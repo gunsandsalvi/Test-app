@@ -274,11 +274,16 @@ function growColumns(n: number) {
   if (n <= colReservation.length) return;
   let size = colReservation.length;
   while (size < n) size *= 2;
-  colReservation = new Float64Array(size);
-  colRange = new Float64Array(size);
-  colMaxHolding = new Float64Array(size);
-  colAffordable = new Float64Array(size);
-  colCore = new Float64Array(size);
+  // §7.309 — the grow MUST carry the columns already written: this is called incrementally
+  // MID-BUILD (one column at a time), so a fresh array here silently zeroed every column below
+  // the boundary for the first process call that crossed it — the first big book of every
+  // process cleared on a half-blank demand schedule. Found by the native port's oracle differ.
+  const g = (old: Float64Array) => { const a = new Float64Array(size); a.set(old); return a; };
+  colReservation = g(colReservation);
+  colRange = g(colRange);
+  colMaxHolding = g(colMaxHolding);
+  colAffordable = g(colAffordable);
+  colCore = g(colCore);
 }
 
 function pushPreparedDemand(demand: ParticipantDemand, previousHoldingUSD: number) {
@@ -874,6 +879,15 @@ export interface ShardedKernelApi {
 let shardedKernel: ShardedKernelApi | null = null;
 export function registerShardedKernel(api: ShardedKernelApi): void { shardedKernel = api; }
 
+/**
+ * §5-SCALE, the native-cores campaign (§7.308): a C port of `runClearingKernel`, verified
+ * bit-equal on captured real books, injects itself here the same way the worker pool does —
+ * this module still imports nothing. The JS kernel stays canonical; the native one must be
+ * value-identical or it may not register (native-kernels.ts owns the gate).
+ */
+let nativeKernel: ((packed: PackedClearing, from: number, to: number) => KernelShardResult) | null = null;
+export function registerNativeKernel(fn: typeof nativeKernel): void { nativeKernel = fn; }
+
 export function clearFinancialAsset(
   instruments: ClearingInstrument[],
   participants: ClearingParticipant[],
@@ -914,7 +928,7 @@ export function clearFinancialAsset(
       // Pool refused (too small, or a worker failed): the packed views are ordinary arrays to
       // the kernel, so fall straight through to the serial path on the same packing.
       growKernelScratch(pCount);
-      const shard = runClearingKernel(packed, 0, packed.n);
+      const shard = (nativeKernel ?? runClearingKernel)(packed, 0, packed.n);
       accumulateShard(shard, instruments, participants, result);
       return result;
     }
@@ -922,7 +936,7 @@ export function clearFinancialAsset(
 
   const packed = packClearing(instruments, participants, params);
   growKernelScratch(packed.pCount);
-  const shard = runClearingKernel(packed, 0, packed.n);
+  const shard = (nativeKernel ?? runClearingKernel)(packed, 0, packed.n);
   accumulateShard(shard, instruments, participants, result);
   return result;
 }
