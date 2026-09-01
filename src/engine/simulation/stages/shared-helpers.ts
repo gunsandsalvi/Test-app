@@ -668,6 +668,9 @@ export function applyHolderInterestAccruals(
     // type and the types in the same map order, so every float accumulates exactly as before.
     const holdings = getHoldingsTable(ctx as never);
     const entities = ctx.updatedInstitutionalEntities;
+    // §7.327 — the holder id per row was an object deref (entities[entCol[row]].id); resolved
+    // once here, the row loop reads a dense string array.
+    const entityIdByRow: string[] = entities.map((e) => e.id);
     const byTypeRows = holdings.byType;
     const qtyCol = holdings.qtyUSD;
     const instCol = holdings.instrumentId;
@@ -679,9 +682,10 @@ export function applyHolderInterestAccruals(
       // compare against a dense array — not a string rebuilt from an id and looked up in a map,
       // which would have handed back with one hand what the columns give with the other.
       const accruingRow: string[] = [];
-      byId.forEach((_v, instrumentText) => {
+      const accruingWeekly: number[] = [];
+      byId.forEach((v, instrumentText) => {
         const id = INSTRUMENT_IDS.peek(instrumentText);
-        if (id >= 0) accruingRow[id] = instrumentText;
+        if (id >= 0) { accruingRow[id] = instrumentText; accruingWeekly[id] = v; }
       });
       // Pass 1 — each instrument's held total, in register order.
       const totalByInst: number[] = [];
@@ -698,7 +702,7 @@ export function applyHolderInterestAccruals(
         const iid = instCol[row];
         const instrumentText = accruingRow[iid];
         if (instrumentText === undefined) continue;
-        const weeklyUSD = byId.get(instrumentText);
+        const weeklyUSD = accruingWeekly[iid];
         const totalUSD = totalByInst[iid] ?? 0;
         if (weeklyUSD === undefined || !(totalUSD > 0)) continue;
         const shareUSD = weeklyUSD * (qtyCol[row] / totalUSD);
@@ -710,7 +714,7 @@ export function applyHolderInterestAccruals(
           if (!byHolder) { byHolder = new Map(); ctx.holderAccruedInterestUSD.set(key, byHolder); }
           byHolderByInst[iid] = byHolder;
         }
-        const entityId = entities[entCol[row]].id;
+        const entityId = entityIdByRow[entCol[row]];
         byHolder.set(entityId, (byHolder.get(entityId) ?? 0) + shareUSD);
       }
     });
