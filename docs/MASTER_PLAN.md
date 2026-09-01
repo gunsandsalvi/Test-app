@@ -459,6 +459,21 @@ arenas, workers over SharedArrayBuffer — with ~1000× compute headroom measure
 cross-language behavioral risk. Rust/WASM shelved as tier-2 (toolchain proven, spike preserved
 at the session scratchpad and rebuildable from this record).
 
+**ENGINE V2 — THE FROM-SCRATCH CHASSIS (campaign escalation, 2026-09-01).** Serial thinning of
+the old engine plateaued at ~10 ms/slice (slices 1-3, all FP-exact, committed); the user
+authorized a full rebuild and the spike's numbers say the from-scratch data-oriented engine
+lands at ~30-60 ms/week single-threaded. V2 = a greenfield columnar chassis under `src/engine2/`
+(typed-array world state built by census, interned ids, snapshot/restore as memcpy — battery-safe
+by design, per-shard effect channels) at FULL FIDELITY — the user chose (2026-09-01, explicit
+question put and answered): EVERY mechanism keeps existing — lots, contracts, the clearing
+family, cohorts, estates, the register — only the REPRESENTATION changes; numeric drift from
+the rewrite is accepted ("we'll fix it later"), mechanism removal is not. The bar: 60 weeks
+≤ 10 s. Architecture: the src/engine2 columnar WorldState becomes the AUTHORITATIVE store
+table-by-table as stages port in measured-weight order (08 → 05 → clearings → tail); each port
+is a clean columnar rewrite of the SAME mechanism; unported stages keep running their object
+code through sync seams (~2 ms/table), so the week is runnable end-to-end at every commit and
+speed improves monotonically. Workers arrive once the ported stages' state is shared memory.
+
 **Measurement-gated; profile first, always.** Two hard constraints: determinism is sacred
 (same-seed A/B byte-identical), and no economic shortcut dressed as an optimisation. Owns the
 damper's float half — and the small-cap equity tail that is HALF the §7.288 damper count. DIST
