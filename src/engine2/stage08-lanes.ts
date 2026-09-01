@@ -48,6 +48,13 @@ export interface BackLanes {
   producedUnitsThisWeek: Float64Array;
   plantCapacityUnitsThisWeek: Float64Array;
   idleLineRevenueShare: Float64Array;
+  wuSalesUSD: Float64Array;
+  wuPurchasesUSD: Float64Array;
+  wuTradeReceivableBookedUSD: Float64Array;
+  wuTradeReceivableCollectedUSD: Float64Array;
+  wuTradePayableBookedUSD: Float64Array;
+  wuTradePayableSettledUSD: Float64Array;
+  wuCapexPurchasesUSD: Float64Array;
   // --- seam reductions over nested structures, in the inline fold order ---
   addressableGrowthAnnual: Float64Array;
   categoryShortfall: Float64Array;
@@ -107,6 +114,9 @@ export function buildBackLanes(
     idleStreakWeeks: f(), mothballedPpeShare: f(), mothballedStreakWeeks: f(),
     usefulLifeYears: f(),
     producedUnitsThisWeek: f(), plantCapacityUnitsThisWeek: f(), idleLineRevenueShare: f(),
+    wuSalesUSD: f(), wuPurchasesUSD: f(), wuTradeReceivableBookedUSD: f(),
+    wuTradeReceivableCollectedUSD: f(), wuTradePayableBookedUSD: f(),
+    wuTradePayableSettledUSD: f(), wuCapexPurchasesUSD: f(),
     addressableGrowthAnnual: f(), categoryShortfall: f(), avgCompetitiveness: f(),
     isBanksSector: new Uint8Array(n), hasTechLine: new Uint8Array(n), investmentGrade: new Uint8Array(n),
     sharesOutstanding: f(), stockPrice: f(), baselineDividendYield: f(), dividendYield: f(),
@@ -152,6 +162,13 @@ export function buildBackLanes(
     L.producedUnitsThisWeek[i] = wu?.producedUnitsThisWeek ?? 0;
     L.plantCapacityUnitsThisWeek[i] = wu?.plantCapacityUnitsThisWeek ?? 0;
     L.idleLineRevenueShare[i] = wu?.idleLineRevenueShare ?? 0;
+    L.wuSalesUSD[i] = wu?.salesUSD ?? 0;
+    L.wuPurchasesUSD[i] = wu?.purchasesUSD ?? 0;
+    L.wuTradeReceivableBookedUSD[i] = wu?.tradeReceivableBookedUSD ?? 0;
+    L.wuTradeReceivableCollectedUSD[i] = wu?.tradeReceivableCollectedUSD ?? 0;
+    L.wuTradePayableBookedUSD[i] = wu?.tradePayableBookedUSD ?? 0;
+    L.wuTradePayableSettledUSD[i] = wu?.tradePayableSettledUSD ?? 0;
+    L.wuCapexPurchasesUSD[i] = wu?.capexPurchasesUSD ?? 0;
     // the three folds, in the inline block's exact order
     const lines = c.productLines || [];
     let addr = 0;

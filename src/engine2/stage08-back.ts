@@ -403,7 +403,13 @@ function runCashWalk(args: {
   maxPayoutRatio: number;
   hasVehicle: boolean;
   boundaryTraceKey: string;
-  weekUpdate: CompanyWeekUpdate | undefined;
+  wuSalesUSD: number;
+  wuPurchasesUSD: number;
+  wuTradeReceivableBookedUSD: number;
+  wuTradeReceivableCollectedUSD: number;
+  wuTradePayableBookedUSD: number;
+  wuTradePayableSettledUSD: number;
+  wuCapexPurchasesUSD: number;
   newNetIncome: number;
   weeklyPayrollUSD: number;
   newRevenue: number;
@@ -426,7 +432,10 @@ function runCashWalk(args: {
 }): { accruedTaxUSD: number } {
   const { ctx, companyId, ticker, region, isBanksSector, homeBankTicker,
     carrierFreightRevenueUSD, channelMarginRevenueUSD, declaredDividendYield, marketCapUSD,
-    maxPayoutRatio, hasVehicle, boundaryTraceKey, weekUpdate, newNetIncome, weeklyPayrollUSD,
+    maxPayoutRatio, hasVehicle, boundaryTraceKey,
+    wuSalesUSD, wuPurchasesUSD, wuTradeReceivableBookedUSD, wuTradeReceivableCollectedUSD,
+    wuTradePayableBookedUSD, wuTradePayableSettledUSD, wuCapexPurchasesUSD,
+    newNetIncome, weeklyPayrollUSD,
     newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
     marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
     bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
@@ -441,8 +450,7 @@ function runCashWalk(args: {
     // business the auction does not settle (non-auction receipts; wages and other unsettled
     // costs; capex beyond what was bought as real units). EBITDA is a reporting figure.
 
-    const update = weekUpdate;
-    if (isBanksSector) {
+      if (isBanksSector) {
       // A bank's real flows live on its named balance sheet (02b); the company-level cash line
       // carries only the accrual bridge. REPORTED, never settled: every line of a bank's P&L is
       // already booked against `bankEquityUSD` in the sector ledger (macro/banking.ts — interest
@@ -463,10 +471,10 @@ function runCashWalk(args: {
       // the household's book, it is paid inside the shelf price by the households that bought out
       // of its stock (stage 05). Counting it here is what keeps it out of the boundary line,
       // which would otherwise pay the sector a second time.
-      const settledSalesUSD = (update?.salesUSD ?? 0)
+      const settledSalesUSD = wuSalesUSD
         + carrierFreightRevenueUSD
         + channelMarginRevenueUSD;
-      const settledPurchasesUSD = update?.purchasesUSD ?? 0;
+      const settledPurchasesUSD = wuPurchasesUSD;
       post('settled sales (real auction receipts)', settledSalesUSD, undefined, false);
       post('settled purchases (real auction: inputs + capex)', -settledPurchasesUSD, undefined, false);
       // XB3a-5: a cross-border sale is delivered and INVOICED, not collected. Revenue is
@@ -477,10 +485,10 @@ function runCashWalk(args: {
       // seller extends moves seller -> buyer in stage 05; the collection moves buyer -> seller in
       // trade-settlement. Posting them here as well would move the same money twice — and
       // posting them against UNMODELED, as they were, moved it to nobody.
-      post('sales invoiced, not yet collected', -(update?.tradeReceivableBookedUSD ?? 0), undefined, false);
-      post('trade invoices collected', update?.tradeReceivableCollectedUSD ?? 0, undefined, false);
-      post('purchases invoiced, not yet paid', update?.tradePayableBookedUSD ?? 0, undefined, false);
-      post('trade invoices paid', -(update?.tradePayableSettledUSD ?? 0), undefined, false);
+      post('sales invoiced, not yet collected', -wuTradeReceivableBookedUSD, undefined, false);
+      post('trade invoices collected', wuTradeReceivableCollectedUSD, undefined, false);
+      post('purchases invoiced, not yet paid', wuTradePayableBookedUSD, undefined, false);
+      post('trade invoices paid', -wuTradePayableSettledUSD, undefined, false);
       // §7.285 — THE BOUNDARY PAIR IS CLOSED, two different ways for two different carriers.
       //
       // BOUNDARY_TRACE decomposed the 4.8B/week 'non-auction operating receipts' line: ~60% was
@@ -518,7 +526,7 @@ function runCashWalk(args: {
       // paid for the same machine twice. What accrues is the operating side, and it nets only
       // against the operating share of what really settled.
       const accruedOutflowsWeekly = (newRevenue - newEbitda) / 52;
-      const capexSettledUSD = update?.capexPurchasesUSD ?? 0;
+      const capexSettledUSD = wuCapexPurchasesUSD;
       // SETL-B: wages are paid to HOUSEHOLDS, who exist and hold deposits. The rest of the line
       // is services and inputs bought outside the modelled auction, which keeps the boundary
       // until those sellers exist. The split is the company's own wage bill against its other
@@ -902,7 +910,14 @@ function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
       maxPayoutRatio: maxDividendPayoutRatioOf(comp),
       hasVehicle: L8.hasVehicle[row] === 1,
       boundaryTraceKey: L8.boundaryTraceKey[row],
-      weekUpdate, newNetIncome, weeklyPayrollUSD,
+      wuSalesUSD: L8.wuSalesUSD[row],
+      wuPurchasesUSD: L8.wuPurchasesUSD[row],
+      wuTradeReceivableBookedUSD: L8.wuTradeReceivableBookedUSD[row],
+      wuTradeReceivableCollectedUSD: L8.wuTradeReceivableCollectedUSD[row],
+      wuTradePayableBookedUSD: L8.wuTradePayableBookedUSD[row],
+      wuTradePayableSettledUSD: L8.wuTradePayableSettledUSD[row],
+      wuCapexPurchasesUSD: L8.wuCapexPurchasesUSD[row],
+      newNetIncome, weeklyPayrollUSD,
       newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
       marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
       bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
@@ -1005,7 +1020,6 @@ function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: ReturnTy
   } = d;
   const L8 = d.backLanes;
   const reg = updatedRegions[L8.region[row]];
-  const weekUpdate = companyUpdates[L8.ticker[row]];
   const accruedTaxUSD = a.accruedTaxUSD;
   const annualInterest = a.annualInterest;
   const bankCredit = a.bankCredit;
