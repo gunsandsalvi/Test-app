@@ -56,13 +56,26 @@ function buildReport(
   const all = samples.map((s) => s.ms);
   const steady = samples.slice(WARMUP_WEEKS).map((s) => s.ms);
   const mean = (v: number[]) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN);
+  // Median is the headline: phones throttle backgrounded tabs into multi-second outlier
+  // weeks that poison a mean but leave the median untouched.
+  const median = (v: number[]) => {
+    if (!v.length) return NaN;
+    const s = [...v].sort((a, b) => a - b);
+    return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+  };
   lines.push(`last week: ${all[all.length - 1].toFixed(0)}ms`
-    + ` | steady mean (wk>${WARMUP_WEEKS}): ${steady.length ? mean(steady).toFixed(0) : 'n/a'}ms`
+    + ` | steady median (wk>${WARMUP_WEEKS}): ${steady.length ? median(steady).toFixed(0) : 'n/a'}ms`
+    + ` | steady mean: ${steady.length ? mean(steady).toFixed(0) : 'n/a'}ms`
     + ` | min/max: ${Math.min(...all).toFixed(0)}/${Math.max(...all).toFixed(0)}ms`);
 
-  // Per-stage steady-state means, largest first ("usage for each branch").
+  // Per-stage steady-state means, largest first ("usage for each branch"), computed only over
+  // non-outlier weeks (>3x the steady median = OS throttling, not the engine).
+  const cut = 3 * median(steady);
+  const kept = samples.slice(WARMUP_WEEKS).filter((s) => s.ms <= cut);
+  const dropped = Math.max(0, samples.length - WARMUP_WEEKS - kept.length);
+  if (dropped > 0) lines.push(`outlier weeks excluded from stage means: ${dropped} (>${cut.toFixed(0)}ms)`);
   const byStage = new Map<string, { total: number; n: number }>();
-  for (const s of samples.slice(WARMUP_WEEKS)) {
+  for (const s of kept) {
     for (const t of s.stages) {
       const e = byStage.get(t.stage) ?? { total: 0, n: 0 };
       e.total += t.ms; e.n++;
@@ -70,7 +83,7 @@ function buildReport(
     }
   }
   if (byStage.size > 0) {
-    const weekMean = mean(steady);
+    const weekMean = mean(kept.map((s) => s.ms));
     const rows = [...byStage.entries()]
       .map(([stage, e]) => ({ stage, mean: e.total / e.n }))
       .sort((a, b) => b.mean - a.mean);
