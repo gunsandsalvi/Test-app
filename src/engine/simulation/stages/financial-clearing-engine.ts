@@ -144,7 +144,7 @@ export interface DemandStaging {
   maxNet: Float64Array;
   minH: Float64Array;
 }
-let stagingScratch: DemandStaging = {
+const stagingScratch: DemandStaging = {
   n: 0, rows: 0,
   present: new Uint8Array(1 << 16), res: new Float64Array(1 << 16), range: new Float64Array(1 << 16),
   maxH: new Float64Array(1 << 16), maxNet: new Float64Array(1 << 16), minH: new Float64Array(1 << 16),
