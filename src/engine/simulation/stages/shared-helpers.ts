@@ -6,7 +6,7 @@
 
 import { journalPayment, partyId } from './settlement';
 import { bookHeadOf, relinkBook } from '../../../engine2/holdings';
-import { V2World } from '../../../engine2/world';
+import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
 import { INSTRUMENT_IDS } from '../../columns/intern';
@@ -49,12 +49,15 @@ function normalCdf(x: number): number {
 }
 
 /** Annualized relative EBITDA volatility, measured from the company's own revenue history. */
-function annualEbitdaVol(comp: Company): number {
-  const hist = comp.revenueHistory || [];
-  if (hist.length < 8) return MIN_ANNUAL_EBITDA_VOL;
+function annualEbitdaVol(v2: V2World, comp: Company): number {
+  // §4.C II.5 — the history reads the ring (world.ts); same entries, same order.
+  const row = rowOf(v2, comp.id);
+  const histLen = revHistLen(v2, row);
+  if (histLen < 8) return MIN_ANNUAL_EBITDA_VOL;
   const rel: number[] = [];
-  for (let i = 1; i < hist.length; i++) {
-    if (hist[i - 1] > 0) rel.push(hist[i] / hist[i - 1] - 1);
+  for (let i = 1; i < histLen; i++) {
+    const prev = revHistAt(v2, row, i - 1);
+    if (prev > 0) rel.push(revHistAt(v2, row, i) / prev - 1);
   }
   if (rel.length < 4) return MIN_ANNUAL_EBITDA_VOL;
   const mean = rel.reduce((a, b) => a + b, 0) / rel.length;
@@ -139,7 +142,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
   const shockToCash = 1 - (fixedOutflowsUSD - Math.max(0, comp.cash)) / ebitda;
   const distance = Math.max(shockToCoverage, shockToCash);
 
-  return normalCdf(-distance / annualEbitdaVol(comp));
+  return normalCdf(-distance / annualEbitdaVol(v2, comp));
 }
 
 /**

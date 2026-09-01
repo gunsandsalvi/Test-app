@@ -1,4 +1,5 @@
 import { random } from '../../../rng';
+import { ensureV2, rowOf, revHistPush } from '../../../../engine2/world';
 import { managedEntityIdsOf } from '../../../../domain/company';
 import { PREMIUM_TO_SURPLUS_RATIO } from '../../../../domain/institutions';
 import { ProfileInput, ProfilePnl } from './types';
@@ -44,7 +45,7 @@ export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const investmentIncome = instEnt?.lastWeeklyInvestmentIncomeUSD ?? floatAssets * 0.04 / 52;
 
   newRevenue = comp.insurancePremiumsWrittenUSD;
-  comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
+  { const v2r = ensureV2(input.state); revHistPush(v2r, rowOf(v2r, comp.id), newRevenue); }
 
   return {
     newRevenue,

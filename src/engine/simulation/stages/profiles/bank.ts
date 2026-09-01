@@ -10,6 +10,7 @@
  */
 
 import { ProfileInput, ProfilePnl } from './types';
+import { ensureV2, rowOf, revHistPush } from '../../../../engine2/world';
 
 export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, reg } = input;
@@ -49,7 +50,7 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // before converging on its true (much larger) NIM-implied scale, blowing through the
   // revenue-growth-ceiling invariant on the way.
   newRevenue = Math.max(10, comp.annualRevenue * 0.85 + (impliedNimRev * 52) * 0.15);
-  comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
+  { const v2r = ensureV2(input.state); revHistPush(v2r, rowOf(v2r, comp.id), newRevenue); }
 
   // §7.122 step 3 — IND-R4's last stated margin is gone. It was `newEbitdaMargin = 0.40`,
   // a number a bank earned regardless of what its book made or what its staff and premises cost.

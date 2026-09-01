@@ -1,6 +1,7 @@
 /** A carrier's P&L: the freight it really carried against the fuel it really burned (moved verbatim from stage 08, BP1c). */
 
 import { random } from '../../../rng';
+import { ensureV2, rowOf, revHistPush } from '../../../../engine2/world';
 import { fuelPriceUsdPerTonne } from '../freight-clearing';
 import { weeklyCapacityTonnes } from '../../../../domain/carrier';
 import { laneDistanceNm } from '../../../../domain/geography';
@@ -18,7 +19,7 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // lands on its margin the same week.
   const weeklyFreightUSD = ctx.carrierFreightRevenue[comp.ticker] ?? 0;
   newRevenue = Math.max(10, weeklyFreightUSD * 52);
-  comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
+  { const v2r = ensureV2(state); revHistPush(v2r, rowOf(v2r, comp.id), newRevenue); }
 
   const fuelUsdPerTonne = fuelPriceUsdPerTonne(reg, state.unitMassTonnes ?? {});
   // §4.0 Tier 1 item 14 — FUEL BURNS ON VOYAGES SAILED, NOT ON THE FLEET'S EXISTENCE. This

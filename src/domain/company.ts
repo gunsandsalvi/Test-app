@@ -430,7 +430,7 @@ export interface Company {
   // Market & Pricing
   stockPrice: number;
   historicalPrices: number[];
-  revenueHistory?: number[];
+  // §4.C II.5 — revenueHistory lives on v2.revRing (world.ts); the object field is gone.
   forwardPE: number;
   marketCap: number;
   dividendYield: number;

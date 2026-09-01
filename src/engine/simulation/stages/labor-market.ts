@@ -35,6 +35,8 @@
  */
 
 import { GameState, Region, RegionId, Company, OccupationType } from '../../../types';
+import { ensureV2, rowOf, revHistFill } from '../../../engine2/world';
+const revHistScratch: number[] = [];
 import {
   SECTOR_OCCUPATION_MIX, LABOR_PRODUCTIVITY_GROWTH_ANNUAL,
   MATCHING_EFFICIENCY, MATCHING_ELASTICITY,
@@ -155,6 +157,7 @@ function desiredGrowthAnnualOf(
 }
 
 export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): void {
+  const v2L = ensureV2(state);
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
@@ -209,7 +212,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const current = Math.max(0, comp.employeeCount);
       if (current <= 0) return;
       const growthAnnual = desiredGrowthAnnualOf(
-        comp.revenueHistory, comp.annualRevenue, inflationAnnual, comp.productLines, reg,
+        revHistFill(v2L, rowOf(v2L, comp.id), revHistScratch), comp.annualRevenue, inflationAnnual, comp.productLines, reg,
         comp.lastLearningGrowthAnnual ?? LABOR_PRODUCTIVITY_GROWTH_ANNUAL);
       const desiredWeeklyChange = current * (growthAnnual / 52);
 

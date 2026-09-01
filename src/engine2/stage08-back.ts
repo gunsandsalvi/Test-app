@@ -48,7 +48,7 @@ import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from 
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
 import { ladderRowsOf, pushLadderRow, relinkLadder, materializeTranche, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
-import { V2World } from './world';
+import { revHistLen, revHistAt, rowOf, V2World } from './world';
 import { totalInputValueUSD } from './lots';
 
 /**
@@ -1195,11 +1195,16 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       }
       const maturityWallShareOfLadder = wallUSD / Math.max(1, ladderSumUSD);
       const ladderUSD = Math.max(1, ladderSumUSD);
-      const revHist = comp.revenueHistory ?? [];
-      const revMean = revHist.length > 2 ? revHist.reduce((a, x) => a + x, 0) / revHist.length : 0;
-      const revVol = revMean > 0
-        ? Math.sqrt(revHist.reduce((a, x) => a + (x - revMean) ** 2, 0) / revHist.length) / revMean
-        : 0;
+      // §4.C II.5 — the ring, at this exact sequence point (the §7.320 mid-loop-append trap is
+      // structurally gone: profiles push to the ring, this fold reads the ring).
+      const rvRow = rowOf(v2, L8.companyId[row]);
+      const rvLen = revHistLen(v2, rvRow);
+      let rvSum = 0;
+      for (let i = 0; i < rvLen; i++) rvSum += revHistAt(v2, rvRow, i);
+      const revMean = rvLen > 2 ? rvSum / rvLen : 0;
+      let rvVar = 0;
+      for (let i = 0; i < rvLen; i++) rvVar += (revHistAt(v2, rvRow, i) - revMean) ** 2;
+      const revVol = revMean > 0 ? Math.sqrt(rvVar / rvLen) / revMean : 0;
       // §7.268 — A BANK IS NOT RATED ON THE CORPORATE CONTEXT. Its company-level figures are
       // the accrual bridge, not the business: its cash lives on the bank sheet (so
       // `liquidityToDebt` read ~0), its earnings statistic swings through zero on the bridge
@@ -2054,13 +2059,19 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       ? round1(L8.baselineAnnualRevenueUSD[row] * 0.995)
       : round1(L8.baselineAnnualRevenueUSD[row] * (1 + trendWeeklyGrowth));
 
-    const revHist = comp.revenueHistory || [newRevenue];
+    // §4.C II.5 — the `|| [newRevenue]` fallback only ever produced a length-1 history, whose
+    // fold is 0 exactly like an empty one: the ring length decides alone.
+    const rvRow2 = rowOf(d.v2, L8.companyId[row]);
+    const rvLen2 = revHistLen(d.v2, rvRow2);
     let calculatedRevVol = 0;
-    if (revHist.length > 2) {
-      const meanRev = revHist.reduce((s, v) => s + v, 0) / revHist.length;
+    if (rvLen2 > 2) {
+      let sum2 = 0;
+      for (let i = 0; i < rvLen2; i++) sum2 += revHistAt(d.v2, rvRow2, i);
+      const meanRev = sum2 / rvLen2;
       if (meanRev > 0) {
-        const varRev = revHist.reduce((s, v) => s + Math.pow(v - meanRev, 2), 0) / revHist.length;
-        calculatedRevVol = Math.sqrt(varRev) / meanRev;
+        let var2 = 0;
+        for (let i = 0; i < rvLen2; i++) var2 += Math.pow(revHistAt(d.v2, rvRow2, i) - meanRev, 2);
+        calculatedRevVol = Math.sqrt(var2 / rvLen2) / meanRev;
       }
     }
     const calculatedSegmentFinancials: SegmentFinancial[] = (updatedProductLines || []).map(line => {

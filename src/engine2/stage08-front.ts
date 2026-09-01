@@ -142,6 +142,6 @@ export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs):
       runFrontCore(S, O, F, inp.v2.lots, inp.v2.lots, undefined, 0, companies.length);
     }
   }
-  applyFrontPost(companies, S, O, F, inp.companyUpdates, inp.updatedRegions);
+  applyFrontPost(companies, S, O, F, inp.v2, inp.companyUpdates, inp.updatedRegions);
   return F;
 }

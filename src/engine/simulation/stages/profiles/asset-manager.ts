@@ -1,4 +1,5 @@
 import { random } from '../../../rng';
+import { ensureV2, rowOf, revHistPush } from '../../../../engine2/world';
 import { managedEntityIdsOf } from '../../../../domain/company';
 
 import { ProfileInput, ProfilePnl } from './types';
@@ -25,6 +26,6 @@ export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) 
   // §7.122 step 3: the stated 0.35 margin is gone. A manager's costs are its people and its
   // technology, both common and both real, and it has no third cost of its own — which is why
   // its basket is the lightest in the registry and its margin the highest.
-  comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
+  { const v2r = ensureV2(state); revHistPush(v2r, rowOf(v2r, comp.id), newRevenue); }
   return { newRevenue, profileCostsAnnualUSD: 0 };
 };

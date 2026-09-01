@@ -33,7 +33,7 @@ import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputInten
 import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, fullStaffingCapHeads } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
-import { V2World, ensureV2 } from '../../../engine2/world';
+import { revHistLen, revHistAt, rowOf, V2World, ensureV2 } from '../../../engine2/world';
 import { pushLot } from '../../../engine2/lots';
 import { contractRows, relinkChain, formContractRow, endOfWeekCompact } from '../../../engine2/contracts';
 import { random, beginEntityScope, endEntityScope } from '../../rng';
@@ -2187,12 +2187,16 @@ function formContracts(
     let duration = 12 + Math.floor(random() * 40);
 
     // Hedging for revenue volatility
-    const revHist = customerComp.revenueHistory || [];
+    const custRow = rowOf(v2, customerComp.id);
+    const revLen = revHistLen(v2, custRow);
     let revVol = 0;
-    if (revHist.length > 3) {
-      const meanRev = revHist.reduce((s, v) => s + v, 0) / revHist.length;
-      const varRev = revHist.reduce((s, v) => s + Math.pow(v - meanRev, 2), 0) / revHist.length;
-      revVol = Math.sqrt(varRev) / meanRev;
+    if (revLen > 3) {
+      let sumRev = 0;
+      for (let i = 0; i < revLen; i++) sumRev += revHistAt(v2, custRow, i);
+      const meanRev = sumRev / revLen;
+      let varSum = 0;
+      for (let i = 0; i < revLen; i++) varSum += Math.pow(revHistAt(v2, custRow, i) - meanRev, 2);
+      revVol = Math.sqrt(varSum / revLen) / meanRev;
     }
     if (revVol > 0.05) {
       duration = 52 + Math.floor(random() * 52); // Seek longer contracts

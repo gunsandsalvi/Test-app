@@ -37,7 +37,7 @@ import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/si
 import { CogsCostDrivers } from '../engine/companyGenerator';
 import { industrialIncome } from '../domain/company-week/income-statement';
 import { fulfillmentRatio } from '../domain/company-week/inventory';
-import { V2World, rowOf } from './world';
+import { revHistPush, V2World, rowOf } from './world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
 import { LotViews, LotStore, consumeFifoOnViews } from './lots';
 import { SUBUNITS, SUBUNIT_INDEX, NSUB } from './state';
@@ -772,7 +772,7 @@ export function runFrontCore(
 
 /** POST — the object writes, from the core's outputs, in row order on the main thread. */
 export function applyFrontPost(
-  companies: Company[], S: FrontSeam, O: FrontCoreOut, F: FrontPass,
+  companies: Company[], S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2: V2World,
   companyUpdates: Record<string, CompanyWeekUpdate>, updatedRegions: WeeklyStepContext['updatedRegions']
 ): void {
   const week = S.nextWeek;
@@ -835,7 +835,7 @@ export function applyFrontPost(
     F.outputInv[row] = outRec;
 
     F.newRecurringBaseUSD[row] = O.hasRecurringOut[row] ? O.recurringBaseOut[row] : undefined;
-    comp.revenueHistory = [...(comp.revenueHistory || [F.newRevenue[row]]).slice(-12), F.newRevenue[row]];
+    revHistPush(v2, rowOf(v2, comp.id), F.newRevenue[row]);
     comp.taxLossCarryforwardUSD = O.taxCarryforwardOut[row];
     comp.taxBasisPpeUSD = O.taxBasisOut[row];
     comp.deferredTaxLiabilityUSD = O.deferredTaxOut[row];

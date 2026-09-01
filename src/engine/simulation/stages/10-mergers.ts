@@ -9,7 +9,7 @@
 
 import { absorbBankBook } from '../../ledger';
 import { bookHeadOf, pushBookRow, markBookDirty } from '../../../engine2/holdings';
-import { ensureV2, internString } from '../../../engine2/world';
+import { ensureV2, internString, revHistSeed, rowOf } from '../../../engine2/world';
 import { syncLadderRows, materializeLadder } from '../../../engine2/tranches';
 import { pay } from './settlement';
 import { GameState, DebtTranche } from '../../../types';
@@ -135,7 +135,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     spin.accumulatedDepreciationUSD = (parent.accumulatedDepreciationUSD ?? 0) * share;
     if (spin.baselineNetPpeUSD !== undefined) spin.baselineNetPpeUSD = spin.baselineNetPpeUSD * share;
     spin.antitrustWeeksAboveThreshold = 0;
-    spin.revenueHistory = [spin.annualRevenue];
+    revHistSeed(ctx.v2!, rowOf(ctx.v2!, spin.id), spin.annualRevenue);
 
     // THE MINT: each holder of parent equity receives its pro-rata spin-co register rows,
     // BEFORE the parent's price steps down (the stake fraction reads the pre-split register).

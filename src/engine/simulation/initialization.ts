@@ -1,5 +1,6 @@
 
 import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
+import { stashSeedRevenueHistory, drainSeedRevenueHistories } from '../../engine2/world';
 import { getSimulationDate } from '../formatters';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
@@ -329,6 +330,8 @@ export function solveSeedInvestmentFixedPoint(
 
 export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {
   const state = buildSeededGameState(seed);
+  // §4.C II.5 — the seed's revenue histories land on the ring now that the world exists.
+  drainSeedRevenueHistories(state);
   // §5-STRUCT step 6 — OFF unless asked for. Burn-in hands back a world the ENGINE produced rather
   // than one this function asserted, which is the end state for every §7.4 defect. It changes every
   // number in the project at once, so it is a switch someone turns deliberately after reading the
@@ -1011,7 +1014,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const ebitdaUSD = revenueUSD * (isManager ? 0.35 : 0.15);
       comp.annualRevenue = revenueUSD;
       comp.baselineAnnualRevenue = revenueUSD;
-      comp.revenueHistory = [revenueUSD];
+      stashSeedRevenueHistory(comp, [revenueUSD]); // §4.C II.5: ring-seeded at drain
       comp.ebitda = ebitdaUSD;
       comp.ebit = Math.max(1, ebitdaUSD);
       comp.netIncome = comp.ebit * (1 - INSTITUTIONAL_EFFECTIVE_TAX_RATE);
@@ -1092,7 +1095,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       c.baselineAnnualRevenue = c.annualRevenue;
       c.ebitda = Math.round((c.annualRevenue * (c.baselineEbitdaMargin ?? 0.40)));
       c.ebit = c.ebitda;
-      c.revenueHistory = [];
+      stashSeedRevenueHistory(c, []); // §4.C II.5: explicitly-empty history
     });
 
     // labor share of output — a per-capita accounting construction. It is then paid per EMPLOYED

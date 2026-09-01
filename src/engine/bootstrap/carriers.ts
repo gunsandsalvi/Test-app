@@ -18,6 +18,7 @@
  */
 
 import { Company, CreditRating, Region, RegionId } from '../../types';
+import { stashSeedRevenueHistory } from '../../engine2/world';
 import { INDUSTRY_SUBUNITS } from '../../domain/industry';
 import { laneDistanceNm } from '../../domain/geography';
 import {
@@ -311,7 +312,7 @@ function buildCarrierCompany(
     holderRequiredReturn: REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
   }).toFixed(2));
 
-  return {
+  const __c = {
     id: `${region}_CAR_${ticker}`,
     ticker,
     name,
@@ -364,7 +365,8 @@ function buildCarrierCompany(
     outputInventoryBySubUnit: {},
     recentFulfillmentEMA: 1.0,
     treasuryHoldings: [],
-    revenueHistory: [annualRevenue],
     _carrierIndex: idx,
   } as unknown as Company;
+  stashSeedRevenueHistory(__c, [annualRevenue]); // §4.C II.5 — lands on the ring at drain
+  return __c;
 }
