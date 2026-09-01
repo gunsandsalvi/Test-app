@@ -240,6 +240,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     taxAccrued: Record<string, number>;
     taxCollected: Record<string, number>;
     journal: PaymentJournal;
+    // §7.317 — the holder-register channels, shard-isolated like the tax maps so the kernel
+    // touches no shared mutable: accruals and cash merge by per-key ADDITION, the settlement
+    // ratios by per-key MULTIPLICATION (their compose rule), the payout set by ordered union —
+    // each in shard order = firm order, float-identical to the inline writes.
+    holderAccruals: Map<string, number>;
+    holderCash: Map<string, number>;
+    holderPayout: Set<string>;
+    holderSettlements: Map<string, number>;
   }
 
   /** Point the shared accumulators at this shard's own, and hand back what they were. */
@@ -254,6 +262,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       taxAccrued: ctx.taxAccruedByRegion,
       taxCollected: ctx.taxCollectedByRegion,
       journal: ctx.paymentJournal,
+      holderAccruals: ctx.pendingHolderAccrualUSD,
+      holderCash: ctx.pendingHolderCashUSD,
+      holderPayout: ctx.pendingHolderAccrualPayout,
+      holderSettlements: ctx.pendingHolderSettlements,
     };
     ctx.creditEventsThisWeek = [];
     ctx.defaultedTickers = [];
@@ -264,6 +276,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     ctx.taxAccruedByRegion = {};
     ctx.taxCollectedByRegion = {};
     ctx.paymentJournal = newPaymentJournal();
+    ctx.pendingHolderAccrualUSD = new Map();
+    ctx.pendingHolderCashUSD = new Map();
+    ctx.pendingHolderAccrualPayout = new Set();
+    ctx.pendingHolderSettlements = new Map();
     return held;
   };
 
@@ -279,6 +295,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       taxAccrued: ctx.taxAccruedByRegion,
       taxCollected: ctx.taxCollectedByRegion,
       journal: ctx.paymentJournal,
+      holderAccruals: ctx.pendingHolderAccrualUSD,
+      holderCash: ctx.pendingHolderCashUSD,
+      holderPayout: ctx.pendingHolderAccrualPayout,
+      holderSettlements: ctx.pendingHolderSettlements,
     };
     ctx.creditEventsThisWeek = held.creditEvents;
     ctx.defaultedTickers = held.defaulted;
@@ -289,6 +309,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     ctx.taxAccruedByRegion = held.taxAccrued;
     ctx.taxCollectedByRegion = held.taxCollected;
     ctx.paymentJournal = held.journal;
+    ctx.pendingHolderAccrualUSD = held.holderAccruals;
+    ctx.pendingHolderCashUSD = held.holderCash;
+    ctx.pendingHolderAccrualPayout = held.holderPayout;
+    ctx.pendingHolderSettlements = held.holderSettlements;
 
     for (const e of mine.creditEvents) ctx.creditEventsThisWeek.push(e);
     for (const t of mine.defaulted) ctx.defaultedTickers.push(t);
@@ -307,6 +331,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       journalPush(j, mine.journal.payerId[k], mine.journal.payeeId[k],
         mine.journal.amountUSD[k], mine.journal.reasonId[k]);
     }
+    mine.holderAccruals.forEach((v, k) => {
+      ctx.pendingHolderAccrualUSD.set(k, (ctx.pendingHolderAccrualUSD.get(k) ?? 0) + v);
+    });
+    mine.holderCash.forEach((v, k) => {
+      ctx.pendingHolderCashUSD.set(k, (ctx.pendingHolderCashUSD.get(k) ?? 0) + v);
+    });
+    mine.holderPayout.forEach((k) => ctx.pendingHolderAccrualPayout.add(k));
+    mine.holderSettlements.forEach((v, k) => {
+      ctx.pendingHolderSettlements.set(k, (ctx.pendingHolderSettlements.get(k) ?? 1) * v);
+    });
   };
 
   runShardedVoid(companyRows.length, (range) => {
