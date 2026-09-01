@@ -16,8 +16,10 @@
  */
 
 import { GameState, RegionId, Company } from '../../../types';
+import { ensureV2, V2World } from '../../../engine2/world';
+import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY } from '../../../engine2/tranches';
 import { WeeklyStepContext } from './context';
-import { isActiveCompany, isPubliclyListed, DebtTranche } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { isInvestmentGrade } from './asset-allocation';
 import { calculateNelsonSiegelZeroRate, NelsonSiegelParams } from '../../nelsonSiegel';
 import {
@@ -25,10 +27,8 @@ import {
   LARGE_CAP_CUMULATIVE_SHARE, INDEX_REBALANCE_WEEKS, INDEX_BASE_LEVEL,
 } from '../../../domain/indexes';
 
-/** Paper the credit indexes can hold: capital-markets instruments, not bank debt or CP. */
-function indexableTranches(comp: Company): DebtTranche[] {
-  return (comp.debtTranches || []).filter((t) => !t.isBankFacility && !t.isCommercialPaper);
-}
+// §7.311 — ladder reads on rows; "indexable" = capital-markets paper (no bank debt, no CP).
+const INDEXABLE_EXCLUDED = TR_FACILITY | TR_CP;
 
 /**
  * A credit index is MARKET-VALUE weighted, so a bond's contribution is its principal at its
@@ -40,33 +40,39 @@ function indexableTranches(comp: Company): DebtTranche[] {
  * cleared curve plus this issuer's cleared spread, which is the same arithmetic the make-whole
  * uses. Floating paper reads the price 07d already clears for it.
  */
-function fixedMarketValueUSD(comp: Company, curve: NelsonSiegelParams, week: number): number {
-  return indexableTranches(comp)
-    .filter((t) => t.rateType === 'FIXED')
-    .reduce((sum, t) => {
-      const years = Math.max(0.25, (t.maturityWeek - week) / 52);
-      const discount = calculateNelsonSiegelZeroRate(years, curve) + comp.oasSpreadBps / 10000;
-      const d = Math.max(1e-6, discount);
-      const df = Math.pow(1 + d, -years);
-      const pricePerDollar = (t.couponRate ?? 0) * ((1 - df) / d) + df;
-      return sum + t.principalUSD * Math.max(0, pricePerDollar);
-    }, 0);
+function fixedMarketValueUSD(v2: V2World, comp: Company, curve: NelsonSiegelParams, week: number): number {
+  const S = v2.tranches;
+  let sum = 0;
+  for (const r of ladderRowsOf(v2, comp.id)) {
+    if (S.flags[r] & (INDEXABLE_EXCLUDED | TR_FLOATING)) continue;
+    const years = Math.max(0.25, (S.maturityWeek[r] - week) / 52);
+    const discount = calculateNelsonSiegelZeroRate(years, curve) + comp.oasSpreadBps / 10000;
+    const d = Math.max(1e-6, discount);
+    const df = Math.pow(1 + d, -years);
+    const pricePerDollar = (Number.isNaN(S.couponRate[r]) ? 0 : S.couponRate[r]) * ((1 - df) / d) + df;
+    sum += S.principalUSD[r] * Math.max(0, pricePerDollar);
+  }
+  return sum;
 }
 
-function floatingMarketValueUSD(comp: Company): number {
+function floatingMarketValueUSD(v2: V2World, comp: Company): number {
   // 07d clears a price to par for every loan it quotes; par is the honest fallback for a tranche
   // whose issuer has no quote yet (a debut in its first week).
   const pricePerDollar = (comp.leveragedLoan?.pricePar ?? 100) / 100;
-  return indexableTranches(comp)
-    .filter((t) => t.rateType === 'FLOATING')
-    .reduce((sum, t) => sum + t.principalUSD * Math.max(0, pricePerDollar), 0);
+  const S = v2.tranches;
+  let sum = 0;
+  for (const r of ladderRowsOf(v2, comp.id)) {
+    if ((S.flags[r] & INDEXABLE_EXCLUDED) || !(S.flags[r] & TR_FLOATING)) continue;
+    sum += S.principalUSD[r] * Math.max(0, pricePerDollar);
+  }
+  return sum;
 }
 
 /**
  * What each eligible name contributes to this index, at this week's cleared prices — market cap
  * for equity, outstanding principal for credit. Zero means not eligible.
  */
-function indexValueUSD(def: IndexDefinition, comp: Company, curveOf: (r: RegionId) => NelsonSiegelParams, week: number): number {
+function indexValueUSD(v2: V2World, def: IndexDefinition, comp: Company, curveOf: (r: RegionId) => NelsonSiegelParams, week: number): number {
   if (!isActiveCompany(comp)) return 0;
   if (def.region && comp.region !== def.region) return 0;
 
@@ -75,13 +81,13 @@ function indexValueUSD(def: IndexDefinition, comp: Company, curveOf: (r: RegionI
     return comp.marketCap;
   }
 
-  if (def.assetClass === 'LEVERAGED_LOAN') return floatingMarketValueUSD(comp);
+  if (def.assetClass === 'LEVERAGED_LOAN') return floatingMarketValueUSD(v2, comp);
 
   // Corporate bonds, split by the issuer's own cleared rating.
   const ig = isInvestmentGrade(comp.creditRating);
   if (def.tier === 'IG' && !ig) return 0;
   if (def.tier === 'HY' && ig) return 0;
-  return fixedMarketValueUSD(comp, curveOf(comp.region), week);
+  return fixedMarketValueUSD(v2, comp, curveOf(comp.region), week);
 }
 
 /**
@@ -89,9 +95,9 @@ function indexValueUSD(def: IndexDefinition, comp: Company, curveOf: (r: RegionI
  * the cumulative share crosses the threshold; SMALL_CAP takes exactly what LARGE_CAP left, so the
  * two partition ALL_CAP with no name in both and none in neither.
  */
-function rebalance(def: IndexDefinition, companies: Company[], curveOf: (r: RegionId) => NelsonSiegelParams, week: number): IndexConstituent[] {
+function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], curveOf: (r: RegionId) => NelsonSiegelParams, week: number): IndexConstituent[] {
   const eligible = companies
-    .map((c) => ({ instrumentId: c.id, valueUSD: indexValueUSD(def, c, curveOf, week) }))
+    .map((c) => ({ instrumentId: c.id, valueUSD: indexValueUSD(v2, def, c, curveOf, week) }))
     .filter((x) => x.valueUSD > 0)
     .sort((a, b) => b.valueUSD - a.valueUSD);
   if (eligible.length === 0) return [];
@@ -113,14 +119,15 @@ function rebalance(def: IndexDefinition, companies: Company[], curveOf: (r: Regi
 }
 
 /** This week's aggregate value of a fixed membership, at cleared prices. */
-function basketValueUSD(def: IndexDefinition, constituents: IndexConstituent[], byId: Map<string, Company>, curveOf: (r: RegionId) => NelsonSiegelParams, week: number): number {
+function basketValueUSD(v2: V2World, def: IndexDefinition, constituents: IndexConstituent[], byId: Map<string, Company>, curveOf: (r: RegionId) => NelsonSiegelParams, week: number): number {
   return constituents.reduce((sum, c) => {
     const comp = byId.get(c.instrumentId);
-    return comp ? sum + indexValueUSD(def, comp, curveOf, week) : sum;
+    return comp ? sum + indexValueUSD(v2, def, comp, curveOf, week) : sum;
   }, 0);
 }
 
 export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContext): void {
+  const v2 = ensureV2(state);
   const byId = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
   const curveOf = (r: RegionId) => ctx.updatedRegions[r].yieldCurveParams;
   const previous = new Map((state.marketIndexes ?? []).map((i) => [i.id, i]));
@@ -131,20 +138,20 @@ export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContex
 
     // Inception: strike the membership and start at base.
     if (!prior || prior.constituents.length === 0) {
-      const constituents = rebalance(def, ctx.updatedCompanies, curveOf, week);
+      const constituents = rebalance(v2, def, ctx.updatedCompanies, curveOf, week);
       return {
         id: def.id,
         constituents,
         lastRebalanceWeek: week,
         level: prior?.level ?? INDEX_BASE_LEVEL,
-        totalValueUSD: basketValueUSD(def, constituents, byId, curveOf, week),
+        totalValueUSD: basketValueUSD(v2, def, constituents, byId, curveOf, week),
       };
     }
 
     // Level FIRST, on the membership that was in force all week — the return the basket actually
     // delivered. Doing this after a rebalance would credit the index with the difference between
     // two different baskets, which is a return no holder could have earned.
-    const heldValueUSD = basketValueUSD(def, prior.constituents, byId, curveOf, week);
+    const heldValueUSD = basketValueUSD(v2, def, prior.constituents, byId, curveOf, week);
     const level = prior.totalValueUSD > 0
       ? prior.level * (heldValueUSD / prior.totalValueUSD)
       : prior.level;
@@ -155,13 +162,13 @@ export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContex
     }
     // Rebalance: new membership, and the value line re-based onto it so next week's level change
     // is measured against what the index now holds.
-    const constituents = rebalance(def, ctx.updatedCompanies, curveOf, week);
+    const constituents = rebalance(v2, def, ctx.updatedCompanies, curveOf, week);
     return {
       id: def.id,
       constituents,
       lastRebalanceWeek: week,
       level,
-      totalValueUSD: basketValueUSD(def, constituents, byId, curveOf, week),
+      totalValueUSD: basketValueUSD(v2, def, constituents, byId, curveOf, week),
     };
   });
 }

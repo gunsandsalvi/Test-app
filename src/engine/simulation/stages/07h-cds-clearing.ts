@@ -15,6 +15,7 @@
  */
 
 import { GameState, RegionId, Company } from '../../../types';
+import { ensureV2 } from '../../../engine2/world';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import {
   CdsContract, CdsParty, CDS_TENOR_WEEKS, cdsWeeklyPremiumUSD, cdsDefaultPayoutUSD,
@@ -39,6 +40,7 @@ const partyRefOf = (p: CdsParty): PartyRef =>
   p.kind === 'BANK' ? { kind: 'BANK', ticker: p.ticker } : { kind: 'INSTITUTION', id: p.id };
 
 export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+  const v2cds = ensureV2(state);
   const regionIds = REGION_IDS;
 
   regionIds.forEach((regionId) => {
@@ -120,7 +122,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
     const referenceIssuers = Array.from(hedgeDemandByIssuer.keys())
       .map((id) => companyById.get(id)!)
       .filter((c) => !!c);
-    const pdByIssuerId = new Map(referenceIssuers.map((c) => [c.id, computeAnnualDefaultProbability(c)]));
+    const pdByIssuerId = new Map(referenceIssuers.map((c) => [c.id, computeAnnualDefaultProbability(v2cds, c)]));
     const instruments: ClearingInstrument[] = referenceIssuers.map((c) => {
       const demand = hedgeDemandByIssuer.get(c.id)!;
       const floatUSD = demand.reduce((a, d) => a + d.usd, 0);

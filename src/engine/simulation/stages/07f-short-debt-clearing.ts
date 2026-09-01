@@ -626,7 +626,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       if (survivingUSD <= 0 && targetCPUSD <= 0 && maturedUSD <= 0) return;
       cpIssuers.push({
         comp,
-        annualPd: computeAnnualDefaultProbability(comp),
+        annualPd: computeAnnualDefaultProbability(v2Mirror, comp),
         survivingUSD,
         maturedUSD,
         wantedUSD: Math.max(0, targetCPUSD - survivingUSD),

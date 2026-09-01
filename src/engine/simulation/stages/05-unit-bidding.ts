@@ -1802,7 +1802,7 @@ function runSubUnitMarkets(
         const invoicedUSD = l.units * exWorksBuyerMoney;
         let buyerPd = sourcing.buyerAnnualPdByTicker.get(comp.ticker);
         if (buyerPd === undefined) {
-          buyerPd = computeAnnualDefaultProbability(comp);
+          buyerPd = computeAnnualDefaultProbability(v2, comp);
           sourcing.buyerAnnualPdByTicker.set(comp.ticker, buyerPd);
         }
         const termWeeks = paymentTermWeeks({

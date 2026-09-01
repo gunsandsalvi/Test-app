@@ -22,6 +22,8 @@
  */
 
 import { govBucketId } from '../../../domain/sovereign-id';
+import { ensureV2 } from '../../../engine2/world';
+import { ladderRowsOf, ensureLaddersSynced } from '../../../engine2/tranches';
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../domain/assets';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
@@ -208,6 +210,10 @@ const ZERO_OWNERSHIP = (): MeasuredOwnership =>
 
 /** One pass over every book; a holding contributes to its ISSUER's region, not its holder's. */
 export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, MeasuredOwnershipByClass> {
+  // Callable outside the weekly step (harness reports), where the week-start catch-up has not
+  // run yet — the idempotent sync makes the rows trustworthy either way.
+  const v2hv = ensureV2(state);
+  ensureLaddersSynced(v2hv, state.companies);
   const out = {} as Record<RegionId, MeasuredOwnershipByClass>;
   const regionIds = Object.keys(state.regions) as RegionId[];
   regionIds.forEach((r) => {
@@ -247,8 +253,13 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     if (isActiveCompany(c)) {
       if (isPubliclyListed(c)) a.equity.outstandingUSD += Math.max(0, c.marketCap ?? 0);
     }
-    a.corpBond.outstandingUSD += (c.debtTranches || [])
-      .reduce((s, t) => s + Math.max(0, t.principalUSD), 0);
+    {
+      // §7.311 — ladder read on rows (fold order = chain order = array order).
+      const TS = v2hv.tranches;
+      let sum = 0;
+      for (const r of ladderRowsOf(v2hv, c.id)) sum += Math.max(0, TS.principalUSD[r]);
+      a.corpBond.outstandingUSD += sum;
+    }
 
     const sheet = c.bankBalanceSheet;
     if (!sheet || !isActiveCompany(c)) return;

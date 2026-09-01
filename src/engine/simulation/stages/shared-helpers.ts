@@ -5,6 +5,8 @@
  */
 
 import { journalPayment, partyId } from './settlement';
+import { V2World } from '../../../engine2/world';
+import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
 import { INSTRUMENT_IDS } from '../../columns/intern';
 import { Company, Region, SmePool, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
@@ -83,7 +85,7 @@ function annualEbitdaVol(comp: Company): number {
  * cash, its real capex and dividends, its own measured revenue volatility. Dispersion between
  * two same-rated names is real information, not curve noise.
  */
-export function computeAnnualDefaultProbability(comp: Company): number {
+export function computeAnnualDefaultProbability(v2: V2World, comp: Company): number {
   // §7.291 — A BANK'S DEFAULT DISTANCE COMES OFF ITS OWN SHEET (§7.268's doctrine, one function
   // over: the RATING was fixed there, and this PD — which PRICES the bank's paper in 07b and
   // sizes its wholesale spread through the cleared OAS — still read the CORPORATE context.
@@ -110,12 +112,18 @@ export function computeAnnualDefaultProbability(comp: Company): number {
     const distance = bufferUSD / (rwaUSD * lossRateAnnual);
     return normalCdf(-distance);
   }
-  const interest = comp.debtTranches?.reduce((sum, t) => {
-    const rate = t.rateType === 'FIXED'
-      ? (t.couponRate ?? 0.05)
-      : (0.05 + (t.floatingMarginBps ?? 200) / 10000);
-    return sum + t.principalUSD * rate;
-  }, 0) || 1;
+  // §7.311 — ladder read on rows (fold order = chain order = array order).
+  let interestSum = 0;
+  {
+    const TS = v2.tranches;
+    for (const r of ladderRowsOf(v2, comp.id)) {
+      const rate = !(TS.flags[r] & TR_FLOATING)
+        ? (Number.isNaN(TS.couponRate[r]) ? 0.05 : TS.couponRate[r])
+        : (0.05 + (Number.isNaN(TS.floatingMarginBps[r]) ? 200 : TS.floatingMarginBps[r]) / 10000);
+      interestSum += TS.principalUSD[r] * rate;
+    }
+  }
+  const interest = interestSum || 1;
   const ebitda = Math.max(1, comp.ebitda);
 
   const shockToCoverage = 1 - (DEFAULT_COVERAGE_FLOOR * interest) / ebitda;
@@ -131,10 +139,6 @@ export function computeAnnualDefaultProbability(comp: Company): number {
   const distance = Math.max(shockToCoverage, shockToCash);
 
   return normalCdf(-distance / annualEbitdaVol(comp));
-}
-
-export function computeExpectedLossSpreadBps(comp: Company, reg?: { realisedRecoveryRates?: number[] }): number {
-  return computeAnnualDefaultProbability(comp) * (1 - creditRecoveryRate(reg)) * 10000;
 }
 
 /**

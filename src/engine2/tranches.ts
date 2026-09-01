@@ -219,3 +219,11 @@ export function ladderRowsOf(v2: V2World, companyId: string): number[] {
   for (let r = S.head[firmRow]; r >= 0; r = S.next[r]) rows.push(r);
   return rows;
 }
+
+/** Idempotent catch-up for entry points that can run OUTSIDE the weekly step (UI/harness reads):
+ *  mirrors any firm not yet synced. The weekly step's own catch-up makes this a no-op in-week. */
+export function ensureLaddersSynced(v2: V2World, companies: { id: string; debtTranches?: DebtTranche[] }[]): void {
+  for (const c of companies) {
+    if (!v2.tranches.synced.has(c.id)) syncLadderRows(v2, c.id, c.debtTranches);
+  }
+}

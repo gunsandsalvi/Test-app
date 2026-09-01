@@ -25,6 +25,8 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
+import { ensureV2, V2World } from '../../../engine2/world';
+import { ladderRowsOf, TR_FLOATING, TR_FACILITY } from '../../../engine2/tranches';
 import { isActiveCompany } from '../../../domain/company';
 import {
   computeReservationSpreadBps,
@@ -35,7 +37,7 @@ import {
   spreadRiskCapitalChargeRate,
   entityRequiredReturn,
 } from './asset-allocation';
-import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
+import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
@@ -68,14 +70,17 @@ const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['leveraged loan'];
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'leveraged loan';
 
-function floatingDebtUSD(comp: Company): number {
+function floatingDebtUSD(v2: V2World, comp: Company): number {
   // G2: bank FACILITIES (revolvers, maintenance bridges) are excluded — they are loans on a
   // named bank's itemized book, not syndicated paper this market can hold. Counting them here
   // was the §6 double-count: the same principal on the bank book AND in institutional
   // holdings, expensed once by the issuer and received twice.
-  return (comp.debtTranches || [])
-    .filter((t) => t.rateType === 'FLOATING' && !t.isBankFacility)
-    .reduce((s, t) => s + t.principalUSD, 0);
+  const S = v2.tranches;
+  let sum = 0;
+  for (const r of ladderRowsOf(v2, comp.id)) {
+    if ((S.flags[r] & TR_FLOATING) && !(S.flags[r] & TR_FACILITY)) sum += S.principalUSD[r];
+  }
+  return sum;
 }
 
 function loanCreditDurationYears(comp: Company): number {
@@ -83,6 +88,7 @@ function loanCreditDurationYears(comp: Company): number {
 }
 
 export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+  const v2 = ensureV2(state);
   const regionIds = REGION_IDS;
 
   // SCALE: same per-run memo and hoist as 07b — floatingDebtUSD walks the ladder per call and
@@ -90,7 +96,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
   const floatingDebtById = new Map<string, number>();
   const floatingDebtOf = (c: Company): number => {
     let v = floatingDebtById.get(c.id);
-    if (v === undefined) { v = floatingDebtUSD(c); floatingDebtById.set(c.id, v); }
+    if (v === undefined) { v = floatingDebtUSD(v2, c); floatingDebtById.set(c.id, v); }
     return v;
   };
   const loanStockByRegion: Record<string, number> = {};
@@ -258,7 +264,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Same per-region memoization as 07b — see the optimization note in the plan's §6.
     const pdByCompanyId = new Map<string, number>();
-    regionCompanies.forEach((c) => pdByCompanyId.set(c.id, computeAnnualDefaultProbability(c)));
+    regionCompanies.forEach((c) => pdByCompanyId.set(c.id, computeAnnualDefaultProbability(v2, c)));
 
     // Per-company terms hoisted out of the per-entity loops — same expressions once instead of
     // per (entity x name) pair; see 07b's twin comment.

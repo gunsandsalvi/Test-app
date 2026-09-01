@@ -40,9 +40,11 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
+import { ensureV2, V2World } from '../../../engine2/world';
+import { ladderRowsOf, TR_FLOATING, TR_CP } from '../../../engine2/tranches';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { isActiveCompany } from '../../../domain/company';
-import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, getRatingBucket, distributeRealTargetByWeight, creditRecoveryRate } from './shared-helpers';
+import { computeAnnualDefaultProbability, getRatingBucket, distributeRealTargetByWeight, creditRecoveryRate } from './shared-helpers';
 import {
   computeReservationSpreadBps,
   FULL_SIZE_SPREAD_RANGE_BPS,
@@ -92,19 +94,29 @@ const BOOK = 'corporate bond';
 // practice — a genuine structural avoidance of high-yield paper, not a soft preference.
 const IG_MANDATE_HY_AVOIDANCE_TILT = -0.7;
 
-function fixedDebtUSD(comp: Company): number {
-  return (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0);
+// §7.311 — ladder reads on rows (chain order = array order, so every fold is float-identical).
+function fixedDebtUSD(v2: V2World, comp: Company): number {
+  const S = v2.tranches;
+  let sum = 0;
+  for (const r of ladderRowsOf(v2, comp.id)) {
+    if (!(S.flags[r] & (TR_FLOATING | TR_CP))) sum += S.principalUSD[r];
+  }
+  return sum;
 }
 
-function creditDurationYears(comp: Company): number {
-  const fixedTranches = (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED' && !t.isCommercialPaper);
-  const totalFixed = fixedDebtUSD(comp);
-  if (fixedTranches.length === 0 || totalFixed <= 0) return 3.5;
-  const weightedTenor = fixedTranches.reduce((s, t) => {
-    const tenorYears = Math.max(0.5, (t.maturityWeek - t.originationWeek) / 52);
-    return s + tenorYears * t.principalUSD;
-  }, 0) / totalFixed;
-  return Math.max(1.0, Math.min(8.0, weightedTenor * 0.75));
+function creditDurationYears(v2: V2World, comp: Company): number {
+  const S = v2.tranches;
+  const totalFixed = fixedDebtUSD(v2, comp);
+  let weighted = 0;
+  let count = 0;
+  for (const r of ladderRowsOf(v2, comp.id)) {
+    if (S.flags[r] & (TR_FLOATING | TR_CP)) continue;
+    count++;
+    const tenorYears = Math.max(0.5, (S.maturityWeek[r] - S.originationWeek[r]) / 52);
+    weighted += tenorYears * S.principalUSD[r];
+  }
+  if (count === 0 || totalFixed <= 0) return 3.5;
+  return Math.max(1.0, Math.min(8.0, (weighted / totalFixed) * 0.75));
 }
 
 // Credit-book duration preference is the kind registry's `preferredCreditDurationYears` row.
@@ -126,6 +138,7 @@ function clamp(v: number, min: number, max: number): number {
  */
 
 export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+  const v2 = ensureV2(state);
   const regionIds = REGION_IDS;
 
   // SCALE: fixedDebtUSD filters and reduces a company's whole ladder per call, and the stage
@@ -134,7 +147,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
   const fixedDebtById = new Map<string, number>();
   const fixedDebtOf = (c: Company): number => {
     let v = fixedDebtById.get(c.id);
-    if (v === undefined) { v = fixedDebtUSD(c); fixedDebtById.set(c.id, v); }
+    if (v === undefined) { v = fixedDebtUSD(v2, c); fixedDebtById.set(c.id, v); }
     return v;
   };
   // Loop-invariant for the same reason — hoisted from the per-region iteration (it was four
@@ -190,7 +203,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       tradableFloatUSD: fixedDebtOf(c),
       currentStat: c.oasSpreadBps,
       statKind: 'YIELD_LIKE',
-      durationYears: creditDurationYears(c),
+      durationYears: creditDurationYears(v2, c),
       primaryOfferingUSD: offeringsByIssuerId.get(c.id)?.sizeUSD,
       primaryWithdrawStat: offeringsByIssuerId.get(c.id)?.walkAwayStat,
       // No floor and no ceiling. The floor is an outcome: every bidder's reservation already
@@ -271,7 +284,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // (§6's optimization rule): the structural PD reads the debt ladder and revenue history and
     // was being recomputed once per entity x company — 4x the work for identical answers.
     const pdByCompanyId = new Map<string, number>();
-    regionCompanies.forEach((c) => pdByCompanyId.set(c.id, computeAnnualDefaultProbability(c)));
+    regionCompanies.forEach((c) => pdByCompanyId.set(c.id, computeAnnualDefaultProbability(v2, c)));
 
     // Everything about a COMPANY that the per-entity loops below were recomputing per pair —
     // ~35 entities x ~350 names x 4 regions of identical answers per week. Hoisted once, same
@@ -285,7 +298,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const regionRecoveryRate = creditRecoveryRate(reg);
     const companyTerms = regionCompanies.map((c) => {
       const annualPd = pdByCompanyId.get(c.id)!;
-      const durationYears = creditDurationYears(c);
+      const durationYears = creditDurationYears(v2, c);
       return {
         id: c.id,
         creditRating: c.creditRating,
@@ -451,7 +464,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // G3c: the lead quotes THIS deal — the desks' own spread, plus what a week's spread move
     // through the deal's own duration can cost on the residual the desks cannot absorb.
     const bookCapacityUSD = totalDeskCapacityUSD(ctx, regionBanks, BOOK);
-    const durationById = new Map(regionCompanies.map((c) => [c.id, creditDurationYears(c)]));
+    const durationById = new Map(regionCompanies.map((c) => [c.id, creditDurationYears(v2, c)]));
     // §7.259: the settlement call moved BELOW applyDealerDeskFills — called here it landed the
     // lead's residual on its desk between the clearing and the rebuild-from-fills, which
     // deleted it with no cash leg and charged it to equity as a phantom fee (see 07d).

@@ -15,6 +15,8 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { ensureV2 } from '../../../engine2/world';
+import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { carriesRateDuration } from '../../../domain/assets';
 import {
@@ -51,6 +53,7 @@ function twoSigmaYieldMoveBps(reg: { historicalZeroCurves?: { tenor10Y: number }
 }
 
 export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+  const v2g = ensureV2(state);
   void state;
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
@@ -132,11 +135,19 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
     // A corporate with floating debt hedges the part whose interest bill its own earnings could
     // not cover if rates moved: the covenant is the test, and it is the borrower's own numbers.
     regionCompanies.forEach((comp) => {
-      const floating = (comp.debtTranches || []).filter((t) => t.rateType === 'FLOATING');
-      const floatingUSD = floating.reduce((a, t) => a + t.principalUSD, 0);
+      // §7.311 — ladder reads on rows, fold order = chain order = array order.
+      const TS = v2g.tranches;
+      let floatingUSD = 0;
+      let interestUSD = 0;
+      for (const r of ladderRowsOf(v2g, comp.id)) {
+        const isFloating = (TS.flags[r] & TR_FLOATING) !== 0;
+        if (isFloating) floatingUSD += TS.principalUSD[r];
+        interestUSD += TS.principalUSD[r]
+          * (!isFloating
+            ? (Number.isNaN(TS.couponRate[r]) ? 0.05 : TS.couponRate[r])
+            : reg.policyRate + ((Number.isNaN(TS.floatingMarginBps[r]) ? 200 : TS.floatingMarginBps[r])) / 10000);
+      }
       if (!(floatingUSD > 0)) return;
-      const interestUSD = (comp.debtTranches || []).reduce((a, t) => a + t.principalUSD
-        * (t.rateType === 'FIXED' ? (t.couponRate ?? 0.05) : reg.policyRate + (t.floatingMarginBps ?? 200) / 10000), 0);
       const affordableInterestUSD = Math.max(0, comp.ebitda) / COVENANT_INTEREST_COVERAGE;
       const headroomUSD = affordableInterestUSD - interestUSD;
       // What a two-sigma rise would add to the bill, against the headroom it has.
