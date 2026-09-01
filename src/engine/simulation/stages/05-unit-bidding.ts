@@ -710,7 +710,7 @@ function settleContracts(
   const fillL = new Float64Array(m);
   const availAfter = new Float64Array(m);
   const __c0 = S05_PROF ? performance.now() : 0;
-  if (S05_PROF) s05Phase.settlePre += __c0 - __sp0;
+  if (S05_PROF) { s05Phase.settlePre += __c0 - __sp0; s05Phase.settleRows += m; }
   settleContractsCore(T, rows, contractLeadWeeks, preStatus, supSlot, needUSD, marketPrice,
     avail, status, buyerLoss, sellerLoss, actualT, paymentL, appliedL, topUpL, fillL, availAfter);
   const __c1 = S05_PROF ? performance.now() : 0;
@@ -1408,7 +1408,7 @@ function buildRegionDemandPlans(
  * wedge sits on each buyer's own reservation, which is exactly how it works: a mill quotes at the
  * gate and the buyer pays the freight.
  */
-export const s05Phase = { plans: 0, settle: 0, settleCore: 0, settlePre: 0, settleEff: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
+export const s05Phase = { settleRows: 0, plans: 0, settle: 0, settleCore: 0, settlePre: 0, settleEff: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
 const S05_PROF = typeof process !== 'undefined' && process.env?.S05_PROF === '1';
 // One-run diagnostic split INSIDE the buyers walk (§7.315's method: name the term before
 // converting anything). ~3 clock reads per lot — relative shares only, not absolute times.
@@ -1720,11 +1720,31 @@ function runSubUnitMarkets(
   // SCALE (§7.305 step 3) — the pid caches and aggregate ids live on the weekly bundle now:
   // they were rebuilt once per MARKET (~200 times a week) for values that are fixed all week.
   const { pidOfSeller, pidOfCarrier, hhPid, govPid } = wk;
+  // §4.C Stage IV — per-(origin, buyer-region) facts hoisted to 4x4 matrices per market: the
+  // ex-works conversion, the landed per-unit, and the transit arrival week were recomputed per
+  // (plan, origin) pair (thousands of pure-function calls per market for 16 distinct values).
+  // Same functions, same arguments, same floats.
+  const exWorksM = new Map<RegionId, Map<RegionId, number>>();
+  const arrivalM = new Map<RegionId, Map<RegionId, number>>();
+  MARKET_REGION_IDS.forEach(origin => {
+    const exRow = new Map<RegionId, number>();
+    const arRow = new Map<RegionId, number>();
+    MARKET_REGION_IDS.forEach(buyer => {
+      exRow.set(buyer, convertLocal(results[origin].clearedPriceUSD, origin, buyer, sourcing.fxToUsd));
+      arRow.set(buyer, nextWeek + Math.round(laneTransitWeeks(origin, buyer, laneDistanceNm(origin, buyer))));
+    });
+    exWorksM.set(origin, exRow);
+    arrivalM.set(origin, arRow);
+  });
+  // The lane's carriers with pid and region resolved ONCE — built lazily at the lane's first
+  // paying lot, so pid interning keeps the old first-use order.
+  const laneCarrierCache = new Map<string, { share: number; ticker: string; pid: number; region: RegionId | undefined }[] | undefined>();
   demandPlans.forEach(plan => {
     if (!plan.company || !plan.key) return;
     if (!purchasedKeys.has(plan.key)) return;
     const comp = plan.company;
     const buyerPid = wk.pidOf(comp);
+    const buyerUpdate = wk.updateOf(comp);
     let units = 0;
     let landedCost = 0;
     MARKET_REGION_IDS.forEach(origin => {
@@ -1733,7 +1753,7 @@ function runSubUnitMarkets(
       if (!buy || buy.quantity <= 0.0001) return;
       // A lot bought abroad is paid for in the seller's money and carried home; both legs land on
       // this buyer's books in its own money.
-      const exWorksBuyerMoney = convertLocal(book.clearedPriceUSD, origin, plan.regionId, sourcing.fxToUsd);
+      const exWorksBuyerMoney = exWorksM.get(origin)!.get(plan.regionId)!;
       const perUnit = exWorksBuyerMoney + freightPerUnitBuyerMoney(origin, plan.regionId);
       units += buy.quantity;
       landedCost += buy.quantity * perUnit;
@@ -1741,12 +1761,25 @@ function runSubUnitMarkets(
       // long as the lane physically takes, and only lands on the buyer's input inventory when it
       // gets there. Domestic hauls that complete inside the week land immediately, which is what
       // a same-week road delivery is.
-      const transit = laneTransitWeeks(origin, plan.regionId, laneDistanceNm(origin, plan.regionId));
-      const arrivalWeek = nextWeek + Math.round(transit);
-      const buyerUpdate = wk.updateOf(comp);
+      const arrivalWeek = arrivalM.get(origin)!.get(plan.regionId)!;
       // §7.315's grind: the lane's carrier shares are a per-(origin, buyer-region) fact, probed
       // once here instead of once per LOT (~25k probes + key strings a week).
-      const laneShares = ctx.freightClearing?.carrierShareByLane.get(laneKey(origin, plan.regionId));
+      const laneK = laneKey(origin, plan.regionId);
+      let laneCarriers = laneCarrierCache.get(laneK);
+      if (laneCarriers === undefined && !laneCarrierCache.has(laneK)) {
+        const shares = ctx.freightClearing?.carrierShareByLane.get(laneK);
+        if (shares) {
+          laneCarriers = [];
+          shares.forEach((share, carrierTicker) => {
+            if (!(share > 0)) return; // a zero share never paid, so it never resolved either
+            laneCarriers!.push({
+              share, ticker: carrierTicker, pid: pidOfCarrier(carrierTicker),
+              region: lookup.byTicker.get(carrierTicker)?.region,
+            });
+          });
+        }
+        laneCarrierCache.set(laneK, laneCarriers);
+      }
       (book.lotsByBuyer.get(plan.key!) ?? []).forEach(l => {
         const __b0 = S05B_PROF ? performance.now() : 0;
         if (S05B_PROF) s05Buyers.lots++;
@@ -1769,9 +1802,8 @@ function runSubUnitMarkets(
         // with what any buyer was charged. What a carrier earned is what its customers paid it.
         const freightUSD = l.units * (perUnit - exWorksBuyerMoney);
         if (freightUSD > 0) {
-          const shares = laneShares;
           let paidUSD = 0;
-          shares?.forEach((share, carrierTicker) => {
+          laneCarriers?.forEach(({ share, ticker: carrierTicker, pid: carrierPid, region: carrierRegion }) => {
             const amountUSD = freightUSD * share;
             if (!(amountUSD > 0)) return;
             paidUSD += amountUSD;
@@ -1780,10 +1812,9 @@ function runSubUnitMarkets(
             // line a currency salad and its margin an FX artifact. The carrier's income stat
             // accrues in the carrier's OWN money; the payment instruction below keeps today's
             // buyer-money convention until Money<C> lands at the pay() seam (§5 Tier 4).
-            const carrierRegion = lookup.byTicker.get(carrierTicker)?.region;
             ctx.carrierFreightRevenue[carrierTicker] = (ctx.carrierFreightRevenue[carrierTicker] ?? 0)
               + (carrierRegion ? convertLocal(amountUSD, plan.regionId, carrierRegion, sourcing.fxToUsd) : amountUSD);
-            payByIds(ctx, buyerPid, pidOfCarrier(carrierTicker), amountUSD, R_FREIGHT);
+            payByIds(ctx, buyerPid, carrierPid, amountUSD, R_FREIGHT);
           });
           // §7.286 — a lane no NAMED carrier serves is still sailed by SOMEBODY: the unnamed
           // small transporters the SME tier exists to represent. The freight pays the origin
@@ -2372,13 +2403,13 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   // Unknown is now unknown: no history, no component.
   if (S05_PROF) {
     const P = s05Phase;
-    console.log(`[s05] plans ${P.plans.toFixed(0)} settle ${P.settle.toFixed(0)} (pre ${P.settlePre.toFixed(0)} core ${P.settleCore.toFixed(0)} eff ${P.settleEff.toFixed(0)}) demand ${P.demand.toFixed(0)} books ${P.books.toFixed(0)} trade ${P.trade.toFixed(0)} sellers ${P.sellers.toFixed(0)} buyers ${P.buyers.toFixed(0)} tail+publish ${P.tail.toFixed(0)}`);
+    console.log(`[s05] plans ${P.plans.toFixed(0)} settle ${P.settle.toFixed(0)} (rows ${P.settleRows} pre ${P.settlePre.toFixed(0)} core ${P.settleCore.toFixed(0)} eff ${P.settleEff.toFixed(0)}) demand ${P.demand.toFixed(0)} books ${P.books.toFixed(0)} trade ${P.trade.toFixed(0)} sellers ${P.sellers.toFixed(0)} buyers ${P.buyers.toFixed(0)} tail+publish ${P.tail.toFixed(0)}`);
     if (S05B_PROF) {
       const B = s05Buyers;
       console.log(`[s05b] lots ${B.lots} pay ${B.pay.toFixed(0)} invoice+fx ${B.invoice.toFixed(0)} aggregate-payers ${B.planRest.toFixed(0)}`);
       B.lots = 0; B.pay = 0; B.invoice = 0; B.planRest = 0;
     }
-    P.plans = 0; P.settle = 0; P.settleCore = 0; P.settlePre = 0; P.settleEff = 0; P.demand = 0; P.books = 0; P.trade = 0; P.sellers = 0; P.buyers = 0; P.tail = 0;
+    P.plans = 0; P.settle = 0; P.settleCore = 0; P.settlePre = 0; P.settleEff = 0; P.settleRows = 0; P.demand = 0; P.books = 0; P.trade = 0; P.sellers = 0; P.buyers = 0; P.tail = 0;
   }
   const realizedIndexVol = realizedAnnualVol(state.compositeIndices.usaComposite.historical, 13);
   const baselineVol = 0.16;
