@@ -12,7 +12,8 @@
     "hygiene": "bash scripts/check-hygiene.sh",
     "test": "node --import tsx --test test/*.test.ts",
     "verify": "bash scripts/check-hygiene.sh && esbuild scripts/harness.ts --bundle --platform=node --format=esm --target=node22 --outfile=node_modules/.cache/harness.mjs --log-level=warning && NODE_OPTIONS=--max-semi-space-size=64 node node_modules/.cache/harness.mjs",
-    "profile": "bash scripts/check-hygiene.sh && esbuild scripts/harness.ts --bundle --platform=node --format=esm --target=node22 --outfile=node_modules/.cache/harness.mjs --log-level=warning && PROFILE=1 NODE_OPTIONS=--max-semi-space-size=64 node node_modules/.cache/harness.mjs"
+    "profile": "bash scripts/check-hygiene.sh && esbuild scripts/harness.ts --bundle --platform=node --format=esm --target=node22 --outfile=node_modules/.cache/harness.mjs --log-level=warning && PROFILE=1 NODE_OPTIONS=--max-semi-space-size=64 node node_modules/.cache/harness.mjs",
+    "build:native": "mkdir -p native/build && gcc -O2 -fPIC -shared -Inode_modules/node-api-headers/include -o native/build/kernels.node native/kernels.c -lm"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -29,6 +30,7 @@
     "@types/react-dom": "^19.2.4",
     "autoprefixer": "^10.4.21",
     "eslint": "^10.1.0",
+    "node-api-headers": "^1.9.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

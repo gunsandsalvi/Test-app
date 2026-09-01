@@ -51,6 +51,7 @@ import { runGoodsArrivalStage } from './stages/goods-arrival';
 import { runTradeSettlementStage } from './stages/trade-settlement';
 // Side effect only: registers the (Node-only, env-gated) clearing worker pool with the engine.
 import './stages/clearing-worker-pool';
+import './stages/native-kernels';
 import { runFreightClearingStage } from './stages/freight-clearing';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
 import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
