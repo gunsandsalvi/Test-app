@@ -23,7 +23,7 @@ import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { getRngState, setRngState } from '../../rng';
 import { runStage08FrontPass } from '../../../engine2/stage08-front';
 import { ensureV2 } from '../../../engine2/world';
-import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm } from '../../../engine2/stage08-back';
+import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm , s08k} from '../../../engine2/stage08-back';
 
 /** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
  *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
@@ -338,6 +338,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   if (S08_PROF) {
     console.log(`[s08] front+indexes ${(__p1 - __p0).toFixed(0)} kernel ${(__p2 - __p1).toFixed(0)}`
       + ` sweeps ${(__p2a - __p2).toFixed(0)} corp-actions ${(__p2b - __p2a).toFixed(0)} accruals ${(__p3 - __p2b).toFixed(0)}`);
+    if (process.env?.S08K_PROF === '1') {
+      console.log(`[s08k] capital ${s08k.capital.toFixed(0)} cash ${s08k.cash.toFixed(0)} debt ${s08k.debt.toFixed(0)} tail ${s08k.tail.toFixed(0)}`);
+      s08k.capital = 0; s08k.cash = 0; s08k.debt = 0; s08k.tail = 0;
+    }
   }
 
   // §4.0 Tier 1 item 9 — A MARKET SHARE IS A RATIO, AND RATIOS SUM TO ONE. Each line's share

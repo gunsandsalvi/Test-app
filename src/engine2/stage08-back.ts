@@ -112,6 +112,10 @@ export interface BackKernelDeps {
 }
 
 /** The back half of one company's week — same statements the stage's kernel ran, same order. */
+// §7.315's method — a coarse per-firm split of the kernel's ~150 ms/wk. Free when off.
+const S08K_PROF = typeof process !== 'undefined' && process.env?.S08K_PROF === '1';
+export const s08k = { capital: 0, cash: 0, debt: 0, tail: 0 };
+
 export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: number) => Company {
   const {
     state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
@@ -119,6 +123,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
   } = d;
   return (comp: Company, row: number): Company => {
+    const __k0 = S08K_PROF ? performance.now() : 0;
     /**
      * Earnings PER SHARE, for a company that has shares. A private firm's register is empty until
      * it lists (HC7's `postIssueSharesOutstanding` creates it), so there is nothing to divide by
@@ -480,6 +485,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const newGrossPPEUSD = priorGrossPPE + capexCommissionedThisWeekUSD;
     const newAccumulatedDepreciationUSD = Math.min(newGrossPPEUSD, priorAccumulatedDepreciation + weeklyDepreciation);
 
+    const __k1 = S08K_PROF ? performance.now() : 0;
+    if (S08K_PROF) s08k.capital += __k1 - __k0;
     // ---- S5: the weekly cash walk is an explicit ledger ----
     // One posting helper is the single write path to cash; every entry is a named real flow.
     // The previous walk triple-counted the operating side: an EBITDA/52 accrual PLUS stage 05's
@@ -807,6 +814,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // and relinks the chain once at write-back. Fold order everywhere = list order = the order
     // the object walk had.
     const TS = v2.tranches;
+    const __k2 = S08K_PROF ? performance.now() : 0;
+    if (S08K_PROF) s08k.cash += __k2 - __k1;
     let rowList = ladderRowsOf(v2, comp.id);
     // Economics views are memoized per row — retirementEconomics and the call arithmetic read
     // no principal, so a view struck before a principal mutation stays valid.
@@ -1590,6 +1599,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // that auction filled.
     const newTreasuryHoldings = weekUpdate?.treasuryHoldings ?? comp.treasuryHoldings ?? [];
 
+    const __k3 = S08K_PROF ? performance.now() : 0;
+    if (S08K_PROF) s08k.debt += __k3 - __k2;
     // Buyback Execution (Part AH)
     let updatedSharesOutstanding = comp.sharesOutstanding;
     const targetCashBuffer = Math.max(10, comp.currentLiabilities * 1.5);
@@ -1944,6 +1955,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // Already real and already-cleared (07d-leveraged-loan-clearing.ts) — passed through as-is.
 
     comp.treasuryHoldings = newTreasuryHoldings;
+    if (S08K_PROF) s08k.tail += performance.now() - __k3;
     return comp;
   };
 }
