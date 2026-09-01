@@ -2362,6 +2362,22 @@ function runHarness() {
             .reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0)
         // HF1: margin loans to hedge funds are this bank's asset too.
         - (bs.primeBrokerageLoansUSD ?? 0);
+      const idTraced = (process.env.BANK_ID_TRACE ?? '').split(',').includes(c.ticker);
+      if (Math.abs(residualUSD) > 5e6 || idTraced) {
+        // §7.302 — the composition, printed when it breaks: a 66B one-week residual during the
+        // first bank resolution was undiagnosable from the total alone. BANK_ID_TRACE=<ticker>
+        // prints one bank's composition every week so the jumping line can be diffed.
+        const bsx = bs as unknown as Record<string, number | undefined>;
+        const gb = (v: number | undefined) => ((v ?? 0) / 1e9).toFixed(1);
+        console.log(`  [bank-identity] w${w} ${c.ticker} resid ${(residualUSD / 1e9).toFixed(2)}B: hhDep ${gb(bs.depositsUSD)}B`
+          + ` corp ${gb(bs.corporateDepositsUSD)}B inst ${gb(bsx.institutionalDepositsUSD)}B`
+          + ` sme ${gb(bsx.smeDepositsUSD)}B unmod ${gb(bsx.unmodeledDepositsUSD)}B`
+          + ` whol ${gb(bs.wholesaleFundingUSD)}B eq ${gb(bs.bankEquityUSD)}B`
+          + ` srf ${gb(bs.srfBorrowingUSD)}B repoB ${gb(bsx.repoBorrowedUSD)}B`
+          + ` || bizL ${gb(bs.businessLoanBookUSD)}B consL ${gb(bs.consumerLoanBookUSD)}B`
+          + ` sov ${gb(sovUSD)}B cash ${gb(bs.cashReservesUSD)}B`
+          + ` repoL ${gb(bsx.repoLentUSD)}B rrp ${gb(bs.onRrpLendingUSD)}B`);
+      }
       if (Math.abs(residualUSD) > 5e6) {
         violations.push({
           week: w,

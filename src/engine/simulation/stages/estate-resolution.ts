@@ -119,7 +119,11 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   // ---- Open an estate for every issuer that has just defaulted. ----
   ctx.updatedCompanies.forEach((comp) => {
     if (!comp.isDefaulted || byCompanyId.has(comp.id) || comp.mergerAcquired) return;
-    if (comp.isBankEntity || comp.isInstitutionalEntity) return;
+    // §7.302 — a RESOLVED bank's shell goes through the one estate machinery like any dead
+    // issuer: its books went to the assuming bank, so its register claims (equity, any traded
+    // paper) recover from nothing and write off — which is what resolution means for holders.
+    // A LIVE bank still never opens an estate here.
+    if ((comp.isBankEntity && comp.bankResolvedWeek === undefined) || comp.isInstitutionalEntity) return;
     const estate = openEstate(comp, ctx);
     if (!estate) return;
     // §7.286 — THE FILING SEIZES NOTHING ANY MORE. §7.264 paid the debtor's cash into the

@@ -425,6 +425,14 @@ timing responds to depreciation treatment.
 
 ### SCALE — universe scale-up *(item 6)*
 
+**THE TARGET IS 100 ms/WEEK — set by the user (2026-09-01), superseding §7.222's "~370–490 ms
+honest target" note.** That note was an argument about the CURRENT architecture (stage 05's
+shared-wallet serialization), not a bound: reaching 100 ms requires the full wave — phase 3
+companies-as-columns, phase 5 workers, the long tail converted — AND a mechanism redesign of
+stage 05's market sequencing (per-market budget envelopes or equivalent), which is a DECLARED
+RELABEL judged by reference like any other. Current measured: 1,583 ms/wk (§7.300); stage 05
+477, stage 08 409, ~40-stage tail ~700, GC ~8%.
+
 **Measurement-gated; profile first, always.** Two hard constraints: determinism is sacred
 (same-seed A/B byte-identical), and no economic shortcut dressed as an optimisation. Owns the
 damper's float half — and the small-cap equity tail that is HALF the §7.288 damper count. DIST
@@ -482,6 +490,7 @@ when housing wealth is fully spendable).
 | **INSTITUTIONAL OPENING SIZE STILL ASSIGNED** | `INSTITUTIONAL_OPENING_BOOK_SHARE.equity = 0.42` — needs the asset manager anchored on households' own fund holdings; interlocks with the manager/vehicle split; a full seed re-base (SEED_BURN_IN gate, §7.283). Owner: COH. |
 | **A MANAGER AND A VEHICLE IN ONE OBJECT** | HEDGE_FUND/PENSION_FUND are both; neither is modelled. **Design assigned (§7.284, ETF template):** (1) vehicle keeps the InstitutionalEntity (assets, cash, unit-holder liability; HF gets an LP register — DYN-adjacent); (2) manager keeps the Company shell with a NEW `managesEntityIds` link replacing id-equality (first commit, pure structure); (3) the fee becomes the real vehicle→manager payment (§7.285 executed this on the conflated object). Own §1.7 chain. |
 | **FX SWAP LINES DO NOT EXIST** | The routine stress instrument; needs an FX funding market first (its own stated gate, §7.282). |
+| **§7.302 BANK RESOLUTION — WIP, one open defect** | Built (PCA trigger 2% RWA, single-assuming P&A, wholesale haircut, reserves as a flow); UK NIM 27x→1x. OPEN: ~51.7B one-week identity residual on the assuming bank at the resolution week; the funding split then derives wholesale to −40.6B persistent — a deposit class double-moves. Resume via THSY/GCKB per-line diffs (BANK_ID_TRACE) + applyBankFundingSplit's wholesale derivation (floor it at 0). PARKED: SCALE is the sole priority (user, 2026-09-01). |
 | **FX SPREAD — remainder** | §7.282 charges the corporate trade-invoice leg (2bps to the buyer's home banks); aggregate buyers (household/government) and the financial books' own conversions still cross at mid — extend the same leg when those flows carry a named payer. |
 | **LOGISTICS IS AN ORDER OF MAGNITUDE TOO SMALL** | 1.0B/wk = 0.05% of world GDP at §7.287 vs real 5–6%; carriers all alive and earning (§7.267) so the gap is domestic tonnage/scale, not deaths. Measurement-gated re-read (Tier 5), owner the freight book with IND16's channel margin. |
 | **UK/EUR BANK WATCHES** | UK NIM marginal (survivors 0.0089–0.0098 vs the 0.01 floor — VOUL's seed wholesale at its cleared spread, §7.259/§7.261: watch, not defect); EUR banks carry wholesale they cannot repay, EUR band pending (§7.254); sovereign-book accretion missing from the NIM measure — pass prior-week accretion in when the family next surfaces. |

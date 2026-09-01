@@ -568,6 +568,10 @@ export interface Company {
   /** PUB1b — tax accrued but not yet remitted. Real firms accrue weekly and pay quarterly, and
    * that lumpiness is most of what makes a treasury account swing. */
   accruedTaxLiabilityUSD?: number;
+  /** §7.302 — the week this bank was RESOLVED (equity ≤ 0 → purchase-and-assumption by the
+   *  region's largest survivor; wholesale haircut by the hole; the shell defaults into the
+   *  estate for its register claims). Set once; a resolved bank never trades again. */
+  bankResolvedWeek?: number;
   /** §5-TAXR — accumulated losses not yet used against taxable profit. A recovering firm draws
    *  this down and pays nothing until it is gone; receipts fall faster than profits in a
    *  downturn. Seeded absent: a firm opens with no loss history (§7.4). */
