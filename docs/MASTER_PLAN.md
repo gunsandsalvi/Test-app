@@ -448,6 +448,17 @@ batch-converted → B5 objects demoted to views. Validation: SHARDS=1≡n, FP fo
 references for the envelope relabel. 4 cores: 100 ms needs ~4-5× serial × ~3.5× workers — the
 serial factor comes from B1/B5, the parallel from B2/B3/B4.
 
+**THE LANGUAGE QUESTION, SETTLED BY SPIKE (2026-09-01):** the representative numeric core of a
+company's week (income+TAXR+capex+learning, the transcendental-heavy mix) ported to Rust and
+benchmarked four ways at 2,500 firms — JS/objects 44 ns/company, JS/columns 42 ns, Rust→WASM 77 ns
+(call overhead + software libm; outputs bit-identical), against the real closure's 78,000 ns.
+**99.95% of stage 08's cost is not arithmetic and not the runtime — it is the object model**
+(weekly snapshot/array rebuilds, string-keyed maps, filter chains, string building, megamorphic
+dispatch). No language rewrite: the campaign is the DATA-ORIENTED rebuild in TS — columns,
+arenas, workers over SharedArrayBuffer — with ~1000× compute headroom measured and zero
+cross-language behavioral risk. Rust/WASM shelved as tier-2 (toolchain proven, spike preserved
+at the session scratchpad and rebuildable from this record).
+
 **Measurement-gated; profile first, always.** Two hard constraints: determinism is sacred
 (same-seed A/B byte-identical), and no economic shortcut dressed as an optimisation. Owns the
 damper's float half — and the small-cap equity tail that is HALF the §7.288 damper count. DIST
