@@ -74,11 +74,8 @@ function fixedShareOf(comp: Company): number {
   const industry = primary ? industryOfSubUnit(primary.subUnitId) : undefined;
   return industry ? base * financingProfileOf(industry).fixedRateTilt : base;
 }
-function maxDividendPayoutRatioOf(comp: Company): number {
-  const primary = (comp.productLines || [])[0];
-  const industry = primary ? industryOfSubUnit(primary.subUnitId) : undefined;
-  return industry ? financingProfileOf(industry).maxPayoutRatio : DEFAULT_MAX_DIVIDEND_PAYOUT_RATIO;
-}
+// (maxDividendPayoutRatioOf moved to the seam — L.maxPayoutRatio, §7.325 W1; the 0.6 default
+// lives in stage08-lanes.ts with the fill.)
 
 /** CAP — the share of a measured capacity shortfall a firm tries to close in a year. */
 const CAPACITY_CATCHUP_SHARE_ANNUAL = 0.35;
@@ -343,13 +340,13 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
 /** §7.317 — the closure-wide cash primitive as a FACTORY: one mutable cash box, one ledger,
  *  one post; the walk and every later block write through the same instance, exactly as the
  *  closure binding did. */
-function makeCashPoster(comp: Company, ctx: WeeklyStepContext, retainCashLedger: boolean): {
+function makeCashPoster(ticker: string, region: Company['region'], cashUSD: number, ctx: WeeklyStepContext, retainCashLedger: boolean): {
   post: (label: string, amountUSD: number, counterparty?: PartyRef, settle?: boolean) => void;
   cash: { usd: number };
   cashLedger: { label: string; amountUSD: number }[];
 } {
     const cashLedger: { label: string; amountUSD: number }[] = [];
-    const cash = { usd: comp.cash };
+    const cash = { usd: cashUSD };
     // SETL2: a ledger entry IS a payment instruction. The S5 walk already named every flow and
     // its amount; what it never named was the OTHER SIDE, which is why corporate cash could move
     // without any bank knowing (§7.86). Each post now names a counterparty; where the model does
@@ -358,8 +355,8 @@ function makeCashPoster(comp: Company, ctx: WeeklyStepContext, retainCashLedger:
     // as later slices name each flow, not a plug (rule 13).
     // SCALE §7.303 — the walk's own party ids, interned once per company: every settled leg
     // used to re-probe two string maps (partyId x2) per post, ~40k+ legs a week.
-    const selfPartyId = partyId({ kind: 'COMPANY', ticker: comp.ticker });
-    const unmodeledPartyId = partyId({ kind: 'UNMODELED', region: comp.region });
+    const selfPartyId = partyId({ kind: 'COMPANY', ticker });
+    const unmodeledPartyId = partyId({ kind: 'UNMODELED', region });
     const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true) => {
       if (!isFinite(amountUSD) || amountUSD === 0) return;
       // SCALE §7.303 — the drill-down rows are display retention with NO consumer anywhere in
@@ -371,7 +368,7 @@ function makeCashPoster(comp: Company, ctx: WeeklyStepContext, retainCashLedger:
       // moves elsewhere; any label whose elsewhere-leg does not actually debit/credit this
       // company is the 02b reconcile's corporate class, attributed here by name.
       if (!settle && process.env.BYPASS_TRACE === '1') {
-        const key = `${comp.region}:${label}`;
+        const key = `${region}:${label}`;
         bypassTraceByLabel.set(key, (bypassTraceByLabel.get(key) ?? 0) + amountUSD);
       }
       // `settle: false` = the line is REPORTED here but the money moves elsewhere, itemised. A
@@ -664,7 +661,33 @@ function runCashWalk(args: {
   return { accruedTaxUSD };
 }
 
-export function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
+/** §7.325 W1 — core-A's comp writes, returned as data by the capital core and applied here.
+ *  Serial/barrier callers apply them inside A (the original write points); a worker A defers
+ *  them, and the main thread applies each firm's writes in row order before the redemptions. */
+export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapitalBlock>, L: BackLanes, row: number): void {
+  if (cap.learningWrites) {
+    comp.cumulativeOutputUnits = cap.learningWrites.cumulativeUnits;
+    comp.learningMultiplier = cap.learningWrites.multiplier;
+    comp.lastLearningGrowthAnnual = cap.learningWrites.growthAnnual;
+  } else if (Number.isNaN(L.cumulativeOutputUnits[row])
+      && (L.plantCapacityUnitsThisWeek[row] > 0 || L.producedUnitsThisWeek[row] > 0)) {
+    // unreachable by construction (seeding always flows into the learned branch); stated so
+    // a future edit that breaks the all-or-none rule fails loudly here.
+    throw new Error('capital core: seeding without learning writes');
+  }
+  comp.idleStreakWeeks = cap.retirementWrites.idleStreakWeeks;
+  comp.mothballedPpeShare = cap.retirementWrites.mothballedPpeShare;
+  comp.mothballedStreakWeeks = cap.retirementWrites.mothballedStreakWeeks;
+  if (cap.scrapWrites) {
+    comp.grossPPEUSD = cap.scrapWrites.grossPPEUSD;
+    comp.accumulatedDepreciationUSD = cap.scrapWrites.accumulatedDepreciationUSD;
+  }
+}
+
+/** §7.325 W1 — `comp: null` is the WORKER form: the profile branch (main-side by §7.318 D)
+ *  must not be reached, and the capital block's comp writes are deferred to the caller via
+ *  `applyCapCompWrites`. Every other read in A is lanes/F only. */
+export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDeps) {
   const {
     state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
@@ -794,6 +817,7 @@ export function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
     // profile. The four financial statement paths live in stages/profiles/. The OPERATING path
     // is the front pass's now; only the profile dispatch still runs here, until profiles/ ports.
     if (F.isProfile[row] === 1) {
+      if (!comp) throw new Error('runBackCoreA: a profile firm runs main-side with its object (§7.318 D)');
       const profileKey = profileKeyOf(comp);
       const profileModule = PROFILE_REGISTRY[profileKey]!;
       // §5-TAXR — the same opening-stock attributes the front pass derives; a profile firm's
@@ -855,25 +879,10 @@ export function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
     const cap = runCapitalBlock(row, d.backLanes, {
       newEbitda, newRevenue, weeklyInterest,
       effectiveDebtRate, newExecutionQuality, capexCommissionedThisWeekUSD, nextWeek,
-      priorOccupationMixDrift: comp.occupationMixDrift, homeBankTicker: L8.homeBankTicker[row],
+      priorOccupationMixDrift: L8.occupationMixDrift[row],
+      homeBankTicker: L8.homeBankTicker[row],
     });
-    if (cap.learningWrites) {
-      comp.cumulativeOutputUnits = cap.learningWrites.cumulativeUnits;
-      comp.learningMultiplier = cap.learningWrites.multiplier;
-      comp.lastLearningGrowthAnnual = cap.learningWrites.growthAnnual;
-    } else if (comp.cumulativeOutputUnits === undefined
-        && (d.backLanes.plantCapacityUnitsThisWeek[row] > 0 || d.backLanes.producedUnitsThisWeek[row] > 0)) {
-      // unreachable by construction (seeding always flows into the learned branch); stated so
-      // a future edit that breaks the all-or-none rule fails loudly here.
-      throw new Error('capital core: seeding without learning writes');
-    }
-    comp.idleStreakWeeks = cap.retirementWrites.idleStreakWeeks;
-    comp.mothballedPpeShare = cap.retirementWrites.mothballedPpeShare;
-    comp.mothballedStreakWeeks = cap.retirementWrites.mothballedStreakWeeks;
-    if (cap.scrapWrites) {
-      comp.grossPPEUSD = cap.scrapWrites.grossPPEUSD;
-      comp.accumulatedDepreciationUSD = cap.scrapWrites.accumulatedDepreciationUSD;
-    }
+    if (comp) applyCapCompWrites(comp, cap, L8, row);
     const newMaintenanceCapex = cap.maintenanceCapexUSD;
     const newMaintenanceShortfallStreak = cap.maintenanceShortfallStreak;
     const weeklyDebtFundedPortion = cap.debtFundedMaintenanceUSD;
@@ -893,7 +902,7 @@ export function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
 
     const __k1 = S08K_PROF ? performance.now() : 0;
     if (S08K_PROF) s08k.capital += __k1 - __k0;
-    const { post, cash, cashLedger } = makeCashPoster(comp, ctx, retainCashLedger);
+    const { post, cash, cashLedger } = makeCashPoster(L8.ticker[row], L8.region[row], L8.cashUSD[row], ctx, retainCashLedger);
     const __cw = runCashWalk({
       ctx,
       companyId: L8.companyId[row],
@@ -901,11 +910,11 @@ export function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
       region: d.backLanes.region[row],
       isBanksSector: d.backLanes.isBanksSector[row] === 1,
       homeBankTicker: L8.homeBankTicker[row],
-      carrierFreightRevenueUSD: ctx.carrierFreightRevenue[L8.ticker[row]] ?? 0,
-      channelMarginRevenueUSD: ctx.channelMarginRevenue[L8.ticker[row]] ?? 0,
+      carrierFreightRevenueUSD: L8.carrierFreightRevenueUSD[row],
+      channelMarginRevenueUSD: L8.channelMarginRevenueUSD[row],
       declaredDividendYield: L8.dividendYield[row] ?? 0,
       marketCapUSD: d.backLanes.marketCapUSD[row],
-      maxPayoutRatio: maxDividendPayoutRatioOf(comp),
+      maxPayoutRatio: L8.maxPayoutRatio[row],
       hasVehicle: L8.hasVehicle[row] === 1,
       boundaryTraceKey: L8.boundaryTraceKey[row],
       wuSalesUSD: L8.wuSalesUSD[row],

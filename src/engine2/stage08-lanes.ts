@@ -18,6 +18,7 @@ import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stage
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
 import { isPubliclyListed, managedEntityIdsOf } from '../domain/company';
+import { industryOfSubUnit, financingProfileOf } from '../domain/industry-registry';
 
 export interface BackLanes {
   n: number;
@@ -81,6 +82,11 @@ export interface BackLanes {
   supplierConcentration: Float64Array;     // NaN = undefined
   hasVehicle: Uint8Array;
   boundaryTraceKey: string[];
+  // --- §7.325 W1: core-A's last object/ctx reads, resolved at the seam ---
+  occupationMixDrift: Company['occupationMixDrift'][]; // object refs, read-only in A
+  maxPayoutRatio: Float64Array;            // IND4 industry payout discipline, resolved
+  carrierFreightRevenueUSD: Float64Array;  // ctx maps, read-frozen during the loop (§7.318)
+  channelMarginRevenueUSD: Float64Array;
   wasDefaulted: Uint8Array;
   wasMergerAcquired: Uint8Array;
   publiclyListed: Uint8Array;
@@ -99,6 +105,8 @@ export function buildBackLanes(
   updatedRegions: WeeklyStepContext['updatedRegions'],
   companyUpdates: Record<string, CompanyWeekUpdate>,
   entityIds: Set<string>,
+  carrierFreightRevenue: Record<string, number>,
+  channelMarginRevenue: Record<string, number>,
 ): BackLanes {
   const n = companies.length;
   const f = () => new Float64Array(n);
@@ -126,6 +134,8 @@ export function buildBackLanes(
     accruedTaxLiabilityUSD: f(), bankCapitalRatio: f(),
     customerConcentration: f(), supplierConcentration: f(),
     hasVehicle: new Uint8Array(n), boundaryTraceKey: new Array(n),
+    occupationMixDrift: new Array(n), maxPayoutRatio: f(),
+    carrierFreightRevenueUSD: f(), channelMarginRevenueUSD: f(),
     wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
     creditRating: new Array(n), name: new Array(n),
     companyId: new Array(n), homeBankTicker: new Array(n),
@@ -213,6 +223,13 @@ export function buildBackLanes(
     L.supplierConcentration[i] = c.supplierConcentration ?? NaN_;
     L.hasVehicle[i] = !c.isBankEntity && c.isInstitutionalEntity
       && entityIds.has(managedEntityIdsOf(c)[0]) ? 1 : 0;
+    L.occupationMixDrift[i] = c.occupationMixDrift;
+    // IND4 — the same read maxDividendPayoutRatioOf made (0.6 = its stated default).
+    const primaryLine = lines[0];
+    const primaryIndustry = primaryLine ? industryOfSubUnit(primaryLine.subUnitId) : undefined;
+    L.maxPayoutRatio[i] = primaryIndustry ? financingProfileOf(primaryIndustry).maxPayoutRatio : 0.6;
+    L.carrierFreightRevenueUSD[i] = carrierFreightRevenue[c.ticker] ?? 0;
+    L.channelMarginRevenueUSD[i] = channelMarginRevenue[c.ticker] ?? 0;
     L.boundaryTraceKey[i] = `${c.region}:${c.financialStatementProfile ?? c.sector ?? '?'}:${c.ticker}`;
     L.wasDefaulted[i] = c.isDefaulted ? 1 : 0;
     L.wasMergerAcquired[i] = c.mergerAcquired ? 1 : 0;
