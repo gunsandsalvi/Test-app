@@ -657,7 +657,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
  * write application, the revenueHistory fold). Returns the measured 50-value crossing interface
  * plus the cash poster the post zone keeps writing through.
  */
-function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
+/** §7.321 core-A: capital + cash walk — no contention, no draws. Parallel-safe. */
+function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
   const {
     state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
@@ -908,7 +909,7 @@ function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
       accruedTaxUSD, currentWeekMod13, weeklyDebtFundedPortion, bankCredit, post,
     });
     accruedTaxUSD = __cw.accruedTaxUSD;
-    let newTotalDebt = L8.totalDebtUSD[row];
+    const newTotalDebt = L8.totalDebtUSD[row];
 
     const newBaselineDividendYield = round4(L8.baselineDividendYield[row] * 0.998 + L8.dividendYield[row] * 0.002);
     const targetDivYield = newBaselineDividendYield * (cash.usd < 0 ? 0.4 : (cash.usd > 2 * L8.currentLiabilitiesUSD[row] ? 1.2 : 1.0)) * (1 + programme.payoutPressure * 2.5);
@@ -967,6 +968,16 @@ function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
     // The redemption is the FIRST rung of the liquidity ladder: shares, then the committed
     // line, and default only when both are gone. The full sweep decision at the bottom still
     // runs — by then cash is at or below the buffer, so it cannot double-redeem.
+  if (S08K_PROF) s08k.cash += performance.now() - __k1;
+  return { accruedTaxUSD, annualInterest, bankCredit, cap, capexCommissionedThisWeekUSD, carryingCostUSD, cash, cashLedger, costDriversUSD, effectiveDebtRate, facilityInterestWeeklyUSD, maintenanceFundingTranches, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCoverage, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLeverage, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, post, recordCredit, sec, stillUnderConstruction, targetProductionUSD, taxPaidAnnualRateUSD, updatedProductLines, weeklyDepreciation, weeklyInterest, weeklyPayrollUSD };
+}
+
+/** §7.321 the BARRIER: the liquidity redemption against the regional book, first-come in row
+ *  order — on main, between core-A and core-B, exactly the order the inline loop had. */
+function runMmfRedemption(comp: Company, row: number, d: BackKernelDeps, a: ReturnType<typeof runBackCoreA>) {
+  const { ctx, mmfSweepBooks } = d;
+  const L8 = d.backLanes;
+  const { cash, post } = a;
     if (L8.wasMergerAcquired[row] !== 1 && cash.usd < 0 && (comp.mmfSharesUSD ?? 0) > 0) {
       const book = mmfSweepBooks.get(L8.region[row]);
       if (book) {
@@ -982,6 +993,66 @@ function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
         }
       }
     }
+}
+
+/** §7.321 core-B: liquidity decision + debt lifecycle + rating (the kernel's one draw).
+ *  Parallel-safe after the barrier. */
+function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: ReturnType<typeof runBackCoreA>) {
+  const {
+    state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
+    regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
+    primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
+  } = d;
+  const L8 = d.backLanes;
+  const reg = updatedRegions[L8.region[row]];
+  const weekUpdate = companyUpdates[L8.ticker[row]];
+  const accruedTaxUSD = a.accruedTaxUSD;
+  const annualInterest = a.annualInterest;
+  const bankCredit = a.bankCredit;
+  const cap = a.cap;
+  const capexCommissionedThisWeekUSD = a.capexCommissionedThisWeekUSD;
+  const carryingCostUSD = a.carryingCostUSD;
+  const cash = a.cash;
+  const cashLedger = a.cashLedger;
+  const costDriversUSD = a.costDriversUSD;
+  const effectiveDebtRate = a.effectiveDebtRate;
+  const facilityInterestWeeklyUSD = a.facilityInterestWeeklyUSD;
+  const maintenanceFundingTranches = a.maintenanceFundingTranches;
+  const measuredInputConsumptionWeeklyUSD = a.measuredInputConsumptionWeeklyUSD;
+  const newAccumulatedDepreciationUSD = a.newAccumulatedDepreciationUSD;
+  const newBaselineDividendYield = a.newBaselineDividendYield;
+  const newCapex = a.newCapex;
+  const newCoverage = a.newCoverage;
+  const newDividendYield = a.newDividendYield;
+  let newEbit = a.newEbit;
+  let newEbitda = a.newEbitda;
+  const newEmployeeCount = a.newEmployeeCount;
+  const newEps = a.newEps;
+  const newExecutionQuality = a.newExecutionQuality;
+  const newGrossPPEUSD = a.newGrossPPEUSD;
+  const newGrowthCapex = a.newGrowthCapex;
+  const newInputSupplyConstraintFactor = a.newInputSupplyConstraintFactor;
+  const newLeverage = a.newLeverage;
+  const newMaintenanceCapex = a.newMaintenanceCapex;
+  const newMaintenanceShortfallStreak = a.newMaintenanceShortfallStreak;
+  const newNetIncome = a.newNetIncome;
+  const newOccupationMixDrift = a.newOccupationMixDrift;
+  const newOutputInventoryBySubUnit = a.newOutputInventoryBySubUnit;
+  const newRecentFulfillmentEMA = a.newRecentFulfillmentEMA;
+  const newRecurringBaseUSD = a.newRecurringBaseUSD;
+  let newRevenue = a.newRevenue;
+  const newRndExpense = a.newRndExpense;
+  let newTotalDebt = a.newTotalDebt;
+  const post = a.post;
+  const recordCredit = a.recordCredit;
+  const sec = a.sec;
+  const stillUnderConstruction = a.stillUnderConstruction;
+  const targetProductionUSD = a.targetProductionUSD;
+  const taxPaidAnnualRateUSD = a.taxPaidAnnualRateUSD;
+  const updatedProductLines = a.updatedProductLines;
+  const weeklyDepreciation = a.weeklyDepreciation;
+  const weeklyInterest = a.weeklyInterest;
+  const weeklyPayrollUSD = a.weeklyPayrollUSD;
 
     // §7.311 WRITER FLIP — the ladder lives on the rows. The kernel works a LOCAL list of row
     // indices (order = ladder order), mutates principals in place, appends via pushLadderRow,
@@ -989,7 +1060,6 @@ function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
     // the object walk had.
     const TS = v2.tranches;
     const __k2 = S08K_PROF ? performance.now() : 0;
-    if (S08K_PROF) s08k.cash += __k2 - __k1;
     let rowList = ladderRowsOf(v2, L8.companyId[row]);
     // Economics views are memoized per row — retirementEconomics and the call arithmetic read
     // no principal, so a view struck before a principal mutation stays valid.
@@ -1658,8 +1728,16 @@ function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
     // Reporting is something a LISTED company does. Gating on the modulo alone kept a company
     // that had been taken private reporting quarterly to a market it had left.
   if (S08K_PROF) s08k.debt += performance.now() - __k2;
-  return { accruedTaxUSD, annualInterest, bondCallPremiumUSD, buybacksThisWeek, newLeverage, newCoverage, cap, capexCommissionedThisWeekUSD, cashLedger, costDriversUSD, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, preActionFixedUSD, preActionFloatingUSD, rowList, sec, settlement, stillUnderConstruction, targetProductionUSD, updatedProductLines, weeklyDepreciation, weeklyPayrollUSD, post, cash };
+  return { bondCallPremiumUSD, buybacksThisWeek, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, newCdsSpreadBps, newLastOpportunisticOfferingWeek, newOasBps, newRating, preActionFixedUSD, preActionFloatingUSD, rowList, settlement, newRevenue, newEbitda, newEbit, newTotalDebt };
 }
+
+function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
+  const a = runBackCoreA(comp, row, d);
+  runMmfRedemption(comp, row, d, a);
+  const b = runBackCoreB(comp, row, d, a);
+  return { ...a, ...b };
+}
+
 
   return (comp: Company, row: number): Company => {
     if (!isActiveCompany(comp)) {
