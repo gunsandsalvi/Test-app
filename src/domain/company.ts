@@ -528,7 +528,6 @@ export interface Company {
   // contract-settlement and open-market, the latter via an explicit buyer/seller lot allocation,
   // not just an aggregate total), consumed oldest-lot-first in 08-company-fundamentals.ts.
   // A pool seller's id is "PRIVATE:<region>:<industry>" since SEG keyed the tier to the registry.
-  inputInventoryBySubUnit?: Record<string, InputLot[]>;
   /**
    * IND10 — WORK IN PROGRESS: production started and not yet finished, by sub-unit.
    *
@@ -707,21 +706,8 @@ export function getWipUSD(comp: Company, subUnitId?: string): number {
   return Object.values(wip).reduce((s, lots) => s + q(lots), 0);
 }
 
-export function getInputInventoryUSD(comp: Company, subUnitId?: string): number {
-  const inv = comp.inputInventoryBySubUnit;
-  if (!inv) return 0;
-  const lotSum = (lots: InputLot[]) => lots.reduce((s, lot) => s + lot.unitsHeld * lot.unitPriceUSD, 0);
-  if (subUnitId) return lotSum(inv[subUnitId] ?? []);
-  return Object.values(inv).reduce((s, lots) => s + lotSum(lots), 0);
-}
-
-export function getInputInventoryUnits(comp: Company, subUnitId?: string): number {
-  const inv = comp.inputInventoryBySubUnit;
-  if (!inv) return 0;
-  const unitSum = (lots: InputLot[]) => lots.reduce((s, lot) => s + lot.unitsHeld, 0);
-  if (subUnitId) return unitSum(inv[subUnitId] ?? []);
-  return Object.values(inv).reduce((s, lots) => s + unitSum(lots), 0);
-}
+// ENGINE V2 (§7.304) — input lots live on the persistent columnar table (engine2/lots.ts);
+// the balance-sheet reads are totalInputValueUSD / inputUnitsHeld / materializeInputInventory.
 
 
 /**

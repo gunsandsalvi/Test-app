@@ -13,7 +13,7 @@
 import { GameState, Company, DebtTranche, NewsItem, SegmentFinancial } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import {
-  isActiveCompany, isPubliclyListed, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare,
+  isActiveCompany, isPubliclyListed, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare,
   managedEntityIdsOf, TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE,
 } from '../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../domain/call-protection';
@@ -46,15 +46,10 @@ import { dividendDecision } from '../domain/company-week/distributions';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../engine/equity-valuation';
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
+import { V2World } from './world';
+import { totalInputValueUSD } from './lots';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
-
-/** The per-lot value sum, in lot order (the §7.237 float-order rule; the §7.303 memo verdict). */
-function lotArrayValueUSD(lots: InputLot[]): number {
-  let v = 0;
-  for (const lot of lots) v += lot.unitsHeld * lot.unitPriceUSD;
-  return v;
-}
 
 /** IND4 — a firm's payout discipline is its INDUSTRY's, from the registry. */
 const DEFAULT_MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
@@ -83,6 +78,7 @@ export const boundaryTraceByFirm = new Map<string, number>();
 export interface BackKernelDeps {
   state: GameState;
   ctx: WeeklyStepContext;
+  v2: V2World;
   F: FrontPass;
   nextWeek: number;
   currentWeekMod13: number;
@@ -104,7 +100,7 @@ export interface BackKernelDeps {
 /** The back half of one company's week — same statements the stage's kernel ran, same order. */
 export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: number) => Company {
   const {
-    state, ctx, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
+    state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
     primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
   } = d;
@@ -227,7 +223,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // charge has a payee (IND16: the distribution sector) and the stock does not.
     const carryingCostUSD = F.carryingCostUSD[row];
     const newOutputInventoryBySubUnit = F.outputInv[row];
-    const newInputInventoryBySubUnit = F.inputInv[row];
 
     let accruedTaxUSD = comp.accruedTaxLiabilityUSD ?? 0;
     const newExecutionQuality = F.newExecutionQuality[row];
@@ -1643,7 +1638,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         costDriversUSD,
         newShortTermDebtUSD,
         annualInterest,
-        Object.values(newInputInventoryBySubUnit).reduce((s, lots) => s + lotArrayValueUSD(lots), 0)
+        totalInputValueUSD(v2, comp.id)
       );
       return [...(comp.historicalFundamentals || []).slice(-7), currentSnapshot];
     })();
@@ -1782,12 +1777,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // sub-units it actually processed (it runs first and has the complete, real
       // production/sales picture for those lines).
     comp.outputInventoryBySubUnit = { ...newOutputInventoryBySubUnit, ...(update?.outputInventoryBySubUnit || {}) };
-
-      // Already reflects this week's real purchases (credited by stage05) minus this week's
-      // real consumption (drawn down above) — no further overlay needed, unlike output
-      // inventory, since this stage (not stage05) is the one authoritative writer of the
-      // post-consumption balance.
-    comp.inputInventoryBySubUnit = newInputInventoryBySubUnit;
 
       // IND10 — the production pipeline stage 05 advanced. Named here because a rebuild from a
       // fixed field list silently drops whatever it does not name (§7.41), and a dropped

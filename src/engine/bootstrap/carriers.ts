@@ -361,7 +361,7 @@ function buildCarrierCompany(
     leveragedLoan: undefined,
     institutionalRole: null,
     inputSupplyConstraintFactor: 1.0,
-    outputInventoryBySubUnit: {}, inputInventoryBySubUnit: {},
+    outputInventoryBySubUnit: {},
     recentFulfillmentEMA: 1.0,
     treasuryHoldings: [],
     revenueHistory: [annualRevenue],

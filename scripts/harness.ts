@@ -1917,7 +1917,7 @@ const FP_WEEKS = Number(process.env.FP_WEEKS) > 0 ? Number(process.env.FP_WEEKS)
 const fpModule: HarnessModule = {
   name: 'FP fingerprint',
   week(_prev, state, w) {
-    if (process.env.STATE_DUMP && w === 1) {
+    if (process.env.STATE_DUMP && w === (Number(process.env.STATE_DUMP_WEEK) || 1)) {
       writeFileSync(process.env.STATE_DUMP,
         JSON.stringify(state.companies, (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Number(v.toPrecision(15)) : v)));
     }

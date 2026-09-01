@@ -31,8 +31,10 @@ import { channelMarginRate, shelfPriceUSD, DISTRIBUTION_SUBUNIT_ID } from '../..
 import { subUnitSpecOf } from '../../../domain/industry-registry';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
-import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot, fullStaffingCapHeads } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, fullStaffingCapHeads } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
+import { V2World, ensureV2 } from '../../../engine2/world';
+import { pushLot } from '../../../engine2/lots';
 import { random, beginEntityScope, endEntityScope } from '../../rng';
 import { capacityMixShares } from '../../../domain/sme-pool';
 import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
@@ -177,7 +179,7 @@ function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, u
 // seller), not merged into one blended average, since the whole point is to keep each real
 // purchase's real counterparty and real price distinguishable (see domain/company.ts's
 // InputLot doc comment) rather than collapsing them the moment they're credited.
-function addInputInventory(update: any, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number) {
+function addInputInventory(v2: V2World, update: any, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number) {
   if (addedUnits <= 0.0001) return;
   // IND1: only material that will be CONSUMED is inventory. A machine delivered is capital; a
   // general operating purchase is used and expensed. Writing all three as lots is what made a
@@ -194,16 +196,9 @@ function addInputInventory(update: any, baseComp: Company, subUnitId: string, se
     return;
   }
   if (kind === 'OPERATING') return;
-  if (!update.inputInventoryBySubUnit) update.inputInventoryBySubUnit = {};
-  // Copy the persisted lots ONCE on first touch, then push into the week-local array in place.
-  // The old form rebuilt the whole array per lot — O(k²) copying for a buyer credited k lots in a
-  // week, all of it garbage — for a list whose final contents and order are exactly these.
-  let lots: InputLot[] | undefined = update.inputInventoryBySubUnit[subUnitId];
-  if (!lots) {
-    lots = [...(baseComp.inputInventoryBySubUnit?.[subUnitId] ?? [])];
-    update.inputInventoryBySubUnit[subUnitId] = lots;
-  }
-  lots.push({ sellerId, unitsHeld: addedUnits, unitPriceUSD: addedValueUSD / addedUnits, acquiredWeek: week });
+  // ENGINE V2 (§7.304) — the lot lands on the persistent table, in stage order, which is the
+  // same order the copy-on-first-touch week arrays used to carry. No copy, no write-back.
+  pushLot(v2, baseComp.id, subUnitId, sellerId, addedUnits, addedValueUSD / addedUnits, week);
 }
 
 /** One week's lot in a production pipeline: what was started, and what it cost to start it. */
@@ -493,6 +488,7 @@ function clearBook(
  * spans every region so the foreign leg of one struck in the world book still settles.
  */
 function settleContracts(
+  v2: V2World,
   ctx: WeeklyStepContext,
   subUnitId: string,
   ownContracts: SupplyContract[],
@@ -677,7 +673,7 @@ function settleContracts(
     // IND17 — net of what was already paid ahead. Charging the full price again would collect
     // for the same goods twice.
     payByIds(ctx, pidOfCo(customer.ticker), pidOfCo(supplier.ticker), paymentUSD - appliedFromDepositUSD, R_DELIVERY);
-    addInputInventory(custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);
+    addInputInventory(v2, custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);
 
     if (fillRate < 0.95 && computeRecipeInputNeedUSD(customer, subUnitId) > 0) {
       // Named shock propagation: reduced fill rate constrains customer capacity directly —
@@ -1326,6 +1322,7 @@ function buildRegionDemandPlans(
  * gate and the buyer pays the freight.
  */
 function runSubUnitMarkets(
+  v2: V2World,
   ctx: WeeklyStepContext,
   subUnitId: string,
   govShare: number,
@@ -1393,7 +1390,7 @@ function runSubUnitMarkets(
   const survivingContracts = {} as Record<RegionId, SupplyContract[]>;
   MARKET_REGION_IDS.forEach(regionId => {
     survivingContracts[regionId] = settleContracts(
-      ctx, subUnitId, contractsByRegion[regionId] ?? [], lookup, anchorPrice,
+      v2, ctx, subUnitId, contractsByRegion[regionId] ?? [], lookup, anchorPrice,
       contractSalesUnitsBySupplier, availableBySupplier
     );
   });
@@ -1723,7 +1720,7 @@ function runSubUnitMarkets(
           }
         }
         if (arrivalWeek <= nextWeek) {
-          addInputInventory(companyUpdates[comp.ticker], comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
+          addInputInventory(v2, companyUpdates[comp.ticker], comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
         } else {
           ctx.shipmentsDispatched.push({
             buyerTicker: comp.ticker, sellerKey: l.sellerKey, subUnitId,
@@ -2105,6 +2102,7 @@ function formContracts(
 
 
 export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): void {
+  const v2 = ensureV2(state);
   const { byRegion: indexes, lookup } = buildMarketIndexes(ctx);
 
   MARKET_REGION_IDS.forEach(exporter => {
@@ -2199,7 +2197,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     const own = {} as Record<RegionId, SupplyContract[]>;
     MARKET_REGION_IDS.forEach(r => { own[r] = contractsByRegionBySubUnit[r].get(subUnit.unitId) ?? []; });
     const survivors = runSubUnitMarkets(
-      ctx, subUnit.unitId,
+      v2, ctx, subUnit.unitId,
       subUnit.buyerMix.GOVERNMENT ?? 0, subUnit.buyerMix.HOUSEHOLD ?? 0,
       indexes, lookup, own, sourcing
     );

@@ -22,6 +22,7 @@ import { runShardedVoid } from '../../columns/kernel';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { getRngState, setRngState } from '../../rng';
 import { runStage08FrontPass } from '../../../engine2/stage08-front';
+import { ensureV2 } from '../../../engine2/world';
 import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm } from '../../../engine2/stage08-back';
 
 /** SCALE: the supply list's own derived indexes, memoised on the array that produced them. */
@@ -173,8 +174,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // order-invariant (the note below) and firms interact only through the frozen snapshots this
   // pass receives. The pass makes each firm's one front-half draw in the firm's own entity
   // scope and captures the stream position; the loop below resumes from it.
+  const v2 = ensureV2(state);
   const F = runStage08FrontPass(state.companies, {
-    nextWeek, companyUpdates, updatedRegions,
+    v2, nextWeek, companyUpdates, updatedRegions,
     supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion,
   });
 
@@ -191,7 +193,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // kernel, you break that property. The test is one line: run the loop backwards and hash the
   // world.
   const companyWeekKernel = makeStage08BackKernel({
-    state, ctx, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
+    state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
     primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering,
     pushNews: (n: NewsItem) => refinanceNews.push(n),

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { GameState, Company } from '../../types';
-import { getOutputInventoryUSD, getInputInventoryUSD, getInputInventoryUnits } from '../../domain/company';
+import { getOutputInventoryUSD } from '../../domain/company';
+import { ensureV2 } from '../../engine2/world';
+import { totalInputValueUSD, inputUnitsHeld, materializeInputInventory } from '../../engine2/lots';
 import { formatCurrency, formatPercent, formatBondName } from '../../engine/formatters';
 import { TapToChart } from '../shared/TapToChart';
 import { priceCorporateBond, priceLeveragedLoan } from '../../engine/pricing';
@@ -10,6 +12,10 @@ type DeepDiveTab = 'performance' | 'financials' | 'supplychain' | 'credit' | 'ma
 
 export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onOpenTrade: (i: any) => void }> = ({ company, state, onOpenTrade }) => {
   const [tab, setTab] = useState<DeepDiveTab>('performance');
+  // ENGINE V2 (§7.304) — input lots live on the persistent columnar table; one materialisation
+  // per render serves every read below.
+  const v2 = ensureV2(state);
+  const inputInventoryBySubUnit = materializeInputInventory(v2, company.id);
   const [finSubTab, setFinSubTab] = useState<'income' | 'balance' | 'cashflow' | 'segments'>('income');
   const reg = state.regions[company.region];
 
@@ -385,15 +391,15 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                       <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit</span>
                     </div>
                   ))}
-                  {getInputInventoryUnits(company) > 0 && (
+                  {inputUnitsHeld(v2, company.id) > 0 && (
                     <div className="flex justify-between text-xs py-1 pt-2 border-b border-[var(--border-hairline)]">
                       <span className="text-[var(--text-secondary)]">Input Inventory (Raw Materials Held)</span>
                       <span className="font-[var(--font-numeric)] font-bold">
-                        {formatCurrency(getInputInventoryUSD(company), { compact: true })}
+                        {formatCurrency(totalInputValueUSD(v2, company.id), { compact: true })}
                       </span>
                     </div>
                   )}
-                  {Object.entries(company.inputInventoryBySubUnit || {}).filter(([, lots]) => lots.some(l => l.unitsHeld > 0.001)).map(([subUnitId, lots]) => (
+                  {Object.entries(inputInventoryBySubUnit).filter(([, lots]) => lots.some(l => l.unitsHeld > 0.001)).map(([subUnitId, lots]) => (
                     <div key={`in-${subUnitId}`} className="pl-3 pb-1 border-b border-[var(--border-hairline)]">
                       <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{subUnitId.replace(/_/g, ' ')}</div>
                       {/* 1$ is 1$ Phase 6: real per-lot provenance — which named counterparty each
@@ -631,7 +637,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit</span>
               </div>
             ))}
-            {Object.entries(company.inputInventoryBySubUnit || {}).filter(([, lots]) => lots.some(l => l.unitsHeld > 0.001)).map(([subUnitId, lots]) => (
+            {Object.entries(inputInventoryBySubUnit).filter(([, lots]) => lots.some(l => l.unitsHeld > 0.001)).map(([subUnitId, lots]) => (
               <div key={`sc-in-${subUnitId}`} className="pl-3 pb-1 border-b border-[var(--border-hairline)]">
                 <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{subUnitId.replace(/_/g, ' ')} (input stock)</div>
                 {lots.filter(l => l.unitsHeld > 0.001).map((lot, i) => (
@@ -647,7 +653,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
               // counterparty this week's COGS/capex spend actually went to, grouped from the
               // same real lots (each lot remembers the week it was acquired).
               const thisWeekBySeller: Record<string, number> = {};
-              Object.values(company.inputInventoryBySubUnit || {}).forEach(lots => {
+              Object.values(inputInventoryBySubUnit).forEach(lots => {
                 lots.forEach(lot => {
                   if (lot.acquiredWeek !== state.currentWeek) return;
                   thisWeekBySeller[lot.sellerId] = (thisWeekBySeller[lot.sellerId] ?? 0) + lot.unitsHeld * lot.unitPriceUSD;

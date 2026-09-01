@@ -60,7 +60,6 @@ export interface CompanyWeekUpdate {
   /** IND10/IND13 — the stocks stage 05 moved: warehouse, input lots, the production pipeline and
    *  capital delivered but not yet commissioned. */
   outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueUSD: number }>;
-  inputInventoryBySubUnit?: Record<string, import('../../../domain/company').InputLot[]>;
   wipBySubUnit?: Record<string, { units: number; valueUSD: number }[]>;
   capexUnderConstruction?: { valueUSD: number; entersServiceWeek: number }[];
   /** WS7 — the treasury sweep's resulting holdings. */

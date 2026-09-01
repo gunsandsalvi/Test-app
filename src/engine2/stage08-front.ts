@@ -27,7 +27,7 @@
 
 import { Company, RegionId } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
-import { isActiveCompany, tranchePaymentDue, InputLot } from '../domain/company';
+import { isActiveCompany, tranchePaymentDue } from '../domain/company';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../domain/market-microstructure';
 import { recurringRevenueShare, SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
 import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
@@ -37,7 +37,9 @@ import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/si
 import { CogsCostDrivers } from '../engine/companyGenerator';
 import { commissionCapital } from '../domain/company-week/capital-programme';
 import { industrialIncome } from '../domain/company-week/income-statement';
-import { chargeCarryingCost, consumeLotsFifo, fulfillmentRatio } from '../domain/company-week/inventory';
+import { chargeCarryingCost, fulfillmentRatio } from '../domain/company-week/inventory';
+import { V2World } from './world';
+import { consumeFifo } from './lots';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../engine/bootstrap/labor-and-wages';
 import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/profiles';
 import { random, beginEntityScope, endEntityScope, getRngState } from '../engine/rng';
@@ -78,7 +80,6 @@ export interface FrontPass {
   newExecutionQuality: Float64Array;
   carryingCostUSD: Float64Array;
   outputInv: Record<string, { unitsHeld: number; valueUSD: number }>[];
-  inputInv: Record<string, InputLot[]>[];
   updatedProductLines: ProductLines[];
   newRevenue: Float64Array;
   measuredInputConsumptionWeeklyUSD: Float64Array;
@@ -101,7 +102,6 @@ function allocScratch(n: number): FrontPass {
     // Object-ref lanes must not leak last week's refs past this week's roster length.
     scratch.stillUnderConstruction.length = n;
     scratch.outputInv.length = n;
-    scratch.inputInv.length = n;
     scratch.updatedProductLines.length = n;
     scratch.newRecurringBaseUSD.length = n;
     scratch.costDrivers.length = n;
@@ -125,7 +125,6 @@ function allocScratch(n: number): FrontPass {
     newExecutionQuality: new Float64Array(n),
     carryingCostUSD: new Float64Array(n),
     outputInv: new Array(n),
-    inputInv: new Array(n),
     updatedProductLines: new Array(n),
     newRevenue: new Float64Array(n),
     measuredInputConsumptionWeeklyUSD: new Float64Array(n),
@@ -144,6 +143,7 @@ function allocScratch(n: number): FrontPass {
 }
 
 export interface FrontPassInputs {
+  v2: V2World;
   nextWeek: number;
   companyUpdates: Record<string, CompanyWeekUpdate>;
   updatedRegions: WeeklyStepContext['updatedRegions'];
@@ -155,7 +155,7 @@ export interface FrontPassInputs {
 
 /** Run the front half for every firm, in row order. One draw per active firm, captured. */
 export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs): FrontPass {
-  const { nextWeek, companyUpdates, updatedRegions, supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion } = inp;
+  const { v2, nextWeek, companyUpdates, updatedRegions, supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion } = inp;
   const F = allocScratch(companies.length);
 
   for (let row = 0; row < companies.length; row++) {
@@ -261,15 +261,6 @@ export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs):
     const carryingCostUSD = carried.totalCostUSD;
     const newOutputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }> = carried.stock;
     F.carryingCostUSD[row] = carryingCostUSD;
-    // Aliased, not copied — see the stage's §7.303 note: drawdown replaces entries, writers
-    // copy-on-first-touch, so the defensive copy was pure garbage.
-    const newInputInventoryBySubUnit: Record<string, InputLot[]> = {};
-    Object.entries(comp.inputInventoryBySubUnit || {}).forEach(([su, lots]) => {
-      newInputInventoryBySubUnit[su] = lots;
-    });
-    Object.entries(weekUpdate?.inputInventoryBySubUnit || {}).forEach(([su, lots]) => {
-      newInputInventoryBySubUnit[su] = lots as InputLot[];
-    });
 
     const executionNoise = (random() - 0.5) * 0.3;
     const newExecutionQuality = ((comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08);
@@ -284,7 +275,6 @@ export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs):
       // The profile dispatch stays in the kernel until profiles/ ports; store the shared front.
       F.isProfile[row] = 1;
       F.outputInv[row] = newOutputInventoryBySubUnit;
-      F.inputInv[row] = newInputInventoryBySubUnit;
       F.updatedProductLines[row] = updatedProductLines;
       F.newRevenue[row] = 0;
       F.measuredInputConsumptionWeeklyUSD[row] = 0;
@@ -327,12 +317,12 @@ export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs):
         if (!hasRealSupply) return;
         const inputUnitPrice = reg.categoryDemand[inputSubUnit]?.unitPriceUSD ?? 1;
         const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice);
-        const drawn = consumeLotsFifo(newInputInventoryBySubUnit[inputSubUnit] ?? [], neededUnits);
+        // ENGINE V2 (§7.304) — the FIFO draw runs on the persistent lot table, in place.
+        const drawn = consumeFifo(v2, comp.id, inputSubUnit, neededUnits);
         physicalFulfillment = Math.min(physicalFulfillment,
           fulfillmentRatio(drawn.availableUnits, neededUnits));
         // Folded PER LOT, in consumption order (§7.237 — float addition is not associative).
         for (const lotCostUSD of drawn.costsUSD) realInputConsumptionCostUSD += lotCostUSD;
-        newInputInventoryBySubUnit[inputSubUnit] = drawn.remaining;
       });
     });
     const combinedFulfillment = Math.min(relevantFulfillment, physicalFulfillment);
@@ -459,7 +449,6 @@ export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs):
     };
 
     F.outputInv[row] = newOutputInventoryBySubUnit;
-    F.inputInv[row] = newInputInventoryBySubUnit;
     F.updatedProductLines[row] = updatedProductLines;
     F.newRevenue[row] = newRevenue;
     F.measuredInputConsumptionWeeklyUSD[row] = measuredInputConsumptionWeeklyUSD;

@@ -704,7 +704,6 @@ export function generateInitialCompanies(
         cdsSpreadBps,
         inputSupplyConstraintFactor: 1.0,
         outputInventoryBySubUnit: {},
-        inputInventoryBySubUnit: {},
         recentFulfillmentEMA: 1.0,
         treasuryHoldings: [],
         producedCommodityId: (tmpl as any).producedCommodityId,
@@ -1214,7 +1213,7 @@ export function generatePrivateCompanies(
       leveragedLoan: undefined, // 07d opens a real quote when its floating debt enters the market (HC2)
       institutionalRole: null,
       inputSupplyConstraintFactor: 1.0,
-      outputInventoryBySubUnit: {}, inputInventoryBySubUnit: {},
+      outputInventoryBySubUnit: {},
       recentFulfillmentEMA: 1.0,
       treasuryHoldings: [],
     } as unknown as Company;

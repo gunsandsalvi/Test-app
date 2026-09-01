@@ -13,8 +13,9 @@
  */
 
 import { GameState } from '../../../types';
-import { InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
+import { ensureV2 } from '../../../engine2/world';
+import { pushLot } from '../../../engine2/lots';
 import { purchaseKindOf, commissioningLeadWeeksOf } from '../../../domain/industry-registry';
 
 /** A consignment bought, paid for, and still on its way. */
@@ -31,6 +32,7 @@ export interface InTransitShipment {
 export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): void {
   const inFlight = state.goodsInTransit ?? [];
   if (inFlight.length === 0) return;
+  const v2 = ensureV2(state);
 
   const stillMoving: InTransitShipment[] = [];
   let arrivedUnits = 0;
@@ -49,7 +51,6 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     if (shipment.arrivalWeek > state.currentWeek) { stillMoving.push(shipment); return; }
     if (!companyUpdates[shipment.buyerTicker]) companyUpdates[shipment.buyerTicker] = {};
     const update = companyUpdates[shipment.buyerTicker];
-    if (!update.inputInventoryBySubUnit) update.inputInventoryBySubUnit = {};
     const buyer = firmByTicker.get(shipment.buyerTicker);
     // A buyer that no longer exists cannot take delivery; the consignment is written off rather
     // than landed on nobody, which would be inventory with no owner.
@@ -72,17 +73,9 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
       arrivedUnits += shipment.units;
       return;
     }
-    let lots: InputLot[] | undefined = update.inputInventoryBySubUnit[shipment.subUnitId];
-    if (!lots) {
-      lots = [...(buyer.inputInventoryBySubUnit?.[shipment.subUnitId] ?? [])];
-      update.inputInventoryBySubUnit[shipment.subUnitId] = lots;
-    }
-    lots.push({
-      sellerId: shipment.sellerKey,
-      unitsHeld: shipment.units,
-      unitPriceUSD: shipment.landedCostPerUnit,
-      acquiredWeek: state.currentWeek,
-    });
+    // ENGINE V2 (§7.304) — the consignment lands on the persistent lot table.
+    pushLot(v2, buyer.id, shipment.subUnitId, shipment.sellerKey,
+      shipment.units, shipment.landedCostPerUnit, state.currentWeek);
     arrivedUnits += shipment.units;
   });
 

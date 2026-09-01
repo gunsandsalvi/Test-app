@@ -21,6 +21,10 @@ import { NewsItem, DiagnosticsLog } from './events';
 import { Region } from './region-macro';
 
 export interface GameState {
+  /** ENGINE V2 (§7.304) — the persistent columnar world: tables land here as mechanisms port.
+   *  Plain data only (typed arrays, Maps, number[]s), so `structuredClone(state)` deep-copies
+   *  it and battery replays stay isolated by construction. Created on first touch. */
+  v2?: import('../engine2/world').V2World;
   currentWeek: number;
   year: number;
   /**
