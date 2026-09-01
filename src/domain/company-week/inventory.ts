@@ -54,7 +54,14 @@ export function consumeLotsFifo<T extends CostedLot>(
   lots: T[],
   unitsWanted: number
 ): { remaining: T[]; unitsTaken: number; costUSD: number; costsUSD: number[]; availableUnits: number } {
-  const sorted = lots.slice().sort((a, b) => a.acquiredWeek - b.acquiredWeek);
+  // SCALE §7.303 — lots are appended in week order, so they arrive sorted almost always; the
+  // unconditional slice().sort() paid an allocation and an O(n log n) pass per firm-sub-unit-
+  // week for nothing. One linear check keeps the sorted guarantee and the same order exactly.
+  let isSorted = true;
+  for (let i = 1; i < lots.length; i++) {
+    if (lots[i].acquiredWeek < lots[i - 1].acquiredWeek) { isSorted = false; break; }
+  }
+  const sorted = isSorted ? lots : lots.slice().sort((a, b) => a.acquiredWeek - b.acquiredWeek);
   const availableUnits = sorted.reduce((s, lot) => s + lot.unitsHeld, 0);
   let left = Math.min(availableUnits, Math.max(0, unitsWanted));
   let unitsTaken = 0;

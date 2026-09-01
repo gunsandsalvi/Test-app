@@ -53,18 +53,13 @@ import { random, beginEntityScope, endEntityScope } from '../../rng';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
 
-// SCALE: the fundamentals snapshot re-summed every input lot of every company every week —
-// ~33 ms/week of it over arrays that mostly had not changed (a lot array is copy-on-first-touch:
-// a week that touches one replaces it with a NEW array and never mutates lots in place, so array
-// identity implies identical contents). Cache the sum by the array object itself; a hit returns
-// the very bits the reduce would have produced.
-const lotValueCache = new WeakMap<InputLot[], number>();
+/** The per-lot value sum, in lot order (the §7.237 float-order rule). */
 function lotArrayValueUSD(lots: InputLot[]): number {
-  let v = lotValueCache.get(lots);
-  if (v === undefined) {
-    v = lots.reduce((s2, lot) => s2 + lot.unitsHeld * lot.unitPriceUSD, 0);
-    lotValueCache.set(lots, v);
-  }
+  // SCALE §7.303 — the WeakMap memo that stood here COST more than it saved (262 ms/10wk in
+  // .set alone): touched lot arrays are copy-on-write, so most weeks most keys were fresh —
+  // every miss paid the reduce AND the insert. The plain reduce is the same floats.
+  let v = 0;
+  for (const lot of lots) v += lot.unitsHeld * lot.unitPriceUSD;
   return v;
 }
 
@@ -289,6 +284,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     }
 
     const reg = updatedRegions[comp.region];
+    // SCALE §7.303 — ONE hash lookup for the firm's week updates (was ~12 string-keyed hits).
+    const weekUpdate = companyUpdates[comp.ticker];
     // IND-R1 / IND-R6: EVERY firm's payroll, computed here — before BOTH forks, because a firm
     // with staff owes them whatever kind of firm it is. It used to live inside the OPERATING
     // branch, so a bank's headcount was hired and fired by the labor market, counted in
@@ -356,63 +353,52 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
 
     // Interest Expense (computed early so Banks can skip or use it if they had standard debt, but they mostly rely on BankingSector)
-    const nonMaturingTranches = comp.debtTranches.filter(t => t.maturityWeek !== nextWeek);
-    const annualInterest = nonMaturingTranches.reduce((sum, t) => {
-      if (t.rateType === 'FIXED') return sum + t.principalUSD * (t.couponRate ?? 0.05);
-      return sum + t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000);
-    }, 0);
-    const weeklyInterest = annualInterest / 52;
-    // SETL4: interest goes to whoever actually lent. A bank FACILITY is paid to the house bank
-    // that wrote it; market paper is paid to the REGISTER, which knows who holds it. Splitting
-    // the two here is what lets each leg have a real payee instead of one aggregate leaving for
-    // the boundary while the lenders were credited independently (rule 3's double derivation).
-    // CAL — INTEREST ACCRUES WEEKLY; CASH MOVES ON THE INSTRUMENT'S OWN DATES. `annualInterest`
-    // above is the accrual, and the income statement uses it every week, which is what an income
-    // statement is for. What LEAVES this week is only what is actually due: a bond pays its
-    // half-year on its own coupon date, a floating loan its quarter on its own reset, commercial
-    // paper nothing until it matures. The smooth 1/52 cash flow this replaces conserved dollars
-    // and erased the lumpiness that is the entire reason a treasurer's quarter-end is a thing.
-    const dueCashUSD = (t: DebtTranche): number => {
-      const { due, weeksCovered } = tranchePaymentDue(t, nextWeek);
-      if (!due) return 0;
+    // SCALE §7.303 — ONE PASS OVER THE LADDER. This block was eight filter().reduce() chains and
+    // three .some() walks over the same tranches, each allocating an intermediate array and
+    // re-deriving the same per-tranche rate and payment-due answer up to four times. One walk
+    // computes every aggregate; each sum accumulates in the SAME array order the filtered
+    // reduces did (a filtered subset preserves array order), so every float is identical.
+    let annualInterest = 0;
+    let facilityInterestWeeklyUSD = 0;
+    let marketBondAccrualUSD = 0;
+    let commercialPaperAccrualUSD = 0;
+    let marketLoanAccrualUSD = 0;
+    let bondCouponDue = false;
+    let cpCouponDue = false;
+    let loanCouponDue = false;
+    let marketFixedInterestWeeklyUSD = 0;
+    let marketFloatingInterestWeeklyUSD = 0;
+    for (const t of comp.debtTranches) {
+      if (t.maturityWeek === nextWeek) continue;
       const annualUSD = t.rateType === 'FIXED'
         ? t.principalUSD * (t.couponRate ?? 0.05)
         : t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000);
-      return (annualUSD * weeksCovered) / 52;
-    };
-    const facilityInterestWeeklyUSD = nonMaturingTranches
-      .filter(t => t.isBankFacility)
-      .reduce((sum, t) => sum + dueCashUSD(t), 0);
-    // Market paper accrues to the REGISTER every week and is paid on its own coupon dates. The
-    // accrual is what each holder earned while it held the paper; the payout hands each of them
-    // exactly that, whether or not it still holds on the date (shared-helpers.ts).
-    const weeklyAccrualUSD = (t: DebtTranche): number =>
-      (t.rateType === 'FIXED'
-        ? t.principalUSD * (t.couponRate ?? 0.05)
-        : t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000)) / 52;
-    // CP: commercial paper is a FIXED tranche and this filter took it as a corporate BOND, so
-    // the CP coupon was accruing to the bond holders of record — a register whose float
-    // explicitly excludes CP (07b). It has its own book and its own holders now.
-    const marketBondAccrualUSD = nonMaturingTranches
-      .filter(t => !t.isBankFacility && !t.isCommercialPaper && t.rateType === 'FIXED')
-      .reduce((sum, t) => sum + weeklyAccrualUSD(t), 0);
-    const commercialPaperAccrualUSD = nonMaturingTranches
-      .filter(t => t.isCommercialPaper)
-      .reduce((sum, t) => sum + weeklyAccrualUSD(t), 0);
-    const marketLoanAccrualUSD = nonMaturingTranches
-      .filter(t => !t.isBankFacility && t.rateType !== 'FIXED')
-      .reduce((sum, t) => sum + weeklyAccrualUSD(t), 0);
-    const bondCouponDue = nonMaturingTranches.some(t => !t.isBankFacility && !t.isCommercialPaper && t.rateType === 'FIXED' && tranchePaymentDue(t, nextWeek).due);
-    const cpCouponDue = nonMaturingTranches.some(t => t.isCommercialPaper && tranchePaymentDue(t, nextWeek).due);
-    const loanCouponDue = nonMaturingTranches.some(t => !t.isBankFacility && t.rateType !== 'FIXED' && tranchePaymentDue(t, nextWeek).due);
-    // What actually leaves the issuer's account for market paper this week: the accrued balances
-    // its coupon dates are clearing. Zero in the weeks between.
-    const marketFixedInterestWeeklyUSD = nonMaturingTranches
-      .filter(t => !t.isBankFacility && t.rateType === 'FIXED')
-      .reduce((sum, t) => sum + dueCashUSD(t), 0);
-    const marketFloatingInterestWeeklyUSD = nonMaturingTranches
-      .filter(t => !t.isBankFacility && t.rateType !== 'FIXED')
-      .reduce((sum, t) => sum + dueCashUSD(t), 0);
+      annualInterest += annualUSD;
+      const { due, weeksCovered } = tranchePaymentDue(t, nextWeek);
+      const dueUSD = due ? (annualUSD * weeksCovered) / 52 : 0;
+      if (t.isBankFacility) {
+        facilityInterestWeeklyUSD += dueUSD;
+        continue;
+      }
+      if (t.isCommercialPaper) {
+        commercialPaperAccrualUSD += annualUSD / 52;
+        if (due) cpCouponDue = true;
+      } else if (t.rateType === 'FIXED') {
+        marketBondAccrualUSD += annualUSD / 52;
+        if (due) bondCouponDue = true;
+      } else {
+        marketLoanAccrualUSD += annualUSD / 52;
+        if (due) loanCouponDue = true;
+      }
+      if (t.rateType === 'FIXED') marketFixedInterestWeeklyUSD += dueUSD;
+      else marketFloatingInterestWeeklyUSD += dueUSD;
+    }
+    const weeklyInterest = annualInterest / 52;
+    // SETL4: interest goes to whoever actually lent — a bank FACILITY to the house bank, market
+    // paper to the REGISTER (which knows who holds it); CAL — interest ACCRUES weekly and cash
+    // moves on the instrument's own dates (a bond's half-year on its coupon date, a floater's
+    // quarter on its reset, CP nothing until maturity); CP has its own book and holders (07b's
+    // float excludes it). All computed in the single ladder pass above.
     const effectiveDebtRate = annualInterest / Math.max(1, comp.totalDebt);
     // TAXR — THE CORPORATE RATE HAS AN OWNER NOW, AND IT IS THE ONE POLICY SETS.
     //
@@ -436,7 +422,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // deferred liability is a thing the world ACCUMULATES from here, not a guessed history).
     const underConstruction = [
       ...(comp.assetsUnderConstruction ?? []),
-      ...(companyUpdates[comp.ticker]?.capexUnderConstruction ?? []),
+      ...(weekUpdate?.capexUnderConstruction ?? []),
     ];
     const { commissionedUSD: capexCommissionedThisWeekUSD, stillUnderConstruction } =
       commissionCapital(underConstruction, nextWeek);
@@ -492,7 +478,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // the world every week (~55k and growing under XB3a's foreign lots), all of it garbage.
       newInputInventoryBySubUnit[su] = lots;
     });
-    Object.entries(companyUpdates[comp.ticker]?.inputInventoryBySubUnit || {}).forEach(([su, lots]) => {
+    Object.entries(weekUpdate?.inputInventoryBySubUnit || {}).forEach(([su, lots]) => {
       newInputInventoryBySubUnit[su] = lots as InputLot[];
     });
 
@@ -770,7 +756,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // signal — rather than reading stage05's own smoothed-price-based figure — is what
       // previously duplicated this model with a second, inconsistent one and caused a collapse;
       // reading stage05's own figures directly keeps one authoritative production number.
-      const update = companyUpdates[comp.ticker];
+      const update = weekUpdate;
       const salesUSD = update?.salesUSD ?? 0;
       // The production plan is stage 05's own, made against this firm's real capacity; the
       // fallback is last week's run-rate, not a revenue this stage has not computed yet.
@@ -927,13 +913,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // seeded firm opens where its curve reproduces the legacy drift for its current run-rate
     // (§7.4: the world opens growing exactly as it used to and diverges by experience).
     {
-      const producedUnits = ctx.companyUpdates[comp.ticker]?.producedUnitsThisWeek ?? 0;
+      const producedUnits = weekUpdate?.producedUnitsThisWeek ?? 0;
       // §5-PROD — the anchor derives from the PLANT'S STRUCTURAL RATE, not the first week's
       // throttled output: seeding off a low week under-seeded the curve, and the recovery to
       // normal volume then read as years of learning at once — multiplier spikes, staffing
       // caps plunging, the §7.301 u regression. Capacity is what "its current run-rate"
       // honestly means for a firm that has produced for years (§7.4).
-      const capacityUnits = ctx.companyUpdates[comp.ticker]?.plantCapacityUnitsThisWeek ?? 0;
+      const capacityUnits = weekUpdate?.plantCapacityUnitsThisWeek ?? 0;
       if (comp.cumulativeOutputUnits === undefined && (capacityUnits > 0 || producedUnits > 0)) {
         comp.cumulativeOutputUnits = seedCumulativeUnits(Math.max(capacityUnits, producedUnits) * 52);
         comp.learningMultiplier = comp.learningMultiplier ?? 1;
@@ -964,7 +950,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const retirement = process.env.DYN_MOTHBALL_OFF === '1'
       ? { idleStreakWeeks: 0, mothballedShare: 0, mothballedStreakWeeks: 0, scrappedShare: 0 }
       : capacityRetirement({
-        idleRevenueShareThisWeek: ctx.companyUpdates[comp.ticker]?.idleLineRevenueShare ?? 0,
+        idleRevenueShareThisWeek: weekUpdate?.idleLineRevenueShare ?? 0,
         priorIdleStreakWeeks: comp.idleStreakWeeks ?? 0,
         priorMothballedShare: comp.mothballedPpeShare ?? 0,
         priorMothballedStreakWeeks: comp.mothballedStreakWeeks ?? 0,
@@ -1121,7 +1107,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         : { payer: self, payee: other, amountUSD: -amountUSD, reason: label });
     };
 
-    const update = companyUpdates[comp.ticker];
+    const update = weekUpdate;
     if (comp.sector === 'Banks') {
       // A bank's real flows live on its named balance sheet (02b); the company-level cash line
       // carries only the accrual bridge. REPORTED, never settled: every line of a bank's P&L is
@@ -1338,7 +1324,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // A firm's headcount now changes in exactly one place, and the real cash-distress layoffs
     // that formula was reaching for live there too.
     const newEmployeeCount = Math.max(10, Math.round(
-      companyUpdates[comp.ticker]?.employeeCount ?? comp.employeeCount
+      weekUpdate?.employeeCount ?? comp.employeeCount
     ));
 
     // (S5: the prepayment rule moved below, where the real tranche ladder exists to retire —
@@ -2137,7 +2123,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // one block. 07f runs the treasurer's bid through the bill auction against real sellers
     // (domain/company.ts owns the sleeve arithmetic), and this stage now simply carries what
     // that auction filled.
-    const newTreasuryHoldings = ctx.companyUpdates[comp.ticker]?.treasuryHoldings ?? comp.treasuryHoldings ?? [];
+    const newTreasuryHoldings = weekUpdate?.treasuryHoldings ?? comp.treasuryHoldings ?? [];
 
     // Buyback Execution (Part AH)
     let updatedSharesOutstanding = comp.sharesOutstanding;
@@ -2320,9 +2306,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // market stage's decisions — carried through explicitly, like employeeCount above,
       // because this stage rebuilds the company from a fixed field list and anything not
       // named here is silently dropped (which is exactly what happened first time).
-    comp.offeredWageIndex = companyUpdates[comp.ticker]?.offeredWageIndex ?? comp.offeredWageIndex ?? 1.0;
+    comp.offeredWageIndex = weekUpdate?.offeredWageIndex ?? comp.offeredWageIndex ?? 1.0;
 
-    comp.unfilledVacancyShare = companyUpdates[comp.ticker]?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0;
+    comp.unfilledVacancyShare = weekUpdate?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0;
 
     comp.previousCapex = comp.capex;
 
@@ -2352,7 +2338,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     comp.inputSupplyConstraintFactor = Number(newInputSupplyConstraintFactor.toFixed(4));
 
-    comp._targetProductionUSD = (companyUpdates[comp.ticker]?._targetProductionUSD ?? targetProductionUSD);
+    comp._targetProductionUSD = (weekUpdate?._targetProductionUSD ?? targetProductionUSD);
 
     comp.lastWeekSalesUSD = update?.salesUSD ?? 0;
 
@@ -2424,7 +2410,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
       // Wall Street Phase 1: real per-bank balance sheet computed this week in
       // 02b-bank-diversification.ts (which runs before this stage), carried forward otherwise.
-    comp.bankBalanceSheet = companyUpdates[comp.ticker]?.bankBalanceSheet ?? comp.bankBalanceSheet;
+    comp.bankBalanceSheet = weekUpdate?.bankBalanceSheet ?? comp.bankBalanceSheet;
     // §7.235: seven `comp.x = comp.x` lines were removed here. They were pass-throughs in the
     // object literal this block used to be — meaningful when building a NEW object, no-ops once
     // §7.230 converted it to direct assignment on `comp` itself. The linter found them on its first
@@ -2629,8 +2615,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         shareSumByKey.set(key, (shareSumByKey.get(key) ?? 0) + (pl.categoryMarketShare ?? 0));
       });
     });
-    ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
-      if (!isActiveCompany(c) || !(c.productLines || []).length) return c;
+    // SCALE §7.303 — in place, like every other write in this stage: the { ...c } spread here
+    // cloned ~73 fields per touched firm per week AND left the roster holding different objects
+    // than prevActiveFirms (the twin-object trap §7.302 fell into). The lines array itself is
+    // fresh (replacement semantics for the persisted array, per the batteries' clone rule).
+    ctx.updatedCompanies.forEach((c) => {
+      if (!isActiveCompany(c) || !(c.productLines || []).length) return;
       let touched = false;
       const lines = (c.productLines || []).map((pl) => {
         const sum = shareSumByKey.get(`${c.region}:${pl.subUnitId}`) ?? 0;
@@ -2638,7 +2628,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         touched = true;
         return { ...pl, categoryMarketShare: Number((pl.categoryMarketShare / sum).toFixed(6)) };
       });
-      return touched ? { ...c, productLines: lines } : c;
+      if (touched) c.productLines = lines;
     });
   }
 
