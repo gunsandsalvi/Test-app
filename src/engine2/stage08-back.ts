@@ -440,8 +440,11 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     const growthCapexIntensity = (newGrowthCapex - (comp.growthCapex ?? 0)) / Math.max(1, comp.growthCapex ?? 1);
     const isAutomating = growthCapexIntensity > 0.05 && newExecutionQuality > 1.0;
-    const newOccupationMixDrift = { ...(comp.occupationMixDrift || {}) };
+    // SCALE — cloned only when actually written (the write-back hands the untouched object
+    // straight back otherwise, which is replacement-neutral for the battery replays).
+    let newOccupationMixDrift = comp.occupationMixDrift || {};
     if (isAutomating) {
+      newOccupationMixDrift = { ...newOccupationMixDrift };
       newOccupationMixDrift.TECHNICAL_ENGINEERING = Math.min(0.15, (newOccupationMixDrift.TECHNICAL_ENGINEERING ?? 0) + 0.001);
       newOccupationMixDrift.GENERAL = Math.max(-0.15, (newOccupationMixDrift.GENERAL ?? 0) - 0.001);
     }
@@ -935,8 +938,15 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const settlement = primarySettlementByIssuerId.get(comp.id);
     const primaryFixedAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FIXED' ? settlement.marketTakeUSD : 0;
     const primaryFloatingAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FLOATING' ? settlement.marketTakeUSD : 0;
-    const preActionFixedUSD = companyTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0) + primaryFixedAdjUSD;
-    const preActionFloatingUSD = companyTranches.filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((s, t) => s + t.principalUSD, 0) + primaryFloatingAdjUSD;
+    // SCALE — the two filtered reduces as one walk; each accumulator sums its subset in array
+    // order and the adjustment adds last, so every float is the one the filters produced.
+    let preFixedSumUSD = 0, preFloatingSumUSD = 0;
+    for (const t of companyTranches) {
+      if (t.rateType === 'FIXED') { if (!t.isCommercialPaper) preFixedSumUSD += t.principalUSD; }
+      else if (!t.isBankFacility) preFloatingSumUSD += t.principalUSD;
+    }
+    const preActionFixedUSD = preFixedSumUSD + primaryFixedAdjUSD;
+    const preActionFloatingUSD = preFloatingSumUSD + primaryFloatingAdjUSD;
 
     /**
      * What retiring `amountUSD` of `tranche` early costs this issuer ON TOP of the principal —
@@ -1260,12 +1270,17 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
           const facilityRepaidByBank = new Map<string, number>();
           let facilityRepaidUSD = 0;
           // Cheapest debt to be rid of first, and only paper that is actually worth retiring.
+          // SCALE — the economics are computed ONCE per tranche (they read only per-dollar
+          // figures, so the map's principal writes cannot change them); the comparator used to
+          // re-run a Nelson-Siegel evaluation on every comparison of the sort.
+          const prepayEcon = new Map<DebtTranche, ReturnType<typeof retirementEconomics>>();
+          for (const t of updatedTranches) prepayEcon.set(t, retirementEconomics(t));
           updatedTranches = updatedTranches
             .slice()
-            .sort((a, b) => retirementEconomics(b).valuePerCost - retirementEconomics(a).valuePerCost)
+            .sort((a, b) => prepayEcon.get(b)!.valuePerCost - prepayEcon.get(a)!.valuePerCost)
             .map(t => {
               if (toPrepayUSD <= 0 || t.isCommercialPaper) return t; // CP is 07f's to resize against the real gap
-              const { premiumPerDollar, worthRetiring } = retirementEconomics(t);
+              const { premiumPerDollar, worthRetiring } = prepayEcon.get(t)!;
               if (!worthRetiring) return t;
               // The budget buys principal AND the premium, so early repayment retires less per
               // dollar of surplus cash than it used to. That is the point: it is not free.
@@ -1363,9 +1378,12 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // and it uses the same call-price arithmetic the decision above does.
       let remainingToRepayUSD = -financing.netDebtChangeUSD;
       let facilityRepaidUSD = 0;
+      // SCALE — same once-per-tranche economics as the prepayment path above.
+      const deleverEcon = new Map<DebtTranche, ReturnType<typeof retirementEconomics>>();
+      for (const t of updatedTranches) deleverEcon.set(t, retirementEconomics(t));
       updatedTranches = updatedTranches
         .slice()
-        .sort((a, b) => retirementEconomics(b).valuePerCost - retirementEconomics(a).valuePerCost)
+        .sort((a, b) => deleverEcon.get(b)!.valuePerCost - deleverEcon.get(a)!.valuePerCost)
         .map(t => {
           if (remainingToRepayUSD <= 0) return t;
           // CP is 07f's, exactly as the surplus-cash prepayment above already says: its size is
@@ -1375,7 +1393,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
           // cash. Measured by the ledger check on its first run: the EUR CP stock falling week
           // after week while its holders' books stood still, 109% held by week eight.
           if (t.isCommercialPaper) return t;
-          const { premiumPerDollar, worthRetiring } = retirementEconomics(t);
+          const { premiumPerDollar, worthRetiring } = deleverEcon.get(t)!;
           // A company that wants less leverage still will not pay a make-whole to get it: if
           // nothing in the stack is economic to retire this week, it holds the cash and waits.
           if (!worthRetiring) return t;
@@ -1577,8 +1595,12 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // into the other rate type has moved between the bond market and the loan market, so their
     // position moves with it. Holdings that do not track the real stock are the difference
     // between a market and a random walk — see settleCorporateActionOnHolders.
-    const postActionFixedUSD = updatedTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0);
-    const postActionFloatingUSD = updatedTranches.filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((s, t) => s + t.principalUSD, 0);
+    let postActionFixedUSD = 0, postActionFloatingUSD = 0, shortTermDebtSumUSD = 0;
+    for (const t of updatedTranches) {
+      if (t.rateType === 'FIXED') { if (!t.isCommercialPaper) postActionFixedUSD += t.principalUSD; }
+      else if (!t.isBankFacility) postActionFloatingUSD += t.principalUSD;
+      if (t.maturityWeek - nextWeek <= 52) shortTermDebtSumUSD += t.principalUSD;
+    }
     settleCorporateActionOnHolders(ctx, comp.id, 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
     settleCorporateActionOnHolders(ctx, comp.id, 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
     // The premium the issuer's ledger just posted out reaches the holders of record — the whole
@@ -1586,40 +1608,46 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     payHoldersCash(ctx, comp.id, 'CORP_BOND', bondCallPremiumUSD);
     payHoldersCash(ctx, comp.id, 'LEVERAGED_LOAN', loanCallPremiumUSD);
 
-    const newShortTermDebtUSD = updatedTranches.filter(t => t.maturityWeek - nextWeek <= 52).reduce((s, t) => s + t.principalUSD, 0);
+    const newShortTermDebtUSD = shortTermDebtSumUSD;
 
-    const currentSnapshot = buildQuarterlyFundamentalSnapshot(
-      nextWeek,
-      formatQuarterFilingDate(quarterIdx),
-      formatSimulationDate(nextWeek),
-      newRevenue,
-      newEbitda,
-      newNetIncome,
-      newEps,
-      newCash,
-      newTotalDebt,
-      currentTreasuryHoldingsUSD,
-      Object.values(newOutputInventoryBySubUnit).reduce((s, inv) => s + inv.valueUSD, 0),
-      newMaintenanceCapex,
-      newGrowthCapex,
-      newOasBps,
-      newDividendYield,
-      newMarketCap,
-      prevSnapshot,
-      debtIssuanceThisWeek,
-      debtRepaymentThisWeek,
-      buybacksThisWeek,
-      newGrossPPEUSD,
-      newAccumulatedDepreciationUSD,
-      weeklyDepreciation * 13,
-      costDriversUSD,
-      newShortTermDebtUSD,
-      annualInterest,
-      Object.values(newInputInventoryBySubUnit).reduce((s, lots) => s + lotArrayValueUSD(lots), 0)
-    );
-    const histFundamentals = isReportingThisWeek
-      ? [...(comp.historicalFundamentals || []).slice(-7), currentSnapshot]
-      : comp.historicalFundamentals || [];
+    // SCALE — the filing is BUILT only in the week it is FILED. The builder is pure arithmetic
+    // and `currentSnapshot` had exactly one consumer, the reporting-week append below; building
+    // it the other twelve weeks was a ~30-field object plus two inventory walks per firm for
+    // the garbage collector. Same floats on every reporting week (prevSnapshot chains only
+    // through reporting weeks in both worlds).
+    const histFundamentals = (() => {
+      if (!isReportingThisWeek) return comp.historicalFundamentals || [];
+      const currentSnapshot = buildQuarterlyFundamentalSnapshot(
+        nextWeek,
+        formatQuarterFilingDate(quarterIdx),
+        formatSimulationDate(nextWeek),
+        newRevenue,
+        newEbitda,
+        newNetIncome,
+        newEps,
+        newCash,
+        newTotalDebt,
+        currentTreasuryHoldingsUSD,
+        Object.values(newOutputInventoryBySubUnit).reduce((s, inv) => s + inv.valueUSD, 0),
+        newMaintenanceCapex,
+        newGrowthCapex,
+        newOasBps,
+        newDividendYield,
+        newMarketCap,
+        prevSnapshot,
+        debtIssuanceThisWeek,
+        debtRepaymentThisWeek,
+        buybacksThisWeek,
+        newGrossPPEUSD,
+        newAccumulatedDepreciationUSD,
+        weeklyDepreciation * 13,
+        costDriversUSD,
+        newShortTermDebtUSD,
+        annualInterest,
+        Object.values(newInputInventoryBySubUnit).reduce((s, lots) => s + lotArrayValueUSD(lots), 0)
+      );
+      return [...(comp.historicalFundamentals || []).slice(-7), currentSnapshot];
+    })();
 
     const systemicStressFactor = systemicStressFactorGlobal + Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.3;
     // G5: the baseline drifts toward what this REGION's workouts have actually recovered, not
