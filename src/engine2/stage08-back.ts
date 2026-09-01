@@ -388,9 +388,21 @@ function makeCashPoster(comp: Company, ctx: WeeklyStepContext, retainCashLedger:
  * order, until it moves to the combine.
  */
 function runCashWalk(args: {
-  comp: Company;
   ctx: WeeklyStepContext;
-  entityById: Map<string, GameState['institutionalEntities'][number]>;
+  // §7.317 step 1.4 — the walk reads NO company object: identity strings and the few
+  // object-derived scalars arrive resolved (from the seam lanes at the call site).
+  companyId: string;
+  ticker: string;
+  region: string;
+  isBanksSector: boolean;
+  homeBankTicker: string | undefined;
+  carrierFreightRevenueUSD: number;
+  channelMarginRevenueUSD: number;
+  declaredDividendYield: number;
+  marketCapUSD: number;
+  maxPayoutRatio: number;
+  vehicleBehind: GameState['institutionalEntities'][number] | undefined;
+  boundaryTraceKey: string;
   weekUpdate: CompanyWeekUpdate | undefined;
   newNetIncome: number;
   weeklyPayrollUSD: number;
@@ -412,7 +424,9 @@ function runCashWalk(args: {
   bankCredit: PartyRef | undefined;
   post: (label: string, amountUSD: number, counterparty?: PartyRef, settle?: boolean) => void;
 }): { accruedTaxUSD: number } {
-  const { comp, ctx, entityById, weekUpdate, newNetIncome, weeklyPayrollUSD,
+  const { ctx, companyId, ticker, region, isBanksSector, homeBankTicker,
+    carrierFreightRevenueUSD, channelMarginRevenueUSD, declaredDividendYield, marketCapUSD,
+    maxPayoutRatio, vehicleBehind, boundaryTraceKey, weekUpdate, newNetIncome, weeklyPayrollUSD,
     newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
     marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
     bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
@@ -428,7 +442,7 @@ function runCashWalk(args: {
     // costs; capex beyond what was bought as real units). EBITDA is a reporting figure.
 
     const update = weekUpdate;
-    if (comp.sector === 'Banks') {
+    if (isBanksSector) {
       // A bank's real flows live on its named balance sheet (02b); the company-level cash line
       // carries only the accrual bridge. REPORTED, never settled: every line of a bank's P&L is
       // already booked against `bankEquityUSD` in the sector ledger (macro/banking.ts — interest
@@ -439,7 +453,7 @@ function runCashWalk(args: {
       // IND-R1: and its staff. A bank paying wages settles like any other payer — reserves out,
       // households' deposits in — and because a bank's payment is on its OWN account the other
       // leg is its equity, which is where a real bank's wage bill lands.
-      post('wages paid to households', -weeklyPayrollUSD, { kind: 'HOUSEHOLD', region: comp.region });
+      post('wages paid to households', -weeklyPayrollUSD, { kind: 'HOUSEHOLD', region: region as Company['region'] });
     } else {
       // XB3a-2: a CARRIER sells no units into the goods auction, so its `salesUSD` is zero — but
       // its freight is settled, by name, by the buyers who shipped with it (stage 05). Counting
@@ -450,8 +464,8 @@ function runCashWalk(args: {
       // of its stock (stage 05). Counting it here is what keeps it out of the boundary line,
       // which would otherwise pay the sector a second time.
       const settledSalesUSD = (update?.salesUSD ?? 0)
-        + (ctx.carrierFreightRevenue[comp.ticker] ?? 0)
-        + (ctx.channelMarginRevenue[comp.ticker] ?? 0);
+        + carrierFreightRevenueUSD
+        + channelMarginRevenueUSD;
       const settledPurchasesUSD = update?.purchasesUSD ?? 0;
       post('settled sales (real auction receipts)', settledSalesUSD, undefined, false);
       post('settled purchases (real auction: inputs + capex)', -settledPurchasesUSD, undefined, false);
@@ -491,13 +505,11 @@ function runCashWalk(args: {
       // what actually settled — the sales anchor, finally binding (§539's expectation applies:
       // prints may get uglier and that is the honest direction, §1.20).
       const nonAuctionReceiptsUSD = Math.max(0, newRevenue / 52 - settledSalesUSD);
-      const vehicleBehind = !comp.isBankEntity && comp.isInstitutionalEntity ? entityById.get(managedEntityIdsOf(comp)[0]) : undefined;
       if (process.env.BOUNDARY_TRACE === '1' && nonAuctionReceiptsUSD > 1e6) {
-        const key = `${comp.region}:${comp.financialStatementProfile ?? comp.sector ?? '?'}:${comp.ticker}`;
-        boundaryTraceByFirm.set(key, (boundaryTraceByFirm.get(key) ?? 0) + nonAuctionReceiptsUSD);
+        boundaryTraceByFirm.set(boundaryTraceKey, (boundaryTraceByFirm.get(boundaryTraceKey) ?? 0) + nonAuctionReceiptsUSD);
       }
       if (vehicleBehind) {
-        post('operating receipts drawn from the vehicle', nonAuctionReceiptsUSD, { kind: 'INSTITUTION', id: comp.id });
+        post('operating receipts drawn from the vehicle', nonAuctionReceiptsUSD, { kind: 'INSTITUTION', id: companyId });
       }
       // ...and the costs of running the whole business beyond what was bought as real units:
       // wages, services, and the unsettled share of capex. Settled purchases already left as
@@ -526,7 +538,7 @@ function runCashWalk(args: {
       // operating cost is a firm whose cash falls faster than its P&L — which is what that is.
       // The same payroll the P&L above was charged — one number, computed once (rule 3).
       const wagesPaidUSD = weeklyPayrollUSD;
-      post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: comp.region });
+      post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: region as Company['region'] });
       // SVC: services are a real market now — professional, facilities and repair sub-units sit
       // in the registry, this firm's recipe includes them, and it BIDS for them in stage 05
       // against real sellers like any other input. What remains on this line is the operating
@@ -542,7 +554,7 @@ function runCashWalk(args: {
       // remainder moves no cash, exactly like its receipts twin.
       const opexBeyondWagesUSD = Math.max(0, opexOutflowUSD - wagesPaidUSD);
       if (vehicleBehind) {
-        post('operating costs borne by the vehicle', -opexBeyondWagesUSD, { kind: 'INSTITUTION', id: comp.id });
+        post('operating costs borne by the vehicle', -opexBeyondWagesUSD, { kind: 'INSTITUTION', id: companyId });
       }
       // IND16: WAREHOUSING HAS A SELLER NOW. This was a declared boundary frontier — "warehousing,
       // unmodelled seller" — because nothing in the model held goods for anybody. The distribution
@@ -550,10 +562,10 @@ function runCashWalk(args: {
       // it, and they are paid for it by name. What is left on the boundary is only a region with
       // no distribution firm at all, which is a fact about that region rather than a gap.
       if (carryingCostUSD > 0) {
-        const holders = ctx.channelShareByRegion[comp.region];
+        const holders = ctx.channelShareByRegion[region];
         let paidUSD = 0;
         holders?.forEach((share, holderTicker) => {
-          if (holderTicker === comp.ticker) return; // a distributor warehouses its own stock
+          if (holderTicker === ticker) return; // a distributor warehouses its own stock
           const amountUSD = carryingCostUSD * share;
           if (!(amountUSD > 0)) return;
           paidUSD += amountUSD;
@@ -567,10 +579,10 @@ function runCashWalk(args: {
       // SETL4: reported here, paid itemised below — the house bank for its facilities, the
       // register for market paper. One aggregate line on the cash walk, three real payees.
       post('interest paid', -weeklyInterest, undefined, false);
-      if (facilityInterestWeeklyUSD > 0 && comp.homeBankTicker) {
+      if (facilityInterestWeeklyUSD > 0 && homeBankTicker) {
         pay(ctx, {
-          payer: { kind: 'COMPANY', ticker: comp.ticker },
-          payee: { kind: 'BANK', ticker: comp.homeBankTicker },
+          payer: { kind: 'COMPANY', ticker },
+          payee: { kind: 'BANK', ticker: homeBankTicker },
           amountUSD: facilityInterestWeeklyUSD,
           reason: 'facility interest to the lending bank',
         });
@@ -578,12 +590,12 @@ function runCashWalk(args: {
       // CAL: accrue to whoever holds it this week; pay it out on the coupon date. The cash that
       // leaves on that date IS the sum of the accruals, so the issuer's ledger and the holders'
       // receivables clear against each other exactly.
-      accrueHoldersInterest(ctx, comp.id, 'CORP_BOND', marketBondAccrualUSD);
-      accrueHoldersInterest(ctx, comp.id, 'LEVERAGED_LOAN', marketLoanAccrualUSD);
-      accrueHoldersInterest(ctx, comp.id, 'COMMERCIAL_PAPER', commercialPaperAccrualUSD);
-      if (bondCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'CORP_BOND');
-      if (loanCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'LEVERAGED_LOAN');
-      if (cpCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'COMMERCIAL_PAPER');
+      accrueHoldersInterest(ctx, companyId, 'CORP_BOND', marketBondAccrualUSD);
+      accrueHoldersInterest(ctx, companyId, 'LEVERAGED_LOAN', marketLoanAccrualUSD);
+      accrueHoldersInterest(ctx, companyId, 'COMMERCIAL_PAPER', commercialPaperAccrualUSD);
+      if (bondCouponDue) payHoldersAccruedInterest(ctx, companyId, 'CORP_BOND');
+      if (loanCouponDue) payHoldersAccruedInterest(ctx, companyId, 'LEVERAGED_LOAN');
+      if (cpCouponDue) payHoldersAccruedInterest(ctx, companyId, 'COMMERCIAL_PAPER');
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
       // now arrives somewhere — the treasury's account — instead of leaving the model.
       // §5-TAXR — the accrual IS the statement's tax line (rule 14: the P&L and the payment are
@@ -592,11 +604,11 @@ function runCashWalk(args: {
       // reach the dollars the treasury actually receives, which is the whole point of them.
       const weeklyAccrualUSD = taxPaidAnnualRateUSD / 52;
       accruedTaxUSD += weeklyAccrualUSD;
-      ctx.taxAccruedByRegion[comp.region] = (ctx.taxAccruedByRegion[comp.region] ?? 0) + weeklyAccrualUSD;
+      ctx.taxAccruedByRegion[region] = (ctx.taxAccruedByRegion[region] ?? 0) + weeklyAccrualUSD;
       // currentWeekMod13 runs 1..13, never 0 — the quarter ends on 13.
       if (currentWeekMod13 === 13 && accruedTaxUSD > 0) {
-        post('cash taxes (quarterly remittance)', -accruedTaxUSD, { kind: 'GOVERNMENT', region: comp.region });
-        ctx.taxCollectedByRegion[comp.region] = (ctx.taxCollectedByRegion[comp.region] ?? 0) + accruedTaxUSD;
+        post('cash taxes (quarterly remittance)', -accruedTaxUSD, { kind: 'GOVERNMENT', region: region as Company['region'] });
+        ctx.taxCollectedByRegion[region] = (ctx.taxCollectedByRegion[region] ?? 0) + accruedTaxUSD;
         accruedTaxUSD = 0;
       }
       // Dividends actually leave (they were declared and never deducted — the plan's leak #2).
@@ -617,16 +629,16 @@ function runCashWalk(args: {
       // on. Thirteen weeks of dividend leave in one week and nothing in the other twelve, which
       // is what a shareholder's cash actually looks like and what a fund reinvesting it feels.
       const dividend = dividendDecision({
-        declaredYield: comp.dividendYield ?? 0,
-        marketCapUSD: comp.marketCap,
+        declaredYield: declaredDividendYield,
+        marketCapUSD,
         netIncomeUSD: newNetIncome,
-        maxPayoutRatio: maxDividendPayoutRatioOf(comp),
+        maxPayoutRatio,
         weekOfQuarter: currentWeekMod13,
         weeksInQuarter: 13,
       });
       const dividendWeeklyUSD = dividend.cashThisWeekUSD;
       post('dividends paid', -dividendWeeklyUSD, undefined, false);
-      payHoldersCash(ctx, comp.id, 'EQUITY', dividendWeeklyUSD);
+      payHoldersCash(ctx, companyId, 'EQUITY', dividendWeeklyUSD);
       post('maintenance funding draw (new tranche proceeds)', weeklyDebtFundedPortion, bankCredit);
     }
   return { accruedTaxUSD };
@@ -867,7 +879,21 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     if (S08K_PROF) s08k.capital += __k1 - __k0;
     const { post, cash, cashLedger } = makeCashPoster(comp, ctx, retainCashLedger);
     const __cw = runCashWalk({
-      comp, ctx, entityById, weekUpdate, newNetIncome, weeklyPayrollUSD,
+      ctx,
+      companyId: comp.id,
+      ticker: d.backLanes.ticker[row],
+      region: d.backLanes.region[row],
+      isBanksSector: d.backLanes.isBanksSector[row] === 1,
+      homeBankTicker: comp.homeBankTicker,
+      carrierFreightRevenueUSD: ctx.carrierFreightRevenue[comp.ticker] ?? 0,
+      channelMarginRevenueUSD: ctx.channelMarginRevenue[comp.ticker] ?? 0,
+      declaredDividendYield: comp.dividendYield ?? 0,
+      marketCapUSD: d.backLanes.marketCapUSD[row],
+      maxPayoutRatio: maxDividendPayoutRatioOf(comp),
+      vehicleBehind: !comp.isBankEntity && comp.isInstitutionalEntity
+        ? entityById.get(managedEntityIdsOf(comp)[0]) : undefined,
+      boundaryTraceKey: `${comp.region}:${comp.financialStatementProfile ?? comp.sector ?? '?'}:${comp.ticker}`,
+      weekUpdate, newNetIncome, weeklyPayrollUSD,
       newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
       marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
       bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
