@@ -25,6 +25,7 @@
  */
 
 import { institutionProfile } from '../../../domain/institution-profiles';
+import { syncBookRows } from '../../../engine2/holdings';
 import { pay } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { mandatePctOf } from '../../../domain/institutions';
@@ -566,6 +567,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
           quantityShares: h.quantityShares === undefined ? undefined : h.quantityShares * (1 - share),
           quantityOrNotionalUSD: (h.quantityOrNotionalUSD ?? 0) * (1 - share),
         }));
+        syncBookRows(ctx.v2, fund.id, fund.itemizedHoldings);
         fundAssetsUSD.set(fundId, totalUSD * (1 - share));
       });
     });
@@ -573,6 +575,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       const investor = entityById.get(investorId);
       if (!investor || rows.length === 0) return;
       investor.itemizedHoldings = [...(investor.itemizedHoldings || []), ...rows];
+      syncBookRows(ctx.v2, investor.id, investor.itemizedHoldings);
       bumpRegister(ctx);
     });
   }

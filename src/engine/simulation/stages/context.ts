@@ -11,6 +11,7 @@
  */
 
 import { newPaymentJournal } from './settlement';
+import { ensureV2 } from '../../../engine2/world';
 import {
   GameState, Company, Region, Position, FxPair, Commodity, CompositeBenchmarkIndices,
   InstitutionalEntity, NewsItem, RegionId,
@@ -70,6 +71,8 @@ export interface CompanyWeekUpdate {
 }
 
 export interface WeeklyStepContext {
+  /** §7.307 flips — the persistent columnar world, one access point for every stage. */
+  v2: import('../../../engine2/world').V2World;
   // Time bookkeeping
   nextWeek: number;
   currentWeekMod13: number;
@@ -312,6 +315,7 @@ export interface WeeklyStepContext {
 export function createInitialContext(state: GameState): WeeklyStepContext {
   const nextWeek = state.currentWeek + 1;
   return {
+    v2: ensureV2(state),
     nextWeek,
     currentWeekMod13: ((nextWeek - 1) % 13) + 1,
 

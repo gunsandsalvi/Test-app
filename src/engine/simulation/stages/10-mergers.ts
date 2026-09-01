@@ -8,6 +8,7 @@
  */
 
 import { absorbBankBook } from '../../ledger';
+import { syncBookRows } from '../../../engine2/holdings';
 import { ensureV2 } from '../../../engine2/world';
 import { syncLadderRows, materializeLadder } from '../../../engine2/tranches';
 import { pay } from './settlement';
@@ -153,6 +154,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
         quantityShares: fraction * spinShares,
         quantityOrNotionalUSD: fraction * spinMcapUSD,
       }];
+      syncBookRows(ctx.v2, e.id, e.itemizedHoldings);
     });
     bumpRegister(ctx);
 
@@ -437,7 +439,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       touched = true;
       return { ...h, instrumentId: acquirer.id, issuerRegion: acquirer.region };
     });
-    if (touched) { e.itemizedHoldings = rows; bumpRegister(ctx); }
+    if (touched) { e.itemizedHoldings = rows; syncBookRows(ctx.v2, e.id, rows); bumpRegister(ctx); }
   });
 
   // Target is absorbed and exits active operations

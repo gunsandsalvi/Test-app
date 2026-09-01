@@ -5,6 +5,7 @@
  */
 
 import { journalPayment, partyId } from './settlement';
+import { syncBookRows } from '../../../engine2/holdings';
 import { V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
@@ -350,6 +351,7 @@ export function settleCorporateActionOnHolders(
  */
 export function applyPendingCorporateActionSettlements(
   ctx: {
+    v2?: import('../../../engine2/world').V2World;
     updatedInstitutionalEntities: InstitutionalEntity[];
     pendingHolderSettlements: Map<string, number>;
     pendingHolderCashUSD?: Map<string, number>;
@@ -528,6 +530,7 @@ export function applyPendingCorporateActionSettlements(
       })
       .filter((h) => h.quantityOrNotionalUSD > 1);
     if (!touched) return entity;
+    if (ctx.v2) syncBookRows(ctx.v2, entity.id, newHoldings);
     return {
       ...entity,
       cashUSD: (entity.cashUSD ?? 0) + cashUSD,

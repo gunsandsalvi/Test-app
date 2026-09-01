@@ -29,6 +29,7 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
+import { syncBookRows } from '../../../engine2/holdings';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 
@@ -185,7 +186,7 @@ export class HoldingsStore {
   }
 
   /** Recompose every entity's `itemizedHoldings`; the working copies stay in place. */
-  finalize(): void {
+  finalize(v2?: import('../../../engine2/world').V2World): void {
     this.slots.forEach((slot) => {
       const out: ItemizedHolding[] = [];
       for (let i = 0; i < slot.rows.length; i++) {
@@ -193,6 +194,7 @@ export class HoldingsStore {
       }
       for (const r of slot.appended) out.push(r);
       slot.entity.itemizedHoldings = out;
+      if (v2) syncBookRows(v2, slot.entity.id, out);
     });
   }
 }
@@ -205,7 +207,7 @@ export function buildHoldingsStore(ctx: WeeklyStepContext): void {
 }
 
 export function finalizeHoldingsStore(ctx: WeeklyStepContext): void {
-  ctx.holdingsStore?.finalize();
+  ctx.holdingsStore?.finalize(ctx.v2);
   bumpRegister(ctx);
   ctx.holdingsStore = undefined;
 }
@@ -253,6 +255,7 @@ export function consolidateRegister(ctx: WeeklyStepContext): void {
       }
     });
     entity.itemizedHoldings = merged;
+    syncBookRows(ctx.v2, entity.id, merged);
     bumpRegister(ctx);
   });
 }

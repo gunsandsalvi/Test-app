@@ -23,6 +23,7 @@ import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuance
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay } from './settlement';
+import { syncBookRows } from '../../../engine2/holdings';
 import { REGION_IDS } from '../../../domain/geography';
 import { encumberedFaceByBucket, repoBorrowedUSD, srfBorrowedUSD } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
@@ -409,6 +410,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             reason: 'sovereign redemption',
           });
         }
+        syncBookRows(ctx.v2, entity.id, newHoldings);
         return { ...entity, itemizedHoldings: newHoldings };
       });
     }

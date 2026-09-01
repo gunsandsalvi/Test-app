@@ -53,6 +53,7 @@ import { runTradeSettlementStage } from './stages/trade-settlement';
 import './stages/clearing-worker-pool';
 import { ensureV2 } from '../../engine2/world';
 import { syncLadderRows, assertLaddersInSync, materializeLadder } from '../../engine2/tranches';
+import { ensureBooksSynced, assertBooksInSync } from '../../engine2/holdings';
 import './stages/native-kernels';
 import { runFreightClearingStage } from './stages/freight-clearing';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
@@ -111,6 +112,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     for (const c of state.companies) {
       if (!v2.tranches.synced.has(c.id)) syncLadderRows(v2, c.id, c.debtTranches);
     }
+    // Holdings flip stage 1 — the same catch-up for the institutional register: the seed and any
+    // unhooked creation path (fund births, estate spawns) get their books mirrored here.
+    ensureBooksSynced(v2, state.institutionalEntities ?? []);
   }
   const baseCtx = createInitialContext(state);
   // §5-STRUCT step 5: `ctx` is a binding the stage closures read at call time, so the runner can
@@ -342,6 +346,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     for (const c of nextState.companies) c.debtTranches = materializeLadder(v2, c.id);
   }
   if (process.env.TRANCHE_SYNC_CHECK === '1') assertLaddersInSync(ensureV2(state), nextState.companies);
+  if (process.env.HOLDINGS_SYNC_CHECK === '1') assertBooksInSync(ensureV2(state), nextState.institutionalEntities ?? []);
   idTrace?.report(baseCtx.nextWeek);
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,

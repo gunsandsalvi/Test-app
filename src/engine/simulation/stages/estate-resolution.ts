@@ -15,6 +15,7 @@
  */
 
 import { assertNever } from '../../../domain/defect';
+import { syncBookRows } from '../../../engine2/holdings';
 import { GameState, RegionId, Company, InstitutionalEntity, ItemizedHolding } from '../../../types';
 import {
   Estate, EstateClaim, CLAIM_SENIORITY, estateAssetsUSD, claimsAtSeniority, outstandingUSD,
@@ -217,6 +218,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     const e = index.entityById.get(id);
     if (!e) return;
     e.itemizedHoldings = (e.itemizedHoldings || []).filter((h) => (h.quantityOrNotionalUSD ?? 0) > 1);
+    syncBookRows(ctx.v2, e.id, e.itemizedHoldings);
     bumpRegister(ctx);
   });
 

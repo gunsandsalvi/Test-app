@@ -17,6 +17,7 @@
 import { LotStore, newLotStore } from './lots';
 import { ContractTable, newContractTable } from './contracts';
 import { TrancheStore, newTrancheStore } from './tranches';
+import { HoldingStore, newHoldingStore } from './holdings';
 
 export interface V2World {
   /** Company id -> table row. Rows are addressing only — order carries no economics. */
@@ -29,8 +30,10 @@ export interface V2World {
   lots: LotStore;
   /** IND11 — the bilateral supply-contract book (§7.304's measured scaling monster). */
   contracts: ContractTable;
-  /** §7.307/§7.310 — the debt ladder as rows (stage 1: a synced mirror of comp.debtTranches). */
+  /** §7.307/§7.310 — the debt ladder as rows (rows are the authority since §7.313). */
   tranches: TrancheStore;
+  /** §7.307 — the institutional register as rows (stage 1: a synced mirror of itemizedHoldings). */
+  holdings: HoldingStore;
 }
 
 /** The host: any object graph that carries a v2 world (GameState, structurally). */
@@ -46,6 +49,7 @@ export function ensureV2(state: V2Host): V2World {
     lots: newLotStore(),
     contracts: newContractTable(),
     tranches: newTrancheStore(),
+    holdings: newHoldingStore(),
   };
   state.v2 = v2;
   return v2;

@@ -19,6 +19,7 @@ import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { isActiveCompany } from '../../../domain/company';
 import { SOV_BILL_BUCKETS } from './shared-helpers';
+import { syncBookRows } from '../../../engine2/holdings';
 
 /** Weekly accretion factor for a bill bucket, off the region's own cleared bill curve. */
 function weeklyAccretionRate(reg: any, bucketKey: string): number {
@@ -85,7 +86,9 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
         touched = true;
         return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 + rate) };
       });
-      return touched ? { ...e, itemizedHoldings: holdings } : e;
+      if (!touched) return e;
+      syncBookRows(ctx.v2, e.id, holdings);
+      return { ...e, itemizedHoldings: holdings };
     });
 
     // The central bank's bill book accretes too — its income is remitted to the treasury, which
