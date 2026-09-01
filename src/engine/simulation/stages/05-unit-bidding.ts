@@ -515,6 +515,88 @@ const R_HH_GOODS = internReason('household goods purchase');
 const R_CHANNEL = internReason('distribution margin paid to the channel');
 const R_GOV_PROC = internReason('government procurement');
 
+// §5-SCALE native cores — settleContracts in the §7.304 seam pattern: PRE reads every object
+// once into lanes; CORE is pure arithmetic over lanes and the contract columns (the portable
+// piece: no object, no Map, no payment — mutates the columns exactly as the inline walk did);
+// EFFECTS replays the rows in order emitting the identical payments and update writes. Float
+// order preserved statement for statement; the oracle differ is the gate.
+
+const CS_ALIVE = 0, CS_DEAD_MISSING = 1, CS_DEAD_SUPPLIER = 2, CS_DEAD_CUSTOMER = 3,
+  CS_DEAD_EXPIRY = 4, CS_DEAD_TERMINATION = 5;
+
+/** The portable core: per-row settlement arithmetic in chain order, draining each supplier's
+ *  one balance sequentially (the coupling that makes this loop serial by construction). */
+function settleContractsCore(
+  T: V2World['contracts'], rows: number[], contractLeadWeeks: number,
+  preStatus: Uint8Array, supSlot: Int32Array, needUSD: Float64Array,
+  marketPrice: Float64Array, avail: Float64Array,
+  status: Uint8Array, buyerLoss: Float64Array, sellerLoss: Float64Array,
+  actualT: Float64Array, paymentL: Float64Array, appliedL: Float64Array,
+  topUpL: Float64Array, fillL: Float64Array, availAfter: Float64Array,
+): void {
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (preStatus[i] !== 0) { status[i] = preStatus[i]; continue; }
+
+    T.weeksRemaining[r] -= 1;
+    const marketPriceUSD = marketPrice[i];
+
+    if (T.weeksRemaining[r] < 0) {
+      buyerLoss[i] = T.backlogUnits[r] * Math.max(0, marketPriceUSD - T.priceUSD[r]);
+      status[i] = CS_DEAD_EXPIRY;
+      continue;
+    }
+
+    if (T.escalationBaseUSD[r] > 0.0001) {
+      T.priceUSD[r] = Number(
+        (T.priceUSD[r] * (marketPriceUSD / T.escalationBaseUSD[r])).toFixed(4)
+      );
+      T.escalationBaseUSD[r] = marketPriceUSD;
+    }
+
+    const openingBacklogUnits = T.backlogUnits[r];
+    const owedUnits = T.qtyPerWeek[r] + openingBacklogUnits;
+
+    let cancelledUnits = 0;
+    if (openingBacklogUnits > 0.0001) {
+      const needUnits = marketPriceUSD > 0.0001 ? needUSD[i] / marketPriceUSD : owedUnits;
+      const excessUnits = owedUnits - needUnits;
+      if (excessUnits > 0.0001) {
+        cancelledUnits = Math.min(openingBacklogUnits, excessUnits);
+        sellerLoss[i] = cancelledUnits * Math.max(0, T.priceUSD[r] - marketPriceUSD);
+      }
+    }
+    const owedAfterCancellationUnits = owedUnits - cancelledUnits;
+
+    const supplierUnits = avail[supSlot[i]];
+    const actualTransacted = Math.min(owedAfterCancellationUnits, supplierUnits);
+    avail[supSlot[i]] = supplierUnits - actualTransacted;
+    availAfter[i] = supplierUnits - actualTransacted;
+    T.backlogUnits[r] = Math.max(0, owedAfterCancellationUnits - actualTransacted);
+    const paymentUSD = actualTransacted * T.priceUSD[r];
+
+    const targetDepositUSD = contractLeadWeeks
+      * T.qtyPerWeek[r] * T.priceUSD[r] * PROGRESS_PAYMENT_SHARE;
+    const appliedFromDepositUSD = Math.min(T.prepaidUSD[r], paymentUSD);
+    T.prepaidUSD[r] = T.prepaidUSD[r] - appliedFromDepositUSD;
+    const topUpUSD = Math.max(0, targetDepositUSD - T.prepaidUSD[r]);
+    T.prepaidUSD[r] += topUpUSD;
+    const fillRate = T.qtyPerWeek[r] > 0
+      ? Math.min(1, actualTransacted / T.qtyPerWeek[r]) : 1.0;
+    T.shortWeeks[r] = fillRate < 0.95 ? T.shortWeeks[r] + 1 : 0;
+
+    actualT[i] = actualTransacted; paymentL[i] = paymentUSD;
+    appliedL[i] = appliedFromDepositUSD; topUpL[i] = topUpUSD; fillL[i] = fillRate;
+
+    if (T.shortWeeks[r] >= CONTRACT_NON_PERFORMANCE_WEEKS) {
+      buyerLoss[i] = T.backlogUnits[r] * Math.max(0, marketPriceUSD - T.priceUSD[r]);
+      status[i] = CS_DEAD_TERMINATION;
+      continue;
+    }
+    status[i] = CS_ALIVE;
+  }
+}
+
 function settleContracts(
   v2: V2World,
   ctx: WeeklyStepContext,
@@ -539,183 +621,119 @@ function settleContracts(
   // SCALE — per-sub-unit registry facts, read once instead of per contract.
   const contractLeadWeeks = productionLeadWeeksOf(subUnitId);
   const isCapitalGoodCategory = purchaseKindOf(subUnitId) === 'CAPITAL_GOOD';
+  const m = rows.length;
 
-  // ENGINE V2 (§7.304) — the walk is the table's chain, in the order the object book carried;
-  // the two firm lookups resolve per unique REF per week (resolveRef), never per contract.
-  for (const r of rows) {
-    const supplier = resolveRef(T.supplierRef[r]);
-    const customer = resolveRef(T.customerRef[r]);
-    if (!supplier || !customer) { dead.push(r); continue; }
-
+  // ---- PRE: every object read, once, into lanes (refs resolve per unique ref per week).
+  const supplierOf: (Company | undefined)[] = new Array(m);
+  const customerOf: (Company | undefined)[] = new Array(m);
+  const preStatus = new Uint8Array(m);
+  const supSlot = new Int32Array(m);
+  const needUSD = new Float64Array(m);
+  const marketPrice = new Float64Array(m);
+  const supRegPx = new Float64Array(m);
+  const slotBySupplier = new Map<Company, number>();
+  const slotSuppliers: Company[] = [];
+  for (let i = 0; i < m; i++) {
+    const r = rows[i];
+    const supplier = supplierOf[i] = resolveRef(T.supplierRef[r]);
+    const customer = customerOf[i] = resolveRef(T.customerRef[r]);
+    if (!supplier || !customer) { preStatus[i] = CS_DEAD_MISSING; continue; }
     if (!isActiveCompany(supplier)) {
-      // Supplier default shock propagates directly to named contract counterparties first.
-      // §7.301 — ONLY A PRODUCTION INPUT THROTTLES PRODUCTION (rule 9): the shock applies when
-      // the customer's own recipe actually consumes this category. A lease or other service
-      // contract short-filled is a cost and a reliability record, never a stopped line — CRE's
-      // chronically tight rental market was writing a ~0.7 output cap onto every corporate
-      // tenant through this channel, measured as +4pts of unemployment by week 30.
-      if (computeRecipeInputNeedUSD(customer, subUnitId) > 0) {
+      // needUSD gates the customer's constraint write in effects (rule 9: only a production
+      // input throttles production — §7.301).
+      needUSD[i] = computeRecipeInputNeedUSD(customer, subUnitId);
+      preStatus[i] = CS_DEAD_SUPPLIER;
+      continue;
+    }
+    if (!isActiveCompany(customer)) { preStatus[i] = CS_DEAD_CUSTOMER; continue; }
+    needUSD[i] = computeRecipeInputNeedUSD(customer, subUnitId);
+    marketPrice[i] = regionReferencePrice[customer.region as RegionId] ?? T.priceUSD[r];
+    supRegPx[i] = regionReferencePrice[supplier.region as RegionId] ?? T.priceUSD[r];
+    let slot = slotBySupplier.get(supplier);
+    if (slot === undefined) {
+      slot = slotSuppliers.length;
+      slotBySupplier.set(supplier, slot);
+      slotSuppliers.push(supplier);
+    }
+    supSlot[i] = slot;
+  }
+  const avail = new Float64Array(slotSuppliers.length);
+  for (let sIdx = 0; sIdx < slotSuppliers.length; sIdx++) {
+    const supplier = slotSuppliers[sIdx];
+    avail[sIdx] = availableBySupplier.get(supplier)
+      ?? getOutputInventoryUnits(supplier, subUnitId);
+  }
+
+  // ---- CORE: the portable arithmetic, chain order, mutating the columns.
+  const status = new Uint8Array(m);
+  const buyerLoss = new Float64Array(m);
+  const sellerLoss = new Float64Array(m);
+  const actualT = new Float64Array(m);
+  const paymentL = new Float64Array(m);
+  const appliedL = new Float64Array(m);
+  const topUpL = new Float64Array(m);
+  const fillL = new Float64Array(m);
+  const availAfter = new Float64Array(m);
+  settleContractsCore(T, rows, contractLeadWeeks, preStatus, supSlot, needUSD, marketPrice,
+    avail, status, buyerLoss, sellerLoss, actualT, paymentL, appliedL, topUpL, fillL, availAfter);
+
+  // ---- EFFECTS: replay in row order; the payment sequence and every object write matches the
+  // inline walk leg for leg.
+  for (let i = 0; i < m; i++) {
+    const r = rows[i];
+    const st = status[i];
+    if (st === CS_DEAD_MISSING || st === CS_DEAD_CUSTOMER) { dead.push(r); continue; }
+    const supplier = supplierOf[i]!;
+    const customer = customerOf[i]!;
+    if (st === CS_DEAD_SUPPLIER) {
+      if (needUSD[i] > 0) {
         const custUp = wk.updateOf(customer);
         custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, 0.70);
       }
       dead.push(r);
       continue;
     }
-    if (!isActiveCompany(customer)) { dead.push(r); continue; }
-
-    T.weeksRemaining[r] -= 1;
-
-    const marketPriceUSD = regionReferencePrice[customer.region as RegionId] ?? T.priceUSD[r];
-
-    /**
-     * IND11 — THE BUYER'S COVER MEASURE. When a contract ends with units still owed, the buyer
-     * must buy them in the open market, so its loss is what the market charges over the price it
-     * was promised. This is contract law's own remedy rather than a chosen penalty rate: there
-     * is no free coefficient in it, and when the market has moved the buyer's way the breach
-     * costs the seller nothing, which is exactly right.
-     */
-    const settleUndeliveredBacklog = () => {
-      const shortfallUnits = T.backlogUnits[r];
-      const buyerLossUSD = shortfallUnits * Math.max(0, marketPriceUSD - T.priceUSD[r]);
-      if (buyerLossUSD > 0.01) {
-        payByIds(ctx, pidOf(supplier), pidOf(customer), buyerLossUSD, R_NONPERF);
-      }
-    };
-
-    // Expiry is settled BEFORE this week's delivery: a contract does not ship in the week its
-    // term runs out, which is what it did before IND11 and still does. What is new is that
-    // running out of term while still owing units is a BREACH rather than a quiet deletion.
-    if (T.weeksRemaining[r] < 0) { settleUndeliveredBacklog(); dead.push(r); continue; }
-
-    // IND11 — INDEXATION. A long contract's price moves with the market it was struck against,
-    // in proportion, so a decade of input-cost inflation is not silently assigned to the seller
-    // (or a decade of deflation to the buyer). A fixed-price contract carries no base and does
-    // not move — that is what makes it a different instrument, not a worse one.
-    if (T.escalationBaseUSD[r] > 0.0001) {
-      T.priceUSD[r] = Number(
-        (T.priceUSD[r] * (marketPriceUSD / T.escalationBaseUSD[r])).toFixed(4)
-      );
-      T.escalationBaseUSD[r] = marketPriceUSD;
-    }
-
-    // IND11 — THE ORDER SURVIVES THE WEEK IT WAS NOT FILLED. What the supplier owes is this
-    // week's quantity PLUS whatever it failed to ship before. The shortfall used to vanish: the
-    // seller simply did not deliver, nobody was owed anything, and a chronic under-deliverer
-    // was indistinguishable from a punctual one the following Monday.
-    const openingBacklogUnits = T.backlogUnits[r];
-    const owedUnits = T.qtyPerWeek[r] + openingBacklogUnits;
-
-    // IND11 — THE BUYER CANCELS WHAT IT NO LONGER NEEDS, AND PAYS FOR IT. A committed order is
-    // not a wish: when the buyer's own demand collapses, the units on order stop being wanted
-    // and the backlog is walked away from. This is the amplifier that makes capital-goods
-    // downturns violent — orders are not merely absent, they are TAKEN BACK — and it cannot
-    // happen unless a backlog exists to cancel.
-    //
-    // The buyer's real weekly need is its own recipe requirement at its current revenue, which
-    // is the same number its open-market bid is built from. Anything committed above that need
-    // is cancelled.
-    let cancelledUnits = 0;
-    if (openingBacklogUnits > 0.0001) {
-      const needUSD = computeRecipeInputNeedUSD(customer, subUnitId);
-      const needUnits = marketPriceUSD > 0.0001 ? needUSD / marketPriceUSD : owedUnits;
-      const excessUnits = owedUnits - needUnits;
-      if (excessUnits > 0.0001) {
-        cancelledUnits = Math.min(openingBacklogUnits, excessUnits);
-        // THE SELLER'S COVER MEASURE. It must now resell those units into the open market, so
-        // its loss is the contract price it was promised less the market price it can get. This
-        // is contract law's own remedy, not a chosen penalty rate: there is no free coefficient
-        // here, and when the market has moved the seller's way the cancellation costs nothing,
-        // which is exactly right.
-        const sellerLossUSD = cancelledUnits * Math.max(0, T.priceUSD[r] - marketPriceUSD);
-        if (sellerLossUSD > 0.01) {
-          payByIds(ctx, pidOf(customer), pidOf(supplier), sellerLossUSD, R_CANCEL);
-        }
-      }
-    }
-    const owedAfterCancellationUnits = owedUnits - cancelledUnits;
-
-    // What this supplier still has to give, this week, across every contract it holds. A
-    // supplier with no plan for this line is not producing it and has only its warehouse.
-    const supplierUnits = availableBySupplier.get(supplier)
-      ?? getOutputInventoryUnits(supplier, subUnitId);
-    const actualTransacted = Math.min(owedAfterCancellationUnits, supplierUnits);
-    availableBySupplier.set(supplier, supplierUnits - actualTransacted);
-    T.backlogUnits[r] = Math.max(0, owedAfterCancellationUnits - actualTransacted);
-    const paymentUSD = actualTransacted * T.priceUSD[r];
-
-    // IND17 — PROGRESS PAYMENTS. What the customer has already paid ahead settles this delivery
-    // first; only the balance moves as cash. The deposit then tracks the work still in the
-    // pipeline: `lead x weekly value x share`, topped back up each week, which is what a
-    // progress-payment schedule IS. A firm building for a year collects most of the price
-    // before it hands anything over, and that is the funding its working capital runs on.
-    const targetDepositUSD = contractLeadWeeks
-      * T.qtyPerWeek[r] * T.priceUSD[r] * PROGRESS_PAYMENT_SHARE;
-    const appliedFromDepositUSD = Math.min(T.prepaidUSD[r], paymentUSD);
-    T.prepaidUSD[r] = T.prepaidUSD[r] - appliedFromDepositUSD;
-    const topUpUSD = Math.max(0, targetDepositUSD - T.prepaidUSD[r]);
-    T.prepaidUSD[r] += topUpUSD;
-    if (topUpUSD > 0.01) {
-      payByIds(ctx, pidOf(customer), pidOf(supplier), topUpUSD, R_PROGRESS);
-    }
-    // The fill rate is measured against THIS WEEK's obligation: shipping down a backlog is
-    // catching up, not over-performing, so it cannot read above 1.
-    const fillRate = T.qtyPerWeek[r] > 0
-      ? Math.min(1, actualTransacted / T.qtyPerWeek[r]) : 1.0;
-    T.shortWeeks[r] = fillRate < 0.95 ? T.shortWeeks[r] + 1 : 0;
-
-    const supUp = wk.updateOf(supplier);
-    // The contract leg's own inventory write. For a supplier that still produces this sub-unit
-    // the open-market settlement below overwrites it with the full week's arithmetic; for one
-    // that has stopped producing and is only working off a live contract, this is the only write
-    // there is — and without it the units ship and the warehouse is never debited. That supplier
-    // has no plan, so its balance above is its warehouse alone, which is what this writes down.
-    setOutputInventory(
-      supUp, subUnitId,
-      Math.max(0, supplierUnits - actualTransacted),
-      regionReferencePrice[supplier.region as RegionId] ?? T.priceUSD[r]
-    );
-    supUp.salesUnits = (supUp.salesUnits ?? 0) + actualTransacted;
-    supUp.salesUSD = (supUp.salesUSD ?? 0) + paymentUSD;
-    // supUp.salesUnits/salesUSD are deliberately cross-sub-unit totals (other consumers want a
-    // company's whole-business sales) — but the inventory settlement below needs THIS sub-unit's
-    // contract sales specifically, so track that separately rather than reading the total.
-    contractSalesUnitsBySupplier.set(supplier, (contractSalesUnitsBySupplier.get(supplier) ?? 0) + actualTransacted);
-    // IND14 — the supplier's own delivery record, kept where the delivery happens: what it owed
-    // this week against what it shipped. Stage 08 smooths it onto the firm.
-    supUp._contractOwedUnits = (supUp._contractOwedUnits ?? 0) + T.qtyPerWeek[r];
-    supUp._contractDeliveredUnits = (supUp._contractDeliveredUnits ?? 0) + Math.min(actualTransacted, T.qtyPerWeek[r]);
-
-    const custUp = wk.updateOf(customer);
-    custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
-    custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
-    if (isCapitalGoodCategory) custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentUSD;
-    // SETL-C: a contract delivery is a payment between two named firms.
-    // IND17 — net of what was already paid ahead. Charging the full price again would collect
-    // for the same goods twice.
-    payByIds(ctx, pidOf(customer), pidOf(supplier), paymentUSD - appliedFromDepositUSD, R_DELIVERY);
-    addInputInventory(v2, custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);
-
-    if (fillRate < 0.95 && computeRecipeInputNeedUSD(customer, subUnitId) > 0) {
-      // Named shock propagation: reduced fill rate constrains customer capacity directly —
-      // §7.301: for a PRODUCTION input only (rule 9). A short-filled lease or service
-      // subscription is a cost and a reliability record (the EMA and IND11's termination clock
-      // above still see it); it does not stop a factory line the way missing steel does.
-      // CAP — THE 0.3 FLOOR IS GONE (rule 2). A firm whose inputs are rationed to nothing must be
-      // able to stop: the floor said every firm could always run at three tenths on inputs it did
-      // not have, which is production out of nothing. Stage 08 already measures real physical
-      // fulfilment from the lots actually held, so the constraint has a real basis to be.
-      custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, Math.max(0, fillRate));
-    }
-
-    // IND11 — TERMINATION FOR NON-PERFORMANCE. A supplier that has missed its obligation for a
-    // full quarter loses the contract: the buyer re-sources through the merit order, which is
-    // where the open market already is. Damages settle on whatever it was still owed.
-    if (T.shortWeeks[r] >= CONTRACT_NON_PERFORMANCE_WEEKS) {
-      settleUndeliveredBacklog();
+    if (st === CS_DEAD_EXPIRY) {
+      if (buyerLoss[i] > 0.01) payByIds(ctx, pidOf(supplier), pidOf(customer), buyerLoss[i], R_NONPERF);
       dead.push(r);
       continue;
     }
+    if (sellerLoss[i] > 0.01) {
+      payByIds(ctx, pidOf(customer), pidOf(supplier), sellerLoss[i], R_CANCEL);
+    }
+    availableBySupplier.set(supplier, availAfter[i]);
+    if (topUpL[i] > 0.01) {
+      payByIds(ctx, pidOf(customer), pidOf(supplier), topUpL[i], R_PROGRESS);
+    }
 
+    const supUp = wk.updateOf(supplier);
+    setOutputInventory(
+      supUp, subUnitId,
+      Math.max(0, availAfter[i]),
+      supRegPx[i]
+    );
+    supUp.salesUnits = (supUp.salesUnits ?? 0) + actualT[i];
+    supUp.salesUSD = (supUp.salesUSD ?? 0) + paymentL[i];
+    contractSalesUnitsBySupplier.set(supplier, (contractSalesUnitsBySupplier.get(supplier) ?? 0) + actualT[i]);
+    supUp._contractOwedUnits = (supUp._contractOwedUnits ?? 0) + T.qtyPerWeek[r];
+    supUp._contractDeliveredUnits = (supUp._contractDeliveredUnits ?? 0) + Math.min(actualT[i], T.qtyPerWeek[r]);
+
+    const custUp = wk.updateOf(customer);
+    custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualT[i];
+    custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentL[i];
+    if (isCapitalGoodCategory) custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentL[i];
+    payByIds(ctx, pidOf(customer), pidOf(supplier), paymentL[i] - appliedL[i], R_DELIVERY);
+    addInputInventory(v2, custUp, customer, subUnitId, supplier.ticker, actualT[i], paymentL[i], nextWeek);
+
+    if (fillL[i] < 0.95 && needUSD[i] > 0) {
+      custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, Math.max(0, fillL[i]));
+    }
+
+    if (st === CS_DEAD_TERMINATION) {
+      if (buyerLoss[i] > 0.01) payByIds(ctx, pidOf(supplier), pidOf(customer), buyerLoss[i], R_NONPERF);
+      dead.push(r);
+      continue;
+    }
     survivors.push(r);
   }
 
@@ -1340,6 +1358,8 @@ function buildRegionDemandPlans(
  * wedge sits on each buyer's own reservation, which is exactly how it works: a mill quotes at the
  * gate and the buyer pays the freight.
  */
+export const s05Phase = { plans: 0, settle: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
+const S05_PROF = typeof process !== 'undefined' && process.env?.S05_PROF === '1';
 function runSubUnitMarkets(
   v2: V2World,
   ctx: WeeklyStepContext,
@@ -1381,6 +1401,7 @@ function runSubUnitMarkets(
   //
   // A firm ships its commitments out of what it has plus what it just finished. That is the
   // order now: produce, deliver the contracts, auction the rest.
+  const __t0 = S05_PROF ? performance.now() : 0;
   const supplyPlans: SupplyPlan[] = [];
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
@@ -1399,6 +1420,7 @@ function runSubUnitMarkets(
   //        what its plant finished this week. The balance is drawn down as it ships, so a
   //        supplier with three contracts cannot deliver the same units to all three — which is
   //        what reading the warehouse fresh inside each contract used to let it do.
+  const __t1 = S05_PROF ? performance.now() : 0;
   const availableBySupplier = new Map<Company, number>();
   supplyPlans.forEach(p => {
     if (!p.company) return;
@@ -1413,6 +1435,7 @@ function runSubUnitMarkets(
     );
   });
 
+  const __t2 = S05_PROF ? performance.now() : 0;
   // --- 4. What every buyer wants, net of the contract volume it is already committed to.
   const contractUnitsByCustomer = new Map<string, number>();
   MARKET_REGION_IDS.forEach(regionId => {
@@ -1482,6 +1505,7 @@ function runSubUnitMarkets(
   // string-keyed lookup this replaces allocated a key per cross-border lot.
   const invoiceRegionCache = new Map<RegionId, Map<RegionId, RegionId>>();
 
+  const __t3 = S05_PROF ? performance.now() : 0;
   // --- 5. Build the four books. Suppliers offer only at home; buyers bid everywhere they intend.
   const bidsByOrigin = {} as Record<RegionId, UnitBid[]>;
   const offersByOrigin = {} as Record<RegionId, UnitOffer[]>;
@@ -1523,6 +1547,7 @@ function runSubUnitMarkets(
     results[origin] = clearBook(bidsByOrigin[origin], offersByOrigin[origin], anchorPrice[origin], offerRegionByKey);
   });
 
+  const __t4 = S05_PROF ? performance.now() : 0;
   // --- 6. Trade, and the freight it took. An export is a fill whose buyer sat elsewhere.
   const shippedTonnesByLane: Record<string, number> = {};
   MARKET_REGION_IDS.forEach(origin => {
@@ -1579,6 +1604,7 @@ function runSubUnitMarkets(
     publishedPrice[r] = paidUnits[r] > 0.0001 ? paidValue[r] / paidUnits[r] : results[r].clearedPriceUSD;
   });
 
+  const __t5 = S05_PROF ? performance.now() : 0;
   // --- 8. Settle production, inventory and cash ONCE per supplier. A seller books its own money.
   supplyPlans.forEach(plan => {
     const sale = results[plan.regionId].salesByKey.get(plan.key);
@@ -1626,6 +1652,7 @@ function runSubUnitMarkets(
     }
   });
 
+  const __t6 = S05_PROF ? performance.now() : 0;
   // --- 9. Settle every buyer once, in ITS money, at the landed cost it actually paid.
   const deferredPurchaseUSD = new Map<string, number>();
   const deferredSaleKeyed = new Map<string, number>();
@@ -1921,6 +1948,7 @@ function runSubUnitMarkets(
     });
   });
 
+  const __t7 = S05_PROF ? performance.now() : 0;
   // --- 10. Aggregate buyers: the household durable stock and the treasury's realized spend.
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
@@ -1940,6 +1968,12 @@ function runSubUnitMarkets(
   // --- 11. Contract formation, once per buyer per week across the books it bought in.
   formContracts(v2, subUnitId, results, supplyPlans, demandPlans, publishedPrice);
 
+  if (S05_PROF) {
+    const __t8 = performance.now();
+    s05Phase.plans += __t1 - __t0; s05Phase.settle += __t2 - __t1; s05Phase.demand += __t3 - __t2;
+    s05Phase.books += __t4 - __t3; s05Phase.trade += __t5 - __t4; s05Phase.sellers += __t6 - __t5;
+    s05Phase.buyers += __t7 - __t6; s05Phase.tail += __t8 - __t7;
+  }
   // --- 12. Publish the week's prices and metrics.
   // SCALE: one pass over the plans instead of a filtered reduce per region — each plan belongs
   // to exactly one region, so every region's total receives the same additions in the same order.
@@ -2267,6 +2301,11 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   // carried its own 0.16 fallback, so a market with too little history was reported as being at
   // exactly its own baseline — which reads as "no excess vol" whether that is true or unknown.
   // Unknown is now unknown: no history, no component.
+  if (S05_PROF) {
+    const P = s05Phase;
+    console.log(`[s05] plans ${P.plans.toFixed(0)} settle ${P.settle.toFixed(0)} demand ${P.demand.toFixed(0)} books ${P.books.toFixed(0)} trade ${P.trade.toFixed(0)} sellers ${P.sellers.toFixed(0)} buyers ${P.buyers.toFixed(0)} tail+publish ${P.tail.toFixed(0)}`);
+    P.plans = 0; P.settle = 0; P.demand = 0; P.books = 0; P.trade = 0; P.sellers = 0; P.buyers = 0; P.tail = 0;
+  }
   const realizedIndexVol = realizedAnnualVol(state.compositeIndices.usaComposite.historical, 13);
   const baselineVol = 0.16;
   const usaRegime = ctx.updatedRegions.USA.cycleRegime;
