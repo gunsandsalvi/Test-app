@@ -72,8 +72,16 @@ export class HoldingsTable {
   get qtyUSD(): Float64Array { return this.table.f64('qtyUSD'); }
   get shares(): Float64Array { return this.table.f64('shares'); }
 
+  /** §7.315: buildFromRows builds only what its consumers read; the transpose is one of the
+   *  features with NO current consumer and is skipped there — a future caller fails loudly
+   *  here instead of silently reading an empty index. */
+  private hasInstrumentTranspose = true;
+
   /** Rows of one instrument, or an empty list. */
   rowsOfInstrument(instrumentText: string): readonly number[] {
+    if (!this.hasInstrumentTranspose) {
+      throw new Error('HoldingsTable: built without the by-instrument transpose (buildFromRows) — extend buildFromRows before using rowsOfInstrument');
+    }
     const id = INSTRUMENT_IDS.peek(instrumentText);
     return id < 0 ? EMPTY : (this.byInstrument.get(id) ?? EMPTY);
   }
@@ -158,11 +166,13 @@ export class HoldingsTable {
     const H = v2.holdings;
     const typeCode: number[] = [];
     HOLDING_TYPES.forEach((t, i) => { typeCode[internString(v2, t)] = i; });
-    const regionCode: number[] = [];
-    HOLDING_REGIONS.forEach((r, i) => { regionCode[internString(v2, r)] = i; });
     let instrMemo = INSTR_ID_MEMO.get(v2);
     if (!instrMemo) { instrMemo = []; INSTR_ID_MEMO.set(v2, instrMemo); }
 
+    // §7.315: only the columns the table's ONE weekly consumer reads (the accrual pass:
+    // byType/typeRange, instrumentId, qtyUSD, entityRow). The by-instrument transpose, shares,
+    // issuerRegion and rowInHolder had no consumer and cost ~110k Map ops and column fills a
+    // week; rowsOfInstrument throws if asked for the skipped index.
     let total = 0;
     for (let e = 0; e < entities.length; e++) {
       for (let r = bookHeadOf(v2, entities[e].id); r >= 0; r = H.next[r]) total++;
@@ -171,20 +181,15 @@ export class HoldingsTable {
     this.table.length = total;
 
     const entityRow = this.entityRow, instrumentId = this.instrumentId;
-    const rowInHolder = this.rowInHolder, instrumentType = this.instrumentType;
-    const issuerRegion = this.issuerRegion, qtyUSD = this.qtyUSD, shares = this.shares;
+    const instrumentType = this.instrumentType, qtyUSD = this.qtyUSD;
 
-    if (this.holderStart.length !== entities.length + 1) {
-      this.holderStart = new Int32Array(entities.length + 1);
-    }
     const typeCounts = new Int32Array(HOLDING_TYPES.length);
     this.byInstrument.clear();
+    this.hasInstrumentTranspose = false;
 
     let at = 0;
     for (let e = 0; e < entities.length; e++) {
-      this.holderStart[e] = at;
-      let bookIdx = 0;
-      for (let r = bookHeadOf(v2, entities[e].id); r >= 0; r = H.next[r], bookIdx++) {
+      for (let r = bookHeadOf(v2, entities[e].id); r >= 0; r = H.next[r]) {
         const code = typeCode[H.typeRef[r]];
         if (code === undefined) continue;
         const ref = H.instrRef[r];
@@ -192,20 +197,12 @@ export class HoldingsTable {
         if (iid === undefined) { iid = INSTRUMENT_IDS.id(v2.internedStrings[ref]); instrMemo[ref] = iid; }
         entityRow[at] = e;
         instrumentId[at] = iid;
-        rowInHolder[at] = bookIdx;
         instrumentType[at] = code;
-        issuerRegion[at] = regionCode[H.regionRef[r]] ?? 0;
         qtyUSD[at] = H.qtyUSD[r];
-        const sh = H.shares[r];
-        shares[at] = Number.isNaN(sh) ? 0 : sh;
         typeCounts[code]++;
-        const list = this.byInstrument.get(iid);
-        if (list) list.push(at); else this.byInstrument.set(iid, [at]);
         at++;
       }
-      ENTITY_IDS.id(entities[e].id);
     }
-    this.holderStart[entities.length] = at;
     this.table.length = at;
 
     this.typeStart[0] = 0;

@@ -328,14 +328,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // Every corporate action this stage recorded reaches the real books here, in one pass.
   // WS7: the funds receive/pay the week's net corporate sweep money.
   settleCorporateSweepBooks(mmfSweepBooks, ctx);
+  const __p2a = S08_PROF ? performance.now() : 0;
 
   applyPendingCorporateActionSettlements(ctx);
+  const __p2b = S08_PROF ? performance.now() : 0;
   // CAL: the week's interest accruals onto the register, and the coupon dates that clear them.
   applyHolderInterestAccruals(ctx);
   const __p3 = S08_PROF ? performance.now() : 0;
   if (S08_PROF) {
     console.log(`[s08] front+indexes ${(__p1 - __p0).toFixed(0)} kernel ${(__p2 - __p1).toFixed(0)}`
-      + ` sweeps+corp-actions+accruals ${(__p3 - __p2).toFixed(0)}`);
+      + ` sweeps ${(__p2a - __p2).toFixed(0)} corp-actions ${(__p2b - __p2a).toFixed(0)} accruals ${(__p3 - __p2b).toFixed(0)}`);
   }
 
   // §4.0 Tier 1 item 9 — A MARKET SHARE IS A RATIO, AND RATIOS SUM TO ONE. Each line's share
