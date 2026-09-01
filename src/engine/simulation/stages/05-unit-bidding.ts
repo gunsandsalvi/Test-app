@@ -674,8 +674,10 @@ function settleContracts(
   const topUpL = new Float64Array(m);
   const fillL = new Float64Array(m);
   const availAfter = new Float64Array(m);
+  const __c0 = S05_PROF ? performance.now() : 0;
   settleContractsCore(T, rows, contractLeadWeeks, preStatus, supSlot, needUSD, marketPrice,
     avail, status, buyerLoss, sellerLoss, actualT, paymentL, appliedL, topUpL, fillL, availAfter);
+  if (S05_PROF) s05Phase.settleCore += performance.now() - __c0;
 
   // ---- EFFECTS: replay in row order; the payment sequence and every object write matches the
   // inline walk leg for leg.
@@ -1358,7 +1360,7 @@ function buildRegionDemandPlans(
  * wedge sits on each buyer's own reservation, which is exactly how it works: a mill quotes at the
  * gate and the buyer pays the freight.
  */
-export const s05Phase = { plans: 0, settle: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
+export const s05Phase = { plans: 0, settle: 0, settleCore: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
 const S05_PROF = typeof process !== 'undefined' && process.env?.S05_PROF === '1';
 function runSubUnitMarkets(
   v2: V2World,
@@ -2303,8 +2305,8 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   // Unknown is now unknown: no history, no component.
   if (S05_PROF) {
     const P = s05Phase;
-    console.log(`[s05] plans ${P.plans.toFixed(0)} settle ${P.settle.toFixed(0)} demand ${P.demand.toFixed(0)} books ${P.books.toFixed(0)} trade ${P.trade.toFixed(0)} sellers ${P.sellers.toFixed(0)} buyers ${P.buyers.toFixed(0)} tail+publish ${P.tail.toFixed(0)}`);
-    P.plans = 0; P.settle = 0; P.demand = 0; P.books = 0; P.trade = 0; P.sellers = 0; P.buyers = 0; P.tail = 0;
+    console.log(`[s05] plans ${P.plans.toFixed(0)} settle ${P.settle.toFixed(0)} (core ${P.settleCore.toFixed(0)}) demand ${P.demand.toFixed(0)} books ${P.books.toFixed(0)} trade ${P.trade.toFixed(0)} sellers ${P.sellers.toFixed(0)} buyers ${P.buyers.toFixed(0)} tail+publish ${P.tail.toFixed(0)}`);
+    P.plans = 0; P.settle = 0; P.settleCore = 0; P.demand = 0; P.books = 0; P.trade = 0; P.sellers = 0; P.buyers = 0; P.tail = 0;
   }
   const realizedIndexVol = realizedAnnualVol(state.compositeIndices.usaComposite.historical, 13);
   const baselineVol = 0.16;
