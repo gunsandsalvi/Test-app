@@ -67,6 +67,7 @@ export interface BackLanes {
   beta: Float64Array;                   // NaN = undefined
   baselineAnnualRevenueUSD: Float64Array;
   lastOpportunisticOfferingWeek: Float64Array; // NaN = undefined
+  employeeCount: Float64Array;
   wasDefaulted: Uint8Array;
   wasMergerAcquired: Uint8Array;
   publiclyListed: Uint8Array;
@@ -104,6 +105,7 @@ export function buildBackLanes(
     sharesOutstanding: f(), stockPrice: f(), baselineDividendYield: f(), dividendYield: f(),
     earningsWeekModulo: f(), eps: f(), cdsSpreadBps: f(), beta: f(),
     baselineAnnualRevenueUSD: f(), lastOpportunisticOfferingWeek: f(),
+    employeeCount: f(),
     wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
     creditRating: new Array(n), name: new Array(n),
     companyId: new Array(n), homeBankTicker: new Array(n),
@@ -173,6 +175,7 @@ export function buildBackLanes(
     L.beta[i] = c.beta ?? NaN_;
     L.baselineAnnualRevenueUSD[i] = c.baselineAnnualRevenue;
     L.lastOpportunisticOfferingWeek[i] = c.lastOpportunisticOfferingWeek ?? NaN_;
+    L.employeeCount[i] = c.employeeCount;
     L.wasDefaulted[i] = c.isDefaulted ? 1 : 0;
     L.wasMergerAcquired[i] = c.mergerAcquired ? 1 : 0;
     L.publiclyListed[i] = isPubliclyListed(c) ? 1 : 0;

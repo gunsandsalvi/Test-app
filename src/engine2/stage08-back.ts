@@ -783,9 +783,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const profileModule = PROFILE_REGISTRY[profileKey]!;
       // §5-TAXR — the same opening-stock attributes the front pass derives; a profile firm's
       // tax fields are untouched by the pass, so this rebuild reads the same values.
-      const openingGrossPpeUSD = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[L8.sector[row]] ?? 0.5));
+      const openingGrossPpeUSD = Number.isNaN(L8.grossPPEUSD[row]) ? L8.ppeDefaultUSD[row] : L8.grossPPEUSD[row];
       const openingNetPpeUSD = Math.max(0,
-        openingGrossPpeUSD - (comp.accumulatedDepreciationUSD ?? openingGrossPpeUSD * 0.45));
+        openingGrossPpeUSD - (Number.isNaN(L8.accumulatedDepreciationUSD[row]) ? openingGrossPpeUSD * 0.45 : L8.accumulatedDepreciationUSD[row]));
       const taxAttrs = {
         taxBasisPpeUSD: comp.taxBasisPpeUSD ?? openingNetPpeUSD,
         usefulLifeYears: SECTOR_PPE_USEFUL_LIFE_YEARS[L8.sector[row]] ?? 12,
@@ -806,7 +806,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const profileInputRate = Object.values(firmInputIntensities(comp.productLines, profileKey))
         .reduce((a, b) => a + b, 0);
       const pnl = profileModule({ comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
-        weeklyPayrollUSD, inputCostAnnualUSD: comp.annualRevenue * profileInputRate });
+        weeklyPayrollUSD, inputCostAnnualUSD: L8.annualRevenueUSD[row] * profileInputRate });
       newRevenue = pnl.newRevenue;
       const profileInputCostUSD = newRevenue * profileInputRate;
       // §5-STRUCT step 2 — the statement lives on the firm (domain/company-week/income-statement.ts).
@@ -816,7 +816,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         inputCostAnnualUSD: profileInputCostUSD,
         payrollAnnualUSD: weeklyPayrollUSD * 52,
         profileCostsAnnualUSD: pnl.profileCostsAnnualUSD,
-        grossPPEUSD: comp.grossPPEUSD ?? 0,
+        grossPPEUSD: Number.isNaN(L8.grossPPEUSD[row]) ? 0 : L8.grossPPEUSD[row],
         ppeDepreciationYears: 20,
         annualInterestUSD: annualInterest,
         taxRate,
@@ -888,7 +888,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       homeBankTicker: L8.homeBankTicker[row],
       carrierFreightRevenueUSD: ctx.carrierFreightRevenue[L8.ticker[row]] ?? 0,
       channelMarginRevenueUSD: ctx.channelMarginRevenue[L8.ticker[row]] ?? 0,
-      declaredDividendYield: comp.dividendYield ?? 0,
+      declaredDividendYield: L8.dividendYield[row] ?? 0,
       marketCapUSD: d.backLanes.marketCapUSD[row],
       maxPayoutRatio: maxDividendPayoutRatioOf(comp),
       vehicleBehind: !comp.isBankEntity && comp.isInstitutionalEntity
@@ -902,10 +902,10 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     });
     accruedTaxUSD = __cw.accruedTaxUSD;
     const update = weekUpdate;
-    let newTotalDebt = comp.totalDebt;
+    let newTotalDebt = L8.totalDebtUSD[row];
 
     const newBaselineDividendYield = round4(L8.baselineDividendYield[row] * 0.998 + L8.dividendYield[row] * 0.002);
-    const targetDivYield = newBaselineDividendYield * (cash.usd < 0 ? 0.4 : (cash.usd > 2 * comp.currentLiabilities ? 1.2 : 1.0)) * (1 + programme.payoutPressure * 2.5);
+    const targetDivYield = newBaselineDividendYield * (cash.usd < 0 ? 0.4 : (cash.usd > 2 * L8.currentLiabilitiesUSD[row] ? 1.2 : 1.0)) * (1 + programme.payoutPressure * 2.5);
     const newDividendYield = Math.max(0, L8.dividendYield[row] * 0.9 + targetDivYield * 0.1);
 
     // HH5: headcount is the LABOR MARKET's, not this stage's. The drift multiplier that used
@@ -916,7 +916,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // A firm's headcount now changes in exactly one place, and the real cash-distress layoffs
     // that formula was reaching for live there too.
     const newEmployeeCount = Math.max(10, Math.round(
-      weekUpdate?.employeeCount ?? comp.employeeCount
+      weekUpdate?.employeeCount ?? L8.employeeCount[row]
     ));
 
     // (S5: the prepayment rule moved below, where the real tranche ladder exists to retire —
@@ -1185,8 +1185,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         ? (Number.isNaN(TS.couponRate[r]) ? 0 : TS.couponRate[r])
         : reg.policyRate + (Number.isNaN(TS.floatingMarginBps[r]) ? 0 : TS.floatingMarginBps[r]) / 10000;
       const fairRateToday = isFixed
-        ? riskFree + comp.oasSpreadBps / 10000
-        : reg.policyRate + comp.oasSpreadBps / 10000;
+        ? riskFree + L8.oasSpreadBps[row] / 10000
+        : reg.policyRate + L8.oasSpreadBps[row] / 10000;
       const premiumPerDollar = callPremiumRowUSD(r, 1);
       const discount = Math.max(1e-6, fairRateToday);
       const savingPvPerDollar =
@@ -1220,10 +1220,10 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     rowList.forEach(rTr => {
       if ((TS.flags[rTr] & (TR_FLOATING | TR_CP))) return;
       const remainingYears = Math.max(0.5, (TS.maturityWeek[rTr] - state.currentWeek) / 52);
-      const currentFairRate = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
+      const currentFairRate = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams) + L8.oasSpreadBps[row] / 10000;
       // A floating tranche carries a margin rather than a coupon; there is nothing to refinance
       // INTO a lower fixed rate, so its saving is zero rather than NaN.
-      const excessCashAvailable = cash.usd > comp.annualRevenue * 0.15;
+      const excessCashAvailable = cash.usd > L8.annualRevenueUSD[row] * 0.15;
       // The real test is not "is the coupon above the market" — it is whether the saving is worth
       // what the call costs. A treasurer discounts the coupon saving over the paper's remaining
       // life and compares it to the premium; below that line the bond stays outstanding.
@@ -1233,7 +1233,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // bond the premium IS the present value of the saving, so a purely rate-driven call never
       // clears this test and an IG issuer calls for a real reason instead.
       // §5-STRUCT step 2 — the call test lives on the ladder (domain/company-week/debt-ladder.ts).
-      const premiumPerDollar = callPricePerDollar(viewOf(rTr), state.currentWeek, currentFairRate - comp.oasSpreadBps / 10000) - 1;
+      const premiumPerDollar = callPricePerDollar(viewOf(rTr), state.currentWeek, currentFairRate - L8.oasSpreadBps[row] / 10000) - 1;
       const economics = callEconomics({
         couponRate: Number.isNaN(TS.couponRate[rTr]) ? undefined : TS.couponRate[rTr],
         currentFairRate,
@@ -1245,7 +1245,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         const calledAmountUSD = callableAmountUSD({
           tranchePrincipalUSD: TS.principalUSD[rTr],
           cashUSD: cash.usd,
-          cashFloorUSD: comp.annualRevenue * 0.15,
+          cashFloorUSD: L8.annualRevenueUSD[row] * 0.15,
           premiumPerDollar,
         });
         TS.principalUSD[rTr] -= calledAmountUSD;
@@ -1466,15 +1466,15 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // invite the supply that widens them and wide spreads choke it off — the credit cycle, which
     // this simulation had no way to produce before.
     const costOfNewDebtAnnual =
-      calculateNelsonSiegelZeroRate(STANDARD_CORP_TENOR_YEARS, reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
+      calculateNelsonSiegelZeroRate(STANDARD_CORP_TENOR_YEARS, reg.yieldCurveParams) + L8.oasSpreadBps[row] / 10000;
     // S5 leak #3 fixed for real: surplus-cash prepayment retires ACTUAL tranches (nearest
     // maturity first — the paper a treasurer would take out), so cash and the ladder move
     // together and the settled reduction reaches holders via settleCorporateActionOnHolders.
-    if (cash.usd > 2.5 * comp.currentLiabilities) {
+    if (cash.usd > 2.5 * L8.currentLiabilitiesUSD[row]) {
       let ladderTotalUSD = 0;
       for (const r of rowList) ladderTotalUSD += TS.principalUSD[r];
       if (ladderTotalUSD > 50) {
-        let toPrepayUSD = Math.min(ladderTotalUSD * 0.05, (cash.usd - 2.5 * comp.currentLiabilities) * 0.25);
+        let toPrepayUSD = Math.min(ladderTotalUSD * 0.05, (cash.usd - 2.5 * L8.currentLiabilitiesUSD[row]) * 0.25);
         if (toPrepayUSD > 1000) {
           // §4.0 Tier 1 item 12 — a FACILITY on the prepay list must reach its LENDER: the loan
           // leaves the bank's book through the credit event and the money through a real
@@ -1567,7 +1567,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // then gaps past it is pulled, which is what a real busted bookbuild is.
       const dealSizeUSD = financing.netDebtChangeUSD * 13;
       const walkAwayOasBps = Math.max(
-        comp.oasSpreadBps,
+        L8.oasSpreadBps[row],
         Math.round((financing.walkAwayCostAnnual - calculateNelsonSiegelZeroRate(STANDARD_CORP_TENOR_YEARS, reg.yieldCurveParams)) * 10000)
       );
       enqueueOffering({
@@ -1635,7 +1635,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     }
 
     // Real, already-cleared this week (see the comment above) — not recomputed here.
-    const newOasBps = comp.oasSpreadBps;
+    const newOasBps = L8.oasSpreadBps[row];
     // CRD/DER2 — THE CDS SPREAD IS CLEARED NOW (07h), not decorated here.
     //
     // What stood here was `oasSpreadBps + a random draw in [-4, +4]`, bounded to [10, 5000]: a
@@ -1771,7 +1771,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     if (S08K_PROF) s08k.debt += __k3 - __k2;
     // Buyback Execution (Part AH)
     let updatedSharesOutstanding = L8.sharesOutstanding[row];
-    const targetCashBuffer = Math.max(10, comp.currentLiabilities * 1.5);
+    const targetCashBuffer = Math.max(10, L8.currentLiabilitiesUSD[row] * 1.5);
     const excessCash = Math.max(0, cash.usd - targetCashBuffer);
     const debtToEquity = newTotalDebt / Math.max(1, (newStockPrice * L8.sharesOutstanding[row]));
     // IND-R6: public-only — retiring shares into the market needs a market to retire them into.
@@ -1915,7 +1915,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // settlement/FX path as every other. (The dividend path cannot serve here: a private sub
     // has no market cap for a declared yield to price, and its holder of record IS the parent.)
     if (comp.parentTicker && !isDefaulted) {
-      const bufferUSD = comp.annualRevenue * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE;
+      const bufferUSD = L8.annualRevenueUSD[row] * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE;
       const excessUSD = Math.max(0, cash.usd - bufferUSD);
       if (excessUSD > 1e6) {
         post('subsidiary excess cash repatriated to the parent', -excessUSD,
@@ -1953,7 +1953,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.baselineDividendYield = newBaselineDividendYield;
 
-    comp.previousEmployeeCount = comp.employeeCount;
+    comp.previousEmployeeCount = L8.employeeCount[row];
 
     comp.accruedTaxLiabilityUSD = Math.round(accruedTaxUSD);
 
@@ -1965,7 +1965,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.unfilledVacancyShare = weekUpdate?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0;
 
-    comp.previousCapex = comp.capex;
+    comp.previousCapex = L8.capexUSD[row];
 
     comp.maintenanceCapex = round1(newMaintenanceCapex);
 
