@@ -7,20 +7,19 @@
  * the sequence — see that file's header comment for why.)
  */
 
-import { absorbBankBook } from '../../ledger';
+import { restateBankSheetStatistics } from '../../../domain/bank-resolution';
+import { mergeBankSheets } from '../../ledger/bank-transfer';
+import { rekeyBankLinks } from './bank-resolution';
 import { bookHeadOf, pushBookRow, markBookDirty } from '../../../engine2/holdings';
 import { ensureV2, internString, revHistSeed, rowOf, ringCopyRow } from '../../../engine2/world';
 import { syncLadderRows, materializeLadder } from '../../../engine2/tranches';
 import { pay } from './settlement';
-import { GameState, DebtTranche } from '../../../types';
+import { GameState, DebtTranche, RegionId } from '../../../types';
 import { getSimulationDate } from '../../formatters';
 import { isAntitrustBlocked, isActiveCompany, isPubliclyListed } from '../../../domain/company';
-import { isIssuerEquityRow } from '../../../domain/assets';
 import { checkForMerger } from '../merger';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
-import { DerivativeParty } from '../../../domain/derivatives/contract';
-import { derivativesBookOf } from './derivative-lifecycle';
 
 /**
  * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
@@ -350,42 +349,13 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // sovereign tenor book, cash and equity. Before this, the target bank's sheet was simply
   // stranded on the absorbed shell: 54B of deposits vanished from every derived sum in one week
   // while the households still held the money, and the borrowers' loans lost their lender.
+  // §7.339: the line-by-line move is the resolution's `absorbBankSheet` (one transfer for the
+  // two events that move a bank whole); a merger moves cash, wholesale and equity with it.
   if (target.bankBalanceSheet && acquirer.bankBalanceSheet) {
     const tb = target.bankBalanceSheet;
     const ab = acquirer.bankBalanceSheet;
-    // §5-STRUCT: the deposit and reserve lines move through the ledger, which owns them.
-    absorbBankBook(ab, tb);
-    ab.bankEquityUSD += tb.bankEquityUSD;
-    ab.businessLoanBookUSD += tb.businessLoanBookUSD;
-    ab.businessLoans = [...(ab.businessLoans || []), ...(tb.businessLoans || [])];
-    // Household pools merge by kind, principals summed and terms blended by size.
-    (tb.householdLoans || []).forEach((pl) => {
-      const mine = (ab.householdLoans || []).find((x) => x.kind === pl.kind);
-      if (!mine) { ab.householdLoans = [...(ab.householdLoans || []), { ...pl }]; return; }
-      const total = mine.principalUSD + pl.principalUSD;
-      if (total > 0) {
-        if (mine.wacAnnual !== undefined || pl.wacAnnual !== undefined) {
-          mine.wacAnnual = Number((((mine.wacAnnual ?? pl.wacAnnual ?? 0) * mine.principalUSD + (pl.wacAnnual ?? mine.wacAnnual ?? 0) * pl.principalUSD) / total).toFixed(4));
-        }
-        if (mine.marginBps !== undefined || pl.marginBps !== undefined) {
-          mine.marginBps = Math.round(((mine.marginBps ?? pl.marginBps ?? 0) * mine.principalUSD + (pl.marginBps ?? mine.marginBps ?? 0) * pl.principalUSD) / total);
-        }
-        if (mine.wamWeeks !== undefined || pl.wamWeeks !== undefined) {
-          mine.wamWeeks = Math.round(((mine.wamWeeks ?? pl.wamWeeks ?? 0) * mine.principalUSD + (pl.wamWeeks ?? mine.wamWeeks ?? 0) * pl.principalUSD) / total);
-        }
-      }
-      mine.principalUSD = total;
-    });
-    ab.consumerLoanBookUSD = (ab.householdLoans || []).reduce((a, pl) => a + pl.principalUSD, 0);
-    Object.entries(tb.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => {
-      ab.sovereignBondHoldingsByTenor[k] = (ab.sovereignBondHoldingsByTenor[k] ?? 0) + (Number(v) || 0);
-    });
-    ab.sovereignBondHoldingsUSD += tb.sovereignBondHoldingsUSD;
-    ab.srfBorrowingUSD = (ab.srfBorrowingUSD ?? 0) + (tb.srfBorrowingUSD ?? 0);
-    ab.repoLentUSD = (ab.repoLentUSD ?? 0) + (tb.repoLentUSD ?? 0);
-    ab.repoBorrowedUSD = (ab.repoBorrowedUSD ?? 0) + (tb.repoBorrowedUSD ?? 0);
-    ab.repoEncumberedCollateralUSD = (ab.repoEncumberedCollateralUSD ?? 0) + (tb.repoEncumberedCollateralUSD ?? 0);
-    // (corporate/institutional/SME deposit lines: absorbed above by absorbBankBook)
+    mergeBankSheets(ab, tb);
+    restateBankSheetStatistics(ab);
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (target.bankMarketShare ?? 0)).toFixed(4));
     target.bankBalanceSheet = undefined;
 
@@ -393,20 +363,9 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     // CDS and FX-forward books still named the absorbed ticker — the merged encumbrance scalar
     // above described pledges no live contract carried, and every counterparty's hedge pointed at
     // a dead desk. A contract survives a merger by NOVATION to the acquirer, so the books re-key.
-    const rekeyTicker = (t: string) => (t === target.ticker ? acquirer.ticker : t);
-    const reg10 = ctx.updatedRegions[target.region];
-    if (reg10?.repoBook) {
-      reg10.repoBook = reg10.repoBook.map((c) => ({
-        ...c,
-        borrowerTicker: rekeyTicker(c.borrowerTicker),
-        lender: 'ticker' in c.lender ? { ...c.lender, ticker: rekeyTicker(c.lender.ticker) } : c.lender,
-      }));
-    }
-    // DRV: ONE derivative book, one re-key — every class, both sides (the old per-book re-keys
-    // missed the futures book entirely and only ever re-keyed the FX forward's bank side).
-    const rekeyParty = (p: DerivativeParty): DerivativeParty =>
-      'ticker' in p && p.ticker === target.ticker ? { ...p, ticker: acquirer.ticker } : p;
-    ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekeyParty(c.a), b: rekeyParty(c.b) }));
+    // §7.339: one re-key for every link that names a bank — the customers' house-bank field, the
+    // facility rows, the repo and prime-brokerage books, the offering pipeline, the derivatives.
+    rekeyBankLinks(state, ctx, target.region as RegionId, target.ticker, acquirer.ticker);
   }
 
   // OWN7: the target's PAPER moves with its debt. Holdings are keyed by the issuer's company
@@ -417,7 +376,6 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // held against 131B outstanding in USA leveraged loans). §7.241: the equity rows ARE re-keyed
   // now — each target shareholder was paid the cash half in the tender above and holds the stock
   // half as real acquirer shares below, instead of keeping a claim on a dead company.
-  const mergedIds = new Set([target.id]);
   // §7.241: the STOCK half of the consideration becomes real acquirer shares on the holders'
   // rows — the old code minted `newShares` onto `sharesOutstanding` with rows for NOBODY, while
   // target equity rows stayed keyed to a dead company. Each target share row converts to the

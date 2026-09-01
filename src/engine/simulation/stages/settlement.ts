@@ -379,6 +379,10 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     if (netById[id] === undefined) { netById[id] = deltaUSD; netTouched.push(id); }
     else netById[id] += deltaUSD;
   };
+  const traceUnresolved = process.env.UNRESOLVED_TRACE === '1';
+  const sheetByTicker = traceUnresolved
+    ? new Map(ctx.updatedCompanies.filter((c) => c.isBankEntity).map((c) => [c.ticker, !!c.bankBalanceSheet]))
+    : undefined;
   for (let n = 0; n < nInstructions; n++) {
     const amountUSD = journal.amountUSD[n];
     const payerIdx = journal.payerId[n];
@@ -386,6 +390,15 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     const payerRef = partyOf(payerIdx);
     const payeeRef = partyOf(payeeIdx);
     report.grossUSD += amountUSD;
+    if (sheetByTicker) {
+      // A leg addressed to a bank that has no sheet any more (resolved, merged) is money with
+      // no account; name the stage's reason here, where the leg is still legible.
+      [payerRef, payeeRef].forEach((ref, side) => {
+        if ((ref.kind === 'BANK' || ref.kind === 'BANK_SECURITIES' || ref.kind === 'BANK_CREDIT') && sheetByTicker.get(ref.ticker) === false) {
+          console.log(`  [unresolved] ${ref.kind} ${ref.ticker} (${side === 0 ? 'payer' : 'payee'}) ${(amountUSD / 1e6).toFixed(3)}M '${reasonText(journal.reasonId[n])}' — no sheet`);
+        }
+      });
+    }
     add(payerIdx, -amountUSD);
     add(payeeIdx, amountUSD);
     // The ledgers below key by the reason's TEXT, so it is un-interned only for the few payments

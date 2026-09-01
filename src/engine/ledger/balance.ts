@@ -129,33 +129,3 @@ export function creditUnbacked(
   ledger.byReason[key] = (ledger.byReason[key] ?? 0) + deltaUSD;
 }
 
-/**
- * §5-STRUCT step 1 — ONE BANK ABSORBS ANOTHER'S BOOK.
- *
- * Not a payment: no money moves and nothing is created. Every line of the target's balance sheet
- * becomes the acquirer's, and the target's is emptied so the same dollar is never counted on two
- * sheets. It lives here rather than in `10-mergers.ts` for the reason the whole module exists — a
- * balance-sheet line has ONE writer, and "the acquirer's deposits go up" is exactly the kind of
- * rule that ends up inline in a stage and is then invisible when it goes wrong (§7.229).
- *
- * The caller still owns everything that is NOT a balance: the shell, the tickers, the news.
- */
-export function absorbBankBook(
-  acquirer: { depositsUSD: number; wholesaleFundingUSD?: number; cashReservesUSD: number;
-    corporateDepositsUSD?: number; institutionalDepositsUSD?: number; smeDepositsUSD?: number },
-  target: { depositsUSD: number; wholesaleFundingUSD?: number; cashReservesUSD: number;
-    corporateDepositsUSD?: number; institutionalDepositsUSD?: number; smeDepositsUSD?: number }
-): void {
-  acquirer.depositsUSD += target.depositsUSD;
-  acquirer.wholesaleFundingUSD = (acquirer.wholesaleFundingUSD ?? 0) + (target.wholesaleFundingUSD ?? 0);
-  acquirer.cashReservesUSD += target.cashReservesUSD;
-  acquirer.corporateDepositsUSD = (acquirer.corporateDepositsUSD ?? 0) + (target.corporateDepositsUSD ?? 0);
-  acquirer.institutionalDepositsUSD = (acquirer.institutionalDepositsUSD ?? 0) + (target.institutionalDepositsUSD ?? 0);
-  acquirer.smeDepositsUSD = (acquirer.smeDepositsUSD ?? 0) + (target.smeDepositsUSD ?? 0);
-  target.depositsUSD = 0;
-  target.wholesaleFundingUSD = 0;
-  target.cashReservesUSD = 0;
-  target.corporateDepositsUSD = 0;
-  target.institutionalDepositsUSD = 0;
-  target.smeDepositsUSD = 0;
-}

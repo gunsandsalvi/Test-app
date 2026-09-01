@@ -25,6 +25,7 @@ import { runCommoditiesStage } from './stages/07-commodities';
 import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clearing';
 import { buildHoldingsStore, finalizeHoldingsStore, consolidateRegister } from './stages/holdings-store';
 import { runSettlementStage } from './stages/settlement';
+import { runBankResolutionStage } from './stages/bank-resolution';
 import { runSmePoolStage } from './stages/sme-pools';
 import { accrueInstitutionalIncome, markInstitutionalBooks } from './stages/institutional-balance-sheet';
 import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
@@ -355,6 +356,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // because a day does, and without the second one those stages had nowhere to send a payment.
   run('settlement-close', () => runSettlementStage(ctx));
   syncCompanyField(state, 'cash');
+  // §7.339: a bank under prompt corrective action is closed on the week's final sheets and its
+  // books go whole to the strongest peer — after the close (an empty journal, every sheet
+  // final), before the central bank counts the reserves it just moved.
+  run('bank-resolution', () => runBankResolutionStage(state, ctx));
+  for (const f of ['cash', 'isDefaulted', 'defaultedWeek', 'bankResolvedWeek', 'employeeCount', 'grossPPEUSD', 'accumulatedDepreciationUSD', 'annualRevenue', 'ebitda', 'ebit', 'bankMarketShare', 'homeBankTicker', 'creditRating', 'stockPrice', 'marketCap'] as const) syncCompanyField(state, f);
   // PUB2: the central bank's week — remittances, the TGA, and the reserves its flows move.
   // After stage 11 AND after the close, so every flow of the week has posted before it counts
   // its own liabilities: settling reserves after it reconciled left its sheet not closing.

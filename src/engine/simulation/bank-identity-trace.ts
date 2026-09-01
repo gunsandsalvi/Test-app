@@ -40,7 +40,7 @@ const FIELD_SIGNS: Record<string, 1 | -1> = {
   primeBrokerageLoansUSD: -1,
 };
 
-function fieldsOf(bs: BankingSector): Record<string, number> {
+export function fieldsOf(bs: BankingSector): Record<string, number> {
   return {
     depositsUSD: bs.depositsUSD, corporateDepositsUSD: bs.corporateDepositsUSD ?? 0,
     institutionalDepositsUSD: bs.institutionalDepositsUSD ?? 0,
@@ -59,7 +59,7 @@ function fieldsOf(bs: BankingSector): Record<string, number> {
   };
 }
 
-function residualOf(bs: BankingSector, signedDesk = false): number {
+export function residualOf(bs: BankingSector, signedDesk = false): number {
   const sovUSD = Object.values(bs.sovereignBondHoldingsByTenor || {})
     .reduce((a: number, v) => a + (Number(v) || 0), 0);
   return (
