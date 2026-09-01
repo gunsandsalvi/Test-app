@@ -523,7 +523,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Apply: each desk's inventory, onto the bank that carried it. The regional array is now
     // the DERIVED sum of the named desks — nothing decides off it (G3a).
-    const deskViewByCompany = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
+    const deskViewByCompany = applyDealerDeskFills({ piById, ctx, banks: regionBanks, book: BOOK, instruments, result });
     // §7.259: AFTER the fills application, so the lead's residual survives to next week's
     // clearing as a real prior position.
     settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD,

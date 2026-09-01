@@ -908,7 +908,11 @@ function accumulateShard(
     const filledUSD = shard.fillFilled[f];
     const tradedUSD = shard.fillTraded[f];
     const feeUSD = shard.fillFee[f];
-    if (filledUSD > 1) result.holdingsMatrix[shard.fillPart[f] * nI + shard.fillInst[f]] = filledUSD;
+    if (filledUSD > 1) {
+      const cell = shard.fillPart[f] * nI + shard.fillInst[f];
+      result.holdingsMatrix[cell] = filledUSD;
+      noteDenseWrite(cell);
+    }
     cashByPi[shard.fillPart[f]] = cashByPi[shard.fillPart[f]] - tradedUSD - feeUSD;
     result.totalDealerRevenueUSD += feeUSD;
     result.dealerNetCashUSD += tradedUSD + feeUSD;
@@ -976,10 +980,24 @@ export function registerShardedKernel(api: ShardedKernelApi): void { shardedKern
  */
 let denseScratch = new Float64Array(1 << 16);
 let denseEpoch = 0;
+// §4.C — the scratch is zeroed by REPLAYING what the last book wrote (fills are sparse; a full
+// n×p zero-fill per book measured as a real regression at the Stage I boundary battery).
+let denseWritten = new Int32Array(1 << 12);
+let denseWrittenCount = 0;
+function noteDenseWrite(cell: number): void {
+  if (denseWrittenCount >= denseWritten.length) {
+    const g = new Int32Array(denseWritten.length * 2); g.set(denseWritten); denseWritten = g;
+  }
+  denseWritten[denseWrittenCount++] = cell;
+}
 function ensureDenseScratch(size: number): Float64Array {
   denseEpoch++;
-  if (denseScratch.length < size) denseScratch = new Float64Array(Math.max(size, denseScratch.length * 2));
-  else denseScratch.fill(0, 0, size);
+  if (denseScratch.length < size) {
+    denseScratch = new Float64Array(Math.max(size, denseScratch.length * 2)); // fresh = zeroed
+  } else {
+    for (let k = 0; k < denseWrittenCount; k++) denseScratch[denseWritten[k]] = 0;
+  }
+  denseWrittenCount = 0;
   return denseScratch.subarray(0, size);
 }
 

@@ -489,7 +489,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Apply: real dealer inventory.
     // G3a: owned by the desks that took it; the regional array is the derived sum.
-    const deskViewByCompany = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
+    const deskViewByCompany = applyDealerDeskFills({ piById, ctx, banks: regionBanks, book: BOOK, instruments, result });
     // §7.259: AFTER the fills application, so the residual written onto the lead's desk
     // survives to next week's clearing — where the build hands it to the kernel as a real prior
     // position that can be genuinely sold.

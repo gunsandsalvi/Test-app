@@ -154,6 +154,9 @@ export function applyDealerDeskFills(args: {
   unitPriceOf?: (instrumentId: string) => number;
   /** The desk's money leg, for a book whose engine cash legs are unit-denominated (07e). */
   cashDeltaOf?: (deskParticipantId: string) => number;
+  /** §4.C int flip — participant index by id; when present the desk fills read the dense
+   *  holdings matrix and the lazy map is never materialized for this book. */
+  piById?: Map<string, number>;
 }): Map<string, number> {
   const { ctx, banks, book, result } = args;
   const unitPrice = (id: string) => Math.max(1e-9, args.unitPriceOf ? args.unitPriceOf(id) : 1);
@@ -162,8 +165,10 @@ export function applyDealerDeskFills(args: {
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
     const deskId = dealerDeskParticipantId(bank.ticker);
-    const fills = result.newParticipantHoldings.get(deskId);
-    if (!fills) { inventories.push(sheet.dealerDeskInventory); return; }
+    const dpi = args.piById?.get(deskId);
+    if (args.piById !== undefined && dpi === undefined) { inventories.push(sheet.dealerDeskInventory); return; }
+    const fills = args.piById !== undefined ? undefined : result.newParticipantHoldings.get(deskId);
+    if (args.piById === undefined && !fills) { inventories.push(sheet.dealerDeskInventory); return; }
 
     const clearedIds = new Set(args.instruments.map((i) => i.id));
     const prior = priorPositions(sheet.dealerDeskInventory, book);
@@ -182,13 +187,23 @@ export function applyDealerDeskFills(args: {
       markToMarketUSD += markedUSD - p.inventoryUSD;
     });
     let newUSD = 0;
-    fills.forEach((units, instrumentId) => {
+    const applyFill = (units: number, instrumentId: string): void => {
       if (!clearedIds.has(instrumentId)) return;
       const inventoryUSD = units * unitPrice(instrumentId);
       if (Math.abs(inventoryUSD) <= 1) return;
       positions.push({ instrumentId, inventoryUSD, units });
       newUSD += inventoryUSD;
-    });
+    };
+    if (dpi !== undefined) {
+      const nI = result.nInstruments;
+      const base = dpi * nI;
+      for (let i = 0; i < nI; i++) {
+        const units = result.holdingsMatrix[base + i];
+        if (units !== 0) applyFill(units, args.instruments[i].id);
+      }
+    } else {
+      fills!.forEach(applyFill);
+    }
     const cashDeltaUSD = args.cashDeltaOf
       ? args.cashDeltaOf(deskId)
       : (result.netCashDeltaByParticipantId.get(deskId) ?? 0);
@@ -201,7 +216,8 @@ export function applyDealerDeskFills(args: {
     // charges equity with any cash that left without inventory arriving, so a books-vs-cash
     // disagreement in the clearing engine lands HERE as a phantom fee. Print it where it books.
     if (process.env.DESK_TRACE === '1' && (feeUSD > 50e6 || Math.abs(markToMarketUSD) > 50e6)) {
-      const fillsStr = Array.from(fills.entries())
+      const dbgFills = fills ?? result.newParticipantHoldings.get(deskId) ?? new Map<string, number>();
+      const fillsStr = Array.from(dbgFills.entries())
         .filter(([id, units]) => Math.abs(units * unitPrice(id)) > 10e6)
         .map(([id, units]) => `${id.slice(0, 12)} u${(units / 1e6).toFixed(1)}M@${unitPrice(id).toFixed(3)}`)
         .slice(0, 6).join(' ');
@@ -215,7 +231,7 @@ export function applyDealerDeskFills(args: {
       prior.forEach((p, instrumentId) => {
         if (!clearedIds.has(instrumentId) || Math.abs(p.inventoryUSD) < 25e6) return;
         console.log(`    [desk-prior] ${bank.ticker} ${instrumentId} held ${(p.inventoryUSD / 1e6).toFixed(1)}M`
-          + ` -> fill ${fills.has(instrumentId) ? (((fills.get(instrumentId) ?? 0) * unitPrice(instrumentId)) / 1e6).toFixed(1) + 'M' : 'NONE'}`
+          + ` -> fill ${dbgFills.has(instrumentId) ? (((dbgFills.get(instrumentId) ?? 0) * unitPrice(instrumentId)) / 1e6).toFixed(1) + 'M' : 'NONE'}`
           + ` float ${((floatById.get(instrumentId) ?? 0) / 1e6).toFixed(1)}M`);
       });
     }
