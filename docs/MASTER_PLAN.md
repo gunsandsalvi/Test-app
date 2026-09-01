@@ -354,7 +354,9 @@ phone as PWA and as the apk-latest TWA); measurement discipline for on-device re
 | 6 | **SCALE — universe scale-up** | **PARKED, later-TBD (user, 2026-09-01).** §4.C stands mid-Stage-II; resume point in the §5 banner + §7.336. Owns the damper's float half (small-cap equity tail, §7.288). |
 | 6b | **DRV — the one derivative layer** | BUILT (§7.337, user-ordered 2026-09-01 ahead of AU). One contract, one book, one lifecycle, one hedging arithmetic, one capacity budget; four class profiles behind a registry. Remainders gated in §5-DRV. |
 | 7 | **S-final — validation gate** | Everything above plus the measurement debt. |
-| 8 | **AU — Aurora, the UI rebuild** | **NEXT (user, 2026-09-01).** Deletion half already done (§7.333); design brief before any build. UI state leaves `GameState`. |
+| 8 | **AU — Aurora, the UI rebuild** | **IN DESIGN (user, 2026-09-01).** Brief in §5-AU; direction chosen (C's console structure with B's editorial voice); slice-one screens being drawn; build after approval. UI state leaves `GameState`. |
+| 9 | **NEWS — a news system worth reading** | IDEA logged (user, 2026-09-01), not scheduled. Charter in §5-NEWS. |
+| 10 | **MGMT — corporate management in depth** | IDEA logged (user, 2026-09-01), not scheduled. Charter in §5-MGMT. |
 
 ### The measurement debt (Tier 5 — finer reads still owed)
 
@@ -730,6 +732,38 @@ week is ~1 s; the UI renders between weeks). The deferred `details`-bag discrimi
 `statements`/`holders`/`peers` over companies, institutions and regions — enough to click through the whole world and prove
 the registry pattern before it is wide. Then the rest, function by function, each its own
 bounded commit. **PROCESS:** mockups (design canvas) → user approval → build slice 1.
+
+### NEWS — a news system worth reading *(item 9 — IDEA, user 2026-09-01; not scheduled)*
+
+Today `13-news` and `newsGenerator.ts` emit items; the ask is a news system that is SMART and
+INTERESTING. The charter, in this repo's terms: **news is a derived narrative over events the
+engine already records** — defaults and resolutions, births and FDI, M&A and divestitures, rating
+moves, failed or under-subscribed auctions, credit events, mothballs and scraps, damper binds, a
+bank's window at the CB, a contract break streak — each story CITING the state it derives from
+(rule 1's cousin: a story with no traceable cause is decoration) and tracing the WHY through the
+ledger ("KRLN missed its coupon because VOUL cut the line because the sovereign book repriced").
+Stories rank by materiality to what the reader watches (AU's `watch`), follow up as the mechanism
+plays out (a default story updates through the estate's workout), and every name in them is a
+link (AU's depth rule). Rule 4 binds: no real-world narrative templates, no invented colour —
+the interest comes from the causal chain being real. **Verify:** every population/credit/market
+event yields a story; every story's claims resolve to state fields; a reader can walk any story
+into the objects it names.
+
+### MGMT — corporate management in depth *(item 10 — IDEA, user 2026-09-01; not scheduled)*
+
+Firms today decide through the company-week rules (capital programme, hiring, financing,
+treasury, hedging) and one strategy branch (vertical integration). The ask is management with
+DEPTH: a firm's management as a state that decides — capital-allocation policy (target leverage,
+payout vs reinvestment), growth-versus-margin orientation, risk appetite, product-line entry and
+exit, M&A intent, guidance — with **turnover**: a management that fails its own measured record
+(sustained underperformance against peers, covenant breaches, a rating slide) is replaced, and
+the replacement decides differently. Rule 19 is the constraint that shapes it: management
+"styles" are SHAPE parameters unless they reduce to the two PREFERENCE primitives (patience and
+risk aversion) plus measured circumstances — so the design is a per-firm preference pair plus
+rules that read the firm's own books, never a stated style table. The game layer's return
+(`portfolio`/`trade`) is the same seam: the player as one firm's management. **Verify:** outcome
+dispersion traces to management choices; turnover follows measured failure and changes the
+firm's path; no stated share or style anywhere.
 
 ### DIST-P — the primitive scoreboard *(the rule is §1.19)*
 
