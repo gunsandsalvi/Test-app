@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { GameState } from './types';
 import { createInitialGameState } from './engine/simulation';
 import { advanceWeeklyStepProfiled } from './engine/simulation/core';
+import { setClearingWorkersWeb, webWorkersAvailable } from './engine/simulation/stages/clearing-worker-pool-web';
 
 interface WeekSample {
   week: number;
@@ -23,7 +24,19 @@ interface WeekSample {
 /** Steady-state means skip the warm-up weeks, matching the harness's convention. */
 const WARMUP_WEEKS = 3;
 
-function buildReport(samples: WeekSample[], running: boolean, error: string | null): string {
+/** Cheap deterministic world checksum; equal digests at a checkpoint mean two runs (e.g.
+ *  workers on vs off) computed the identical world. */
+function worldDigest(state: GameState): string {
+  let sum = 0;
+  for (const c of state.companies) sum += c.stockPrice + c.cash;
+  return sum.toPrecision(17);
+}
+const DIGEST_WEEKS = [1, 5, 10, 20, 50];
+
+function buildReport(
+  samples: WeekSample[], running: boolean, error: string | null,
+  workers: number, digests: Map<number, string>,
+): string {
   const nav = typeof navigator !== 'undefined' ? navigator : undefined;
   const mem = (performance as unknown as { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
   const lines: string[] = [];
@@ -32,7 +45,11 @@ function buildReport(samples: WeekSample[], running: boolean, error: string | nu
   lines.push(`cores (hardwareConcurrency): ${nav?.hardwareConcurrency ?? 'n/a'}`
     + ` | crossOriginIsolated (SharedArrayBuffer usable): ${typeof crossOriginIsolated !== 'undefined' ? crossOriginIsolated : 'n/a'}`);
   if (mem) lines.push(`js heap: ${(mem.usedJSHeapSize / 1e6).toFixed(0)}MB used / ${(mem.jsHeapSizeLimit / 1e6).toFixed(0)}MB limit`);
+  lines.push(`clearing workers: ${workers === 0 ? 'off (serial)' : workers}`);
   lines.push(`status: ${running ? 'RUNNING' : 'STOPPED'} | weeks run: ${samples.length}`);
+  if (digests.size > 0) {
+    lines.push(`world digest @wk: ${[...digests.entries()].map(([w, d]) => `${w}=${d}`).join(' ')}`);
+  }
   if (error) lines.push(`ERROR: ${error}`);
   if (samples.length === 0) return lines.join('\n');
 
@@ -75,6 +92,13 @@ export default function App() {
   const [seeding, setSeeding] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [workers, setWorkers] = useState(0);
+  const digestsRef = useRef(new Map<number, string>());
+
+  const onWorkers = (n: number) => {
+    setWorkers(n);
+    setClearingWorkersWeb(n);
+  };
 
   const fail = (e: unknown) => {
     runningRef.current = false;
@@ -91,6 +115,9 @@ export default function App() {
       const ms = performance.now() - t0;
       stateRef.current = r.state;
       samplesRef.current.push({ week: r.state.currentWeek, ms, stages: r.timings ?? [] });
+      if (DIGEST_WEEKS.includes(samplesRef.current.length)) {
+        digestsRef.current.set(samplesRef.current.length, worldDigest(r.state));
+      }
     } catch (e) {
       fail(e);
       return;
@@ -133,13 +160,14 @@ export default function App() {
     setRunning(false);
     stateRef.current = null;
     samplesRef.current = [];
+    digestsRef.current = new Map();
     setError(null);
     setTick((t) => t + 1);
   };
 
   useEffect(() => () => { runningRef.current = false; }, []);
 
-  const report = buildReport(samplesRef.current, running, error);
+  const report = buildReport(samplesRef.current, running, error, workers, digestsRef.current);
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(report);
@@ -163,6 +191,19 @@ export default function App() {
         <button style={btn} onClick={onStop} disabled={!running}>Stop</button>
         <button style={btn} onClick={onRestart}>Restart</button>
         <button style={btn} onClick={onCopy}>{copied ? 'Copied ✓' : 'Copy report'}</button>
+        {webWorkersAvailable() && (
+          <label style={{ fontSize: 14, marginLeft: 4 }}>
+            workers:{' '}
+            <select
+              value={workers}
+              onChange={(e) => onWorkers(Number(e.target.value))}
+              style={{ fontSize: 14, padding: '6px 8px' }}
+            >
+              {[0, 2, 3, 4, 6].filter((n) => n === 0 || n <= (navigator.hardwareConcurrency ?? 2) - 1)
+                .map((n) => <option key={n} value={n}>{n === 0 ? 'off' : n}</option>)}
+            </select>
+          </label>
+        )}
       </div>
       <pre style={{
         background: '#111', color: '#d6f2d6', padding: 12, borderRadius: 6,

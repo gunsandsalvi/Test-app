@@ -12,6 +12,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Grants cross-origin isolation on static hosts (GitHub Pages can't set COOP/COEP
+         headers itself), which unhides SharedArrayBuffer so the worker path can run.
+         Registers a service worker and reloads the page once on first visit. -->
+    <script src="./coi-serviceworker.min.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
