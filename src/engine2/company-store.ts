@@ -15,6 +15,7 @@
  * convention every prior seam used); optional booleans carry 2 = undefined.
  */
 import { GameState, Company } from '../types';
+import { V2World, ensureV2 } from './world';
 
 const F64_FIELDS = [
   // capital / production
@@ -81,7 +82,10 @@ function alloc(cap: number): CompanyStore {
   return { n: 0, cap, num, flag, str, epoch: 0 };
 }
 
-let storeByState = new WeakMap<object, CompanyStore>();
+// Keyed by the persistent V2World — the GameState OBJECT is rebuilt every week (stage 13's
+// `{...state}`), so keying on it re-allocated the whole SAB store weekly (measured ~11.5 ms/wk
+// of pure allocation before this line learned that fact).
+let storeByState = new WeakMap<V2World, CompanyStore>();
 
 /** Test seam: forget cached stores (batteries clone whole states). */
 export function resetCompanyStores(): void { storeByState = new WeakMap(); }
@@ -92,8 +96,9 @@ export function resetCompanyStores(): void { storeByState = new WeakMap(); }
  */
 export function refreshCompanyStore(state: GameState): CompanyStore {
   const companies = state.companies;
+  const key = ensureV2(state);
   const n = companies.length;
-  let S = storeByState.get(state);
+  let S = storeByState.get(key);
   if (!S || S.cap < n) {
     const grown = alloc(Math.max(n, S ? S.cap * 2 : 0, 1 << 12));
     if (S) {
@@ -103,7 +108,7 @@ export function refreshCompanyStore(state: GameState): CompanyStore {
       for (const f of STR_FIELDS) for (let i = 0; i < S.n; i++) grown.str[f][i] = S.str[f][i];
     }
     S = grown;
-    storeByState.set(state, S);
+    storeByState.set(key, S);
   }
   S.n = n;
   const num = S.num, flag = S.flag, str = S.str;
@@ -143,7 +148,7 @@ export function syncCompanyRow(S: CompanyStore, comp: Company, row: number): voi
  * store stops refreshing at every use point (Stage II.4's staging).
  */
 export function checkCompanyStore(state: GameState, where: string): void {
-  const S = storeByState.get(state);
+  const S = storeByState.get(ensureV2(state));
   if (!S) return;
   const companies = state.companies;
   for (let i = 0; i < Math.min(S.n, companies.length); i++) {
