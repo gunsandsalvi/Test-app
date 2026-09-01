@@ -46,6 +46,8 @@ import { sovereignCouponByBucket, sovereignCouponDueShare } from '../../../domai
 import { sovBucketKey } from './shared-helpers';
 import { isActiveCompany } from '../../../domain/company';
 import { REGION_IDS } from '../../../domain/geography';
+import { bookHeadOf } from '../../../engine2/holdings';
+import { internString } from '../../../engine2/world';
 
 /** `<region>|<bucket>|<partyKey>` — the receivable one holder has against one bucket. */
 const accrualKey = (regionId: RegionId, bucket: string, party: PartyRef) =>
@@ -81,14 +83,18 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
 
     // ---- 1. The institutions, off the register. Their cash arrives on the date; the income
     // statement is struck in institutional-balance-sheet.ts, where it stays smooth. ----
+    // §7.307 holdings flip: row walk — a non-GOV_BOND or foreign row costs two int compares.
+    const H = ctx.v2.holdings;
+    const govBondRef = internString(ctx.v2, 'GOV_BOND');
+    const regionRef = internString(ctx.v2, regionId);
     ctx.updatedInstitutionalEntities.forEach((entity) => {
       if (entity.isDefaulted) return;
-      (entity.itemizedHoldings || []).forEach((h) => {
-        if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return;
-        const bucketKey = govBucketKeyOf(h.instrumentId, regionId);
-        if (!bucketKey) return;
-        accrue(bucketKey, { kind: 'INSTITUTION', id: entity.id }, h.quantityOrNotionalUSD ?? 0);
-      });
+      for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
+        if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
+        const bucketKey = govBucketKeyOf(ctx.v2.internedStrings[H.instrRef[r]], regionId);
+        if (!bucketKey) continue;
+        accrue(bucketKey, { kind: 'INSTITUTION', id: entity.id }, H.qtyUSD[r]);
+      }
     });
 
     // ---- 2. The banks, off their own per-tenor books. This is the leg that could not be keyed

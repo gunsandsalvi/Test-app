@@ -24,6 +24,7 @@
 import { govBucketId } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, ensureLaddersSynced } from '../../../engine2/tranches';
+import { bookHeadOf, ensureBooksSynced } from '../../../engine2/holdings';
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../domain/assets';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
@@ -138,18 +139,29 @@ export function measuredForeignOwnershipAllRegions(state: GameState): Record<Reg
   const foreign: Partial<Record<RegionId, Acc>> = {};
   const accFor = (table: Partial<Record<RegionId, Acc>>, r: RegionId): Acc =>
     table[r] ?? (table[r] = { equity: 0, corpBond: 0, sovBond: 0 });
+  // §7.307 holdings flip: row walk on the mirror; the registry dispatch (§7.241) is resolved
+  // ONCE per interned type instead of per row. Idempotent sync first — harness reports call
+  // this outside the weekly step, same as the ladder catch-up below in measuredOwnership.
+  const v2 = ensureV2(state);
+  ensureBooksSynced(v2, state.institutionalEntities);
+  const H = v2.holdings;
+  const keyByTypeRef: ('equity' | 'sovBond' | 'corpBond' | false)[] = [];
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
-    e.itemizedHoldings.forEach((h) => {
-      const v = h.quantityOrNotionalUSD ?? 0;
-      // §7.241: registry dispatch (see the ownership accumulator above) — vehicle claims are
-      // excluded and each class lands in its own accumulator, one mapping for a new type.
-      const cls = isVehicleClaim(h.instrumentType) ? undefined : holdingClassOf(h.instrumentType);
-      const key = cls ? ({ EQUITY: 'equity', SOVEREIGN: 'sovBond', CREDIT: 'corpBond' } as const)[cls as 'EQUITY' | 'SOVEREIGN' | 'CREDIT'] : undefined;
-      if (!key) return;
-      accFor(held, h.issuerRegion)[key] += v;
-      if (e.region !== h.issuerRegion) accFor(foreign, h.issuerRegion)[key] += v;
-    });
+    for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
+      const tref = H.typeRef[r];
+      let key = keyByTypeRef[tref];
+      if (key === undefined) {
+        const t = v2.internedStrings[tref] as ItemizedHolding['instrumentType'];
+        const cls = isVehicleClaim(t) ? undefined : holdingClassOf(t);
+        key = keyByTypeRef[tref] = (cls ? ({ EQUITY: 'equity', SOVEREIGN: 'sovBond', CREDIT: 'corpBond' } as const)[cls as 'EQUITY' | 'SOVEREIGN' | 'CREDIT'] : undefined) ?? false;
+      }
+      if (!key) continue;
+      const issuer = v2.internedStrings[H.regionRef[r]] as RegionId;
+      const v = H.qtyUSD[r];
+      accFor(held, issuer)[key] += v;
+      if (e.region !== issuer) accFor(foreign, issuer)[key] += v;
+    }
   });
   const out = {} as Record<RegionId, Acc>;
   REGION_IDS.forEach((r) => {
@@ -214,6 +226,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   // run yet — the idempotent sync makes the rows trustworthy either way.
   const v2hv = ensureV2(state);
   ensureLaddersSynced(v2hv, state.companies);
+  ensureBooksSynced(v2hv, state.institutionalEntities);
   const out = {} as Record<RegionId, MeasuredOwnershipByClass>;
   const regionIds = Object.keys(state.regions) as RegionId[];
   regionIds.forEach((r) => {
@@ -221,19 +234,27 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   });
   const acc = (r: RegionId): MeasuredOwnershipByClass | undefined => out[r];
 
+  // §7.307 holdings flip: row walk on the mirror; the §7.241 registry dispatch — the chain's
+  // silence on fund shares was an undocumented fact, now `isVehicleClaim`; a new holding type
+  // gets its class in domain/assets, not here — is resolved once per interned type.
+  const Hmo = v2hv.holdings;
+  const keyByTypeRef: ('equity' | 'sovBond' | 'corpBond' | false)[] = [];
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
-    e.itemizedHoldings.forEach((h) => {
-      const a = acc(h.issuerRegion);
-      if (!a) return;
-      const v = h.quantityOrNotionalUSD ?? 0;
-      // §7.241: dispatched through the registry instead of an if-chain — the chain's silence on
-      // fund shares was an undocumented fact, now `isVehicleClaim`; a new holding type gets its
-      // class in domain/assets, not here.
-      const cls = isVehicleClaim(h.instrumentType) ? undefined : holdingClassOf(h.instrumentType);
-      const sink = cls ? { EQUITY: a.equity, SOVEREIGN: a.sovBond, CREDIT: a.corpBond }[cls as 'EQUITY' | 'SOVEREIGN' | 'CREDIT'] : undefined;
-      if (sink) sink.institutionalUSD += v;
-    });
+    for (let r = bookHeadOf(v2hv, e.id); r >= 0; r = Hmo.next[r]) {
+      const a = acc(v2hv.internedStrings[Hmo.regionRef[r]] as RegionId);
+      if (!a) continue;
+      const tref = Hmo.typeRef[r];
+      let key = keyByTypeRef[tref];
+      if (key === undefined) {
+        const t = v2hv.internedStrings[tref] as ItemizedHolding['instrumentType'];
+        const cls = isVehicleClaim(t) ? undefined : holdingClassOf(t);
+        key = keyByTypeRef[tref] = (cls ? ({ EQUITY: 'equity', SOVEREIGN: 'sovBond', CREDIT: 'corpBond' } as const)[cls as 'EQUITY' | 'SOVEREIGN' | 'CREDIT'] : undefined) ?? false;
+      }
+      if (!key) continue;
+      const sink = key === 'equity' ? a.equity : key === 'sovBond' ? a.sovBond : a.corpBond;
+      sink.institutionalUSD += Hmo.qtyUSD[r];
+    }
   });
 
   // §4.0 Tier 1 item 11 — THE ESTATE WINDOW. A defaulted issuer leaves the active roster the

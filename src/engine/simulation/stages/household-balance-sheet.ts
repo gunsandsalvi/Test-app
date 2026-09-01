@@ -30,6 +30,7 @@ import { GameState, RegionId, InstitutionalEntity } from '../../../types';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { WeeklyStepContext } from './context';
 import { ETF_INCEPTION_NAV_PER_SHARE } from '../../../domain/etf';
+import { bookHeadOf } from '../../../engine2/holdings';
 import { AVERAGE_HOUSEHOLD_SIZE, WealthTier } from '../../../domain/region-macro';
 import { WEALTH_TIERS } from '../../macro/household-cohorts';
 import {
@@ -87,8 +88,11 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
   const fundNavPerShare = (fund: InstitutionalEntity): number => {
     const shares = fund.etf?.sharesOutstanding ?? 0;
     if (!(shares > 0)) return ETF_INCEPTION_NAV_PER_SHARE;
-    const navUSD = fund.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0)
-      + Math.max(0, fund.cashUSD ?? 0);
+    // §7.307 holdings flip: row walk on the mirror.
+    const H = ctx.v2.holdings;
+    let heldUSD = 0;
+    for (let r = bookHeadOf(ctx.v2, fund.id); r >= 0; r = H.next[r]) heldUSD += H.qtyUSD[r];
+    const navUSD = heldUSD + Math.max(0, fund.cashUSD ?? 0);
     return navUSD / shares;
   };
 

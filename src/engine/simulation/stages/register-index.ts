@@ -105,11 +105,15 @@ export function getHoldingsTable(
   ctx: {
     holdingsTable?: import('../../columns/holdings-table').HoldingsTable;
     updatedInstitutionalEntities: InstitutionalEntity[];
+    v2?: import('../../../engine2/world').V2World;
   }
 ): import('../../columns/holdings-table').HoldingsTable {
   if (!ctx.holdingsTable) {
     const t = new HoldingsTable();
-    t.build(ctx.updatedInstitutionalEntities);
+    // §7.307 holdings flip: built from the persistent row mirror when the week's context carries
+    // it — no object is touched. The object-graph build remains for callers outside the week.
+    if (ctx.v2) t.buildFromRows(ctx.v2, ctx.updatedInstitutionalEntities);
+    else t.build(ctx.updatedInstitutionalEntities);
     ctx.holdingsTable = t;
   }
   return ctx.holdingsTable;

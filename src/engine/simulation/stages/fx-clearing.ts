@@ -31,6 +31,7 @@
 
 import { RegionId, GameState } from '../../../types';
 import { WeeklyStepContext } from './context';
+import { bookHeadOf } from '../../../engine2/holdings';
 import {
   fxWeeklySigma, speculatorReservationMoveFrac, speculatorFullSizeRangeFrac, speculatorMaxPositionUSD,
   centralBankReservationMoveFrac, centralBankFullSizeRangeFrac,
@@ -78,12 +79,15 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   // ---- Every cross-border payment has TWO legs, and building them one currency at a time is how
   // a leg goes missing. A JPN insurer buying EUR paper BUYS euro and SELLS yen — which under XB6
   // is a trade in the EUR/JPY book, not two dollar legs that happen to net. ----
+  // §7.307 holdings flip: row walk on the mirror (current here — every writer up-stage syncs).
+  const HFX = ctx.v2.holdings;
   ctx.updatedInstitutionalEntities.forEach((e: any) => {
     const heldNow: Record<string, number> = {};
-    (e.itemizedHoldings || []).forEach((h: any) => {
-      if (!h.issuerRegion || h.issuerRegion === e.region) return;
-      heldNow[h.issuerRegion] = (heldNow[h.issuerRegion] ?? 0) + (h.quantityOrNotionalUSD ?? 0);
-    });
+    for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = HFX.next[r]) {
+      const issuer = ctx.v2.internedStrings[HFX.regionRef[r]];
+      if (!issuer || issuer === e.region) continue;
+      heldNow[issuer] = (heldNow[issuer] ?? 0) + HFX.qtyUSD[r];
+    }
     const prior = e.priorForeignHoldingsByRegion ?? {};
     const touched = new Set([...Object.keys(heldNow), ...Object.keys(prior)]);
     touched.forEach((issuer) => {
@@ -443,12 +447,14 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
 }
 
 export function recordForeignHoldingsSnapshot(ctx: WeeklyStepContext): void {
+  const H = ctx.v2.holdings;
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e: any) => {
     const byRegion: Record<string, number> = {};
-    (e.itemizedHoldings || []).forEach((h: any) => {
-      if (!h.issuerRegion || h.issuerRegion === e.region) return;
-      byRegion[h.issuerRegion] = (byRegion[h.issuerRegion] ?? 0) + (h.quantityOrNotionalUSD ?? 0);
-    });
+    for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
+      const issuer = ctx.v2.internedStrings[H.regionRef[r]];
+      if (!issuer || issuer === e.region) continue;
+      byRegion[issuer] = (byRegion[issuer] ?? 0) + H.qtyUSD[r];
+    }
     return { ...e, priorForeignHoldingsByRegion: byRegion };
   });
 }

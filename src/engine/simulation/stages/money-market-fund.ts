@@ -30,6 +30,7 @@
 
 import { pay } from './settlement';
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
+import { bookHeadOf } from '../../../engine2/holdings';
 import { Company, InstitutionalEntity, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { computeSovereignBookAnnualYield, ON_RRP_SPREAD_BPS } from '../../macro/banking';
@@ -222,9 +223,12 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   // note says it closed an assets-versus-shares divergence — it closed it on the fund's side and
   // opened the same hole on the holders'.
   const issuedByRegion = new Map<RegionId, number>();
+  const H = ctx.v2.holdings;
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.entityType !== 'MONEY_MARKET_FUND') return e;
-    const holdingsUSD = (e.itemizedHoldings || []).reduce((a, h) => a + h.quantityOrNotionalUSD, 0);
+    // §7.307 holdings flip: row walk on the mirror.
+    let holdingsUSD = 0;
+    for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r];
     const bookUSD = (e.cashUSD ?? 0) + holdingsUSD + (e.repoLentUSD ?? 0);
     if (bookUSD <= 0) return e;
     const feeUSD = (bookUSD * MMF_FEE_ANNUAL) / 52;

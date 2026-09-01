@@ -32,6 +32,7 @@
 
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
+import { bookHeadOf } from '../../../engine2/holdings';
 import { RegionId, InstitutionalEntity } from '../../../types';
 import { mandatePctOf } from '../../../domain/institutions';
 import { publicComparableEvMultiple } from './pe-lifecycle';
@@ -174,8 +175,12 @@ export function markInstitutionalBooks(ctx: WeeklyStepContext): void {
         + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })
         + (entity.repoLentUSD ?? 0) + (entity.stockLoanNetUSD ?? 0) + portfolioUSD) };
     }
-    const holdingsUSD = entity.itemizedHoldings.reduce(
-      (a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
+    // §7.307 holdings flip: row walk (this runs right after the write-back, mirror current).
+    let holdingsUSD = 0;
+    {
+      const H = ctx.v2.holdings;
+      for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r];
+    }
     // SETL6: this stage runs before the settlement pass, so the week's cleared trades are still
     // unsettled — the securities are on the book and the cash has not moved. The receivable (or
     // payable) is the other leg, and leaving it out would mark every buyer up and every seller

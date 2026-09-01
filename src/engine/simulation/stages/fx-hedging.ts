@@ -15,6 +15,8 @@
 import { RegionId } from '../../../types';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { hedgedAsFixedIncome } from '../../../domain/assets';
+import { bookHeadOf } from '../../../engine2/holdings';
+import { V2World } from '../../../engine2/world';
 import { WeeklyStepContext } from './context';
 import { pay, pendingSettlementUSD } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
@@ -35,16 +37,19 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { REGION_IDS } from '../../../domain/geography';
 
 /** What this entity holds in each foreign region, split by how much of it its mandate hedges. */
-function hedgeableExposureByRegion(entity: any): Map<RegionId, number> {
+// §7.307 holdings flip: row walk on the mirror (this stage runs after the write-back).
+function hedgeableExposureByRegion(v2: V2World, entity: any): Map<RegionId, number> {
   const out = new Map<RegionId, number>();
-  (entity.itemizedHoldings || []).forEach((h: any) => {
-    const issuer = h.issuerRegion as RegionId;
-    if (!issuer || issuer === entity.region) return;
-    const ratio = h.instrumentType === 'EQUITY' ? equityHedgeRatioFor(entity.entityType, entity.hedgeFundStrategy)
-      : hedgedAsFixedIncome(h.instrumentType) ? HEDGE_RATIO_FIXED_INCOME : 0;
-    if (ratio <= 0) return;
-    out.set(issuer, (out.get(issuer) ?? 0) + (h.quantityOrNotionalUSD ?? 0) * ratio);
-  });
+  const H = v2.holdings;
+  for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
+    const issuer = v2.internedStrings[H.regionRef[r]] as RegionId;
+    if (!issuer || issuer === entity.region) continue;
+    const type = v2.internedStrings[H.typeRef[r]];
+    const ratio = type === 'EQUITY' ? equityHedgeRatioFor(entity.entityType, entity.hedgeFundStrategy)
+      : hedgedAsFixedIncome(type) ? HEDGE_RATIO_FIXED_INCOME : 0;
+    if (ratio <= 0) continue;
+    out.set(issuer, (out.get(issuer) ?? 0) + H.qtyUSD[r] * ratio);
+  }
   return out;
 }
 
@@ -185,7 +190,7 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     const covered = new Map<RegionId, number>();
     live.forEach((f) => covered.set(f.foreignRegion, (covered.get(f.foreignRegion) ?? 0) + f.notionalUSD));
     const gaps = new Map<RegionId, number>();
-    hedgeableExposureByRegion(entity).forEach((wantUSD, issuer) => {
+    hedgeableExposureByRegion(ctx.v2, entity).forEach((wantUSD, issuer) => {
       const gapUSD = wantUSD - (covered.get(issuer) ?? 0);
       if (gapUSD > 1e6) gaps.set(issuer, gapUSD);
     });
@@ -328,7 +333,7 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity: any) => {
     const live: FxForward[] = (entity.fxForwards || []).filter((f: FxForward) => f.maturityWeek > week);
-    const exposure = hedgeableExposureByRegion(entity);
+    const exposure = hedgeableExposureByRegion(ctx.v2, entity);
     if (live.length === 0 && exposure.size === 0) return entity;
 
     // Mark every live contract, then post the holder's side and remember the bank's mirror.

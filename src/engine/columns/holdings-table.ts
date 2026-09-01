@@ -21,6 +21,13 @@ import { InstitutionalEntity, ItemizedHolding } from '../../types';
 import { Table } from './table';
 import { INSTRUMENT_IDS, ENTITY_IDS } from './intern';
 import { REGION_IDS } from '../../domain/geography';
+import { V2World, internString } from '../../engine2/world';
+import { bookHeadOf } from '../../engine2/holdings';
+
+/** v2-intern-id → INSTRUMENT_IDS id. Both pools assign ids in first-sight order and never reuse
+ *  them, so a translation, once made, holds for the life of the world — the memo never
+ *  invalidates. Keyed weakly per world because batteries clone whole states. */
+const INSTR_ID_MEMO = new WeakMap<V2World, number[]>();
 
 /** The instrument types, in the order the by-type grouping uses. */
 export const HOLDING_TYPES: ItemizedHolding['instrumentType'][] = [
@@ -137,6 +144,76 @@ export class HoldingsTable {
     if (this.byType.length < at) this.byType = new Int32Array(Math.max(at, 1 << 17));
     const cursor = Int32Array.from(this.typeStart.subarray(0, HOLDING_TYPES.length));
     for (let i = 0; i < at; i++) this.byType[cursor[instrumentType[i]]++] = i;
+  }
+
+  /**
+   * §7.307 holdings flip — rebuild from the PERSISTENT ROW MIRROR (engine2/holdings) instead of
+   * the object graph: every column fill is typed-array loads plus interned-int translation, and
+   * no holding object is touched. Valid wherever the mirror is current — after the clearing
+   * write-back, since every writer syncs at its own site (HOLDINGS_SYNC_CHECK proves it).
+   * Chain order = book order, so `rowInHolder` and every grouping come out exactly as `build`'s.
+   */
+  buildFromRows(v2: V2World, entities: InstitutionalEntity[]): void {
+    this.entities = entities;
+    const H = v2.holdings;
+    const typeCode: number[] = [];
+    HOLDING_TYPES.forEach((t, i) => { typeCode[internString(v2, t)] = i; });
+    const regionCode: number[] = [];
+    HOLDING_REGIONS.forEach((r, i) => { regionCode[internString(v2, r)] = i; });
+    let instrMemo = INSTR_ID_MEMO.get(v2);
+    if (!instrMemo) { instrMemo = []; INSTR_ID_MEMO.set(v2, instrMemo); }
+
+    let total = 0;
+    for (let e = 0; e < entities.length; e++) {
+      for (let r = bookHeadOf(v2, entities[e].id); r >= 0; r = H.next[r]) total++;
+    }
+    this.table.grow(Math.max(1, total));
+    this.table.length = total;
+
+    const entityRow = this.entityRow, instrumentId = this.instrumentId;
+    const rowInHolder = this.rowInHolder, instrumentType = this.instrumentType;
+    const issuerRegion = this.issuerRegion, qtyUSD = this.qtyUSD, shares = this.shares;
+
+    if (this.holderStart.length !== entities.length + 1) {
+      this.holderStart = new Int32Array(entities.length + 1);
+    }
+    const typeCounts = new Int32Array(HOLDING_TYPES.length);
+    this.byInstrument.clear();
+
+    let at = 0;
+    for (let e = 0; e < entities.length; e++) {
+      this.holderStart[e] = at;
+      let bookIdx = 0;
+      for (let r = bookHeadOf(v2, entities[e].id); r >= 0; r = H.next[r], bookIdx++) {
+        const code = typeCode[H.typeRef[r]];
+        if (code === undefined) continue;
+        const ref = H.instrRef[r];
+        let iid = instrMemo[ref];
+        if (iid === undefined) { iid = INSTRUMENT_IDS.id(v2.internedStrings[ref]); instrMemo[ref] = iid; }
+        entityRow[at] = e;
+        instrumentId[at] = iid;
+        rowInHolder[at] = bookIdx;
+        instrumentType[at] = code;
+        issuerRegion[at] = regionCode[H.regionRef[r]] ?? 0;
+        qtyUSD[at] = H.qtyUSD[r];
+        const sh = H.shares[r];
+        shares[at] = Number.isNaN(sh) ? 0 : sh;
+        typeCounts[code]++;
+        const list = this.byInstrument.get(iid);
+        if (list) list.push(at); else this.byInstrument.set(iid, [at]);
+        at++;
+      }
+      ENTITY_IDS.id(entities[e].id);
+    }
+    this.holderStart[entities.length] = at;
+    this.table.length = at;
+
+    this.typeStart[0] = 0;
+    for (let t = 0; t < HOLDING_TYPES.length; t++) this.typeStart[t + 1] = this.typeStart[t] + typeCounts[t];
+    if (this.byType.length < at) this.byType = new Int32Array(Math.max(at, 1 << 17));
+    const cursor = Int32Array.from(this.typeStart.subarray(0, HOLDING_TYPES.length));
+    const instrumentTypeCol = this.instrumentType;
+    for (let i = 0; i < at; i++) this.byType[cursor[instrumentTypeCol[i]]++] = i;
   }
 }
 

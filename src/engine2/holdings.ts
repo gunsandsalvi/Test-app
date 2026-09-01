@@ -113,6 +113,14 @@ export function syncBookRows(v2: V2World, entityId: string, book: ItemizedHoldin
   H.tail[slot] = prev;
 }
 
+/** Head row of the entity's mirrored book, -1 when it has none — for direct chain walks
+ *  (`for (let r = bookHeadOf(...); r >= 0; r = H.next[r])`) that allocate nothing. */
+export function bookHeadOf(v2: V2World, entityId: string): number {
+  const H = v2.holdings;
+  const entRow = v2.rowById.get(entityId);
+  return entRow === undefined || entRow >= H.head.length ? -1 : H.head[entRow];
+}
+
 /** The entity's book as row indices, in book order. */
 export function bookRowsOf(v2: V2World, entityId: string): number[] {
   const H = v2.holdings;
