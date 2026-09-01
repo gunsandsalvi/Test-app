@@ -666,9 +666,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
     }
 
-    const reg = updatedRegions[comp.region];
+    const reg = updatedRegions[L8.region[row]];
     // SCALE §7.303 — ONE hash lookup for the firm's week updates (was ~12 string-keyed hits).
-    const weekUpdate = companyUpdates[comp.ticker];
+    const weekUpdate = companyUpdates[L8.ticker[row]];
     // ENGINE V2 — THE FRONT HALF OF THIS KERNEL LIVES IN src/engine2/stage08-front.ts NOW:
     // payroll (IND-R1/IND-R6), the ladder interest walk, the tax attributes, carrying cost,
     // FIFO consumption, the product-line evolution, revenue recognition and the industrial
@@ -690,18 +690,18 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // a headcount rule that drifted out of agreement with the listed tier's because a fix could
     // land in one path and miss the other. A second path does not stay a copy.
 
-    const sec = SECTOR_BENCHMARKS[comp.sector];
+    const sec = SECTOR_BENCHMARKS[L8.sector[row]];
 
     // SETL2b: drawing a bank facility is not a payment FROM anyone — the bank writes the loan and
     // the borrower's balance appears against it, in the same statement (settlement.ts). Naming
     // the house bank's CREDIT is what tells settlement no reserve should move.
-    const bankCredit: PartyRef | undefined = comp.homeBankTicker
-      ? { kind: 'BANK_CREDIT', ticker: comp.homeBankTicker }
+    const bankCredit: PartyRef | undefined = L8.homeBankTicker[row]
+      ? { kind: 'BANK_CREDIT', ticker: L8.homeBankTicker[row] }
       : undefined;
     const recordCredit = (trancheId: string, principalUSD: number, marginBps: number, termWeeks: number, retire: boolean) => {
-      if (!comp.homeBankTicker || !(principalUSD > 0)) return;
+      if (!L8.homeBankTicker[row] || !(principalUSD > 0)) return;
       ctx.creditEventsThisWeek.push({
-        bankTicker: comp.homeBankTicker, companyId: comp.id, trancheId,
+        bankTicker: L8.homeBankTicker[row], companyId: L8.companyId[row], trancheId,
         principalUSD, marginBps, originationWeek: nextWeek, termWeeks, retire,
       });
     };
@@ -783,12 +783,12 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const profileModule = PROFILE_REGISTRY[profileKey]!;
       // §5-TAXR — the same opening-stock attributes the front pass derives; a profile firm's
       // tax fields are untouched by the pass, so this rebuild reads the same values.
-      const openingGrossPpeUSD = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
+      const openingGrossPpeUSD = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[L8.sector[row]] ?? 0.5));
       const openingNetPpeUSD = Math.max(0,
         openingGrossPpeUSD - (comp.accumulatedDepreciationUSD ?? openingGrossPpeUSD * 0.45));
       const taxAttrs = {
         taxBasisPpeUSD: comp.taxBasisPpeUSD ?? openingNetPpeUSD,
-        usefulLifeYears: SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12,
+        usefulLifeYears: SECTOR_PPE_USEFUL_LIFE_YEARS[L8.sector[row]] ?? 12,
         capexDeliveredAnnualUSD: capexCommissionedThisWeekUSD * 52,
         carryforwardUSD: comp.taxLossCarryforwardUSD ?? 0,
         bookNetPpeUSD: openingNetPpeUSD,
@@ -840,7 +840,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const cap = runCapitalBlock(row, d.backLanes, {
       newEbitda, newRevenue, weeklyInterest,
       effectiveDebtRate, newExecutionQuality, capexCommissionedThisWeekUSD, nextWeek,
-      priorOccupationMixDrift: comp.occupationMixDrift, homeBankTicker: comp.homeBankTicker,
+      priorOccupationMixDrift: comp.occupationMixDrift, homeBankTicker: L8.homeBankTicker[row],
     });
     if (cap.learningWrites) {
       comp.cumulativeOutputUnits = cap.learningWrites.cumulativeUnits;
@@ -881,19 +881,19 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const { post, cash, cashLedger } = makeCashPoster(comp, ctx, retainCashLedger);
     const __cw = runCashWalk({
       ctx,
-      companyId: comp.id,
+      companyId: L8.companyId[row],
       ticker: d.backLanes.ticker[row],
       region: d.backLanes.region[row],
       isBanksSector: d.backLanes.isBanksSector[row] === 1,
-      homeBankTicker: comp.homeBankTicker,
-      carrierFreightRevenueUSD: ctx.carrierFreightRevenue[comp.ticker] ?? 0,
-      channelMarginRevenueUSD: ctx.channelMarginRevenue[comp.ticker] ?? 0,
+      homeBankTicker: L8.homeBankTicker[row],
+      carrierFreightRevenueUSD: ctx.carrierFreightRevenue[L8.ticker[row]] ?? 0,
+      channelMarginRevenueUSD: ctx.channelMarginRevenue[L8.ticker[row]] ?? 0,
       declaredDividendYield: comp.dividendYield ?? 0,
       marketCapUSD: d.backLanes.marketCapUSD[row],
       maxPayoutRatio: maxDividendPayoutRatioOf(comp),
       vehicleBehind: !comp.isBankEntity && comp.isInstitutionalEntity
         ? entityById.get(managedEntityIdsOf(comp)[0]) : undefined,
-      boundaryTraceKey: `${comp.region}:${comp.financialStatementProfile ?? comp.sector ?? '?'}:${comp.ticker}`,
+      boundaryTraceKey: `${L8.region[row]}:${comp.financialStatementProfile ?? L8.sector[row] ?? '?'}:${L8.ticker[row]}`,
       weekUpdate, newNetIncome, weeklyPayrollUSD,
       newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
       marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
@@ -929,7 +929,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // a measurement (§1.15), and the clamps these used to carry destroyed the information that a
     // firm has no earnings at all.
     const { leverage: newLeverage, coverage: newCoverage } = creditMetrics({
-      isBank: comp.sector === 'Banks',
+      isBank: L8.sector[row] === 'Banks',
       totalDebtUSD: newTotalDebt,
       revenueUSD: newRevenue,
       ebitdaUSD: newEbitda,
@@ -962,7 +962,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // line, and default only when both are gone. The full sweep decision at the bottom still
     // runs — by then cash is at or below the buffer, so it cannot double-redeem.
     if (L8.wasMergerAcquired[row] !== 1 && cash.usd < 0 && (comp.mmfSharesUSD ?? 0) > 0) {
-      const book = mmfSweepBooks.get(comp.region);
+      const book = mmfSweepBooks.get(L8.region[row]);
       if (book) {
         const wantedUSD = Math.min(comp.mmfSharesUSD ?? 0, -cash.usd);
         const paidUSD = Math.min(wantedUSD, book.redeemableUSD);
@@ -970,7 +970,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
           book.netInflowUSD -= paidUSD;
           book.redeemableUSD -= paidUSD;
           comp.mmfSharesUSD = (comp.mmfSharesUSD ?? 0) - paidUSD;
-          const shortfallFund = findRegionMmf(ctx.updatedInstitutionalEntities, comp.region);
+          const shortfallFund = findRegionMmf(ctx.updatedInstitutionalEntities, L8.region[row]);
           post('money fund share redemption: liquidity shortfall', paidUSD,
             shortfallFund ? { kind: 'INSTITUTION', id: shortfallFund.id } : undefined);
         }
@@ -984,7 +984,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const TS = v2.tranches;
     const __k2 = S08K_PROF ? performance.now() : 0;
     if (S08K_PROF) s08k.cash += __k2 - __k1;
-    let rowList = ladderRowsOf(v2, comp.id);
+    let rowList = ladderRowsOf(v2, L8.companyId[row]);
     // Economics views are memoized per row — retirementEconomics and the call arithmetic read
     // no principal, so a view struck before a principal mutation stays valid.
     const econViews = new Map<number, DebtTranche>();
@@ -1008,7 +1008,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       });
       if (drawUSD > 1) {
         const revolver: DebtTranche = {
-          id: `${comp.id}-REVOLVER-LIQ-${nextWeek}`,
+          id: `${L8.companyId[row]}-REVOLVER-LIQ-${nextWeek}`,
           principalUSD: drawUSD,
           rateType: 'FLOATING',
           floatingMarginBps: REVOLVER_MARGIN_BPS,
@@ -1017,13 +1017,13 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
           seniority: 'SENIOR',
           // G2: a committed line is BANK debt on the house bank's own itemized book.
           isBankFacility: true,
-          facilityBankTicker: comp.homeBankTicker,
+          facilityBankTicker: L8.homeBankTicker[row],
         };
-        drawnRevolverRow = pushLadderRow(v2, comp.id, revolver);
+        drawnRevolverRow = pushLadderRow(v2, L8.companyId[row], revolver);
         recordCredit(revolver.id, drawUSD, REVOLVER_MARGIN_BPS, 52, false);
         newTotalDebt += drawUSD;
         post('revolver drawn: liquidity shortfall', drawUSD,
-          comp.homeBankTicker ? { kind: 'BANK_CREDIT', ticker: comp.homeBankTicker } : undefined);
+          L8.homeBankTicker[row] ? { kind: 'BANK_CREDIT', ticker: L8.homeBankTicker[row] } : undefined);
       }
     }
 
@@ -1045,7 +1045,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     if (isDefaulted) {
       newRating = 'D';
       if (L8.wasDefaulted[row] !== 1) {
-        ctx.defaultedTickers.push(comp.ticker);
+        ctx.defaultedTickers.push(L8.ticker[row]);
         comp.defaultedWeek = nextWeek;
         newRevenue = round1(newRevenue * 0.4);
         newEbitda = 0;
@@ -1079,7 +1079,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // branch — its sheet's capital ratio — and the corporate measurements are simply "no
       // opinion" (absent), which is what the CreditContext contract says absence means.
       const calculatedRating = determineCreditRating(newLeverage, newCoverage,
-        comp.sector === 'Banks'
+        L8.sector[row] === 'Banks'
           ? {
             annualRevenueUSD: newRevenue,
             peerMedianRevenueUSD: regionMedianRevenueUSD,
@@ -1114,7 +1114,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const forceUpdate = notchGap >= 2 || crossesIgHyLine;
       if (calculatedRating !== L8.creditRating[row] && (forceUpdate || random() < 0.25)) {
         ctx.ratingChanges.push({
-          ticker: comp.ticker,
+          ticker: L8.ticker[row],
           from: L8.creditRating[row] as Company['creditRating'],
           to: calculatedRating,
           name: comp.name,
@@ -1141,7 +1141,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // WS8: a settled primary was ALREADY placed with the holders by the auction itself — the
     // engine allocated the new float and settled the cash legs. Count its size as pre-existing
     // here, or the pro-rata action settlement below hands holders the same paper twice.
-    const settlement = primarySettlementByIssuerId.get(comp.id);
+    const settlement = primarySettlementByIssuerId.get(L8.companyId[row]);
     const primaryFixedAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FIXED' ? settlement.marketTakeUSD : 0;
     const primaryFloatingAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FLOATING' ? settlement.marketTakeUSD : 0;
     // SCALE — the two filtered reduces as one walk; each accumulator sums its subset in array
@@ -1265,7 +1265,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         // flow moved its spread hundreds of basis points a week.
         if (calledAmountUSD > 0.01) {
           calledRefinanceTranches.push({
-            id: `${comp.id}-CALL-${state.currentWeek}-${v2.internedStrings[TS.idRef[rTr]]}`,
+            id: `${L8.companyId[row]}-CALL-${state.currentWeek}-${v2.internedStrings[TS.idRef[rTr]]}`,
             principalUSD: calledAmountUSD,
             rateType: 'FIXED',
             couponRate: currentFairRate,
@@ -1280,7 +1280,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     });
     // Remove any tranche whose principalUSD reaches zero, then add the replacement issues.
     rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
-    for (const t of calledRefinanceTranches) rowList.push(pushLadderRow(v2, comp.id, t));
+    for (const t of calledRefinanceTranches) rowList.push(pushLadderRow(v2, L8.companyId[row], t));
 
     // WS8: the year-early pre-refi and the at-maturity formula roll are both gone — a roll now
     // happens in the MARKET. A tranche one week from maturity is announced as a REFINANCE
@@ -1288,20 +1288,20 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // alongside the outstanding stock, and the settlement below either delivers the new
     // tranche at the CLEARED terms or — withdrawn/unpriced — the revolver catches the issuer
     // at its penalty rate, the same real funding-squeeze mechanism as a failed CP roll.
-    const fiveYearSovRate = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
+    const fiveYearSovRate = calculateNelsonSiegelZeroRate(5, updatedRegions[L8.region[row]].yieldCurveParams);
     rowList.forEach((rTr) => {
       if (TS.flags[rTr] & TR_CP) return;
       if (TS.maturityWeek[rTr] !== nextWeek + 1) return;
-      if (pendingOfferingIssuerIds.has(comp.id)) return; // one live book per issuer
+      if (pendingOfferingIssuerIds.has(L8.companyId[row])) return; // one live book per issuer
       // IND4: rating decides an issuer's ACCESS to the bond market; the industry tilts it by
       // what the money is buying. Long-lived assets are funded long, asset-light ones float.
       const refinanceAsFixed = fixedShareOf(comp) >= 0.5;
       const revolverAllInAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
       enqueueOffering({
-        id: `PO-${comp.id}-${nextWeek}-REFI`,
-        issuerId: comp.id,
-        issuerTicker: comp.ticker,
-        region: comp.region,
+        id: `PO-${L8.companyId[row]}-${nextWeek}-REFI`,
+        issuerId: L8.companyId[row],
+        issuerTicker: L8.ticker[row],
+        region: L8.region[row],
         instrumentType: refinanceAsFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
         purpose: 'REFINANCE',
         sizeUSD: TS.principalUSD[rTr],
@@ -1333,7 +1333,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const placedUSD = Math.max(0, Math.min(o.sizeUSD, settlement.issuedUSD ?? o.sizeUSD));
       const newTranche: DebtTranche = o.rateType === 'FIXED'
         ? {
-            id: `${comp.id}-${o.purpose}-${nextWeek}`,
+            id: `${L8.companyId[row]}-${o.purpose}-${nextWeek}`,
             principalUSD: placedUSD,
             rateType: 'FIXED',
             // The CLEARED terms — the whole point of the primary market.
@@ -1344,7 +1344,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
             callProtection: callProtectionForIssue({ rateType: 'FIXED', isInvestmentGrade: isInvestmentGrade(newRating) }),
           }
         : {
-            id: `${comp.id}-${o.purpose}-${nextWeek}`,
+            id: `${L8.companyId[row]}-${o.purpose}-${nextWeek}`,
             principalUSD: placedUSD,
             rateType: 'FLOATING',
             floatingMarginBps: Math.round(settlement.clearedStat),
@@ -1366,7 +1366,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         debtRepaymentThisWeek += retiredUSD;
         post('term-out: maintenance bridges retired', -retiredUSD, bankCredit);
       }
-      if (placedUSD > 1000) rowList.push(pushLadderRow(v2, comp.id, newTranche));
+      if (placedUSD > 1000) rowList.push(pushLadderRow(v2, L8.companyId[row], newTranche));
       debtIssuanceThisWeek += placedUSD;
       // WS8/CASH: reported here, PAID elsewhere by name — the clearing house pays the issuer for
       // what the book took, and the lead pays it for the residual and charges it the fee
@@ -1377,7 +1377,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // The market said no and the paper still matures: the revolver catches it — real market
       // access closing when spreads gap, with a real penalty cost.
       const revolverTranche: DebtTranche = {
-        id: `${comp.id}-REVOLVER-${nextWeek}`,
+        id: `${L8.companyId[row]}-REVOLVER-${nextWeek}`,
         principalUSD: maturingPrincipalUSD,
         rateType: 'FLOATING',
         floatingMarginBps: REVOLVER_MARGIN_BPS,
@@ -1386,23 +1386,23 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         seniority: 'SENIOR',
         // G2: the revolver is a committed BANK line — the house bank funds it and books it.
         isBankFacility: true,
-        facilityBankTicker: comp.homeBankTicker,
+        facilityBankTicker: L8.homeBankTicker[row],
       };
-      rowList.push(pushLadderRow(v2, comp.id, revolverTranche));
+      rowList.push(pushLadderRow(v2, L8.companyId[row], revolverTranche));
       debtIssuanceThisWeek += revolverTranche.principalUSD;
       recordCredit(revolverTranche.id, revolverTranche.principalUSD, REVOLVER_MARGIN_BPS,
         Math.max(1, revolverTranche.maturityWeek - nextWeek), false);
       post('revolver draw: withdrawn refinancing', revolverTranche.principalUSD, bankCredit);
       pushNews({
-        id: `refi-fail-${comp.ticker}-${nextWeek}`,
+        id: `refi-fail-${L8.ticker[row]}-${nextWeek}`,
         week: nextWeek,
-        title: `${comp.ticker} Pulls Refinancing, Draws Revolver`,
+        title: `${L8.ticker[row]} Pulls Refinancing, Draws Revolver`,
         description: `${comp.name} withdrew a ${formatCurrency(settlement.offering.sizeUSD, { compact: true })} refinancing at its walk-away and drew its revolver at policy+${REVOLVER_MARGIN_BPS}bps.`,
         category: 'CREDIT',
         impactBadge: '[FUNDING SQUEEZE]',
-        impactRegion: comp.region,
-        impactSector: comp.sector,
-        affectedTicker: comp.ticker,
+        impactRegion: L8.region[row],
+        impactSector: L8.sector[row],
+        affectedTicker: L8.ticker[row],
         urgent: true,
       } as NewsItem);
     }
@@ -1418,7 +1418,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     }
 
     if (maintenanceFundingTranches.length > 0) {
-      for (const t of maintenanceFundingTranches) rowList.push(pushLadderRow(v2, comp.id, t));
+      for (const t of maintenanceFundingTranches) rowList.push(pushLadderRow(v2, L8.companyId[row], t));
       debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
     }
 
@@ -1426,7 +1426,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // and once the accumulated bridges reach benchmark size the treasurer TERMS THEM OUT
     // through a real offering — bridge-then-term-out, the actual corporate funding pattern.
     // IG issuers term out in the bond market, sub-IG in the loan market.
-    if (!pendingOfferingIssuerIds.has(comp.id) && !primarySettlementByIssuerId.has(comp.id)) {
+    if (!pendingOfferingIssuerIds.has(L8.companyId[row]) && !primarySettlementByIssuerId.has(L8.companyId[row])) {
       const bridges = rowList.filter(r => v2.internedStrings[TS.idRef[r]].includes('-MAINT-'));
       let bridgeUSD = 0;
       for (const r of bridges) bridgeUSD += TS.principalUSD[r];
@@ -1436,10 +1436,10 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         const asFixed = fixedShareOf(comp) >= 0.5;  // IND4: rating's access, industry's tilt
         const revolverAllInAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
         enqueueOffering({
-          id: `PO-${comp.id}-${nextWeek}-MAINT`,
-          issuerId: comp.id,
-          issuerTicker: comp.ticker,
-          region: comp.region,
+          id: `PO-${L8.companyId[row]}-${nextWeek}-MAINT`,
+          issuerId: L8.companyId[row],
+          issuerTicker: L8.ticker[row],
+          region: L8.region[row],
           instrumentType: asFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
           purpose: 'MAINTENANCE_TERM_OUT',
           sizeUSD: bridgeUSD,
@@ -1511,7 +1511,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
                 // PGNX +292.7M of prepay credit against a −4.1M loan move, identity −151.8M).
                 // Its `principalUSD > 0` guard also swallowed full retirements.
                 ctx.creditEventsThisWeek.push({
-                  bankTicker, companyId: comp.id, trancheId: v2.internedStrings[TS.idRef[rTr]],
+                  bankTicker, companyId: L8.companyId[row], trancheId: v2.internedStrings[TS.idRef[rTr]],
                   principalUSD: Math.max(0, remainingUSD), marginBps: Number.isNaN(TS.floatingMarginBps[rTr]) ? 350 : TS.floatingMarginBps[rTr],
                   originationWeek: TS.originationWeek[rTr], termWeeks: Math.max(1, TS.maturityWeek[rTr] - TS.originationWeek[rTr]),
                   retire: remainingUSD <= 0.01,
@@ -1559,7 +1559,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       && (Number.isNaN(L8.earningsWeekModulo[row])
         || (nextWeek % 13) === ((L8.earningsWeekModulo[row] + 1) % 13));
     let newLastOpportunisticOfferingWeek = Number.isNaN(L8.lastOpportunisticOfferingWeek[row]) ? undefined : L8.lastOpportunisticOfferingWeek[row];
-    if (financing.reason === 'ISSUE_CHEAP_DEBT' && financing.netDebtChangeUSD > 1000 && !pendingOfferingIssuerIds.has(comp.id) && opportunisticCooldownOver) {
+    if (financing.reason === 'ISSUE_CHEAP_DEBT' && financing.netDebtChangeUSD > 1000 && !pendingOfferingIssuerIds.has(L8.companyId[row]) && opportunisticCooldownOver) {
       // WS8: the CFO ANNOUNCES a deal instead of conjuring a tranche at the current stat. Real
       // issuance is chunky — a quarter's worth of the weekly flow in one book — and it is
       // priced NEXT week alongside the outstanding stock, conceding what real demand requires.
@@ -1571,10 +1571,10 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         Math.round((financing.walkAwayCostAnnual - calculateNelsonSiegelZeroRate(STANDARD_CORP_TENOR_YEARS, reg.yieldCurveParams)) * 10000)
       );
       enqueueOffering({
-        id: `PO-${comp.id}-${nextWeek}-OPP`,
-        issuerId: comp.id,
-        issuerTicker: comp.ticker,
-        region: comp.region,
+        id: `PO-${L8.companyId[row]}-${nextWeek}-OPP`,
+        issuerId: L8.companyId[row],
+        issuerTicker: L8.ticker[row],
+        region: L8.region[row],
         instrumentType: 'CORP_BOND',
         purpose: 'OPPORTUNISTIC',
         sizeUSD: dealSizeUSD,
@@ -1686,14 +1686,14 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       }
 
       ctx.earningsReportedThisTurn.push({
-        ticker: comp.ticker,
+        ticker: L8.ticker[row],
         name: comp.name,
         actualEps,
         consensusEps,
         surprisePct: lastEarningsSurprisePct,
         guidanceSnippet,
-        sector: comp.sector,
-        region: comp.region,
+        sector: L8.sector[row],
+        region: L8.region[row],
       });
 
       // Update next quarter 3-dealer forecasts
@@ -1746,7 +1746,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // IDX: beta is measured off this name's own cleared returns against its region's index —
     // both series this model publishes every week — instead of being read from its sector label.
     const newBeta = isPubliclyListed(comp)
-      ? measureBeta(comp.historicalPrices, regionIndexOf(state.compositeIndices, comp.region).historical, Number.isNaN(L8.beta[row]) ? 1 : L8.beta[row])
+      ? measureBeta(comp.historicalPrices, regionIndexOf(state.compositeIndices, L8.region[row]).historical, Number.isNaN(L8.beta[row]) ? 1 : L8.beta[row])
       : (Number.isNaN(L8.beta[row]) ? 1 : L8.beta[row]);
     const newForwardPE = newEps > 0 ? round2(newStockPrice / newEps) : comp.forwardPE;
     // The book-value x cycle-P/B branch that used to price banks and institutions here is GONE.
@@ -1798,7 +1798,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         // The shares retire through the EQUITY register below; the money reaches the same holders
         // of record, pro rata, instead of the boundary.
         post('share buybacks', -buybacksThisWeek, undefined, false);
-        payHoldersCash(ctx, comp.id, 'EQUITY', buybacksThisWeek);
+        payHoldersCash(ctx, L8.companyId[row], 'EQUITY', buybacksThisWeek);
       }
     }
     const newMarketCap = Math.round((newStockPrice * updatedSharesOutstanding));
@@ -1822,12 +1822,12 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       else if (!(fl & TR_FACILITY)) postActionFloatingUSD += TS.principalUSD[r];
       if (TS.maturityWeek[r] - nextWeek <= 52) shortTermDebtSumUSD += TS.principalUSD[r];
     }
-    settleCorporateActionOnHolders(ctx, comp.id, 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
-    settleCorporateActionOnHolders(ctx, comp.id, 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
+    settleCorporateActionOnHolders(ctx, L8.companyId[row], 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
+    settleCorporateActionOnHolders(ctx, L8.companyId[row], 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
     // The premium the issuer's ledger just posted out reaches the holders of record — the whole
     // reason call protection changes anything is that the money goes to the lender.
-    payHoldersCash(ctx, comp.id, 'CORP_BOND', bondCallPremiumUSD);
-    payHoldersCash(ctx, comp.id, 'LEVERAGED_LOAN', loanCallPremiumUSD);
+    payHoldersCash(ctx, L8.companyId[row], 'CORP_BOND', bondCallPremiumUSD);
+    payHoldersCash(ctx, L8.companyId[row], 'LEVERAGED_LOAN', loanCallPremiumUSD);
 
     const newShortTermDebtUSD = shortTermDebtSumUSD;
 
@@ -1865,7 +1865,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         costDriversUSD,
         newShortTermDebtUSD,
         annualInterest,
-        totalInputValueUSD(v2, comp.id)
+        totalInputValueUSD(v2, L8.companyId[row])
       );
       return [...(comp.historicalFundamentals || []).slice(-7), currentSnapshot];
     })();
@@ -1923,13 +1923,13 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       }
     }
     if (!comp.isBankEntity && !comp.isInstitutionalEntity && !isDefaulted && comp.listingStatus !== 'PRIVATE') {
-      const sweep = corporateSweepDecision(comp, cash.usd, mmfSweepBooks.get(comp.region));
+      const sweep = corporateSweepDecision(comp, cash.usd, mmfSweepBooks.get(L8.region[row]));
       if (sweep.cashDeltaUSD !== 0) {
         // The counterparty is a named fund that exists — routing it to the boundary would have
         // the fund credited by its own stage AND the money appear at the boundary, which creates
         // it (measured: 64B over 12 weeks; the bank identity could not see it because the
         // institutional sector is not in the settlement layer yet).
-        const sweepFund = findRegionMmf(ctx.updatedInstitutionalEntities, comp.region);
+        const sweepFund = findRegionMmf(ctx.updatedInstitutionalEntities, L8.region[row]);
         post(sweep.cashDeltaUSD < 0 ? 'treasury sweep into money fund shares' : 'money fund share redemption',
           sweep.cashDeltaUSD,
           sweepFund ? { kind: 'INSTITUTION', id: sweepFund.id } : undefined);
@@ -2029,7 +2029,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.recoveryRate = round3(effectiveRecoveryRate);
 
-    relinkLadder(v2, comp.id, rowList);
+    relinkLadder(v2, L8.companyId[row], rowList);
 
     comp.productLines = updatedProductLines;
 

@@ -72,10 +72,12 @@ export interface BackLanes {
   publiclyListed: Uint8Array;
   creditRating: string[];
   name: string[];
+  companyId: string[];
+  homeBankTicker: (string | undefined)[];
   // --- strings for diagnostics and the bridge tranche (main-side only) ---
   ticker: string[];
-  region: string[];
-  sector: string[];
+  region: Company['region'][];
+  sector: Company['sector'][];
 }
 
 export function buildBackLanes(
@@ -104,6 +106,7 @@ export function buildBackLanes(
     baselineAnnualRevenueUSD: f(), lastOpportunisticOfferingWeek: f(),
     wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
     creditRating: new Array(n), name: new Array(n),
+    companyId: new Array(n), homeBankTicker: new Array(n),
     ticker: new Array(n), region: new Array(n), sector: new Array(n),
   };
   const NaN_ = Number.NaN;
@@ -175,6 +178,8 @@ export function buildBackLanes(
     L.publiclyListed[i] = isPubliclyListed(c) ? 1 : 0;
     L.creditRating[i] = c.creditRating;
     L.name[i] = c.name;
+    L.companyId[i] = c.id;
+    L.homeBankTicker[i] = c.homeBankTicker;
   }
   return L;
 }
