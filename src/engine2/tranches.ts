@@ -209,3 +209,13 @@ export function assertLaddersInSync(v2: V2World, companies: { id: string; ticker
     }
   }
 }
+
+/** The firm's ladder as row indices, in ladder order; empty when the firm has no rows. */
+export function ladderRowsOf(v2: V2World, companyId: string): number[] {
+  const S = v2.tranches;
+  const firmRow = v2.rowById.get(companyId);
+  const rows: number[] = [];
+  if (firmRow === undefined || firmRow >= S.head.length) return rows;
+  for (let r = S.head[firmRow]; r >= 0; r = S.next[r]) rows.push(r);
+  return rows;
+}
