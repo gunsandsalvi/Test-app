@@ -1,0 +1,42 @@
+# Builds the Engine Bench APK (a WebView shell over the Pages deploy) and publishes it on the
+# fixed "apk-latest" release, so the .apk can be downloaded and sideloaded from a phone. The
+# shell only wraps the URL, so it rebuilds only when android/ changes — bench changes reach the
+# installed app through the normal Pages deploy.
+name: android-apk
+
+on:
+  push:
+    branches: [main]
+    paths: ['android/**', '.github/workflows/android-apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build signed APK
+        working-directory: android
+        env:
+          APK_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          gradle wrapper --gradle-version 8.7
+          ./gradlew --no-daemon assembleRelease
+      - name: Publish to the apk-latest release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk engine-bench.apk
+          gh release delete apk-latest --yes --repo "$GITHUB_REPOSITORY" || true
+          git push --delete origin apk-latest || true
+          gh release create apk-latest engine-bench.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Engine Bench APK" \
+            --notes "Sideload build. Self-signed: Android will ask to allow installs from your browser/files app."
