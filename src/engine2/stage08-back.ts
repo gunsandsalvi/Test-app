@@ -401,7 +401,7 @@ function runCashWalk(args: {
   declaredDividendYield: number;
   marketCapUSD: number;
   maxPayoutRatio: number;
-  vehicleBehind: GameState['institutionalEntities'][number] | undefined;
+  hasVehicle: boolean;
   boundaryTraceKey: string;
   weekUpdate: CompanyWeekUpdate | undefined;
   newNetIncome: number;
@@ -426,7 +426,7 @@ function runCashWalk(args: {
 }): { accruedTaxUSD: number } {
   const { ctx, companyId, ticker, region, isBanksSector, homeBankTicker,
     carrierFreightRevenueUSD, channelMarginRevenueUSD, declaredDividendYield, marketCapUSD,
-    maxPayoutRatio, vehicleBehind, boundaryTraceKey, weekUpdate, newNetIncome, weeklyPayrollUSD,
+    maxPayoutRatio, hasVehicle, boundaryTraceKey, weekUpdate, newNetIncome, weeklyPayrollUSD,
     newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
     marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
     bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
@@ -508,7 +508,7 @@ function runCashWalk(args: {
       if (process.env.BOUNDARY_TRACE === '1' && nonAuctionReceiptsUSD > 1e6) {
         boundaryTraceByFirm.set(boundaryTraceKey, (boundaryTraceByFirm.get(boundaryTraceKey) ?? 0) + nonAuctionReceiptsUSD);
       }
-      if (vehicleBehind) {
+      if (hasVehicle) {
         post('operating receipts drawn from the vehicle', nonAuctionReceiptsUSD, { kind: 'INSTITUTION', id: companyId });
       }
       // ...and the costs of running the whole business beyond what was bought as real units:
@@ -553,7 +553,7 @@ function runCashWalk(args: {
       // entity pays as real legs) are reimbursed to the vehicle; an operating firm's accrual
       // remainder moves no cash, exactly like its receipts twin.
       const opexBeyondWagesUSD = Math.max(0, opexOutflowUSD - wagesPaidUSD);
-      if (vehicleBehind) {
+      if (hasVehicle) {
         post('operating costs borne by the vehicle', -opexBeyondWagesUSD, { kind: 'INSTITUTION', id: companyId });
       }
       // IND16: WAREHOUSING HAS A SELLER NOW. This was a declared boundary frontier — "warehousing,
@@ -772,7 +772,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const carryingCostUSD = F.carryingCostUSD[row];
     const newOutputInventoryBySubUnit = F.outputInv[row];
 
-    let accruedTaxUSD = comp.accruedTaxLiabilityUSD ?? 0;
+    let accruedTaxUSD = Number.isNaN(L8.accruedTaxLiabilityUSD[row]) ? 0 : L8.accruedTaxLiabilityUSD[row];
     const newExecutionQuality = F.newExecutionQuality[row];
 
     // BP1c (rule 17): a stage does not switch on a kind — it keys the kind once and calls the
@@ -891,9 +891,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       declaredDividendYield: L8.dividendYield[row] ?? 0,
       marketCapUSD: d.backLanes.marketCapUSD[row],
       maxPayoutRatio: maxDividendPayoutRatioOf(comp),
-      vehicleBehind: !comp.isBankEntity && comp.isInstitutionalEntity
-        ? entityById.get(managedEntityIdsOf(comp)[0]) : undefined,
-      boundaryTraceKey: `${L8.region[row]}:${comp.financialStatementProfile ?? L8.sector[row] ?? '?'}:${L8.ticker[row]}`,
+      hasVehicle: L8.hasVehicle[row] === 1,
+      boundaryTraceKey: L8.boundaryTraceKey[row],
       weekUpdate, newNetIncome, weeklyPayrollUSD,
       newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
       marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
@@ -937,7 +936,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       annualInterestUSD: annualInterest,
       // §7.268: the bank's OWN sheet, not the region average — a solvency rating on the
       // cohort's mean rated every bank the same and none of them on itself.
-      bankCapitalRatio: comp.bankBalanceSheet?.bankCapitalRatio ?? reg.bankingSector.bankCapitalRatio,
+      bankCapitalRatio: Number.isNaN(L8.bankCapitalRatio[row]) ? reg.bankingSector.bankCapitalRatio : L8.bankCapitalRatio[row],
     });
 
     // G5 — THE COMMITTED LINE IS DRAWN BEFORE ANYTHING DEFAULTS.
@@ -1087,8 +1086,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
           : {
             annualRevenueUSD: newRevenue,
             peerMedianRevenueUSD: regionMedianRevenueUSD,
-            customerConcentration: comp.customerConcentration,
-            supplierConcentration: comp.supplierConcentration,
+            customerConcentration: Number.isNaN(L8.customerConcentration[row]) ? undefined : L8.customerConcentration[row],
+            supplierConcentration: Number.isNaN(L8.supplierConcentration[row]) ? undefined : L8.supplierConcentration[row],
             maturityWallShare: maturityWallShareOfLadder,
             liquidityToDebt: Math.max(0, cash.usd) / ladderUSD,
             revenueVolatility: revVol,
@@ -1117,7 +1116,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
           ticker: L8.ticker[row],
           from: L8.creditRating[row] as Company['creditRating'],
           to: calculatedRating,
-          name: comp.name,
+          name: L8.name[row],
         });
         newRating = calculatedRating;
       }
@@ -1397,7 +1396,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         id: `refi-fail-${L8.ticker[row]}-${nextWeek}`,
         week: nextWeek,
         title: `${L8.ticker[row]} Pulls Refinancing, Draws Revolver`,
-        description: `${comp.name} withdrew a ${formatCurrency(settlement.offering.sizeUSD, { compact: true })} refinancing at its walk-away and drew its revolver at policy+${REVOLVER_MARGIN_BPS}bps.`,
+        description: `${L8.name[row]} withdrew a ${formatCurrency(settlement.offering.sizeUSD, { compact: true })} refinancing at its walk-away and drew its revolver at policy+${REVOLVER_MARGIN_BPS}bps.`,
         category: 'CREDIT',
         impactBadge: '[FUNDING SQUEEZE]',
         impactRegion: L8.region[row],
@@ -1687,7 +1686,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
       ctx.earningsReportedThisTurn.push({
         ticker: L8.ticker[row],
-        name: comp.name,
+        name: L8.name[row],
         actualEps,
         consensusEps,
         surprisePct: lastEarningsSurprisePct,

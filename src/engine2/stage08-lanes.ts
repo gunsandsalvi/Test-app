@@ -17,7 +17,7 @@ import { Company } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
-import { isPubliclyListed } from '../domain/company';
+import { isPubliclyListed, managedEntityIdsOf } from '../domain/company';
 
 export interface BackLanes {
   n: number;
@@ -68,6 +68,12 @@ export interface BackLanes {
   baselineAnnualRevenueUSD: Float64Array;
   lastOpportunisticOfferingWeek: Float64Array; // NaN = undefined
   employeeCount: Float64Array;
+  accruedTaxLiabilityUSD: Float64Array;    // NaN = undefined
+  bankCapitalRatio: Float64Array;          // NaN = no bank sheet
+  customerConcentration: Float64Array;     // NaN = undefined
+  supplierConcentration: Float64Array;     // NaN = undefined
+  hasVehicle: Uint8Array;
+  boundaryTraceKey: string[];
   wasDefaulted: Uint8Array;
   wasMergerAcquired: Uint8Array;
   publiclyListed: Uint8Array;
@@ -85,6 +91,7 @@ export function buildBackLanes(
   companies: Company[],
   updatedRegions: WeeklyStepContext['updatedRegions'],
   companyUpdates: Record<string, CompanyWeekUpdate>,
+  entityIds: Set<string>,
 ): BackLanes {
   const n = companies.length;
   const f = () => new Float64Array(n);
@@ -106,6 +113,9 @@ export function buildBackLanes(
     earningsWeekModulo: f(), eps: f(), cdsSpreadBps: f(), beta: f(),
     baselineAnnualRevenueUSD: f(), lastOpportunisticOfferingWeek: f(),
     employeeCount: f(),
+    accruedTaxLiabilityUSD: f(), bankCapitalRatio: f(),
+    customerConcentration: f(), supplierConcentration: f(),
+    hasVehicle: new Uint8Array(n), boundaryTraceKey: new Array(n),
     wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
     creditRating: new Array(n), name: new Array(n),
     companyId: new Array(n), homeBankTicker: new Array(n),
@@ -176,6 +186,17 @@ export function buildBackLanes(
     L.baselineAnnualRevenueUSD[i] = c.baselineAnnualRevenue;
     L.lastOpportunisticOfferingWeek[i] = c.lastOpportunisticOfferingWeek ?? NaN_;
     L.employeeCount[i] = c.employeeCount;
+    L.accruedTaxLiabilityUSD[i] = c.accruedTaxLiabilityUSD ?? NaN_;
+    L.bankCapitalRatio[i] = c.bankBalanceSheet?.bankCapitalRatio ?? NaN_;
+    // NOTE (§7.320): revenueVolatility is NOT seam-computable — the PROFILE modules append
+    // comp.revenueHistory MID-LOOP (profiles/bank.ts:52 and siblings), after any seam and
+    // before the rating reads it. The fold stays closure-side; the week-2 rating drift that
+    // taught this is the record's.
+    L.customerConcentration[i] = c.customerConcentration ?? NaN_;
+    L.supplierConcentration[i] = c.supplierConcentration ?? NaN_;
+    L.hasVehicle[i] = !c.isBankEntity && c.isInstitutionalEntity
+      && entityIds.has(managedEntityIdsOf(c)[0]) ? 1 : 0;
+    L.boundaryTraceKey[i] = `${c.region}:${c.financialStatementProfile ?? c.sector ?? '?'}:${c.ticker}`;
     L.wasDefaulted[i] = c.isDefaulted ? 1 : 0;
     L.wasMergerAcquired[i] = c.mergerAcquired ? 1 : 0;
     L.publiclyListed[i] = isPubliclyListed(c) ? 1 : 0;
