@@ -225,7 +225,23 @@ reconciliation), `government-entity.ts` (the one budget decomposition; the stanc
 
 ### 2.4 UI and the harness
 
-UI reads `GameState` only. **One harness:** `scripts/harness.ts` via `npm run verify` — every
+**The product UI is DELETED (user-ordered, 2026-09-01; f277780).** `src/components/` is gone —
+recoverable only from git history — and `src/App.tsx` is now the BENCH SHELL (§7.333):
+Run/Stop/Restart/Copy over a copy-pasteable report (cores, crossOriginIsolated, heap, per-week
+ms, steady MEDIAN + mean, per-stage means over non-outlier weeks, world-digest checkpoints at
+weeks 1/5/10/20/50). The browser build WORKS and DEPLOYS (it was broken since native-kernels
+landed): `vite.config.ts` aliases `node:module` to `src/shims/node-module-browser.ts`, defines
+`process.env` as `{}` (every engine flag reads off), base `./`; `dist/` is tsc-excluded. Deploy
+chain, all automatic on push to `main`: `.github/workflows/deploy-pages.yml` → GitHub Pages at
+**https://gunsandsalvi.github.io/Test-app/** (PWA-installable: `public/manifest.webmanifest` +
+icons); `.github/workflows/android-apk.yml` → a signed TWA APK on the fixed release
+**apk-latest** (rebuilds only on `android/**` changes — the APK wraps the URL, so bench changes
+reach the installed app through Pages alone). `public/coi-serviceworker.min.js` grants
+cross-origin isolation on Pages (unhides SharedArrayBuffer);
+`gunsandsalvi/gunsandsalvi.github.io` (separate repo, user-created) serves
+`.well-known/assetlinks.json` vouching for `android/keystore.p12` so the app runs fullscreen.
+Browser worker pool: `stages/clearing-worker-pool-web.ts` + `clearing-worker-web.ts` (§7.334).
+UI still reads `GameState` only. **One harness:** `scripts/harness.ts` via `npm run verify` — every
 check, battery, profiler as modules on one pass. Checks: NaN purity, ownership/holdings
 conservation, per-bank identity, CCP and unresolved residuals, **declared boundary frontiers**
 (ONE line remains: 'wholesale funding repaid', seed-gated §7.286 — anything else fails the week
@@ -236,7 +252,7 @@ SPIRAL_PRICES/PX_FOCUS, SEED_RECON, CARRIER/FREIGHT_TRACE, OD_TRACE, PNL_TRACE, 
 RECON_TRACE, CAPEX_TRACE, BOUNDARY_TRACE, LEFTOVER_TRACE, EQ_CONS_TRACE, HH_EQ_TRACE.
 
 **One TEST TREE:** `test/` holds PURE-FUNCTION tests over `domain/` only (no engine run) —
-72 tests; hygiene enforces the boundary. **The gates, every one a ratchet (may fall, never
+98 tests; hygiene enforces the boundary. **The gates, every one a ratchet (may fall, never
 rise):** lint = `tsc --noEmit` (strict) + ESLint on this repo's paid-for defect classes
 (ceiling 386); hygiene budgets: assignment-form money writes 3, spread-form 16, asset-literal
 comparisons 58, test purity. CI runs lint+hygiene+tests on push/PR; the harness is deliberately
@@ -284,11 +300,22 @@ read §7.289 before comparing). Headlines: the u endpoint BENT (30.3/28.1/25.4/2
 boundary one declared line at −0.2B, CPI ×2.189. Compare nothing across trees without naming the
 relabels between.
 
-**STANDING DIRECTIVE (user, 2026-08-31):** finish the entire pipeline through S-final without
-stopping — STRUCT, the §4.0 queue, Tier-5, the gated decisions (seed rebases explicitly
-permitted, including SEED_BURN_IN, judged against the current reference per their gates), then
-the build table MNC → DYN → PROD → CRE → TAXR → SCALE Wave 2 → S-final. Stop BEFORE AU (the UI).
-Decide from the rules; push every commit to `claude/master-plan-file-pv33a9` AND `main`.
+**STANDING DIRECTIVE (user, 2026-09-01 evening — supersedes 2026-08-31's "stop before AU"):**
+**SCALE/§4.C is PARKED as later-TBD** (mid-Stage-II; exact resume point recorded in the §5
+SCALE banner and §7.336). **THE NEXT PROJECT IS AU — the UI rebuild** (§5 AU; its required
+process stands: written design brief → mockups → build, nothing built before the brief is
+approved). Push every commit to `claude/master-plan-review-2tfhu4` AND `main` (main's push
+auto-deploys Pages, and `android/**` changes auto-publish the APK — see §2.4).
+
+**HANDOVER STATE (2026-09-01, for a fresh session):** working branch
+`claude/master-plan-review-2tfhu4`, byte-gate baselines are REGENERATED FRESH at session start
+(the scratchpad dies with the container; the engine is deterministic — dump 4/13wk from HEAD
+before touching anything, then gate your changes against those). Gates per commit: `tsc
+--noEmit`, ESLint errors-only on touched files, `scripts/check-hygiene.sh`, `npm test`
+(98), and for engine changes the 4/13wk byte-identical dumps or a §7.313 declared re-baseline.
+Live delivery: bench at https://gunsandsalvi.github.io/Test-app/ (also installed on the user's
+phone as PWA and as the apk-latest TWA); measurement discipline for on-device reports is
+§7.335's (median headline, within-device A/B only, digests must match).
 
 ### 4.0 The fix order (post-§7.289)
 
@@ -317,9 +344,9 @@ Decide from the rules; push every commit to `claude/master-plan-file-pv33a9` AND
 | 3 | **PROD — firm productivity and innovation** | BUILT (§7.297). Wright's law per firm; stated drift dead. R&D spend / product innovation deferred with reasons. |
 | 4 | **CRE — commercial property and leases** | BUILT; MARKET GATED (§7.301). The live market is a measured §7.245-family spiral at the seed's level; landlords/entry stand. Reopens with the §6.1 level-row decision (`CRE_MARKET_LIVE=1` re-measures). |
 | 5 | **TAXR — corporate tax, really** | BUILT (§7.299). Acceleration, carryforwards, deferred view, regional rates; transfer pricing deferred until intra-firm flows emerge (§7.295). |
-| 6 | **SCALE — universe scale-up** | Wall-clock budget met at reduced scale (§7.214); full-fidelity path is Wave 2 columnar state (§5). Owns the damper's float half (small-cap equity tail, §7.288). |
+| 6 | **SCALE — universe scale-up** | **PARKED, later-TBD (user, 2026-09-01).** §4.C stands mid-Stage-II; resume point in the §5 banner + §7.336. Owns the damper's float half (small-cap equity tail, §7.288). |
 | 7 | **S-final — validation gate** | Everything above plus the measurement debt. |
-| 8 | **AU — Aurora, the UI rebuild** | Last. UI state leaves `GameState`. |
+| 8 | **AU — Aurora, the UI rebuild** | **NEXT (user, 2026-09-01).** Deletion half already done (§7.333); design brief before any build. UI state leaves `GameState`. |
 
 ### The measurement debt (Tier 5 — finer reads still owed)
 
@@ -444,6 +471,20 @@ MNC — profit booked where rates are lower.
 timing responds to depreciation treatment.
 
 ### SCALE — universe scale-up *(item 6)*
+
+**★ PARKED — LATER, TBD (user, 2026-09-01 evening; §7.336). Do not resume without the user's
+go.** Frozen state: Stage I CLOSED (§7.332); Stage II store on trust (§7.329) with four history
+fields columnar (§7.330–331). **Exact resume point: productLines** (63 read sites / 18 files,
+§7.311 staging: store + dual-write + check → readers file-by-file → declared delete), then
+historicalFundamentals + dealerConsensus, then the 85 scalars (object becomes a view,
+dump-from-columns declared re-baseline), then III ∥ IV, V, VI (gated on III), VII. Measured
+scoreboard at park: 1,558 → 1,305 ms/wk battery-verified on the dev box (the tranche-writer
+−76 and §7.327's −89 are the only battery-verified wins; everything since is
+cost-neutral-to-noise, §7.332); on the user's phone ~950–1,015 ms/wk median with the browser
+clearing pool at 6–7 workers (§7.334–335). New inputs for the resume decision: the on-device
+state-growth drift (§6.2, +45% weeks 5→80) and the browser worker precedent (the clearing
+pool's ~20% cut of the 07x sum on-device — the first positive parallel measurement anywhere in
+this campaign, §7.334) bear directly on Stage III's go/no-go.
 
 **§4.C — THE END-TO-END COLUMNAR PROGRAM (user-approved 2026-09-01). THE WORK ORDER OF RECORD
 for this campaign, superseding the 7-phase list and the B1–B5 sketch below.** One program:
@@ -594,11 +635,22 @@ bit-exact, stop and declare the relabel.**
 
 Full `npm run verify` green plus the §4 measurement debt read in order.
 
-### AU — Aurora, the UI rebuild *(item 8)*
+### AU — Aurora, the UI rebuild *(item 8 — THE NEXT PROJECT, user 2026-09-01)*
 
-Delete and rebuild `src/components/` + `App.tsx`. Required process: written design brief → mockups
-→ build; real-world product inspiration. Folded: UI state leaves `GameState` (the determinism hash
-spans it). Inherits §7.240's UI-rot inventory (every fix is "read the stored value").
+The DELETE half is done (§7.333): `src/components/` is gone (f277780; the old 21-file tree is
+recoverable from git history for reference, not for resurrection) and `App.tsx` is the bench
+shell, which AU replaces or absorbs (keep the bench reachable — it is the user's on-device
+measurement instrument; a route/toggle, not deletion). Required process UNCHANGED and not yet
+started: **written design brief → mockups → build, in that order; nothing is built before the
+user approves the brief.** Real-world product inspiration. Folded: UI state leaves `GameState`
+(the determinism hash spans it). Inherits §7.240's UI-rot inventory (every fix is "read the
+stored value"). What AU inherits from §7.333–335 for free: a working browser build and deploy
+chain (Pages on every `main` push), PWA install, the TWA APK (tracks Pages, no rebuild), and
+the profiled-step API (`advanceWeeklyStepProfiled`) if the UI wants live timings. Constraint
+that now exists: the UI runs in browsers WITHOUT Node — anything it imports from the engine
+must stay free of Node-only globals (the §7.333 shims cover the current tree; new engine code
+that reaches the browser bundle must keep the guard discipline: bare `process` behind `typeof`,
+SAB behind availability checks).
 
 ### DIST-P — the primitive scoreboard *(the rule is §1.19)*
 
@@ -649,6 +701,7 @@ when housing wealth is fully spendable).
 | The named private tier still sells nothing | ~300 seeded private firms/region carry `productLines: []`. |
 | Loan-book Spearman noise | 0.26–0.76 at 23–32 names; re-measure as the universe grows. |
 | The two credit-ETF w3 dust singles | 0.01B, baseline since §7.275; likely in-kind slice edge or pending-settlement timing at the bound (§7.262). |
+| **THE STATE-GROWTH DRIFT (on-device, §7.335)** | Weekly cost climbs ~45% weeks 5→80 (~700–750 → ~1,030–1,140 ms) on two independent 85-week phone runs tracking the SAME curve — thermals excluded, all stages inflate roughly proportionally (shares constant). First suspect: the contract book's measured growth (§7.328: 20,124 → 32,705 rows, ~3k/wk) and its ∝-rows settle cost; roster and history growth behind it. Measure before fixing; whoever resumes §4.C or profiles long runs owns the read. |
 
 ### 6.3 The clamp discipline
 
@@ -1002,3 +1055,7 @@ finding, the number, the lesson. Full narratives in git before the 2026-08-31 co
 330. **II.5's PILOT FIELD IS DONE: `revenueHistory` is COLUMNAR — the first Company field deleted from the object, by the method the rest of Stage II now follows.** The 13-slot ring on V2World (plain arrays, not SAB — batteries deep-clone v2, and SAB lanes would SHARE across clones: a noted §1.24 deviation, workers get mirrors per §7.306) encodes unset-vs-explicitly-empty because the seed writes both and `||` distinguishes them; the push replays `[...(hist || [v]).slice(-12), v]` exactly, absent→[v,v] included. All writers (front post, the four profiles, the merger spin, three seed sites) and readers (two rating folds, contract terms, labor demand via a reused scratch, the PD vol) converted; the §7.320 mid-loop-append trap is structurally dissolved — profiles push to the ring, the fold reads the ring. **THE METHOD, proven here: delete the field from the interface → tsc names every typed site → grep names the cast-hidden ones → the per-week A/B differ (§1.22) verifies behavior.** And its first catch: the carriers bootstrap seeded the field inside an `as unknown as Company` literal tsc could not see; carriers started with the wrong history length, ONE region's labor matching drifted at week 2 (1,449 firms' vacancyShare, one employee at a time), and the differ walked it back to the literal in three probes. **Declared per §7.313: dumps lose the field — 4wk and 13wk differ by EXACTLY one family, stripped logs identical, tests green; baselines re-based (zz4/zz13). Next fields by the same method: ratingHistory, historicalPrices, oasSpreadBpsHistory (rings), then productLines (the seam's CSR becomes the authority), then historicalFundamentals/dealerConsensus, then the scalars — at which point the store IS the company and the object is a view.**
 331. **THREE MORE FIELDS COLUMNAR BY THE §7.330 METHOD — ratingHistory, historicalPrices, oasSpreadBpsHistory — the Company object no longer carries any price/rating history.** A generic `F64Ring` on V2World (52/16/8 slots; ratings as interned codes) with the exact `[...slice(-(cap-1)), x]` push; merger spins COPY ring rows (structuredClone silently carried the arrays before — the §7.312 aliasing class, pre-empted this time); seed literals stash and drain both at state assembly and at the RUNTIME birth pushes (generatePrivateCompanies runs for quarterly births too); the seed-time composite-index call's ring-absent fallback is provably equal to the old length-1 array's. Casts hid THREE sites from tsc again (carriers, generatePrivateCompanies — §7.330's lesson now twice-confirmed: after the census, grep the field name). Gates: dumps lose EXACTLY the three families at 4 and 13 weeks, stripped logs identical, tests green, baselines re-based. Weekly allocation kill so far from the four ring fields: ~10k arrays/wk. Timing pulses (single-run, ±80 ms noise on this box: 1,366 → 1,445 across the batch) say nothing yet — the battery at the stage boundary decides (§4.C). NEXT in the field queue: productLines (63 read sites / 18 files — staged per §7.311: store + dual-write + check, then readers file-by-file, then the declared delete), historicalFundamentals + dealerConsensus, then the 85 scalars, at which point the object is a view and the write-back's double-write dies.
 332. **STAGE I IS CLOSED — every item done or dispositioned, and its boundary battery caught a real +62 ms/wk regression that two named fixes then erased.** Landed since the §7.327 five: 07b and 07d demand builds on dense columns (byte-identical); the ClearingResult INT FLIP in three slices — accumulateShard writes dense views only, the 07b/07d/07e apply passes read them (piById for filtered funds; has()-checks become matrix-nonzero under the engine's own >$1 fill guard), and the string maps became LAZY getters built in the exact old insertion order with an epoch guard that fails loudly on a stale read (it never fired over 13 weeks — every consumer reads its result before the next book clears); DIRECT-TO-PACK for the three fat books — an engine-owned reused demand staging in the pack's own layout (claim a row, write scalars, the pack blits), deleting ~300–500k weekly ParticipantDemand objects. Item 5 (the corp-action walk's ~17 ms) is DISPOSITIONED, not skipped: the walk is already fused and int-keyed — the remainder is chain-walk floor, and the correct fix (a maintained (type, instrument) transpose on the holdings store) binds to Stage V's store work; §1.23's one bounded attempt was spent in §7.327 (2). **The boundary battery (interleaved vs 526a2b1, §7.307 protocol) first measured HEAD +62 ms/wk NON-OVERLAPPING — a real regression inside the new machinery: (a) the dense scratch's full n×p zero-fill per book (tens of millions of writes a week) — now zeroed by replaying only the cells the last book WROTE; (b) applyDealerDeskFills materializing the whole lazy holdings map for every book — now reads the matrix when the caller hands piById. Re-battery: base 1,427 vs head 1,447, RANGES OVERLAPPING — the regression is erased and Stage I lands cost-neutral-to-noise on this box (±30 ms single-run noise; the §7.327 −89 remains the stage's measured win). The §1.23 honesty line: the int flip's and direct-to-pack's expected single-digit wins are not resolvable above this machine's noise floor — recorded as such, not claimed.** NEXT per §4.C's exact order: Stage II resumes at productLines (§7.311 staging: store + dual-write + check, readers file-by-file, declared delete), then historicalFundamentals/dealerConsensus, then the scalars.
+333. **THE BENCH SHELL AND THE DELIVERY CHAIN (user-ordered): the product UI is deleted, App.tsx is a measurement instrument, and the engine now runs in real browsers on the user's phone from a URL.** The 21-file `src/components/` tree is DELETED (f277780; git history is the only copy) and `App.tsx` is a bench: Run/Stop/Restart/Copy over a monospace report (ua, cores, crossOriginIsolated, heap, weeks, steady MEDIAN + mean + min/max, per-stage means with % share, per-week list, world-digest checkpoints at weeks 1/5/10/20/50 — Σ(stockPrice+cash), full precision). **The browser build had been broken since native-kernels landed** (its top-level `import { createRequire } from 'node:module'` fails rollup): fixed by a vite alias to `src/shims/node-module-browser.ts` plus `define: {'process.env': {}}` (every engine debug flag reads off in the bundle), base `'./'`, `dist/` tsc-excluded. **Second browser crash class: a non-isolated browser HIDES the SharedArrayBuffer global** — company-store's lane allocator threw on first Run (silently: week 0, no error — the bench now prints ERROR + stack into the report); fixed with `globalThis.SharedArrayBuffer ?? ArrayBuffer` (identical single-threaded; dumps byte-identical 4/13wk). Delivery, all push-to-main automatic: `deploy-pages.yml` → https://gunsandsalvi.github.io/Test-app/ (Pages had to be enabled once by the user in Settings — a workflow token cannot create the Pages site); PWA manifest + generated icons (installable; Chrome mints a WebAPK). Stats hardening after the first phone reports: MEDIAN headline and stage means over non-outlier weeks only (>3× median excluded, count printed) — phones throttle backgrounded tabs into 3–10 s weeks that poison a mean.
+334. **BROWSER MULTITHREADING EXISTS AND IS THE CAMPAIGN'S FIRST POSITIVE PARALLEL MEASUREMENT — a Web Worker twin of the clearing pool, digest-verified identical, ~20% off the 07x sum on the user's 7-core phone.** A browser forbids the Node pool twice: `Atomics.wait` is banned on the main thread, and a worker's postMessage result CANNOT be delivered mid-step (the synchronous week never yields). The twin (`clearing-worker-pool-web.ts` + `clearing-worker-web.ts`) keeps the sharding and the ordered, bit-identical accumulation and changes only transport: jobs go out by postMessage (workers' loops are free), each worker COPIES its shard into its own SAB output region behind a fixed layout, completion rings an Atomics doorbell at offset 0, and the main thread does a bounded spin (10 s timeout → pool dead → serial fallback); a 'ready' handshake keeps jobs off workers whose module hasn't evaluated; opt-in registration at runtime always lands after the Node pool's import-time self-registration (workerCount 0 in browsers). Cross-origin isolation on static hosts via the vendored `coi-serviceworker` (SW adds COOP/COEP, one auto-reload). VERIFIED: world digests bit-identical serial vs workers at wk 1/5/10 (headless, 3 workers) and wk 1/5/10/20/50 (the user's phone, 6 workers, two 85-week runs). MEASURED: headless 4-core container steady mean 1,944 → 1,693 ms; on-device 07x clearing sum ~320 → ~254 ms/wk with the workers run starting on the hotter phone. Bench defaults to `hardwareConcurrency` workers (user-ordered); the dropdown keeps max/max−1/4/2/off because the spinning main thread contends with the Nth worker — measure, don't assume. **What this changes for Stage III: the go/no-go now has a real-hardware precedent and a measurement device; the front pool (stage 08, the 16% term) is the next-biggest prize and stays Node-only until ported by the same recipe.**
+335. **THE APK, AND WHAT THE ON-DEVICE CAMPAIGN MEASURED — WebView has no SharedArrayBuffer (a hard platform fact, not a config), the TWA is the correct shell, and the phone's numbers re-rank nothing but re-scale everything.** APK v1 wrapped the URL in a WebView: installed, ran serially, and could never show the worker path — Android WebView simply does not ship SAB. v2 is a Trusted Web Activity (`androidbrowserhelper` LauncherActivity): the app runs Chrome's engine fullscreen; `gunsandsalvi/gunsandsalvi.github.io` (user-created; the token cannot create repos) serves `.well-known/assetlinks.json` for the committed self-sign key (`android/keystore.p12`, deliberately committed: stable signature, installs-over; a bench app, not a secret), CI (`android-apk.yml`) publishes to the fixed `apk-latest` release, and the shell rebuilds only on `android/**` changes — the bench inside updates via Pages. MEASURED on the 7-core phone (Chrome 153): app ≥ browser (median 1,015 vs 1,083 ms/wk, app run started cooler — read "at least as fast"); serial first-visit run 953 ms/wk mean vs the dev box's 1,305 battery — **the phone is the faster machine and the deployment target; dev-box absolute numbers under-state it by ~25%**. The stage PROFILE matches Node (05 ~26%, 08 ~16-17%, then the 07x books) — §4.C's targets transfer unchanged. LESSONS with teeth: (1) cross-BUILD digests diverge in the last digits past ~wk 5 (`Math.exp/pow` are implementation-defined per V8 build) — digests compare runs WITHIN one device/build only, never across; (2) the growth drift is REAL state growth, not thermals — two independent 85-week runs track the same +45% curve weeks 5→80 (§6.2 row); (3) `performance.memory` is quantized garbage without COI and real with it.
+336. **DIRECTIVE CHANGE AND HANDOVER (user, 2026-09-01 evening): §4.C/SCALE is PARKED as later-TBD mid-Stage-II; AU — the UI rebuild — is THE NEXT PROJECT.** The park is an ORDER, not a judgment: Stage I closed (§7.332), Stage II's store runs on trust with four fields columnar (§7.329–331), and the resume point is written in the §5 SCALE banner (productLines by the §7.311 staging, then historicalFundamentals/dealerConsensus, then the 85 scalars, then III ∥ IV → V → VI → VII). Two facts recorded today feed the eventual resume: the browser clearing pool's on-device win (§7.334 — the first positive parallel measurement, directly relevant to III's go/no-go) and the state-growth drift (§6.2 — long-run cost is not flat, so §4.C's per-week arithmetic has a time dimension nobody priced). AU starts from §5 AU as rewritten today: deletion done, delivery chain live, design brief FIRST — the user approves the brief before anything is built. Handover mechanics for a fresh session are in §4's HANDOVER STATE block (branch, both-push rule, gates, regenerate-baselines-at-session-start — the scratchpad is ephemeral and the engine deterministic). The bench (App.tsx + Pages + PWA + APK) is the user's instrument: AU must keep it reachable, and any engine code that reaches the browser bundle keeps the §7.333 guard discipline (bare `process` behind `typeof`, SAB behind availability checks, no top-level Node imports on the bundle path).
