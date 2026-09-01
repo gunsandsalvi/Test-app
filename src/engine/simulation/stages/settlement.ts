@@ -363,7 +363,15 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     switch (party.kind) {
       case 'COMPANY': {
         const comp = companyByTicker.get(party.ticker);
-        if (!comp) { report.unresolvedUSD += deltaUSD; return; }
+        if (!comp) {
+          report.unresolvedUSD += deltaUSD;
+          // UNRESOLVED_TRACE=1 — name the account a payment could not find, at the moment it
+          // fails: the violation itself only carries the week's total.
+          if (process.env.UNRESOLVED_TRACE === '1') {
+            console.log(`  [unresolved] COMPANY ${party.ticker} net ${(deltaUSD / 1e6).toFixed(2)}M found no account`);
+          }
+          return;
+        }
         // A BANK trading on its own account is not a depositor — it has no home bank, because
         // it IS one. Its money is central-bank reserves and the other side is its own equity,
         // exactly as the BANK party below. Routing it as an ordinary company dropped every such
@@ -382,7 +390,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
       }
       case 'INSTITUTION': {
         const entity = entityById.get(party.id);
-        if (!entity) { report.unresolvedUSD += deltaUSD; return; }
+        if (!entity) { report.unresolvedUSD += deltaUSD; if (process.env.UNRESOLVED_TRACE === '1') {
+            console.log(`  [unresolved] INSTITUTION ${party.id} net ${(deltaUSD / 1e6).toFixed(2)}M found no account ()`);
+          } return; }
         entity.cashUSD = (entity.cashUSD ?? 0) + deltaUSD;
         creditBank(report, entity.homeBankTicker, deltaUSD);
         addTo(report.institutionalDepositDeltaByBank, entity.homeBankTicker ?? '', deltaUSD);
@@ -394,13 +404,17 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         // belonging to a real (aggregate) actor rather than to nobody.
         const seg = ctx.updatedRegions[party.region]?.smePools
           ?.find((s) => s.industry === party.industry);
-        if (!seg) { report.unresolvedUSD += deltaUSD; return; }
+        if (!seg) { report.unresolvedUSD += deltaUSD; if (process.env.UNRESOLVED_TRACE === '1') {
+            console.log(`  [unresolved] SEGMENT ${party.region}:${party.industry} net ${(deltaUSD / 1e6).toFixed(2)}M found no account (no pool)`);
+          } return; }
         seg.cashUSD = (seg.cashUSD ?? 0) + deltaUSD;
         const segBanks = ctx.updatedCompanies.filter(
           (c) => c.region === party.region && c.isBankEntity && c.bankBalanceSheet && !c.isDefaulted
         );
         const segTotalShare = segBanks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
-        if (segBanks.length === 0 || !(segTotalShare > 0)) { report.unresolvedUSD += deltaUSD; return; }
+        if (segBanks.length === 0 || !(segTotalShare > 0)) { report.unresolvedUSD += deltaUSD; if (process.env.UNRESOLVED_TRACE === '1') {
+            console.log(`  [unresolved] SEGMENT ${party.region}:${party.industry} net ${(deltaUSD / 1e6).toFixed(2)}M found no account (no live bank)`);
+          } return; }
         segBanks.forEach((b) => {
           const shareUSD = deltaUSD * ((b.bankMarketShare ?? 0) / segTotalShare);
           addTo(report.depositDeltaByBank, b.ticker, shareUSD);
@@ -410,7 +424,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
       }
       case 'HOUSEHOLD': {
         const hs = ctx.updatedRegions[party.region]?.householdState;
-        if (!hs) { report.unresolvedUSD += deltaUSD; return; }
+        if (!hs) { report.unresolvedUSD += deltaUSD; if (process.env.UNRESOLVED_TRACE === '1') {
+            console.log(`  [unresolved] HOUSEHOLD ${party.region} net ${(deltaUSD / 1e6).toFixed(2)}M found no account (no household state)`);
+          } return; }
         hs.depositsUSD = (hs.depositsUSD ?? 0) + deltaUSD;
         // HH4d already owns the household deposit hand-off: a stage moving them after the bank
         // pass records the flow here and the banks post it next week (T+1). So the bank leg is
@@ -459,7 +475,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
           (c) => c.region === party.region && c.isBankEntity && c.bankBalanceSheet && !c.isDefaulted
         );
         const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
-        if (banks.length === 0 || !(totalShare > 0)) { report.unresolvedUSD += deltaUSD; return; }
+        if (banks.length === 0 || !(totalShare > 0)) { report.unresolvedUSD += deltaUSD; if (process.env.UNRESOLVED_TRACE === '1') {
+            console.log(`  [unresolved] UNMODELED ${party.region} net ${(deltaUSD / 1e6).toFixed(2)}M found no account (no live bank)`);
+          } return; }
         banks.forEach((b) => {
           const shareUSD = deltaUSD * ((b.bankMarketShare ?? 0) / totalShare);
           addTo(report.depositDeltaByBank, b.ticker, shareUSD);

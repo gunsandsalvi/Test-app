@@ -494,10 +494,17 @@ function settleContracts(
     if (!supplier || !customer) continue;
 
     if (!isActiveCompany(supplier)) {
-      // Supplier default shock propagates directly to named contract counterparties first
-      if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
-      const custUp = companyUpdates[customer.ticker];
-      custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, 0.70);
+      // Supplier default shock propagates directly to named contract counterparties first.
+      // §7.301 — ONLY A PRODUCTION INPUT THROTTLES PRODUCTION (rule 9): the shock applies when
+      // the customer's own recipe actually consumes this category. A lease or other service
+      // contract short-filled is a cost and a reliability record, never a stopped line — CRE's
+      // chronically tight rental market was writing a ~0.7 output cap onto every corporate
+      // tenant through this channel, measured as +4pts of unemployment by week 30.
+      if (computeRecipeInputNeedUSD(customer, subUnitId) > 0) {
+        if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
+        const custUp = companyUpdates[customer.ticker];
+        custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, 0.70);
+      }
       continue;
     }
     if (!isActiveCompany(customer)) continue;
@@ -658,8 +665,11 @@ function settleContracts(
     });
     addInputInventory(custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);
 
-    if (fillRate < 0.95) {
-      // Named shock propagation: reduced fill rate constrains customer capacity directly
+    if (fillRate < 0.95 && computeRecipeInputNeedUSD(customer, subUnitId) > 0) {
+      // Named shock propagation: reduced fill rate constrains customer capacity directly —
+      // §7.301: for a PRODUCTION input only (rule 9). A short-filled lease or service
+      // subscription is a cost and a reliability record (the EMA and IND11's termination clock
+      // above still see it); it does not stop a factory line the way missing steel does.
       // CAP — THE 0.3 FLOOR IS GONE (rule 2). A firm whose inputs are rationed to nothing must be
       // able to stop: the floor said every firm could always run at three tenths on inputs it did
       // not have, which is production out of nothing. Stage 08 already measures real physical
@@ -757,11 +767,25 @@ function buildRegionSupplyPlans(
     if (!(line.unitsPerNetPpeDollar! > 0)) {
       const openingCapacityUnits =
         ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / referencePriceUSD;
-      line.unitsPerNetPpeDollar =
-        openingCapacityUnits / (netPPEForCapacityUSD * (line.revenueShare ?? 1.0));
+      // §7.301 — SAME VINTAGE ON BOTH SIDES (rule 9). The line's share belongs INSIDE the
+      // anchor: dividing by the opening share here and re-multiplying by the CURRENT share on
+      // every read made physical capacity track the line's revenue share week to week — plant
+      // that evaporates because its PRICE moved. Measured on the CRE landlords: rental clears
+      // unit-elastic (units × price constant), the other lines inflate, the share falls, and
+      // capacity followed it 4,492 → 2,300 units in ten weeks while the price DOUBLED — the
+      // §7.132 ratchet in the capacity dimension. The comment above always said the rule:
+      // capacity is the ratio times the capital it has NOW — the share re-multiplication was
+      // the contradiction. Bit-identical at the anchor week; a line's capacity now moves with
+      // the firm's PLANT (IND1/IND13's deliveries), never with its price.
+      line.unitsPerNetPpeDollar = openingCapacityUnits / netPPEForCapacityUSD;
     }
     line.weeklyCapacityUnits = Math.max(0.0001,
-      line.unitsPerNetPpeDollar! * netPPEForCapacityUSD * (line.revenueShare ?? 1.0));
+      line.unitsPerNetPpeDollar! * netPPEForCapacityUSD);
+    // CRE_SUPPLY_X=<n> — attribution probe only: scales this one category's capacity to test
+    // whether the §7.301 CRE shortage (price ×2 in 20 weeks, fill ~0.7) is the ratchet channel.
+    if (subUnitId === 'commercial_rental_services' && Number(process.env.CRE_SUPPLY_X) > 0) {
+      line.weeklyCapacityUnits *= Number(process.env.CRE_SUPPLY_X);
+    }
     const baseMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     const costRate = Math.max(0, 1 - baseMargin);
     // §7.246 — THE FLOOR'S WAGE COMPONENT IS THE WAGE BILL AT CURRENT STAFFING, NOT A TRAILING
@@ -858,8 +882,16 @@ function buildRegionSupplyPlans(
     const onlineShare = 1 - Math.max(0, Math.min(1, comp.mothballedPpeShare ?? 0));
     const normalSeasonUnits = line.weeklyCapacityUnits! * productionThrottle * onlineShare;
     const staffedNormalSeasonUnits = Math.min(normalSeasonUnits, normalSeasonUnits * staffedShare);
-    const prospectiveUnitCostUSD = staffedNormalSeasonUnits > 0.0001
-      ? weeklyOperatingCostUSD / staffedNormalSeasonUnits
+    // §7.301 — THE MOTHBALL MOVES CAPACITY; IT MUST NOT DECIDE SOLVENCY (§1.9, the same
+    // periodicity discipline as the seasonal factor below). Dividing the firm's cost by the
+    // MOTHBALL-SHAVED volume made every mothball raise the measured unit cost that idled the
+    // plant — a ratchet by construction, measured on the CRE landlords: capacity 4,492 → 2,300
+    // in 20 weeks while their price DOUBLED. The test is asked at the plant's NORMAL staffed
+    // volume — the basis its costs were struck on — and is bit-identical when nothing is
+    // mothballed; what the firm OFFERS below is still only the online, staffed plant.
+    const testVolumeUnits = line.weeklyCapacityUnits! * productionThrottle * Math.min(1, staffedShare);
+    const prospectiveUnitCostUSD = testVolumeUnits > 0.0001
+      ? weeklyOperatingCostUSD / testVolumeUnits
       : Infinity;
     const coversUnitCost = supplierExpectedUnitPriceUSD >= prospectiveUnitCostUSD;
     // §5-DYN — the week's idle record, measured where the test runs and nowhere else (rule 3):
@@ -877,6 +909,17 @@ function buildRegionSupplyPlans(
       if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
       const upl = companyUpdates[comp.ticker];
       upl.producedUnitsThisWeek = (upl.producedUnitsThisWeek ?? 0) + targetProductionUnits;
+    }
+    // §5-PROD — the plant's STRUCTURAL weekly rate, for the learning curve's seed anchor only.
+    // Seeding the anchor off the first nonzero PRODUCED week annualized under-seeded any firm
+    // whose first week was throttled, off-season or partly idle — and when its output then
+    // normalized, ln(cum'/cum) read the recovery as years of learning at once: the §7.301
+    // measured regression (USA u +3.8pts by w30 from this line's absence). Capacity is the
+    // §7.4 shape — a seeded firm has produced for years AT ITS PLANT'S SCALE.
+    {
+      if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
+      const upl = companyUpdates[comp.ticker];
+      upl.plantCapacityUnitsThisWeek = (upl.plantCapacityUnitsThisWeek ?? 0) + line.weeklyCapacityUnits!;
     }
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
     // IND10 — the firm offers what it HAS plus what its plant FINISHED this week, not what it
@@ -1911,6 +1954,12 @@ function runSubUnitMarkets(
     const contractUnits = contracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
     demandState.totalUnitsSuppliedThisWeek = results[regionId].clearedUnits + contractUnits;
     demandState.totalUnitsDemandedThisWeek = (demandUnitsByRegion.get(regionId) ?? 0) + contractUnits;
+    // CAT_TRACE=<subUnitId> — one category's weekly price and fill, per region (probe).
+    if (process.env.CAT_TRACE === subUnitId) {
+      console.log(`  [cat] ${subUnitId} ${regionId} price ${demandState.unitPriceUSD}`
+        + ` (exw ${demandState.exWorksUnitPriceUSD}) supplied ${Math.round(demandState.totalUnitsSuppliedThisWeek)}`
+        + ` / demanded ${Math.round(demandState.totalUnitsDemandedThisWeek)}`);
+    }
     const landedPrice = demandState.unitPriceUSD ?? 0;
     const priorBase = demandState.baseUnitPriceUSD ?? 0;
     const basePrice = priorBase > 0 ? priorBase : landedPrice;
@@ -2109,6 +2158,18 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
       return a.unitId < b.unitId ? -1 : a.unitId > b.unitId ? 1 : 0;
     })
     .forEach(subUnit => {
+    // §7.301 — THE CRE MARKET IS GATED, ON MEASUREMENT (the §7.294 pattern: a gate stands or
+    // falls on what a run shows, and this one closed). The dealt landlords and the registry
+    // entry stand (§7.298's build is intact); the LIVE market alone carried +4.8pts of USA
+    // unemployment and +32 CPI points by week 30 — a §7.245-family service spiral: the market
+    // opens ~26% short (the §6.1 seed-level row — measured INVARIANT to the stated intensity,
+    // both sides derive from one level), corporate premises demand is nearly inelastic, supply
+    // is buildings and cannot answer inside a year, and the compounding price leaks through
+    // the shared industry's wage and revenue signals into the housing categories households
+    // DO buy. REOPENING CONDITION, named: the §6.1 level-row decision re-sizes the market
+    // (or corporate premises demand gets a real elasticity). CRE_MARKET_LIVE=1 runs it live
+    // for that re-measurement.
+    if (process.env.CRE_MARKET_LIVE !== '1' && subUnit.unitId === 'commercial_rental_services') return;
     const savedStream = beginEntityScope(subUnit.unitId, ctx.nextWeek);
     const own = {} as Record<RegionId, SupplyContract[]>;
     MARKET_REGION_IDS.forEach(r => { own[r] = contractsByRegionBySubUnit[r].get(subUnit.unitId) ?? []; });

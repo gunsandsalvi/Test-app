@@ -738,6 +738,12 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         // structural under-sizing every corporate-heavy service rides (logistics at 0.08% of
         // GDP against a real 5-6% is the named specimen). That is §6.1's level row, not this
         // entry's: the MECHANISM here is complete at whatever scale the level hands it.
+        //
+        // §7.301 measured the OPEN-SHORT question and closed it: restating the intensity
+        // (400 -> 280 was tried) moves BOTH sides — supply derives from the same level
+        // identity — so the ~0.74 opening fill is INVARIANT to this number and belongs to
+        // §6.1's seed-level row (~86% uniform undersupply), not to this entry. The stated
+        // premises requirement stands.
         householdUnitsPerCapitaAnnual: 0, corporateUnitsPerFirmAnnual: 400.0,
         recipeInputs: { repair_and_maintenance: 0.12, electricity: 0.05, professional_services: 0.05, facilities_and_logistics: 0.02 },
         label: "Commercial Property & Leasing",

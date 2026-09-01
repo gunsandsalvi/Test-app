@@ -146,6 +146,9 @@ function groupSupplyRelationships(
   return out;
 }
 
+/** LEARN_TRACE=1 — per-quarter learning-state rows, printed and cleared at stage exit. */
+const learnTraceRows: { m: number; g: number }[] = [];
+
 /** BYPASS_TRACE=1 — per (region:label) weekly sums of the walk's settle:false legs (see the
  *  `post` closure below); cleared at stage entry, printed at stage exit. */
 const bypassTraceByLabel = new Map<string, number>();
@@ -924,8 +927,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // (§7.4: the world opens growing exactly as it used to and diverges by experience).
     {
       const producedUnits = ctx.companyUpdates[comp.ticker]?.producedUnitsThisWeek ?? 0;
-      if (comp.cumulativeOutputUnits === undefined && producedUnits > 0) {
-        comp.cumulativeOutputUnits = seedCumulativeUnits(producedUnits * 52);
+      // §5-PROD — the anchor derives from the PLANT'S STRUCTURAL RATE, not the first week's
+      // throttled output: seeding off a low week under-seeded the curve, and the recovery to
+      // normal volume then read as years of learning at once — multiplier spikes, staffing
+      // caps plunging, the §7.301 u regression. Capacity is what "its current run-rate"
+      // honestly means for a firm that has produced for years (§7.4).
+      const capacityUnits = ctx.companyUpdates[comp.ticker]?.plantCapacityUnitsThisWeek ?? 0;
+      if (comp.cumulativeOutputUnits === undefined && (capacityUnits > 0 || producedUnits > 0)) {
+        comp.cumulativeOutputUnits = seedCumulativeUnits(Math.max(capacityUnits, producedUnits) * 52);
         comp.learningMultiplier = comp.learningMultiplier ?? 1;
       }
       if (comp.cumulativeOutputUnits !== undefined) {
@@ -938,18 +947,27 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         comp.learningMultiplier = learned.multiplier;
         comp.lastLearningGrowthAnnual = learned.growthAnnual;
       }
+      // LEARN_TRACE=1 — the learning distribution, quarterly: is the curve at its designed
+      // ~1.2%/yr or spiking (the §7.301 seed question, answered by measurement not story).
+      if (process.env.LEARN_TRACE === '1' && nextWeek % 13 === 0) {
+        learnTraceRows.push({ m: comp.learningMultiplier ?? 1, g: comp.lastLearningGrowthAnnual ?? -1 });
+      }
     }
 
     // §5-DYN — the capacity-retirement STOCK response: integrate this week's measured idle
     // record (stage 05's own §7.139 test) into mothball / restart / scrap. Scrap is the one
     // irreversible act: the written-off plant leaves gross PP&E and its share of accumulated
     // depreciation together, so net book value falls by only the unrecovered remainder.
-    const retirement = capacityRetirement({
-      idleRevenueShareThisWeek: ctx.companyUpdates[comp.ticker]?.idleLineRevenueShare ?? 0,
-      priorIdleStreakWeeks: comp.idleStreakWeeks ?? 0,
-      priorMothballedShare: comp.mothballedPpeShare ?? 0,
-      priorMothballedStreakWeeks: comp.mothballedStreakWeeks ?? 0,
-    });
+    // DYN_MOTHBALL_OFF=1 — attribution probe only: holds the stock response at zero so a run
+    // can price the mothball mechanism's own share of a trajectory. Never set in a reference.
+    const retirement = process.env.DYN_MOTHBALL_OFF === '1'
+      ? { idleStreakWeeks: 0, mothballedShare: 0, mothballedStreakWeeks: 0, scrappedShare: 0 }
+      : capacityRetirement({
+        idleRevenueShareThisWeek: ctx.companyUpdates[comp.ticker]?.idleLineRevenueShare ?? 0,
+        priorIdleStreakWeeks: comp.idleStreakWeeks ?? 0,
+        priorMothballedShare: comp.mothballedPpeShare ?? 0,
+        priorMothballedStreakWeeks: comp.mothballedStreakWeeks ?? 0,
+      });
     comp.idleStreakWeeks = retirement.idleStreakWeeks;
     comp.mothballedPpeShare = retirement.mothballedShare;
     comp.mothballedStreakWeeks = retirement.mothballedStreakWeeks;
@@ -2622,6 +2640,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
   ctx.newsItems.push(...refinanceNews);
 
+  if (process.env.LEARN_TRACE === '1' && learnTraceRows.length > 0) {
+    const ms = learnTraceRows.map((r) => r.m).sort((a, b) => a - b);
+    const gs = learnTraceRows.map((r) => r.g).filter((g) => g >= 0).sort((a, b) => a - b);
+    const q = (xs: number[], p: number) => xs.length ? xs[Math.min(xs.length - 1, Math.floor(p * xs.length))] : 0;
+    console.log(`  [learn] w${nextWeek} n=${learnTraceRows.length} multiplier p50 ${q(ms, 0.5).toFixed(4)}`
+      + ` p90 ${q(ms, 0.9).toFixed(4)} max ${q(ms, 1).toFixed(4)}`
+      + ` | growth/yr p50 ${(q(gs, 0.5) * 100).toFixed(2)}% p90 ${(q(gs, 0.9) * 100).toFixed(2)}% max ${(q(gs, 1) * 100).toFixed(2)}%`);
+    learnTraceRows.length = 0;
+  }
   if (process.env.BYPASS_TRACE === '1' && bypassTraceByLabel.size > 0) {
     const rows = Array.from(bypassTraceByLabel.entries())
       .filter(([, usd]) => Math.abs(usd) > 10e6)

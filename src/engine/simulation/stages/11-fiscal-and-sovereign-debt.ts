@@ -484,6 +484,12 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
     const corporateTaxWeeklyUSD = ctx.taxCollectedByRegion[regionId] ?? 0;
     reg.taxCollectedCorporateUSD = Math.round(corporateTaxWeeklyUSD);
+    // FISCAL_TRACE=1 — the week's ACCRUAL by base (the smooth rate, not the lumpy remittance).
+    if (process.env.FISCAL_TRACE === '1') {
+      console.log(`  [fiscal] ${regionId} corpAccrual ${(((ctx.taxAccruedByRegion[regionId] ?? 0)) / 1e6).toFixed(1)}M`
+        + ` sme ${(smeAccrualWeeklyUSD / 1e6).toFixed(1)}M hh ${(householdAccrualWeeklyUSD / 1e6).toFixed(1)}M`
+        + ` budget ${((reg.governmentSpendingWeeklyUSD ?? 0) / 1e6).toFixed(1)}M`);
+    }
     reg.taxCollectedSmeUSD = Math.round(smeTaxWeeklyUSD);
     reg.taxCollectedHouseholdUSD = Math.round(householdTaxWeeklyUSD);
     reg.taxCollectedPayrollUSD = Math.round(payrollTaxWeeklyUSD);

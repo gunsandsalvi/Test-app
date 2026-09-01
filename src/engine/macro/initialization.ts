@@ -254,8 +254,15 @@ export const CORPORATE_TAX_RATE_BY_REGION: Record<RegionId, number> = {
   USA: 0.26, EUR: 0.28, UK: 0.25, JPN: 0.30,
 };
 /** The seed's TOTAL-government-revenue share of GDP (all bases, not just corporate) — kept for
- *  the week-0 fiscal close only. The live corporate rate is the per-region map above. */
-export const EFFECTIVE_TAX_RATE = 0.31;
+ *  the week-0 fiscal close only. The live corporate rate is the per-region map above.
+ *  §7.301 — RE-STRUCK TO WHAT THE TAX SYSTEM ACTUALLY YIELDS (§7.4: the budget opens in the
+ *  shape the engine produces). TAXR's real base collects 27–33% less corporate tax than the
+ *  flat-rate accrual this share was closed against (measured week 5–6, like-for-like: the
+ *  double-declining shield and carryforwards dominate; the statutory rate cuts are the minor
+ *  part), and corporate tax is ~12% of the budget — so a budget struck at 0.31 opened ~3.6%
+ *  above sustainable revenue in every region and compounded into the w45+ sovereign-yield
+ *  blowout the first fixed-tree reference measured (10Y 4.7 → 12.9). One number, one owner. */
+export const EFFECTIVE_TAX_RATE = 0.2988;
 /**
  * The size of the opening sovereign stack, as a multiple of nominal GDP. A SEED primitive with
  * one use: it sizes `govDebtTranches` at week 0 and nothing thereafter. FRM deleted the weekly

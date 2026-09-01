@@ -629,9 +629,17 @@ export function fullStaffingCapHeads(c: Company): number {
   // §5-PROD: a firm that has LEARNED runs the same plant with fewer people — the ceiling is
   // heads-per-plant at the firm's own current unit-labour productivity, not its baseline's.
   const learning = Math.max(1e-6, c.learningMultiplier ?? 1);
-  if (!(netPpeUSD > 0)) return Math.max(1, baselineHeads / learning);
+  // §5-DYN — MOTHBALLED PLANT IS NOT STAFFABLE. "No maintenance draw, no staffed capacity" is
+  // the mechanism's own definition, and until this factor the second half was unimplemented:
+  // the ceiling ignored the mothballed share, so a firm kept full staff on a shaved plant, the
+  // full payroll divided by the online plant's output re-failed the §7.139 unit-cost test, and
+  // the mothball RATCHETED — measured in the first 80-week reference as the u-band regression
+  // (§7.301). The labour demand this ceiling caps now falls with the plant that is actually
+  // there to staff, which is what lets a mothballed firm shed cost and the test recover.
+  const online = 1 - Math.max(0, Math.min(1, c.mothballedPpeShare ?? 0));
+  if (!(netPpeUSD > 0)) return Math.max(1, (baselineHeads * online) / learning);
   if (!(c.baselineNetPpeUSD !== undefined && c.baselineNetPpeUSD > 0)) c.baselineNetPpeUSD = netPpeUSD;
-  return Math.max(1, (baselineHeads * (netPpeUSD / c.baselineNetPpeUSD)) / learning);
+  return Math.max(1, (baselineHeads * (netPpeUSD / c.baselineNetPpeUSD) * online) / learning);
 }
 
 /**

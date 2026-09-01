@@ -299,12 +299,19 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // delivered capex grew its PP&E can staff the bigger plant; frozen at the seed headcount,
       // no profitable firm could ever absorb a released worker and unemployment only ratcheted.
       const productiveHeadsCap = Math.max(1, fullStaffingCapHeads(comp));
-      // §5-PROD — the need is at the firm's OWN learned productivity: a firm that runs the same
-      // output with fewer people needs fewer people (baseline revenue-per-head × its Wright's-law
-      // multiplier, the same number fullStaffingCapHeads divides by — rule 3, one owner).
-      const learnedRevPerHeadUSD = baselineRevPerHeadUSD * Math.max(1e-6, comp.learningMultiplier ?? 1);
-      const outputNeedHeads = learnedRevPerHeadUSD > 0
-        ? Math.min((realRevenueUSD * demandPull) / learnedRevPerHeadUSD, productiveHeadsCap)
+      // §5-PROD, CORRECTED BY MEASUREMENT (§7.301) — THE LEVEL TARGET DOES **NOT** LEARN.
+      // Multiplying revenue-per-head by the Wright's-law multiplier here was §5-PROD's third
+      // labour consumer, and the inside-commit bisection priced it alone at +3.6pts of USA
+      // unemployment by week 30: the §7.247 override is a THRESHOLD (it rescues a firm only
+      // while outputNeedHeads exceeds its books), so even the clean ~0.5%/yr multiplier shaved
+      // marginal firms out of the rescue every week and released exactly the growth-signal
+      // layoffs the override exists to veto — a ratchet, not a level shift. It was also a
+      // §1.9 periodicity mismatch (a trailing, baseline-priced demand read divided by an
+      // instant multiplier) and a double-count: the firm's OWN learning already reaches its
+      // labour demand through the netting (the flow) and the ceiling below (the cap). Both
+      // sides of this ratio are struck at the BASELINE vintage, deliberately.
+      const outputNeedHeads = baselineRevPerHeadUSD > 0
+        ? Math.min((realRevenueUSD * demandPull) / baselineRevPerHeadUSD, productiveHeadsCap)
         : current;
       const earningsHeadroomUSD = comp.ebitda - capitalChargeUSD;
       const affordableHireHeads = (earningsHeadroomUSD > 0 && annualWagePerWorkerUSD > 0)
