@@ -169,3 +169,103 @@ export function checkCompanyStore(state: GameState, where: string): void {
     }
   }
 }
+
+/** §4.C II.4 — one field's lane re-synced over the whole roster (a writer stage's cheap
+ *  postlude: ~2,500 reads). Strings and flags route by field kind automatically. */
+export function syncCompanyField(state: GameState, field: CompanyF64Field | CompanyBoolField | CompanyStrField): void {
+  const S = storeByState.get(ensureV2(state));
+  if (!S) return;
+  const companies = state.companies;
+  const m = Math.min(S.n, companies.length);
+  if ((F64_FIELDS as readonly string[]).includes(field)) {
+    const lane = S.num[field as CompanyF64Field];
+    for (let i = 0; i < m; i++) {
+      const v = (companies[i] as unknown as Record<string, unknown>)[field] as number | undefined;
+      lane[i] = v === undefined ? NaN : v;
+    }
+  } else if ((BOOL_FIELDS as readonly string[]).includes(field)) {
+    const lane = S.flag[field as CompanyBoolField];
+    for (let i = 0; i < m; i++) {
+      const v = (companies[i] as unknown as Record<string, unknown>)[field] as boolean | undefined;
+      lane[i] = v === undefined ? 2 : v ? 1 : 0;
+    }
+  } else {
+    const lane = S.str[field as CompanyStrField];
+    for (let i = 0; i < m; i++) lane[i] = (companies[i] as unknown as Record<string, unknown>)[field] as string | undefined;
+  }
+}
+
+/**
+ * §4.C II.4 TRUST MODE — the store is kept current by the writer sync mesh (core.ts) and the
+ * per-firm row sync at stage 08's write-back, so the weekly full refresh dies: only rows the
+ * roster APPENDED since last week (births) fill here. COMPANY_SYNC_CHECK=1 verifies the mesh.
+ */
+export function trustCompanyStore(state: GameState): CompanyStore {
+  const S = storeByState.get(ensureV2(state));
+  if (!S) return refreshCompanyStore(state);
+  const companies = state.companies;
+  if (companies.length > S.cap) return refreshCompanyStore(state); // grow path re-fills
+  for (let i = S.n; i < companies.length; i++) syncCompanyRow(S, companies[i], i);
+  S.n = companies.length;
+  S.epoch++;
+  return S;
+}
+
+/** The store for this world, if it exists yet (the II.4 sync sites need it without forcing). */
+export function companyStoreOf(state: GameState): CompanyStore | undefined {
+  return storeByState.get(ensureV2(state));
+}
+
+// --- §4.C II.4 writer hunt -------------------------------------------------------------------
+const staleSeen = new Set<string>();
+const staleByStage = new Map<string, Set<string>>();
+
+/**
+ * COMPANY_STORE_AUDIT=1 — after every stage, record which fields FIRST went stale at which
+ * stage (subsequent stages re-reporting the same staleness are not the writer). One short run
+ * names every writer the II.4 dual-write must cover; printed at each week's last stage.
+ */
+export function auditCompanyStore(state: GameState, stage: string): void {
+  const S = storeByState.get(ensureV2(state));
+  if (!S) return;
+  const companies = state.companies;
+  const cur = new Set<string>();
+  const m = Math.min(S.n, companies.length);
+  for (const f of F64_FIELDS) {
+    const lane = S.num[f];
+    for (let i = 0; i < m; i++) {
+      const o = (companies[i] as unknown as Record<string, unknown>)[f] as number | undefined;
+      const l = lane[i];
+      const same = o === undefined ? Number.isNaN(l) : (o === l || (Number.isNaN(o) && Number.isNaN(l)));
+      if (!same) { cur.add(f); break; }
+    }
+  }
+  for (const f of BOOL_FIELDS) {
+    const lane = S.flag[f];
+    for (let i = 0; i < m; i++) {
+      const o = (companies[i] as unknown as Record<string, unknown>)[f] as boolean | undefined;
+      if ((o === undefined ? 2 : o ? 1 : 0) !== lane[i]) { cur.add(f); break; }
+    }
+  }
+  for (const f of STR_FIELDS) {
+    const lane = S.str[f];
+    for (let i = 0; i < m; i++) {
+      if (((companies[i] as unknown as Record<string, unknown>)[f] as string | undefined) !== lane[i]) { cur.add(f); break; }
+    }
+  }
+  if (companies.length !== S.n) cur.add('(roster length)');
+  for (const f of cur) {
+    if (!staleSeen.has(f)) {
+      staleSeen.add(f);
+      let set = staleByStage.get(stage);
+      if (!set) { set = new Set(); staleByStage.set(stage, set); }
+      set.add(f);
+    }
+  }
+  for (const f of [...staleSeen]) if (!cur.has(f)) staleSeen.delete(f); // refresh healed it
+  if (stage === '13-news-and-turn-summary') {
+    for (const [st, fields] of staleByStage) {
+      console.log(`[company-store-audit] ${st}: ${[...fields].sort().join(' ')}`);
+    }
+  }
+}

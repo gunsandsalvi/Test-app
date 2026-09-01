@@ -25,7 +25,7 @@ import { runStage08FrontPass } from '../../../engine2/stage08-front';
 import { ensureV2 } from '../../../engine2/world';
 import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm , s08k, runBackCoreA, runBackCoreB, runMmfRedemption, rebuildBackCoreA, applyCapCompWrites } from '../../../engine2/stage08-back';
 import { buildBackLanes } from '../../../engine2/stage08-lanes';
-import { refreshCompanyStore, checkCompanyStore } from '../../../engine2/company-store';
+import { trustCompanyStore, checkCompanyStore, syncCompanyRow } from '../../../engine2/company-store';
 import { backWorkerCount, dispatchBackA, collectBackA } from '../../../engine2/back-pool';
 import type { BackAShardOut } from '../../../engine2/back-worker';
 
@@ -191,8 +191,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const v2 = ensureV2(state);
   // §4.C Stage II.1 — the company row store, refreshed before the front pass so every scalar
   // lane is current by construction; the seam and the back lanes read/alias its columns.
-  const companyStore = refreshCompanyStore(state);
-  if (process.env.COMPANY_SYNC_CHECK === '1') checkCompanyStore(state, 'post-refresh');
+  const companyStore = trustCompanyStore(state);
+  if (process.env.COMPANY_SYNC_CHECK === '1') checkCompanyStore(state, 'stage-08 top (trust)');
   const F = runStage08FrontPass(state.companies, {
     v2, nextWeek, companyUpdates, updatedRegions,
     supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion, companyStore,
@@ -474,8 +474,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     backDeps.onSweepDelta = (row, deltaUSD) => { sweepDelta[row] = deltaUSD; };
     const postCap = runPhase((i) => {
       const comp = companyRows[i];
-      if (!aRes[i]) { updatedCompanies[i] = companyWeekKernel(comp, i); return; }
+      if (!aRes[i]) { updatedCompanies[i] = companyWeekKernel(comp, i); syncCompanyRow(companyStore, updatedCompanies[i], i); return; }
       updatedCompanies[i] = companyWeekKernel(comp, i, { ...aRes[i]!, ...bRes[i]! });
+      syncCompanyRow(companyStore, updatedCompanies[i], i); // II.4 dual-write: lanes stay current
     });
     backDeps.onSweepDelta = undefined;
     backDeps.taxCapture = undefined;
@@ -571,6 +572,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const savedStream = getRngState();
       setRngState(F.rngAfter[i]);
       updatedCompanies[i] = companyWeekKernel(comp, i);
+      syncCompanyRow(companyStore, updatedCompanies[i], i); // II.4 dual-write: lanes stay current
       setRngState(savedStream);
     }
     closeShard(held);

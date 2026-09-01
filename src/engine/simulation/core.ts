@@ -31,6 +31,7 @@ import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clear
 import { runShortDebtClearingStage } from './stages/07f-short-debt-clearing';
 import { runEquityClearingStage } from './stages/07e-equity-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
+import { auditCompanyStore, syncCompanyField } from '../../engine2/company-store';
 import { runPeLifecycleForRegion, settlePeLifecycleDeals, runFirmBirthsForRegion } from './stages/pe-lifecycle';
 import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } from './stages/shared-helpers';
 import { runIndexCalculationStage } from './stages/index-calculation';
@@ -129,6 +130,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   const run = <T>(stage: string, fn: () => T): T => {
     if (trace) ctx = trace.begin(stage, baseCtx);
     try {
+      if (process.env.COMPANY_STORE_AUDIT === '1') {
+        const r = fn();
+        auditCompanyStore(state, stage);
+        return r;
+      }
       if (!profile) return fn();
       const startedAt = performance.now();
       const result = fn();
@@ -183,8 +189,10 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   };
 
   run('01-macro-feedback', () => runMacroFeedbackStage(state, ctx));
+  syncCompanyField(state, 'cash');
   run('02-region-macro', () => runRegionMacroStage(state, ctx));
   run('02b-bank-diversification', () => runBankDiversificationStage(state, ctx));
+  syncCompanyField(state, 'bankMarketShare'); syncCompanyField(state, 'totalDebt'); // II.4 sync mesh (writers named by the store audit)
   // HH5: the labor market clears between credit (02b) and goods demand (03) — employment is
   // determined before the income it generates is spent.
   run('labor-market', () => runLaborMarketStage(state, ctx));
@@ -214,17 +222,22 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // rows in the same order the old per-book partition-and-rebuild chain produced.
   run('holdings-store', () => buildHoldingsStore(ctx));
   run('07b-corporate-bond-clearing', () => runCorporateBondClearingStage(state, ctx));
+  syncCompanyField(state, 'oasSpreadBps');
   run('07c-sovereign-bond-clearing', () => runSovereignBondClearingStage(state, ctx));
   run('07d-leveraged-loan-clearing', () => runLeveragedLoanClearingStage(state, ctx));
   run('07f-short-debt-clearing', () => runShortDebtClearingStage(state, ctx));
+  syncCompanyField(state, 'totalDebt');
   // HF: the borrow is located and struck BEFORE the equity book opens, so a short sells its
   // borrowed shares into this week's real bid and a recalled one buys in against it.
   run('securities-lending', () => runSecuritiesLendingStage(state, ctx));
+  syncCompanyField(state, 'shortInterestShares');
   run('07e-equity-clearing', () => runEquityClearingStage(state, ctx));
+  syncCompanyField(state, 'stockPrice'); syncCompanyField(state, 'marketCap');
   // DER1: after the sovereign curve is this week's cleared one, which every schedule reads.
   run('07g-swap-clearing', () => runSwapClearingStage(state, ctx));
   // CRD/DER2: after 07b, whose cleared OAS every schedule in the protection book prices against.
   run('07h-cds-clearing', () => runCdsClearingStage(state, ctx));
+  syncCompanyField(state, 'cdsSpreadBps'); syncCompanyField(state, 'cdsBasisBps');
   // DER4: after 07-commodities, whose spot every futures schedule prices against.
   run('07i-commodity-futures', () => runCommodityFuturesStage(state, ctx));
   // REPO2: the sovereign books have all cleared, so a pledge on paper a bank no longer holds is
@@ -243,6 +256,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // migrate more stages onto instructions this moves to the end of the week, where a net
   // settlement system actually runs.
   run('settlement', () => runSettlementStage(ctx));
+  syncCompanyField(state, 'cash');
   // SEG-D: the SME pools' week, measured from the payments settlement just executed — margin,
   // the revenue history the labor market hires against, cash-gated investment, and cash-measured
   // distress. Directly after settlement, because that is where its inputs land.
@@ -279,6 +293,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // the whole register again for nothing — or, in a week with no coupon due, for a second
     // accrual on top of the first.
   });
+  syncCompanyField(state, 'lastRecapWeek'); syncCompanyField(state, 'listingStatus'); syncCompanyField(state, 'stockPrice'); syncCompanyField(state, 'marketCap'); syncCompanyField(state, 'sharesOutstanding');
 
   // HH1c: the liability flows. After stage 08, so the insurers' own P&L for the week is struck
   // and this stage moves the cash that P&L implies; before the household books, which mark what
@@ -301,8 +316,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
 
   // G5: after stage 08 has named this week's defaults, so a workout opens the week it fails.
   run('estate-resolution', () => runEstateResolutionStage(state, ctx));
+  syncCompanyField(state, 'grossPPEUSD');
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
+  syncCompanyField(state, 'customerConcentration'); syncCompanyField(state, 'supplierConcentration');
   run('10-mergers', () => runMergersStage(state, ctx));
+  for (const f of ['accumulatedDepreciationUSD', 'acquiredByTicker', 'annualRevenue', 'capex', 'employeeCount', 'grossPPEUSD', 'growthCapex', 'maintenanceCapex', 'marketCap', 'mergerAcquired', 'sharesOutstanding', 'stockPrice', 'totalDebt'] as const) syncCompanyField(state, f);
   // PUB3d: bills accrete BEFORE the fiscal stage redeems them, so a maturing bill is repaid at
   // the face its holder has accreted to rather than at last week's value.
   // A stable-NAV fund pays its yield as new shares and its fee leaves to the manager.
@@ -312,6 +330,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // hedging flow the desks just generated, which now has a counterparty.
   run('fx-clearing', () => { runFxClearingStage(state, ctx); recordForeignHoldingsSnapshot(ctx); });
   run('money-fund-income', () => distributeMoneyFundIncome(ctx));
+  syncCompanyField(state, 'mmfSharesUSD');
   run('bill-accretion', () => runBillAccretionStage(state, ctx));
   // CAL: the sovereign calendar. After every book that trades government paper has cleared and
   // the bills have accreted, so the holders it walks are the ones the week ended with; before the
@@ -329,6 +348,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // the FX desks, the estates, the treasury's redemptions — settles here. A week has two cycles
   // because a day does, and without the second one those stages had nowhere to send a payment.
   run('settlement-close', () => runSettlementStage(ctx));
+  syncCompanyField(state, 'cash');
   // PUB2: the central bank's week — remittances, the TGA, and the reserves its flows move.
   // After stage 11 AND after the close, so every flow of the week has posted before it counts
   // its own liabilities: settling reserves after it reconciled left its sheet not closing.
