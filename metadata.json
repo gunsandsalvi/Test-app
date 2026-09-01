@@ -1,6 +1,0 @@
-{
-  "name": "Global Macro & Quant Simulator",
-  "description": "Turn-based weekly quantitative financial markets simulator and trading game with multi-region Taylor rules, Nelson-Siegel curves, 200 corporate issuers, dynamic credit transitions, and multi-asset derivative pricing.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

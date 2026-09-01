@@ -304,11 +304,12 @@ relabels between.
 **SCALE/§4.C is PARKED as later-TBD** (mid-Stage-II; exact resume point recorded in the §5
 SCALE banner and §7.336). **THE NEXT PROJECT IS AU — the UI rebuild** (§5 AU; its required
 process stands: written design brief → mockups → build, nothing built before the brief is
-approved). Push every commit to `claude/master-plan-review-2tfhu4` AND `main` (main's push
+approved). Push every commit to the session's designated `claude/…` branch AND `main` (main's push
 auto-deploys Pages, and `android/**` changes auto-publish the APK — see §2.4).
 
-**HANDOVER STATE (2026-09-01, for a fresh session):** working branch
-`claude/master-plan-review-2tfhu4`, byte-gate baselines are REGENERATED FRESH at session start
+**HANDOVER STATE (2026-09-01, for a fresh session):** working branch is the session's designated
+`claude/…` branch (old session branches are deleted when done — 2026-09-01 cleanup: only `main`
+and the live session branch remain), byte-gate baselines are REGENERATED FRESH at session start
 (the scratchpad dies with the container; the engine is deterministic — dump 4/13wk from HEAD
 before touching anything, then gate your changes against those). Gates per commit: `tsc
 --noEmit`, ESLint errors-only on touched files, `scripts/check-hygiene.sh`, `npm test`
