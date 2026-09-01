@@ -16,6 +16,7 @@
  * Violations print inline the week they happen (capped per week), and the end prints a grouped
  * summary. Exit code 1 on any violation.
  */
+import { writeFileSync } from 'fs';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -1916,6 +1917,10 @@ const FP_WEEKS = Number(process.env.FP_WEEKS) > 0 ? Number(process.env.FP_WEEKS)
 const fpModule: HarnessModule = {
   name: 'FP fingerprint',
   week(_prev, state, w) {
+    if (process.env.STATE_DUMP && w === 1) {
+      writeFileSync(process.env.STATE_DUMP,
+        JSON.stringify(state.companies, (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Number(v.toPrecision(15)) : v)));
+    }
     if (!FP || w > FP_WEEKS) return;
     console.log(`  [FP] w${w} ${canonicalFingerprint(state)}`);
   },

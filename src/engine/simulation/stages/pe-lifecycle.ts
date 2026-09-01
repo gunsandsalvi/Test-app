@@ -633,10 +633,12 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
         founderPct: 0, peSponsorId: deal.sponsorId, peSponsorPct: 1, acquiredWeek: nextWeek,
         entryEvMultiple: comp.ebitda > 0 ? (comp.totalDebt + takeoutValueUSD) / comp.ebitda : 0,
       };
-      comp.lastCashLedger = [
-        ...(comp.lastCashLedger ?? []),
-        { label: 'taken private: public register bought out', amountUSD: 0 },
-      ];
+      if (process.env.CASH_LEDGER === '1') {
+        comp.lastCashLedger = [
+          ...(comp.lastCashLedger ?? []),
+          { label: 'taken private: public register bought out', amountUSD: 0 },
+        ];
+      }
       return;
     }
 

@@ -159,6 +159,7 @@ const boundaryTraceByFirm = new Map<string, number>();
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
   const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, systemicStressFactorGlobal } = ctx;
   let refinanceNews: NewsItem[] = [];
+  const retainCashLedger = process.env.CASH_LEDGER === '1';
   bypassTraceByLabel.clear();
   boundaryTraceByFirm.clear();
 
@@ -1096,7 +1097,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // as later slices name each flow, not a plug (rule 13).
     const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true) => {
       if (!isFinite(amountUSD) || amountUSD === 0) return;
-      cashLedger.push({ label, amountUSD: Math.round(amountUSD) });
+      // SCALE §7.303 — the drill-down rows are display retention with NO consumer anywhere in
+      // the tree (grepped: written, never read). ~40 objects x 2,492 firms x 52 weeks of pure
+      // GC food; kept only under CASH_LEDGER=1 for debugging.
+      if (retainCashLedger) cashLedger.push({ label, amountUSD: Math.round(amountUSD) });
       newCash += amountUSD;
       // BYPASS_TRACE=1 — the settle:false legs are cash the walk moves while claiming the money
       // moves elsewhere; any label whose elsewhere-leg does not actually debit/credit this
@@ -2441,7 +2445,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     comp.lastOpportunisticOfferingWeek = newLastOpportunisticOfferingWeek;
 
-    comp.lastCashLedger = cashLedger;
+    comp.lastCashLedger = retainCashLedger ? cashLedger : undefined;
 
     comp.leverage = newLeverage;
 

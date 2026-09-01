@@ -433,6 +433,21 @@ stage 05's market sequencing (per-market budget envelopes or equivalent), which 
 RELABEL judged by reference like any other. Current measured: 1,583 ms/wk (§7.300); stage 05
 477, stage 08 409, ~40-stage tail ~700, GC ~8%.
 
+**THE 100ms CAMPAIGN (task #12) — the plan of record, measured gates at every step.**
+W0 (measured, dead end): the existing clearing-worker pool parallelizes only the packed kernel
+(~21 ms/wk); the 07x stages' cost is the OBJECT CEREMONY around it — pack/build/apply. So the
+campaign's law: kill ceremony with columnar state end-to-end, shard the two big BODIES, and the
+object graph becomes a VIEW at the boundary, not the store. B1 world tables (companies/tranches/
+holdings/journal exist; contracts, invoices, relationships, regions to add) → B2 stage 08 rebuilt
+as a numeric kernel over columns (worker pool, §7.222's entity-scoped RNG already makes it
+order-invariant) + a main-thread effect applier (32 ledger posts, 89 scalar writes, 29
+tranche/line touches per firm-week — censused by Proxy audit) → B3 stage 05 rebuilt: per-market
+budget ENVELOPES (declared relabel — pre-split each buyer's cash by need shares so markets shard;
+markets already open their own RNG scopes) + market kernels on the pool → B4 the ~700 ms tail
+batch-converted → B5 objects demoted to views. Validation: SHARDS=1≡n, FP for pure steps,
+references for the envelope relabel. 4 cores: 100 ms needs ~4-5× serial × ~3.5× workers — the
+serial factor comes from B1/B5, the parallel from B2/B3/B4.
+
 **Measurement-gated; profile first, always.** Two hard constraints: determinism is sacred
 (same-seed A/B byte-identical), and no economic shortcut dressed as an optimisation. Owns the
 damper's float half — and the small-cap equity tail that is HALF the §7.288 damper count. DIST
