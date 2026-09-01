@@ -345,6 +345,305 @@ function runCapitalBlock(args: {
   };
 }
 
+/** §7.317 — the closure-wide cash primitive as a FACTORY: one mutable cash box, one ledger,
+ *  one post; the walk and every later block write through the same instance, exactly as the
+ *  closure binding did. */
+function makeCashPoster(comp: Company, ctx: WeeklyStepContext, retainCashLedger: boolean): {
+  post: (label: string, amountUSD: number, counterparty?: PartyRef, settle?: boolean) => void;
+  cash: { usd: number };
+  cashLedger: { label: string; amountUSD: number }[];
+} {
+    const cashLedger: { label: string; amountUSD: number }[] = [];
+    const cash = { usd: comp.cash };
+    // SETL2: a ledger entry IS a payment instruction. The S5 walk already named every flow and
+    // its amount; what it never named was the OTHER SIDE, which is why corporate cash could move
+    // without any bank knowing (§7.86). Each post now names a counterparty; where the model does
+    // not have one yet it says so explicitly (`UNMODELED`), and the size of that line is the
+    // honest measure of how much of the payment graph is still unnamed — a number to watch down
+    // as later slices name each flow, not a plug (rule 13).
+    // SCALE §7.303 — the walk's own party ids, interned once per company: every settled leg
+    // used to re-probe two string maps (partyId x2) per post, ~40k+ legs a week.
+    const selfPartyId = partyId({ kind: 'COMPANY', ticker: comp.ticker });
+    const unmodeledPartyId = partyId({ kind: 'UNMODELED', region: comp.region });
+    const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true) => {
+      if (!isFinite(amountUSD) || amountUSD === 0) return;
+      // SCALE §7.303 — the drill-down rows are display retention with NO consumer anywhere in
+      // the tree (grepped: written, never read). ~40 objects x 2,492 firms x 52 weeks of pure
+      // GC food; kept only under CASH_LEDGER=1 for debugging.
+      if (retainCashLedger) cashLedger.push({ label, amountUSD: Math.round(amountUSD) });
+      cash.usd += amountUSD;
+      // BYPASS_TRACE=1 — the settle:false legs are cash the walk moves while claiming the money
+      // moves elsewhere; any label whose elsewhere-leg does not actually debit/credit this
+      // company is the 02b reconcile's corporate class, attributed here by name.
+      if (!settle && process.env.BYPASS_TRACE === '1') {
+        const key = `${comp.region}:${label}`;
+        bypassTraceByLabel.set(key, (bypassTraceByLabel.get(key) ?? 0) + amountUSD);
+      }
+      // `settle: false` = the line is REPORTED here but the money moves elsewhere, itemised. A
+      // dividend is the case: the issuer owes the register, and the register pays each holder by
+      // name — so the payment instructions come from the settlement of that register, and posting
+      // one here as well would move the same money twice.
+      if (!settle) return;
+      const otherId = counterparty ? partyId(counterparty) : unmodeledPartyId;
+      const reasonId = internReason(label);
+      if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, reasonId);
+      else payByIds(ctx, selfPartyId, otherId, -amountUSD, reasonId);
+    };
+  return { post, cash, cashLedger };
+}
+
+/**
+ * §7.317 — THE CASH WALK AS ONE PURE-CALL UNIT (draw-free). Every payment leg, holder accrual
+ * and tax-map write happens inside, in exactly the order the inline block emitted them — the
+ * caller invokes it at the same sequence point, so the journal is untouched. The §7.316
+ * contended resource (the money-fund redemption) is NOT here: it stays in the closure, in firm
+ * order, until it moves to the combine.
+ */
+function runCashWalk(args: {
+  comp: Company;
+  ctx: WeeklyStepContext;
+  entityById: Map<string, GameState['institutionalEntities'][number]>;
+  weekUpdate: CompanyWeekUpdate | undefined;
+  newNetIncome: number;
+  weeklyPayrollUSD: number;
+  newRevenue: number;
+  newEbitda: number;
+  carryingCostUSD: number;
+  weeklyInterest: number;
+  facilityInterestWeeklyUSD: number;
+  marketBondAccrualUSD: number;
+  marketLoanAccrualUSD: number;
+  commercialPaperAccrualUSD: number;
+  bondCouponDue: boolean;
+  loanCouponDue: boolean;
+  cpCouponDue: boolean;
+  taxPaidAnnualRateUSD: number;
+  accruedTaxUSD: number;
+  currentWeekMod13: number;
+  weeklyDebtFundedPortion: number;
+  bankCredit: PartyRef | undefined;
+  post: (label: string, amountUSD: number, counterparty?: PartyRef, settle?: boolean) => void;
+}): { accruedTaxUSD: number } {
+  const { comp, ctx, entityById, weekUpdate, newNetIncome, weeklyPayrollUSD,
+    newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
+    marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
+    bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
+    currentWeekMod13, weeklyDebtFundedPortion, bankCredit, post } = args;
+  let { accruedTaxUSD } = args;
+    // ---- S5: the weekly cash walk is an explicit ledger ----
+    // One posting helper is the single write path to cash; every entry is a named real flow.
+    // The previous walk triple-counted the operating side: an EBITDA/52 accrual PLUS stage 05's
+    // real settled cashChange PLUS a separate productionCost subtraction — three overlapping
+    // descriptions of one week's operations. Here each real dollar enters exactly once:
+    // settled auction flows at their real amounts, and accruals ONLY for the parts of the
+    // business the auction does not settle (non-auction receipts; wages and other unsettled
+    // costs; capex beyond what was bought as real units). EBITDA is a reporting figure.
+
+    const update = weekUpdate;
+    if (comp.sector === 'Banks') {
+      // A bank's real flows live on its named balance sheet (02b); the company-level cash line
+      // carries only the accrual bridge. REPORTED, never settled: every line of a bank's P&L is
+      // already booked against `bankEquityUSD` in the sector ledger (macro/banking.ts — interest
+      // earned and paid, repo interest, wholesale and deposit funding, dividends), so settling
+      // this bridge as well credited the same income to the same equity twice, out of a boundary
+      // that does not exist. Two independent quantities for one balance is rule 3.
+      post('bank net income accrual', newNetIncome / 52, undefined, false);
+      // IND-R1: and its staff. A bank paying wages settles like any other payer — reserves out,
+      // households' deposits in — and because a bank's payment is on its OWN account the other
+      // leg is its equity, which is where a real bank's wage bill lands.
+      post('wages paid to households', -weeklyPayrollUSD, { kind: 'HOUSEHOLD', region: comp.region });
+    } else {
+      // XB3a-2: a CARRIER sells no units into the goods auction, so its `salesUSD` is zero — but
+      // its freight is settled, by name, by the buyers who shipped with it (stage 05). Counting
+      // it here is what keeps the whole of its revenue out of `non-auction operating receipts`,
+      // which would otherwise pay it a second time out of the boundary.
+      // IND16: and a DISTRIBUTOR's channel margin, on the same reasoning — it sells no units into
+      // the household's book, it is paid inside the shelf price by the households that bought out
+      // of its stock (stage 05). Counting it here is what keeps it out of the boundary line,
+      // which would otherwise pay the sector a second time.
+      const settledSalesUSD = (update?.salesUSD ?? 0)
+        + (ctx.carrierFreightRevenue[comp.ticker] ?? 0)
+        + (ctx.channelMarginRevenue[comp.ticker] ?? 0);
+      const settledPurchasesUSD = update?.purchasesUSD ?? 0;
+      post('settled sales (real auction receipts)', settledSalesUSD, undefined, false);
+      post('settled purchases (real auction: inputs + capex)', -settledPurchasesUSD, undefined, false);
+      // XB3a-5: a cross-border sale is delivered and INVOICED, not collected. Revenue is
+      // recognised in full at delivery above; the cash is backed out here and posted when the
+      // invoice falls due, at whatever the invoice currency is then worth. The gap between the
+      // two is the transaction FX exposure, and it lands as real cash rather than a statistic.
+      // IND12/CASH: all four are REPORTED here and settled elsewhere, by name. The credit a
+      // seller extends moves seller -> buyer in stage 05; the collection moves buyer -> seller in
+      // trade-settlement. Posting them here as well would move the same money twice — and
+      // posting them against UNMODELED, as they were, moved it to nobody.
+      post('sales invoiced, not yet collected', -(update?.tradeReceivableBookedUSD ?? 0), undefined, false);
+      post('trade invoices collected', update?.tradeReceivableCollectedUSD ?? 0, undefined, false);
+      post('purchases invoiced, not yet paid', update?.tradePayableBookedUSD ?? 0, undefined, false);
+      post('trade invoices paid', -(update?.tradePayableSettledUSD ?? 0), undefined, false);
+      // §7.285 — THE BOUNDARY PAIR IS CLOSED, two different ways for two different carriers.
+      //
+      // BOUNDARY_TRACE decomposed the 4.8B/week 'non-auction operating receipts' line: ~60% was
+      // the four INSURERS' shells collecting their premium revenue from the boundary while the
+      // insurance stage had already paid the same premiums to their entities as real legs — the
+      // same dollar arriving twice, and a GROWTH LOOP besides (premium capacity = surplus x
+      // ratio, and the double-collected cash fed the surplus: the USA insurer's line grew 988M
+      // -> 1,532M in three weeks). The asset-manager shells were the same shape with no real leg
+      // anywhere (fee revenue whose payer is the conflated vehicle, §7.284's finding).
+      //
+      // (1) A shell BACKED BY A REAL ENTITY settles its operating result against that entity —
+      // the vehicle's book, which is where the real premiums/fees/income land. This is §7.284's
+      // step 3 executed on the conflated object: the two party kinds (INSTITUTION vs COMPANY)
+      // are two ledger accounts even while the ids are one. The entity nets to ~zero on an
+      // insurer (premiums through, claims reimbursed); on a manager it pays the fee out of the
+      // managed assets, which is what a real fund does.
+      //
+      // (2) An OPERATING firm's residual gap is the ACCRUAL LAG (the revenue EMA above/below
+      // this week's settled sales), and `max(0, ...)` kept only the positive side — so the
+      // boundary structurally PAID declining firms and charged nobody. The lag is a reporting
+      // statement, not a flow: nobody owes it, so no cash moves for it at all. Cash binds to
+      // what actually settled — the sales anchor, finally binding (§539's expectation applies:
+      // prints may get uglier and that is the honest direction, §1.20).
+      const nonAuctionReceiptsUSD = Math.max(0, newRevenue / 52 - settledSalesUSD);
+      const vehicleBehind = !comp.isBankEntity && comp.isInstitutionalEntity ? entityById.get(managedEntityIdsOf(comp)[0]) : undefined;
+      if (process.env.BOUNDARY_TRACE === '1' && nonAuctionReceiptsUSD > 1e6) {
+        const key = `${comp.region}:${comp.financialStatementProfile ?? comp.sector ?? '?'}:${comp.ticker}`;
+        boundaryTraceByFirm.set(key, (boundaryTraceByFirm.get(key) ?? 0) + nonAuctionReceiptsUSD);
+      }
+      if (vehicleBehind) {
+        post('operating receipts drawn from the vehicle', nonAuctionReceiptsUSD, { kind: 'INSTITUTION', id: comp.id });
+      }
+      // ...and the costs of running the whole business beyond what was bought as real units:
+      // wages, services, and the unsettled share of capex. Settled purchases already left as
+      // real cash above, so only the excess of total accrued outflows over them posts here.
+      // IND1: capex left as REAL CASH in `settled purchases` above, so accruing it again here
+      // paid for the same machine twice. What accrues is the operating side, and it nets only
+      // against the operating share of what really settled.
+      const accruedOutflowsWeekly = (newRevenue - newEbitda) / 52;
+      const capexSettledUSD = update?.capexPurchasesUSD ?? 0;
+      // SETL-B: wages are paid to HOUSEHOLDS, who exist and hold deposits. The rest of the line
+      // is services and inputs bought outside the modelled auction, which keeps the boundary
+      // until those sellers exist. The split is the company's own wage bill against its other
+      // operating costs — not a chosen ratio.
+      const opexOutflowUSD = Math.max(0, accruedOutflowsWeekly - Math.max(0, settledPurchasesUSD - capexSettledUSD));
+      // HH: THE FIRM'S OWN PAYROLL — its headcount, in the occupations its sector employs, at
+      // the wage those occupations clear at, times the wage this firm itself offers
+      // (`offeredWageIndex`, which moves with its own hiring success in the labor market).
+      //
+      // What this replaces: `employeeCount x (estimatedHouseholdIncomeUSD / regionEmployed)`, a
+      // per-capita INCOME figure standing in for a wage. Every employer in a region paid the same
+      // average regardless of who it employed or what it offered, and once household income
+      // became the sum of what employers pay, the number would have depended on itself.
+      //
+      // A firm pays its staff in full. What is left of the week's operating outflow is the rest
+      // of running the business; it cannot be negative, and a payroll larger than the accrued
+      // operating cost is a firm whose cash falls faster than its P&L — which is what that is.
+      // The same payroll the P&L above was charged — one number, computed once (rule 3).
+      const wagesPaidUSD = weeklyPayrollUSD;
+      post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: comp.region });
+      // SVC: services are a real market now — professional, facilities and repair sub-units sit
+      // in the registry, this firm's recipe includes them, and it BIDS for them in stage 05
+      // against real sellers like any other input. What remains on this line is the operating
+      // cost that is neither wages nor a purchase the auction covers.
+      //
+      // The supplier used to be picked here, by a size-weighted hash over the SME pools. That was
+      // an allocation standing in for a purchasing decision — the thing rule 13 forbids — and it
+      // is deleted rather than tuned.
+      // §7.285 (2), the cost half of the same pair — closed WITH the receipts half, as the
+      // frontier's own doc demanded (both are accruals; removing one side alone makes every
+      // firm bleed). An entity-backed shell's extra costs (an insurer's claims — which its
+      // entity pays as real legs) are reimbursed to the vehicle; an operating firm's accrual
+      // remainder moves no cash, exactly like its receipts twin.
+      const opexBeyondWagesUSD = Math.max(0, opexOutflowUSD - wagesPaidUSD);
+      if (vehicleBehind) {
+        post('operating costs borne by the vehicle', -opexBeyondWagesUSD, { kind: 'INSTITUTION', id: comp.id });
+      }
+      // IND16: WAREHOUSING HAS A SELLER NOW. This was a declared boundary frontier — "warehousing,
+      // unmodelled seller" — because nothing in the model held goods for anybody. The distribution
+      // tier is that sector: the same firms that run the household channel hold a firm's stock for
+      // it, and they are paid for it by name. What is left on the boundary is only a region with
+      // no distribution firm at all, which is a fact about that region rather than a gap.
+      if (carryingCostUSD > 0) {
+        const holders = ctx.channelShareByRegion[comp.region];
+        let paidUSD = 0;
+        holders?.forEach((share, holderTicker) => {
+          if (holderTicker === comp.ticker) return; // a distributor warehouses its own stock
+          const amountUSD = carryingCostUSD * share;
+          if (!(amountUSD > 0)) return;
+          paidUSD += amountUSD;
+          post('inventory carrying cost', -amountUSD, { kind: 'COMPANY', ticker: holderTicker });
+        });
+        // Only a region with no distribution firm at all still reaches the boundary here, and
+        // that is a fact about the region rather than a gap in the model.
+        const unheldUSD = carryingCostUSD - paidUSD;
+        if (unheldUSD > 0.01) post('inventory carrying cost', -unheldUSD);
+      }
+      // SETL4: reported here, paid itemised below — the house bank for its facilities, the
+      // register for market paper. One aggregate line on the cash walk, three real payees.
+      post('interest paid', -weeklyInterest, undefined, false);
+      if (facilityInterestWeeklyUSD > 0 && comp.homeBankTicker) {
+        pay(ctx, {
+          payer: { kind: 'COMPANY', ticker: comp.ticker },
+          payee: { kind: 'BANK', ticker: comp.homeBankTicker },
+          amountUSD: facilityInterestWeeklyUSD,
+          reason: 'facility interest to the lending bank',
+        });
+      }
+      // CAL: accrue to whoever holds it this week; pay it out on the coupon date. The cash that
+      // leaves on that date IS the sum of the accruals, so the issuer's ledger and the holders'
+      // receivables clear against each other exactly.
+      accrueHoldersInterest(ctx, comp.id, 'CORP_BOND', marketBondAccrualUSD);
+      accrueHoldersInterest(ctx, comp.id, 'LEVERAGED_LOAN', marketLoanAccrualUSD);
+      accrueHoldersInterest(ctx, comp.id, 'COMMERCIAL_PAPER', commercialPaperAccrualUSD);
+      if (bondCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'CORP_BOND');
+      if (loanCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'LEVERAGED_LOAN');
+      if (cpCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'COMMERCIAL_PAPER');
+      // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
+      // now arrives somewhere — the treasury's account — instead of leaving the model.
+      // §5-TAXR — the accrual IS the statement's tax line (rule 14: the P&L and the payment are
+      // one number). The `max(0, EBIT − interest) × rate` recomputation this replaces was the
+      // old gate surviving in the cash walk: carryforwards and the accelerated schedule now
+      // reach the dollars the treasury actually receives, which is the whole point of them.
+      const weeklyAccrualUSD = taxPaidAnnualRateUSD / 52;
+      accruedTaxUSD += weeklyAccrualUSD;
+      ctx.taxAccruedByRegion[comp.region] = (ctx.taxAccruedByRegion[comp.region] ?? 0) + weeklyAccrualUSD;
+      // currentWeekMod13 runs 1..13, never 0 — the quarter ends on 13.
+      if (currentWeekMod13 === 13 && accruedTaxUSD > 0) {
+        post('cash taxes (quarterly remittance)', -accruedTaxUSD, { kind: 'GOVERNMENT', region: comp.region });
+        ctx.taxCollectedByRegion[comp.region] = (ctx.taxCollectedByRegion[comp.region] ?? 0) + accruedTaxUSD;
+        accruedTaxUSD = 0;
+      }
+      // Dividends actually leave (they were declared and never deducted — the plan's leak #2).
+      // Sized by the board's REAL constraint — earnings — not by yield x market cap: the equity
+      // level is a known-inflated formula until WS4, and paying a real 2-3% yield on a fake 30B
+      // cap bled 10x a real dividend out of every profitable company (measured in this ledger's
+      // first week of existence: 15-25M/wk against 20M/wk of sales). A board pays out a share of
+      // what the company earns; the declared yield stands only when earnings cover it.
+      // §5-STRUCT step 2 — the payout rule lives on the firm (domain/company-week/distributions.ts).
+      // SETL3: a dividend is paid to the REGISTER. It used to leave the payer and arrive nowhere
+      // — the one-sided flow §6 half-knew about, listing "institutional dividend passthrough" as
+      // an unbuilt receipt channel. The paying-agent path already exists for call premiums and
+      // takeouts: the issuer says what the holders of its equity are owed, and the settlement
+      // pass distributes it pro rata to whoever the register says holds it. The issuer does not
+      // need to know its holders, which is exactly why real issuers appoint an agent.
+      // CAL: a board declares QUARTERLY and pays on a date, and the company's own reporting
+      // quarter is that date — the same thirteen-week clock stage 08 already runs its earnings
+      // on. Thirteen weeks of dividend leave in one week and nothing in the other twelve, which
+      // is what a shareholder's cash actually looks like and what a fund reinvesting it feels.
+      const dividend = dividendDecision({
+        declaredYield: comp.dividendYield ?? 0,
+        marketCapUSD: comp.marketCap,
+        netIncomeUSD: newNetIncome,
+        maxPayoutRatio: maxDividendPayoutRatioOf(comp),
+        weekOfQuarter: currentWeekMod13,
+        weeksInQuarter: 13,
+      });
+      const dividendWeeklyUSD = dividend.cashThisWeekUSD;
+      post('dividends paid', -dividendWeeklyUSD, undefined, false);
+      payHoldersCash(ctx, comp.id, 'EQUITY', dividendWeeklyUSD);
+      post('maintenance funding draw (new tranche proceeds)', weeklyDebtFundedPortion, bankCredit);
+    }
+  return { accruedTaxUSD };
+}
+
 export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: number) => Company {
   const {
     state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
@@ -559,257 +858,20 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     const __k1 = S08K_PROF ? performance.now() : 0;
     if (S08K_PROF) s08k.capital += __k1 - __k0;
-    // ---- S5: the weekly cash walk is an explicit ledger ----
-    // One posting helper is the single write path to cash; every entry is a named real flow.
-    // The previous walk triple-counted the operating side: an EBITDA/52 accrual PLUS stage 05's
-    // real settled cashChange PLUS a separate productionCost subtraction — three overlapping
-    // descriptions of one week's operations. Here each real dollar enters exactly once:
-    // settled auction flows at their real amounts, and accruals ONLY for the parts of the
-    // business the auction does not settle (non-auction receipts; wages and other unsettled
-    // costs; capex beyond what was bought as real units). EBITDA is a reporting figure.
-    const cashLedger: { label: string; amountUSD: number }[] = [];
-    let newCash = comp.cash;
-    // SETL2: a ledger entry IS a payment instruction. The S5 walk already named every flow and
-    // its amount; what it never named was the OTHER SIDE, which is why corporate cash could move
-    // without any bank knowing (§7.86). Each post now names a counterparty; where the model does
-    // not have one yet it says so explicitly (`UNMODELED`), and the size of that line is the
-    // honest measure of how much of the payment graph is still unnamed — a number to watch down
-    // as later slices name each flow, not a plug (rule 13).
-    // SCALE §7.303 — the walk's own party ids, interned once per company: every settled leg
-    // used to re-probe two string maps (partyId x2) per post, ~40k+ legs a week.
-    const selfPartyId = partyId({ kind: 'COMPANY', ticker: comp.ticker });
-    const unmodeledPartyId = partyId({ kind: 'UNMODELED', region: comp.region });
-    const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true) => {
-      if (!isFinite(amountUSD) || amountUSD === 0) return;
-      // SCALE §7.303 — the drill-down rows are display retention with NO consumer anywhere in
-      // the tree (grepped: written, never read). ~40 objects x 2,492 firms x 52 weeks of pure
-      // GC food; kept only under CASH_LEDGER=1 for debugging.
-      if (retainCashLedger) cashLedger.push({ label, amountUSD: Math.round(amountUSD) });
-      newCash += amountUSD;
-      // BYPASS_TRACE=1 — the settle:false legs are cash the walk moves while claiming the money
-      // moves elsewhere; any label whose elsewhere-leg does not actually debit/credit this
-      // company is the 02b reconcile's corporate class, attributed here by name.
-      if (!settle && process.env.BYPASS_TRACE === '1') {
-        const key = `${comp.region}:${label}`;
-        bypassTraceByLabel.set(key, (bypassTraceByLabel.get(key) ?? 0) + amountUSD);
-      }
-      // `settle: false` = the line is REPORTED here but the money moves elsewhere, itemised. A
-      // dividend is the case: the issuer owes the register, and the register pays each holder by
-      // name — so the payment instructions come from the settlement of that register, and posting
-      // one here as well would move the same money twice.
-      if (!settle) return;
-      const otherId = counterparty ? partyId(counterparty) : unmodeledPartyId;
-      const reasonId = internReason(label);
-      if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, reasonId);
-      else payByIds(ctx, selfPartyId, otherId, -amountUSD, reasonId);
-    };
-
+    const { post, cash, cashLedger } = makeCashPoster(comp, ctx, retainCashLedger);
+    const __cw = runCashWalk({
+      comp, ctx, entityById, weekUpdate, newNetIncome, weeklyPayrollUSD,
+      newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
+      marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
+      bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
+      accruedTaxUSD, currentWeekMod13, weeklyDebtFundedPortion, bankCredit, post,
+    });
+    accruedTaxUSD = __cw.accruedTaxUSD;
     const update = weekUpdate;
-    if (comp.sector === 'Banks') {
-      // A bank's real flows live on its named balance sheet (02b); the company-level cash line
-      // carries only the accrual bridge. REPORTED, never settled: every line of a bank's P&L is
-      // already booked against `bankEquityUSD` in the sector ledger (macro/banking.ts — interest
-      // earned and paid, repo interest, wholesale and deposit funding, dividends), so settling
-      // this bridge as well credited the same income to the same equity twice, out of a boundary
-      // that does not exist. Two independent quantities for one balance is rule 3.
-      post('bank net income accrual', newNetIncome / 52, undefined, false);
-      // IND-R1: and its staff. A bank paying wages settles like any other payer — reserves out,
-      // households' deposits in — and because a bank's payment is on its OWN account the other
-      // leg is its equity, which is where a real bank's wage bill lands.
-      post('wages paid to households', -weeklyPayrollUSD, { kind: 'HOUSEHOLD', region: comp.region });
-    } else {
-      // XB3a-2: a CARRIER sells no units into the goods auction, so its `salesUSD` is zero — but
-      // its freight is settled, by name, by the buyers who shipped with it (stage 05). Counting
-      // it here is what keeps the whole of its revenue out of `non-auction operating receipts`,
-      // which would otherwise pay it a second time out of the boundary.
-      // IND16: and a DISTRIBUTOR's channel margin, on the same reasoning — it sells no units into
-      // the household's book, it is paid inside the shelf price by the households that bought out
-      // of its stock (stage 05). Counting it here is what keeps it out of the boundary line,
-      // which would otherwise pay the sector a second time.
-      const settledSalesUSD = (update?.salesUSD ?? 0)
-        + (ctx.carrierFreightRevenue[comp.ticker] ?? 0)
-        + (ctx.channelMarginRevenue[comp.ticker] ?? 0);
-      const settledPurchasesUSD = update?.purchasesUSD ?? 0;
-      post('settled sales (real auction receipts)', settledSalesUSD, undefined, false);
-      post('settled purchases (real auction: inputs + capex)', -settledPurchasesUSD, undefined, false);
-      // XB3a-5: a cross-border sale is delivered and INVOICED, not collected. Revenue is
-      // recognised in full at delivery above; the cash is backed out here and posted when the
-      // invoice falls due, at whatever the invoice currency is then worth. The gap between the
-      // two is the transaction FX exposure, and it lands as real cash rather than a statistic.
-      // IND12/CASH: all four are REPORTED here and settled elsewhere, by name. The credit a
-      // seller extends moves seller -> buyer in stage 05; the collection moves buyer -> seller in
-      // trade-settlement. Posting them here as well would move the same money twice — and
-      // posting them against UNMODELED, as they were, moved it to nobody.
-      post('sales invoiced, not yet collected', -(update?.tradeReceivableBookedUSD ?? 0), undefined, false);
-      post('trade invoices collected', update?.tradeReceivableCollectedUSD ?? 0, undefined, false);
-      post('purchases invoiced, not yet paid', update?.tradePayableBookedUSD ?? 0, undefined, false);
-      post('trade invoices paid', -(update?.tradePayableSettledUSD ?? 0), undefined, false);
-      // §7.285 — THE BOUNDARY PAIR IS CLOSED, two different ways for two different carriers.
-      //
-      // BOUNDARY_TRACE decomposed the 4.8B/week 'non-auction operating receipts' line: ~60% was
-      // the four INSURERS' shells collecting their premium revenue from the boundary while the
-      // insurance stage had already paid the same premiums to their entities as real legs — the
-      // same dollar arriving twice, and a GROWTH LOOP besides (premium capacity = surplus x
-      // ratio, and the double-collected cash fed the surplus: the USA insurer's line grew 988M
-      // -> 1,532M in three weeks). The asset-manager shells were the same shape with no real leg
-      // anywhere (fee revenue whose payer is the conflated vehicle, §7.284's finding).
-      //
-      // (1) A shell BACKED BY A REAL ENTITY settles its operating result against that entity —
-      // the vehicle's book, which is where the real premiums/fees/income land. This is §7.284's
-      // step 3 executed on the conflated object: the two party kinds (INSTITUTION vs COMPANY)
-      // are two ledger accounts even while the ids are one. The entity nets to ~zero on an
-      // insurer (premiums through, claims reimbursed); on a manager it pays the fee out of the
-      // managed assets, which is what a real fund does.
-      //
-      // (2) An OPERATING firm's residual gap is the ACCRUAL LAG (the revenue EMA above/below
-      // this week's settled sales), and `max(0, ...)` kept only the positive side — so the
-      // boundary structurally PAID declining firms and charged nobody. The lag is a reporting
-      // statement, not a flow: nobody owes it, so no cash moves for it at all. Cash binds to
-      // what actually settled — the sales anchor, finally binding (§539's expectation applies:
-      // prints may get uglier and that is the honest direction, §1.20).
-      const nonAuctionReceiptsUSD = Math.max(0, newRevenue / 52 - settledSalesUSD);
-      const vehicleBehind = !comp.isBankEntity && comp.isInstitutionalEntity ? entityById.get(managedEntityIdsOf(comp)[0]) : undefined;
-      if (process.env.BOUNDARY_TRACE === '1' && nonAuctionReceiptsUSD > 1e6) {
-        const key = `${comp.region}:${comp.financialStatementProfile ?? comp.sector ?? '?'}:${comp.ticker}`;
-        boundaryTraceByFirm.set(key, (boundaryTraceByFirm.get(key) ?? 0) + nonAuctionReceiptsUSD);
-      }
-      if (vehicleBehind) {
-        post('operating receipts drawn from the vehicle', nonAuctionReceiptsUSD, { kind: 'INSTITUTION', id: comp.id });
-      }
-      // ...and the costs of running the whole business beyond what was bought as real units:
-      // wages, services, and the unsettled share of capex. Settled purchases already left as
-      // real cash above, so only the excess of total accrued outflows over them posts here.
-      // IND1: capex left as REAL CASH in `settled purchases` above, so accruing it again here
-      // paid for the same machine twice. What accrues is the operating side, and it nets only
-      // against the operating share of what really settled.
-      const accruedOutflowsWeekly = (newRevenue - newEbitda) / 52;
-      const capexSettledUSD = update?.capexPurchasesUSD ?? 0;
-      // SETL-B: wages are paid to HOUSEHOLDS, who exist and hold deposits. The rest of the line
-      // is services and inputs bought outside the modelled auction, which keeps the boundary
-      // until those sellers exist. The split is the company's own wage bill against its other
-      // operating costs — not a chosen ratio.
-      const opexOutflowUSD = Math.max(0, accruedOutflowsWeekly - Math.max(0, settledPurchasesUSD - capexSettledUSD));
-      // HH: THE FIRM'S OWN PAYROLL — its headcount, in the occupations its sector employs, at
-      // the wage those occupations clear at, times the wage this firm itself offers
-      // (`offeredWageIndex`, which moves with its own hiring success in the labor market).
-      //
-      // What this replaces: `employeeCount x (estimatedHouseholdIncomeUSD / regionEmployed)`, a
-      // per-capita INCOME figure standing in for a wage. Every employer in a region paid the same
-      // average regardless of who it employed or what it offered, and once household income
-      // became the sum of what employers pay, the number would have depended on itself.
-      //
-      // A firm pays its staff in full. What is left of the week's operating outflow is the rest
-      // of running the business; it cannot be negative, and a payroll larger than the accrued
-      // operating cost is a firm whose cash falls faster than its P&L — which is what that is.
-      // The same payroll the P&L above was charged — one number, computed once (rule 3).
-      const wagesPaidUSD = weeklyPayrollUSD;
-      post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: comp.region });
-      // SVC: services are a real market now — professional, facilities and repair sub-units sit
-      // in the registry, this firm's recipe includes them, and it BIDS for them in stage 05
-      // against real sellers like any other input. What remains on this line is the operating
-      // cost that is neither wages nor a purchase the auction covers.
-      //
-      // The supplier used to be picked here, by a size-weighted hash over the SME pools. That was
-      // an allocation standing in for a purchasing decision — the thing rule 13 forbids — and it
-      // is deleted rather than tuned.
-      // §7.285 (2), the cost half of the same pair — closed WITH the receipts half, as the
-      // frontier's own doc demanded (both are accruals; removing one side alone makes every
-      // firm bleed). An entity-backed shell's extra costs (an insurer's claims — which its
-      // entity pays as real legs) are reimbursed to the vehicle; an operating firm's accrual
-      // remainder moves no cash, exactly like its receipts twin.
-      const opexBeyondWagesUSD = Math.max(0, opexOutflowUSD - wagesPaidUSD);
-      if (vehicleBehind) {
-        post('operating costs borne by the vehicle', -opexBeyondWagesUSD, { kind: 'INSTITUTION', id: comp.id });
-      }
-      // IND16: WAREHOUSING HAS A SELLER NOW. This was a declared boundary frontier — "warehousing,
-      // unmodelled seller" — because nothing in the model held goods for anybody. The distribution
-      // tier is that sector: the same firms that run the household channel hold a firm's stock for
-      // it, and they are paid for it by name. What is left on the boundary is only a region with
-      // no distribution firm at all, which is a fact about that region rather than a gap.
-      if (carryingCostUSD > 0) {
-        const holders = ctx.channelShareByRegion[comp.region];
-        let paidUSD = 0;
-        holders?.forEach((share, holderTicker) => {
-          if (holderTicker === comp.ticker) return; // a distributor warehouses its own stock
-          const amountUSD = carryingCostUSD * share;
-          if (!(amountUSD > 0)) return;
-          paidUSD += amountUSD;
-          post('inventory carrying cost', -amountUSD, { kind: 'COMPANY', ticker: holderTicker });
-        });
-        // Only a region with no distribution firm at all still reaches the boundary here, and
-        // that is a fact about the region rather than a gap in the model.
-        const unheldUSD = carryingCostUSD - paidUSD;
-        if (unheldUSD > 0.01) post('inventory carrying cost', -unheldUSD);
-      }
-      // SETL4: reported here, paid itemised below — the house bank for its facilities, the
-      // register for market paper. One aggregate line on the cash walk, three real payees.
-      post('interest paid', -weeklyInterest, undefined, false);
-      if (facilityInterestWeeklyUSD > 0 && comp.homeBankTicker) {
-        pay(ctx, {
-          payer: { kind: 'COMPANY', ticker: comp.ticker },
-          payee: { kind: 'BANK', ticker: comp.homeBankTicker },
-          amountUSD: facilityInterestWeeklyUSD,
-          reason: 'facility interest to the lending bank',
-        });
-      }
-      // CAL: accrue to whoever holds it this week; pay it out on the coupon date. The cash that
-      // leaves on that date IS the sum of the accruals, so the issuer's ledger and the holders'
-      // receivables clear against each other exactly.
-      accrueHoldersInterest(ctx, comp.id, 'CORP_BOND', marketBondAccrualUSD);
-      accrueHoldersInterest(ctx, comp.id, 'LEVERAGED_LOAN', marketLoanAccrualUSD);
-      accrueHoldersInterest(ctx, comp.id, 'COMMERCIAL_PAPER', commercialPaperAccrualUSD);
-      if (bondCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'CORP_BOND');
-      if (loanCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'LEVERAGED_LOAN');
-      if (cpCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'COMMERCIAL_PAPER');
-      // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
-      // now arrives somewhere — the treasury's account — instead of leaving the model.
-      // §5-TAXR — the accrual IS the statement's tax line (rule 14: the P&L and the payment are
-      // one number). The `max(0, EBIT − interest) × rate` recomputation this replaces was the
-      // old gate surviving in the cash walk: carryforwards and the accelerated schedule now
-      // reach the dollars the treasury actually receives, which is the whole point of them.
-      const weeklyAccrualUSD = taxPaidAnnualRateUSD / 52;
-      accruedTaxUSD += weeklyAccrualUSD;
-      ctx.taxAccruedByRegion[comp.region] = (ctx.taxAccruedByRegion[comp.region] ?? 0) + weeklyAccrualUSD;
-      // currentWeekMod13 runs 1..13, never 0 — the quarter ends on 13.
-      if (currentWeekMod13 === 13 && accruedTaxUSD > 0) {
-        post('cash taxes (quarterly remittance)', -accruedTaxUSD, { kind: 'GOVERNMENT', region: comp.region });
-        ctx.taxCollectedByRegion[comp.region] = (ctx.taxCollectedByRegion[comp.region] ?? 0) + accruedTaxUSD;
-        accruedTaxUSD = 0;
-      }
-      // Dividends actually leave (they were declared and never deducted — the plan's leak #2).
-      // Sized by the board's REAL constraint — earnings — not by yield x market cap: the equity
-      // level is a known-inflated formula until WS4, and paying a real 2-3% yield on a fake 30B
-      // cap bled 10x a real dividend out of every profitable company (measured in this ledger's
-      // first week of existence: 15-25M/wk against 20M/wk of sales). A board pays out a share of
-      // what the company earns; the declared yield stands only when earnings cover it.
-      // §5-STRUCT step 2 — the payout rule lives on the firm (domain/company-week/distributions.ts).
-      // SETL3: a dividend is paid to the REGISTER. It used to leave the payer and arrive nowhere
-      // — the one-sided flow §6 half-knew about, listing "institutional dividend passthrough" as
-      // an unbuilt receipt channel. The paying-agent path already exists for call premiums and
-      // takeouts: the issuer says what the holders of its equity are owed, and the settlement
-      // pass distributes it pro rata to whoever the register says holds it. The issuer does not
-      // need to know its holders, which is exactly why real issuers appoint an agent.
-      // CAL: a board declares QUARTERLY and pays on a date, and the company's own reporting
-      // quarter is that date — the same thirteen-week clock stage 08 already runs its earnings
-      // on. Thirteen weeks of dividend leave in one week and nothing in the other twelve, which
-      // is what a shareholder's cash actually looks like and what a fund reinvesting it feels.
-      const dividend = dividendDecision({
-        declaredYield: comp.dividendYield ?? 0,
-        marketCapUSD: comp.marketCap,
-        netIncomeUSD: newNetIncome,
-        maxPayoutRatio: maxDividendPayoutRatioOf(comp),
-        weekOfQuarter: currentWeekMod13,
-        weeksInQuarter: 13,
-      });
-      const dividendWeeklyUSD = dividend.cashThisWeekUSD;
-      post('dividends paid', -dividendWeeklyUSD, undefined, false);
-      payHoldersCash(ctx, comp.id, 'EQUITY', dividendWeeklyUSD);
-      post('maintenance funding draw (new tranche proceeds)', weeklyDebtFundedPortion, bankCredit);
-    }
     let newTotalDebt = comp.totalDebt;
 
     const newBaselineDividendYield = round4(comp.baselineDividendYield * 0.998 + comp.dividendYield * 0.002);
-    const targetDivYield = newBaselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0)) * (1 + programme.payoutPressure * 2.5);
+    const targetDivYield = newBaselineDividendYield * (cash.usd < 0 ? 0.4 : (cash.usd > 2 * comp.currentLiabilities ? 1.2 : 1.0)) * (1 + programme.payoutPressure * 2.5);
     const newDividendYield = Math.max(0, comp.dividendYield * 0.9 + targetDivYield * 0.1);
 
     // HH5: headcount is the LABOR MARKET's, not this stage's. The drift multiplier that used
@@ -865,10 +927,10 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // The redemption is the FIRST rung of the liquidity ladder: shares, then the committed
     // line, and default only when both are gone. The full sweep decision at the bottom still
     // runs — by then cash is at or below the buffer, so it cannot double-redeem.
-    if (!comp.mergerAcquired && newCash < 0 && (comp.mmfSharesUSD ?? 0) > 0) {
+    if (!comp.mergerAcquired && cash.usd < 0 && (comp.mmfSharesUSD ?? 0) > 0) {
       const book = mmfSweepBooks.get(comp.region);
       if (book) {
-        const wantedUSD = Math.min(comp.mmfSharesUSD ?? 0, -newCash);
+        const wantedUSD = Math.min(comp.mmfSharesUSD ?? 0, -cash.usd);
         const paidUSD = Math.min(wantedUSD, book.redeemableUSD);
         if (paidUSD > 1) {
           book.netInflowUSD -= paidUSD;
@@ -898,7 +960,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       return vv;
     };
     let drawnRevolverRow = -1;
-    if (!comp.isDefaulted && !comp.mergerAcquired && newCash < 0) {
+    if (!comp.isDefaulted && !comp.mergerAcquired && cash.usd < 0) {
       const revolverRateAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
       let alreadyDrawnUSD = 0;
       for (const r of rowList) if (TS.flags[r] & TR_FACILITY) alreadyDrawnUSD += TS.principalUSD[r];
@@ -908,7 +970,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         revolverRateAnnual,
       }) - alreadyDrawnUSD);
       const drawUSD = revolverDrawUSD({
-        cashShortfallUSD: -newCash, headroomUSD, alreadyDrawnUSD: 0,
+        cashShortfallUSD: -cash.usd, headroomUSD, alreadyDrawnUSD: 0,
       });
       if (drawUSD > 1) {
         const revolver: DebtTranche = {
@@ -939,7 +1001,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const isDefaulted = isInDefault({
       wasDefaulted: comp.isDefaulted,
       mergerAcquired: Boolean(comp.mergerAcquired),
-      cashUSD: newCash,
+      cashUSD: cash.usd,
       coverage: newCoverage,
       coverageFloor: DEFAULT_COVERAGE_FLOOR,
     });
@@ -994,7 +1056,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
             customerConcentration: comp.customerConcentration,
             supplierConcentration: comp.supplierConcentration,
             maturityWallShare: maturityWallShareOfLadder,
-            liquidityToDebt: Math.max(0, newCash) / ladderUSD,
+            liquidityToDebt: Math.max(0, cash.usd) / ladderUSD,
             revenueVolatility: revVol,
             // CRD: the earnings themselves, so the rater can answer the case the ratio clamps
             // were covering up rather than inheriting a bounded number that has lost it.
@@ -1127,7 +1189,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const currentFairRate = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
       // A floating tranche carries a margin rather than a coupon; there is nothing to refinance
       // INTO a lower fixed rate, so its saving is zero rather than NaN.
-      const excessCashAvailable = newCash > comp.annualRevenue * 0.15;
+      const excessCashAvailable = cash.usd > comp.annualRevenue * 0.15;
       // The real test is not "is the coupon above the market" — it is whether the saving is worth
       // what the call costs. A treasurer discounts the coupon saving over the paper's remaining
       // life and compares it to the premium; below that line the bond stays outstanding.
@@ -1148,7 +1210,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       if (economics.isAccretive && excessCashAvailable && newRating !== 'CCC' && newRating !== 'D') {
         const calledAmountUSD = callableAmountUSD({
           tranchePrincipalUSD: TS.principalUSD[rTr],
-          cashUSD: newCash,
+          cashUSD: cash.usd,
           cashFloorUSD: comp.annualRevenue * 0.15,
           premiumPerDollar,
         });
@@ -1374,11 +1436,11 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // S5 leak #3 fixed for real: surplus-cash prepayment retires ACTUAL tranches (nearest
     // maturity first — the paper a treasurer would take out), so cash and the ladder move
     // together and the settled reduction reaches holders via settleCorporateActionOnHolders.
-    if (newCash > 2.5 * comp.currentLiabilities) {
+    if (cash.usd > 2.5 * comp.currentLiabilities) {
       let ladderTotalUSD = 0;
       for (const r of rowList) ladderTotalUSD += TS.principalUSD[r];
       if (ladderTotalUSD > 50) {
-        let toPrepayUSD = Math.min(ladderTotalUSD * 0.05, (newCash - 2.5 * comp.currentLiabilities) * 0.25);
+        let toPrepayUSD = Math.min(ladderTotalUSD * 0.05, (cash.usd - 2.5 * comp.currentLiabilities) * 0.25);
         if (toPrepayUSD > 1000) {
           // §4.0 Tier 1 item 12 — a FACILITY on the prepay list must reach its LENDER: the loan
           // leaves the bank's book through the credit event and the money through a real
@@ -1447,7 +1509,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       ebitdaAnnual: newEbitda,
       ebitAnnual: newEbit,
       totalDebtUSD: rowList.reduce((sum, r) => sum + TS.principalUSD[r], 0),
-      cashUSD: newCash,
+      cashUSD: cash.usd,
       rating: newRating,
     });
 
@@ -1676,19 +1738,19 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // Buyback Execution (Part AH)
     let updatedSharesOutstanding = comp.sharesOutstanding;
     const targetCashBuffer = Math.max(10, comp.currentLiabilities * 1.5);
-    const excessCash = Math.max(0, newCash - targetCashBuffer);
+    const excessCash = Math.max(0, cash.usd - targetCashBuffer);
     const debtToEquity = newTotalDebt / Math.max(1, (newStockPrice * comp.sharesOutstanding));
     // IND-R6: public-only — retiring shares into the market needs a market to retire them into.
     // A private firm's distributions to its owners are HC's sponsor machinery, not a buyback.
     if (isPubliclyListed(comp) && excessCash > 5 && debtToEquity < 0.6 && comp.sharesOutstanding > 10 && !isDefaulted && newStockPrice > 0) {
-      const estimatedBookValuePerShare = Math.max(0.5, (newCash + newRevenue * 0.8 - newTotalDebt) / comp.sharesOutstanding);
+      const estimatedBookValuePerShare = Math.max(0.5, (cash.usd + newRevenue * 0.8 - newTotalDebt) / comp.sharesOutstanding);
       // "Cheap" against the same arithmetic the market itself prices this company with (07e /
       // equity-valuation.ts), at the board's own cost of capital — not against a sector P/E
       // table. A board that buys back stock is taking the other side of that auction, so it has
       // to be reading the same book; comparing to a multiple the market no longer uses would be
       // two valuations of one company again.
       const boardFairValuePerShare = companyFairValuePerShare(
-        { ...comp, netIncome: newNetIncome, cash: newCash, totalDebt: newTotalDebt },
+        { ...comp, netIncome: newNetIncome, cash: cash.usd, totalDebt: newTotalDebt },
         reg.zeroRates?.tenor10Y ?? reg.policyRate,
         REPRESENTATIVE_HOLDER_REQUIRED_RETURN
       );
@@ -1750,7 +1812,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         newEbitda,
         newNetIncome,
         newEps,
-        newCash,
+        cash.usd,
         newTotalDebt,
         currentTreasuryHoldingsUSD,
         Object.values(newOutputInventoryBySubUnit).reduce((s, inv) => s + inv.valueUSD, 0),
@@ -1820,14 +1882,14 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // has no market cap for a declared yield to price, and its holder of record IS the parent.)
     if (comp.parentTicker && !isDefaulted) {
       const bufferUSD = comp.annualRevenue * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE;
-      const excessUSD = Math.max(0, newCash - bufferUSD);
+      const excessUSD = Math.max(0, cash.usd - bufferUSD);
       if (excessUSD > 1e6) {
         post('subsidiary excess cash repatriated to the parent', -excessUSD,
           { kind: 'COMPANY', ticker: comp.parentTicker });
       }
     }
     if (!comp.isBankEntity && !comp.isInstitutionalEntity && !isDefaulted && comp.listingStatus !== 'PRIVATE') {
-      const sweep = corporateSweepDecision(comp, newCash, mmfSweepBooks.get(comp.region));
+      const sweep = corporateSweepDecision(comp, cash.usd, mmfSweepBooks.get(comp.region));
       if (sweep.cashDeltaUSD !== 0) {
         // The counterparty is a named fund that exists — routing it to the boundary would have
         // the fund credited by its own stage AND the money appear at the boundary, which creates
