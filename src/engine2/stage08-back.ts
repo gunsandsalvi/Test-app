@@ -115,6 +115,10 @@ export interface BackKernelDeps {
   /** §7.321 barrier mode: reports the post sweep's exact share delta so the merge can rebuild
    *  the region book's netInflow float sum in original firm order. */
   onSweepDelta?: (row: number, deltaUSD: number) => void;
+  /** §7.325 barrier/worker capture: the cash walk's two exact tax amounts by row (NaN = no
+   *  write), so the firm-major replay adds the SAME floats the serial walk added — a delta
+   *  recovered by subtracting map values would be a different float (§7.324's lesson). */
+  taxCapture?: { accrueUSD: Float64Array; collectUSD: Float64Array };
 }
 
 /** The back half of one company's week — same statements the stage's kernel ran, same order. */
@@ -432,6 +436,9 @@ function runCashWalk(args: {
   weeklyDebtFundedPortion: number;
   bankCredit: PartyRef | undefined;
   post: (label: string, amountUSD: number, counterparty?: PartyRef, settle?: boolean) => void;
+  /** §7.325 — this firm's row and the capture columns for the walk's two tax writes. */
+  row: number;
+  taxCapture?: { accrueUSD: Float64Array; collectUSD: Float64Array };
 }): { accruedTaxUSD: number } {
   const { ctx, companyId, ticker, region, isBanksSector, homeBankTicker,
     carrierFreightRevenueUSD, channelMarginRevenueUSD, declaredDividendYield, marketCapUSD,
@@ -442,7 +449,7 @@ function runCashWalk(args: {
     newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
     marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
     bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
-    currentWeekMod13, weeklyDebtFundedPortion, bankCredit, post } = args;
+    currentWeekMod13, weeklyDebtFundedPortion, bankCredit, post, row, taxCapture } = args;
   let { accruedTaxUSD } = args;
     // ---- S5: the weekly cash walk is an explicit ledger ----
     // One posting helper is the single write path to cash; every entry is a named real flow.
@@ -616,10 +623,12 @@ function runCashWalk(args: {
       const weeklyAccrualUSD = taxPaidAnnualRateUSD / 52;
       accruedTaxUSD += weeklyAccrualUSD;
       ctx.taxAccruedByRegion[region] = (ctx.taxAccruedByRegion[region] ?? 0) + weeklyAccrualUSD;
+      if (taxCapture) taxCapture.accrueUSD[row] = weeklyAccrualUSD;
       // currentWeekMod13 runs 1..13, never 0 — the quarter ends on 13.
       if (currentWeekMod13 === 13 && accruedTaxUSD > 0) {
         post('cash taxes (quarterly remittance)', -accruedTaxUSD, { kind: 'GOVERNMENT', region: region as Company['region'] });
         ctx.taxCollectedByRegion[region] = (ctx.taxCollectedByRegion[region] ?? 0) + accruedTaxUSD;
+        if (taxCapture) taxCapture.collectUSD[row] = accruedTaxUSD;
         accruedTaxUSD = 0;
       }
       // Dividends actually leave (they were declared and never deducted — the plan's leak #2).
@@ -911,6 +920,7 @@ export function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
       marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
       bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
       accruedTaxUSD, currentWeekMod13, weeklyDebtFundedPortion, bankCredit, post,
+      row, taxCapture: d.taxCapture,
     });
     accruedTaxUSD = __cw.accruedTaxUSD;
     const newTotalDebt = L8.totalDebtUSD[row];

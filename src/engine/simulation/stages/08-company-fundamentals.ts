@@ -348,62 +348,124 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // the journal and every accumulator reproduce the interleaved loop exactly.
   if (process.env.BACK_BARRIER === '1') {
     const n = companyRows.length;
-    const capture = (fn: () => void): CompanyShardAccumulators => {
+    // §7.325 — PHASE-LEVEL CAPTURE. The §7.324 per-firm capture allocated ~12 objects (a fresh
+    // PaymentJournal among them) per firm per phase and merged Maps per firm — measured at ~10x
+    // the kernel itself (serial ~110ms/wk, barrier ~1,150ms/wk). Same oracle semantics, new
+    // mechanism: ONE accumulator set per phase, per-firm END OFFSETS into every family, and one
+    // firm-major replay appending exactly the captured entries in [A, red, B, post] order per
+    // firm. The Map families are sliceable because every kernel holder key carries the firm's
+    // own companyId (one writer per key) and Maps preserve insertion order; the TAX maps are
+    // not (many firms add into one region key), so the walk reports its two exact amounts per
+    // row via d.taxCapture and the replay adds those same floats in firm order — a delta
+    // recovered by subtraction would be a different float (§7.324's lesson).
+    interface PhaseMarks {
+      credit: Int32Array; def: Int32Array; ratings: Int32Array; earnings: Int32Array;
+      offerings: Int32Array; news: Int32Array; journalN: Int32Array;
+      hAcc: Int32Array; hCash: Int32Array; hPay: Int32Array; hSettle: Int32Array;
+    }
+    const runPhase = (body: (i: number) => void): { acc: CompanyShardAccumulators; marks: PhaseMarks } => {
       const held = openShard();
-      fn();
-      const mine = snapshotAccums();
+      const acc = snapshotAccums();
+      const marks: PhaseMarks = {
+        credit: new Int32Array(n), def: new Int32Array(n), ratings: new Int32Array(n),
+        earnings: new Int32Array(n), offerings: new Int32Array(n), news: new Int32Array(n),
+        journalN: new Int32Array(n), hAcc: new Int32Array(n), hCash: new Int32Array(n),
+        hPay: new Int32Array(n), hSettle: new Int32Array(n),
+      };
+      for (let i = 0; i < n; i++) {
+        body(i);
+        marks.credit[i] = acc.creditEvents.length; marks.def[i] = acc.defaulted.length;
+        marks.ratings[i] = acc.ratings.length; marks.earnings[i] = acc.earnings.length;
+        marks.offerings[i] = acc.offerings.length; marks.news[i] = acc.news.length;
+        marks.journalN[i] = acc.journal.n; marks.hAcc[i] = acc.holderAccruals.size;
+        marks.hCash[i] = acc.holderCash.size; marks.hPay[i] = acc.holderPayout.size;
+        marks.hSettle[i] = acc.holderSettlements.size;
+      }
       installAccums(held);
-      return mine;
+      return { acc, marks };
     };
     const aRes: (ReturnType<typeof runBackCoreA> | undefined)[] = new Array(n);
     const bRes: (ReturnType<typeof runBackCoreB> | undefined)[] = new Array(n);
     const streamAfterA: (ReturnType<typeof getRngState> | undefined)[] = new Array(n);
     const redPaid = new Float64Array(n);
     const sweepDelta = new Float64Array(n);
-    const aBuf: (CompanyShardAccumulators | undefined)[] = new Array(n);
-    const redBuf: (CompanyShardAccumulators | undefined)[] = new Array(n);
-    const bBuf: (CompanyShardAccumulators | undefined)[] = new Array(n);
-    const postBuf: (CompanyShardAccumulators | undefined)[] = new Array(n);
+    const taxCapture = {
+      accrueUSD: new Float64Array(n).fill(NaN),
+      collectUSD: new Float64Array(n).fill(NaN),
+    };
+    backDeps.taxCapture = taxCapture;
     const ambient = getRngState();
     ctx.deferPendingNet = true;
-    for (let i = 0; i < n; i++) {
+    const aCap = runPhase((i) => {
       const comp = companyRows[i];
-      if (!isActiveCompany(comp)) continue;
-      aBuf[i] = capture(() => {
-        setRngState(F.rngAfter[i]);
-        aRes[i] = runBackCoreA(comp, i, backDeps);
-        streamAfterA[i] = getRngState();
-      });
-    }
-    for (let i = 0; i < n; i++) {
-      const comp = companyRows[i];
-      if (!aRes[i]) continue;
-      redBuf[i] = capture(() => { redPaid[i] = runMmfRedemption(comp, i, backDeps, aRes[i]!); });
-    }
-    for (let i = 0; i < n; i++) {
-      const comp = companyRows[i];
-      if (!aRes[i]) continue;
-      bBuf[i] = capture(() => {
-        setRngState(streamAfterA[i]!);
-        bRes[i] = runBackCoreB(comp, i, backDeps, aRes[i]!);
-      });
-    }
+      if (!isActiveCompany(comp)) return;
+      setRngState(F.rngAfter[i]);
+      aRes[i] = runBackCoreA(comp, i, backDeps);
+      streamAfterA[i] = getRngState();
+    });
+    const redCap = runPhase((i) => {
+      if (!aRes[i]) return;
+      redPaid[i] = runMmfRedemption(companyRows[i], i, backDeps, aRes[i]!);
+    });
+    const bCap = runPhase((i) => {
+      if (!aRes[i]) return;
+      setRngState(streamAfterA[i]!);
+      bRes[i] = runBackCoreB(companyRows[i], i, backDeps, aRes[i]!);
+    });
     backDeps.onSweepDelta = (row, deltaUSD) => { sweepDelta[row] = deltaUSD; };
-    for (let i = 0; i < n; i++) {
+    const postCap = runPhase((i) => {
       const comp = companyRows[i];
-      if (!aRes[i]) { updatedCompanies[i] = companyWeekKernel(comp, i); continue; }
-      postBuf[i] = capture(() => {
-        updatedCompanies[i] = companyWeekKernel(comp, i, { ...aRes[i]!, ...bRes[i]! });
-      });
-    }
+      if (!aRes[i]) { updatedCompanies[i] = companyWeekKernel(comp, i); return; }
+      updatedCompanies[i] = companyWeekKernel(comp, i, { ...aRes[i]!, ...bRes[i]! });
+    });
     backDeps.onSweepDelta = undefined;
+    backDeps.taxCapture = undefined;
     setRngState(ambient);
     ctx.deferPendingNet = false;
+    // The firm-major replay: each firm's captured entries land in [A, red, B, post] order,
+    // reproducing the interleaved loop's journal and accumulator content exactly.
+    const phases = [aCap, redCap, bCap, postCap];
+    const slices = phases.map((ph) => ({
+      hAcc: [...ph.acc.holderAccruals], hCash: [...ph.acc.holderCash],
+      hPay: [...ph.acc.holderPayout], hSettle: [...ph.acc.holderSettlements],
+    }));
     for (let i = 0; i < n; i++) {
-      if (aBuf[i]) mergeAccums(aBuf[i]!, true);
-      if (redBuf[i]) mergeAccums(redBuf[i]!, true);
-      if (bBuf[i]) mergeAccums(bBuf[i]!, true);
-      if (postBuf[i]) mergeAccums(postBuf[i]!, true);
+      for (let p = 0; p < 4; p++) {
+        const { acc, marks } = phases[p];
+        const sl = slices[p];
+        const s = (m: Int32Array) => (i > 0 ? m[i - 1] : 0);
+        for (let k = s(marks.credit); k < marks.credit[i]; k++) ctx.creditEventsThisWeek.push(acc.creditEvents[k]);
+        for (let k = s(marks.def); k < marks.def[i]; k++) ctx.defaultedTickers.push(acc.defaulted[k]);
+        for (let k = s(marks.ratings); k < marks.ratings[i]; k++) ctx.ratingChanges.push(acc.ratings[k]);
+        for (let k = s(marks.earnings); k < marks.earnings[i]; k++) ctx.earningsReportedThisTurn.push(acc.earnings[k]);
+        for (let k = s(marks.offerings); k < marks.offerings[i]; k++) ctx.primaryOfferingsWorking.push(acc.offerings[k]);
+        for (let k = s(marks.news); k < marks.news[i]; k++) refinanceNews.push(acc.news[k]);
+        const J = acc.journal;
+        for (let k = s(marks.journalN); k < marks.journalN[i]; k++) {
+          journalPush(ctx.paymentJournal, J.payerId[k], J.payeeId[k], J.amountUSD[k], J.reasonId[k]);
+          applyPendingLeg(ctx, J.payerId[k], J.payeeId[k], J.amountUSD[k]);
+        }
+        for (let k = s(marks.hAcc); k < marks.hAcc[i]; k++) {
+          const [key, v] = sl.hAcc[k];
+          ctx.pendingHolderAccrualUSD.set(key, (ctx.pendingHolderAccrualUSD.get(key) ?? 0) + v);
+        }
+        for (let k = s(marks.hCash); k < marks.hCash[i]; k++) {
+          const [key, v] = sl.hCash[k];
+          ctx.pendingHolderCashUSD.set(key, (ctx.pendingHolderCashUSD.get(key) ?? 0) + v);
+        }
+        for (let k = s(marks.hPay); k < marks.hPay[i]; k++) ctx.pendingHolderAccrualPayout.add(sl.hPay[k]);
+        for (let k = s(marks.hSettle); k < marks.hSettle[i]; k++) {
+          const [key, v] = sl.hSettle[k];
+          ctx.pendingHolderSettlements.set(key, (ctx.pendingHolderSettlements.get(key) ?? 1) * v);
+        }
+      }
+      const regKey = backLanes.region[i];
+      if (!Number.isNaN(taxCapture.accrueUSD[i])) {
+        ctx.taxAccruedByRegion[regKey] = (ctx.taxAccruedByRegion[regKey] ?? 0) + taxCapture.accrueUSD[i];
+      }
+      if (!Number.isNaN(taxCapture.collectUSD[i])) {
+        ctx.taxCollectedByRegion[regKey] = (ctx.taxCollectedByRegion[regKey] ?? 0) + taxCapture.collectUSD[i];
+      }
     }
     // §7.321 — the region books' netInflow REBUILT on the exact per-firm deltas in the
     // interleaved loop's order [red_i, sweep_i] per firm, so the settle-time float sum keeps
