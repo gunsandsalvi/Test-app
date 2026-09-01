@@ -287,8 +287,21 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     });
     const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
 
+    // §4.C Stage I — dense pair loops (07b/07e's shape, §7.327 (1)): the per-(entity, name)
+    // holding probe becomes an array read; both passes keep companyTerms order, so every float
+    // accumulates exactly as before.
+    const tiById = new Map<string, number>();
+    companyTerms.forEach((t, ti) => tiById.set(t.id, ti));
+    const heldArr = new Float64Array(companyTerms.length);
+    const heldTouched: number[] = [];
+
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
+      heldTouched.length = 0;
+      currentHoldingByCompany.forEach((usd, id) => {
+        const ti = tiById.get(id);
+        if (ti !== undefined) { heldArr[ti] = usd; heldTouched.push(ti); }
+      });
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
       const entityShare = entityShareOfSector / sectorTotal;
       const requiredReturn = entityRequiredReturn(entity);
@@ -313,13 +326,14 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
       let totalCashDemandWeightUSD = 0;
-      companyTerms.forEach((t, ti) => {
+      for (let ti = 0; ti < companyTerms.length; ti++) {
+        const t = companyTerms[ti];
         const structuralUSD = t.liveFloatUSD * entityShare;
-        const gapToTargetUSD = Math.max(0, structuralUSD - (currentHoldingByCompany.get(t.id) ?? 0));
+        const gapToTargetUSD = Math.max(0, structuralUSD - heldArr[ti]);
         const weightUSD = t.offeringUSD + gapToTargetUSD;
         cashDemandWeightByIndex[ti] = weightUSD;
         totalCashDemandWeightUSD += weightUSD;
-      });
+      }
 
       // Same terms as the bond book, at the loan's own economics: a first-lien loan's collateral
       // means less is expected to be lost on it and less capital is tied up holding it, so it
@@ -327,7 +341,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // structural relationship between the two markets, expressed where it belongs — in what
       // each set of holders will pay — rather than as a fixed multiple between two statistics.
       const demandByIndex: (ParticipantDemand | undefined)[] = new Array(companyTerms.length);
-      companyTerms.forEach((t, ti) => {
+      for (let ti = 0; ti < companyTerms.length; ti++) {
+        const t = companyTerms[ti];
         // The loan's recovery is derived from the same senior-lien discount that scales its
         // expected loss, and the collateral that raises recovery also lowers the capital its
         // spread risk consumes — one lien, both consequences (terms hoisted above).
@@ -352,7 +367,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
               ? cashDemandWeightByIndex[ti] / totalCashDemandWeightUSD
               : 0),
         };
-      });
+      }
+      for (const ti of heldTouched) heldArr[ti] = 0;
 
       return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId: EMPTY_DEMAND_MAP, demandByIndex };
     });
