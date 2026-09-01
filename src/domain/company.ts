@@ -264,6 +264,16 @@ export interface Company {
   isInstitutionalEntity?: boolean;
   institutionalEntityType?: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND';
   /**
+   * §5-MNC — the OWNERSHIP link: this company is a subsidiary and its equity belongs to the
+   * named parent (founderPct 0 keeps it out of the household private-business residual, OWN4).
+   * Consolidation is a VIEW over this link, never a second set of books.
+   */
+  parentTicker?: string;
+  /** §5-MNC — consecutive weeks each foreign market's own producers have beaten this firm's
+   *  landed exports in the sourcing merit order (reset on any week it wins again); a year of
+   *  losing is the structural signal the FDI decision fires on. */
+  fdiDisadvantageWeeksByRegion?: Partial<Record<RegionId, number>>;
+  /**
    * §7.284 step 2 — THE MANAGER→VEHICLE LINK, replacing the id-equality convention. A listed
    * manager (this Company shell: staff, fee revenue, its own equity) MANAGES vehicles (the
    * InstitutionalEntity pools: assets, cash, unit-holder liabilities). Today every institutional

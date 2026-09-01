@@ -11,7 +11,7 @@
 import {
   GameState, Company, DebtTranche, NewsItem, SegmentFinancial, RegionId,
 } from '../../../types';
-import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare, tranchePaymentDue, managedEntityIdsOf } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare, tranchePaymentDue, managedEntityIdsOf, TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../../../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call-protection';
 import { isInvestmentGrade } from './asset-allocation';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
@@ -2165,6 +2165,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // the default trigger; a redemption arriving the week after distress began is the real
     // T+1 of a treasury pulling money home.
     let newMmfSharesUSD = comp.mmfSharesUSD ?? 0;
+    // §5-MNC — REPATRIATION IS THE SUBSIDIARY'S TREASURY SWEEP. A wholly-owned sub's excess
+    // cash belongs to the parent, not to a money fund: the same above-the-buffer excess the
+    // sweep below would move goes home instead, as a real cross-border payment through the same
+    // settlement/FX path as every other. (The dividend path cannot serve here: a private sub
+    // has no market cap for a declared yield to price, and its holder of record IS the parent.)
+    if (comp.parentTicker && !isDefaulted) {
+      const bufferUSD = comp.annualRevenue * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE;
+      const excessUSD = Math.max(0, newCash - bufferUSD);
+      if (excessUSD > 1e6) {
+        post('subsidiary excess cash repatriated to the parent', -excessUSD,
+          { kind: 'COMPANY', ticker: comp.parentTicker });
+      }
+    }
     if (!comp.isBankEntity && !comp.isInstitutionalEntity && !isDefaulted && comp.listingStatus !== 'PRIVATE') {
       const sweep = corporateSweepDecision(comp, newCash, mmfSweepBooks.get(comp.region));
       if (sweep.cashDeltaUSD !== 0) {

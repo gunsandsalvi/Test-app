@@ -1370,6 +1370,21 @@ const xbModule: HarnessModule = (() => {
       });
       const withRevenue = carriers.filter(c => (c.carrierFleet?.lastWeekFreightRevenueUSD ?? 0) > 0);
       out.push(`  carriers earning freight this week: ${withRevenue.length} of ${alive.length}; tonne-miles ${carriers.reduce((a, c) => a + (c.carrierFleet?.lastWeekTonneNm ?? 0), 0).toExponential(2)}`);
+      out.push('--- MNC: subsidiaries and intra-firm trade (§5-MNC) ---');
+      const subs = s.companies.filter((c) => c.parentTicker && isActiveCompany(c));
+      out.push(`  subsidiaries ${subs.length}${subs.length > 0
+        ? ` (${subs.slice(0, 6).map((c) => `${c.parentTicker}->${c.ticker}@${c.region}`).join(' ')})` : ''}`);
+      const groupOf = new Map<string, string>();
+      s.companies.forEach((c) => { groupOf.set(c.ticker, c.parentTicker ?? c.ticker); });
+      let intraUSD = 0; let crossUSD = 0;
+      (s.tradeInvoices ?? []).forEach((inv) => {
+        if (inv.sellerRegion === inv.buyerRegion) return;
+        const usd = Math.max(0, inv.amountCurrency * inv.bookedUsdPerCurrency);
+        crossUSD += usd;
+        if (groupOf.get(inv.sellerTicker) !== undefined
+          && groupOf.get(inv.sellerTicker) === groupOf.get(inv.buyerTicker)) intraUSD += usd;
+      });
+      out.push(`  intra-firm share of cross-border invoices: ${crossUSD > 0 ? pct(intraUSD / crossUSD) : 'n/a (no cross-border book)'} [real: ~one third; EMERGES from who owns whom]`);
       out.push('--- transit, the currency boundary, reserves ---');
   // CASH — how much money moved on a holder's book with NO payment instruction behind it. 02b
   // invents the matching reserves so the per-bank identity cannot drift, which is why this has

@@ -38,6 +38,7 @@ import { runEtfFlowsStage } from './stages/etf-flows';
 import { runHouseholdBalanceSheetStage } from './stages/household-balance-sheet';
 import { runInsuranceAndPensionsStage } from './stages/insurance-and-pensions';
 import { generatePrivateCompanies } from '../companyGenerator';
+import { runForeignDirectInvestment } from './stages/foreign-direct-investment';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
 import { runFiscalAndSovereignDebtStage } from './stages/11-fiscal-and-sovereign-debt';
@@ -222,6 +223,10 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       const born = runFirmBirthsForRegion(regionId, reg, ctx, ctx.nextWeek, generatePrivateCompanies);
       if (born.length > 0) ctx.updatedCompanies.push(...born);
     });
+    // §5-MNC: a firm that has lost a foreign merit order for the measured year builds there —
+    // through the SAME birth machinery, funded by the parent's own money crossing settlement.
+    const fdiBorn = runForeignDirectInvestment(ctx, ctx.nextWeek, generatePrivateCompanies);
+    if (fdiBorn.length > 0) ctx.updatedCompanies.push(...fdiBorn);
     // A take-private's tender is a corporate action recorded on the same per-week maps stage 08
     // uses — and stage 08 has already drained them by the time this stage runs, so settling here
     // is not optional. Without it the register was extinguished and the shareholders were paid
