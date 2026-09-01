@@ -17,6 +17,7 @@ import { Company } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
+import { isPubliclyListed } from '../domain/company';
 
 export interface BackLanes {
   n: number;
@@ -55,6 +56,22 @@ export interface BackLanes {
   isBanksSector: Uint8Array;
   hasTechLine: Uint8Array;
   investmentGrade: Uint8Array;
+  // --- §7.317 step 1.6a: the debt/tail blocks' scalar reads ---
+  sharesOutstanding: Float64Array;
+  stockPrice: Float64Array;
+  baselineDividendYield: Float64Array;
+  dividendYield: Float64Array;
+  earningsWeekModulo: Float64Array;     // NaN = undefined (the === undefined tests)
+  eps: Float64Array;
+  cdsSpreadBps: Float64Array;
+  beta: Float64Array;                   // NaN = undefined
+  baselineAnnualRevenueUSD: Float64Array;
+  lastOpportunisticOfferingWeek: Float64Array; // NaN = undefined
+  wasDefaulted: Uint8Array;
+  wasMergerAcquired: Uint8Array;
+  publiclyListed: Uint8Array;
+  creditRating: string[];
+  name: string[];
   // --- strings for diagnostics and the bridge tranche (main-side only) ---
   ticker: string[];
   region: string[];
@@ -82,6 +99,11 @@ export function buildBackLanes(
     producedUnitsThisWeek: f(), plantCapacityUnitsThisWeek: f(), idleLineRevenueShare: f(),
     addressableGrowthAnnual: f(), categoryShortfall: f(), avgCompetitiveness: f(),
     isBanksSector: new Uint8Array(n), hasTechLine: new Uint8Array(n), investmentGrade: new Uint8Array(n),
+    sharesOutstanding: f(), stockPrice: f(), baselineDividendYield: f(), dividendYield: f(),
+    earningsWeekModulo: f(), eps: f(), cdsSpreadBps: f(), beta: f(),
+    baselineAnnualRevenueUSD: f(), lastOpportunisticOfferingWeek: f(),
+    wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
+    creditRating: new Array(n), name: new Array(n),
     ticker: new Array(n), region: new Array(n), sector: new Array(n),
   };
   const NaN_ = Number.NaN;
@@ -138,6 +160,21 @@ export function buildBackLanes(
     L.isBanksSector[i] = c.sector === 'Banks' ? 1 : 0;
     L.hasTechLine[i] = lines.some(l => l.industry === 'TechHardwareSemis' || l.industry === 'SoftwareDigitalServices') ? 1 : 0;
     L.investmentGrade[i] = isInvestmentGrade(c.creditRating) ? 1 : 0;
+    L.sharesOutstanding[i] = c.sharesOutstanding;
+    L.stockPrice[i] = c.stockPrice;
+    L.baselineDividendYield[i] = c.baselineDividendYield;
+    L.dividendYield[i] = c.dividendYield;
+    L.earningsWeekModulo[i] = c.earningsWeekModulo ?? NaN_;
+    L.eps[i] = c.eps;
+    L.cdsSpreadBps[i] = c.cdsSpreadBps;
+    L.beta[i] = c.beta ?? NaN_;
+    L.baselineAnnualRevenueUSD[i] = c.baselineAnnualRevenue;
+    L.lastOpportunisticOfferingWeek[i] = c.lastOpportunisticOfferingWeek ?? NaN_;
+    L.wasDefaulted[i] = c.isDefaulted ? 1 : 0;
+    L.wasMergerAcquired[i] = c.mergerAcquired ? 1 : 0;
+    L.publiclyListed[i] = isPubliclyListed(c) ? 1 : 0;
+    L.creditRating[i] = c.creditRating;
+    L.name[i] = c.name;
   }
   return L;
 }

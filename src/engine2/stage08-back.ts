@@ -652,6 +652,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
   } = d;
   return (comp: Company, row: number): Company => {
     const __k0 = S08K_PROF ? performance.now() : 0;
+    const L8 = d.backLanes;
     /**
      * Earnings PER SHARE, for a company that has shares. A private firm's register is empty until
      * it lists (HC7's `postIssueSharesOutstanding` creates it), so there is nothing to divide by
@@ -659,7 +660,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
      * count that the generator used to hand every private firm.
      */
     const perShare = (amountUSD: number): number =>
-      comp.sharesOutstanding > 0 ? round2(amountUSD / comp.sharesOutstanding) : 0;
+      L8.sharesOutstanding[row] > 0 ? round2(amountUSD / L8.sharesOutstanding[row]) : 0;
 
     if (!isActiveCompany(comp)) {
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
@@ -819,7 +820,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         ppeDepreciationYears: 20,
         annualInterestUSD: annualInterest,
         taxRate,
-        sharesOutstanding: comp.sharesOutstanding,
+        sharesOutstanding: L8.sharesOutstanding[row],
         tax: taxAttrs,
       });
       newEbitda = profilePnl.ebitdaUSD;
@@ -903,9 +904,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const update = weekUpdate;
     let newTotalDebt = comp.totalDebt;
 
-    const newBaselineDividendYield = round4(comp.baselineDividendYield * 0.998 + comp.dividendYield * 0.002);
+    const newBaselineDividendYield = round4(L8.baselineDividendYield[row] * 0.998 + L8.dividendYield[row] * 0.002);
     const targetDivYield = newBaselineDividendYield * (cash.usd < 0 ? 0.4 : (cash.usd > 2 * comp.currentLiabilities ? 1.2 : 1.0)) * (1 + programme.payoutPressure * 2.5);
-    const newDividendYield = Math.max(0, comp.dividendYield * 0.9 + targetDivYield * 0.1);
+    const newDividendYield = Math.max(0, L8.dividendYield[row] * 0.9 + targetDivYield * 0.1);
 
     // HH5: headcount is the LABOR MARKET's, not this stage's. The drift multiplier that used
     // to sit here (cash < 0 ? -1.5% : margin/regime nudges) ran every week and silently
@@ -960,7 +961,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // The redemption is the FIRST rung of the liquidity ladder: shares, then the committed
     // line, and default only when both are gone. The full sweep decision at the bottom still
     // runs — by then cash is at or below the buffer, so it cannot double-redeem.
-    if (!comp.mergerAcquired && cash.usd < 0 && (comp.mmfSharesUSD ?? 0) > 0) {
+    if (L8.wasMergerAcquired[row] !== 1 && cash.usd < 0 && (comp.mmfSharesUSD ?? 0) > 0) {
       const book = mmfSweepBooks.get(comp.region);
       if (book) {
         const wantedUSD = Math.min(comp.mmfSharesUSD ?? 0, -cash.usd);
@@ -993,7 +994,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       return vv;
     };
     let drawnRevolverRow = -1;
-    if (!comp.isDefaulted && !comp.mergerAcquired && cash.usd < 0) {
+    if (L8.wasDefaulted[row] !== 1 && L8.wasMergerAcquired[row] !== 1 && cash.usd < 0) {
       const revolverRateAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
       let alreadyDrawnUSD = 0;
       for (const r of rowList) if (TS.flags[r] & TR_FACILITY) alreadyDrawnUSD += TS.principalUSD[r];
@@ -1032,18 +1033,18 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // (computeAnnualDefaultProbability), so priced risk and realized risk are one model. It is
     // reached now only AFTER the committed line above has been drawn to whatever it will bear.
     const isDefaulted = isInDefault({
-      wasDefaulted: comp.isDefaulted,
-      mergerAcquired: Boolean(comp.mergerAcquired),
+      wasDefaulted: L8.wasDefaulted[row] === 1,
+      mergerAcquired: L8.wasMergerAcquired[row] === 1,
       cashUSD: cash.usd,
       coverage: newCoverage,
       coverageFloor: DEFAULT_COVERAGE_FLOOR,
     });
 
-    let newRating = comp.creditRating;
+    let newRating = L8.creditRating[row] as Company['creditRating'];
 
     if (isDefaulted) {
       newRating = 'D';
-      if (!comp.isDefaulted) {
+      if (L8.wasDefaulted[row] !== 1) {
         ctx.defaultedTickers.push(comp.ticker);
         comp.defaultedWeek = nextWeek;
         newRevenue = round1(newRevenue * 0.4);
@@ -1108,13 +1109,13 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // "fallen angel" cliff downgrade, not another 25% coin flip. Force an immediate update once
       // the gap is that large; keep the stochastic lag only for ordinary single-notch drift.
       const RATING_ORDER: typeof calculatedRating[] = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC'];
-      const notchGap = Math.abs(RATING_ORDER.indexOf(calculatedRating) - RATING_ORDER.indexOf(comp.creditRating));
-      const crossesIgHyLine = getRatingBucket(calculatedRating) !== getRatingBucket(comp.creditRating);
+      const notchGap = Math.abs(RATING_ORDER.indexOf(calculatedRating) - RATING_ORDER.indexOf(L8.creditRating[row] as Company['creditRating']));
+      const crossesIgHyLine = getRatingBucket(calculatedRating) !== getRatingBucket(L8.creditRating[row] as Company['creditRating']);
       const forceUpdate = notchGap >= 2 || crossesIgHyLine;
-      if (calculatedRating !== comp.creditRating && (forceUpdate || random() < 0.25)) {
+      if (calculatedRating !== L8.creditRating[row] && (forceUpdate || random() < 0.25)) {
         ctx.ratingChanges.push({
           ticker: comp.ticker,
-          from: comp.creditRating,
+          from: L8.creditRating[row] as Company['creditRating'],
           to: calculatedRating,
           name: comp.name,
         });
@@ -1550,14 +1551,14 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // been digested (without this, every issuer re-announced the week its deal settled and the
     // market ran a standing conveyor at 13x the intended flow — measured 17,006 deals in 30
     // weeks with the median OAS pinned at the wides).
-    const opportunisticCooldownOver = nextWeek - (comp.lastOpportunisticOfferingWeek ?? -999) >= 13
+    const opportunisticCooldownOver = nextWeek - (Number.isNaN(L8.lastOpportunisticOfferingWeek[row]) ? -999 : L8.lastOpportunisticOfferingWeek[row]) >= 13
       // Launch in the issuer's own post-earnings window — real deals price off fresh numbers,
       // and the stagger stops the whole cohort announcing in one synchronized quarterly burst.
       // An issuer with no reporting calendar (a private firm) has no post-earnings window to
       // launch into, so its cooldown is the only gate.
-      && (comp.earningsWeekModulo === undefined
-        || (nextWeek % 13) === ((comp.earningsWeekModulo + 1) % 13));
-    let newLastOpportunisticOfferingWeek = comp.lastOpportunisticOfferingWeek;
+      && (Number.isNaN(L8.earningsWeekModulo[row])
+        || (nextWeek % 13) === ((L8.earningsWeekModulo[row] + 1) % 13));
+    let newLastOpportunisticOfferingWeek = Number.isNaN(L8.lastOpportunisticOfferingWeek[row]) ? undefined : L8.lastOpportunisticOfferingWeek[row];
     if (financing.reason === 'ISSUE_CHEAP_DEBT' && financing.netDebtChangeUSD > 1000 && !pendingOfferingIssuerIds.has(comp.id) && opportunisticCooldownOver) {
       // WS8: the CFO ANNOUNCES a deal instead of conjuring a tranche at the current stat. Real
       // issuance is chunky — a quarter's worth of the weekly flow in one book — and it is
@@ -1643,7 +1644,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // credit concentration at all — the only way to reduce one was to stop lending. The
     // protection book prices it against real hedging demand and real sellers, and the difference
     // between it and the cash OAS is the BASIS, which is an outcome worth having.
-    const newCdsSpreadBps = comp.cdsSpreadBps > 0 ? comp.cdsSpreadBps : newOasBps;
+    const newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row] : newOasBps;
 
     // Real, already-cleared this week by 07d-leveraged-loan-clearing.ts — not recomputed here.
 
@@ -1651,7 +1652,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // Reporting is something a LISTED company does. Gating on the modulo alone kept a company
     // that had been taken private reporting quarterly to a market it had left.
     const isReportingThisWeek = !isDefaulted && isPubliclyListed(comp)
-      && comp.earningsWeekModulo !== undefined && comp.earningsWeekModulo === currentWeekMod13;
+      && !Number.isNaN(L8.earningsWeekModulo[row]) && L8.earningsWeekModulo[row] === currentWeekMod13;
     let lastEarningsSurprisePct = comp.lastEarningsSurprisePct;
     let lastManagementCommentary = comp.lastManagementCommentary;
 
@@ -1662,9 +1663,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // branch was right to skip, now guarded where it happens instead of forking the whole model.
     if (isReportingThisWeek && isPubliclyListed(comp)) {
       // Mean of Dealer Alpha, Beta, and Gamma estimates
-      const alphaEps = comp.dealerConsensus?.alpha?.eps ?? comp.eps;
-      const betaEps = comp.dealerConsensus?.beta?.eps ?? comp.eps;
-      const gammaEps = comp.dealerConsensus?.gamma?.eps ?? comp.eps;
+      const alphaEps = comp.dealerConsensus?.alpha?.eps ?? L8.eps[row];
+      const betaEps = comp.dealerConsensus?.beta?.eps ?? L8.eps[row];
+      const gammaEps = comp.dealerConsensus?.gamma?.eps ?? L8.eps[row];
       const consensusEps = round2((alphaEps + betaEps + gammaEps) / 3);
       const actualEps = newEps;
       const epsDiff = actualEps - consensusEps;
@@ -1734,7 +1735,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // company whose equity the market has decided is worthless approaches zero — the endgame is
     // delisting and default, not a ten-cent bound that then feeds market cap, index levels and
     // the take-private arithmetic. Only the non-negativity remains, which is arithmetic.
-    const newStockPrice = isDefaulted ? 0.0 : Math.max(0, round2(comp.stockPrice));
+    const newStockPrice = isDefaulted ? 0.0 : Math.max(0, round2(L8.stockPrice[row]));
     // IND7: the antitrust clock. It counts UP while this firm is dominant in some category it
     // sells into and resets when it is not, so the consequence attaches to a sustained position
     // rather than one good quarter.
@@ -1745,8 +1746,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // IDX: beta is measured off this name's own cleared returns against its region's index —
     // both series this model publishes every week — instead of being read from its sector label.
     const newBeta = isPubliclyListed(comp)
-      ? measureBeta(comp.historicalPrices, regionIndexOf(state.compositeIndices, comp.region).historical, comp.beta ?? 1)
-      : (comp.beta ?? 1);
+      ? measureBeta(comp.historicalPrices, regionIndexOf(state.compositeIndices, comp.region).historical, Number.isNaN(L8.beta[row]) ? 1 : L8.beta[row])
+      : (Number.isNaN(L8.beta[row]) ? 1 : L8.beta[row]);
     const newForwardPE = newEps > 0 ? round2(newStockPrice / newEps) : comp.forwardPE;
     // The book-value x cycle-P/B branch that used to price banks and institutions here is GONE.
     // It was the last formula price setter for a listed cohort: a multiple looked up from the
@@ -1769,14 +1770,14 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const __k3 = S08K_PROF ? performance.now() : 0;
     if (S08K_PROF) s08k.debt += __k3 - __k2;
     // Buyback Execution (Part AH)
-    let updatedSharesOutstanding = comp.sharesOutstanding;
+    let updatedSharesOutstanding = L8.sharesOutstanding[row];
     const targetCashBuffer = Math.max(10, comp.currentLiabilities * 1.5);
     const excessCash = Math.max(0, cash.usd - targetCashBuffer);
-    const debtToEquity = newTotalDebt / Math.max(1, (newStockPrice * comp.sharesOutstanding));
+    const debtToEquity = newTotalDebt / Math.max(1, (newStockPrice * L8.sharesOutstanding[row]));
     // IND-R6: public-only — retiring shares into the market needs a market to retire them into.
     // A private firm's distributions to its owners are HC's sponsor machinery, not a buyback.
-    if (isPubliclyListed(comp) && excessCash > 5 && debtToEquity < 0.6 && comp.sharesOutstanding > 10 && !isDefaulted && newStockPrice > 0) {
-      const estimatedBookValuePerShare = Math.max(0.5, (cash.usd + newRevenue * 0.8 - newTotalDebt) / comp.sharesOutstanding);
+    if (L8.publiclyListed[row] === 1 && excessCash > 5 && debtToEquity < 0.6 && L8.sharesOutstanding[row] > 10 && !isDefaulted && newStockPrice > 0) {
+      const estimatedBookValuePerShare = Math.max(0.5, (cash.usd + newRevenue * 0.8 - newTotalDebt) / L8.sharesOutstanding[row]);
       // "Cheap" against the same arithmetic the market itself prices this company with (07e /
       // equity-valuation.ts), at the board's own cost of capital — not against a sector P/E
       // table. A board that buys back stock is taking the other side of that auction, so it has
@@ -1790,9 +1791,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const isCheap = newStockPrice < estimatedBookValuePerShare || newStockPrice < boardFairValuePerShare * 0.95;
       const buybackShare = isCheap ? 0.60 : 0.25;
       const buybackSpendM = (excessCash * 0.05 / 52) * buybackShare;
-      const sharesToRetire = Math.min(comp.sharesOutstanding * 0.005, buybackSpendM / Math.max(0.1, newStockPrice));
+      const sharesToRetire = Math.min(L8.sharesOutstanding[row] * 0.005, buybackSpendM / Math.max(0.1, newStockPrice));
       if (sharesToRetire > 0.001) {
-        updatedSharesOutstanding = Math.max(1.0, comp.sharesOutstanding - sharesToRetire);
+        updatedSharesOutstanding = Math.max(1.0, L8.sharesOutstanding[row] - sharesToRetire);
         buybacksThisWeek = sharesToRetire * newStockPrice;
         // The shares retire through the EQUITY register below; the money reaches the same holders
         // of record, pro rata, instead of the boundary.
@@ -1879,8 +1880,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const effectiveRecoveryRate = Math.max(0, newBaselineRecoveryRate * (1 - systemicStressFactor));
     const trendWeeklyGrowth = (reg.potentialGdpGrowth + reg.targetInflation) / 52;
     const newBaselineAnnualRevenue = isDefaulted
-      ? round1(comp.baselineAnnualRevenue * 0.995)
-      : round1(comp.baselineAnnualRevenue * (1 + trendWeeklyGrowth));
+      ? round1(L8.baselineAnnualRevenueUSD[row] * 0.995)
+      : round1(L8.baselineAnnualRevenueUSD[row] * (1 + trendWeeklyGrowth));
 
     const revHist = comp.revenueHistory || [newRevenue];
     let calculatedRevVol = 0;
