@@ -354,7 +354,7 @@ phone as PWA and as the apk-latest TWA); measurement discipline for on-device re
 | 6 | **SCALE — universe scale-up** | **PARKED, later-TBD (user, 2026-09-01).** §4.C stands mid-Stage-II; resume point in the §5 banner + §7.336. Owns the damper's float half (small-cap equity tail, §7.288). |
 | 6b | **DRV — the one derivative layer** | BUILT (§7.337, user-ordered 2026-09-01 ahead of AU). One contract, one book, one lifecycle, one hedging arithmetic, one capacity budget; four class profiles behind a registry. Remainders gated in §5-DRV. |
 | 7 | **S-final — validation gate** | Everything above plus the measurement debt. |
-| 8 | **AU — Aurora, the UI rebuild** | **IN DESIGN (user, 2026-09-01).** Brief in §5-AU; direction chosen (C's console structure with B's editorial voice); slice-one screens being drawn; build after approval. UI state leaves `GameState`. |
+| 8 | **AU — Aurora, the UI rebuild** | **DESIGN APPROVED (user, 2026-09-01).** Brief + chosen design in §5-AU; slice 1 builds after the engine campaign below. UI state leaves `GameState`. |
 | 9 | **NEWS — a news system worth reading** | IDEA logged (user, 2026-09-01), not scheduled. Charter in §5-NEWS. |
 | 10 | **MGMT — corporate management in depth** | IDEA logged (user, 2026-09-01), not scheduled. Charter in §5-MGMT. |
 
@@ -728,7 +728,17 @@ week is ~1 s; the UI renders between weeks). The deferred `details`-bag discrimi
 **PARKED (user, 2026-09-01):** the game layer — player portfolio, trade ticket, dealers
 (stage 12's legacy display-struct positions). Returns as `portfolio`/`trade` functions later.
 
-**SLICE 1 (approved in principle):** resolver + phone shell + `overview`/`all`/`chart`/
+**DESIGN CHOSEN (user, 2026-09-01):** the Aurora canvas, page "Slice 1"
+(https://claude.ai/code/artifact/13a0ce35-936f-45c5-acf5-e163d6e54b78) — direction C's console
+structure and palette (dark slate cards, segmented underline tabs, one accent used only for
+links and the active tab), with a serif object name and A TOUCH of context: a word or two beside
+a number only where it needs one (the covenant beside leverage, the statutory rate beside the
+effective one). Statement-style financials: units line, indented items, ruled subtotals,
+parenthesised negatives, right-aligned tabular numerals, a change column. **RULE (user): the UI
+never shows a week as a unit.** Dates (day-month-year), months and years only; the engine's
+week index maps through one UI calendar (week 0 = 1 Jan 2027) and never appears; durations read
+"1m Δ", "May 2028", "3 months of history", never "4w" or "w 71".
+**SLICE 1 (approved):** resolver + phone shell + `overview`/`all`/`chart`/
 `statements`/`holders`/`peers` over companies, institutions and regions — enough to click through the whole world and prove
 the registry pattern before it is wide. Then the rest, function by function, each its own
 bounded commit. **PROCESS:** mockups (design canvas) → user approval → build slice 1.
