@@ -810,8 +810,14 @@ function growKernelScratch(pCount: number) {
 function accumulateShard(
   shard: KernelShardResult,
   instruments: ClearingInstrument[],
-  participants: ClearingParticipant[],
-  result: ClearingResult
+  result: ClearingResult,
+  // §7.327 — the per-fill string-map probes hoisted: instrument ids and each participant's
+  // holdings map resolved once per book, the net-cash walk on a dense array flushed after the
+  // shards (the map was pre-populated per participant, so insertion order is untouched, and the
+  // dense accumulation runs the same terms in the same fill order the per-fill roundtrip did).
+  instIds: string[],
+  holdByPi: Map<string, number>[],
+  cashByPi: Float64Array,
 ): void {
   for (let i = shard.from; i < shard.to; i++) {
     const o = i - shard.from;
@@ -832,12 +838,11 @@ function accumulateShard(
   // Fill rows are already globally ordered within the shard.
   for (; f < shard.fillCount; f++) {
     const pi = shard.fillPart[f];
-    const p = participants[pi];
     const filledUSD = shard.fillFilled[f];
     const tradedUSD = shard.fillTraded[f];
     const feeUSD = shard.fillFee[f];
-    if (filledUSD > 1) result.newParticipantHoldings.get(p.id)!.set(instruments[shard.fillInst[f]].id, filledUSD);
-    result.netCashDeltaByParticipantId.set(p.id, (result.netCashDeltaByParticipantId.get(p.id) ?? 0) - tradedUSD - feeUSD);
+    if (filledUSD > 1) holdByPi[pi].set(instIds[shard.fillInst[f]], filledUSD);
+    cashByPi[pi] = cashByPi[pi] - tradedUSD - feeUSD;
     result.totalDealerRevenueUSD += feeUSD;
     result.dealerNetCashUSD += tradedUSD + feeUSD;
   }
@@ -910,6 +915,13 @@ export function clearFinancialAsset(
     result.newParticipantHoldings.set(p.id, new Map<string, number>());
     result.netCashDeltaByParticipantId.set(p.id, 0);
   });
+  // §7.327 — accumulate's hoisted lookups (see accumulateShard).
+  const instIds = instruments.map((i) => i.id);
+  const holdByPi = participants.map((p) => result.newParticipantHoldings.get(p.id)!);
+  const cashByPi = new Float64Array(participants.length);
+  const flushCash = () => {
+    participants.forEach((p, pi) => result.netCashDeltaByParticipantId.set(p.id, cashByPi[pi]));
+  };
 
   // Worker path (opt-in, Node-only): pack onto shared memory, shard the kernel across the pool,
   // accumulate the shards in instrument order. Serial path otherwise — the SAME kernel, so the
@@ -922,14 +934,16 @@ export function clearFinancialAsset(
       const packed = packClearing(instruments, participants, params, sab);
       const shards = shardedKernel.run(packed, sab);
       if (shards) {
-        for (const shard of shards) accumulateShard(shard as never, instruments, participants, result);
+        for (const shard of shards) accumulateShard(shard as never, instruments, result, instIds, holdByPi, cashByPi);
+        flushCash();
         return result;
       }
       // Pool refused (too small, or a worker failed): the packed views are ordinary arrays to
       // the kernel, so fall straight through to the serial path on the same packing.
       growKernelScratch(pCount);
       const shard = (nativeKernel ?? runClearingKernel)(packed, 0, packed.n);
-      accumulateShard(shard, instruments, participants, result);
+      accumulateShard(shard, instruments, result, instIds, holdByPi, cashByPi);
+      flushCash();
       return result;
     }
   }
@@ -937,6 +951,7 @@ export function clearFinancialAsset(
   const packed = packClearing(instruments, participants, params);
   growKernelScratch(packed.pCount);
   const shard = (nativeKernel ?? runClearingKernel)(packed, 0, packed.n);
-  accumulateShard(shard, instruments, participants, result);
+  accumulateShard(shard, instruments, result, instIds, holdByPi, cashByPi);
+  flushCash();
   return result;
 }
