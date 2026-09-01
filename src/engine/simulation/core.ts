@@ -51,6 +51,8 @@ import { runGoodsArrivalStage } from './stages/goods-arrival';
 import { runTradeSettlementStage } from './stages/trade-settlement';
 // Side effect only: registers the (Node-only, env-gated) clearing worker pool with the engine.
 import './stages/clearing-worker-pool';
+import { ensureV2 } from '../../engine2/world';
+import { syncLadderRows, assertLaddersInSync } from '../../engine2/tranches';
 import './stages/native-kernels';
 import { runFreightClearingStage } from './stages/freight-clearing';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
@@ -102,6 +104,14 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // state below. A saved game therefore resumes the same world instead of forking into another
   // one, and a run replayed from the same seed is identical week for week (engine/rng.ts).
   setRngState(state.rngState);
+  {
+    // §7.310 tranche flip stage 1 — the mirror's catch-up: any firm not yet synced (the seed,
+    // and every birth path) gets its ladder mirrored before the week reads anything.
+    const v2 = ensureV2(state);
+    for (const c of state.companies) {
+      if (!v2.tranches.synced.has(c.id)) syncLadderRows(v2, c.id, c.debtTranches);
+    }
+  }
   const baseCtx = createInitialContext(state);
   // §5-STRUCT step 5: `ctx` is a binding the stage closures read at call time, so the runner can
   // swap a recording proxy in around each stage without any stage knowing. Off by default; when
@@ -222,12 +232,20 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       if (!reg) return;
       runPeLifecycleForRegion(regionId, reg, ctx, ctx.nextWeek);
       const born = runFirmBirthsForRegion(regionId, reg, ctx, ctx.nextWeek, generatePrivateCompanies);
-      if (born.length > 0) ctx.updatedCompanies.push(...born);
+      if (born.length > 0) {
+        ctx.updatedCompanies.push(...born);
+        const v2b = ensureV2(state);
+        for (const b of born) syncLadderRows(v2b, b.id, b.debtTranches);
+      }
     });
     // §5-MNC: a firm that has lost a foreign merit order for the measured year builds there —
     // through the SAME birth machinery, funded by the parent's own money crossing settlement.
     const fdiBorn = runForeignDirectInvestment(ctx, ctx.nextWeek, generatePrivateCompanies);
-    if (fdiBorn.length > 0) ctx.updatedCompanies.push(...fdiBorn);
+    if (fdiBorn.length > 0) {
+      ctx.updatedCompanies.push(...fdiBorn);
+      const v2f = ensureV2(state);
+      for (const b of fdiBorn) syncLadderRows(v2f, b.id, b.debtTranches);
+    }
     // A take-private's tender is a corporate action recorded on the same per-week maps stage 08
     // uses — and stage 08 has already drained them by the time this stage runs, so settling here
     // is not optional. Without it the register was extinguished and the shareholders were paid
@@ -298,6 +316,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // walk positions rather than the fills that built them (stages/holdings-store.ts).
   run('register-consolidation', () => consolidateRegister(ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
+  if (process.env.TRANCHE_SYNC_CHECK === '1') assertLaddersInSync(ensureV2(state), nextState.companies);
   idTrace?.report(baseCtx.nextWeek);
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,

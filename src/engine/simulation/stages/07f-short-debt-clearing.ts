@@ -30,6 +30,8 @@
  */
 
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
+import { ensureV2 } from '../../../engine2/world';
+import { syncLadderRows } from '../../../engine2/tranches';
 import { REGION_IDS } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
@@ -89,6 +91,8 @@ const CP_MIN_GAP_SHARE_OF_REVENUE = 0.01;
 const billInstrumentId = (regionId: RegionId, key: string) => `${regionId}-GOV-${key}`;
 
 export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+  const v2Mirror = ensureV2(state);
+  const touchedLadders = new Set<Company>();
   const regionIds = REGION_IDS;
 
   regionIds.forEach((regionId) => {
@@ -697,6 +701,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         });
         iss.comp.debtTranches = (iss.comp.debtTranches || [])
           .filter((t) => !(t.isCommercialPaper && t.maturityWeek <= ctx.nextWeek));
+        touchedLadders.add(iss.comp);
       });
 
       deskCpRows.forEach((rows, ticker) => {
@@ -821,6 +826,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // No floor on the level (rule 15): the paper exists at whatever the auction printed.
         if (placedUSD > 1) {
           iss.comp.debtTranches = iss.comp.debtTranches || [];
+          touchedLadders.add(iss.comp);
           iss.comp.debtTranches.push({
             id: `${iss.comp.ticker}-CP-${ctx.nextWeek}`,
             principalUSD: placedUSD,
@@ -840,6 +846,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const revolverUSD = Math.max(0, rollNeedUSD - placedUSD);
         if (revolverUSD > 1) {
           iss.comp.debtTranches = iss.comp.debtTranches || [];
+          touchedLadders.add(iss.comp);
           iss.comp.debtTranches.push({
             id: `${iss.comp.ticker}-REVOLVER-${ctx.nextWeek}`,
             principalUSD: revolverUSD,
@@ -912,4 +919,5 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       );
     }
   });
+  touchedLadders.forEach((c) => syncLadderRows(v2Mirror, c.id, c.debtTranches));
 }

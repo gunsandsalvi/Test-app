@@ -46,6 +46,7 @@ import { dividendDecision } from '../domain/company-week/distributions';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../engine/equity-valuation';
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
+import { syncLadderRows } from './tranches';
 import { V2World } from './world';
 import { totalInputValueUSD } from './lots';
 
@@ -1816,6 +1817,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     comp.recoveryRate = round3(effectiveRecoveryRate);
 
     comp.debtTranches = updatedTranches;
+    syncLadderRows(v2, comp.id, updatedTranches);
 
     comp.productLines = updatedProductLines;
 

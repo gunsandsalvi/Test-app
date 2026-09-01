@@ -8,6 +8,8 @@
  */
 
 import { absorbBankBook } from '../../ledger';
+import { ensureV2 } from '../../../engine2/world';
+import { syncLadderRows } from '../../../engine2/tranches';
 import { pay } from './settlement';
 import { GameState, DebtTranche } from '../../../types';
 import { getSimulationDate } from '../../formatters';
@@ -312,9 +314,11 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     );
 
     acquirer.debtTranches = [...protectedAcquirerTranches, ...consolidatedTranches];
+    syncLadderRows(ensureV2(state), acquirer.id, acquirer.debtTranches);
     acquirer.totalDebt = acquirer.debtTranches.reduce((s, t) => s + t.principalUSD, 0);
   }
   target.debtTranches = [];
+  syncLadderRows(ensureV2(state), target.id, target.debtTranches);
   target.totalDebt = 0;
 
   // HH4d (a hole the deposit-unification invariant exposed): an acquired BANK brings its whole
