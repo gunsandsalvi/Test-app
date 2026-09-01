@@ -568,6 +568,15 @@ export interface Company {
   /** PUB1b — tax accrued but not yet remitted. Real firms accrue weekly and pay quarterly, and
    * that lumpiness is most of what makes a treasury account swing. */
   accruedTaxLiabilityUSD?: number;
+  /** §5-TAXR — accumulated losses not yet used against taxable profit. A recovering firm draws
+   *  this down and pays nothing until it is gone; receipts fall faster than profits in a
+   *  downturn. Seeded absent: a firm opens with no loss history (§7.4). */
+  taxLossCarryforwardUSD?: number;
+  /** §5-TAXR — the plant's TAX basis, run down double-declining while the book runs straight-
+   *  line. Seeded at book net PP&E on first touch — no opening deferral (§7.4). */
+  taxBasisPpeUSD?: number;
+  /** §5-TAXR — (book net PP&E − tax basis) × rate: what acceleration has deferred. A VIEW. */
+  deferredTaxLiabilityUSD?: number;
   lastWeekSalesUSD?: number;
   /**
    * HH6 — the wage this firm OFFERS, as a multiple of the going rate for its own occupation

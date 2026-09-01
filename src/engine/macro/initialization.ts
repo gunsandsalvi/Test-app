@@ -242,10 +242,19 @@ const NET_MIGRATION_RATE_ANNUAL = 0.0;
  *  pool's real book weekly, so this sets the opening spread and never the debt itself. */
 const SME_SEED_LEVERAGE_MULTIPLE = 2.7;
 /**
- * TAXR — the corporate tax rate a region OPENS at. One owner (rule 3): every corporate tax
- * number in the model reads `region.effectiveTaxRate`, which starts here and which the fiscal
- * stance then moves. It is a seed, not a weekly input (§7.4).
+ * TAXR — the corporate tax rate each region OPENS at: POLICY primitives (rule 19's admissible
+ * class — a statutory choice a legislature made, not a fitted number). Combined statutory
+ * corporate rates, national plus local: US federal 21% + state average; Japan's national +
+ * enterprise taxes at the high end; the UK's 25% headline at the low end. One owner (rule 3):
+ * every corporate tax number in the model reads `region.effectiveTaxRate`, which starts here
+ * and which each region's own fiscal stance then moves — so the differential is real policy
+ * variation that MNC subsidiaries (taxed where they are booked) now actually face.
  */
+export const CORPORATE_TAX_RATE_BY_REGION: Record<RegionId, number> = {
+  USA: 0.26, EUR: 0.28, UK: 0.25, JPN: 0.30,
+};
+/** The seed's TOTAL-government-revenue share of GDP (all bases, not just corporate) — kept for
+ *  the week-0 fiscal close only. The live corporate rate is the per-region map above. */
 export const EFFECTIVE_TAX_RATE = 0.31;
 /**
  * The size of the opening sovereign stack, as a multiple of nominal GDP. A SEED primitive with
@@ -575,7 +584,7 @@ function buildRegion(regionId: RegionId): Region {
     nominalGdpHistory: seedNominalGdpHistory(estimatedNominalGdpUSD, gdpGrowth + targetInflation),
     consumptionComponentUSD: 0,
     investmentComponentUSD: 0,
-    effectiveTaxRate: EFFECTIVE_TAX_RATE,
+    effectiveTaxRate: CORPORATE_TAX_RATE_BY_REGION[regionId],
     governmentRevenueUSD,
     governmentSpendingWeeklyUSD,
     governmentPayrollWeeklyUSD: Math.round(seedPayrollWeeklyUSD),

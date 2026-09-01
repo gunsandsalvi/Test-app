@@ -1775,6 +1775,19 @@ const indModule: HarnessModule = (() => {
       out.push(`  ${b.label}: deposits held ${(rev > 0 ? dep / rev : 0).toFixed(2)} weeks of sales`);
     });
 
+    out.push('--- §5-TAXR: the tax base against the book ---');
+    {
+      const firms = s.companies.filter(isActiveCompany);
+      const carryFirms = firms.filter(c => (c.taxLossCarryforwardUSD ?? 0) > 0);
+      const carryUSD = carryFirms.reduce((a, c) => a + (c.taxLossCarryforwardUSD ?? 0), 0);
+      const deferredUSD = firms.reduce((a, c) => a + (c.deferredTaxLiabilityUSD ?? 0), 0);
+      const basisUSD = firms.reduce((a, c) => a + (c.taxBasisPpeUSD ?? 0), 0);
+      const netBookUSD = firms.reduce((a, c) =>
+        a + Math.max(0, (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0)), 0);
+      out.push(`  ${carryFirms.length} of ${firms.length} firms carry a loss carryforward, ${B(carryUSD)} in total`);
+      out.push(`  tax basis ${B(basisUSD)} vs book net PP&E ${B(netBookUSD)} — deferred tax liability ${B(deferredUSD)}`);
+    }
+
     out.push('--- IND13: capital that has arrived and is not yet plant ---');
     const aucFirms = s.companies.filter(c => isActiveCompany(c) && ((c as any).assetsUnderConstruction ?? []).length > 0);
     const aucUSD = aucFirms.reduce((a, c) => a + ((c as any).assetsUnderConstruction as any[]).reduce((b, l) => b + l.valueUSD, 0), 0);

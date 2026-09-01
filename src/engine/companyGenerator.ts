@@ -4,7 +4,7 @@ import { defect } from '../domain/defect';
 import { callProtectionForIssue } from '../domain/call-protection';
 import { isInvestmentGrade } from './simulation/stages/asset-allocation';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS } from './pricing';
-import { getInitialRegions, EFFECTIVE_TAX_RATE } from './macro/initialization';
+import { getInitialRegions, CORPORATE_TAX_RATE_BY_REGION } from './macro/initialization';
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
 import { getRegionProductivityPerCapitaUSD } from './bootstrap/population';
 import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from './simulation/constants';
@@ -483,7 +483,8 @@ export function generateInitialCompanies(
       const interestExpense = Math.max(1, tmpl.debtBase * interestRate);
       // ONE OWNER (§6.1's duplicate row): the seed rate is the SAME number the fiscal stance
       // drifts from — a firm generated at 21% into a 31% world opened mispriced by the gap.
-      const taxRate = EFFECTIVE_TAX_RATE;
+      // §5-TAXR: that number is now the firm's own region's statutory rate.
+      const taxRate = CORPORATE_TAX_RATE_BY_REGION[region];
       const netIncome = Math.max(5, (ebit - interestExpense) * (1 - taxRate));
       const eps = Number((netIncome / tmpl.shares).toFixed(2));
       
@@ -1147,7 +1148,7 @@ export function generatePrivateCompanies(
       previousEmployeeCount: seed.employeeCount, employeeCount: seed.employeeCount,
       baselineEmployeeCount: seed.employeeCount,
       ebitda, baselineEbitdaMargin: seed.ebitdaMargin, ebit,
-      netIncome: Math.round((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE)),
+      netIncome: Math.round((ebit - annualInterest) * (1 - CORPORATE_TAX_RATE_BY_REGION[region])),
       eps: 0,
       // No traded equity: private shares exist (founders hold them) but carry no market price.
       // Zero here is "unquoted", not "worthless" — every consumer of stockPrice/marketCap must

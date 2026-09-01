@@ -15,7 +15,7 @@ test('a seeded firm opens growing at exactly the drift the constant asserted', (
 });
 
 test('a doubling of cumulative output raises productivity by the elasticity', () => {
-  let m = 1; let cum = 1000;
+  const m = 1; const cum = 1000;
   const u = learningUpdate({ priorCumulativeUnits: cum, producedUnitsThisWeek: cum, priorMultiplier: m });
   // One doubling in one step: multiplier = e^(ε·ln2) = 2^ε.
   assert.ok(Math.abs(u.multiplier - Math.pow(2, LEARNING_ELASTICITY)) < 1e-12);

@@ -424,6 +424,32 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // and the WACC already use, so the four of them stop being four opinions.
     const taxRate = reg.effectiveTaxRate;
 
+    // §5-TAXR — THE FIRM'S TAX ATTRIBUTES, gathered on the week's opening stocks. The
+    // commissioning read (IND13) happens here, ONCE, because the tax basis grows by the same
+    // event the book capitalises in the roll-forward below: plant ENTERING SERVICE, never plant
+    // budgeted — the PP&E roll-forward reuses these values instead of reading the queue twice.
+    // The tax basis seeds at book net PP&E on first touch (§7.4: no opening deferral — the
+    // deferred liability is a thing the world ACCUMULATES from here, not a guessed history).
+    const underConstruction = [
+      ...(comp.assetsUnderConstruction ?? []),
+      ...(companyUpdates[comp.ticker]?.capexUnderConstruction ?? []),
+    ];
+    const { commissionedUSD: capexCommissionedThisWeekUSD, stillUnderConstruction } =
+      commissionCapital(underConstruction, nextWeek);
+    const openingGrossPpeUSD = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
+    const openingNetPpeUSD = Math.max(0,
+      openingGrossPpeUSD - (comp.accumulatedDepreciationUSD ?? openingGrossPpeUSD * 0.45));
+    const taxAttrs = {
+      taxBasisPpeUSD: comp.taxBasisPpeUSD ?? openingNetPpeUSD,
+      usefulLifeYears: SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12,
+      capexDeliveredAnnualUSD: capexCommissionedThisWeekUSD * 52,
+      carryforwardUSD: comp.taxLossCarryforwardUSD ?? 0,
+      bookNetPpeUSD: openingNetPpeUSD,
+    };
+    /** The statement's own tax line, year-rate — the weekly cash accrual below remits exactly
+     *  this (rule 14: the P&L and the payment are one number). */
+    let taxPaidAnnualRateUSD: number;
+
     let updatedProductLines = comp.productLines || []; let newRevenue = 0;
     // §7.246 — persisted for stage 05's floor decomposition; stays 0 on the profile path, whose
     // firms offer no goods (IND-R2), so the floor's fallback basis serves them unchanged.
@@ -506,12 +532,18 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         annualInterestUSD: annualInterest,
         taxRate,
         sharesOutstanding: comp.sharesOutstanding,
+        tax: taxAttrs,
       });
       newEbitda = profilePnl.ebitdaUSD;
       newEbitdaMargin = newRevenue > 0 ? newEbitda / newRevenue : 0;
       newEbit = profilePnl.ebitUSD;
       newNetIncome = profilePnl.netIncomeUSD;
       newEps = perShare(newNetIncome);
+      // §5-TAXR — the statement rolled the attributes one week; the firm carries them.
+      taxPaidAnnualRateUSD = profilePnl.taxPaidAnnualUSD;
+      comp.taxLossCarryforwardUSD = profilePnl.taxLossCarryforwardUSD;
+      comp.taxBasisPpeUSD = profilePnl.taxBasisPpeUSD;
+      comp.deferredTaxLiabilityUSD = profilePnl.deferredTaxLiabilityUSD;
     } else {
       // Consumer Revenue Beta
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
@@ -835,11 +867,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         annualInterestUSD: annualInterest,
         taxRate,
         sharesOutstanding: comp.sharesOutstanding,
+        tax: taxAttrs,
       });
       newEbitda = industrialPnl.ebitdaUSD;
       newEbit = industrialPnl.ebitUSD;
       newNetIncome = industrialPnl.netIncomeUSD;
       newEps = perShare(newNetIncome);
+      // §5-TAXR — the statement rolled the attributes one week; the firm carries them.
+      taxPaidAnnualRateUSD = industrialPnl.taxPaidAnnualUSD;
+      comp.taxLossCarryforwardUSD = industrialPnl.taxLossCarryforwardUSD;
+      comp.taxBasisPpeUSD = industrialPnl.taxBasisPpeUSD;
+      comp.deferredTaxLiabilityUSD = industrialPnl.deferredTaxLiabilityUSD;
 
       // Quarterly dollar impact of the same cost drivers that moved targetMargin above —
       // this is what backs the COGS breakdown shown in the deep financials drill-down, so it
@@ -1017,12 +1055,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // construction, each lot carrying the week it enters service. The plant grows by what was
     // COMMISSIONED, not by what was delivered — so PP&E, and the capacity that grows off it,
     // arrive after the demand that justified them. That lag is the capacity cycle.
-    const underConstruction = [
-      ...(comp.assetsUnderConstruction ?? []),
-      ...(companyUpdates[comp.ticker]?.capexUnderConstruction ?? []),
-    ];
-    const { commissionedUSD: capexCommissionedThisWeekUSD, stillUnderConstruction } =
-      commissionCapital(underConstruction, nextWeek);
+    // (§5-TAXR reads the construction queue ONCE, above the income statement — the same
+    // `capexCommissionedThisWeekUSD` grows the tax basis there and the book here.)
     const newGrossPPEUSD = priorGrossPPE + capexCommissionedThisWeekUSD;
     const newAccumulatedDepreciationUSD = Math.min(newGrossPPEUSD, priorAccumulatedDepreciation + weeklyDepreciation);
 
@@ -1225,7 +1259,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       void marketFixedInterestWeeklyUSD; void marketFloatingInterestWeeklyUSD;
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
       // now arrives somewhere — the treasury's account — instead of leaving the model.
-      const weeklyAccrualUSD = Math.max(0, (newEbit - annualInterest)) * taxRate / 52;
+      // §5-TAXR — the accrual IS the statement's tax line (rule 14: the P&L and the payment are
+      // one number). The `max(0, EBIT − interest) × rate` recomputation this replaces was the
+      // old gate surviving in the cash walk: carryforwards and the accelerated schedule now
+      // reach the dollars the treasury actually receives, which is the whole point of them.
+      const weeklyAccrualUSD = taxPaidAnnualRateUSD / 52;
       accruedTaxUSD += weeklyAccrualUSD;
       ctx.taxAccruedByRegion[comp.region] = (ctx.taxAccruedByRegion[comp.region] ?? 0) + weeklyAccrualUSD;
       // currentWeekMod13 runs 1..13, never 0 — the quarter ends on 13.
