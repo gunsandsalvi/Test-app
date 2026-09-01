@@ -19,6 +19,7 @@ import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/si
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
 import { isPubliclyListed, managedEntityIdsOf } from '../domain/company';
 import { industryOfSubUnit, financingProfileOf } from '../domain/industry-registry';
+import { CompanyStore } from './company-store';
 
 export interface BackLanes {
   n: number;
@@ -108,19 +109,25 @@ export function buildBackLanes(
   entityIds: Set<string>,
   carrierFreightRevenue: Record<string, number>,
   channelMarginRevenue: Record<string, number>,
+  S: CompanyStore,
 ): BackLanes {
   const n = companies.length;
   const f = () => new Float64Array(n);
+  // §4.C Stage II.1 — the 1:1 scalar lanes ALIAS the company row store (refreshed by the stage
+  // just before this call, so validity is by construction): same values, same NaN-as-undefined
+  // convention, zero copies. Only the derived lanes (folds, flags, registry tables, weekUpdate
+  // scalars) are still built here.
+  const N = S.num, T = S.str;
   const L: BackLanes = {
     n,
-    grossPPEUSD: f(), accumulatedDepreciationUSD: f(), ppeDefaultUSD: f(),
-    annualRevenueUSD: f(), cashUSD: f(), currentLiabilitiesUSD: f(),
-    maintenanceCapexUSD: f(), growthCapexUSD: f(), capexUSD: f(),
-    maintenanceShortfallStreak: f(), baselineGrowthCapexToRevenueRatio: f(),
-    marketCapUSD: f(), totalDebtUSD: f(),
-    cumulativeOutputUnits: f(), learningMultiplier: f(), lastLearningGrowthAnnual: f(),
-    rndExpenseUSD: f(), oasSpreadBps: f(),
-    idleStreakWeeks: f(), mothballedPpeShare: f(), mothballedStreakWeeks: f(),
+    grossPPEUSD: N.grossPPEUSD, accumulatedDepreciationUSD: N.accumulatedDepreciationUSD, ppeDefaultUSD: f(),
+    annualRevenueUSD: N.annualRevenue, cashUSD: N.cash, currentLiabilitiesUSD: N.currentLiabilities,
+    maintenanceCapexUSD: N.maintenanceCapex, growthCapexUSD: N.growthCapex, capexUSD: N.capex,
+    maintenanceShortfallStreak: N.maintenanceShortfallStreak, baselineGrowthCapexToRevenueRatio: N.baselineGrowthCapexToRevenueRatio,
+    marketCapUSD: N.marketCap, totalDebtUSD: N.totalDebt,
+    cumulativeOutputUnits: N.cumulativeOutputUnits, learningMultiplier: N.learningMultiplier, lastLearningGrowthAnnual: N.lastLearningGrowthAnnual,
+    rndExpenseUSD: N.rndExpense, oasSpreadBps: N.oasSpreadBps,
+    idleStreakWeeks: N.idleStreakWeeks, mothballedPpeShare: N.mothballedPpeShare, mothballedStreakWeeks: N.mothballedStreakWeeks,
     usefulLifeYears: f(),
     producedUnitsThisWeek: f(), plantCapacityUnitsThisWeek: f(), idleLineRevenueShare: f(),
     wuSalesUSD: f(), wuPurchasesUSD: f(), wuTradeReceivableBookedUSD: f(),
@@ -128,47 +135,26 @@ export function buildBackLanes(
     wuTradePayableSettledUSD: f(), wuCapexPurchasesUSD: f(),
     addressableGrowthAnnual: f(), categoryShortfall: f(), avgCompetitiveness: f(),
     isBanksSector: new Uint8Array(n), hasTechLine: new Uint8Array(n), investmentGrade: new Uint8Array(n),
-    sharesOutstanding: f(), stockPrice: f(), baselineDividendYield: f(), dividendYield: f(),
-    earningsWeekModulo: f(), eps: f(), cdsSpreadBps: f(), beta: f(),
-    baselineAnnualRevenueUSD: f(), lastOpportunisticOfferingWeek: f(),
-    employeeCount: f(), employeeCountUpdate: f(),
-    accruedTaxLiabilityUSD: f(), bankCapitalRatio: f(),
-    customerConcentration: f(), supplierConcentration: f(),
+    sharesOutstanding: N.sharesOutstanding, stockPrice: N.stockPrice, baselineDividendYield: N.baselineDividendYield, dividendYield: N.dividendYield,
+    earningsWeekModulo: N.earningsWeekModulo, eps: N.eps, cdsSpreadBps: N.cdsSpreadBps, beta: N.beta,
+    baselineAnnualRevenueUSD: N.baselineAnnualRevenue, lastOpportunisticOfferingWeek: N.lastOpportunisticOfferingWeek,
+    employeeCount: N.employeeCount, employeeCountUpdate: f(),
+    accruedTaxLiabilityUSD: N.accruedTaxLiabilityUSD, bankCapitalRatio: f(),
+    customerConcentration: N.customerConcentration, supplierConcentration: N.supplierConcentration,
     hasVehicle: new Uint8Array(n), boundaryTraceKey: new Array(n),
     occupationMixDrift: new Array(n), maxPayoutRatio: f(),
     carrierFreightRevenueUSD: f(), channelMarginRevenueUSD: f(),
     wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
-    creditRating: new Array(n), name: new Array(n),
-    companyId: new Array(n), homeBankTicker: new Array(n),
-    ticker: new Array(n), region: new Array(n), sector: new Array(n),
+    creditRating: T.creditRating as string[], name: T.name as string[],
+    companyId: T.id as string[], homeBankTicker: T.homeBankTicker,
+    ticker: T.ticker as string[], region: T.region as Company['region'][], sector: T.sector as Company['sector'][],
   };
   const NaN_ = Number.NaN;
   for (let i = 0; i < n; i++) {
     const c = companies[i];
     const reg = updatedRegions[c.region];
     const wu = companyUpdates[c.ticker];
-    L.ticker[i] = c.ticker; L.region[i] = c.region; L.sector[i] = c.sector;
-    L.grossPPEUSD[i] = c.grossPPEUSD ?? NaN_;
-    L.accumulatedDepreciationUSD[i] = c.accumulatedDepreciationUSD ?? NaN_;
     L.ppeDefaultUSD[i] = c.annualRevenue * (SECTOR_PPE_INTENSITY[c.sector] ?? 0.5);
-    L.annualRevenueUSD[i] = c.annualRevenue;
-    L.cashUSD[i] = c.cash;
-    L.currentLiabilitiesUSD[i] = c.currentLiabilities;
-    L.maintenanceCapexUSD[i] = c.maintenanceCapex ?? NaN_;
-    L.growthCapexUSD[i] = c.growthCapex ?? NaN_;
-    L.capexUSD[i] = c.capex;
-    L.maintenanceShortfallStreak[i] = c.maintenanceShortfallStreak ?? NaN_;
-    L.baselineGrowthCapexToRevenueRatio[i] = c.baselineGrowthCapexToRevenueRatio ?? NaN_;
-    L.marketCapUSD[i] = c.marketCap;
-    L.totalDebtUSD[i] = c.totalDebt;
-    L.cumulativeOutputUnits[i] = c.cumulativeOutputUnits ?? NaN_;
-    L.learningMultiplier[i] = c.learningMultiplier ?? NaN_;
-    L.lastLearningGrowthAnnual[i] = c.lastLearningGrowthAnnual ?? NaN_;
-    L.rndExpenseUSD[i] = c.rndExpense ?? NaN_;
-    L.oasSpreadBps[i] = c.oasSpreadBps;
-    L.idleStreakWeeks[i] = c.idleStreakWeeks ?? NaN_;
-    L.mothballedPpeShare[i] = c.mothballedPpeShare ?? NaN_;
-    L.mothballedStreakWeeks[i] = c.mothballedStreakWeeks ?? NaN_;
     L.usefulLifeYears[i] = SECTOR_PPE_USEFUL_LIFE_YEARS[c.sector] ?? 12;
     L.producedUnitsThisWeek[i] = wu?.producedUnitsThisWeek ?? 0;
     L.plantCapacityUnitsThisWeek[i] = wu?.plantCapacityUnitsThisWeek ?? 0;
@@ -203,26 +189,12 @@ export function buildBackLanes(
     L.isBanksSector[i] = c.sector === 'Banks' ? 1 : 0;
     L.hasTechLine[i] = lines.some(l => l.industry === 'TechHardwareSemis' || l.industry === 'SoftwareDigitalServices') ? 1 : 0;
     L.investmentGrade[i] = isInvestmentGrade(c.creditRating) ? 1 : 0;
-    L.sharesOutstanding[i] = c.sharesOutstanding;
-    L.stockPrice[i] = c.stockPrice;
-    L.baselineDividendYield[i] = c.baselineDividendYield;
-    L.dividendYield[i] = c.dividendYield;
-    L.earningsWeekModulo[i] = c.earningsWeekModulo ?? NaN_;
-    L.eps[i] = c.eps;
-    L.cdsSpreadBps[i] = c.cdsSpreadBps;
-    L.beta[i] = c.beta ?? NaN_;
-    L.baselineAnnualRevenueUSD[i] = c.baselineAnnualRevenue;
-    L.lastOpportunisticOfferingWeek[i] = c.lastOpportunisticOfferingWeek ?? NaN_;
-    L.employeeCount[i] = c.employeeCount;
     L.employeeCountUpdate[i] = wu?.employeeCount ?? NaN_;
-    L.accruedTaxLiabilityUSD[i] = c.accruedTaxLiabilityUSD ?? NaN_;
     L.bankCapitalRatio[i] = c.bankBalanceSheet?.bankCapitalRatio ?? NaN_;
     // NOTE (§7.320): revenueVolatility is NOT seam-computable — the PROFILE modules append
     // comp.revenueHistory MID-LOOP (profiles/bank.ts:52 and siblings), after any seam and
     // before the rating reads it. The fold stays closure-side; the week-2 rating drift that
     // taught this is the record's.
-    L.customerConcentration[i] = c.customerConcentration ?? NaN_;
-    L.supplierConcentration[i] = c.supplierConcentration ?? NaN_;
     L.hasVehicle[i] = !c.isBankEntity && c.isInstitutionalEntity
       && entityIds.has(managedEntityIdsOf(c)[0]) ? 1 : 0;
     L.occupationMixDrift[i] = c.occupationMixDrift;
@@ -236,10 +208,6 @@ export function buildBackLanes(
     L.wasDefaulted[i] = c.isDefaulted ? 1 : 0;
     L.wasMergerAcquired[i] = c.mergerAcquired ? 1 : 0;
     L.publiclyListed[i] = isPubliclyListed(c) ? 1 : 0;
-    L.creditRating[i] = c.creditRating;
-    L.name[i] = c.name;
-    L.companyId[i] = c.id;
-    L.homeBankTicker[i] = c.homeBankTicker;
   }
   return L;
 }

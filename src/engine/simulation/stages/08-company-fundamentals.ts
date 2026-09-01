@@ -25,6 +25,7 @@ import { runStage08FrontPass } from '../../../engine2/stage08-front';
 import { ensureV2 } from '../../../engine2/world';
 import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm , s08k, runBackCoreA, runBackCoreB, runMmfRedemption, rebuildBackCoreA, applyCapCompWrites } from '../../../engine2/stage08-back';
 import { buildBackLanes } from '../../../engine2/stage08-lanes';
+import { refreshCompanyStore, checkCompanyStore } from '../../../engine2/company-store';
 import { backWorkerCount, dispatchBackA, collectBackA } from '../../../engine2/back-pool';
 import type { BackAShardOut } from '../../../engine2/back-worker';
 
@@ -208,7 +209,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // world.
   // §7.317 steps 1.1-1.2 — the back seam: one pass reads every firm's capital-block inputs
   // into typed lanes before the shard loop; the core reads rows, not objects.
-  const backLanes = buildBackLanes(state.companies, updatedRegions, companyUpdates, new Set(state.institutionalEntities.map(e => e.id)), ctx.carrierFreightRevenue, ctx.channelMarginRevenue);
+  // §4.C Stage II.1 — the company row store, refreshed at this stage's top so every lane is
+  // current by construction; the seam lanes below alias its 1:1 columns.
+  const companyStore = refreshCompanyStore(state);
+  if (process.env.COMPANY_SYNC_CHECK === '1') checkCompanyStore(state, 'post-refresh');
+  const backLanes = buildBackLanes(state.companies, updatedRegions, companyUpdates, new Set(state.institutionalEntities.map(e => e.id)), ctx.carrierFreightRevenue, ctx.channelMarginRevenue, companyStore);
   const backDeps: import('../../../engine2/stage08-back').BackKernelDeps = {
     state, ctx, v2, F, backLanes, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
