@@ -38,11 +38,12 @@ import { CogsCostDrivers } from '../engine/companyGenerator';
 import { industrialIncome } from '../domain/company-week/income-statement';
 import { fulfillmentRatio } from '../domain/company-week/inventory';
 import { V2World, rowOf } from './world';
-import { consumeFifoByRow } from './lots';
+import { LotViews, LotStore, consumeFifoOnViews } from './lots';
 import { SUBUNITS, SUBUNIT_INDEX, NSUB } from './state';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../engine/bootstrap/labor-and-wages';
 import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/profiles';
 import { random, getRngState, setRngState, scopedStreamSeed } from '../engine/rng';
+import { lane64, lane32, laneU32, lane8 } from './shared-lanes';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -206,6 +207,7 @@ export interface FrontCoreOut {
   taxBasisOut: Float64Array;
   deferredTaxOut: Float64Array;
   hasRecurringOut: Uint8Array;
+  recurringBaseOut: Float64Array;
 }
 
 const EMPTY_LINES: ProductLine[] = [];
@@ -240,73 +242,73 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
 
   const S: FrontSeam = {
     n, nextWeek, regionIds,
-    regionIdx: new Int32Array(n),
-    isActive: new Uint8Array(n),
-    isProfile: new Uint8Array(n),
-    rngSeed: new Uint32Array(n),
-    lotRow: new Int32Array(n),
-    employeeCount: new Float64Array(n),
-    offeredWageIndex: new Float64Array(n),
-    baselineEmployeeCount: new Float64Array(n),
-    totalDebt: new Float64Array(n),
-    annualRevenue: new Float64Array(n),
-    baselineAnnualRevenueResolved: new Float64Array(n),
-    ebitda: new Float64Array(n),
-    cash: new Float64Array(n),
-    currentLiabilities: new Float64Array(n),
-    marketCap: new Float64Array(n),
-    sharesOutstanding: new Float64Array(n),
-    growthCapexResolved: new Float64Array(n),
-    maintenanceShortfallStreak: new Float64Array(n),
-    executionQuality0: new Float64Array(n),
-    inputConstraint0: new Float64Array(n),
-    fulfillEMA0: new Float64Array(n),
-    recurringBase0: new Float64Array(n),
-    baselineGrowthRatioResolved: new Float64Array(n),
-    baselineEbitdaMarginResolved: new Float64Array(n),
-    openingGrossPpeUSD: new Float64Array(n),
-    openingNetPpeUSD: new Float64Array(n),
-    taxBasisOpenUSD: new Float64Array(n),
-    carryforwardUSD: new Float64Array(n),
-    usefulLifeYears: new Float64Array(n),
-    baselineInputRateSum: new Float64Array(n),
-    perWorkerAnnualUSD: new Float64Array(n),
-    perWorkerBaselineAnnualUSD: new Float64Array(n),
-    mktUnitPrice: new Float64Array(R * NSUB),
-    mktFulfill: new Float64Array(R * NSUB),
-    mktCrowding: new Float64Array(R * NSUB),
-    mktExists: new Uint8Array(R * NSUB),
-    suppliedMask: new Uint8Array(R * NSUB),
-    policyRate: new Float64Array(R),
-    effectiveTaxRate: new Float64Array(R),
-    trStart: new Int32Array(n + 1),
-    trPrincipal: new Float64Array(nTr),
-    trAnnualRate: new Float64Array(nTr),
-    trIsFloating: new Uint8Array(nTr),
-    trIsFacility: new Uint8Array(nTr),
-    trIsCP: new Uint8Array(nTr),
-    trMatWeek: new Int32Array(nTr),
-    trPeriodWeeks: new Int32Array(nTr),
-    trAnchorWeek: new Int32Array(nTr),
-    plStart: new Int32Array(n + 1),
-    plSub: new Int32Array(nPl),
-    plShare: new Float64Array(nPl),
-    plComp: new Float64Array(nPl),
-    plMktShare: new Float64Array(nPl),
-    outStart: new Int32Array(n + 1),
-    outSub: new Int32Array(nOut),
-    outUnits: new Float64Array(nOut),
-    outValue: new Float64Array(nOut),
-    ucStart: new Int32Array(n + 1),
-    ucValue: new Float64Array(nUc),
-    ucServiceWeek: new Int32Array(nUc),
-    shStart: new Int32Array(n + 1),
-    shSupplierRevenue: new Float64Array(nSh),
-    shInvUSD: new Float64Array(nSh),
-    shStrength: new Float64Array(nSh),
-    updSalesUSD: new Float64Array(n),
-    updHasTargetProd: new Uint8Array(n),
-    updTargetProdUSD: new Float64Array(n),
+    regionIdx: lane32(n),
+    isActive: lane8(n),
+    isProfile: lane8(n),
+    rngSeed: laneU32(n),
+    lotRow: lane32(n),
+    employeeCount: lane64(n),
+    offeredWageIndex: lane64(n),
+    baselineEmployeeCount: lane64(n),
+    totalDebt: lane64(n),
+    annualRevenue: lane64(n),
+    baselineAnnualRevenueResolved: lane64(n),
+    ebitda: lane64(n),
+    cash: lane64(n),
+    currentLiabilities: lane64(n),
+    marketCap: lane64(n),
+    sharesOutstanding: lane64(n),
+    growthCapexResolved: lane64(n),
+    maintenanceShortfallStreak: lane64(n),
+    executionQuality0: lane64(n),
+    inputConstraint0: lane64(n),
+    fulfillEMA0: lane64(n),
+    recurringBase0: lane64(n),
+    baselineGrowthRatioResolved: lane64(n),
+    baselineEbitdaMarginResolved: lane64(n),
+    openingGrossPpeUSD: lane64(n),
+    openingNetPpeUSD: lane64(n),
+    taxBasisOpenUSD: lane64(n),
+    carryforwardUSD: lane64(n),
+    usefulLifeYears: lane64(n),
+    baselineInputRateSum: lane64(n),
+    perWorkerAnnualUSD: lane64(n),
+    perWorkerBaselineAnnualUSD: lane64(n),
+    mktUnitPrice: lane64(R * NSUB),
+    mktFulfill: lane64(R * NSUB),
+    mktCrowding: lane64(R * NSUB),
+    mktExists: lane8(R * NSUB),
+    suppliedMask: lane8(R * NSUB),
+    policyRate: lane64(R),
+    effectiveTaxRate: lane64(R),
+    trStart: lane32(n + 1),
+    trPrincipal: lane64(nTr),
+    trAnnualRate: lane64(nTr),
+    trIsFloating: lane8(nTr),
+    trIsFacility: lane8(nTr),
+    trIsCP: lane8(nTr),
+    trMatWeek: lane32(nTr),
+    trPeriodWeeks: lane32(nTr),
+    trAnchorWeek: lane32(nTr),
+    plStart: lane32(n + 1),
+    plSub: lane32(nPl),
+    plShare: lane64(nPl),
+    plComp: lane64(nPl),
+    plMktShare: lane64(nPl),
+    outStart: lane32(n + 1),
+    outSub: lane32(nOut),
+    outUnits: lane64(nOut),
+    outValue: lane64(nOut),
+    ucStart: lane32(n + 1),
+    ucValue: lane64(nUc),
+    ucServiceWeek: lane32(nUc),
+    shStart: lane32(n + 1),
+    shSupplierRevenue: lane64(nSh),
+    shInvUSD: lane64(nSh),
+    shStrength: lane64(nSh),
+    updSalesUSD: lane64(n),
+    updHasTargetProd: lane8(n),
+    updTargetProdUSD: lane64(n),
   };
 
   // per-week region tables
@@ -457,20 +459,21 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
 export function allocCoreOut(S: FrontSeam): FrontCoreOut {
   const n = S.n;
   return {
-    plNewComp: new Float64Array(S.plStart[n]),
-    plNewShare: new Float64Array(S.plStart[n]),
-    outNewValue: new Float64Array(S.outStart[n]),
-    ucKeep: new Uint8Array(S.ucStart[n]),
-    industrialLineAt: new Int32Array(n).fill(-1),
-    badLineAt: new Int32Array(n).fill(-1),
-    costWage: new Float64Array(n),
-    costInput: new Float64Array(n),
-    costDecay: new Float64Array(n),
-    costCrowd: new Float64Array(n),
-    taxCarryforwardOut: new Float64Array(n),
-    taxBasisOut: new Float64Array(n),
-    deferredTaxOut: new Float64Array(n),
-    hasRecurringOut: new Uint8Array(n),
+    plNewComp: lane64(S.plStart[n]),
+    plNewShare: lane64(S.plStart[n]),
+    outNewValue: lane64(S.outStart[n]),
+    ucKeep: lane8(S.ucStart[n]),
+    industrialLineAt: lane32(n).fill(-1),
+    badLineAt: lane32(n).fill(-1),
+    costWage: lane64(n),
+    costInput: lane64(n),
+    costDecay: lane64(n),
+    costCrowd: lane64(n),
+    taxCarryforwardOut: lane64(n),
+    taxBasisOut: lane64(n),
+    deferredTaxOut: lane64(n),
+    hasRecurringOut: lane8(n),
+    recurringBaseOut: lane64(n),
   };
 }
 
@@ -479,7 +482,11 @@ export function allocCoreOut(S: FrontSeam): FrontCoreOut {
  * the inline pass ran, on lanes; every ??-default was resolved at the seam, every registry fact
  * is a static table, the RNG opens by stream word. A worker runs exactly this over its shard.
  */
-export function runFrontCore(S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2: V2World, lo: number, hi: number): void {
+export function runFrontCore(
+  S: FrontSeam, O: FrontCoreOut, F: FrontPass,
+  lots: LotViews, freeInto: LotStore | null, deadSink: number[] | undefined,
+  lo: number, hi: number
+): void {
   const week = S.nextWeek;
   for (let row = lo; row < hi; row++) {
     if (!S.isActive[row]) {
@@ -610,7 +617,7 @@ export function runFrontCore(S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2: V2
         if (!hasRealSupply) continue;
         const inputUnitPrice = S.mktExists[mktBase + inputSi] ? S.mktUnitPrice[mktBase + inputSi] : 1;
         const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice);
-        const drawn = consumeFifoByRow(v2, lotRow, inputSi, neededUnits);
+        const drawn = consumeFifoOnViews(lots, lotRow, inputSi, neededUnits, freeInto, deadSink);
         physicalFulfillment = Math.min(physicalFulfillment, fulfillmentRatio(drawn.availableUnits, neededUnits));
         for (const lotCostUSD of drawn.costsUSD) realInputConsumptionCostUSD += lotCostUSD;
       }
@@ -722,7 +729,7 @@ export function runFrontCore(S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2: V2
     O.taxBasisOut[row] = industrialPnl.taxBasisPpeUSD;
     O.deferredTaxOut[row] = industrialPnl.deferredTaxLiabilityUSD;
     F.newInputSupplyConstraintFactor[row] = newInputSupplyConstraintFactor;
-    F.newRecurringBaseUSD[row] = O.hasRecurringOut[row] ? newRecurringBaseUSD : undefined;
+    O.recurringBaseOut[row] = newRecurringBaseUSD;
 
     const revQ = newRevenue / 4;
     O.costWage[row] = 0;
@@ -796,6 +803,7 @@ export function applyFrontPost(
     }
     F.outputInv[row] = outRec;
 
+    F.newRecurringBaseUSD[row] = O.hasRecurringOut[row] ? O.recurringBaseOut[row] : undefined;
     comp.revenueHistory = [...(comp.revenueHistory || [F.newRevenue[row]]).slice(-12), F.newRevenue[row]];
     comp.taxLossCarryforwardUSD = O.taxCarryforwardOut[row];
     comp.taxBasisPpeUSD = O.taxBasisOut[row];

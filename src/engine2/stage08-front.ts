@@ -18,6 +18,8 @@ import { CogsCostDrivers } from '../engine/companyGenerator';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { V2World } from './world';
 import { buildFrontSeam, allocCoreOut, runFrontCore, applyFrontPost } from './front-core';
+import { setSharedLanes, lane64, laneU32, lane8 } from './shared-lanes';
+import { frontWorkerCount, runFrontSharded } from './front-pool';
 
 type ProductLines = NonNullable<Company['productLines']>;
 type ConstructionLot = { valueUSD: number; entersServiceWeek: number };
@@ -74,34 +76,34 @@ function allocScratch(n: number): FrontPass {
   }
   scratch = {
     n,
-    isActive: new Uint8Array(n),
-    isProfile: new Uint8Array(n),
-    rngAfter: new Uint32Array(n),
-    weeklyPayrollUSD: new Float64Array(n),
-    annualInterest: new Float64Array(n),
-    facilityInterestWeeklyUSD: new Float64Array(n),
-    marketBondAccrualUSD: new Float64Array(n),
-    commercialPaperAccrualUSD: new Float64Array(n),
-    marketLoanAccrualUSD: new Float64Array(n),
-    couponDue: new Uint8Array(n),
-    effectiveDebtRate: new Float64Array(n),
-    capexCommissionedUSD: new Float64Array(n),
+    isActive: lane8(n),
+    isProfile: lane8(n),
+    rngAfter: laneU32(n),
+    weeklyPayrollUSD: lane64(n),
+    annualInterest: lane64(n),
+    facilityInterestWeeklyUSD: lane64(n),
+    marketBondAccrualUSD: lane64(n),
+    commercialPaperAccrualUSD: lane64(n),
+    marketLoanAccrualUSD: lane64(n),
+    couponDue: lane8(n),
+    effectiveDebtRate: lane64(n),
+    capexCommissionedUSD: lane64(n),
     stillUnderConstruction: new Array(n),
-    newExecutionQuality: new Float64Array(n),
-    carryingCostUSD: new Float64Array(n),
+    newExecutionQuality: lane64(n),
+    carryingCostUSD: lane64(n),
     outputInv: new Array(n),
     updatedProductLines: new Array(n),
-    newRevenue: new Float64Array(n),
-    measuredInputConsumptionWeeklyUSD: new Float64Array(n),
-    newEbitda: new Float64Array(n),
-    newEbit: new Float64Array(n),
-    newNetIncome: new Float64Array(n),
-    newEps: new Float64Array(n),
-    taxPaidAnnualRateUSD: new Float64Array(n),
-    newInputSupplyConstraintFactor: new Float64Array(n),
-    newRecentFulfillmentEMA: new Float64Array(n),
+    newRevenue: lane64(n),
+    measuredInputConsumptionWeeklyUSD: lane64(n),
+    newEbitda: lane64(n),
+    newEbit: lane64(n),
+    newNetIncome: lane64(n),
+    newEps: lane64(n),
+    taxPaidAnnualRateUSD: lane64(n),
+    newInputSupplyConstraintFactor: lane64(n),
+    newRecentFulfillmentEMA: lane64(n),
     newRecurringBaseUSD: new Array(n),
-    targetProductionUSD: new Float64Array(n),
+    targetProductionUSD: lane64(n),
     costDrivers: new Array(n),
   };
   return scratch;
@@ -118,12 +120,16 @@ export interface FrontPassInputs {
   suppliedSubUnitsByRegion: Map<string, Set<string>>;
 }
 
-/** Run the front half for every firm: seam, core (serial today, shardable), post. */
+/** Run the front half for every firm: seam, core (sharded when FRONT_WORKERS=n, serial
+ *  otherwise — the SAME core either way), post. */
 export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs): FrontPass {
+  setSharedLanes(frontWorkerCount() >= 2);
   const F = allocScratch(companies.length);
   const S = buildFrontSeam(companies, inp);
   const O = allocCoreOut(S);
-  runFrontCore(S, O, F, inp.v2, 0, companies.length);
+  if (!runFrontSharded(S, O, F, inp.v2)) {
+    runFrontCore(S, O, F, inp.v2.lots, inp.v2.lots, undefined, 0, companies.length);
+  }
   applyFrontPost(companies, S, O, F, inp.companyUpdates, inp.updatedRegions);
   return F;
 }

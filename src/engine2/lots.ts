@@ -145,6 +145,10 @@ function chainOf(L: LotStore, v2: V2World, companyId: string, subUnitId: string)
 }
 
 function chainOfSlot(L: LotStore, firmRow: number, subIdx: number): { slot: number; rows: number[] } {
+  return chainOfSlotViews(L, firmRow, subIdx);
+}
+
+function chainOfSlotViews(L: LotViews, firmRow: number, subIdx: number): { slot: number; rows: number[] } {
   const slot = firmRow * NSUB + subIdx;
   if (firmRow < 0 || slot >= L.head.length) return { slot: -1, rows: [] };
   const rows: number[] = [];
@@ -165,12 +169,31 @@ export function consumeFifo(
   return consumeFifoByRow(v2, firmRow, subIdx, unitsWanted);
 }
 
-/** ENGINE V2 (§7.305) — the row-addressed draw the numeric core calls: no strings anywhere. */
+/** The columns a FIFO draw touches — the store itself, or a worker's shared mirror of it. */
+export interface LotViews {
+  units: Float64Array;
+  priceUSD: Float64Array;
+  acquiredWeek: Int32Array;
+  next: Int32Array;
+  head: Int32Array;
+  tail: Int32Array;
+}
+
+/** ENGINE V2 (§7.305) — the row-addressed draw the numeric core calls: no strings anywhere.
+ *  With a `deadSink` the fully-consumed rows are handed back instead of touching the shared
+ *  free list — the shard-safe form a worker uses; the main thread merges sinks afterwards. */
 export function consumeFifoByRow(
-  v2: V2World, firmRow: number, subIdx: number, unitsWanted: number
+  v2: V2World, firmRow: number, subIdx: number, unitsWanted: number, deadSink?: number[]
 ): { availableUnits: number; costsUSD: number[] } {
-  const L = v2.lots;
-  const { slot, rows } = chainOfSlot(L, firmRow, subIdx);
+  return consumeFifoOnViews(v2.lots, firmRow, subIdx, unitsWanted, deadSink === undefined ? v2.lots : null, deadSink);
+}
+
+export function consumeFifoOnViews(
+  LV: LotViews, firmRow: number, subIdx: number, unitsWanted: number,
+  freeInto: LotStore | null, deadSink?: number[]
+): { availableUnits: number; costsUSD: number[] } {
+  const L = LV;
+  const { slot, rows } = chainOfSlotViews(L, firmRow, subIdx);
   if (rows.length === 0) return { availableUnits: 0, costsUSD: [] };
 
   // Sorted almost always (lots append in week order); an out-of-order chain — a delayed
@@ -210,9 +233,15 @@ export function consumeFifoByRow(
       firstKept = r;
       break;
     }
-    // Fully consumed (or dust): recycle the row.
-    L.next[r] = L.freeHead;
-    L.freeHead = r;
+    // Fully consumed (or dust): recycle the row — directly on the serial path, via the
+    // shard-safe sink when a worker owns only a row range of the store.
+    if (freeInto) {
+      L.next[r] = freeInto.freeHead;
+      freeInto.freeHead = r;
+    } else {
+      L.next[r] = -1;
+      deadSink!.push(r);
+    }
   }
   if (firstKept < 0) {
     L.head[slot] = -1;
@@ -294,4 +323,13 @@ export function materializeInputInventory(v2: V2World, companyId: string): Recor
     out[SUBUNITS[subIdx]] = lots;
   }
   return out;
+}
+
+/** Merge worker dead-row sinks back onto the free list (main thread, after a sharded pass). */
+export function freeLotRows(v2: V2World, rows: number[]): void {
+  const L = v2.lots;
+  for (const r of rows) {
+    L.next[r] = L.freeHead;
+    L.freeHead = r;
+  }
 }
