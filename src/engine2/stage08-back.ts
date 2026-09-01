@@ -406,7 +406,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     }
 
     const newMaintenanceCapex = programme.maintenanceCapexUSD;
-    const maintenanceShortfallThisWeek = programme.maintenanceShortfallThisWeekUSD;
     const newMaintenanceShortfallStreak = programme.maintenanceShortfallStreak;
     const weeklyDebtFundedPortion = programme.debtFundedMaintenanceUSD;
 
@@ -1455,7 +1454,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       lastEarningsSurprisePct = Number((rawSurprise).toFixed(3));
 
       // Management commentary & guidance snippet generation
-      let guidanceSnippet = '';
+      let guidanceSnippet: string;
       if (lastEarningsSurprisePct > 0.05) {
         guidanceSnippet = 'Management raises FY CapEx and operating margin guidance on strong forward demand.';
         lastManagementCommentary = `CEO affirmed record operational throughput and upgraded full-year EPS guidance (+${(lastEarningsSurprisePct * 100).toFixed(1)}% surprise).`;
