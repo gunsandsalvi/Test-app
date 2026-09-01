@@ -4,6 +4,7 @@ import { GameState, Company } from '../../types';
 import { getOutputInventoryUSD } from '../../domain/company';
 import { ensureV2 } from '../../engine2/world';
 import { totalInputValueUSD, inputUnitsHeld, materializeInputInventory } from '../../engine2/lots';
+import { forEachContract } from '../../engine2/contracts';
 import { formatCurrency, formatPercent, formatBondName } from '../../engine/formatters';
 import { TapToChart } from '../shared/TapToChart';
 import { priceCorporateBond, priceLeveragedLoan } from '../../engine/pricing';
@@ -703,9 +704,19 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
             )}
             
             {(() => {
-              const contracts = reg?.activeContracts || [];
-              const asSupplier = contracts.filter((r: any) => r.supplierCompanyId === company.ticker || r.supplierCompanyId === company.id);
-              const asCustomer = contracts.filter((r: any) => r.customerCompanyId === company.ticker || r.customerCompanyId === company.id);
+              // ENGINE V2 (§7.304) — the contract book is columnar; materialise this company's rows.
+              const CT = v2.contracts;
+              const asSupplier: any[] = [];
+              const asCustomer: any[] = [];
+              forEachContract(v2, company.region, (row, supplierKey, customerKey, subUnitId) => {
+                const c = {
+                  supplierCompanyId: supplierKey, customerCompanyId: customerKey, subUnitId,
+                  priceUSD: CT.priceUSD[row], quantityUnitsPerWeek: CT.qtyPerWeek[row],
+                  weeksRemaining: CT.weeksRemaining[row], backlogUnits: CT.backlogUnits[row],
+                };
+                if (supplierKey === company.ticker || supplierKey === company.id) asSupplier.push(c);
+                if (customerKey === company.ticker || customerKey === company.id) asCustomer.push(c);
+              });
               
               if (asSupplier.length === 0 && asCustomer.length === 0) {
                  return <div className="text-[11px] text-[var(--text-tertiary)] italic">No explicit major bilateral supply contracts found. Operates primarily via open auction spot markets.</div>;

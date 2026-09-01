@@ -1,0 +1,197 @@
+/**
+ * ENGINE V2 — THE SUPPLY-CONTRACT TABLE: the bilateral contract book as columns, persistent
+ * across weeks, chained per (region, sub-unit) in exactly the order the object book carried.
+ *
+ * WHY THIS TABLE IS THE BIG ONE, measured (§7.304's probe): the live book GROWS ~3k contracts a
+ * week with a ~45-week mean tenor — ~12k live at week 4, ~55k by week 21, heading for ~150k at
+ * the 60-week horizon — and `settleContracts` walks every one of them weekly with two firm
+ * lookups, string-keyed map probes and up to four payment legs each. The object book is why
+ * stage 05's cost RISES with horizon; the whole point of the 100 ms/week bar is the long run,
+ * so this is the scaling defect, not just an allocation one.
+ *
+ * ORDER IS ECONOMICS HERE, so the chains replicate the object flow exactly:
+ * - Within a (region, sub-unit) bucket: iteration order = the array order the grouped book had;
+ *   survivors keep their position (dead rows unlink), formations append at the tail.
+ * - Across buckets (the 09-concentration walk, the harness conservation checks): a region's
+ *   buckets iterate in FIRST-OCCURRENCE order, an emptied bucket drops out at week end and a
+ *   re-formed one re-appends — which is precisely what rebuilding the group map from the
+ *   reassembled array did every week.
+ *
+ * Refs stay the strings the world uses (tickers on every current path, ids tolerated) — interned
+ * once (world.ts), resolved per unique ref per WEEK rather than per contract. Plain data only:
+ * `structuredClone(state)` carries the book into battery replays by value.
+ */
+
+import { V2World, internString } from './world';
+import { SUBUNIT_INDEX, SUBUNITS, NSUB } from './state';
+
+export interface ContractTable {
+  cap: number;
+  used: number;
+  freeHead: number;
+  supplierRef: Int32Array;
+  customerRef: Int32Array;
+  subIdx: Int32Array;
+  priceUSD: Float64Array;
+  qtyPerWeek: Float64Array;
+  weeksRemaining: Int32Array;
+  backlogUnits: Float64Array;
+  shortWeeks: Int32Array;
+  prepaidUSD: Float64Array;
+  /** 0 = a fixed-price contract (the old field's absent case). */
+  escalationBaseUSD: Float64Array;
+  next: Int32Array;
+  /** Per region key: chain head/tail per sub-unit index, and the bucket order (see header). */
+  headByRegion: Record<string, Int32Array>;
+  tailByRegion: Record<string, Int32Array>;
+  suOrderByRegion: Record<string, number[]>;
+}
+
+export function newContractTable(): ContractTable {
+  const cap = 1 << 12;
+  return {
+    cap,
+    used: 0,
+    freeHead: -1,
+    supplierRef: new Int32Array(cap),
+    customerRef: new Int32Array(cap),
+    subIdx: new Int32Array(cap),
+    priceUSD: new Float64Array(cap),
+    qtyPerWeek: new Float64Array(cap),
+    weeksRemaining: new Int32Array(cap),
+    backlogUnits: new Float64Array(cap),
+    shortWeeks: new Int32Array(cap),
+    prepaidUSD: new Float64Array(cap),
+    escalationBaseUSD: new Float64Array(cap),
+    next: new Int32Array(cap).fill(-1),
+    headByRegion: {},
+    tailByRegion: {},
+    suOrderByRegion: {},
+  };
+}
+
+function grow(T: ContractTable): void {
+  const cap = T.cap * 2;
+  const gf = (old: Float64Array) => { const a = new Float64Array(cap); a.set(old); return a; };
+  const gi = (old: Int32Array, fill = 0) => { const a = new Int32Array(cap).fill(fill); a.set(old); return a; };
+  T.supplierRef = gi(T.supplierRef);
+  T.customerRef = gi(T.customerRef);
+  T.subIdx = gi(T.subIdx);
+  T.priceUSD = gf(T.priceUSD);
+  T.qtyPerWeek = gf(T.qtyPerWeek);
+  T.weeksRemaining = gi(T.weeksRemaining);
+  T.backlogUnits = gf(T.backlogUnits);
+  T.shortWeeks = gi(T.shortWeeks);
+  T.prepaidUSD = gf(T.prepaidUSD);
+  T.escalationBaseUSD = gf(T.escalationBaseUSD);
+  T.next = gi(T.next, -1);
+  T.cap = cap;
+}
+
+function regionTables(T: ContractTable, region: string): { head: Int32Array; tail: Int32Array; suOrder: number[] } {
+  let head = T.headByRegion[region];
+  if (!head) {
+    head = new Int32Array(NSUB).fill(-1);
+    T.headByRegion[region] = head;
+    T.tailByRegion[region] = new Int32Array(NSUB).fill(-1);
+    T.suOrderByRegion[region] = [];
+  }
+  return { head, tail: T.tailByRegion[region], suOrder: T.suOrderByRegion[region] };
+}
+
+/** Append a newly-formed contract at the tail of its (region, sub-unit) chain. */
+export function formContractRow(
+  v2: V2World, region: string, subUnitId: string,
+  supplierKey: string, customerKey: string,
+  priceUSD: number, qtyPerWeek: number, weeksRemaining: number, escalationBaseUSD: number
+): void {
+  const T = v2.contracts;
+  const subIdx = SUBUNIT_INDEX.get(subUnitId);
+  if (subIdx === undefined) throw new Error(`ENGINE DEFECT: unknown sub-unit ${subUnitId} on a contract`);
+  let r: number;
+  if (T.freeHead >= 0) { r = T.freeHead; T.freeHead = T.next[r]; }
+  else { if (T.used >= T.cap) grow(T); r = T.used++; }
+  T.supplierRef[r] = internString(v2, supplierKey);
+  T.customerRef[r] = internString(v2, customerKey);
+  T.subIdx[r] = subIdx;
+  T.priceUSD[r] = priceUSD;
+  T.qtyPerWeek[r] = qtyPerWeek;
+  T.weeksRemaining[r] = weeksRemaining | 0;
+  T.backlogUnits[r] = 0;
+  T.shortWeeks[r] = 0;
+  T.prepaidUSD[r] = 0;
+  T.escalationBaseUSD[r] = escalationBaseUSD;
+  T.next[r] = -1;
+  const { head, tail, suOrder } = regionTables(T, region);
+  if (tail[subIdx] >= 0) {
+    T.next[tail[subIdx]] = r;
+    tail[subIdx] = r;
+  } else {
+    head[subIdx] = r;
+    tail[subIdx] = r;
+    // A bucket that comes alive appends to the region's bucket order (the group map's
+    // new-key append); an emptied one is dropped by endOfWeekCompact below.
+    if (!suOrder.includes(subIdx)) suOrder.push(subIdx);
+  }
+}
+
+/** The (region, sub-unit) chain as row indexes, in bucket order. */
+export function contractRows(v2: V2World, region: string, subUnitId: string): number[] {
+  const T = v2.contracts;
+  const head = T.headByRegion[region];
+  const subIdx = SUBUNIT_INDEX.get(subUnitId);
+  if (!head || subIdx === undefined) return [];
+  const rows: number[] = [];
+  for (let r = head[subIdx]; r >= 0; r = T.next[r]) rows.push(r);
+  return rows;
+}
+
+/**
+ * Rewrite one (region, sub-unit) chain to exactly `survivors` (a subsequence of the walked
+ * rows, in order) and recycle `dead`. The settle kernel decides who lives; this just relinks.
+ */
+export function relinkChain(v2: V2World, region: string, subUnitId: string, survivors: number[], dead: number[]): void {
+  const T = v2.contracts;
+  const subIdx = SUBUNIT_INDEX.get(subUnitId)!;
+  const { head, tail } = regionTables(T, region);
+  if (survivors.length === 0) {
+    head[subIdx] = -1;
+    tail[subIdx] = -1;
+  } else {
+    for (let i = 0; i < survivors.length; i++) {
+      T.next[survivors[i]] = i + 1 < survivors.length ? survivors[i + 1] : -1;
+    }
+    head[subIdx] = survivors[0];
+    tail[subIdx] = survivors[survivors.length - 1];
+  }
+  for (const r of dead) {
+    T.next[r] = T.freeHead;
+    T.freeHead = r;
+  }
+}
+
+/** Week end: drop emptied buckets from each region's bucket order (see header). */
+export function endOfWeekCompact(v2: V2World): void {
+  const T = v2.contracts;
+  for (const region of Object.keys(T.suOrderByRegion)) {
+    const head = T.headByRegion[region];
+    const order = T.suOrderByRegion[region];
+    T.suOrderByRegion[region] = order.filter((su) => head[su] >= 0);
+  }
+}
+
+/** Walk every live contract of one region in bucket order — the 09/harness/UI read. */
+export function forEachContract(
+  v2: V2World, region: string,
+  fn: (row: number, supplierKey: string, customerKey: string, subUnitId: string) => void
+): void {
+  const T = v2.contracts;
+  const head = T.headByRegion[region];
+  const order = T.suOrderByRegion[region];
+  if (!head || !order) return;
+  for (const su of order) {
+    for (let r = head[su]; r >= 0; r = T.next[r]) {
+      fn(r, v2.internedStrings[T.supplierRef[r]], v2.internedStrings[T.customerRef[r]], SUBUNITS[su]);
+    }
+  }
+}

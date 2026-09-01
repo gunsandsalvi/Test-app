@@ -46,6 +46,8 @@ import { advanceWeeklyStep, advanceWeeklyStepProfiled } from '../src/engine/simu
 import { GameState, RegionId, Position } from '../src/types';
 import { executeTrade } from "../src/engine/simulation/trade";
 import { isPubliclyListed, isActiveCompany } from '../src/domain/company';
+import { ensureV2 } from '../src/engine2/world';
+import { forEachContract } from '../src/engine2/contracts';
 import { sovereignCouponByBucket, weeklyInterestExpenseUSD, decomposeGovernmentSpending } from '../src/domain/government';
 import { governmentOf } from '../src/domain/government-entity';
 import { probeSteadyState, compareToSettled } from '../src/engine/simulation/burn-in';
@@ -1447,10 +1449,20 @@ const xbModule: HarnessModule = (() => {
  * later IND slices add. It judges nothing; the numbers are for reading.
  */
 const indModule: HarnessModule = (() => {
-  const contractKey = (c: any) => `${c.supplierCompanyId}|${c.customerCompanyId}|${c.subUnitId}`;
+  // ENGINE V2 (§7.304) — the contract book is columnar; these diagnostics read the table.
   const allContracts = (s: GameState) => {
+    const v2 = ensureV2(s);
+    const CT = v2.contracts;
     const out = new Map<string, any>();
-    REGIONS.forEach(r => ((s.regions[r] as any).activeContracts ?? []).forEach((c: any) => out.set(contractKey(c), c)));
+    REGIONS.forEach(r => forEachContract(v2, r, (row, supplierKey, customerKey, subUnitId) => {
+      out.set(`${supplierKey}|${customerKey}|${subUnitId}`, {
+        supplierCompanyId: supplierKey, customerCompanyId: customerKey, subUnitId,
+        quantityUnitsPerWeek: CT.qtyPerWeek[row], priceUSD: CT.priceUSD[row],
+        backlogUnits: CT.backlogUnits[row], shortWeeks: CT.shortWeeks[row],
+        weeksRemaining: CT.weeksRemaining[row], escalationBaseUSD: CT.escalationBaseUSD[row],
+        prepaidUSD: CT.prepaidUSD[row],
+      });
+    }));
     return out;
   };
   // §7.270: the BACKLOG check aggregates per key, never last-wins. Two live contracts can
@@ -1459,13 +1471,15 @@ const indModule: HarnessModule = (() => {
   // backlog growth, the singles this check printed. The conservation claim is about the
   // PAIR's total obligation, so the sums are what it must bound.
   const backlogByKey = (s: GameState) => {
+    const v2 = ensureV2(s);
+    const CT = v2.contracts;
     const out = new Map<string, { backlogUnits: number; quantityUnitsPerWeek: number }>();
-    REGIONS.forEach(r => (s.regions[r]?.activeContracts ?? []).forEach((c) => {
-      const k = contractKey(c);
+    REGIONS.forEach(r => forEachContract(v2, r, (row, supplierKey, customerKey, subUnitId) => {
+      const k = `${supplierKey}|${customerKey}|${subUnitId}`;
       const agg = out.get(k) ?? { backlogUnits: 0, quantityUnitsPerWeek: 0 };
-      agg.backlogUnits += Number(c.backlogUnits ?? 0) || 0;
-      agg.quantityUnitsPerWeek += Number(c.quantityUnitsPerWeek ?? 0) || 0;
-      if (isNaN(c.backlogUnits ?? 0)) agg.backlogUnits = NaN;
+      agg.backlogUnits += Number(CT.backlogUnits[row]) || 0;
+      agg.quantityUnitsPerWeek += Number(CT.qtyPerWeek[row]) || 0;
+      if (isNaN(CT.backlogUnits[row])) agg.backlogUnits = NaN;
       out.set(k, agg);
     }));
     return out;

@@ -11,7 +11,7 @@ import { Industry } from './industry';
 import { CentralBank } from './central-bank';
 import { BankingSectorView, AssetOwnershipShares } from './banking';
 import { InstitutionalSector } from './institutions';
-import { SupplyContract, CategoryDemandState, SupplyRelationship } from './market-microstructure';
+import { CategoryDemandState, SupplyRelationship } from './market-microstructure';
 
 export type WealthTier = 'BOTTOM_50' | 'NEXT_40' | 'TOP_9' | 'TOP_1';
 
@@ -672,7 +672,6 @@ export interface Region {
   id: RegionId;
   name: string;
   categoryDemand: Record<string, CategoryDemandState>;
-  activeContracts: SupplyContract[];
   currency: string;
   symbol: string;
   centralBank: string;

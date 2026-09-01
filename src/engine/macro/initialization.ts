@@ -518,7 +518,6 @@ function buildRegion(regionId: RegionId): Region {
     id: regionId,
     name: identity.name,
     categoryDemand: {},
-    activeContracts: [],
     currency: identity.currency,
     symbol: identity.symbol,
     centralBank: identity.centralBank,

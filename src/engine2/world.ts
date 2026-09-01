@@ -15,6 +15,7 @@
  */
 
 import { LotStore, newLotStore } from './lots';
+import { ContractTable, newContractTable } from './contracts';
 
 export interface V2World {
   /** Company id -> table row. Rows are addressing only — order carries no economics. */
@@ -25,6 +26,8 @@ export interface V2World {
   internedIdByString: Map<string, number>;
   /** IND1/1$-is-1$ — every firm's real input lots, FIFO by acquisition week. */
   lots: LotStore;
+  /** IND11 — the bilateral supply-contract book (§7.304's measured scaling monster). */
+  contracts: ContractTable;
 }
 
 /** The host: any object graph that carries a v2 world (GameState, structurally). */
@@ -38,6 +41,7 @@ export function ensureV2(state: V2Host): V2World {
     internedStrings: [],
     internedIdByString: new Map(),
     lots: newLotStore(),
+    contracts: newContractTable(),
   };
   state.v2 = v2;
   return v2;

@@ -14,6 +14,8 @@
  */
 
 import { GameState } from '../../../types';
+import { ensureV2 } from '../../../engine2/world';
+import { forEachContract } from '../../../engine2/contracts';
 import { WeeklyStepContext } from './context';
 
 /** A counterparty share above this is a real dependency worth flagging. */
@@ -40,11 +42,14 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
   const asSupplier = new Map<string, PartyExposure>();
   const asCustomer = new Map<string, PartyExposure>();
 
+  // ENGINE V2 (§7.304) — the contract book is columnar; same walk order as the object array.
+  const v2 = ensureV2(state);
+  const CT = v2.contracts;
   (Object.keys(ctx.updatedRegions) as (keyof typeof ctx.updatedRegions)[]).forEach(rid => {
-    (ctx.updatedRegions[rid]?.activeContracts || []).forEach((c: any) => {
-      const annualUSD = c.quantityUnitsPerWeek * c.priceUSD * 52;
-      addExposure(asSupplier, c.supplierCompanyId, c.customerCompanyId, annualUSD);
-      addExposure(asCustomer, c.customerCompanyId, c.supplierCompanyId, annualUSD);
+    forEachContract(v2, rid as string, (row, supplierKey, customerKey) => {
+      const annualUSD = CT.qtyPerWeek[row] * CT.priceUSD[row] * 52;
+      addExposure(asSupplier, supplierKey, customerKey, annualUSD);
+      addExposure(asCustomer, customerKey, supplierKey, annualUSD);
     });
   });
 

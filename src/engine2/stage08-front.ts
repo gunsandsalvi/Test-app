@@ -51,10 +51,8 @@ import { random, beginEntityScope, endEntityScope, getRngState } from '../engine
  * arithmetic way. Half-point and far-ULP cases can land one ULP differently than the decimal
  * string did — accepted numeric drift, no mechanism changes.
  */
-const round1 = (v: number) => Math.round(v * 10) / 10;
 const round2 = (v: number) => Math.round(v * 100) / 100;
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
-const round4 = (v: number) => Math.round(v * 10000) / 10000;
 
 
 type ProductLines = NonNullable<Company['productLines']>;
