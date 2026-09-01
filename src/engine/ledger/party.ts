@@ -94,6 +94,11 @@ export function partyId(p: PartyRef): number {
 /** The party behind an id, for the apply pass. */
 export const partyOf = (id: number): PartyRef => partyRefById[id];
 
+/** §7.325 W2 — the table's size and its refs-from-index, for seeding a worker thread's own
+ *  intern table to match this one id-for-id (refs replayed in id order intern identically). */
+export const partyTableSize = (): number => partyRefById.length;
+export const partyRefsFrom = (from: number): PartyRef[] => partyRefById.slice(from);
+
 export const partyKey = (p: PartyRef): string => partyKeyById[partyId(p)];
 
 /** The inverse of `partyKey`, for the ledgers that key a balance by party (CAL's accrual). */

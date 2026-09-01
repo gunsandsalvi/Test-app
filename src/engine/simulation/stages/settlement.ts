@@ -114,6 +114,9 @@ export function internReason(reason: string): number {
 }
 /** The text behind an interned reason — the ledgers still key by it. */
 export const reasonText = (id: number): string => reasonById[id];
+/** §7.325 W2 — table size and texts-from-index, to seed a worker's reason table id-for-id. */
+export const reasonTableSize = (): number => reasonById.length;
+export const reasonTextsFrom = (from: number): string[] => reasonById.slice(from);
 /** The category beside the free text (§7.276). */
 export const reasonCategory = (id: number): PaymentCategory => reasonCategoryById[id];
 /** Every reason this run has written that no category rule matches. The harness asserts this

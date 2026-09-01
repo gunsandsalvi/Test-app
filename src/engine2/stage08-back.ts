@@ -684,15 +684,54 @@ export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapi
   }
 }
 
+/** §7.325 W2 — the firm's credit-event channel, one closure shape shared by A and by the
+ *  worker-result rebuild (a worker's own recordCredit captures into its shard instead). */
+export function makeRecordCredit(row: number, L8: BackLanes, ctx: WeeklyStepContext, nextWeek: number) {
+  return (trancheId: string, principalUSD: number, marginBps: number, termWeeks: number, retire: boolean) => {
+    if (!L8.homeBankTicker[row] || !(principalUSD > 0)) return;
+    ctx.creditEventsThisWeek.push({
+      bankTicker: L8.homeBankTicker[row]!, companyId: L8.companyId[row], trancheId,
+      principalUSD, marginBps, originationWeek: nextWeek, termWeeks, retire,
+    });
+  };
+}
+
+/** §7.325 W2 — the fields a worker STRIPS from its A result before postMessage (functions,
+ *  the mutable cash box, and the F/benchmark pass-throughs the main thread re-attaches from
+ *  its own structures), shipped instead as `cashAfterAUSD` plus the numeric/cloneable rest. */
+export type ShippedBackCoreA = Omit<ReturnType<typeof runBackCoreA>,
+  'post' | 'recordCredit' | 'cash' | 'cashLedger' | 'sec' | 'costDriversUSD'
+  | 'newOutputInventoryBySubUnit' | 'updatedProductLines' | 'stillUnderConstruction'
+  | 'newRecurringBaseUSD'> & { cashAfterAUSD: number };
+
+/** Rebuild the full A crossing from a worker's shipped form: fresh poster continuing the
+ *  worker's cash walk at its exact final value, closures re-bound to the REAL ctx, and the
+ *  pass-throughs re-attached from main's own F and benchmark tables. */
+export function rebuildBackCoreA(shipped: ShippedBackCoreA, row: number, d: BackKernelDeps): ReturnType<typeof runBackCoreA> {
+  const L8 = d.backLanes;
+  const { post, cash, cashLedger } = makeCashPoster(L8.ticker[row], L8.region[row], shipped.cashAfterAUSD, d.ctx, false);
+  // In place, not a spread: the shipped object is already this firm's own fresh clone, and a
+  // second ~50-field materialization per firm measured as the pool's single largest overhead.
+  const a = shipped as unknown as ReturnType<typeof runBackCoreA> & { cashAfterAUSD?: number };
+  a.cashAfterAUSD = undefined; // not `delete` — dictionary-mode conversion taxes every later read
+  a.post = post; a.cash = cash; a.cashLedger = cashLedger;
+  a.recordCredit = makeRecordCredit(row, L8, d.ctx, d.nextWeek);
+  a.sec = SECTOR_BENCHMARKS[L8.sector[row]];
+  a.costDriversUSD = d.F.costDrivers[row];
+  a.newOutputInventoryBySubUnit = d.F.outputInv[row];
+  a.updatedProductLines = d.F.updatedProductLines[row];
+  a.stillUnderConstruction = d.F.stillUnderConstruction[row];
+  a.newRecurringBaseUSD = d.F.newRecurringBaseUSD[row];
+  return a;
+}
+
 /** §7.325 W1 — `comp: null` is the WORKER form: the profile branch (main-side by §7.318 D)
  *  must not be reached, and the capital block's comp writes are deferred to the caller via
  *  `applyCapCompWrites`. Every other read in A is lanes/F only. */
 export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDeps) {
-  const {
-    state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
-    regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
-    primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
-  } = d;
+  // §7.325 W2 — A's dep surface, kept to what its body actually touches: `state` and
+  // `entityById` feed only the profile branch (main-side), so a worker's deps may stub them.
+  const { state, ctx, F, nextWeek, currentWeekMod13, updatedRegions, entityById, retainCashLedger } = d;
     const __k0 = S08K_PROF ? performance.now() : 0;
     const L8 = d.backLanes;
     /**
@@ -705,8 +744,6 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       L8.sharesOutstanding[row] > 0 ? round2(amountUSD / L8.sharesOutstanding[row]) : 0;
 
     const reg = updatedRegions[L8.region[row]];
-    // SCALE §7.303 — ONE hash lookup for the firm's week updates (was ~12 string-keyed hits).
-    const weekUpdate = companyUpdates[L8.ticker[row]];
     // ENGINE V2 — THE FRONT HALF OF THIS KERNEL LIVES IN src/engine2/stage08-front.ts NOW:
     // payroll (IND-R1/IND-R6), the ladder interest walk, the tax attributes, carrying cost,
     // FIFO consumption, the product-line evolution, revenue recognition and the industrial
@@ -736,13 +773,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     const bankCredit: PartyRef | undefined = L8.homeBankTicker[row]
       ? { kind: 'BANK_CREDIT', ticker: L8.homeBankTicker[row] }
       : undefined;
-    const recordCredit = (trancheId: string, principalUSD: number, marginBps: number, termWeeks: number, retire: boolean) => {
-      if (!L8.homeBankTicker[row] || !(principalUSD > 0)) return;
-      ctx.creditEventsThisWeek.push({
-        bankTicker: L8.homeBankTicker[row], companyId: L8.companyId[row], trancheId,
-        principalUSD, marginBps, originationWeek: nextWeek, termWeeks, retire,
-      });
-    };
+    const recordCredit = makeRecordCredit(row, L8, ctx, nextWeek);
 
 
     // SCALE §7.303 — ONE PASS OVER THE LADDER, now made in the front pass (same walk, same
@@ -946,7 +977,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // A firm's headcount now changes in exactly one place, and the real cash-distress layoffs
     // that formula was reaching for live there too.
     const newEmployeeCount = Math.max(10, Math.round(
-      weekUpdate?.employeeCount ?? L8.employeeCount[row]
+      Number.isNaN(L8.employeeCountUpdate[row]) ? L8.employeeCount[row] : L8.employeeCountUpdate[row]
     ));
 
     // (S5: the prepayment rule moved below, where the real tranche ladder exists to retire —

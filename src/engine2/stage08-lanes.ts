@@ -76,6 +76,7 @@ export interface BackLanes {
   baselineAnnualRevenueUSD: Float64Array;
   lastOpportunisticOfferingWeek: Float64Array; // NaN = undefined
   employeeCount: Float64Array;
+  employeeCountUpdate: Float64Array;       // NaN = no update / no field (the ?? fallback)
   accruedTaxLiabilityUSD: Float64Array;    // NaN = undefined
   bankCapitalRatio: Float64Array;          // NaN = no bank sheet
   customerConcentration: Float64Array;     // NaN = undefined
@@ -130,7 +131,7 @@ export function buildBackLanes(
     sharesOutstanding: f(), stockPrice: f(), baselineDividendYield: f(), dividendYield: f(),
     earningsWeekModulo: f(), eps: f(), cdsSpreadBps: f(), beta: f(),
     baselineAnnualRevenueUSD: f(), lastOpportunisticOfferingWeek: f(),
-    employeeCount: f(),
+    employeeCount: f(), employeeCountUpdate: f(),
     accruedTaxLiabilityUSD: f(), bankCapitalRatio: f(),
     customerConcentration: f(), supplierConcentration: f(),
     hasVehicle: new Uint8Array(n), boundaryTraceKey: new Array(n),
@@ -213,6 +214,7 @@ export function buildBackLanes(
     L.baselineAnnualRevenueUSD[i] = c.baselineAnnualRevenue;
     L.lastOpportunisticOfferingWeek[i] = c.lastOpportunisticOfferingWeek ?? NaN_;
     L.employeeCount[i] = c.employeeCount;
+    L.employeeCountUpdate[i] = wu?.employeeCount ?? NaN_;
     L.accruedTaxLiabilityUSD[i] = c.accruedTaxLiabilityUSD ?? NaN_;
     L.bankCapitalRatio[i] = c.bankBalanceSheet?.bankCapitalRatio ?? NaN_;
     // NOTE (§7.320): revenueVolatility is NOT seam-computable — the PROFILE modules append

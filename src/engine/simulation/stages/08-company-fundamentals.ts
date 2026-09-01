@@ -23,8 +23,10 @@ import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { getRngState, setRngState } from '../../rng';
 import { runStage08FrontPass } from '../../../engine2/stage08-front';
 import { ensureV2 } from '../../../engine2/world';
-import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm , s08k, runBackCoreA, runBackCoreB, runMmfRedemption} from '../../../engine2/stage08-back';
+import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm , s08k, runBackCoreA, runBackCoreB, runMmfRedemption, rebuildBackCoreA, applyCapCompWrites } from '../../../engine2/stage08-back';
 import { buildBackLanes } from '../../../engine2/stage08-lanes';
+import { backWorkerCount, dispatchBackA, collectBackA } from '../../../engine2/back-pool';
+import type { BackAShardOut } from '../../../engine2/back-worker';
 
 /** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
  *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
@@ -346,7 +348,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // for the firm — the PROFILE branch draws in A), then every post — with each phase's
   // emissions captured PER FIRM and folded back as [A, red, B, post] per firm in row order, so
   // the journal and every accumulator reproduce the interleaved loop exactly.
-  if (process.env.BACK_BARRIER === '1') {
+  if (process.env.BACK_BARRIER === '1' || backWorkerCount() >= 2) {
     const n = companyRows.length;
     // §7.325 — PHASE-LEVEL CAPTURE. The §7.324 per-firm capture allocated ~12 objects (a fresh
     // PaymentJournal among them) per firm per phase and merged Maps per firm — measured at ~10x
@@ -394,15 +396,67 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       collectUSD: new Float64Array(n).fill(NaN),
     };
     backDeps.taxCapture = taxCapture;
+    // §7.325 W2 — the A POOL: workers run core-A for every active non-profile firm while the
+    // main thread runs the ~75 profile firms' A (their deep object reads and RNG draws are
+    // main-side by §7.318 D). Worker emissions come back as §7.325-shaped segments and fold
+    // into the same firm-major replay; a dead pool falls back to running those firms serially
+    // in a second captured phase — the world is identical on every path.
+    const __w0 = S08_PROF ? performance.now() : 0;
+    const dispatch = backWorkerCount() >= 2 ? dispatchBackA({
+      lanes: backLanes, F, updatedRegions,
+      channelShareByRegion: ctx.channelShareByRegion,
+      nextWeek, currentWeekMod13,
+    }) : null;
+    const __w1 = S08_PROF ? performance.now() : 0;
     const ambient = getRngState();
     ctx.deferPendingNet = true;
     const aCap = runPhase((i) => {
       const comp = companyRows[i];
       if (!isActiveCompany(comp)) return;
+      if (dispatch && F.isProfile[i] !== 1) return; // the pool's firm
       setRngState(F.rngAfter[i]);
       aRes[i] = runBackCoreA(comp, i, backDeps);
       streamAfterA[i] = getRngState();
     });
+    let aCapRetry: ReturnType<typeof runPhase> | null = null;
+    let shardByRow: (BackAShardOut | null)[] | null = null;
+    const __w2 = S08_PROF ? performance.now() : 0;
+    let __w3 = __w2;
+    if (dispatch) {
+      const shards = collectBackA(dispatch);
+      __w3 = S08_PROF ? performance.now() : 0;
+      if (!shards) {
+        // Pool died mid-week: run its firms serially under the same capture. Correct either way.
+        aCapRetry = runPhase((i) => {
+          const comp = companyRows[i];
+          if (!isActiveCompany(comp) || F.isProfile[i] === 1 || aRes[i]) return;
+          setRngState(F.rngAfter[i]);
+          aRes[i] = runBackCoreA(comp, i, backDeps);
+          streamAfterA[i] = getRngState();
+        });
+      } else {
+        shardByRow = new Array(n).fill(null);
+        for (const sh of shards) {
+          for (let i = sh.lo; i < sh.hi; i++) {
+            shardByRow[i] = sh;
+            if (!Number.isNaN(sh.taxAccrue[i])) taxCapture.accrueUSD[i] = sh.taxAccrue[i];
+            if (!Number.isNaN(sh.taxCollect[i])) taxCapture.collectUSD[i] = sh.taxCollect[i];
+            const cross = sh.crossings[i];
+            if (cross) {
+              // The full A crossing, rebuilt: fresh poster continuing the worker's exact cash
+              // value, closures on the REAL ctx, pass-throughs from main's own F.
+              aRes[i] = rebuildBackCoreA(cross, i, backDeps);
+              streamAfterA[i] = F.rngAfter[i]; // non-profile A is draw-free (§7.317)
+              applyCapCompWrites(companyRows[i], aRes[i]!.cap, backLanes, i);
+            }
+          }
+        }
+      }
+    }
+    if (S08_PROF && dispatch) {
+      console.log(`[s08w] dispatch ${(__w1 - __w0).toFixed(1)} profileA ${(__w2 - __w1).toFixed(1)}`
+        + ` collect ${(__w3 - __w2).toFixed(1)} rebuild ${(performance.now() - __w3).toFixed(1)}`);
+    }
     const redCap = runPhase((i) => {
       if (!aRes[i]) return;
       redPaid[i] = runMmfRedemption(companyRows[i], i, backDeps, aRes[i]!);
@@ -424,13 +478,38 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     ctx.deferPendingNet = false;
     // The firm-major replay: each firm's captured entries land in [A, red, B, post] order,
     // reproducing the interleaved loop's journal and accumulator content exactly.
-    const phases = [aCap, redCap, bCap, postCap];
+    const phases = aCapRetry
+      ? [aCap, aCapRetry, redCap, bCap, postCap]
+      : [aCap, redCap, bCap, postCap];
+    /** Index in `phases` after which a pool shard's A segment replays (before red). */
+    const shardAfter = aCapRetry ? 1 : 0;
+    const nPhases = phases.length;
     const slices = phases.map((ph) => ({
       hAcc: [...ph.acc.holderAccruals], hCash: [...ph.acc.holderCash],
       hPay: [...ph.acc.holderPayout], hSettle: [...ph.acc.holderSettlements],
     }));
+    /** One pool shard's A segment for firm `i` — canonical ids by construction (back-pool's
+     *  pre-intern + seeding), so legs replay exactly like a main-side capture's. */
+    const replayShardA = (sh: BackAShardOut, i: number): void => {
+      const st = (m: Int32Array) => (i > sh.lo ? m[i - 1] : 0);
+      for (let k = st(sh.journalMark); k < sh.journalMark[i]; k++) {
+        journalPush(ctx.paymentJournal, sh.journalPayer[k], sh.journalPayee[k], sh.journalAmount[k], sh.journalReason[k]);
+        applyPendingLeg(ctx, sh.journalPayer[k], sh.journalPayee[k], sh.journalAmount[k]);
+      }
+      for (let k = st(sh.holderAccMark); k < sh.holderAccMark[i]; k++) {
+        const [key, v] = sh.holderAcc[k];
+        ctx.pendingHolderAccrualUSD.set(key, (ctx.pendingHolderAccrualUSD.get(key) ?? 0) + v);
+      }
+      for (let k = st(sh.holderCashMark); k < sh.holderCashMark[i]; k++) {
+        const [key, v] = sh.holderCash[k];
+        ctx.pendingHolderCashUSD.set(key, (ctx.pendingHolderCashUSD.get(key) ?? 0) + v);
+      }
+      for (let k = st(sh.holderPayMark); k < sh.holderPayMark[i]; k++) ctx.pendingHolderAccrualPayout.add(sh.holderPay[k]);
+      for (let k = st(sh.creditMark); k < sh.creditMark[i]; k++) ctx.creditEventsThisWeek.push(sh.credits[k]);
+    };
     for (let i = 0; i < n; i++) {
-      for (let p = 0; p < 4; p++) {
+      for (let p = 0; p < nPhases; p++) {
+        if (p === shardAfter + 1 && shardByRow && shardByRow[i]) replayShardA(shardByRow[i]!, i);
         const { acc, marks } = phases[p];
         const sl = slices[p];
         const s = (m: Int32Array) => (i > 0 ? m[i - 1] : 0);
