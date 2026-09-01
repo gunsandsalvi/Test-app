@@ -40,7 +40,7 @@ import { fulfillmentRatio } from '../domain/company-week/inventory';
 import { V2World, rowOf } from './world';
 import { LotViews, LotStore, consumeFifoOnViews } from './lots';
 import { SUBUNITS, SUBUNIT_INDEX, NSUB } from './state';
-import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../engine/bootstrap/labor-and-wages';
+import { getBaseAnnualWageUSD } from '../engine/bootstrap/labor-and-wages';
 import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/profiles';
 import { random, getRngState, setRngState, scopedStreamSeed } from '../engine/rng';
 import { lane64, lane32, laneU32, lane8 } from './shared-lanes';
@@ -342,15 +342,16 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
       const mix = SECTOR_OCCUPATION_MIX[sector as keyof typeof SECTOR_OCCUPATION_MIX] ?? { GENERAL: 1.0 };
       const baseWage = getBaseAnnualWageUSD(region);
       const pools = updatedRegions[region].occupationPools;
-      // one head, index 1, over one week ×52 = the annual per-worker term exactly
-      v = {
-        now: weeklyWageBillUSD(1, mix, baseWage, pools, 1) * 52,
-        base: weeklyWageBillUSD(1, mix, baseWage, {
-          GENERAL: { wageIndex: 1 }, SKILLED_TRADES: { wageIndex: 1 },
-          TECHNICAL_ENGINEERING: { wageIndex: 1 }, SPECIALIZED_PROFESSIONAL: { wageIndex: 1 },
-          MANAGERIAL_FINANCIAL: { wageIndex: 1 },
-        } as Record<import('../types').OccupationType, { wageIndex: number }>, 1) * 52,
-      };
+      // THE SAME Σ weeklyWageBillUSD folds, taken once — reckoning step 1 caught the first form
+      // of this (annual/52 × 52) drifting the whole cash walk by one ULP per firm.
+      let now = 0, base = 0;
+      for (const occ of Object.keys(mix) as (keyof typeof mix)[]) {
+        const share = mix[occ] ?? 0;
+        if (share <= 0) continue;
+        now += share * (baseWage[occ] ?? 0) * (pools[occ]?.wageIndex ?? 1);
+        base += share * (baseWage[occ] ?? 0) * 1;
+      }
+      v = { now, base };
       perWorkerBySectorRegion.set(key, v);
     }
     return v;
@@ -503,7 +504,7 @@ export function runFrontCore(
     const weeklyPayrollUSD = S.employeeCount[row] > 0
       ? (S.employeeCount[row] * S.perWorkerAnnualUSD[row] * S.offeredWageIndex[row]) / 52 : 0;
     const baselineWeeklyPayrollUSD = S.baselineEmployeeCount[row] > 0
-      ? (S.baselineEmployeeCount[row] * S.perWorkerBaselineAnnualUSD[row]) / 52 : 0;
+      ? (S.baselineEmployeeCount[row] * S.perWorkerBaselineAnnualUSD[row] * 1) / 52 : 0;
     F.weeklyPayrollUSD[row] = weeklyPayrollUSD;
 
     // the ladder walk on read-columns
