@@ -27,6 +27,7 @@ interface PoolWorker {
 
 let pool: PoolWorker[] | null = null;
 let poolUnavailable = false;
+let engagedLogged = false;
 let receiveMessageOnPortFn: ((port: unknown) => { message: unknown } | undefined) | null = null;
 
 export function frontWorkerCount(): number {
@@ -139,6 +140,10 @@ export function runFrontSharded(S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2:
     const hi = Math.min(n, lo + per);
     Atomics.store(workers[i].doorbell, 0, 0);
     workers[i].port.postMessage({ seam: seamLanes, out: outLanes, f: fLanes, lots: lotViews, lo, hi });
+  }
+  if (!engagedLogged) {
+    engagedLogged = true;
+    console.error(`[front-pool] engaged: ${w} shards over ${n} firms`);
   }
   const deadByShard: number[][] = [];
   for (let i = 0; i < w; i++) {
