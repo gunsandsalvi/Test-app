@@ -24,6 +24,7 @@ import { getRngState, setRngState } from '../../rng';
 import { runStage08FrontPass } from '../../../engine2/stage08-front';
 import { ensureV2 } from '../../../engine2/world';
 import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm , s08k} from '../../../engine2/stage08-back';
+import { buildBackLanes } from '../../../engine2/stage08-lanes';
 
 /** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
  *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
@@ -203,8 +204,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // If you add a draw, a contended resource, or a read of another company's live book to this
   // kernel, you break that property. The test is one line: run the loop backwards and hash the
   // world.
+  // §7.317 steps 1.1-1.2 — the back seam: one pass reads every firm's capital-block inputs
+  // into typed lanes before the shard loop; the core reads rows, not objects.
+  const backLanes = buildBackLanes(state.companies, updatedRegions, companyUpdates);
   const companyWeekKernel = makeStage08BackKernel({
-    state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
+    state, ctx, v2, F, backLanes, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
     primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering,
     pushNews: (n: NewsItem) => refinanceNews.push(n),

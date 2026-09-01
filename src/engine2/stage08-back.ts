@@ -12,6 +12,7 @@
 
 import { GameState, Company, DebtTranche, NewsItem, SegmentFinancial } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
+import { BackLanes } from './stage08-lanes';
 import {
   isActiveCompany, isPubliclyListed, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare,
   managedEntityIdsOf, TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE,
@@ -94,6 +95,8 @@ export interface BackKernelDeps {
   ctx: WeeklyStepContext;
   v2: V2World;
   F: FrontPass;
+  /** §7.317 — the seam lanes the back cores read (built once before the shard loop). */
+  backLanes: BackLanes;
   nextWeek: number;
   currentWeekMod13: number;
   updatedRegions: WeeklyStepContext['updatedRegions'];
@@ -136,12 +139,14 @@ interface CapitalBlockOut {
   accumulatedDepreciationUSD: number;
   weeklyDepreciationUSD: number;
   payoutPressure: number;
+  /** §7.317 step 1.3 — the block's comp writes, returned as data; the caller applies them at
+   *  the original write points (the future post pass). All-or-none per the seeding rule. */
+  learningWrites?: { cumulativeUnits: number; multiplier: number; growthAnnual: number };
+  retirementWrites: { idleStreakWeeks: number; mothballedPpeShare: number; mothballedStreakWeeks: number };
+  scrapWrites?: { grossPPEUSD: number; accumulatedDepreciationUSD: number };
 }
 
-function runCapitalBlock(args: {
-  comp: Company;
-  reg: WeeklyStepContext['updatedRegions'][keyof WeeklyStepContext['updatedRegions']];
-  weekUpdate: CompanyWeekUpdate | undefined;
+function runCapitalBlock(row: number, L: BackLanes, args: {
   newEbitda: number;
   newRevenue: number;
   weeklyInterest: number;
@@ -149,186 +154,162 @@ function runCapitalBlock(args: {
   newExecutionQuality: number;
   capexCommissionedThisWeekUSD: number;
   nextWeek: number;
+  priorOccupationMixDrift: Company['occupationMixDrift'];
+  homeBankTicker: string | undefined;
 }): CapitalBlockOut {
-  const { comp, reg, weekUpdate, newEbitda, newRevenue, weeklyInterest,
-    effectiveDebtRate, newExecutionQuality, capexCommissionedThisWeekUSD, nextWeek } = args;
-    // §5-STRUCT step 2 — THE CAPITAL PROGRAMME LIVES ON THE FIRM, NOT HERE.
-    // 158 lines moved to `domain/company-week/capital-programme.ts`: maintenance anchored to
-    // depreciation, what can be funded, what is deferred, the growth envelope, and the plant's
-    // roll-forward. It is a pure function now, so "does a firm short of cash defer maintenance?"
-    // is a test rather than a sixty-week run. This stage's job is to gather the inputs and book
-    // the results — which is all a stage should ever do.
-    const usefulLifeYearsForCapex = SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12;
-    const grossPPEForCapex = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
-    const addressableGrowthAnnual = (comp.productLines || []).reduce((acc, l) => {
-      const catDemand = reg.categoryDemand[l.subUnitId];
-      return acc + Math.max(0, catDemand?.demandGrowthAnnual ?? 0) * l.revenueShare;
-    }, 0);
-    const categoryShortfall = (comp.productLines || []).reduce((acc, l) => {
-      const cd = reg.categoryDemand[l.subUnitId] as { totalUnitsSuppliedThisWeek?: number; totalUnitsDemandedThisWeek?: number } | undefined;
-      const supplied = cd?.totalUnitsSuppliedThisWeek ?? 0;
-      const demanded = cd?.totalUnitsDemandedThisWeek ?? 0;
-      if (!(supplied > 0) || !(demanded > 0)) return acc;
-      return acc + Math.max(0, demanded / supplied - 1) * (l.revenueShare ?? 1);
-    }, 0);
-    const avgCompetitiveness = (comp.productLines || []).reduce((acc, l) => acc + l.competitiveness, 0)
-      / Math.max(1, (comp.productLines || []).length);
+  const { newEbitda, newRevenue, weeklyInterest, effectiveDebtRate, newExecutionQuality,
+    capexCommissionedThisWeekUSD, nextWeek, priorOccupationMixDrift, homeBankTicker } = args;
+  // §7.317 step 1.3 — THE CAPITAL CORE READS LANES, NOT THE OBJECT. Every `x ?? d` the object
+  // read had becomes `Number.isNaN(lane) ? d : lane` on the same value; the scrap/learning
+  // read-after-write chains thread locals carrying exactly the values the object carried.
+  const usefulLifeYearsForCapex = L.usefulLifeYears[row];
+  const g0 = L.grossPPEUSD[row];
+  const a0 = L.accumulatedDepreciationUSD[row];
+  const grossPPEForCapex = Number.isNaN(g0) ? L.ppeDefaultUSD[row] : g0;
+  const addressableGrowthAnnual = L.addressableGrowthAnnual[row];
+  const categoryShortfall = L.categoryShortfall[row];
+  const avgCompetitiveness = L.avgCompetitiveness[row];
 
-    // §5-PROD — Wright's-law learning: fold this week's making into the firm's own curve. A
-    // seeded firm opens where its curve reproduces the legacy drift for its current run-rate
-    // (§7.4: the world opens growing exactly as it used to and diverges by experience).
-    {
-      const producedUnits = weekUpdate?.producedUnitsThisWeek ?? 0;
-      // §5-PROD — the anchor derives from the PLANT'S STRUCTURAL RATE, not the first week's
-      // throttled output: seeding off a low week under-seeded the curve, and the recovery to
-      // normal volume then read as years of learning at once — multiplier spikes, staffing
-      // caps plunging, the §7.301 u regression. Capacity is what "its current run-rate"
-      // honestly means for a firm that has produced for years (§7.4).
-      const capacityUnits = weekUpdate?.plantCapacityUnitsThisWeek ?? 0;
-      if (comp.cumulativeOutputUnits === undefined && (capacityUnits > 0 || producedUnits > 0)) {
-        comp.cumulativeOutputUnits = seedCumulativeUnits(Math.max(capacityUnits, producedUnits) * 52);
-        comp.learningMultiplier = comp.learningMultiplier ?? 1;
-      }
-      if (comp.cumulativeOutputUnits !== undefined) {
-        const learned = learningUpdate({
-          priorCumulativeUnits: comp.cumulativeOutputUnits,
-          producedUnitsThisWeek: producedUnits,
-          priorMultiplier: comp.learningMultiplier ?? 1,
-        });
-        comp.cumulativeOutputUnits = learned.cumulativeUnits;
-        comp.learningMultiplier = learned.multiplier;
-        comp.lastLearningGrowthAnnual = learned.growthAnnual;
-      }
-      // LEARN_TRACE=1 — the learning distribution, quarterly: is the curve at its designed
-      // ~1.2%/yr or spiking (the §7.301 seed question, answered by measurement not story).
-      if (process.env.LEARN_TRACE === '1' && nextWeek % 13 === 0) {
-        learnTraceRows.push({ m: comp.learningMultiplier ?? 1, g: comp.lastLearningGrowthAnnual ?? -1 });
-      }
+  // §5-PROD — Wright's-law learning: fold this week's making into the firm's own curve.
+  let learningWrites: CapitalBlockOut['learningWrites'];
+  {
+    const producedUnits = L.producedUnitsThisWeek[row];
+    const capacityUnits = L.plantCapacityUnitsThisWeek[row];
+    let cumulative = L.cumulativeOutputUnits[row]; // NaN = undefined
+    let multiplier = L.learningMultiplier[row];    // NaN = undefined
+    if (Number.isNaN(cumulative) && (capacityUnits > 0 || producedUnits > 0)) {
+      cumulative = seedCumulativeUnits(Math.max(capacityUnits, producedUnits) * 52);
+      if (Number.isNaN(multiplier)) multiplier = 1;
     }
-
-    // §5-DYN — the capacity-retirement STOCK response: integrate this week's measured idle
-    // record (stage 05's own §7.139 test) into mothball / restart / scrap. Scrap is the one
-    // irreversible act: the written-off plant leaves gross PP&E and its share of accumulated
-    // depreciation together, so net book value falls by only the unrecovered remainder.
-    // DYN_MOTHBALL_OFF=1 — attribution probe only: holds the stock response at zero so a run
-    // can price the mothball mechanism's own share of a trajectory. Never set in a reference.
-    const retirement = process.env.DYN_MOTHBALL_OFF === '1'
-      ? { idleStreakWeeks: 0, mothballedShare: 0, mothballedStreakWeeks: 0, scrappedShare: 0 }
-      : capacityRetirement({
-        idleRevenueShareThisWeek: weekUpdate?.idleLineRevenueShare ?? 0,
-        priorIdleStreakWeeks: comp.idleStreakWeeks ?? 0,
-        priorMothballedShare: comp.mothballedPpeShare ?? 0,
-        priorMothballedStreakWeeks: comp.mothballedStreakWeeks ?? 0,
+    if (!Number.isNaN(cumulative)) {
+      const learned = learningUpdate({
+        priorCumulativeUnits: cumulative,
+        producedUnitsThisWeek: producedUnits,
+        priorMultiplier: Number.isNaN(multiplier) ? 1 : multiplier,
       });
-    comp.idleStreakWeeks = retirement.idleStreakWeeks;
-    comp.mothballedPpeShare = retirement.mothballedShare;
-    comp.mothballedStreakWeeks = retirement.mothballedStreakWeeks;
-    if (retirement.scrappedShare > 0) {
-      const scrappedGrossUSD = grossPPEForCapex * retirement.scrappedShare;
-      const scrappedDepUSD = (comp.accumulatedDepreciationUSD ?? grossPPEForCapex * 0.45) * retirement.scrappedShare;
-      comp.grossPPEUSD = Math.max(0, (comp.grossPPEUSD ?? grossPPEForCapex) - scrappedGrossUSD);
-      comp.accumulatedDepreciationUSD = Math.max(0, (comp.accumulatedDepreciationUSD ?? 0) - scrappedDepUSD);
+      learningWrites = {
+        cumulativeUnits: learned.cumulativeUnits,
+        multiplier: learned.multiplier,
+        growthAnnual: learned.growthAnnual,
+      };
     }
+    // LEARN_TRACE=1 — the learning distribution, quarterly (§7.301's seed question).
+    if (process.env.LEARN_TRACE === '1' && nextWeek % 13 === 0) {
+      const priorGrowth = L.lastLearningGrowthAnnual[row];
+      learnTraceRows.push({
+        m: learningWrites?.multiplier ?? (Number.isNaN(multiplier) ? 1 : multiplier),
+        g: learningWrites?.growthAnnual ?? (Number.isNaN(priorGrowth) ? -1 : priorGrowth),
+      });
+    }
+  }
 
-    const programme = planCapitalProgramme({
-      grossPPEUSD: grossPPEForCapex,
-      mothballedPpeShare: comp.mothballedPpeShare,
-      accumulatedDepreciationUSD: comp.accumulatedDepreciationUSD ?? (grossPPEForCapex * 0.45),
-      usefulLifeYears: usefulLifeYearsForCapex,
-      weeklyEbitdaUSD: newEbitda / 52,
-      weeklyInterestUSD: weeklyInterest,
-      cashUSD: comp.cash,
-      currentLiabilitiesUSD: comp.currentLiabilities,
-      annualRevenueUSD: comp.annualRevenue,
-      newRevenueUSD: newRevenue,
-      priorMaintenanceCapexUSD: comp.maintenanceCapex ?? (comp.capex * 0.6),
-      priorGrowthCapexUSD: comp.growthCapex ?? (comp.capex * 0.4),
-      priorMaintenanceShortfallStreak: comp.maintenanceShortfallStreak ?? 0,
-      baselineGrowthCapexToRevenueRatio: comp.baselineGrowthCapexToRevenueRatio
-        ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue)),
-      isInvestmentGrade: isInvestmentGrade(comp.creditRating),
-      addressableGrowthAnnual,
-      categoryShortfall,
-      capacityCatchupShareAnnual: CAPACITY_CATCHUP_SHARE_ANNUAL,
-      effectiveDebtRate,
-      marketCapUSD: comp.marketCap,
-      totalDebtUSD: comp.totalDebt,
-      avgCompetitiveness,
+  // §5-DYN — the capacity-retirement STOCK response (mothball / restart / scrap).
+  const retirement = process.env.DYN_MOTHBALL_OFF === '1'
+    ? { idleStreakWeeks: 0, mothballedShare: 0, mothballedStreakWeeks: 0, scrappedShare: 0 }
+    : capacityRetirement({
+      idleRevenueShareThisWeek: L.idleLineRevenueShare[row],
+      priorIdleStreakWeeks: Number.isNaN(L.idleStreakWeeks[row]) ? 0 : L.idleStreakWeeks[row],
+      priorMothballedShare: Number.isNaN(L.mothballedPpeShare[row]) ? 0 : L.mothballedPpeShare[row],
+      priorMothballedStreakWeeks: Number.isNaN(L.mothballedStreakWeeks[row]) ? 0 : L.mothballedStreakWeeks[row],
     });
+  let scrapWrites: CapitalBlockOut['scrapWrites'];
+  // the object chain: after a scrap both fields are DEFINED; without one they keep their
+  // seam values (possibly undefined). gCur/aCur carry NaN for "still undefined".
+  let gCur = g0;
+  let aCur = a0;
+  if (retirement.scrappedShare > 0) {
+    const scrappedGrossUSD = grossPPEForCapex * retirement.scrappedShare;
+    const scrappedDepUSD = (Number.isNaN(a0) ? grossPPEForCapex * 0.45 : a0) * retirement.scrappedShare;
+    gCur = Math.max(0, grossPPEForCapex - scrappedGrossUSD);
+    aCur = Math.max(0, (Number.isNaN(a0) ? 0 : a0) - scrappedDepUSD);
+    scrapWrites = { grossPPEUSD: gCur, accumulatedDepreciationUSD: aCur };
+  }
 
-    // CAPEX_TRACE=1 — the §7.272/§7.287 money-bid decomposition: who bids what, with the
-    // multiplier terms, so the EUR 7.5x-of-depreciation overbid names its own driver.
-    if (process.env.CAPEX_TRACE === '1' && programme.capexUSD > 0.5e9) {
-      console.log(`  [capex] w${nextWeek} ${comp.region}:${comp.ticker} ${comp.sector} `
-        + `capex ${(programme.capexUSD / 1e9).toFixed(2)}B/yr (maint ${(programme.maintenanceCapexUSD / 1e9).toFixed(2)} growth ${(programme.growthCapexUSD / 1e9).toFixed(2)}) `
-        + `rev ${(newRevenue / 1e9).toFixed(2)}B ratio ${(comp.baselineGrowthCapexToRevenueRatio ?? -1).toFixed(4)} `
-        + `shortfall ${categoryShortfall.toFixed(3)} addrGrowth ${addressableGrowthAnnual.toFixed(3)} `
-        + `ppe ${(grossPPEForCapex / 1e9).toFixed(2)}B ebitda/wk ${(newEbitda / 52 / 1e6).toFixed(1)}M`);
-    }
+  const programme = planCapitalProgramme({
+    grossPPEUSD: grossPPEForCapex,
+    mothballedPpeShare: retirement.mothballedShare,
+    accumulatedDepreciationUSD: Number.isNaN(aCur) ? (grossPPEForCapex * 0.45) : aCur,
+    usefulLifeYears: usefulLifeYearsForCapex,
+    weeklyEbitdaUSD: newEbitda / 52,
+    weeklyInterestUSD: weeklyInterest,
+    cashUSD: L.cashUSD[row],
+    currentLiabilitiesUSD: L.currentLiabilitiesUSD[row],
+    annualRevenueUSD: L.annualRevenueUSD[row],
+    newRevenueUSD: newRevenue,
+    priorMaintenanceCapexUSD: Number.isNaN(L.maintenanceCapexUSD[row]) ? (L.capexUSD[row] * 0.6) : L.maintenanceCapexUSD[row],
+    priorGrowthCapexUSD: Number.isNaN(L.growthCapexUSD[row]) ? (L.capexUSD[row] * 0.4) : L.growthCapexUSD[row],
+    priorMaintenanceShortfallStreak: Number.isNaN(L.maintenanceShortfallStreak[row]) ? 0 : L.maintenanceShortfallStreak[row],
+    baselineGrowthCapexToRevenueRatio: Number.isNaN(L.baselineGrowthCapexToRevenueRatio[row])
+      ? ((Number.isNaN(L.growthCapexUSD[row]) ? (L.capexUSD[row] * 0.4) : L.growthCapexUSD[row]) / Math.max(1, L.annualRevenueUSD[row]))
+      : L.baselineGrowthCapexToRevenueRatio[row],
+    isInvestmentGrade: L.investmentGrade[row] === 1,
+    addressableGrowthAnnual,
+    categoryShortfall,
+    capacityCatchupShareAnnual: CAPACITY_CATCHUP_SHARE_ANNUAL,
+    effectiveDebtRate,
+    marketCapUSD: L.marketCapUSD[row],
+    totalDebtUSD: L.totalDebtUSD[row],
+    avgCompetitiveness,
+  });
 
-    const newMaintenanceCapex = programme.maintenanceCapexUSD;
-    const newMaintenanceShortfallStreak = programme.maintenanceShortfallStreak;
-    const weeklyDebtFundedPortion = programme.debtFundedMaintenanceUSD;
+  // CAPEX_TRACE=1 — the §7.272/§7.287 money-bid decomposition (string lanes, main-side).
+  if (process.env.CAPEX_TRACE === '1' && programme.capexUSD > 0.5e9) {
+    const ratio0 = L.baselineGrowthCapexToRevenueRatio[row];
+    console.log(`  [capex] w${nextWeek} ${L.region[row]}:${L.ticker[row]} ${L.sector[row]} `
+      + `capex ${(programme.capexUSD / 1e9).toFixed(2)}B/yr (maint ${(programme.maintenanceCapexUSD / 1e9).toFixed(2)} growth ${(programme.growthCapexUSD / 1e9).toFixed(2)}) `
+      + `rev ${(newRevenue / 1e9).toFixed(2)}B ratio ${(Number.isNaN(ratio0) ? -1 : ratio0).toFixed(4)} `
+      + `shortfall ${categoryShortfall.toFixed(3)} addrGrowth ${addressableGrowthAnnual.toFixed(3)} `
+      + `ppe ${(grossPPEForCapex / 1e9).toFixed(2)}B ebitda/wk ${(newEbitda / 52 / 1e6).toFixed(1)}M`);
+  }
 
-    // The bridge is a REAL tranche on a real bank's book, so the programme reports the amount and
-    // this stage issues it — one writer per fact (§1.3).
-    let maintenanceFundingTranches: DebtTranche[] = [];
-    if (weeklyDebtFundedPortion > 1000) {
-      maintenanceFundingTranches = [{
-        id: `${comp.ticker}-MAINT-${nextWeek}`,
-        principalUSD: weeklyDebtFundedPortion,
-        rateType: 'FLOATING',
-        floatingMarginBps: Math.round(comp.oasSpreadBps * 1.1), // priced wide — bridge, not term
-        originationWeek: nextWeek,
-        maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
-        seniority: 'SENIOR',
-        // G2: a bridge is BANK debt — it lives on the house bank's itemized book and its interest
-        // is paid to that bank, not to the loan market (the §6 double-count).
-        isBankFacility: true,
-        facilityBankTicker: comp.homeBankTicker,
-      }];
-    }
+  const newMaintenanceCapex = programme.maintenanceCapexUSD;
+  const newMaintenanceShortfallStreak = programme.maintenanceShortfallStreak;
+  const weeklyDebtFundedPortion = programme.debtFundedMaintenanceUSD;
 
-    let newGrowthCapex = programme.growthCapexUSD;
-    let newRndExpense = comp.rndExpense ?? 0;
-    if ((comp.productLines || []).some(l => l.industry === 'TechHardwareSemis' || l.industry === 'SoftwareDigitalServices')) {
-      newRndExpense = newGrowthCapex * 0.4;
-      newGrowthCapex = newGrowthCapex * 0.6;
-    }
+  // The bridge is a REAL tranche on a real bank's book (§1.3: one writer per fact).
+  let maintenanceFundingTranches: DebtTranche[] = [];
+  if (weeklyDebtFundedPortion > 1000) {
+    maintenanceFundingTranches = [{
+      id: `${L.ticker[row]}-MAINT-${nextWeek}`,
+      principalUSD: weeklyDebtFundedPortion,
+      rateType: 'FLOATING',
+      floatingMarginBps: Math.round(L.oasSpreadBps[row] * 1.1), // priced wide — bridge, not term
+      originationWeek: nextWeek,
+      maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
+      seniority: 'SENIOR',
+      // G2: a bridge is BANK debt — it lives on the house bank's itemized book.
+      isBankFacility: true,
+      facilityBankTicker: homeBankTicker,
+    }];
+  }
 
-    const growthCapexIntensity = (newGrowthCapex - (comp.growthCapex ?? 0)) / Math.max(1, comp.growthCapex ?? 1);
-    const isAutomating = growthCapexIntensity > 0.05 && newExecutionQuality > 1.0;
-    // SCALE — cloned only when actually written (the write-back hands the untouched object
-    // straight back otherwise, which is replacement-neutral for the battery replays).
-    let newOccupationMixDrift = comp.occupationMixDrift || {};
-    if (isAutomating) {
-      newOccupationMixDrift = { ...newOccupationMixDrift };
-      newOccupationMixDrift.TECHNICAL_ENGINEERING = Math.min(0.15, (newOccupationMixDrift.TECHNICAL_ENGINEERING ?? 0) + 0.001);
-      newOccupationMixDrift.GENERAL = Math.max(-0.15, (newOccupationMixDrift.GENERAL ?? 0) - 0.001);
-    }
+  let newGrowthCapex = programme.growthCapexUSD;
+  let newRndExpense = Number.isNaN(L.rndExpenseUSD[row]) ? 0 : L.rndExpenseUSD[row];
+  if (L.hasTechLine[row] === 1) {
+    newRndExpense = newGrowthCapex * 0.4;
+    newGrowthCapex = newGrowthCapex * 0.6;
+  }
 
-    const newCapex = comp.sector === 'Banks' ? 0 : (newMaintenanceCapex + newGrowthCapex);
+  const priorGrowth = L.growthCapexUSD[row];
+  const growthCapexIntensity = (newGrowthCapex - (Number.isNaN(priorGrowth) ? 0 : priorGrowth))
+    / Math.max(1, Number.isNaN(priorGrowth) ? 1 : priorGrowth);
+  const isAutomating = growthCapexIntensity > 0.05 && newExecutionQuality > 1.0;
+  // SCALE — cloned only when actually written (replacement-neutral for the battery replays).
+  let newOccupationMixDrift = priorOccupationMixDrift || {};
+  if (isAutomating) {
+    newOccupationMixDrift = { ...newOccupationMixDrift };
+    newOccupationMixDrift.TECHNICAL_ENGINEERING = Math.min(0.15, (newOccupationMixDrift.TECHNICAL_ENGINEERING ?? 0) + 0.001);
+    newOccupationMixDrift.GENERAL = Math.max(-0.15, (newOccupationMixDrift.GENERAL ?? 0) - 0.001);
+  }
 
-    // PP&E roll-forward: a genuine stock (gross cost less accumulated depreciation), not a
-    // static totalDebt-derived formula — grows with actual weekly capex spend and runs down on
-    // a sector-appropriate straight-line useful life, so "how is PPE being depreciated" has a
-    // real, inspectable mechanism behind it.
-    const priorGrossPPE = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
-    const priorAccumulatedDepreciation = comp.accumulatedDepreciationUSD ?? (priorGrossPPE * 0.45);
-    const usefulLifeYears = SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12;
-    const weeklyDepreciation = priorGrossPPE / (usefulLifeYears * 52);
-    // IND1: the plant grows by what was actually DELIVERED, not by what was budgeted. A machine
-    // ordered is not PP&E — capex is a bid into a real market that can go unfilled or arrive
-    // weeks later by ship, and investment showing up after the demand that justified it is the
-    // mechanism behind every capacity cycle. (`newCapex / 52` capitalised the intention.)
-    // IND13 — CONSTRUCTION IN PROGRESS. What arrived this week joins the assets under
-    // construction, each lot carrying the week it enters service. The plant grows by what was
-    // COMMISSIONED, not by what was delivered — so PP&E, and the capacity that grows off it,
-    // arrive after the demand that justified them. That lag is the capacity cycle.
-    // (§5-TAXR reads the construction queue ONCE, above the income statement — the same
-    // `capexCommissionedThisWeekUSD` grows the tax basis there and the book here.)
-    const newGrossPPEUSD = priorGrossPPE + capexCommissionedThisWeekUSD;
-    const newAccumulatedDepreciationUSD = Math.min(newGrossPPEUSD, priorAccumulatedDepreciation + weeklyDepreciation);
+  const newCapex = L.isBanksSector[row] === 1 ? 0 : (newMaintenanceCapex + newGrowthCapex);
+
+  // PP&E roll-forward (IND13: grows by what was COMMISSIONED; the lag is the capacity cycle).
+  const priorGrossPPE = Number.isNaN(gCur) ? L.ppeDefaultUSD[row] : gCur;
+  const priorAccumulatedDepreciation = Number.isNaN(aCur) ? (priorGrossPPE * 0.45) : aCur;
+  const weeklyDepreciation = priorGrossPPE / (usefulLifeYearsForCapex * 52);
+  const newGrossPPEUSD = priorGrossPPE + capexCommissionedThisWeekUSD;
+  const newAccumulatedDepreciationUSD = Math.min(newGrossPPEUSD, priorAccumulatedDepreciation + weeklyDepreciation);
   return {
     maintenanceCapexUSD: newMaintenanceCapex,
     maintenanceShortfallStreak: newMaintenanceShortfallStreak,
@@ -342,6 +323,13 @@ function runCapitalBlock(args: {
     accumulatedDepreciationUSD: newAccumulatedDepreciationUSD,
     weeklyDepreciationUSD: weeklyDepreciation,
     payoutPressure: programme.payoutPressure,
+    learningWrites,
+    retirementWrites: {
+      idleStreakWeeks: retirement.idleStreakWeeks,
+      mothballedPpeShare: retirement.mothballedShare,
+      mothballedStreakWeeks: retirement.mothballedStreakWeeks,
+    },
+    scrapWrites,
   };
 }
 
@@ -833,12 +821,31 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       comp.deferredTaxLiabilityUSD = profilePnl.deferredTaxLiabilityUSD;
     }
 
-    // §7.317 — the capital block runs as ONE call (see runCapitalBlock above); the maintenance
-    // credit event is emitted HERE, at the block's original sequence point.
-    const cap = runCapitalBlock({
-      comp, reg, weekUpdate, newEbitda, newRevenue, weeklyInterest,
+    // §7.317 — the capital CORE runs on the seam lanes (steps 1.1-1.3); its comp writes come
+    // back as data and are applied here, at the block's original write points, and the
+    // maintenance credit event is emitted at its original sequence point.
+    const cap = runCapitalBlock(row, d.backLanes, {
+      newEbitda, newRevenue, weeklyInterest,
       effectiveDebtRate, newExecutionQuality, capexCommissionedThisWeekUSD, nextWeek,
+      priorOccupationMixDrift: comp.occupationMixDrift, homeBankTicker: comp.homeBankTicker,
     });
+    if (cap.learningWrites) {
+      comp.cumulativeOutputUnits = cap.learningWrites.cumulativeUnits;
+      comp.learningMultiplier = cap.learningWrites.multiplier;
+      comp.lastLearningGrowthAnnual = cap.learningWrites.growthAnnual;
+    } else if (comp.cumulativeOutputUnits === undefined
+        && (d.backLanes.plantCapacityUnitsThisWeek[row] > 0 || d.backLanes.producedUnitsThisWeek[row] > 0)) {
+      // unreachable by construction (seeding always flows into the learned branch); stated so
+      // a future edit that breaks the all-or-none rule fails loudly here.
+      throw new Error('capital core: seeding without learning writes');
+    }
+    comp.idleStreakWeeks = cap.retirementWrites.idleStreakWeeks;
+    comp.mothballedPpeShare = cap.retirementWrites.mothballedPpeShare;
+    comp.mothballedStreakWeeks = cap.retirementWrites.mothballedStreakWeeks;
+    if (cap.scrapWrites) {
+      comp.grossPPEUSD = cap.scrapWrites.grossPPEUSD;
+      comp.accumulatedDepreciationUSD = cap.scrapWrites.accumulatedDepreciationUSD;
+    }
     const newMaintenanceCapex = cap.maintenanceCapexUSD;
     const newMaintenanceShortfallStreak = cap.maintenanceShortfallStreak;
     const weeklyDebtFundedPortion = cap.debtFundedMaintenanceUSD;
