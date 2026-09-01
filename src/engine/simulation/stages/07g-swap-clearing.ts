@@ -1,7 +1,8 @@
 /**
- * DER1 — the interest-rate swap market: par rates at 2/5/10 years, cleared on the same engine as
- * every other book. The shape of the market, and why it is the one to build first, is documented
- * once in domain/swaps.ts.
+ * DER1 — the interest-rate swap MARKET: par rates at 2/5/10 years, cleared on the same engine as
+ * every other book. The contract itself — legs, close-out, maturity — is the IRS profile under
+ * domain/derivatives/classes/irs.ts, run by the one lifecycle (derivative-lifecycle.ts). This
+ * stage keeps what is the market's: who must pay fixed, who will receive it, and the print.
  *
  * The float this auction prices is the pay-fixed demand: what the hedgers whose exposure their
  * own balance sheets cannot absorb need someone to take. The participants are the receivers —
@@ -20,21 +21,18 @@ import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { carriesRateDuration } from '../../../domain/assets';
 import {
-  SwapContract, SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, swapPartyKey,
-  swapWeeklyNetToReceiverUSD, repricingLossUSD, SwapParty,
-} from '../../../domain/swaps';
+  SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, repricingLossUSD,
+} from '../../../domain/derivatives/classes/irs';
+import { DerivativeContract, DerivativeParty, standingCoverUSD } from '../../../domain/derivatives/contract';
 import { WeeklyStepContext } from './context';
-import { pay } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
 import { isActiveCompany } from '../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from './bank-lending';
+import { COVENANT_INTEREST_COVERAGE } from './corporate-financing';
+import { buildDerivativeMarketView, derivativesBookOf, settleDerivativeClass, strikeDerivatives } from './derivative-lifecycle';
 
 /** Swaps are struck for their tenor and run to it — there is no secondary market here yet. */
 const swapInstrumentId = (regionId: RegionId, key: SwapTenorKey) => `${regionId}-IRS-${key}`;
-
-/** The coverage a lender's covenant expects — one owner now (corporate-financing.ts), because
- *  G5's committed line is sized off exactly the same test from the lender's side (rule 3). */
-import { COVENANT_INTEREST_COVERAGE } from './corporate-financing';
 
 /**
  * The two-sigma one-week move in this region's own yields, in bps — the repricing every hedger
@@ -54,43 +52,15 @@ function twoSigmaYieldMoveBps(reg: { historicalZeroCurves?: { tenor10Y: number }
 
 export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2g = ensureV2(state);
-  void state;
+  // The standing book settles first — the floating leg pays what the week actually printed —
+  // and what matured or lost a counterparty leaves. One lifecycle, this class's turn.
+  settleDerivativeClass(ctx, state, 'IRS', buildDerivativeMarketView(ctx));
+  const book = derivativesBookOf(ctx, state);
+  const week = ctx.nextWeek;
+
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg?.zeroRates) return;
-
-    // ---- Last week's book settles, and what matured leaves. The floating leg pays what the week
-    // actually printed, so a payer of fixed gains exactly when rates rose against it. ----
-    const priorBook: SwapContract[] = reg.swapBook ?? [];
-    // DER/CAL — THE FLOATING LEG PAYS THE SECURED OVERNIGHT RATE, WHICH MAKES THESE OIS.
-    //
-    // It used to pay `policyRate`: an administered number, not a traded one, so the swap curve
-    // was a term structure on something nobody transacts at. The overnight benchmark this model
-    // actually produces is the cleared GC repo print (WS6/REPO) — its own SOFR — and a swap that
-    // references it is what a modern rates market is built on. The reference is the rate the week
-    // PRINTED, compounded into the index below, so a floating leg pays realised overnight money.
-    const overnightRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
-    priorBook.forEach((c) => {
-      const netUSD = swapWeeklyNetToReceiverUSD(c, overnightRateAnnual);
-      if (Math.abs(netUSD) < 1) return;
-      if (netUSD > 0) pay(ctx, { payer: c.payer, payee: c.receiver, amountUSD: netUSD, reason: 'swap settlement' });
-      else pay(ctx, { payer: c.receiver, payee: c.payer, amountUSD: -netUSD, reason: 'swap settlement' });
-    });
-    const carried = priorBook.filter((c) => c.maturityWeek > ctx.nextWeek);
-
-    // §7.241: NET THE STANDING BOOK OUT OF THE SIZING. Without this, a bank re-hedged its ENTIRE
-    // uncovered repricing exposure every week while last week's 2-10y swaps still ran, and a
-    // receiver refilled its whole duration gap weekly — notional accumulated without bound
-    // (~52x/yr at steady state). 07h nets `alreadyHedgedUSD` and 07i nets standing positions;
-    // this book alone was missing the rule its two siblings already carry.
-    const carriedPayUSDByPartyTenor = new Map<string, number>();
-    const carriedReceiveUSDByParty = new Map<string, number>();
-    carried.forEach((c) => {
-      const pk = `${swapPartyKey(c.payer)}|${c.tenorKey}`;
-      carriedPayUSDByPartyTenor.set(pk, (carriedPayUSDByPartyTenor.get(pk) ?? 0) + c.notionalUSD);
-      const rk = swapPartyKey(c.receiver);
-      carriedReceiveUSDByParty.set(rk, (carriedReceiveUSDByParty.get(rk) ?? 0) + c.notionalUSD);
-    });
 
     const moveBps = twoSigmaYieldMoveBps(reg);
     const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
@@ -102,8 +72,9 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
         && institutionProfile(e.entityType).liabilityDriven
     );
 
-    // ---- The PAY-FIXED side, sized by what each hedger's own sheet cannot absorb. ----
-    const payDemandByTenor = new Map<SwapTenorKey, { party: SwapParty; usd: number }[]>();
+    // ---- The PAY-FIXED side, sized by what each hedger's own sheet cannot absorb, net of what
+    // it is already paying on (§7.241, off the one book). ----
+    const payDemandByTenor = new Map<SwapTenorKey, { party: DerivativeParty; usd: number }[]>();
     SWAP_TENORS.forEach((k) => payDemandByTenor.set(k, []));
 
     // A bank's fixed-rate sovereign book is funded by liabilities that reprice with policy. Its
@@ -121,7 +92,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
         if (lossUSD <= absorbableUSD) return;
         // Hedge the notional whose repricing loss is the excess — the rest it can carry.
         const wantedUSD = ((lossUSD - absorbableUSD) / Math.max(1e-9, lossUSD)) * bookUSD;
-        const alreadyPayingUSD = carriedPayUSDByPartyTenor.get(`BANK:${bank.ticker}|${k}`) ?? 0;
+        const alreadyPayingUSD = standingCoverUSD(book, 'IRS', 'a', `BANK:${bank.ticker}`, week, undefined, k);
         const hedgeUSD = Math.max(0, wantedUSD - alreadyPayingUSD);
         if (!(hedgeUSD > 0)) return;
         payDemandByTenor.get(k)!.push({ party: { kind: 'BANK', ticker: bank.ticker }, usd: hedgeUSD });
@@ -150,10 +121,10 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
       const shockCostUSD = floatingUSD * (moveBps / 10000);
       if (shockCostUSD <= headroomUSD) return;
       const wantedUSD = Math.min(floatingUSD, ((shockCostUSD - headroomUSD) / Math.max(1e-9, shockCostUSD)) * floatingUSD);
-      const alreadyPayingUSD = carriedPayUSDByPartyTenor.get(`COMPANY:${comp.ticker}|s5`) ?? 0;
+      // Floating corporate debt is short-dated relative to the curve; it hedges at the 5-year.
+      const alreadyPayingUSD = standingCoverUSD(book, 'IRS', 'a', `COMPANY:${comp.ticker}`, week, undefined, 's5');
       const hedgeUSD = Math.max(0, wantedUSD - alreadyPayingUSD);
       if (!(hedgeUSD > 0)) return;
-      // Floating corporate debt is short-dated relative to the curve; it hedges at the 5-year.
       payDemandByTenor.get('s5')!.push({ party: { kind: 'COMPANY', ticker: comp.ticker }, usd: hedgeUSD });
     });
 
@@ -175,10 +146,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
         durationYears: SWAP_TENOR_YEARS[k],
       });
     });
-    if (instruments.length === 0) {
-      reg.swapBook = carried;
-      return;
-    }
+    if (instruments.length === 0) return;
 
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
@@ -188,7 +156,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
       const bondBookUSD = (entity.itemizedHoldings || [])
         .filter((h) => carriesRateDuration(h.instrumentType))
         .reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
-      const alreadyReceivingUSD = carriedReceiveUSDByParty.get(`INSTITUTION:${entity.id}`) ?? 0;
+      const alreadyReceivingUSD = standingCoverUSD(book, 'IRS', 'b', `INSTITUTION:${entity.id}`, week);
       const durationGapUSD = Math.max(0, entity.totalAssetsUSD - bondBookUSD - alreadyReceivingUSD);
       if (durationGapUSD <= 0) return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
       SWAP_TENORS.forEach((k) => {
@@ -216,7 +184,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
 
     // ---- Strike the week's contracts. At one cleared par rate the receivers are fungible, so
     // each payer's hedge draws from each receiver in proportion to what that receiver took. ----
-    const newContracts: SwapContract[] = [];
+    const struck: DerivativeContract[] = [];
     const parByTenor: Record<string, number> = { ...(reg.swapParRateByTenor ?? {}) };
     let seq = 0;
     SWAP_TENORS.forEach((k) => {
@@ -242,24 +210,27 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
         takenByEntity.forEach((takenUSD, entityId) => {
           const notionalUSD = hedgedUSD * (takenUSD / totalTakenUSD);
           if (notionalUSD <= 1) return;
-          newContracts.push({
-            id: `${regionId}-IRS-${k}-${ctx.nextWeek}-${seq++}`,
+          struck.push({
+            id: `${regionId}-IRS-${k}-${week}-${seq++}`,
+            classId: 'IRS',
             regionId,
-            tenorKey: k,
-            payer: d.party,
-            receiver: { kind: 'INSTITUTION', id: entityId },
+            a: d.party,
+            b: { kind: 'INSTITUTION', id: entityId },
             notionalUSD: Math.round(notionalUSD),
-            fixedRateAnnual: parByTenor[k],
-            struckWeek: ctx.nextWeek,
-            maturityWeek: ctx.nextWeek + Math.round(SWAP_TENOR_YEARS[k] * 52),
+            strike: parByTenor[k],
+            referenceId: '',
+            termKey: k,
+            struckWeek: week,
+            maturityWeek: week + Math.round(SWAP_TENOR_YEARS[k] * 52),
           });
         });
       });
     });
+    strikeDerivatives(ctx, state, struck);
 
-    reg.swapBook = [...carried, ...newContracts];
     reg.swapParRateByTenor = parByTenor;
     // The published benchmark: the overnight print compounded, exactly as an overnight index is.
+    const overnightRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
     reg.securedOvernightIndex = Number(
       ((reg.securedOvernightIndex ?? 100) * (1 + overnightRateAnnual / 52)).toFixed(6)
     );

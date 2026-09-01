@@ -157,9 +157,9 @@ export interface WeeklyStepContext {
    * only between the store's build (before 07b) and its write-back (after 07e). While it is
    * set, entity `itemizedHoldings` arrays are stale week-start snapshots: read positions
    * through the store. */
-  /** DER4 — this week's commodity futures book: who is long and short what, at what strike, and
-   * where each position was last marked. Global, because the commodities are. */
-  commodityFuturesBook?: import('../../../domain/commodity-futures').FuturesPosition[];
+  /** DRV — THE ONE DERIVATIVE BOOK: every bilateral contract of every class, the week's working
+   * copy (derivative-lifecycle.ts owns every read and write; market stages strike into it). */
+  derivativesBook?: import('../../../domain/derivatives/contract').DerivativeContract[];
   holdingsStore?: import('./holdings-store').HoldingsStore;
   /** HF — what the securities-lending stage struck this week, read by 07e in the same pass.
    * `lentShares` is exposure a lender still has through a loan receivable, so its holding

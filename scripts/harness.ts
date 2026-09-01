@@ -142,6 +142,7 @@ import { laneDistanceNm, REGION_IDS, REGION_IDS_SEED_ORDER } from '../src/domain
 import { laneKey, laneTransitWeeks } from '../src/domain/carrier';
 import { isCarrier } from '../src/engine/simulation/stages/freight-clearing';
 import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
+import { DERIVATIVE_CLASSES } from '../src/domain/derivatives/registry';
 
 interface Violation {
   week: number;
@@ -1876,6 +1877,29 @@ const indModule: HarnessModule = (() => {
         a + Math.max(0, (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0)), 0);
       out.push(`  ${carryFirms.length} of ${firms.length} firms carry a loss carryforward, ${B(carryUSD)} in total`);
       out.push(`  tax basis ${B(basisUSD)} vs book net PP&E ${B(netBookUSD)} — deferred tax liability ${B(deferredUSD)}`);
+    }
+
+    out.push('--- DRV: the one derivative book (§5-DRV) ---');
+    {
+      const book = s.derivativesBook ?? [];
+      const wk = s.currentWeek;
+      const byClass = new Map<string, { n: number; notionalUSD: number; settledMarkUSD: number; banks: number; firms: number; institutions: number }>();
+      let pfeUSD = 0;
+      for (const c of book) {
+        const row = byClass.get(c.classId) ?? { n: 0, notionalUSD: 0, settledMarkUSD: 0, banks: 0, firms: 0, institutions: 0 };
+        row.n++; row.notionalUSD += c.notionalUSD; row.settledMarkUSD += c.settledMarkUSD ?? 0;
+        for (const p of [c.a, c.b]) {
+          if (p.kind === 'BANK') row.banks++; else if (p.kind === 'COMPANY') row.firms++; else row.institutions++;
+          if (p.kind === 'BANK') pfeUSD += c.notionalUSD * DERIVATIVE_CLASSES[c.classId].pfeAddOnRate;
+        }
+        byClass.set(c.classId, row);
+      }
+      out.push(`  ${book.length} live contracts across ${byClass.size} classes at week ${wk}; PFE charged to bank desks ${B(pfeUSD)} (one budget, every class)`);
+      byClass.forEach((r, id) => {
+        const live = book.filter(c => c.classId === id && c.maturityWeek > wk).length;
+        out.push(`  ${id.padEnd(16)} n=${String(r.n).padStart(5)} (${live} live) notional ${B(r.notionalUSD)} | sides: banks ${r.banks} firms ${r.firms} institutions ${r.institutions}`
+          + (r.settledMarkUSD !== 0 ? ` | mark settled to A ${B(r.settledMarkUSD)}` : ''));
+      });
     }
 
     out.push('--- IND13: capital that has arrived and is not yet plant ---');

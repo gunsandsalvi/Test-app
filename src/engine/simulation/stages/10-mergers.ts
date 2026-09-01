@@ -19,6 +19,8 @@ import { isIssuerEquityRow } from '../../../domain/assets';
 import { checkForMerger } from '../merger';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
+import { DerivativeParty } from '../../../domain/derivatives/contract';
+import { derivativesBookOf } from './derivative-lifecycle';
 
 /**
  * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
@@ -400,30 +402,11 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
         lender: 'ticker' in c.lender ? { ...c.lender, ticker: rekeyTicker(c.lender.ticker) } : c.lender,
       }));
     }
-    if (reg10?.swapBook) {
-      reg10.swapBook = reg10.swapBook.map((c) => ({
-        ...c,
-        payer: 'ticker' in c.payer ? { ...c.payer, ticker: rekeyTicker(c.payer.ticker) } : c.payer,
-        receiver: 'ticker' in c.receiver ? { ...c.receiver, ticker: rekeyTicker(c.receiver.ticker) } : c.receiver,
-      }));
-    }
-    if (reg10?.cdsBook) {
-      reg10.cdsBook = reg10.cdsBook.map((c) => ({
-        ...c,
-        buyer: 'ticker' in c.buyer ? { ...c.buyer, ticker: rekeyTicker(c.buyer.ticker) } : c.buyer,
-        seller: 'ticker' in c.seller ? { ...c.seller, ticker: rekeyTicker(c.seller.ticker) } : c.seller,
-      }));
-    }
-    ctx.updatedInstitutionalEntities.forEach((e) => {
-      if (!e.fxForwards?.length) return;
-      e.fxForwards = e.fxForwards.map((f) =>
-        f.counterpartyTicker === target.ticker ? { ...f, counterpartyTicker: acquirer.ticker } : f);
-    });
-    ctx.updatedCompanies.forEach((c) => {
-      if (!c.fxForwards?.length) return;
-      c.fxForwards = c.fxForwards.map((f) =>
-        f.counterpartyTicker === target.ticker ? { ...f, counterpartyTicker: acquirer.ticker } : f);
-    });
+    // DRV: ONE derivative book, one re-key — every class, both sides (the old per-book re-keys
+    // missed the futures book entirely and only ever re-keyed the FX forward's bank side).
+    const rekeyParty = (p: DerivativeParty): DerivativeParty =>
+      'ticker' in p && p.ticker === target.ticker ? { ...p, ticker: acquirer.ticker } : p;
+    ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekeyParty(c.a), b: rekeyParty(c.b) }));
   }
 
   // OWN7: the target's PAPER moves with its debt. Holdings are keyed by the issuer's company

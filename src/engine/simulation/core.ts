@@ -384,7 +384,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   idTrace?.report(baseCtx.nextWeek);
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
-    commodityFuturesBook: ctx.commodityFuturesBook,
+    derivativesBook: ctx.derivativesBook ?? state.derivativesBook,
     holderAccruedInterestUSD: ctx.holderAccruedInterestUSD,
     sovereignAccruedInterestUSD: ctx.sovereignAccruedInterestUSD,
     lastCashReconcileUSD: ctx.cashReconcileUSD,

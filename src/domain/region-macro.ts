@@ -4,8 +4,6 @@
 import { RegionId } from './geography';
 import { RepoContract } from './repo';
 import { PrimeBrokerageLine } from './prime-brokerage';
-import { SwapContract } from './swaps';
-import { CdsContract } from './credit-default-swap';
 import { SecurityLoan } from './securities-lending';
 import { Industry } from './industry';
 import { CentralBank } from './central-bank';
@@ -718,19 +716,7 @@ export interface Region {
    * the repo book; the brokers' `primeBrokerageLoansUSD` and the funds' leverage are derived.
    */
   primeBrokerageBook?: PrimeBrokerageLine[];
-  /**
-   * DER1 — this region's live interest-rate swap book: every open contract, with the payer of
-   * fixed, the receiver, the par rate it was struck at and when it matures. Stored once with both
-   * parties named, the same shape as the repo and prime-brokerage books.
-   */
-  swapBook?: SwapContract[];
-  /**
-   * CRD/DER2 — the single-name CDS contracts written on this region's issuers, stored ONCE with
-   * both parties named (the G2/REPO/DER contract-book pattern). Every scalar anyone wants about
-   * protection — who is hedged, who is short the credit, what one name's outstanding is — is
-   * derived from this list, never carried beside it.
-   */
-  cdsBook?: CdsContract[];
+  // DRV — the swap and CDS books moved to the ONE derivative book (GameState.derivativesBook).
   /** HF — the stock loans outstanding in this region: who lent what to whom, at what fee. The
    * short interest in every name is a measurement of this book. */
   securityLoanBook?: SecurityLoan[];

@@ -2,7 +2,6 @@
  *  ETFs — their mandates, their real books and the claims their beneficiaries hold on them. */
 
 import { RegionId } from './geography';
-import { FxForward } from './fx-hedging';
 import { ItemizedHolding } from './banking';
 import { FinancialStatementProfile } from './company';
 
@@ -157,11 +156,6 @@ export interface InstitutionalEntity {
    * one. Positive for whichever side the mark has moved toward; a short's P&L lives here.
    * Derived every week from the region's loan book — never set by hand. */
   stockLoanNetUSD?: number;
-  /**
-   * XB2 — the FX forwards hedging this entity's cross-border book. Real contracts with a named
-   * bank on the other side, marked every week, not a discount applied to a yield.
-   */
-  fxForwards?: FxForward[];
   /** WS9/XB2d: last week's foreign holdings by issuer region, so this week's CHANGE is the real
    * cross-border settlement flow that has to buy or sell currency. */
   priorForeignHoldingsByRegion?: Record<string, number>;

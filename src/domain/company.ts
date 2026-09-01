@@ -500,9 +500,6 @@ export interface Company {
   /** HF — shares of this name out on loan, i.e. sold short. A measurement of the region's stock
    * loan book (domain/securities-lending.ts), never a stated number. */
   shortInterestShares?: number;
-  /** DER5 — this firm's FX forwards against its own invoice exposure, each struck with a named
-   * bank at the cleared basis (stages/fx-hedging.ts). Same contract type the institutions use. */
-  fxForwards?: import('./fx-hedging').FxForward[];
   // Rolling weekly history of real cleared oasSpreadBps (most recent last, capped length) — real
   // credit investors weigh recent spread momentum (a name that's been widening fast is a riskier
   // "catch the falling knife" buy even if it already looks cheap) alongside static fair value.

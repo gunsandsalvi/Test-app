@@ -48,7 +48,7 @@ import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../..
 import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
 import { institutionProfile } from '../../../domain/institution-profiles';
-import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
+import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';

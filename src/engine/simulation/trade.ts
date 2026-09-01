@@ -3,7 +3,14 @@ import { random } from '../rng';
 import { DESK_BOOK_BY_ASSET_TYPE } from '../dealers';
 import { regionalDeskView } from '../../domain/dealer-desk';
 import { bookPnL } from '../ledger/bank-book';
-import { FX_PFE_ADD_ON_RATE } from '../../domain/dealer-derivatives';
+import { DERIVATIVE_CLASSES } from '../../domain/derivatives/registry';
+import { DerivativeClassId } from '../../domain/derivatives/contract';
+
+/** The player's legacy position types onto the registry's classes; anything the registry does
+ *  not know is charged at the FX forward's add-on, which is what every derivative paid before. */
+const PLAYER_ASSET_TYPE_CLASS: Record<string, DerivativeClassId> = { IRS: 'IRS', CDS: 'CDS', COMMODITY: 'COMMODITY_FUTURE', FX: 'FX_FORWARD' };
+const playerPfeAddOnRate = (assetType: string): number =>
+  DERIVATIVE_CLASSES[PLAYER_ASSET_TYPE_CLASS[assetType] ?? 'FX_FORWARD'].pfeAddOnRate;
 
 export function executeTrade(
   state: GameState,
@@ -52,7 +59,7 @@ export function executeTrade(
       const book = DESK_BOOK_BY_ASSET_TYPE[posData.assetType] ?? 'derivatives';
       const instrumentId = posData.trancheId || posData.symbol;
       const balanceSheetUseUSD = book === 'derivatives'
-        ? posData.notional * FX_PFE_ADD_ON_RATE
+        ? posData.notional * playerPfeAddOnRate(posData.assetType)
         : posData.notional;
       // Buying takes paper OFF the desk; selling puts it on. A short sale is the desk taking the
       // other side, which leaves it long, exactly as a real client short does. A derivative

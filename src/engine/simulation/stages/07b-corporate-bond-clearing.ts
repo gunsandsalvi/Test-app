@@ -71,7 +71,7 @@ import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
-import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
+import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
 import { REGION_IDS } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
 

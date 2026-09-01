@@ -116,9 +116,9 @@ export interface GameState {
   companies: Company[];
   institutionalEntities: InstitutionalEntity[];
   commodities: Commodity[];
-  /** DER4 — the open commodity futures positions, carried week to week
-   * (domain/commodity-futures.ts). The curve on each commodity is derived from it. */
-  commodityFuturesBook?: import('./commodity-futures').FuturesPosition[];
+  /** DRV — the one derivative book: every bilateral contract of every class (swaps, CDS,
+   *  futures, FX forwards), one shape, one lifecycle. Born empty (§7.44). */
+  derivativesBook?: import('./derivatives/contract').DerivativeContract[];
   compositeIndices: CompositeBenchmarkIndices;
   recentIPOs: { ticker: string; name: string; category: string; week: number }[];
   recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[];

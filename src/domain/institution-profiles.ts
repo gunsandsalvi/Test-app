@@ -21,7 +21,7 @@ export interface InstitutionProfile {
   readonly leverage: 'NONE' | 'PRIME_BROKERAGE';
   /** Long-dated liabilities force asset-liability matching: this kind receives fixed in the swap
    *  book and hedges its foreign FIXED-INCOME book at the mandate ratio (equity hedging is the
-   *  separate two-axis rule in domain/fx-hedging.ts). */
+   *  separate two-axis rule in domain/derivatives/classes/fx-forward.ts). */
   readonly liabilityDriven: boolean;
   /** Its beneficiaries are households — its liability is a household claim, so the household
    *  balance sheet attributes its net assets. Everything else either has a named holder already

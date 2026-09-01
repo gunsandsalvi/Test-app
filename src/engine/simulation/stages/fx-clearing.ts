@@ -41,7 +41,9 @@ import {
   clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
 } from './financial-clearing-engine';
 import { centralBankFxReservesUSD } from '../../../domain/central-bank';
-import { fxDeskCapacityUSD, DEALER_QUOTE_WIDTH_BPS } from '../../../domain/dealer-derivatives';
+import { DEALER_QUOTE_WIDTH_BPS } from '../../../domain/dealer-derivatives';
+import { deskNotionalCapacityUSD } from '../../../domain/derivatives/registry';
+import { deskStandingPfeChargeUSD } from './derivative-lifecycle';
 import { leverageHeadroomUSD } from '../../macro/banking';
 import { REGION_IDS } from '../../../domain/geography';
 
@@ -121,7 +123,8 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   ctx.updatedCompanies.forEach((c: any) => {
     const sheet = c.bankBalanceSheet;
     if (!sheet) return;
-    const capUSD = fxDeskCapacityUSD(leverageHeadroomUSD(sheet), sheet.fxDealerBook);
+    // DRV: the desk's remaining derivative budget is ONE number across every class it writes.
+    const capUSD = deskNotionalCapacityUSD(leverageHeadroomUSD(sheet), deskStandingPfeChargeUSD(ctx, state, c.ticker), 'FX_FORWARD');
     if (capUSD > 0) deskCapacityByTicker.set(c.ticker, capUSD);
     arbitrageCapacityUSD += capUSD;
   });

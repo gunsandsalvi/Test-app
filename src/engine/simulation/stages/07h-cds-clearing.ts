@@ -1,6 +1,8 @@
 /**
- * CRD/DER2 — the single-name CDS market, cleared on the same engine as every other book. The
- * shape of the market, and what it replaces, is documented once in domain/credit-default-swap.ts.
+ * CRD/DER2 — the single-name CDS MARKET, cleared on the same engine as every other book. The
+ * contract itself — premium, credit event, close-out — is the CDS profile under
+ * domain/derivatives/classes/cds.ts, run by the one lifecycle. This stage keeps what is the
+ * market's: who needs protection, who will write it, and the print.
  *
  * The float this auction prices is the PROTECTION SOMEBODY NEEDS: the exposure a lender's capital
  * does not let it carry against one name, measured off its own book against the large-exposure
@@ -17,19 +19,19 @@
 import { GameState, RegionId, Company } from '../../../types';
 import { ensureV2 } from '../../../engine2/world';
 import { institutionProfile } from '../../../domain/institution-profiles';
-import {
-  CdsContract, CdsParty, CDS_TENOR_WEEKS, cdsWeeklyPremiumUSD, cdsDefaultPayoutUSD,
-  cdsPartyKey, protectionNeedUSD,
-} from '../../../domain/credit-default-swap';
+import { CDS_TENOR_WEEKS, protectionNeedUSD } from '../../../domain/derivatives/classes/cds';
+import { DerivativeContract, DerivativeParty, standingCoverUSD } from '../../../domain/derivatives/contract';
+import { deskNotionalCapacityUSD } from '../../../domain/derivatives/registry';
 import { BankLoan } from '../../../domain/banking';
 import { WeeklyStepContext } from './context';
-import { pay } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { isActiveCompany } from '../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
 import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequiredReturn, FULL_SIZE_SPREAD_RANGE_BPS } from './asset-allocation';
-import { bankRequiredReturnAnnual, BANK_WORKING_CAPITAL_RATIO } from './bank-lending';
+import { bankRequiredReturnAnnual } from './bank-lending';
+import { leverageHeadroomUSD } from '../../macro/banking';
 import { REGION_IDS } from '../../../domain/geography';
+import { buildDerivativeMarketView, derivativesBookOf, deskStandingPfeChargeUSD, settleDerivativeClass, strikeDerivatives } from './derivative-lifecycle';
 
 const cdsInstrumentId = (regionId: RegionId, issuerId: string) => `${regionId}-CDS-${issuerId}`;
 
@@ -38,56 +40,27 @@ const MAX_WEEKLY_CDS_MOVE_PCT = 0.25;
 
 export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2cds = ensureV2(state);
-  const regionIds = REGION_IDS;
+  // The standing book settles first: this week's premium, any credit event a reference default
+  // triggered, any counterparty that died. One lifecycle, this class's turn.
+  settleDerivativeClass(ctx, state, 'CDS', buildDerivativeMarketView(ctx));
+  const book = derivativesBookOf(ctx, state);
+  const week = ctx.nextWeek;
+  const companyById = new Map<string, Company>(
+    [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].map((c) => [c.id, c])
+  );
 
-  regionIds.forEach((regionId) => {
+  REGION_IDS.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    const book = reg.cdsBook ?? [];
     const recoveryRate = creditRecoveryRate(reg);
 
-    // ---- 1. The standing book settles first: this week's premium, and any payout a default
-    // triggered. A defaulted reference entity terminates the contract — protection pays par less
-    // what the workout actually recovers (G5), which is what makes buying it worth anything. ----
-    const companyById = new Map<string, Company>(
-      [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].map((c) => [c.id, c])
-    );
-    const carried: CdsContract[] = [];
-    book.forEach((c) => {
-      const issuer = companyById.get(c.referenceIssuerId);
-      const defaulted = !issuer || issuer.isDefaulted;
-      if (defaulted) {
-        const payoutUSD = cdsDefaultPayoutUSD(c, recoveryRate);
-        if (payoutUSD > 0) {
-          pay(ctx, {
-            payer: c.seller,
-            payee: c.buyer,
-            amountUSD: payoutUSD,
-            reason: 'CDS credit event settled',
-          });
-        }
-        return; // terminated
-      }
-      if (c.maturityWeek <= ctx.nextWeek) return; // ran off
-      const premiumUSD = cdsWeeklyPremiumUSD(c);
-      if (premiumUSD > 0) {
-        pay(ctx, {
-          payer: c.buyer,
-          payee: c.seller,
-          amountUSD: premiumUSD,
-          reason: 'CDS premium',
-        });
-      }
-      carried.push(c);
-    });
-
-    // ---- 2. WHO NEEDS PROTECTION, and how much. A bank's exposure to one name beyond what its
+    // ---- 1. WHO NEEDS PROTECTION, and how much. A bank's exposure to one name beyond what its
     // capital lets it carry against a single counterparty. This is the decision
     // `09-concentration-risk.ts`'s measurement never had: above the limit the position is not one
     // the bank is allowed to keep, so the excess is laid off rather than preferred away. ----
     const regionBanks = ctx.prevActiveFirms.filter(
       (c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c)
     );
-    const hedgeDemandByIssuer = new Map<string, { party: CdsParty; usd: number }[]>();
+    const hedgeDemandByIssuer = new Map<string, { party: DerivativeParty; usd: number }[]>();
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const exposureByIssuer = new Map<string, number>();
@@ -95,17 +68,14 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
         if (l.borrowerKind !== 'COMPANY_FACILITY') return;
         exposureByIssuer.set(l.borrowerId, (exposureByIssuer.get(l.borrowerId) ?? 0) + Math.max(0, l.principalUSD));
       });
-      const party: CdsParty = { kind: 'BANK', ticker: bank.ticker };
-      const key = cdsPartyKey(party);
+      const party: DerivativeParty = { kind: 'BANK', ticker: bank.ticker };
       exposureByIssuer.forEach((exposureUSD, issuerId) => {
         const issuer = companyById.get(issuerId);
         if (!issuer || issuer.region !== regionId || !isActiveCompany(issuer)) return;
-        const alreadyHedgedUSD = carried.reduce((a, c) =>
-          a + (c.referenceIssuerId === issuerId && cdsPartyKey(c.buyer) === key ? c.notionalUSD : 0), 0);
         const needUSD = protectionNeedUSD({
           exposureUSD,
           bankEquityUSD: sheet.bankEquityUSD,
-          alreadyHedgedUSD,
+          alreadyHedgedUSD: standingCoverUSD(book, 'CDS', 'a', `BANK:${bank.ticker}`, week, issuerId),
         });
         if (needUSD <= 1) return;
         const list = hedgeDemandByIssuer.get(issuerId) ?? [];
@@ -113,9 +83,9 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
         hedgeDemandByIssuer.set(issuerId, list);
       });
     });
-    if (hedgeDemandByIssuer.size === 0) { reg.cdsBook = carried; return; }
+    if (hedgeDemandByIssuer.size === 0) return;
 
-    // ---- 3. The book. One instrument per reference entity somebody needs protection on. ----
+    // ---- 2. The book. One instrument per reference entity somebody needs protection on. ----
     const referenceIssuers = Array.from(hedgeDemandByIssuer.keys())
       .map((id) => companyById.get(id)!)
       .filter((c) => !!c);
@@ -136,7 +106,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
       };
     });
 
-    // ---- 4. THE SELLERS. Writing protection is a long in the credit that nobody funded, so a
+    // ---- 3. THE SELLERS. Writing protection is a long in the credit that nobody funded, so a
     // seller's reservation is what the same credit costs it to carry: its expected loss plus the
     // capital the position consumes at its own required return — the identical arithmetic the
     // corporate bond book prices with, because it is the identical risk. What differs is the
@@ -145,14 +115,16 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
     const participants: ClearingParticipant[] = [];
 
     // The banks' derivative desks: capital is the constraint, not cash, because the position is
-    // unfunded — the same reason 07c leaves a bank's bond bid without a cash budget.
+    // unfunded. DRV: the capacity is the desk's remaining derivative budget — ONE budget across
+    // the swaps it pays on, the forwards it writes and the protection it has already sold
+    // (registry.ts), through this class's PFE add-on.
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      // What its capital supports written across every name: equity over the capital a unit of
-      // protection consumes. A desk cannot write more risk than it holds capital against.
-      const capacityUSD = Math.max(0, sheet.bankEquityUSD) / Math.max(0.01, BANK_WORKING_CAPITAL_RATIO);
+      const capacityUSD = deskNotionalCapacityUSD(
+        leverageHeadroomUSD(sheet), deskStandingPfeChargeUSD(ctx, state, bank.ticker), 'CDS');
+      if (!(capacityUSD > 0)) return;
       referenceIssuers.forEach((c) => {
         const annualPd = pdByIssuerId.get(c.id)!;
         const capitalChargeRate = spreadRiskCapitalChargeRate(c.creditRating, CDS_TENOR_WEEKS / 52);
@@ -207,7 +179,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
       participants.push({ id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId });
     });
 
-    if (participants.length === 0) { reg.cdsBook = carried; return; }
+    if (participants.length === 0) return;
 
     const result = clearFinancialAsset(instruments, participants, new Map(), {
       // Bilateral between named desks and funds; the clearing house takes no fee on it yet.
@@ -216,9 +188,9 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `cds:${id}`));
 
-    // ---- 5. Strike the week's contracts. At one cleared spread the sellers are fungible, so each
+    // ---- 4. Strike the week's contracts. At one cleared spread the sellers are fungible, so each
     // hedger's need draws from each seller in proportion to what that seller wrote. ----
-    const newContracts: CdsContract[] = [];
+    const struck: DerivativeContract[] = [];
     let seq = 0;
     referenceIssuers.forEach((issuer) => {
       const instrumentId = cdsInstrumentId(regionId, issuer.id);
@@ -248,24 +220,25 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
         writtenBySeller.forEach((writtenUSD, participantId) => {
           const notionalUSD = hedgedUSD * (writtenUSD / totalWrittenUSD);
           if (notionalUSD <= 1) return;
-          const seller: CdsParty = participantId.startsWith('CDSDESK-')
+          const seller: DerivativeParty = participantId.startsWith('CDSDESK-')
             ? { kind: 'BANK', ticker: participantId.slice('CDSDESK-'.length) }
             : { kind: 'INSTITUTION', id: participantId };
-          newContracts.push({
-            id: `${regionId}-CDS-${issuer.id}-${ctx.nextWeek}-${seq++}`,
+          struck.push({
+            id: `${regionId}-CDS-${issuer.id}-${week}-${seq++}`,
+            classId: 'CDS',
             regionId,
-            referenceIssuerId: issuer.id,
-            buyer: d.party,
-            seller,
+            a: d.party,
+            b: seller,
             notionalUSD: Math.round(notionalUSD),
-            spreadBps: Number(clearedBps.toFixed(1)),
-            struckWeek: ctx.nextWeek,
-            maturityWeek: ctx.nextWeek + CDS_TENOR_WEEKS,
+            strike: Number(clearedBps.toFixed(1)),
+            referenceId: issuer.id,
+            termKey: '',
+            struckWeek: week,
+            maturityWeek: week + CDS_TENOR_WEEKS,
           });
         });
       });
     });
-
-    reg.cdsBook = [...carried, ...newContracts];
+    strikeDerivatives(ctx, state, struck);
   });
 }
