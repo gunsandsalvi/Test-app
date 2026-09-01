@@ -19,7 +19,8 @@ import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { isActiveCompany } from '../../../domain/company';
 import { SOV_BILL_BUCKETS } from './shared-helpers';
-import { syncBookRows } from '../../../engine2/holdings';
+import { bookHeadOf } from '../../../engine2/holdings';
+import { internString } from '../../../engine2/world';
 
 /** Weekly accretion factor for a bill bucket, off the region's own cleared bill curve. */
 function weeklyAccretionRate(reg: any, bucketKey: string): number {
@@ -75,20 +76,19 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
     });
 
     // Institutions: the holding grows; the book's own marking treats it as the income it is.
-    ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-      if (e.region !== regionId) return e;
-      let touched = false;
-      const holdings = e.itemizedHoldings.map((h) => {
-        if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return h;
-        const key = govBucketKeyOf(h.instrumentId, regionId);
+    // §7.313 flip — the accretion lands on the rows in place; the view refreshes at week end.
+    const H = ctx.v2.holdings;
+    const govBondRef = internString(ctx.v2, 'GOV_BOND');
+    const regionRef = internString(ctx.v2, regionId);
+    ctx.updatedInstitutionalEntities.forEach((e) => {
+      if (e.region !== regionId) return;
+      for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
+        if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
+        const key = govBucketKeyOf(ctx.v2.internedStrings[H.instrRef[r]], regionId);
         const rate = key ? rateByBucket.get(key) : undefined;
-        if (!rate) return h;
-        touched = true;
-        return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 + rate) };
-      });
-      if (!touched) return e;
-      syncBookRows(ctx.v2, e.id, holdings);
-      return { ...e, itemizedHoldings: holdings };
+        if (!rate) continue;
+        H.qtyUSD[r] = H.qtyUSD[r] * (1 + rate);
+      }
     });
 
     // The central bank's bill book accretes too — its income is remitted to the treasury, which

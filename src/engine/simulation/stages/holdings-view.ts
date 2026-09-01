@@ -53,27 +53,42 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
   const institutionalHoldings: ItemizedHolding[] = [];
   let corp = 0, sov = 0, loan = 0, equity = 0, cash = 0;
 
+  // §7.313 flip — the rows are the register's authority mid-week; the flattened view the UI
+  // reads is materialized from them here (idempotent sync first: initialization and the UI call
+  // this outside the weekly step).
+  const v2a = ensureV2(state);
+  ensureBooksSynced(v2a, state.institutionalEntities);
+  const Ha = v2a.holdings;
   state.institutionalEntities.forEach((e) => {
     if (e.region !== regionId || e.isDefaulted) return;
     // WS6: cash lent overnight is the entity's money in transit, part of its cash position.
     cash += (e.cashUSD ?? 0) + (e.repoLentUSD ?? 0);
-    e.itemizedHoldings.forEach((h) => {
+    for (let r = bookHeadOf(v2a, e.id); r >= 0; r = Ha.next[r]) {
+      const type = v2a.internedStrings[Ha.typeRef[r]] as ItemizedHolding['instrumentType'];
+      const sh = Ha.shares[r];
+      const h: ItemizedHolding = {
+        instrumentId: v2a.internedStrings[Ha.instrRef[r]],
+        instrumentType: type,
+        issuerRegion: v2a.internedStrings[Ha.regionRef[r]] as ItemizedHolding['issuerRegion'],
+        quantityOrNotionalUSD: Ha.qtyUSD[r],
+      };
+      if (!Number.isNaN(sh)) h.quantityShares = sh;
       institutionalHoldings.push(h);
-      const v = h.quantityOrNotionalUSD ?? 0;
+      const v = Ha.qtyUSD[r];
       // CP: an issuer's short paper is corporate credit like its bonds — one view of the
       // institutional sector's claim on companies, whatever book prices it.
       // §5-STRUCT step 4 — the class comes from the registry (domain/assets), which is also where
       // the four disagreeing instrument taxonomies are reconciled. The chain this replaces had to
       // be found and edited for every new instrument, and a missed one added silently to nothing.
-      const cls = holdingClassOf(h.instrumentType);
-      if (h.instrumentType === 'LEVERAGED_LOAN') loan += v;
-      else if (isIntraSectorClaim(h.instrumentType)) { /* see the registry: double-counts */ }
+      const cls = holdingClassOf(type);
+      if (type === 'LEVERAGED_LOAN') loan += v;
+      else if (isIntraSectorClaim(type)) { /* see the registry: double-counts */ }
       else if (cls === 'CREDIT') corp += v;
       else if (cls === 'SOVEREIGN') sov += v;
-      else if (cls === 'EQUITY' && h.instrumentType === 'EQUITY') equity += v;
+      else if (cls === 'EQUITY' && type === 'EQUITY') equity += v;
       // PE_FUND_INTEREST is an ownership claim on another entity in this same sector; counting it
       // in a sector aggregate would double-count the underlying portfolio companies.
-    });
+    }
   });
 
   const bankHoldings: ItemizedHolding[] = [];

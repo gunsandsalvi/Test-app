@@ -25,7 +25,7 @@
  */
 
 import { institutionProfile } from '../../../domain/institution-profiles';
-import { syncBookRows, bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, pushBookRow, relinkBook } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { pay } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
@@ -66,8 +66,11 @@ function indexedShare(entity: InstitutionalEntity, nameCount: number): number {
 }
 
 /** NAV of a fund: its real basket at this week's cleared marks, plus cash it has not deployed. */
-function fundNavUSD(fund: InstitutionalEntity): number {
-  const holdingsUSD = fund.itemizedHoldings.reduce((s, h) => s + (h.quantityOrNotionalUSD ?? 0), 0);
+// §7.313 flip: read off the rows — mid-week the persistent store is the book's authority.
+function fundNavUSD(v2: import('../../../engine2/world').V2World, fund: InstitutionalEntity): number {
+  const H = v2.holdings;
+  let holdingsUSD = 0;
+  for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r];
   return holdingsUSD + Math.max(0, fund.cashUSD ?? 0);
 }
 
@@ -80,7 +83,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // ---- 1. The sponsor's fee, out of the fund's assets. A real flow between two named books. ----
   const navByFundId = new Map<string, number>();
   funds.forEach((fund) => {
-    const navUSD = fundNavUSD(fund);
+    const navUSD = fundNavUSD(ctx.v2, fund);
     // §4.0 Tier 1 item 6 — a fee is paid FROM CASH THE FUND HAS. Charging the full ratio into a
     // fund whose cash-plus-pending was already spent dug the small persistent overdrafts the
     // harness flags (USAIGX −18M, the IGX/LLX residue); the sponsor of a cash-short fund waits,
@@ -229,7 +232,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       const bufferFloorUSD = (reg.estimatedHouseholdIncomeUSD / 52) * BUFFER_TARGET_WEEKS;
       const depositHeadroomUSD = Math.max(0, (hs.depositsUSD ?? 0) - bufferFloorUSD);
       // Sell only the part of the gap the cash cannot meet, and never more than is held.
-      const heldUSD = householdEtfHoldingsUSD(hs, ctx.updatedInstitutionalEntities);
+      const heldUSD = householdEtfHoldingsUSD(ctx.v2, hs, ctx.updatedInstitutionalEntities);
       const cashGapUSD = Math.max(0, -weeklySavingUSD - depositHeadroomUSD);
       intoFundsUSD = -Math.min(Math.max(0, heldUSD), cashGapUSD);
       // §7.281 — the ladder's NEXT rung. What neither the deposit buffer nor the fund shares
@@ -281,16 +284,25 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // One pass over the investors' books instead of a `.find` per investor PER FUND — the same
   // first-match-wins row each per-fund scan used to stop at (per-item scans in per-item loops:
   // the §7.32 anti-pattern, found here by the SCALE profile at ~17 ms/week).
-  const etfShareRowByInvestor = new Map<string, Map<string, { quantityShares?: number }>>();
+  // §7.313 flip: first-match-wins share counts read off the rows.
+  const etfShareRowByInvestor = new Map<string, Map<string, number>>();
   const investorById = new Map(investors.map((i) => [i.id, i]));
-  investors.forEach((inv) => {
-    let rows: Map<string, { quantityShares?: number }> | undefined;
-    inv.itemizedHoldings.forEach((x) => {
-      if (x.instrumentType !== 'ETF_SHARE') return;
-      if (!rows) { rows = new Map(); etfShareRowByInvestor.set(inv.id, rows); }
-      if (!rows.has(x.instrumentId)) rows.set(x.instrumentId, x);
+  {
+    const H = ctx.v2.holdings;
+    const etfShareRef0 = internString(ctx.v2, 'ETF_SHARE');
+    investors.forEach((inv) => {
+      let rows: Map<string, number> | undefined;
+      for (let r = bookHeadOf(ctx.v2, inv.id); r >= 0; r = H.next[r]) {
+        if (H.typeRef[r] !== etfShareRef0) continue;
+        const fundId = ctx.v2.internedStrings[H.instrRef[r]];
+        if (!rows) { rows = new Map(); etfShareRowByInvestor.set(inv.id, rows); }
+        if (!rows.has(fundId)) {
+          const sh = H.shares[r];
+          rows.set(fundId, Number.isNaN(sh) ? 0 : sh);
+        }
+      }
     });
-  });
+  }
 
   // ETF2 — ONE BUDGET PER INVESTOR, ACROSS EVERY FUND IT BUYS INTO.
   //
@@ -320,8 +332,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // What each investor holds today, in dollars at the current NAV.
     const heldByInvestor = new Map<string, number>();
     investors.forEach((inv) => {
-      const h = etfShareRowByInvestor.get(inv.id)?.get(fund.id);
-      if (h) heldByInvestor.set(inv.id, (h.quantityShares ?? 0) * navPerShare);
+      const held = etfShareRowByInvestor.get(inv.id)?.get(fund.id);
+      if (held !== undefined) heldByInvestor.set(inv.id, held * navPerShare);
     });
 
     // Gross flow both ways, netted — an AP only has to carry the net basket.
@@ -539,15 +551,24 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         // out is a fund being wound up, which is a real outcome rather than a failure to settle.
         const share = Math.min(1, owedUSD / totalUSD);
         const rows = deliveredRowsByInvestor.get(investorId) ?? [];
-        (fund.itemizedHoldings || []).forEach((h) => {
-          const qty = (h.quantityOrNotionalUSD ?? 0) * share;
-          if (!(Math.abs(qty) > 0.0001)) return;
-          rows.push({
-            ...h,
-            quantityShares: h.quantityShares === undefined ? undefined : h.quantityShares * share,
-            quantityOrNotionalUSD: qty,
-          });
-        });
+        // §7.313 flip: the basket slice reads the fund's rows; the clones append to the
+        // investor's chain below.
+        {
+          const H = ctx.v2.holdings;
+          for (let r = bookHeadOf(ctx.v2, fundId); r >= 0; r = H.next[r]) {
+            const qty = H.qtyUSD[r] * share;
+            if (!(Math.abs(qty) > 0.0001)) continue;
+            const sh = H.shares[r];
+            const out: ItemizedHolding = {
+              instrumentId: ctx.v2.internedStrings[H.instrRef[r]],
+              instrumentType: ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'],
+              issuerRegion: ctx.v2.internedStrings[H.regionRef[r]] as ItemizedHolding['issuerRegion'],
+              quantityOrNotionalUSD: qty,
+            };
+            if (!Number.isNaN(sh)) out.quantityShares = sh * share;
+            rows.push(out);
+          }
+        }
         deliveredRowsByInvestor.set(investorId, rows);
         // The cash slice of the basket travels with it: a pro-rata claim is on everything the
         // fund owns, and leaving the cash behind would hand the last redeemer a fund of pure
@@ -564,21 +585,22 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
             reason: 'etf in-kind redemption: cash slice',
           });
         }
-        // And the fund's own book shrinks by exactly what left it.
-        fund.itemizedHoldings = (fund.itemizedHoldings || []).map((h) => ({
-          ...h,
-          quantityShares: h.quantityShares === undefined ? undefined : h.quantityShares * (1 - share),
-          quantityOrNotionalUSD: (h.quantityOrNotionalUSD ?? 0) * (1 - share),
-        }));
-        syncBookRows(ctx.v2, fund.id, fund.itemizedHoldings);
+        // And the fund's own book shrinks by exactly what left it — in place, on the rows.
+        {
+          const H = ctx.v2.holdings;
+          for (let r = bookHeadOf(ctx.v2, fundId); r >= 0; r = H.next[r]) {
+            const sh = H.shares[r];
+            if (!Number.isNaN(sh)) H.shares[r] = sh * (1 - share);
+            H.qtyUSD[r] = H.qtyUSD[r] * (1 - share);
+          }
+        }
         fundAssetsUSD.set(fundId, totalUSD * (1 - share));
       });
     });
     deliveredRowsByInvestor.forEach((rows, investorId) => {
       const investor = entityById.get(investorId);
       if (!investor || rows.length === 0) return;
-      investor.itemizedHoldings = [...(investor.itemizedHoldings || []), ...rows];
-      syncBookRows(ctx.v2, investor.id, investor.itemizedHoldings);
+      for (const h of rows) pushBookRow(ctx.v2, investor.id, h);
       bumpRegister(ctx);
     });
   }
@@ -699,25 +721,36 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // assets backing them (measured: 13.49B of fund assets against 13.38B of claims after thirty
   // weeks), which is the same class of error as any stale mark.
   const finalNavPerShareByFund = new Map<string, number>();
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
-    const shareDeltas = holdingsDeltaByInvestor.get(entity.id);
-    if (!shareDeltas) return entity;
-
-    let holdings = entity.itemizedHoldings;
-    if (shareDeltas) {
-      const next = [...holdings];
+  // §7.313 flip: the deltas land on the rows — first matching row mutates in place, a spent
+  // position's row is dropped by one relink, a new position appends at the tail (where the old
+  // array push put it).
+  {
+    const H = ctx.v2.holdings;
+    const etfShareRefD = internString(ctx.v2, 'ETF_SHARE');
+    ctx.updatedInstitutionalEntities.forEach((entity) => {
+      const shareDeltas = holdingsDeltaByInvestor.get(entity.id);
+      if (!shareDeltas) return;
+      const removed = new Set<number>();
       shareDeltas.forEach((shares, fundId) => {
-        const idx = next.findIndex((h) => h.instrumentType === 'ETF_SHARE' && h.instrumentId === fundId);
         const fund = funds.find((f) => f.id === fundId)!;
         const navPerShare = (navByFundId.get(fundId) ?? 0) > 0 && fund.etf!.sharesOutstanding > 0
           ? (navByFundId.get(fundId) ?? 0) / fund.etf!.sharesOutstanding
           : ETF_INCEPTION_NAV_PER_SHARE;
-        if (idx >= 0) {
-          const held = (next[idx].quantityShares ?? 0) + shares;
-          if (held <= 1e-6) next.splice(idx, 1);
-          else next[idx] = { ...next[idx], quantityShares: held, quantityOrNotionalUSD: held * navPerShare };
+        const iRef = ctx.v2.internedIdByString.get(fundId);
+        let found = -1;
+        if (iRef !== undefined) {
+          for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
+            if (removed.has(r)) continue;
+            if (H.typeRef[r] === etfShareRefD && H.instrRef[r] === iRef) { found = r; break; }
+          }
+        }
+        if (found >= 0) {
+          const sh = H.shares[found];
+          const held = (Number.isNaN(sh) ? 0 : sh) + shares;
+          if (held <= 1e-6) removed.add(found);
+          else { H.shares[found] = held; H.qtyUSD[found] = held * navPerShare; }
         } else if (shares > 1e-6) {
-          next.push({
+          pushBookRow(ctx.v2, entity.id, {
             instrumentId: fundId,
             instrumentType: 'ETF_SHARE',
             issuerRegion: fund.region,
@@ -726,11 +759,15 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
           } as ItemizedHolding);
         }
       });
-      holdings = next;
-    }
-    syncBookRows(ctx.v2, entity.id, holdings);
-    return { ...entity, itemizedHoldings: holdings };
-  });
+      if (removed.size > 0) {
+        const kept: number[] = [];
+        for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
+          if (!removed.has(r)) kept.push(r);
+        }
+        relinkBook(ctx.v2, entity.id, kept);
+      }
+    });
+  }
 
   // Every fund's final price per share, after this week's creations, fees and cash movements.
   // ETF2: what a holder's shares are WORTH is what they trade at, which is the share book's own
@@ -741,21 +778,25 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.entityType !== 'ETF' || !e.etf) return;
     const shares = e.etf.sharesOutstanding;
-    const navPerShare = shares > 0 ? fundNavUSD(e) / shares : ETF_INCEPTION_NAV_PER_SHARE;
+    const navPerShare = shares > 0 ? fundNavUSD(ctx.v2, e) / shares : ETF_INCEPTION_NAV_PER_SHARE;
     const marketPrice = e.etf.marketPricePerShare;
     finalNavPerShareByFund.set(e.id, marketPrice && marketPrice > 0 ? marketPrice : navPerShare);
   });
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
-    if (!entity.itemizedHoldings.some((h) => h.instrumentType === 'ETF_SHARE')) return entity;
-    const remarked = entity.itemizedHoldings.map((h) => {
-      if (h.instrumentType !== 'ETF_SHARE') return h;
-      const navPerShare = finalNavPerShareByFund.get(h.instrumentId);
-      if (navPerShare === undefined) return h;
-      return { ...h, quantityOrNotionalUSD: (h.quantityShares ?? 0) * navPerShare };
+  // §7.313 flip: the re-mark writes the rows in place — an ETF claim row costs one int compare
+  // and, when its fund priced, two column writes.
+  {
+    const H = ctx.v2.holdings;
+    const etfShareRefM = internString(ctx.v2, 'ETF_SHARE');
+    ctx.updatedInstitutionalEntities.forEach((entity) => {
+      for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
+        if (H.typeRef[r] !== etfShareRefM) continue;
+        const navPerShare = finalNavPerShareByFund.get(ctx.v2.internedStrings[H.instrRef[r]]);
+        if (navPerShare === undefined) continue;
+        const sh = H.shares[r];
+        H.qtyUSD[r] = (Number.isNaN(sh) ? 0 : sh) * navPerShare;
+      }
     });
-    syncBookRows(ctx.v2, entity.id, remarked);
-    return { ...entity, itemizedHoldings: remarked };
-  });
+  }
 
   // The household creation leg is handed to `household-balance-sheet.ts`, which owns the
   // household books. This stage owns the FLOW — who wanted what, and what the dealers could carry.

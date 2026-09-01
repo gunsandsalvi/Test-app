@@ -5,7 +5,7 @@
  */
 
 import { journalPayment, partyId } from './settlement';
-import { syncBookRows } from '../../../engine2/holdings';
+import { bookHeadOf, relinkBook } from '../../../engine2/holdings';
 import { V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
@@ -351,7 +351,7 @@ export function settleCorporateActionOnHolders(
  */
 export function applyPendingCorporateActionSettlements(
   ctx: {
-    v2?: import('../../../engine2/world').V2World;
+    v2: import('../../../engine2/world').V2World;
     updatedInstitutionalEntities: InstitutionalEntity[];
     pendingHolderSettlements: Map<string, number>;
     pendingHolderCashUSD?: Map<string, number>;
@@ -390,29 +390,48 @@ export function applyPendingCorporateActionSettlements(
   const pendingByType = splitKeys(pending);
   const pendingCashByType = splitKeys(pendingCash);
 
+  // §7.313 flip — the pending instruments translate to interned pairs ONCE; every row is then
+  // probed by one integer key. An instrument never interned has no rows and drops out here.
+  const v2 = ctx.v2;
+  const H = v2.holdings;
+  const refOf = (t: string): number | undefined => v2.internedIdByString.get(t);
+  const pairKeyOf = (r: number): number => H.typeRef[r] * 0x400000 + H.instrRef[r];
+  const toPairs = (byType: Map<string, Map<string, number>>): Map<number, number> => {
+    const out = new Map<number, number>();
+    byType.forEach((byId, type) => {
+      const t = refOf(type);
+      if (t === undefined) return;
+      byId.forEach((v, id) => {
+        const i = refOf(id);
+        if (i !== undefined) out.set(t * 0x400000 + i, v);
+      });
+    });
+    return out;
+  };
+  const ratioByPair = toPairs(pendingByType);
+  const owedByPair = toPairs(pendingCashByType);
+  const equityRef = refOf('EQUITY') ?? -2;
+
   // Holders OF RECORD — the books as they stand before this week's actions scale them. A call
   // premium belongs to whoever owned the paper when it was called, so the shares are taken from
-  // the pre-action notionals and the scaling happens after. Keyed by the same (type, id) pair.
-  const preActionTotalByTypeId = new Map<string, Map<string, number>>();
+  // the pre-action notionals and the scaling happens after.
+  const totalByPair = new Map<number, number>();
   if (hasCash) {
     ctx.updatedInstitutionalEntities.forEach((entity) => {
-      entity.itemizedHoldings.forEach((h) => {
-        const inner = pendingCashByType.get(h.instrumentType);
-        if (!inner || !inner.has(h.instrumentId)) return;
-        let totals = preActionTotalByTypeId.get(h.instrumentType);
-        if (!totals) { totals = new Map(); preActionTotalByTypeId.set(h.instrumentType, totals); }
-        totals.set(h.instrumentId, (totals.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
-      });
+      for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
+        const k = pairKeyOf(r);
+        if (!owedByPair.has(k)) continue;
+        totalByPair.set(k, (totalByPair.get(k) ?? 0) + H.qtyUSD[r]);
+      }
     });
   }
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
-    // Cheap pre-scan: an entity holding none of the touched instruments is returned as-is —
-    // the old path built (and threw away) a full copy of its holdings array to find that out.
+    // Cheap pre-scan: an entity holding none of the touched instruments is returned as-is.
     let anyHit = false;
-    for (const h of entity.itemizedHoldings) {
-      if (pendingByType.get(h.instrumentType)?.has(h.instrumentId)
-        || pendingCashByType.get(h.instrumentType)?.has(h.instrumentId)) { anyHit = true; break; }
+    for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
+      const k = pairKeyOf(r);
+      if (ratioByPair.has(k) || owedByPair.has(k)) { anyHit = true; break; }
     }
     if (!anyHit) return entity;
     let touched = false;
@@ -420,121 +439,105 @@ export function applyPendingCorporateActionSettlements(
     // Placements this entity has funded within THIS pass — journalPayment does not update the
     // running settlement net, so two placements in one week must see each other here.
     let committedPlacementUSD = 0;
-    const newHoldings = entity.itemizedHoldings
-      .map((h) => {
-        if (hasCash) {
-          const owedUSD = pendingCashByType.get(h.instrumentType)?.get(h.instrumentId);
-          const totalUSD = preActionTotalByTypeId.get(h.instrumentType)?.get(h.instrumentId) ?? 0;
-          if (owedUSD !== undefined && totalUSD > 0) {
-            // SETL3/4: the holder's share of what the issuer owes. Paid AS A PAYMENT from the
-            // issuer, so the money has a payer and a payee (rule 14) instead of appearing on the
-            // holder's book while the issuer's ledger says it left.
-            const shareUSD = owedUSD * (h.quantityOrNotionalUSD / totalUSD);
-            const issuerTicker = ctx.issuerTickerById?.get(h.instrumentId);
-            if (ctx.paymentJournal && issuerTicker) {
-              journalPayment(ctx.paymentJournal, {
-                payer: { kind: 'COMPANY', ticker: issuerTicker },
-                payee: { kind: 'INSTITUTION', id: entity.id },
-                amountUSD: shareUSD,
-                reason: 'security payment to holder of record',
-              });
-            } else {
-              // §7.241: an unmapped issuer used to credit the holder with NO payer, silently —
-              // one measured feeder of 02b's reconcile plug. Still credited (deleting the
-              // holder's money would break the other leg), but COUNTED now, like creditUnbacked.
-              cashUSD += shareUSD;
-              if (ctx.unbackedLedger) {
-                ctx.unbackedLedger.totalUSD += Math.abs(shareUSD);
-                ctx.unbackedLedger.byReason['security payment with unmapped issuer'] =
-                  (ctx.unbackedLedger.byReason['security payment with unmapped issuer'] ?? 0) + shareUSD;
-              }
-            }
-            touched = true;
-          }
-        }
-        const ratio = pendingByType.get(h.instrumentType)?.get(h.instrumentId);
-        if (ratio === undefined) return h;
-        touched = true;
-        // THE PRINCIPAL'S CASH LEG. A redemption is money: the issuer pays its lenders back and
-        // their claim shrinks by exactly what they were paid. Before this, the notional simply
-        // left the holder's book and arrived nowhere — a transfer from lenders to no one, and a
-        // conservation break in the securities ledger sitting underneath every price the model
-        // cleared against those books.
-        //
-        // Derived from the composed ratio rather than recorded separately, so it stays exact when
-        // two actions hit one instrument in a week (the ratios multiply; the notional change is
-        // whatever the product implies). Debt redeems at PAR, so the notional change IS the cash
-        // — the call premium on top of it rides the explicit `pendingHolderCashUSD` path above,
-        // and equity is excluded because a share is bought at a negotiated price rather than at
-        // its carrying value (a take-private pays its own takeout, §7.43).
-        //
-        // The mirror case is a float INCREASE that did not come through the auction: paper placed
-        // pro rata with the existing holder base, which they must pay for. WS8 primary issuance is
-        // already netted out of this ratio by stage 08 (it inflates the pre-action float by the
-        // market take), so what remains here is a genuine placement and it is charged, not gifted.
-        let principalCashUSD = h.instrumentType === 'EQUITY'
-          ? 0
-          : h.quantityOrNotionalUSD * (1 - ratio);
-        // §4.0 Tier 1 item 6 — A PLACEMENT IS TAKEN UP ONLY AS FAR AS THE CASH REACHES. The
-        // float-increase leg billed holders of record with no budget: a fund whose week was
-        // already spent was debited into overdraft by its own pro-rata allotment (measured:
-        // USAIGX −18M, the residual of the overdraft family). A holder short of cash declines
-        // the unaffordable slice — its holding grows by only the share it funded, and the
-        // issuer's proceeds shrink by the same amount on the same instruction.
-        let effectiveRatio = ratio;
-        if (principalCashUSD < 0) {
-          const pendingUSD = ctx.pendingNetById
-            ? (ctx.pendingNetById[partyId({ kind: 'INSTITUTION', id: entity.id })] ?? 0)
-            : 0;
-          const availableUSD = Math.max(0, (entity.cashUSD ?? 0) + cashUSD + pendingUSD
-            - committedPlacementUSD);
-          const owedUSD = -principalCashUSD;
-          const fundedShare = owedUSD > 0 ? Math.min(1, availableUSD / owedUSD) : 1;
-          if (fundedShare < 1) {
-            effectiveRatio = 1 + (ratio - 1) * fundedShare;
-            principalCashUSD = -owedUSD * fundedShare;
-          }
-          committedPlacementUSD += -principalCashUSD;
-        }
-        // CASH: and it comes FROM THE ISSUER, by name — the same route the premium above takes.
-        // Crediting `cashUSD` here made the redemption money appear on the holder's book while
-        // stage 08's ledger posted the issuer's side against the UNMODELED boundary: two halves
-        // of one payment, neither of them attached to the other (rule 14). A float INCREASE runs
-        // the same instruction backwards, because a placement is paid for.
-        const principalIssuerTicker = ctx.issuerTickerById?.get(h.instrumentId);
-        if (ctx.paymentJournal && principalIssuerTicker && Math.abs(principalCashUSD) > 0) {
-          journalPayment(ctx.paymentJournal, principalCashUSD > 0
-            ? {
-              payer: { kind: 'COMPANY', ticker: principalIssuerTicker },
+    const kept: number[] = [];
+    for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
+      const k = pairKeyOf(r);
+      if (hasCash) {
+        const owedUSD = owedByPair.get(k);
+        const totalUSD = totalByPair.get(k) ?? 0;
+        if (owedUSD !== undefined && totalUSD > 0) {
+          // SETL3/4: the holder's share of what the issuer owes. Paid AS A PAYMENT from the
+          // issuer, so the money has a payer and a payee (rule 14) instead of appearing on the
+          // holder's book while the issuer's ledger says it left.
+          const shareUSD = owedUSD * (H.qtyUSD[r] / totalUSD);
+          const issuerTicker = ctx.issuerTickerById?.get(v2.internedStrings[H.instrRef[r]]);
+          if (ctx.paymentJournal && issuerTicker) {
+            journalPayment(ctx.paymentJournal, {
+              payer: { kind: 'COMPANY', ticker: issuerTicker },
               payee: { kind: 'INSTITUTION', id: entity.id },
-              amountUSD: principalCashUSD,
-              reason: 'principal redeemed to holder of record',
-            }
-            : {
-              payer: { kind: 'INSTITUTION', id: entity.id },
-              payee: { kind: 'COMPANY', ticker: principalIssuerTicker },
-              amountUSD: -principalCashUSD,
-              reason: 'placement paid by holder of record',
+              amountUSD: shareUSD,
+              reason: 'security payment to holder of record',
             });
-        } else {
-          // §7.241: same counting as the coupon leg above — an unmapped issuer's redemption
-          // money reached the holder with no payer; it is now visible on the unbacked ledger.
-          cashUSD += principalCashUSD;
-          if (ctx.unbackedLedger && principalCashUSD !== 0) {
-            ctx.unbackedLedger.totalUSD += Math.abs(principalCashUSD);
-            ctx.unbackedLedger.byReason['principal moved with unmapped issuer'] =
-              (ctx.unbackedLedger.byReason['principal moved with unmapped issuer'] ?? 0) + principalCashUSD;
+          } else {
+            // §7.241: an unmapped issuer used to credit the holder with NO payer, silently —
+            // one measured feeder of 02b's reconcile plug. Still credited (deleting the
+            // holder's money would break the other leg), but COUNTED now, like creditUnbacked.
+            cashUSD += shareUSD;
+            if (ctx.unbackedLedger) {
+              ctx.unbackedLedger.totalUSD += Math.abs(shareUSD);
+              ctx.unbackedLedger.byReason['security payment with unmapped issuer'] =
+                (ctx.unbackedLedger.byReason['security payment with unmapped issuer'] ?? 0) + shareUSD;
+            }
           }
+          touched = true;
         }
-        return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * effectiveRatio };
-      })
-      .filter((h) => h.quantityOrNotionalUSD > 1);
+      }
+      const ratio = ratioByPair.get(k);
+      if (ratio === undefined) {
+        if (H.qtyUSD[r] > 1) kept.push(r);
+        continue;
+      }
+      touched = true;
+      // THE PRINCIPAL'S CASH LEG. A redemption is money: the issuer pays its lenders back and
+      // their claim shrinks by exactly what they were paid. Derived from the composed ratio so
+      // it stays exact when two actions hit one instrument in a week; debt redeems at PAR, so
+      // the notional change IS the cash — the call premium rides `pendingHolderCashUSD` above,
+      // and equity is excluded (a share is bought at a negotiated price, §7.43).
+      let principalCashUSD = H.typeRef[r] === equityRef ? 0 : H.qtyUSD[r] * (1 - ratio);
+      // §4.0 Tier 1 item 6 — A PLACEMENT IS TAKEN UP ONLY AS FAR AS THE CASH REACHES. A holder
+      // short of cash declines the unaffordable slice — its holding grows by only the share it
+      // funded, and the issuer's proceeds shrink by the same amount on the same instruction.
+      let effectiveRatio = ratio;
+      if (principalCashUSD < 0) {
+        const pendingUSD = ctx.pendingNetById
+          ? (ctx.pendingNetById[partyId({ kind: 'INSTITUTION', id: entity.id })] ?? 0)
+          : 0;
+        const availableUSD = Math.max(0, (entity.cashUSD ?? 0) + cashUSD + pendingUSD
+          - committedPlacementUSD);
+        const owedUSD = -principalCashUSD;
+        const fundedShare = owedUSD > 0 ? Math.min(1, availableUSD / owedUSD) : 1;
+        if (fundedShare < 1) {
+          effectiveRatio = 1 + (ratio - 1) * fundedShare;
+          principalCashUSD = -owedUSD * fundedShare;
+        }
+        committedPlacementUSD += -principalCashUSD;
+      }
+      // CASH: and it comes FROM THE ISSUER, by name — a float INCREASE runs the same
+      // instruction backwards, because a placement is paid for.
+      const principalIssuerTicker = ctx.issuerTickerById?.get(v2.internedStrings[H.instrRef[r]]);
+      if (ctx.paymentJournal && principalIssuerTicker && Math.abs(principalCashUSD) > 0) {
+        journalPayment(ctx.paymentJournal, principalCashUSD > 0
+          ? {
+            payer: { kind: 'COMPANY', ticker: principalIssuerTicker },
+            payee: { kind: 'INSTITUTION', id: entity.id },
+            amountUSD: principalCashUSD,
+            reason: 'principal redeemed to holder of record',
+          }
+          : {
+            payer: { kind: 'INSTITUTION', id: entity.id },
+            payee: { kind: 'COMPANY', ticker: principalIssuerTicker },
+            amountUSD: -principalCashUSD,
+            reason: 'placement paid by holder of record',
+          });
+      } else {
+        // §7.241: same counting as the coupon leg above — an unmapped issuer's redemption
+        // money reached the holder with no payer; it is now visible on the unbacked ledger.
+        cashUSD += principalCashUSD;
+        if (ctx.unbackedLedger && principalCashUSD !== 0) {
+          ctx.unbackedLedger.totalUSD += Math.abs(principalCashUSD);
+          ctx.unbackedLedger.byReason['principal moved with unmapped issuer'] =
+            (ctx.unbackedLedger.byReason['principal moved with unmapped issuer'] ?? 0) + principalCashUSD;
+        }
+      }
+      const scaledUSD = H.qtyUSD[r] * effectiveRatio;
+      H.qtyUSD[r] = scaledUSD;
+      if (scaledUSD > 1) kept.push(r);
+    }
     if (!touched) return entity;
-    if (ctx.v2) syncBookRows(ctx.v2, entity.id, newHoldings);
+    relinkBook(v2, entity.id, kept);
     return {
       ...entity,
       cashUSD: (entity.cashUSD ?? 0) + cashUSD,
-      itemizedHoldings: newHoldings,
     };
   });
   pending.clear();

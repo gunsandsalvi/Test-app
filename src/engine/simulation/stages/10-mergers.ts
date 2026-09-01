@@ -8,7 +8,7 @@
  */
 
 import { absorbBankBook } from '../../ledger';
-import { syncBookRows, bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, pushBookRow } from '../../../engine2/holdings';
 import { ensureV2, internString } from '../../../engine2/world';
 import { syncLadderRows, materializeLadder } from '../../../engine2/tranches';
 import { pay } from './settlement';
@@ -153,14 +153,13 @@ function runDivestitures(ctx: WeeklyStepContext): void {
       }
       if (!(heldShares > 0)) return;
       const fraction = Math.min(1, heldShares / parent.sharesOutstanding);
-      e.itemizedHoldings = [...e.itemizedHoldings, {
+      pushBookRow(ctx.v2, e.id, {
         instrumentId: spin.id,
         instrumentType: 'EQUITY',
         issuerRegion: spin.region,
         quantityShares: fraction * spinShares,
         quantityOrNotionalUSD: fraction * spinMcapUSD,
-      }];
-      syncBookRows(ctx.v2, e.id, e.itemizedHoldings);
+      });
     });
     bumpRegister(ctx);
 
@@ -432,26 +431,40 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // rows — the old code minted `newShares` onto `sharesOutstanding` with rows for NOBODY, while
   // target equity rows stayed keyed to a dead company. Each target share row converts to the
   // acquirer stock it was exchanged for (its stake's share of the stock leg).
+  // §7.313 flip — the re-key is column writes on the matching rows: interned refs swap to the
+  // acquirer's, and the equity rows revalue in place.
   const stockRatio = stockPaid / targetMarketCapUSD;
-  ctx.updatedInstitutionalEntities.forEach((e) => {
-    let touched = false;
-    const rows = e.itemizedHoldings.map((h) => {
-      if (!mergedIds.has(h.instrumentId)) return h;
-      if (isIssuerEquityRow(h)) {
-        touched = true;
-        const newValueUSD = (h.quantityOrNotionalUSD ?? 0) * stockRatio;
-        return {
-          ...h, instrumentId: acquirer.id, issuerRegion: acquirer.region,
-          quantityOrNotionalUSD: newValueUSD,
-          quantityShares: acquirer.stockPrice > 0 ? newValueUSD / acquirer.stockPrice : h.quantityShares,
-        };
-      }
-      if (h.instrumentType !== 'CORP_BOND' && h.instrumentType !== 'LEVERAGED_LOAN') return h;
-      touched = true;
-      return { ...h, instrumentId: acquirer.id, issuerRegion: acquirer.region };
-    });
-    if (touched) { e.itemizedHoldings = rows; syncBookRows(ctx.v2, e.id, rows); bumpRegister(ctx); }
-  });
+  {
+    const H = ctx.v2.holdings;
+    const targetIdRef = ctx.v2.internedIdByString.get(target.id);
+    if (targetIdRef !== undefined) {
+      const acquirerIdRef = internString(ctx.v2, acquirer.id);
+      const acquirerRegionRef = internString(ctx.v2, acquirer.region);
+      const equityRefR = internString(ctx.v2, 'EQUITY');
+      const corpBondRef = internString(ctx.v2, 'CORP_BOND');
+      const levLoanRef = internString(ctx.v2, 'LEVERAGED_LOAN');
+      ctx.updatedInstitutionalEntities.forEach((e) => {
+        let touched = false;
+        for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
+          if (H.instrRef[r] !== targetIdRef) continue;
+          if (H.typeRef[r] === equityRefR) {
+            touched = true;
+            const newValueUSD = H.qtyUSD[r] * stockRatio;
+            H.instrRef[r] = acquirerIdRef;
+            H.regionRef[r] = acquirerRegionRef;
+            H.qtyUSD[r] = newValueUSD;
+            if (acquirer.stockPrice > 0) H.shares[r] = newValueUSD / acquirer.stockPrice;
+            continue;
+          }
+          if (H.typeRef[r] !== corpBondRef && H.typeRef[r] !== levLoanRef) continue;
+          touched = true;
+          H.instrRef[r] = acquirerIdRef;
+          H.regionRef[r] = acquirerRegionRef;
+        }
+        if (touched) bumpRegister(ctx);
+      });
+    }
+  }
 
   // Target is absorbed and exits active operations
   target.mergerAcquired = true;

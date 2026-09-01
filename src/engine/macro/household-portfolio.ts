@@ -20,6 +20,8 @@
  *     the universe does not yet contain. See `unmodeledFinancialAssetsUSD`.
  */
 
+import { bookHeadOf } from '../../engine2/holdings';
+import { internString } from '../../engine2/world';
 import { Company, RegionId } from '../../types';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { HouseholdState } from '../../domain/region-macro';
@@ -59,21 +61,27 @@ export function householdPrivateBusinessEquityUSD(
  * Nothing circular: 07e clears the whole register (OWN2), so this is a measurement of who ended
  * up holding it, never an input to what the book may trade.
  */
+// §7.313 flip: reads the persistent rows — mid-week the object books are a stale view.
 export function householdDirectEquityUSD(
+  v2: import('../../engine2/world').V2World,
   regionId: RegionId,
   companies: Company[],
   entities: InstitutionalEntity[]
 ): number {
+  const H = v2.holdings;
+  const equityRef = internString(v2, 'EQUITY');
+  const regionRef = internString(v2, regionId);
   const institutionallyHeldUSD = new Map<string, number>();
   entities.forEach((e) => {
     if (e.isDefaulted) return;
-    e.itemizedHoldings.forEach((h) => {
-      if (h.instrumentType !== 'EQUITY' || h.issuerRegion !== regionId) return;
+    for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
+      if (H.typeRef[r] !== equityRef || H.regionRef[r] !== regionRef) continue;
+      const instrumentId = v2.internedStrings[H.instrRef[r]];
       institutionallyHeldUSD.set(
-        h.instrumentId,
-        (institutionallyHeldUSD.get(h.instrumentId) ?? 0) + (h.quantityOrNotionalUSD ?? 0)
+        instrumentId,
+        (institutionallyHeldUSD.get(instrumentId) ?? 0) + H.qtyUSD[r]
       );
-    });
+    }
   });
   return companies.reduce((sum, c) => {
     if (c.region !== regionId || !isActiveCompany(c) || !isPubliclyListed(c)) return sum;
@@ -82,17 +90,21 @@ export function householdDirectEquityUSD(
 }
 
 /** Marked value of the household's index-fund shares, at each fund's current net asset value. */
+// §7.313 flip: the fund's basket is read off the rows.
 export function householdEtfHoldingsUSD(
+  v2: import('../../engine2/world').V2World,
   hs: Pick<HouseholdState, 'etfShares'>,
   entities: InstitutionalEntity[]
 ): number {
   if (!hs.etfShares?.length) return 0;
+  const H = v2.holdings;
   const fundById = new Map(entities.filter((e) => e.entityType === 'ETF' && e.etf).map((e) => [e.id, e]));
   return hs.etfShares.reduce((sum, holding) => {
     const fund = fundById.get(holding.fundId);
     if (!fund?.etf || !(fund.etf.sharesOutstanding > 0)) return sum;
-    const navUSD = fund.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0)
-      + Math.max(0, fund.cashUSD ?? 0);
+    let heldUSD = 0;
+    for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) heldUSD += H.qtyUSD[r];
+    const navUSD = heldUSD + Math.max(0, fund.cashUSD ?? 0);
     return sum + holding.shares * (navUSD / fund.etf.sharesOutstanding);
   }, 0);
 }

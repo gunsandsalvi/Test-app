@@ -131,6 +131,72 @@ export function bookRowsOf(v2: V2World, entityId: string): number[] {
   return rows;
 }
 
+/** Append one holding as a row at the tail of the entity's chain; returns the row. */
+export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): number {
+  const H = v2.holdings;
+  H.synced.add(entityId);
+  const slot = slotFor(H, rowOf(v2, entityId));
+  const r = allocRow(H);
+  H.typeRef[r] = internString(v2, h.instrumentType);
+  H.instrRef[r] = internString(v2, h.instrumentId);
+  H.regionRef[r] = internString(v2, h.issuerRegion);
+  H.qtyUSD[r] = h.quantityOrNotionalUSD ?? 0;
+  H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
+  H.next[r] = -1;
+  if (H.tail[slot] >= 0) H.next[H.tail[slot]] = r; else H.head[slot] = r;
+  H.tail[slot] = r;
+  return r;
+}
+
+/**
+ * Re-chain the entity's book to exactly `rows`, in order; every current row NOT in the list is
+ * freed. The §7.313 write-back pattern: a writer edits a local row list, then relinks once.
+ */
+export function relinkBook(v2: V2World, entityId: string, rows: number[]): void {
+  const H = v2.holdings;
+  H.synced.add(entityId);
+  const slot = slotFor(H, rowOf(v2, entityId));
+  if (rows.length > 0) {
+    const keep = new Set(rows);
+    for (let r = H.head[slot]; r >= 0; ) {
+      const nxt = H.next[r];
+      if (!keep.has(r)) { H.next[r] = H.freeHead; H.freeHead = r; }
+      r = nxt;
+    }
+    for (let i = 0; i < rows.length; i++) H.next[rows[i]] = i + 1 < rows.length ? rows[i + 1] : -1;
+    H.head[slot] = rows[0];
+    H.tail[slot] = rows[rows.length - 1];
+  } else {
+    for (let r = H.head[slot]; r >= 0; ) {
+      const nxt = H.next[r];
+      H.next[r] = H.freeHead;
+      H.freeHead = r;
+      r = nxt;
+    }
+    H.head[slot] = -1;
+    H.tail[slot] = -1;
+  }
+}
+
+/** The entity's book as objects — the WEEK-END VIEW once rows are the authority (§7.313's
+ *  pattern: one linear pass at the close replaces every per-writer sync). */
+export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[] {
+  const H = v2.holdings;
+  const out: ItemizedHolding[] = [];
+  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) {
+    const sh = H.shares[r];
+    const h: ItemizedHolding = {
+      instrumentId: v2.internedStrings[H.instrRef[r]],
+      instrumentType: v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'],
+      issuerRegion: v2.internedStrings[H.regionRef[r]] as ItemizedHolding['issuerRegion'],
+      quantityOrNotionalUSD: H.qtyUSD[r],
+    };
+    if (!Number.isNaN(sh)) h.quantityShares = sh;
+    out.push(h);
+  }
+  return out;
+}
+
 /** Idempotent catch-up (seed and any unhooked creation path). */
 export function ensureBooksSynced(v2: V2World, entities: { id: string; itemizedHoldings?: ItemizedHolding[] }[]): void {
   for (const e of entities) {

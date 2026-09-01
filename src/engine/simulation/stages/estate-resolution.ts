@@ -15,7 +15,7 @@
  */
 
 import { assertNever } from '../../../domain/defect';
-import { syncBookRows, bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, relinkBook } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { GameState, RegionId, Company, InstitutionalEntity, ItemizedHolding } from '../../../types';
 import {
@@ -59,6 +59,7 @@ const holderRef = (c: EstateClaim): PartyRef =>
  * What changes is that each answer is computed once instead of once per claim.
  */
 interface EstateIndex {
+  v2: import('../../../engine2/world').V2World;
   entityById: Map<string, InstitutionalEntity>;
   bankByTicker: Map<string, Company>;
   companyById: Map<string, Company>;
@@ -70,7 +71,7 @@ interface EstateIndex {
   /** `entityId -> instrumentId -> the rows of that entity's book holding it`. Built once for the
    *  holders that actually have a claim, which is what turns a per-claim SCAN of a whole book
    *  into a lookup: ~300 institutions were being re-scanned by ~11,000 claims a week. */
-  rowsByEntityInstrument: Map<string, Map<string, ItemizedHolding[]>>;
+  rowsByEntityInstrument: Map<string, Map<string, number[]>>;
   /** Entities whose book was written, so the sub-$1 compaction runs once each at the end. */
   touchedEntityIds: Set<string>;
 }
@@ -85,7 +86,7 @@ function buildEstateIndex(ctx: WeeklyStepContext): EstateIndex {
     if (c.bankBalanceSheet) bankByTicker.set(c.ticker, c);
   });
   return {
-    entityById, bankByTicker, companyById,
+    v2: ctx.v2, entityById, bankByTicker, companyById,
     ppeWeeksByRegion: new Map(),
     rowsByEntityInstrument: new Map(), touchedEntityIds: new Set(),
   };
@@ -98,14 +99,18 @@ function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
     if (e.closedWeek !== undefined) return;
     e.claims.forEach((c) => { if (c.holder.kind === 'INSTITUTION') needed.add(c.holder.id); });
   });
+  // §7.313 flip — the index holds ROW IDS in the persistent store; a claim's write-down is a
+  // column write on exactly those rows.
   needed.forEach((id) => {
     const e = index.entityById.get(id);
     if (!e) return;
-    const byInstrument = new Map<string, ItemizedHolding[]>();
-    (e.itemizedHoldings || []).forEach((h) => {
-      const rows = byInstrument.get(h.instrumentId);
-      if (rows) rows.push(h); else byInstrument.set(h.instrumentId, [h]);
-    });
+    const H = index.v2.holdings;
+    const byInstrument = new Map<string, number[]>();
+    for (let r = bookHeadOf(index.v2, id); r >= 0; r = H.next[r]) {
+      const instrumentId = index.v2.internedStrings[H.instrRef[r]];
+      const rows = byInstrument.get(instrumentId);
+      if (rows) rows.push(r); else byInstrument.set(instrumentId, [r]);
+    }
     index.rowsByEntityInstrument.set(id, byInstrument);
   });
 }
@@ -218,8 +223,12 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   index.touchedEntityIds.forEach((id) => {
     const e = index.entityById.get(id);
     if (!e) return;
-    e.itemizedHoldings = (e.itemizedHoldings || []).filter((h) => (h.quantityOrNotionalUSD ?? 0) > 1);
-    syncBookRows(ctx.v2, e.id, e.itemizedHoldings);
+    const H = ctx.v2.holdings;
+    const kept: number[] = [];
+    for (let r = bookHeadOf(ctx.v2, id); r >= 0; r = H.next[r]) {
+      if (H.qtyUSD[r] > 1) kept.push(r);
+    }
+    relinkBook(ctx.v2, id, kept);
     bumpRegister(ctx);
   });
 
@@ -352,11 +361,12 @@ function reduceHolding(
     let leftUSD = amountUSD;
     const rows = index.rowsByEntityInstrument.get(id)?.get(companyId);
     if (rows) {
+      const H = index.v2.holdings;
       for (let i = 0; i < rows.length && leftUSD > 0; i++) {
-        const h = rows[i];
-        const takeUSD = Math.min(leftUSD, h.quantityOrNotionalUSD ?? 0);
+        const r = rows[i];
+        const takeUSD = Math.min(leftUSD, H.qtyUSD[r]);
         leftUSD -= takeUSD;
-        h.quantityOrNotionalUSD = (h.quantityOrNotionalUSD ?? 0) - takeUSD;
+        H.qtyUSD[r] = H.qtyUSD[r] - takeUSD;
       }
       index.touchedEntityIds.add(id);
     }

@@ -23,7 +23,8 @@ import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuance
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay } from './settlement';
-import { syncBookRows } from '../../../engine2/holdings';
+import { bookHeadOf, relinkBook } from '../../../engine2/holdings';
+import { internString } from '../../../engine2/world';
 import { REGION_IDS } from '../../../domain/geography';
 import { encumberedFaceByBucket, repoBorrowedUSD, srfBorrowedUSD } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
@@ -384,23 +385,37 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // regionId` filter that stood here repaid only the issuer's own institutions, so a foreign
       // holder's position never shrank and never got its money — the row below already tests
       // `h.issuerRegion`, which is the only test that belongs here.
-      ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map(entity => {
+      // §7.313 flip — the redemption scales rows in place and relinks past the dust; the cash
+      // leg reads the same rows in the same order.
+      const Hsov = ctx.v2.holdings;
+      const govBondRefS = internString(ctx.v2, 'GOV_BOND');
+      const regionRefS = internString(ctx.v2, regionId);
+      ctx.updatedInstitutionalEntities.forEach(entity => {
         let touched = false;
         let redeemedCashUSD = 0;
-        const newHoldings = entity.itemizedHoldings.map(h => {
-          if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return h;
-          const key = govBucketKeyOf(h.instrumentId, regionId);
+        const kept: number[] = [];
+        for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = Hsov.next[r]) {
+          if (Hsov.typeRef[r] !== govBondRefS || Hsov.regionRef[r] !== regionRefS) {
+            if (Hsov.qtyUSD[r] > 1) kept.push(r);
+            continue;
+          }
+          const key = govBucketKeyOf(ctx.v2.internedStrings[Hsov.instrRef[r]], regionId);
           const fraction = (key ? redeemedFractionByBucket.get(key) : 0) ?? 0;
-          if (fraction <= 0) return h;
+          if (fraction <= 0) {
+            if (Hsov.qtyUSD[r] > 1) kept.push(r);
+            continue;
+          }
           touched = true;
-          redeemedCashUSD += h.quantityOrNotionalUSD * fraction;
-          return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 - fraction) };
-        }).filter(h => h.quantityOrNotionalUSD > 1);
+          redeemedCashUSD += Hsov.qtyUSD[r] * fraction;
+          const scaled = Hsov.qtyUSD[r] * (1 - fraction);
+          Hsov.qtyUSD[r] = scaled;
+          if (scaled > 1) kept.push(r);
+        }
         // The matching cash leg. The "no itemized cash line to credit yet" era this comment
         // used to describe ended when S11 gave every entity a real cashUSD — and bills (WS5)
         // made the gap weekly instead of quarterly, which is how the missing leg finally
         // showed up as a conservation violation.
-        if (!touched) return entity;
+        if (!touched) return;
         if (redeemedCashUSD > 0) {
           redemptionPaidUSD += redeemedCashUSD;
           pay(ctx, {
@@ -410,8 +425,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             reason: 'sovereign redemption',
           });
         }
-        syncBookRows(ctx.v2, entity.id, newHoldings);
-        return { ...entity, itemizedHoldings: newHoldings };
+        relinkBook(ctx.v2, entity.id, kept);
       });
     }
 
@@ -524,9 +538,18 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           .reduce((x, [k, v]) => x + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0), 0)
         + ctx.updatedInstitutionalEntities
           .filter(e => !e.isDefaulted)
-          .reduce((a, e) => a + e.itemizedHoldings
-            .filter(h => h.instrumentType === 'GOV_BOND' && h.issuerRegion === regionId)
-            .reduce((x, h) => x + ((h.quantityOrNotionalUSD ?? 0) * (cb[govBucketKeyOf(h.instrumentId, regionId) ?? ''] ?? 0)) / 52, 0), 0);
+          .reduce((a, e) => {
+            // §7.313 flip: row walk on the register's authority.
+            const Hg = ctx.v2.holdings;
+            const gRef = internString(ctx.v2, 'GOV_BOND');
+            const rRef = internString(ctx.v2, regionId);
+            let x = 0;
+            for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = Hg.next[r]) {
+              if (Hg.typeRef[r] !== gRef || Hg.regionRef[r] !== rRef) continue;
+              x += (Hg.qtyUSD[r] * (cb[govBucketKeyOf(ctx.v2.internedStrings[Hg.instrRef[r]], regionId) ?? ''] ?? 0)) / 52;
+            }
+            return a + x;
+          }, 0);
       reg.governmentInterestToUnmodeledHoldersUSD = Math.round(Math.max(0, interestWeeklyUSD - held));
     }
 

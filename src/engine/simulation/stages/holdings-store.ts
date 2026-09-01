@@ -29,7 +29,8 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
-import { syncBookRows } from '../../../engine2/holdings';
+import { bookHeadOf, pushBookRow, relinkBook } from '../../../engine2/holdings';
+import { V2World } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 
@@ -42,6 +43,9 @@ interface EntitySlot {
   entity: InstitutionalEntity;
   /** Week-start rows, plus any delivered outside an auction (see `addShares`). */
   rows: ItemizedHolding[];
+  /** §7.313 flip — each row's backing row in the persistent store, parallel to `rows`;
+   *  -1 = created mid-window (a real row is allocated for it at the write-back). */
+  rowIds: number[];
   /** 0 = unclaimed; otherwise the epoch (region-pass) that claimed the row. */
   claimed: Uint16Array;
   /** Row indices per book-priced instrument type, in original array order. */
@@ -51,16 +55,23 @@ interface EntitySlot {
 
 export class HoldingsStore {
   private slots = new Map<string, EntitySlot>();
+  private v2: V2World;
   /** The current region-pass. In the old chain an entity's array only changed at each region
    * pass's APPLY, so a read taken mid-pass still sees the rows that pass has already claimed;
    * a new epoch (bumped at the top of every region pass) is what retires the previous pass's
    * claims from view. */
   private epoch = 1;
 
-  constructor(entities: InstitutionalEntity[]) {
+  constructor(entities: InstitutionalEntity[], v2: V2World) {
+    this.v2 = v2;
+    const H = v2.holdings;
     entities.forEach((source) => {
       const entity: InstitutionalEntity = { ...source };
       const rows = entity.itemizedHoldings || [];
+      // §7.313 flip — the objects are last close's materialized view and the chain holds the
+      // same book in the same order, so pairing index-for-row is one linear walk.
+      const rowIds: number[] = [];
+      for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) rowIds.push(r);
       const byType = new Map<string, number[]>();
       rows.forEach((h, i) => {
         if (!BOOK_TYPES.includes(h.instrumentType)) return;
@@ -68,7 +79,7 @@ export class HoldingsStore {
         if (list) list.push(i); else byType.set(h.instrumentType, [i]);
       });
       this.slots.set(entity.id, {
-        entity, rows, byType,
+        entity, rows, rowIds, byType,
         claimed: new Uint16Array(rows.length),
         appended: [],
       });
@@ -156,6 +167,13 @@ export class HoldingsStore {
         const next = held + take;
         row.quantityShares = next;
         row.quantityOrNotionalUSD = next * pricePerShare;
+        // §7.313 flip — the persistent row is the authority; the delivery lands on it too.
+        const rid = slot.rowIds[i];
+        if (rid >= 0) {
+          const H = this.v2.holdings;
+          H.shares[rid] = next;
+          H.qtyUSD[rid] = next * pricePerShare;
+        }
         remaining -= take;
         if (Math.abs(remaining) <= 1e-9) return;
       }
@@ -170,6 +188,7 @@ export class HoldingsStore {
       quantityOrNotionalUSD: shares * pricePerShare,
     };
     slot.rows = [...slot.rows, row];
+    slot.rowIds.push(-1); // a real row is allocated for it at the write-back
     const grown = new Uint16Array(slot.rows.length);
     grown.set(slot.claimed);
     slot.claimed = grown;
@@ -185,29 +204,40 @@ export class HoldingsStore {
     for (const r of rows) slot.appended.push(r);
   }
 
-  /** Recompose every entity's `itemizedHoldings`; the working copies stay in place. */
-  finalize(v2?: import('../../../engine2/world').V2World): void {
+  /**
+   * §7.313 flip — the write-back RELINKS the persistent chains instead of recomposing objects:
+   * [every unclaimed row, original order] ++ [appended fills, append order], exactly the
+   * composition the recompose produced, but only NEW rows (fills, mid-window deliveries) pay an
+   * intern; the standing register is a pointer relink. `entity.itemizedHoldings` is refreshed at
+   * the week end by the one materialization pass in core.ts.
+   */
+  finalize(): void {
+    const v2 = this.v2;
     this.slots.forEach((slot) => {
-      const out: ItemizedHolding[] = [];
+      const untouched = slot.appended.length === 0
+        && !slot.rowIds.includes(-1)
+        && slot.claimed.every((c) => c === 0);
+      if (untouched) return;
+      const ids: number[] = [];
       for (let i = 0; i < slot.rows.length; i++) {
-        if (!slot.claimed[i]) out.push(slot.rows[i]);
+        if (slot.claimed[i]) continue;
+        ids.push(slot.rowIds[i] >= 0 ? slot.rowIds[i] : pushBookRow(v2, slot.entity.id, slot.rows[i]));
       }
-      for (const r of slot.appended) out.push(r);
-      slot.entity.itemizedHoldings = out;
-      if (v2) syncBookRows(v2, slot.entity.id, out);
+      for (const r of slot.appended) ids.push(pushBookRow(v2, slot.entity.id, r));
+      relinkBook(v2, slot.entity.id, ids);
     });
   }
 }
 
 /** Build the store from this week's entity state and install the working copies. */
 export function buildHoldingsStore(ctx: WeeklyStepContext): void {
-  const store = new HoldingsStore(ctx.updatedInstitutionalEntities);
+  const store = new HoldingsStore(ctx.updatedInstitutionalEntities, ctx.v2);
   ctx.holdingsStore = store;
   ctx.updatedInstitutionalEntities = store.workingEntities();
 }
 
 export function finalizeHoldingsStore(ctx: WeeklyStepContext): void {
-  ctx.holdingsStore?.finalize(ctx.v2);
+  ctx.holdingsStore?.finalize();
   bumpRegister(ctx);
   ctx.holdingsStore = undefined;
 }
@@ -229,33 +259,39 @@ export function finalizeHoldingsStore(ctx: WeeklyStepContext): void {
  * there were. Folding at the close means every sweep of the NEXT week walks one row per position.
  */
 export function consolidateRegister(ctx: WeeklyStepContext): void {
+  // §7.313 flip — dup-scan and merge on the rows: a (type, instrument) pair is one integer
+  // key, the surviving row is the FIRST (the register keeps its order), dollars and shares add
+  // in row order — the same accumulation the object merge produced.
+  const v2 = ctx.v2;
+  const H = v2.holdings;
+  const pairKey = (r: number): number => H.typeRef[r] * 0x400000 + H.instrRef[r];
   ctx.updatedInstitutionalEntities.forEach((entity) => {
-    const rows = entity.itemizedHoldings;
-    if (!rows || rows.length < 2) return;
     // First pass is a scan, not an allocation: the overwhelming majority of books have nothing
     // to merge in a given week and must not pay for a map they do not need.
-    const seen = new Set<string>();
     let hasDuplicate = false;
-    for (let i = 0; i < rows.length; i++) {
-      const k = `${rows[i].instrumentType}\u0000${rows[i].instrumentId}`;
-      if (seen.has(k)) { hasDuplicate = true; break; }
-      seen.add(k);
+    {
+      const seen = new Set<number>();
+      for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
+        const k = pairKey(r);
+        if (seen.has(k)) { hasDuplicate = true; break; }
+        seen.add(k);
+      }
     }
     if (!hasDuplicate) return;
-    const byKey = new Map<string, ItemizedHolding>();
-    const merged: ItemizedHolding[] = [];
-    rows.forEach((h) => {
-      const k = `${h.instrumentType}\u0000${h.instrumentId}`;
-      const open = byKey.get(k);
-      if (!open) { byKey.set(k, h); merged.push(h); return; }
-      // The surviving row is the FIRST one, so the register keeps the order it already had.
-      open.quantityOrNotionalUSD = (open.quantityOrNotionalUSD ?? 0) + (h.quantityOrNotionalUSD ?? 0);
-      if (h.quantityShares !== undefined) {
-        open.quantityShares = (open.quantityShares ?? 0) + h.quantityShares;
+    const firstByKey = new Map<number, number>();
+    const kept: number[] = [];
+    for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
+      const k = pairKey(r);
+      const first = firstByKey.get(k);
+      if (first === undefined) { firstByKey.set(k, r); kept.push(r); continue; }
+      H.qtyUSD[first] = H.qtyUSD[first] + H.qtyUSD[r];
+      const sh = H.shares[r];
+      if (!Number.isNaN(sh)) {
+        const cur = H.shares[first];
+        H.shares[first] = (Number.isNaN(cur) ? 0 : cur) + sh;
       }
-    });
-    entity.itemizedHoldings = merged;
-    syncBookRows(ctx.v2, entity.id, merged);
+    }
+    relinkBook(v2, entity.id, kept);
     bumpRegister(ctx);
   });
 }

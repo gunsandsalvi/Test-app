@@ -132,8 +132,8 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
 
     // ---- 4. The rest of the real book, marked from this week's clears. ----
     const evMultiple = publicComparableEvMultiple(region, ctx.updatedCompanies);
-    const etfHoldingsUSD = householdEtfHoldingsUSD({ etfShares }, ctx.updatedInstitutionalEntities);
-    const directEquityUSD = householdDirectEquityUSD(
+    const etfHoldingsUSD = householdEtfHoldingsUSD(ctx.v2, { etfShares }, ctx.updatedInstitutionalEntities);
+    const directEquityUSD = householdDirectEquityUSD(ctx.v2,
       region, ctx.updatedCompanies, ctx.updatedInstitutionalEntities
     );
     const privateBusinessEquityUSD = householdPrivateBusinessEquityUSD(region, ctx.updatedCompanies, evMultiple);
