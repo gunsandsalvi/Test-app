@@ -264,6 +264,10 @@ interface RegionMarketIndex {
   recipeInputBuyersBySubUnit: Map<string, Company[]>;
   /** subUnitId -> the firms that produce it (built from one pass over every firm's lines). */
   suppliersBySubUnit: Map<string, Company[]>;
+  /** SCALE — the producing LINE per (sub-unit, firm), recorded at index build so the supply
+   *  planner stops running a .find over each supplier's lines per market. First line wins,
+   *  exactly as the find it replaces. */
+  lineBySupplierBySubUnit: Map<string, Map<Company, NonNullable<Company['productLines']>[number]>>;
   /** Firms with real capex, the customer base for every capital-goods category. */
   capexBuyers: Company[];
 }
@@ -294,6 +298,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
       activeFirms: [],
       recipeInputBuyersBySubUnit: new Map(),
       suppliersBySubUnit: new Map(),
+      lineBySupplierBySubUnit: new Map(),
       capexBuyers: [],
     };
   });
@@ -314,6 +319,9 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
     (c.productLines || []).forEach((l) => {
       const arr = index.suppliersBySubUnit.get(l.subUnitId);
       if (arr) arr.push(c); else index.suppliersBySubUnit.set(l.subUnitId, [c]);
+      let lineByCo = index.lineBySupplierBySubUnit.get(l.subUnitId);
+      if (!lineByCo) { lineByCo = new Map(); index.lineBySupplierBySubUnit.set(l.subUnitId, lineByCo); }
+      if (!lineByCo.has(c)) lineByCo.set(c, l);
     });
     // §7.122 step 4: registered as a BUYER from its own input basket — its products' recipes if
     // it makes anything, its profile's basket if it does not. Selling and buying were the same
@@ -499,6 +507,9 @@ function settleContracts(
 
   const { companyUpdates, nextWeek } = ctx;
   const remainingContracts: SupplyContract[] = [];
+  // SCALE — per-sub-unit registry facts, read once instead of per contract.
+  const contractLeadWeeks = productionLeadWeeksOf(subUnitId);
+  const isCapitalGoodCategory = purchaseKindOf(subUnitId) === 'CAPITAL_GOOD';
 
   // SCALE: for..of — the profiler put ~38 ms/week on this loop's callback dispatch alone at
   // ~74k live contracts; a plain loop is the same iteration in the same order.
@@ -609,7 +620,7 @@ function settleContracts(
     // pipeline: `lead x weekly value x share`, topped back up each week, which is what a
     // progress-payment schedule IS. A firm building for a year collects most of the price
     // before it hands anything over, and that is the funding its working capital runs on.
-    const targetDepositUSD = productionLeadWeeksOf(subUnitId)
+    const targetDepositUSD = contractLeadWeeks
       * contract.quantityUnitsPerWeek * contract.priceUSD * PROGRESS_PAYMENT_SHARE;
     const appliedFromDepositUSD = Math.min(contract.prepaidUSD ?? 0, paymentUSD);
     contract.prepaidUSD = (contract.prepaidUSD ?? 0) - appliedFromDepositUSD;
@@ -652,7 +663,7 @@ function settleContracts(
     const custUp = companyUpdates[customer.ticker];
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
-    if (purchaseKindOf(subUnitId) === 'CAPITAL_GOOD') custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentUSD;
+    if (isCapitalGoodCategory) custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentUSD;
     // SETL-C: a contract delivery is a payment between two named firms.
     // IND17 — net of what was already paid ahead. Charging the full price again would collect
     // for the same goods twice.
@@ -703,9 +714,10 @@ function buildRegionSupplyPlans(
 ): SupplyPlan[] {
   const plans: SupplyPlan[] = [];
   const suppliers = index.suppliersBySubUnit.get(subUnitId) ?? [];
+  const lineByCo = index.lineBySupplierBySubUnit.get(subUnitId);
 
   suppliers.forEach(comp => {
-    const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
+    const line = lineByCo!.get(comp)!;
     const warehouseCapacityUSD = comp.annualRevenue * 0.15;
     const currentInvUSD = getOutputInventoryUSD(comp, subUnitId);
     // A hard on/off switch here (full production, then a sudden drop to 30% once inventory
@@ -1647,8 +1659,8 @@ function runSubUnitMarkets(
       // a same-week road delivery is.
       const transit = laneTransitWeeks(origin, plan.regionId, laneDistanceNm(origin, plan.regionId));
       const arrivalWeek = nextWeek + Math.round(transit);
+      if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
       (book.lotsByBuyer.get(plan.key!) ?? []).forEach(l => {
-        if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
         // SETL-C: the auction knows exactly who bought whose lot, so the payment keeps its
         // counterparty instead of both sides netting through the boundary.
         // The buyer pays LANDED cost; the seller receives only ex-works. The difference is the
