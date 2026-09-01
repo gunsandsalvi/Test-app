@@ -121,11 +121,24 @@ const PROGRESS_PAYMENT_SHARE = 0.30;
 // inventory — bidding to this real, recipe-derived need (instead of a generic revenue-share
 // slice of aggregate corporate demand) is what makes what a company buys here actually match
 // what it consumes there, rather than two independently-sized, unrelated numbers.
-function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string): number {
+// §7.327 — the intensity record was rebuilt PER LIVE CONTRACT (the settle walk's ~tens of
+// thousands of calls a week, growing with the book); one build per firm per week is the same
+// record, because comp.productLines and the profile only change at stage 08's write-back,
+// after this stage has run. Week-stamped so a battery's re-run of a week cannot reuse a clone's
+// stale entry (companies mutate in place; the WeakMap keys survive).
+const INPUT_INTENSITIES_MEMO = new WeakMap<Company, { week: number; v: Partial<Record<string, number>> }>();
+function firmIntensitiesWeekly(comp: Company, week: number): Partial<Record<string, number>> {
+  const m = INPUT_INTENSITIES_MEMO.get(comp);
+  if (m && m.week === week) return m.v;
+  const v = firmInputIntensities(comp.productLines, profileKeyOf(comp));
+  INPUT_INTENSITIES_MEMO.set(comp, { week, v });
+  return v;
+}
+function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string, week: number): number {
   // §7.122 step 4: a firm that sells no product still buys — a bank's premises, software and
   // professional services come from its profile's basket. One accessor for both cases, so a firm
   // cannot be charged for an input in stage 08 that it never bid for here (rule 14).
-  const intensity = firmInputIntensities(comp.productLines, profileKeyOf(comp))[inputSubUnitId];
+  const intensity = firmIntensitiesWeekly(comp, week)[inputSubUnitId];
   if (!intensity) return 0;
   return (comp.annualRevenue / 52) * intensity;
 }
@@ -641,12 +654,12 @@ function settleContracts(
     if (!isActiveCompany(supplier)) {
       // needUSD gates the customer's constraint write in effects (rule 9: only a production
       // input throttles production — §7.301).
-      needUSD[i] = computeRecipeInputNeedUSD(customer, subUnitId);
+      needUSD[i] = computeRecipeInputNeedUSD(customer, subUnitId, nextWeek);
       preStatus[i] = CS_DEAD_SUPPLIER;
       continue;
     }
     if (!isActiveCompany(customer)) { preStatus[i] = CS_DEAD_CUSTOMER; continue; }
-    needUSD[i] = computeRecipeInputNeedUSD(customer, subUnitId);
+    needUSD[i] = computeRecipeInputNeedUSD(customer, subUnitId, nextWeek);
     marketPrice[i] = regionReferencePrice[customer.region as RegionId] ?? T.priceUSD[r];
     supRegPx[i] = regionReferencePrice[supplier.region as RegionId] ?? T.priceUSD[r];
     let slot = slotBySupplier.get(supplier);
@@ -1148,7 +1161,7 @@ function buildRegionDemandPlans(
       const realCapexUSD = (comp.maintenanceCapex ?? 0) + (comp.growthCapex ?? 0);
       demandUSD = (realCapexUSD / 52) * capexSupplierWeight!;
     } else if (isRecipeInputCategory) {
-      demandUSD = computeRecipeInputNeedUSD(comp, subUnitId);
+      demandUSD = computeRecipeInputNeedUSD(comp, subUnitId, week);
     } else {
       // This company's real named bid is its revenue share of the category's real total
       // corporate demand — every company that could plausibly buy this category gets a bid
