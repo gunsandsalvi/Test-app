@@ -5,10 +5,21 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // Relative asset URLs so the same build works at any mount path (GitHub Pages serves
+    // this under /Test-app/, local preview serves it at /).
+    base: './',
     plugins: [react(), tailwindcss()],
+    // The engine reads process.env flags (harness/debug switches) without guards; in the
+    // browser bundle they all read as undefined, which is each flag's off state.
+    define: {
+      'process.env': {},
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+        // native-kernels.ts imports node:module for its Node-only addon loader; give the
+        // browser bundle a shim so rollup finds the named export (never called in a browser).
+        'node:module': path.resolve(__dirname, 'src/shims/node-module-browser.ts'),
       },
     },
     server: {
