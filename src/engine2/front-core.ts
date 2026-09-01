@@ -38,6 +38,7 @@ import { CogsCostDrivers } from '../engine/companyGenerator';
 import { industrialIncome } from '../domain/company-week/income-statement';
 import { fulfillmentRatio } from '../domain/company-week/inventory';
 import { V2World, rowOf } from './world';
+import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
 import { LotViews, LotStore, consumeFifoOnViews } from './lots';
 import { SUBUNITS, SUBUNIT_INDEX, NSUB } from './state';
 import { getBaseAnnualWageUSD } from '../engine/bootstrap/labor-and-wages';
@@ -245,7 +246,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
   // counts first, so the CSRs allocate once
   let nTr = 0, nPl = 0, nOut = 0, nUc = 0, nSh = 0;
   for (const c of companies) {
-    nTr += c.debtTranches?.length ?? 0;
+    nTr += ladderRowsOf(v2, c.id).length;
     nPl += c.productLines?.length ?? 0;
     nOut += Object.keys(c.outputInventoryBySubUnit || {}).length;
     nUc += (c.assetsUnderConstruction?.length ?? 0) + (companyUpdates[c.ticker]?.capexUnderConstruction?.length ?? 0);
@@ -417,19 +418,27 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     S.perWorkerAnnualUSD[row] = pw.now;
     S.perWorkerBaselineAnnualUSD[row] = pw.base;
 
-    for (const t of comp.debtTranches) {
-      S.trPrincipal[atTr] = t.principalUSD;
-      const floating = t.rateType === 'FLOATING';
-      S.trIsFloating[atTr] = floating ? 1 : 0;
-      S.trAnnualRate[atTr] = floating ? (t.floatingMarginBps ?? 200) / 10000 : (t.couponRate ?? 0.05);
-      S.trIsFacility[atTr] = t.isBankFacility ? 1 : 0;
-      S.trIsCP[atTr] = t.isCommercialPaper ? 1 : 0;
-      S.trMatWeek[atTr] = t.maturityWeek | 0;
-      const perYear = t.paymentsPerYear !== undefined ? Math.max(1, t.paymentsPerYear)
-        : (t.isCommercialPaper ? 1 : (t.rateType === 'FIXED' ? 2 : 4));
-      S.trPeriodWeeks[atTr] = Math.max(1, Math.round(52 / perYear));
-      S.trAnchorWeek[atTr] = (t.paymentAnchorWeek ?? 0) | 0;
-      atTr++;
+    // §7.311 — the ladder lanes fill from the row store (chain order = array order); the
+    // resolved defaults are the same expressions with NaN as the absent sentinel.
+    {
+      const TS = v2.tranches;
+      for (const tr of ladderRowsOf(v2, comp.id)) {
+        S.trPrincipal[atTr] = TS.principalUSD[tr];
+        const fl = TS.flags[tr];
+        const floating = (fl & TR_FLOATING) !== 0;
+        S.trIsFloating[atTr] = floating ? 1 : 0;
+        S.trAnnualRate[atTr] = floating
+          ? (Number.isNaN(TS.floatingMarginBps[tr]) ? 200 : TS.floatingMarginBps[tr]) / 10000
+          : (Number.isNaN(TS.couponRate[tr]) ? 0.05 : TS.couponRate[tr]);
+        S.trIsFacility[atTr] = fl & TR_FACILITY ? 1 : 0;
+        S.trIsCP[atTr] = fl & TR_CP ? 1 : 0;
+        S.trMatWeek[atTr] = TS.maturityWeek[tr] | 0;
+        const perYear = !Number.isNaN(TS.paymentsPerYear[tr]) ? Math.max(1, TS.paymentsPerYear[tr])
+          : ((fl & TR_CP) ? 1 : (!floating ? 2 : 4));
+        S.trPeriodWeeks[atTr] = Math.max(1, Math.round(52 / perYear));
+        S.trAnchorWeek[atTr] = (Number.isNaN(TS.paymentAnchorWeek[tr]) ? 0 : TS.paymentAnchorWeek[tr]) | 0;
+        atTr++;
+      }
     }
     for (const l of comp.productLines || []) {
       S.plSub[atPl] = SUBUNIT_INDEX.get(l.subUnitId) ?? -1;

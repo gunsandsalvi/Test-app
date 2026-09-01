@@ -8,6 +8,8 @@
  */
 
 import { GameState, Position } from '../../../types';
+import { ensureV2 } from '../../../engine2/world';
+import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { isActiveCompany } from '../../../domain/company';
 import { assertNever } from '../../../domain/defect';
 import { calculateBlackScholesGreeks } from '../../blackScholes';
@@ -21,6 +23,8 @@ import { realizedAnnualVol } from '../../../domain/volatility';
 import { regionIndexOf } from '../../macro/indices';
 
 export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepContext): void {
+  const v2 = ensureV2(state);
+  const TS = v2.tranches;
   const { updatedRegions, updatedCompanies, updatedCommodities, updatedFxPairs, nextWeek } = ctx;
 
   ctx.updatedCompositeIndices = calculateCompositeIndices(
@@ -86,8 +90,12 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         const comp = updatedCompanies.find((c) => c.ticker === pos.symbol);
         const sovParams = updatedRegions[pos.region].yieldCurveParams;
         if (comp) {
-          const tranche = comp.debtTranches.find(t => t.id === pos.trancheId);
-          if (!tranche) {
+          // §7.311 — the ladder find on rows (the id is interned; a short walk per position).
+          let trRow = -1;
+          for (const r of ladderRowsOf(v2, comp.id)) {
+            if (v2.internedStrings[TS.idRef[r]] === pos.trancheId) { trRow = r; break; }
+          }
+          if (trRow < 0) {
             currentPrice = comp.isDefaulted ? (comp.recoveryRate * 100) : 100;
             const posValueUSD = pos.quantity * (currentPrice / 100) * fxRateToUsd;
             const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
@@ -118,17 +126,17 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             break;
           }
 
-          const remainingTenorYears = Math.max(0.01, (tranche.maturityWeek - nextWeek) / 52);
+          const remainingTenorYears = Math.max(0.01, (TS.maturityWeek[trRow] - nextWeek) / 52);
           const totalCorpBondPrincipalOutstanding = updatedCompanies.filter(c => c.region === pos.region).reduce((s, c) => s + c.totalDebt, 0);
           // S6: the position marks off the CLEARED stat, full stop. The deleted block here
           // re-adjusted the already-cleared OAS by an ownership-derived premium — a second
           // price-setter duplicating (and disagreeing with) the real auction in 07b.
           const adjustedOasSpreadBps = comp.oasSpreadBps;
 
-          if (tranche.rateType === 'FIXED') {
+          if (!(TS.flags[trRow] & TR_FLOATING)) {
             const bondPriced = priceCorporateBond(
               remainingTenorYears,
-              tranche.couponRate ?? 0.05,
+              Number.isNaN(TS.couponRate[trRow]) ? 0.05 : TS.couponRate[trRow],
               sovParams,
               adjustedOasSpreadBps,
               comp.isDefaulted,
@@ -142,7 +150,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
 
             const carryEst = calculateExpectedCarry('CORP_BOND', pos.direction, posValueUSD, {
               policyRate: updatedRegions[pos.region].policyRate,
-              couponRate: tranche.couponRate ?? 0.05,
+              couponRate: Number.isNaN(TS.couponRate[trRow]) ? 0.05 : TS.couponRate[trRow],
               cdsSpreadBps: comp.oasSpreadBps
             });
             weeklyFinancing = carryEst.components.financingCostUSD;
@@ -154,9 +162,9 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             maintMargin = marginReq * 0.65;
           } else {
             // S6: marked off the loan's own CLEARED discount margin (07d), not a re-derived one.
-            const clearedDmBps = comp.leveragedLoan?.discountMarginBps ?? (tranche.floatingMarginBps ?? 200);
+            const clearedDmBps = comp.leveragedLoan?.discountMarginBps ?? (Number.isNaN(TS.floatingMarginBps[trRow]) ? 200 : TS.floatingMarginBps[trRow]);
             const loanPricing = priceLeveragedLoan(
-              tranche.floatingMarginBps ?? 200,
+              Number.isNaN(TS.floatingMarginBps[trRow]) ? 200 : TS.floatingMarginBps[trRow],
               clearedDmBps,
               remainingTenorYears,
               comp.isDefaulted,
@@ -168,7 +176,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
             const carryEst = calculateExpectedCarry('LEVERAGED_LOAN', pos.direction, posValueUSD, {
               policyRate: updatedRegions[pos.region].policyRate,
-              cdsSpreadBps: tranche.floatingMarginBps ?? 200
+              cdsSpreadBps: Number.isNaN(TS.floatingMarginBps[trRow]) ? 200 : TS.floatingMarginBps[trRow]
             });
             weeklyFinancing = carryEst.components.financingCostUSD;
             ctx.attributionCarry += carryEst.weeklyCarryUSD;

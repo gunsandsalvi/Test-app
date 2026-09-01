@@ -22,7 +22,7 @@
 
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import { syncLadderRows } from '../../../engine2/tranches';
+import { syncLadderRows, ladderRowsOf, TR_FACILITY } from '../../../engine2/tranches';
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
 import { regionalDeskView } from '../../../domain/dealer-desk';
@@ -114,17 +114,21 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // G2: the corporate bank facilities each named bank holds, read off the borrowers' REAL
     // ladders — the bank's loan records mirror them 1:1 rather than being a second stock.
     const facilityTranchesByBank = new Map<string, { companyId: string; trancheId: string; principalUSD: number; marginBps: number; originationWeek: number; maturityWeek: number }[]>();
+    const v2r = ensureV2(state);
+    const TSr = v2r.tranches;
     ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
       if (c.region !== regionId || c.isDefaulted) return;
-      (c.debtTranches || []).forEach((t) => {
-        if (!t.isBankFacility || !t.facilityBankTicker) return;
-        (facilityTranchesByBank.get(t.facilityBankTicker) ?? facilityTranchesByBank.set(t.facilityBankTicker, []).get(t.facilityBankTicker)!)
+      // §7.311 — the facility scan on rows (walk order = ladder order).
+      for (const r of ladderRowsOf(v2r, c.id)) {
+        if (!(TSr.flags[r] & TR_FACILITY) || TSr.bankRef[r] < 0) continue;
+        const bankTicker = v2r.internedStrings[TSr.bankRef[r]];
+        (facilityTranchesByBank.get(bankTicker) ?? facilityTranchesByBank.set(bankTicker, []).get(bankTicker)!)
           .push({
-            companyId: c.id, trancheId: t.id, principalUSD: t.principalUSD,
-            marginBps: t.floatingMarginBps ?? 350,
-            originationWeek: t.originationWeek, maturityWeek: t.maturityWeek,
+            companyId: c.id, trancheId: v2r.internedStrings[TSr.idRef[r]], principalUSD: TSr.principalUSD[r],
+            marginBps: Number.isNaN(TSr.floatingMarginBps[r]) ? 350 : TSr.floatingMarginBps[r],
+            originationWeek: TSr.originationWeek[r], maturityWeek: TSr.maturityWeek[r],
           });
-      });
+      }
     });
     // G2 slice 4: corporate deposits ARE the home companies' S5 cash — one representation,
     // derived weekly from the real ledger rather than stored twice.
