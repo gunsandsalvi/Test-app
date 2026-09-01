@@ -24,7 +24,7 @@ import {
   swapWeeklyNetToReceiverUSD, repricingLossUSD, SwapParty,
 } from '../../../domain/swaps';
 import { WeeklyStepContext } from './context';
-import { pay, PartyRef } from './settlement';
+import { pay } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
 import { isActiveCompany } from '../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from './bank-lending';
@@ -62,10 +62,6 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
     // ---- Last week's book settles, and what matured leaves. The floating leg pays what the week
     // actually printed, so a payer of fixed gains exactly when rates rose against it. ----
     const priorBook: SwapContract[] = reg.swapBook ?? [];
-    const partyRef = (p: SwapParty): PartyRef =>
-      p.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: p.id }
-        : p.kind === 'BANK' ? { kind: 'BANK', ticker: p.ticker }
-          : { kind: 'COMPANY', ticker: p.ticker };
     // DER/CAL — THE FLOATING LEG PAYS THE SECURED OVERNIGHT RATE, WHICH MAKES THESE OIS.
     //
     // It used to pay `policyRate`: an administered number, not a traded one, so the swap curve
@@ -77,8 +73,8 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
     priorBook.forEach((c) => {
       const netUSD = swapWeeklyNetToReceiverUSD(c, overnightRateAnnual);
       if (Math.abs(netUSD) < 1) return;
-      if (netUSD > 0) pay(ctx, { payer: partyRef(c.payer), payee: partyRef(c.receiver), amountUSD: netUSD, reason: 'swap settlement' });
-      else pay(ctx, { payer: partyRef(c.receiver), payee: partyRef(c.payer), amountUSD: -netUSD, reason: 'swap settlement' });
+      if (netUSD > 0) pay(ctx, { payer: c.payer, payee: c.receiver, amountUSD: netUSD, reason: 'swap settlement' });
+      else pay(ctx, { payer: c.receiver, payee: c.payer, amountUSD: -netUSD, reason: 'swap settlement' });
     });
     const carried = priorBook.filter((c) => c.maturityWeek > ctx.nextWeek);
 

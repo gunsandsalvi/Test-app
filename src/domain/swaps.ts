@@ -17,6 +17,7 @@
  */
 
 import { RegionId } from './geography';
+import { DerivativeParty, derivativePartyKey } from './derivatives';
 
 export type SwapTenorKey = 's2' | 's5' | 's10';
 
@@ -28,10 +29,8 @@ export const SWAP_TENOR_ZERO_FIELD: Record<SwapTenorKey, 'tenor2Y' | 'tenor5Y' |
   s2: 'tenor2Y', s5: 'tenor5Y', s10: 'tenor10Y',
 };
 
-export type SwapParty =
-  | { kind: 'BANK'; ticker: string }
-  | { kind: 'COMPANY'; ticker: string }
-  | { kind: 'INSTITUTION'; id: string };
+/** DRV — one party encoding for every derivative book; the per-class union died with it. */
+export type SwapParty = DerivativeParty;
 
 export interface SwapContract {
   id: string;
@@ -48,9 +47,7 @@ export interface SwapContract {
   maturityWeek: number;
 }
 
-export function swapPartyKey(p: SwapParty): string {
-  return `${p.kind}:${p.kind === 'INSTITUTION' ? p.id : p.ticker}`;
-}
+export const swapPartyKey = derivativePartyKey;
 
 /**
  * One week's net settlement on a swap, positive when the RECEIVER is owed.

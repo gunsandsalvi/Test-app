@@ -33,14 +33,14 @@
  * the market will pay to hold the physical rather than the paper.
  */
 
+import { DerivativeParty } from './derivatives';
+
 /** The tenors this model quotes. The same three the curve has always carried (rule 3). */
 export const FUTURES_TENOR_MONTHS = [1, 3, 6] as const;
 export type FuturesTenorMonths = typeof FUTURES_TENOR_MONTHS[number];
 
-export type FuturesParty =
-  | { kind: 'COMPANY'; ticker: string }
-  | { kind: 'BANK'; ticker: string }
-  | { kind: 'INSTITUTION'; id: string };
+/** DRV — one party encoding for every derivative book; the per-class union died with it. */
+export type FuturesParty = DerivativeParty;
 
 export interface FuturesPosition {
   id: string;

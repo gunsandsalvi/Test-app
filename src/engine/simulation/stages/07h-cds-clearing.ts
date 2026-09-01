@@ -23,7 +23,7 @@ import {
 } from '../../../domain/credit-default-swap';
 import { BankLoan } from '../../../domain/banking';
 import { WeeklyStepContext } from './context';
-import { pay, PartyRef } from './settlement';
+import { pay } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { isActiveCompany } from '../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
@@ -35,9 +35,6 @@ const cdsInstrumentId = (regionId: RegionId, issuerId: string) => `${regionId}-C
 
 /** A protection seller is short a credit it did not fund; its book reprices like any other. */
 const MAX_WEEKLY_CDS_MOVE_PCT = 0.25;
-
-const partyRefOf = (p: CdsParty): PartyRef =>
-  p.kind === 'BANK' ? { kind: 'BANK', ticker: p.ticker } : { kind: 'INSTITUTION', id: p.id };
 
 export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2cds = ensureV2(state);
@@ -62,8 +59,8 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
         const payoutUSD = cdsDefaultPayoutUSD(c, recoveryRate);
         if (payoutUSD > 0) {
           pay(ctx, {
-            payer: partyRefOf(c.seller),
-            payee: partyRefOf(c.buyer),
+            payer: c.seller,
+            payee: c.buyer,
             amountUSD: payoutUSD,
             reason: 'CDS credit event settled',
           });
@@ -74,8 +71,8 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
       const premiumUSD = cdsWeeklyPremiumUSD(c);
       if (premiumUSD > 0) {
         pay(ctx, {
-          payer: partyRefOf(c.buyer),
-          payee: partyRefOf(c.seller),
+          payer: c.buyer,
+          payee: c.seller,
           amountUSD: premiumUSD,
           reason: 'CDS premium',
         });

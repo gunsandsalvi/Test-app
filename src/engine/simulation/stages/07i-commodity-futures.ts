@@ -22,7 +22,7 @@ import {
 import { COMMODITY_CATEGORY_LINKAGE } from '../../../domain/instruments';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { WeeklyStepContext } from './context';
-import { pay, PartyRef } from './settlement';
+import { pay } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { isActiveCompany } from '../../../domain/company';
 import { exposureToHedgeUSD } from './corporate-financing';
@@ -40,11 +40,6 @@ function annualInterestOf(c: Company): number {
   if (!(coverage > 0) || !isFinite(coverage)) return 0;
   return Math.max(0, c.ebit) / coverage;
 }
-
-const partyRefOf = (p: FuturesParty): PartyRef =>
-  p.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: p.id }
-    : p.kind === 'BANK' ? { kind: 'BANK', ticker: p.ticker }
-      : { kind: 'COMPANY', ticker: p.ticker };
 
 export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContext): void {
   const book: FuturesPosition[] = ctx.commodityFuturesBook ?? state.commodityFuturesBook ?? [];
@@ -74,8 +69,8 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
       const winner = marginUSD > 0 ? pos.long : pos.short;
       const loser = marginUSD > 0 ? pos.short : pos.long;
       pay(ctx, {
-        payer: partyRefOf(loser),
-        payee: partyRefOf(winner),
+        payer: loser,
+        payee: winner,
         amountUSD: Math.abs(marginUSD),
         reason: expiring ? 'futures settled to spot' : 'futures variation margin',
       });

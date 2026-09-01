@@ -38,10 +38,11 @@
  */
 
 import { RegionId } from './geography';
+import { DerivativeParty, derivativePartyKey } from './derivatives';
 
-export type CdsParty =
-  | { kind: 'BANK'; ticker: string }
-  | { kind: 'INSTITUTION'; id: string };
+/** DRV — the derivative party encoding, narrowed: a company neither buys nor sells protection
+ *  here (its credit is the REFERENCE, not a side). An Exclude view of the one union (§7.290). */
+export type CdsParty = Exclude<DerivativeParty, { kind: 'COMPANY' }>;
 
 export interface CdsContract {
   id: string;
@@ -87,9 +88,7 @@ export function cdsDefaultPayoutUSD(c: CdsContract, recoveryRate: number): numbe
   return c.notionalUSD * Math.max(0, 1 - Math.max(0, Math.min(1, recoveryRate)));
 }
 
-export function cdsPartyKey(p: CdsParty): string {
-  return `${p.kind}:${p.kind === 'INSTITUTION' ? p.id : p.ticker}`;
-}
+export const cdsPartyKey = derivativePartyKey;
 
 /** Protection outstanding on one name, by whoever bought or sold it. */
 export function cdsNetProtectionBoughtUSD(book: CdsContract[], party: CdsParty, issuerId: string): number {
