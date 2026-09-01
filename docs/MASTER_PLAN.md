@@ -292,11 +292,11 @@ Decide from the rules; push every commit to `claude/master-plan-file-pv33a9` AND
 
 | # | Project | State |
 |---|---|---|
-| 1 | **MNC — multinational production** | NOT STARTED. Prereqs IND, XB closed. |
-| 2 | **DYN — entry, exit, industry structure** | NOT STARTED. Prereqs IND, BP1 done. Also the re-entry mechanism §7.152's floor stands in for, and the mothball/scrap half of the capacity cycle. |
-| 3 | **PROD — firm productivity and innovation** | NOT STARTED. Prereq IND. |
-| 4 | **CRE — commercial property and leases** | NOT STARTED. Prereqs HH, G2. |
-| 5 | **TAXR — corporate tax, really** | Rate has one owner (§7.206); the BASE (depreciation shield, carry-forwards, deferred tax; cross-border after MNC) does not. |
+| 1 | **MNC — multinational production** | BUILT (§7.295). Armed and inert until counters cross the §7.138 year; first live read is the next long reference. |
+| 2 | **DYN — entry, exit, industry structure** | BUILT (§7.296). Entry×margin, mothball/restart/scrap, vertical integration; the stock clocks (13/52wk) arm at horizon. |
+| 3 | **PROD — firm productivity and innovation** | BUILT (§7.297). Wright's law per firm; stated drift dead. R&D spend / product innovation deferred with reasons. |
+| 4 | **CRE — commercial property and leases** | BUILT (§7.298). One registry entry; value scale rides §6.1's level row. REIT wrapper a declared null. |
+| 5 | **TAXR — corporate tax, really** | BUILT (§7.299). Acceleration, carryforwards, deferred view, regional rates; transfer pricing deferred until intra-firm flows emerge (§7.295). |
 | 6 | **SCALE — universe scale-up** | Wall-clock budget met at reduced scale (§7.214); full-fidelity path is Wave 2 columnar state (§5). Owns the damper's float half (small-cap equity tail, §7.288). |
 | 7 | **S-final — validation gate** | Everything above plus the measurement debt. |
 | 8 | **AU — Aurora, the UI rebuild** | Last. UI state leaves `GameState`. |
