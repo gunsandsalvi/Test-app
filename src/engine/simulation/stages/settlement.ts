@@ -185,9 +185,22 @@ export function payByIds(
 /** The running net, as a dense array indexed by party id. Touched ids are remembered so the
  *  week's reset is proportional to what moved rather than to the table's size. */
 function addPending(ctx: WeeklyStepContext, id: number, deltaUSD: number): void {
+  // §7.321 barrier mode: the running net is applied at MERGE time, leg by leg in the journal's
+  // merged order (applyPendingLeg below), so per-party float sums keep the exact summation tree
+  // the interleaved loop had. Emission-time application is suppressed inside the phase loops.
+  if (ctx.deferPendingNet) return;
   const net = ctx.pendingNetById;
   if (net[id] === undefined) { net[id] = deltaUSD; ctx.pendingTouchedIds.push(id); return; }
   net[id] += deltaUSD;
+}
+
+/** §7.321 barrier merge: one journal leg's effect on the running net, applied in merged order. */
+export function applyPendingLeg(ctx: WeeklyStepContext, payerId: number, payeeId: number, amountUSD: number): void {
+  const net = ctx.pendingNetById;
+  if (net[payerId] === undefined) { net[payerId] = -amountUSD; ctx.pendingTouchedIds.push(payerId); }
+  else net[payerId] += -amountUSD;
+  if (net[payeeId] === undefined) { net[payeeId] = amountUSD; ctx.pendingTouchedIds.push(payeeId); }
+  else net[payeeId] += amountUSD;
 }
 
 /** Zero the week's running net. */

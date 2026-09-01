@@ -17,13 +17,13 @@ import { openCorporateSweepBooks, settleCorporateSweepBooks } from './money-mark
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
 import { leadBankAllocator } from './dealer-desks';
 import { WeeklyStepContext } from './context';
-import { PaymentJournal, newPaymentJournal, journalPush } from './settlement';
+import { PaymentJournal, newPaymentJournal, journalPush , applyPendingLeg} from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { getRngState, setRngState } from '../../rng';
 import { runStage08FrontPass } from '../../../engine2/stage08-front';
 import { ensureV2 } from '../../../engine2/world';
-import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm , s08k} from '../../../engine2/stage08-back';
+import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm , s08k, runBackCoreA, runBackCoreB, runMmfRedemption} from '../../../engine2/stage08-back';
 import { buildBackLanes } from '../../../engine2/stage08-lanes';
 
 /** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
@@ -207,12 +207,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // §7.317 steps 1.1-1.2 — the back seam: one pass reads every firm's capital-block inputs
   // into typed lanes before the shard loop; the core reads rows, not objects.
   const backLanes = buildBackLanes(state.companies, updatedRegions, companyUpdates, new Set(state.institutionalEntities.map(e => e.id)));
-  const companyWeekKernel = makeStage08BackKernel({
+  const backDeps: import('../../../engine2/stage08-back').BackKernelDeps = {
     state, ctx, v2, F, backLanes, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
     primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering,
     pushNews: (n: NewsItem) => refinanceNews.push(n),
-  });
+  };
+  const companyWeekKernel = makeStage08BackKernel(backDeps);
 
   // SCALE wave 2 — THE COMPANY WEEK AS A SHARDED KERNEL (columns/kernel.ts).
   //
@@ -254,69 +255,52 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     holderSettlements: Map<string, number>;
   }
 
+  /** The current accumulator set, by reference — §7.321 primitives shared by the shard path
+   *  and the barrier path. */
+  const snapshotAccums = (): CompanyShardAccumulators => ({
+    creditEvents: ctx.creditEventsThisWeek,
+    defaulted: ctx.defaultedTickers,
+    ratings: ctx.ratingChanges,
+    earnings: ctx.earningsReportedThisTurn,
+    offerings: ctx.primaryOfferingsWorking,
+    news: refinanceNews,
+    taxAccrued: ctx.taxAccruedByRegion,
+    taxCollected: ctx.taxCollectedByRegion,
+    journal: ctx.paymentJournal,
+    holderAccruals: ctx.pendingHolderAccrualUSD,
+    holderCash: ctx.pendingHolderCashUSD,
+    holderPayout: ctx.pendingHolderAccrualPayout,
+    holderSettlements: ctx.pendingHolderSettlements,
+  });
+  const installAccums = (a: CompanyShardAccumulators): void => {
+    ctx.creditEventsThisWeek = a.creditEvents;
+    ctx.defaultedTickers = a.defaulted;
+    ctx.ratingChanges = a.ratings;
+    ctx.earningsReportedThisTurn = a.earnings;
+    ctx.primaryOfferingsWorking = a.offerings;
+    refinanceNews = a.news;
+    ctx.taxAccruedByRegion = a.taxAccrued;
+    ctx.taxCollectedByRegion = a.taxCollected;
+    ctx.paymentJournal = a.journal;
+    ctx.pendingHolderAccrualUSD = a.holderAccruals;
+    ctx.pendingHolderCashUSD = a.holderCash;
+    ctx.pendingHolderAccrualPayout = a.holderPayout;
+    ctx.pendingHolderSettlements = a.holderSettlements;
+  };
   /** Point the shared accumulators at this shard's own, and hand back what they were. */
   const openShard = (): CompanyShardAccumulators => {
-    const held: CompanyShardAccumulators = {
-      creditEvents: ctx.creditEventsThisWeek,
-      defaulted: ctx.defaultedTickers,
-      ratings: ctx.ratingChanges,
-      earnings: ctx.earningsReportedThisTurn,
-      offerings: ctx.primaryOfferingsWorking,
-      news: refinanceNews,
-      taxAccrued: ctx.taxAccruedByRegion,
-      taxCollected: ctx.taxCollectedByRegion,
-      journal: ctx.paymentJournal,
-      holderAccruals: ctx.pendingHolderAccrualUSD,
-      holderCash: ctx.pendingHolderCashUSD,
-      holderPayout: ctx.pendingHolderAccrualPayout,
-      holderSettlements: ctx.pendingHolderSettlements,
-    };
-    ctx.creditEventsThisWeek = [];
-    ctx.defaultedTickers = [];
-    ctx.ratingChanges = [];
-    ctx.earningsReportedThisTurn = [];
-    ctx.primaryOfferingsWorking = [];
-    refinanceNews = [];
-    ctx.taxAccruedByRegion = {};
-    ctx.taxCollectedByRegion = {};
-    ctx.paymentJournal = newPaymentJournal();
-    ctx.pendingHolderAccrualUSD = new Map();
-    ctx.pendingHolderCashUSD = new Map();
-    ctx.pendingHolderAccrualPayout = new Set();
-    ctx.pendingHolderSettlements = new Map();
+    const held = snapshotAccums();
+    installAccums({
+      creditEvents: [], defaulted: [], ratings: [], earnings: [], offerings: [], news: [],
+      taxAccrued: {}, taxCollected: {}, journal: newPaymentJournal(),
+      holderAccruals: new Map(), holderCash: new Map(),
+      holderPayout: new Set(), holderSettlements: new Map(),
+    });
     return held;
   };
 
-  /** Fold this shard's accumulators onto the ones it displaced, in shard order. */
-  const closeShard = (held: CompanyShardAccumulators): void => {
-    const mine = {
-      creditEvents: ctx.creditEventsThisWeek,
-      defaulted: ctx.defaultedTickers,
-      ratings: ctx.ratingChanges,
-      earnings: ctx.earningsReportedThisTurn,
-      offerings: ctx.primaryOfferingsWorking,
-      news: refinanceNews,
-      taxAccrued: ctx.taxAccruedByRegion,
-      taxCollected: ctx.taxCollectedByRegion,
-      journal: ctx.paymentJournal,
-      holderAccruals: ctx.pendingHolderAccrualUSD,
-      holderCash: ctx.pendingHolderCashUSD,
-      holderPayout: ctx.pendingHolderAccrualPayout,
-      holderSettlements: ctx.pendingHolderSettlements,
-    };
-    ctx.creditEventsThisWeek = held.creditEvents;
-    ctx.defaultedTickers = held.defaulted;
-    ctx.ratingChanges = held.ratings;
-    ctx.earningsReportedThisTurn = held.earnings;
-    ctx.primaryOfferingsWorking = held.offerings;
-    refinanceNews = held.news;
-    ctx.taxAccruedByRegion = held.taxAccrued;
-    ctx.taxCollectedByRegion = held.taxCollected;
-    ctx.paymentJournal = held.journal;
-    ctx.pendingHolderAccrualUSD = held.holderAccruals;
-    ctx.pendingHolderCashUSD = held.holderCash;
-    ctx.pendingHolderAccrualPayout = held.holderPayout;
-    ctx.pendingHolderSettlements = held.holderSettlements;
+  /** Fold `mine` into the CURRENT accumulators, in order — the §7.321 merge primitive. */
+  const mergeAccums = (mine: CompanyShardAccumulators, deferMergeAppliesNet = false): void => {
 
     for (const e of mine.creditEvents) ctx.creditEventsThisWeek.push(e);
     for (const t of mine.defaulted) ctx.defaultedTickers.push(t);
@@ -334,6 +318,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     for (let k = 0; k < mine.journal.n; k++) {
       journalPush(j, mine.journal.payerId[k], mine.journal.payeeId[k],
         mine.journal.amountUSD[k], mine.journal.reasonId[k]);
+      // §7.321 barrier mode: the running net, applied here in the merged (= original) leg
+      // order; in normal shard mode emission already applied it and this replay must not.
+      if (deferMergeAppliesNet) applyPendingLeg(ctx, mine.journal.payerId[k], mine.journal.payeeId[k], mine.journal.amountUSD[k]);
     }
     mine.holderAccruals.forEach((v, k) => {
       ctx.pendingHolderAccrualUSD.set(k, (ctx.pendingHolderAccrualUSD.get(k) ?? 0) + v);
@@ -346,7 +333,89 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       ctx.pendingHolderSettlements.set(k, (ctx.pendingHolderSettlements.get(k) ?? 1) * v);
     });
   };
+  /** Fold this shard's accumulators onto the ones it displaced, in shard order. */
+  const closeShard = (held: CompanyShardAccumulators): void => {
+    const mine = snapshotAccums();
+    installAccums(held);
+    mergeAccums(mine);
+  };
 
+  // §7.321/323 — BACK_BARRIER=1: the POOL'S EXECUTION ORDER, run serially and byte-gated
+  // before any worker exists (the §7.316 vacuous-test lesson, inverted): all core-A in row
+  // order, then every liquidity redemption, then all core-B (each under the stream core-A left
+  // for the firm — the PROFILE branch draws in A), then every post — with each phase's
+  // emissions captured PER FIRM and folded back as [A, red, B, post] per firm in row order, so
+  // the journal and every accumulator reproduce the interleaved loop exactly.
+  if (process.env.BACK_BARRIER === '1') {
+    const n = companyRows.length;
+    const capture = (fn: () => void): CompanyShardAccumulators => {
+      const held = openShard();
+      fn();
+      const mine = snapshotAccums();
+      installAccums(held);
+      return mine;
+    };
+    const aRes: (ReturnType<typeof runBackCoreA> | undefined)[] = new Array(n);
+    const bRes: (ReturnType<typeof runBackCoreB> | undefined)[] = new Array(n);
+    const streamAfterA: (ReturnType<typeof getRngState> | undefined)[] = new Array(n);
+    const redPaid = new Float64Array(n);
+    const sweepDelta = new Float64Array(n);
+    const aBuf: (CompanyShardAccumulators | undefined)[] = new Array(n);
+    const redBuf: (CompanyShardAccumulators | undefined)[] = new Array(n);
+    const bBuf: (CompanyShardAccumulators | undefined)[] = new Array(n);
+    const postBuf: (CompanyShardAccumulators | undefined)[] = new Array(n);
+    const ambient = getRngState();
+    ctx.deferPendingNet = true;
+    for (let i = 0; i < n; i++) {
+      const comp = companyRows[i];
+      if (!isActiveCompany(comp)) continue;
+      aBuf[i] = capture(() => {
+        setRngState(F.rngAfter[i]);
+        aRes[i] = runBackCoreA(comp, i, backDeps);
+        streamAfterA[i] = getRngState();
+      });
+    }
+    for (let i = 0; i < n; i++) {
+      const comp = companyRows[i];
+      if (!aRes[i]) continue;
+      redBuf[i] = capture(() => { redPaid[i] = runMmfRedemption(comp, i, backDeps, aRes[i]!); });
+    }
+    for (let i = 0; i < n; i++) {
+      const comp = companyRows[i];
+      if (!aRes[i]) continue;
+      bBuf[i] = capture(() => {
+        setRngState(streamAfterA[i]!);
+        bRes[i] = runBackCoreB(comp, i, backDeps, aRes[i]!);
+      });
+    }
+    backDeps.onSweepDelta = (row, deltaUSD) => { sweepDelta[row] = deltaUSD; };
+    for (let i = 0; i < n; i++) {
+      const comp = companyRows[i];
+      if (!aRes[i]) { updatedCompanies[i] = companyWeekKernel(comp, i); continue; }
+      postBuf[i] = capture(() => {
+        updatedCompanies[i] = companyWeekKernel(comp, i, { ...aRes[i]!, ...bRes[i]! });
+      });
+    }
+    backDeps.onSweepDelta = undefined;
+    setRngState(ambient);
+    ctx.deferPendingNet = false;
+    for (let i = 0; i < n; i++) {
+      if (aBuf[i]) mergeAccums(aBuf[i]!, true);
+      if (redBuf[i]) mergeAccums(redBuf[i]!, true);
+      if (bBuf[i]) mergeAccums(bBuf[i]!, true);
+      if (postBuf[i]) mergeAccums(postBuf[i]!, true);
+    }
+    // §7.321 — the region books' netInflow REBUILT on the exact per-firm deltas in the
+    // interleaved loop's order [red_i, sweep_i] per firm, so the settle-time float sum keeps
+    // the serial tree bit-exactly (the 13wk ULP cascade this replaces was the record's).
+    mmfSweepBooks.forEach((b) => { b.netInflowUSD = 0; });
+    for (let i = 0; i < n; i++) {
+      const b = mmfSweepBooks.get(backLanes.region[i]);
+      if (!b) continue;
+      if (redPaid[i] > 0) b.netInflowUSD -= redPaid[i];
+      if (sweepDelta[i] !== 0) b.netInflowUSD += sweepDelta[i];
+    }
+  } else {
   runShardedVoid(companyRows.length, (range) => {
     const held = openShard();
     for (let i = range.lo; i < range.hi; i++) {
@@ -360,6 +429,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     }
     closeShard(held);
   });
+  }
   ctx.updatedCompanies = updatedCompanies;
   const __p2 = S08_PROF ? performance.now() : 0;
 

@@ -280,6 +280,8 @@ export interface WeeklyStepContext {
   pendingHolderAccrualUSD: Map<string, number>;
   /** CAL — the instruments whose coupon falls due this week: their accrued balances become cash. */
   pendingHolderAccrualPayout: Set<string>;
+  /** §7.321 barrier mode: suppress emission-time running-net application (merge applies it). */
+  deferPendingNet?: boolean;
   /** CAL — what each holder has EARNED and not yet been paid, by (instrument, holder). The
    *  receivable that sits between an accrual and a coupon date, and the reason a bond can change
    *  hands mid-period without moving the interest to the wrong party. */

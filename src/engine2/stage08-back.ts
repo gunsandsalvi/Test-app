@@ -112,6 +112,9 @@ export interface BackKernelDeps {
   enqueueOffering: (o: PrimaryOffering) => void;
   /** Appends to the stage's refinance-news accumulator (swapped by the shard machinery). */
   pushNews: (n: NewsItem) => void;
+  /** §7.321 barrier mode: reports the post sweep's exact share delta so the merge can rebuild
+   *  the region book's netInflow float sum in original firm order. */
+  onSweepDelta?: (row: number, deltaUSD: number) => void;
 }
 
 /** The back half of one company's week — same statements the stage's kernel ran, same order. */
@@ -652,21 +655,7 @@ function runCashWalk(args: {
   return { accruedTaxUSD };
 }
 
-export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: number) => Company {
-  const {
-    state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
-    regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
-    primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
-  } = d;
-/**
- * §7.317 steps 1.5/1.7 — THE BACK CORE, lifted whole: capital → cash walk → liquidity → debt →
- * rating, verbatim, ending where the earnings/filing/write-back POST begins. Reads lanes and v2
- * rows only, except the four §7.320 exceptions (the profile branch, mmfSharesUSD, the capital
- * write application, the revenueHistory fold). Returns the measured 50-value crossing interface
- * plus the cash poster the post zone keeps writing through.
- */
-/** §7.321 core-A: capital + cash walk — no contention, no draws. Parallel-safe. */
-function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
+export function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
   const {
     state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
@@ -989,7 +978,7 @@ function runBackCoreA(comp: Company, row: number, d: BackKernelDeps) {
 
 /** §7.321 the BARRIER: the liquidity redemption against the regional book, first-come in row
  *  order — on main, between core-A and core-B, exactly the order the inline loop had. */
-function runMmfRedemption(comp: Company, row: number, d: BackKernelDeps, a: ReturnType<typeof runBackCoreA>) {
+export function runMmfRedemption(comp: Company, row: number, d: BackKernelDeps, a: ReturnType<typeof runBackCoreA>): number {
   const { ctx, mmfSweepBooks } = d;
   const L8 = d.backLanes;
   const { cash, post } = a;
@@ -1005,14 +994,16 @@ function runMmfRedemption(comp: Company, row: number, d: BackKernelDeps, a: Retu
           const shortfallFund = findRegionMmf(ctx.updatedInstitutionalEntities, L8.region[row]);
           post('money fund share redemption: liquidity shortfall', paidUSD,
             shortfallFund ? { kind: 'INSTITUTION', id: shortfallFund.id } : undefined);
+          return paidUSD;
         }
       }
     }
+  return 0;
 }
 
 /** §7.321 core-B: liquidity decision + debt lifecycle + rating (the kernel's one draw).
  *  Parallel-safe after the barrier. */
-function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: ReturnType<typeof runBackCoreA>) {
+export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: ReturnType<typeof runBackCoreA>) {
   const {
     state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
@@ -1745,6 +1736,8 @@ function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: ReturnTy
   return { bondCallPremiumUSD, buybacksThisWeek, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, newCdsSpreadBps, newLastOpportunisticOfferingWeek, newOasBps, newRating, preActionFixedUSD, preActionFloatingUSD, rowList, settlement, newRevenue, newEbitda, newEbit, newTotalDebt };
 }
 
+export type BackCoreOut = ReturnType<typeof runBackCoreA> & ReturnType<typeof runBackCoreB>;
+
 function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
   const a = runBackCoreA(comp, row, d);
   runMmfRedemption(comp, row, d, a);
@@ -1752,12 +1745,27 @@ function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
   return { ...a, ...b };
 }
 
+export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: number, pre?: BackCoreOut) => Company {
+  const {
+    state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
+    regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
+    primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
+  } = d;
+/**
+ * §7.317 steps 1.5/1.7 — THE BACK CORE, lifted whole: capital → cash walk → liquidity → debt →
+ * rating, verbatim, ending where the earnings/filing/write-back POST begins. Reads lanes and v2
+ * rows only, except the four §7.320 exceptions (the profile branch, mmfSharesUSD, the capital
+ * write application, the revenueHistory fold). Returns the measured 50-value crossing interface
+ * plus the cash poster the post zone keeps writing through.
+ */
+/** §7.321 core-A: capital + cash walk — no contention, no draws. Parallel-safe. */
 
-  return (comp: Company, row: number): Company => {
+
+  return (comp: Company, row: number, pre?: BackCoreOut): Company => {
     if (!isActiveCompany(comp)) {
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
     }
-    const core = runBackCore(comp, row, d);
+    const core = pre ?? runBackCore(comp, row, d);
     const { accruedTaxUSD, annualInterest, bondCallPremiumUSD, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, cap, capexCommissionedThisWeekUSD, cashLedger, costDriversUSD, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, preActionFixedUSD, preActionFloatingUSD, rowList, sec, settlement, stillUnderConstruction, targetProductionUSD, updatedProductLines, weeklyDepreciation, weeklyPayrollUSD, post, cash } = core;
     const L8 = d.backLanes;
     const reg = updatedRegions[L8.region[row]];
@@ -2048,6 +2056,7 @@ function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
           sweepFund ? { kind: 'INSTITUTION', id: sweepFund.id } : undefined);
         newMmfSharesUSD = Math.max(0, newMmfSharesUSD + sweep.shareDeltaUSD);
       }
+      if (sweep.shareDeltaUSD !== 0) d.onSweepDelta?.(row, sweep.shareDeltaUSD);
     }
 
     // SCALE: same in-place assignment as the private path above — see that comment.
