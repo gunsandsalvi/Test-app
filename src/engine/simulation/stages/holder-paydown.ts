@@ -66,10 +66,15 @@ export function reconcileHolderPrincipal(args: {
   // issuer can actually pay this week. $1M of slack keeps the pass off rounding noise; the
   // drift this burns is B-scale.
   const factorByIssuer = new Map<string, number>();
+  const trace = process.env.PAYDOWN_TRACE === '1';
   heldByIssuer.forEach((heldUSD, issuerId) => {
     const outstandingUSD = Math.max(0, outstandingByIssuerId.get(issuerId) ?? 0);
     if (!(heldUSD > outstandingUSD + 1e6)) return;
     const issuer = issuerById.get(issuerId);
+    if (trace && heldUSD - outstandingUSD > 1e9) {
+      console.log(`  [paydown] ${deskBook} ${issuer?.ticker ?? issuerId} held ${(heldUSD / 1e6).toFixed(0)}M out ${(outstandingUSD / 1e6).toFixed(0)}M`
+        + `${!issuer ? ' SKIP:no-issuer' : issuer.isBankEntity ? ' SKIP:bank' : ` cash ${(issuer.cash / 1e6).toFixed(0)}M`}`);
+    }
     if (!issuer) return;
     // A BANK's own paper is WHOLESALE FUNDING, and its repayment accounting belongs to the
     // funding roll (02b/§7.254) — paying it here raced that roll's same-week wholesale write

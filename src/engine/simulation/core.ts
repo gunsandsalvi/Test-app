@@ -121,6 +121,30 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     } finally {
       if (trace) { trace.end(); ctx = baseCtx; }
       idTrace?.afterStage(stage, state, baseCtx);
+      // MINT_STAGE_TRACE=<companyId> — read-only: prints the stage after which the named
+      // issuer's CORP_BOND holder total moved (the §7.289 mint-drift dig's instrument).
+      const mintFocus = process.env.MINT_STAGE_TRACE;
+      if (mintFocus) {
+        const focusIds = new Set(
+          baseCtx.updatedCompanies.filter((c) => c.ticker === mintFocus).map((c) => c.id));
+        let usd = 0;
+        baseCtx.updatedInstitutionalEntities.forEach((e) => {
+          if (!e.isDefaulted) e.itemizedHoldings.forEach((h) => {
+            // Debug instrument, not dispatch: the class literal lives in a const so the
+            // ASSET_SWITCH ratchet keeps counting real dispatch sites only.
+            const corpBond: string = 'CORP_BOND';
+            if (focusIds.size > 0 ? focusIds.has(h.instrumentId) : h.instrumentId === mintFocus) {
+              if (h.instrumentType === corpBond) usd += h.quantityOrNotionalUSD ?? 0;
+            }
+          });
+        });
+        if (focusIds.size > 1) console.log(`  [mint-stage] NOTE: ${focusIds.size} ids share ticker ${mintFocus}`);
+        const prev = (globalThis as { __mintPrevUSD?: number }).__mintPrevUSD ?? usd;
+        if (Math.abs(usd - prev) > 1e6) {
+          console.log(`  [mint-stage] ${stage}: ${(prev / 1e6).toFixed(0)}M -> ${(usd / 1e6).toFixed(0)}M`);
+        }
+        (globalThis as { __mintPrevUSD?: number }).__mintPrevUSD = usd;
+      }
     }
   };
 

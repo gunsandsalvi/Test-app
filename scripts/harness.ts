@@ -277,18 +277,24 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
   // MINT_TRACE=1 — per-issuer decomposition of a minting class: who carries the excess, and is
   // the issuer live, dead, or a bank (the §7.286 paydown exclusion). Read-only.
   if (process.env.MINT_TRACE === '1') {
+    // Keyed by (issuer, CLASS): every debt class shares the company id as its instrumentId, so
+    // a by-id-only sum mixed bonds, loans and CP against a one-class outstanding and reported
+    // phantom "excess" that was simply the OTHER classes' real holdings (§7.292 — this
+    // instrument's own first version did exactly that; §7.221's lesson, self-inflicted).
     const heldByIssuer = new Map<string, { usd: number; cls: string }>();
     const addTrace = (h: { instrumentType: string; instrumentId: string; quantityOrNotionalUSD?: number }) => {
       if (h.instrumentType !== 'LEVERAGED_LOAN' && h.instrumentType !== 'CORP_BOND'
         && h.instrumentType !== 'COMMERCIAL_PAPER') return;
-      const cur = heldByIssuer.get(h.instrumentId) ?? { usd: 0, cls: h.instrumentType };
+      const key = `${h.instrumentId}|${h.instrumentType}`;
+      const cur = heldByIssuer.get(key) ?? { usd: 0, cls: h.instrumentType };
       cur.usd += h.quantityOrNotionalUSD ?? 0;
-      heldByIssuer.set(h.instrumentId, cur);
+      heldByIssuer.set(key, cur);
     };
     state.institutionalEntities.forEach((e) => { if (!e.isDefaulted) e.itemizedHoldings.forEach(addTrace); });
     const byId = new Map(state.companies.map((c) => [c.id, c]));
     const rows: string[] = [];
-    heldByIssuer.forEach((v, id) => {
+    heldByIssuer.forEach((v, key) => {
+      const id = key.split('|')[0];
       const c = byId.get(id);
       const outUSD = c ? (c.debtTranches || []).reduce((a: number, t) => {
         const cls = t.isCommercialPaper ? 'COMMERCIAL_PAPER' : t.rateType === 'FIXED' ? 'CORP_BOND' : 'LEVERAGED_LOAN';
@@ -304,7 +310,8 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     if (rows.length > 0) console.log(`  [mint] w${week} excess>50M: ${rows.sort((a, b) => parseFloat(b) - parseFloat(a)).slice(0, 12).join(' | ')}`);
     // The top excess name's holders, so the unswept path names itself.
     let topId = ''; let topExcess = 0;
-    heldByIssuer.forEach((v, id) => {
+    heldByIssuer.forEach((v, key) => {
+      const id = key.split('|')[0];
       const c = byId.get(id);
       const outUSD = c ? (c.debtTranches || []).reduce((a: number, t) => {
         const cls = t.isCommercialPaper ? 'COMMERCIAL_PAPER' : t.rateType === 'FIXED' ? 'CORP_BOND' : 'LEVERAGED_LOAN';
