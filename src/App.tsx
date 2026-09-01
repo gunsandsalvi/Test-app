@@ -113,6 +113,12 @@ export default function App() {
     setClearingWorkersWeb(n);
   };
 
+  // Default to every available thread; the dropdown stays for A/B against fewer (the main
+  // thread spin-waits during shards, so max is not guaranteed to beat max-1 — measure it).
+  useEffect(() => {
+    if (webWorkersAvailable()) onWorkers(navigator.hardwareConcurrency ?? 2);
+  }, []);
+
   const fail = (e: unknown) => {
     runningRef.current = false;
     setRunning(false);
@@ -212,7 +218,10 @@ export default function App() {
               onChange={(e) => onWorkers(Number(e.target.value))}
               style={{ fontSize: 14, padding: '6px 8px' }}
             >
-              {[0, 2, 3, 4, 6].filter((n) => n === 0 || n <= (navigator.hardwareConcurrency ?? 2) - 1)
+              {[...new Set([0, 2, 4,
+                Math.max(2, (navigator.hardwareConcurrency ?? 2) - 1),
+                Math.max(2, navigator.hardwareConcurrency ?? 2)])]
+                .sort((a, b) => a - b)
                 .map((n) => <option key={n} value={n}>{n === 0 ? 'off' : n}</option>)}
             </select>
           </label>
