@@ -46,7 +46,7 @@ import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settl
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand , YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
+import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand , YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
@@ -287,6 +287,9 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     });
     const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
 
+    // §4.C direct-to-pack — demand written straight into the engine's staging.
+    const DS = openDemandStaging(companyTerms.length);
+
     // §4.C Stage I — dense pair loops (07b/07e's shape, §7.327 (1)): the per-(entity, name)
     // holding probe becomes an array read; both passes keep companyTerms order, so every float
     // accumulates exactly as before.
@@ -340,7 +343,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // clears its cost at a tighter margin than the same issuer's unsecured paper. That is the
       // structural relationship between the two markets, expressed where it belongs — in what
       // each set of holders will pay — rather than as a fixed multiple between two statistics.
-      const demandByIndex: (ParticipantDemand | undefined)[] = new Array(companyTerms.length);
+      const demandRow = claimDemandRow(DS);
       for (let ti = 0; ti < companyTerms.length; ti++) {
         const t = companyTerms[ti];
         // The loan's recovery is derived from the same senior-lien discount that scales its
@@ -356,21 +359,20 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
               creditConditionsIndex: reg.bankingSector.creditConditionsIndex ?? 0,
             });
         const structuralSizeUSD = t.liveFloatUSD * entityShare;
-        demandByIndex[ti] = {
-          // XB2: a cross-border loan is hedged like a bond — the CIP cost is in the requirement.
-          reservationStat: reservationBps + hedgeAdjBps,
-          maxHoldingUSD: structuralSizeUSD * overweightMultiple,
-          fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
-          maxNetPurchaseUSD:
-            classBudgetUSD *
+        // XB2: a cross-border loan is hedged like a bond — the CIP cost is in the requirement.
+        setDemand(DS, demandRow, ti,
+          reservationBps + hedgeAdjBps,
+          FULL_SIZE_SPREAD_RANGE_BPS,
+          structuralSizeUSD * overweightMultiple,
+          classBudgetUSD *
             (totalCashDemandWeightUSD > 0
               ? cashDemandWeightByIndex[ti] / totalCashDemandWeightUSD
               : 0),
-        };
+          0);
       }
       for (const ti of heldTouched) heldArr[ti] = 0;
 
-      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId: EMPTY_DEMAND_MAP, demandByIndex };
+      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId: EMPTY_DEMAND_MAP, demandRow };
     });
 
     const priorDealerInventoryById = new Map<string, number>();

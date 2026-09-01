@@ -31,7 +31,7 @@ import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { entityRequiredReturn, MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
@@ -229,6 +229,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           && (d.region === regionId || !d.region))
     );
     const bookEntities = [...regionEntities, ...regionIndexFunds];
+    // §4.C direct-to-pack — demand written straight into the engine's staging.
+    const DS = openDemandStaging(regionCompanies.length);
     const currentSharesByEntity = new Map<string, Map<string, number>>();
     // SCALE C1: positions come off the shared store's EQUITY rows; only THIS region's names are
     // claimed, everything else passes through the write-back untouched.
@@ -393,7 +395,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         cashWeightArr[ci] = weightUSD;
         totalCashDemandWeightUSD += weightUSD;
       }
-      const demandByIndex: (ParticipantDemand | undefined)[] = new Array(nC);
+      const demandRow = claimDemandRow(DS);
       for (let ci = 0; ci < nC; ci++) {
         const fair = defaultedArr[ci] === 1 ? 0 : fairValuePerShare({
           annualEarningsUSD: netIncomeArr[ci],
@@ -421,14 +423,13 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         // — which is exactly what makes a squeeze move the print.
         const buyInShares = buyInArr[ci];
         const structuralCeiling = Math.max(0, structuralShares * MAX_OVERWEIGHT_MULTIPLE - lentShares);
-        demandByIndex[ci] = {
-          reservationStat: fair,
-          maxHoldingUSD: Math.max(structuralCeiling, buyInShares),
-          fullSizeStatRange: Math.max(0.01, fair * FULL_SIZE_PRICE_DISCOUNT),
-          minHoldingUSD: buyInShares > 0 ? buyInShares : undefined,
-          // Budget in SHARES at the current price — a holder cannot buy what it cannot fund.
-          maxNetPurchaseUSD: (budgetUSD * cashShare) / Math.max(0.01, refPrice),
-        };
+        // Budget in SHARES at the current price — a holder cannot buy what it cannot fund.
+        setDemand(DS, demandRow, ci,
+          fair,
+          Math.max(0.01, fair * FULL_SIZE_PRICE_DISCOUNT),
+          Math.max(structuralCeiling, buyInShares),
+          (budgetUSD * cashShare) / Math.max(0.01, refPrice),
+          buyInShares > 0 ? buyInShares : 0);
       }
       while (heldTouched.length) heldSharesArr[heldTouched.pop()!] = 0;
       while (lentTouched.length) lentArr[lentTouched.pop()!] = 0;
@@ -437,7 +438,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         id: entity.id,
         currentHoldingsByInstrumentId: currentSharesByEntity.get(entity.id)!,
         demandByInstrumentId: EMPTY_DEMAND_MAP,
-        demandByIndex,
+        demandRow,
       };
     });
 

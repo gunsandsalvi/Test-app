@@ -125,6 +125,56 @@ export interface ClearingParticipant {
    *  entity) hand demand over by index and skip ~120k string-keyed Map inserts a week. When
    *  present it is authoritative for this participant; the Map stays for sparse participants. */
   demandByIndex?: (ParticipantDemand | undefined)[];
+  /** §4.C Stage I direct-to-pack — the row this participant wrote in the engine's demand
+   *  staging (claimDemandRow/setDemand): no ParticipantDemand objects exist at all; packClearing
+   *  blits the row. Authoritative over both alternatives above when present. */
+  demandRow?: number;
+}
+
+/** §4.C Stage I direct-to-pack — a REUSED per-book demand staging in the pack's own layout.
+ *  Adapters claim a row per participant and write scalars; the pack blits rows. Epoch-guarded
+ *  like the result scratch: a staging is valid until the next openDemandStaging call. */
+export interface DemandStaging {
+  n: number;
+  rows: number;
+  present: Uint8Array;
+  res: Float64Array;
+  range: Float64Array;
+  maxH: Float64Array;
+  maxNet: Float64Array;
+  minH: Float64Array;
+}
+let stagingScratch: DemandStaging = {
+  n: 0, rows: 0,
+  present: new Uint8Array(1 << 16), res: new Float64Array(1 << 16), range: new Float64Array(1 << 16),
+  maxH: new Float64Array(1 << 16), maxNet: new Float64Array(1 << 16), minH: new Float64Array(1 << 16),
+};
+export function openDemandStaging(n: number): DemandStaging {
+  stagingScratch.n = n;
+  stagingScratch.rows = 0;
+  return stagingScratch;
+}
+export function claimDemandRow(D: DemandStaging): number {
+  const row = D.rows++;
+  const need = (row + 1) * D.n;
+  if (D.present.length < need) {
+    const cap = Math.max(need, D.present.length * 2);
+    const gp = new Uint8Array(cap); gp.set(D.present);
+    const g = (o: Float64Array) => { const a = new Float64Array(cap); a.set(o); return a; };
+    D.present = gp; D.res = g(D.res); D.range = g(D.range); D.maxH = g(D.maxH); D.maxNet = g(D.maxNet); D.minH = g(D.minH);
+  }
+  D.present.fill(0, row * D.n, need);
+  return row;
+}
+/** One (participant, instrument) schedule — the exact scalars packClearing stored per pair. */
+export function setDemand(D: DemandStaging, row: number, i: number, reservationStat: number, fullSizeStatRange: number, maxHoldingUSD: number, maxNetPurchaseUSDOrNaN: number, minHoldingUSD: number): void {
+  const at = row * D.n + i;
+  D.present[at] = 1;
+  D.res[at] = reservationStat;
+  D.range[at] = fullSizeStatRange;
+  D.maxH[at] = maxHoldingUSD;
+  D.maxNet[at] = maxNetPurchaseUSDOrNaN;
+  D.minH[at] = minHoldingUSD;
 }
 
 /**
@@ -558,7 +608,19 @@ export function packClearing(
   });
   participants.forEach((p, pi) => {
     const base = pi * n;
-    if (p.demandByIndex !== undefined) {
+    if (p.demandRow !== undefined) {
+      const D = stagingScratch;
+      const src = p.demandRow * n;
+      for (let i = 0; i < n; i++) {
+        if (!D.present[src + i]) continue;
+        packed.present[base + i] = 1;
+        packed.dRes[base + i] = D.res[src + i];
+        packed.dRange[base + i] = D.range[src + i];
+        packed.dMaxH[base + i] = D.maxH[src + i];
+        packed.dMaxNet[base + i] = D.maxNet[src + i];
+        packed.dMinH[base + i] = D.minH[src + i];
+      }
+    } else if (p.demandByIndex !== undefined) {
       const arr = p.demandByIndex;
       for (let i = 0; i < n; i++) {
         const d = arr[i];
@@ -870,6 +932,16 @@ function anyCeilingAboveHolding(
   participants: ClearingParticipant[]
 ): boolean {
   for (const p of participants) {
+    if (p.demandRow !== undefined) {
+      const D = stagingScratch;
+      const src = p.demandRow * D.n;
+      for (let i = 0; i < instruments.length; i++) {
+        if (!D.present[src + i]) continue;
+        const held = p.currentHoldingsByInstrumentId.get(instruments[i].id) ?? 0;
+        if (D.maxH[src + i] > held + 1) return true;
+      }
+      continue;
+    }
     for (let i = 0; i < instruments.length; i++) {
       const d = p.demandByIndex !== undefined
         ? p.demandByIndex[i]

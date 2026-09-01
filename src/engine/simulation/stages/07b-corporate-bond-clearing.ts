@@ -63,7 +63,7 @@ import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settl
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
+import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
@@ -316,6 +316,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     });
     // Identical for every entity; the old code re-reduced it inside each entity's closure.
     const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
+    // §4.C direct-to-pack — demand written straight into the engine's staging; no
+    // ParticipantDemand objects exist for this book at all.
+    const DS = openDemandStaging(companyTerms.length);
 
     // §4.C Stage I — the pair loops on dense columns (the 07e slice's shape, §7.327 (1)): the
     // per-(entity, name) holding probe becomes an array read; iteration order is companyTerms
@@ -373,7 +376,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // want the bond at all; above it, it scales into its policy size. The old engine used the
       // same numbers to nudge a quantity target, which is why spreads could settle through zero:
       // a nudged quota still has to be filled at whatever price results.
-      const demandByIndex: (ParticipantDemand | undefined)[] = new Array(companyTerms.length);
+      const demandRow = claimDemandRow(DS);
       for (let ti = 0; ti < companyTerms.length; ti++) {
         const t = companyTerms[ti];
         // Rating enters this book in the two places it really acts: the capital the position
@@ -392,21 +395,20 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
             });
         const sizeFactor = t.subIG ? entitySubIGFactor : 1;
         const structuralSizeUSD = t.liveFloatUSD * entityShare * sizeFactor;
-        demandByIndex[ti] = {
-          // XB2: hedged, so a foreign buyer's requirement carries the CIP cost of the hedge.
-          reservationStat: reservationBps + hedgeAdjBps,
-          maxHoldingUSD: structuralSizeUSD * overweightMultiple,
-          fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
-          maxNetPurchaseUSD:
-            classBudgetUSD *
+        // XB2: hedged, so a foreign buyer's requirement carries the CIP cost of the hedge.
+        setDemand(DS, demandRow, ti,
+          reservationBps + hedgeAdjBps,
+          FULL_SIZE_SPREAD_RANGE_BPS,
+          structuralSizeUSD * overweightMultiple,
+          classBudgetUSD *
             (totalCashDemandWeightUSD > 0
               ? cashDemandWeightByIndex[ti] / totalCashDemandWeightUSD
               : 0),
-        };
+          0);
       }
       for (const ti of heldTouched) heldArr[ti] = 0;
 
-      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId: EMPTY_DEMAND_MAP, demandByIndex };
+      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId: EMPTY_DEMAND_MAP, demandRow };
     });
 
     const priorDealerInventoryById = new Map<string, number>();
