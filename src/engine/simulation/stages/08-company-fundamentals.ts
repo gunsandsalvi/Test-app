@@ -9,7 +9,7 @@
  */
 
 import {
-  GameState, Company, DebtTranche, NewsItem, SegmentFinancial, RegionId,
+  GameState, Company, NewsItem, RegionId,
 } from '../../../types';
 import { isActiveCompany, getOutputInventoryUSD } from '../../../domain/company';
 import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } from './shared-helpers';
