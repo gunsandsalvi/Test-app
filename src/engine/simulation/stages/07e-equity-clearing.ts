@@ -163,6 +163,64 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const bookEquityById = new Map(regionCompanies.map((c) => [c.id, companyBookEquityUSD(c)]));
     const netInvestmentRateById = new Map(regionCompanies.map((c) => [c.id, companyNetInvestmentRate(c)]));
 
+    // §7.327 — THE DEMAND BUILD'S DENSE COLUMNS. The participants loop below runs
+    // entities × companies with ~6 Map probes and two `positionKey` string builds per pair
+    // (measured ~22 ms/wk self, the family's fattest JS term). The per-company values are
+    // resolved ONCE into arrays indexed by the region's company index; the loops keep their
+    // exact iteration order, so every float accumulates as before. The maps stay — the index
+    // funds, the household channel and the write-back still read them.
+    const nC = regionCompanies.length;
+    const ciById = new Map<string, number>();
+    const refPriceArr = new Float64Array(nC);
+    const floatValueArr = new Float64Array(nC);
+    const offeredValueArr = new Float64Array(nC);
+    const bookEquityArr = new Float64Array(nC);
+    const netInvRateArr = new Float64Array(nC);
+    const liveSharesArr = new Float64Array(nC);
+    const betaArr = new Float64Array(nC);
+    const defaultedArr = new Uint8Array(nC);
+    const netIncomeArr = new Float64Array(nC);
+    regionCompanies.forEach((c, ci) => {
+      ciById.set(c.id, ci);
+      refPriceArr[ci] = refPriceById.get(c.id) ?? 0;
+      floatValueArr[ci] = floatValueById.get(c.id) ?? 0;
+      offeredValueArr[ci] = offeredValueById.get(c.id) ?? 0;
+      bookEquityArr[ci] = bookEquityById.get(c.id) ?? 0;
+      netInvRateArr[ci] = netInvestmentRateById.get(c.id) ?? 0;
+      liveSharesArr[ci] = liveSharesOf(c);
+      betaArr[ci] = c.beta ?? 1;
+      defaultedArr[ci] = c.isDefaulted ? 1 : 0;
+      netIncomeArr[ci] = c.netIncome;
+    });
+    // The lent/buy-in books, re-grouped by entity once — the two lookups were per-pair
+    // `positionKey` string builds against global maps.
+    const lentByEntity = new Map<string, [number, number][]>();
+    ctx.lentSharesByLender.forEach((shares, key) => {
+      const at = key.indexOf('|');
+      const ci = ciById.get(key.slice(at + 1));
+      if (ci === undefined) return;
+      const eid = key.slice(0, at);
+      const list = lentByEntity.get(eid);
+      if (list) list.push([ci, shares]); else lentByEntity.set(eid, [[ci, shares]]);
+    });
+    const buyInByEntity = new Map<string, [number, number][]>();
+    ctx.buyInSharesByBorrower.forEach((shares, key) => {
+      const at = key.indexOf('|');
+      const ci = ciById.get(key.slice(at + 1));
+      if (ci === undefined) return;
+      const eid = key.slice(0, at);
+      const list = buyInByEntity.get(eid);
+      if (list) list.push([ci, shares]); else buyInByEntity.set(eid, [[ci, shares]]);
+    });
+    // Per-entity scratch, allocated once and zeroed by touched-list — never per entity.
+    const heldSharesArr = new Float64Array(nC);
+    const lentArr = new Float64Array(nC);
+    const buyInArr = new Float64Array(nC);
+    const cashWeightArr = new Float64Array(nC);
+    const heldTouched: number[] = [];
+    const lentTouched: number[] = [];
+    const buyInTouched: number[] = [];
+
     // Index funds hold real equity and settle real cash, so they go through exactly the same
     // bookkeeping and apply passes as every other holder; only their SCHEDULE differs.
     const regionIndexFunds = ctx.updatedInstitutionalEntities.filter(
@@ -316,43 +374,52 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       // Splitting the budget across the whole float instead gave a listing a slice the size of
       // its issuer's index weight rather than of the deal (see 07d for the measurement).
       const currentShares = currentSharesByEntity.get(entity.id)!;
-      const cashDemandWeightByCompany = new Map<string, number>();
-      let totalCashDemandWeightUSD = 0;
-      regionCompanies.forEach((c) => {
-        const structuralUSD = entityPoolUSD * ((floatValueById.get(c.id) ?? 0) / totalFloatValueUSD);
-        const heldUSD = (currentShares.get(c.id) ?? 0) * (refPriceById.get(c.id) ?? 0);
-        const weightUSD = (offeredValueById.get(c.id) ?? 0) + Math.max(0, structuralUSD - heldUSD);
-        cashDemandWeightByCompany.set(c.id, weightUSD);
-        totalCashDemandWeightUSD += weightUSD;
+      // §7.327 — the pair loops on dense columns, in the same iteration order (the store scan
+      // filtered to this region's names, so every held key resolves to a company index).
+      currentShares.forEach((shares, companyId) => {
+        const ci = ciById.get(companyId);
+        if (ci !== undefined) { heldSharesArr[ci] = shares; heldTouched.push(ci); }
       });
-      const demandByIndex: (ParticipantDemand | undefined)[] = new Array(regionCompanies.length);
-      regionCompanies.forEach((c, ci) => {
-        const fair = c.isDefaulted ? 0 : fairValuePerShare({
-          annualEarningsUSD: c.netIncome,
-          sharesOutstanding: liveSharesOf(c),
-          bookEquityUSD: bookEquityById.get(c.id) ?? 0,
-          netInvestmentRate: netInvestmentRateById.get(c.id) ?? 0,
+      const lentList = lentByEntity.get(entity.id);
+      if (lentList) for (const [ci, shares] of lentList) { lentArr[ci] = shares; lentTouched.push(ci); }
+      const buyInList = buyInByEntity.get(entity.id);
+      if (buyInList) for (const [ci, shares] of buyInList) { buyInArr[ci] = shares; buyInTouched.push(ci); }
+      const holderRequiredReturn = entityRequiredReturn(entity);
+      let totalCashDemandWeightUSD = 0;
+      for (let ci = 0; ci < nC; ci++) {
+        const structuralUSD = entityPoolUSD * (floatValueArr[ci] / totalFloatValueUSD);
+        const heldUSD = heldSharesArr[ci] * refPriceArr[ci];
+        const weightUSD = offeredValueArr[ci] + Math.max(0, structuralUSD - heldUSD);
+        cashWeightArr[ci] = weightUSD;
+        totalCashDemandWeightUSD += weightUSD;
+      }
+      const demandByIndex: (ParticipantDemand | undefined)[] = new Array(nC);
+      for (let ci = 0; ci < nC; ci++) {
+        const fair = defaultedArr[ci] === 1 ? 0 : fairValuePerShare({
+          annualEarningsUSD: netIncomeArr[ci],
+          sharesOutstanding: liveSharesArr[ci],
+          bookEquityUSD: bookEquityArr[ci],
+          netInvestmentRate: netInvRateArr[ci],
           riskFreeRate,
-          beta: c.beta ?? 1,
-          holderRequiredReturn: entityRequiredReturn(entity),
+          beta: betaArr[ci],
+          holderRequiredReturn,
         });
         // Structural size: this entity's share of the region's equity pool, allocated to this
         // name by its share of the float's value — the same real-pool discipline the credit
         // adapters use, expressed in shares.
-        const refPrice = refPriceById.get(c.id) ?? 0;
-        const nameFloatValueUSD = floatValueById.get(c.id) ?? 0;
-        const structuralShares = (entityPoolUSD * (nameFloatValueUSD / totalFloatValueUSD)) / Math.max(0.01, refPrice);
+        const refPrice = refPriceArr[ci];
+        const structuralShares = (entityPoolUSD * (floatValueArr[ci] / totalFloatValueUSD)) / Math.max(0.01, refPrice);
         const cashShare = totalCashDemandWeightUSD > 0
-          ? (cashDemandWeightByCompany.get(c.id) ?? 0) / totalCashDemandWeightUSD
+          ? cashWeightArr[ci] / totalCashDemandWeightUSD
           : 0;
         // HF: exposure this holder already has through a stock loan it wrote. The shares are out
         // of its hands but the position is not, so its ceiling here comes down by them — without
         // this a lender walks straight back into the auction to re-buy what it has just lent.
-        const lentShares = ctx.lentSharesByLender.get(positionKey(entity.id, c.id)) ?? 0;
+        const lentShares = lentArr[ci];
         // HF: and what a recalled short has to DELIVER. A buy-in is an obligation to produce
         // shares, not a view on their price, so it enters as a mandated core with no reservation
         // — which is exactly what makes a squeeze move the print.
-        const buyInShares = ctx.buyInSharesByBorrower.get(positionKey(entity.id, c.id)) ?? 0;
+        const buyInShares = buyInArr[ci];
         const structuralCeiling = Math.max(0, structuralShares * MAX_OVERWEIGHT_MULTIPLE - lentShares);
         demandByIndex[ci] = {
           reservationStat: fair,
@@ -362,7 +429,10 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           // Budget in SHARES at the current price — a holder cannot buy what it cannot fund.
           maxNetPurchaseUSD: (budgetUSD * cashShare) / Math.max(0.01, refPrice),
         };
-      });
+      }
+      while (heldTouched.length) heldSharesArr[heldTouched.pop()!] = 0;
+      while (lentTouched.length) lentArr[lentTouched.pop()!] = 0;
+      while (buyInTouched.length) buyInArr[buyInTouched.pop()!] = 0;
       return {
         id: entity.id,
         currentHoldingsByInstrumentId: currentSharesByEntity.get(entity.id)!,
