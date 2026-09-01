@@ -122,6 +122,7 @@ export interface FrontPassInputs {
   supplyRelsByCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeUSD: number; relationshipStrength: number }[]>;
   supplierShockStats: Map<string, { annualRevenue: number; invUSDByCategory: Map<string, number> }>;
   suppliedSubUnitsByRegion: Map<string, Set<string>>;
+  companyStore: import('./company-store').CompanyStore;
 }
 
 /** Run the front half for every firm: seam, core (sharded when FRONT_WORKERS=n, serial

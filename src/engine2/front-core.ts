@@ -234,10 +234,16 @@ export interface FrontSeamInputs {
   supplyRelsByCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeUSD: number; relationshipStrength: number }[]>;
   supplierShockStats: Map<string, { annualRevenue: number; invUSDByCategory: Map<string, number> }>;
   suppliedSubUnitsByRegion: Map<string, Set<string>>;
+  companyStore: import('./company-store').CompanyStore;
 }
 
 export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): FrontSeam {
-  const { v2, nextWeek, companyUpdates, updatedRegions, supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion } = inp;
+  const { v2, nextWeek, companyUpdates, updatedRegions, supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion, companyStore } = inp;
+  // §4.C Stage II.3a — the scalar block reads the company row store (refreshed by stage 08
+  // just before this pass, so validity is by construction). NaN is the store's undefined; the
+  // `??`/`||` resolutions below replay the object reads' semantics exactly.
+  const CN = companyStore.num;
+  const nn = (v: number, d: number): number => (Number.isNaN(v) ? d : v);
   const n = companies.length;
   const regionIds = Object.keys(updatedRegions) as RegionId[];
   const regionIndex = new Map(regionIds.map((r, i) => [r, i]));
@@ -384,33 +390,36 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     S.isProfile[row] = PROFILE_REGISTRY[profileKeyOf(comp)] ? 1 : 0;
     S.lotRow[row] = rowOf(v2, comp.id);
 
-    S.employeeCount[row] = comp.employeeCount;
-    S.offeredWageIndex[row] = comp.offeredWageIndex ?? 1.0;
-    S.baselineEmployeeCount[row] = comp.baselineEmployeeCount ?? comp.employeeCount;
-    S.totalDebt[row] = comp.totalDebt;
-    S.annualRevenue[row] = comp.annualRevenue;
-    S.baselineAnnualRevenueResolved[row] = comp.baselineAnnualRevenue || comp.annualRevenue;
-    S.ebitda[row] = comp.ebitda;
-    S.cash[row] = comp.cash;
-    S.currentLiabilities[row] = comp.currentLiabilities;
-    S.marketCap[row] = comp.marketCap;
-    S.sharesOutstanding[row] = comp.sharesOutstanding;
-    const growthCapexResolved = comp.growthCapex ?? (comp.capex * 0.4);
+    const empl = CN.employeeCount[row];
+    S.employeeCount[row] = empl;
+    S.offeredWageIndex[row] = nn(CN.offeredWageIndex[row], 1.0);
+    S.baselineEmployeeCount[row] = nn(CN.baselineEmployeeCount[row], empl);
+    S.totalDebt[row] = CN.totalDebt[row];
+    const annualRev = CN.annualRevenue[row];
+    S.annualRevenue[row] = annualRev;
+    S.baselineAnnualRevenueResolved[row] = CN.baselineAnnualRevenue[row] || annualRev;
+    const ebitdaV = CN.ebitda[row];
+    S.ebitda[row] = ebitdaV;
+    S.cash[row] = CN.cash[row];
+    S.currentLiabilities[row] = CN.currentLiabilities[row];
+    S.marketCap[row] = CN.marketCap[row];
+    S.sharesOutstanding[row] = CN.sharesOutstanding[row];
+    const growthCapexResolved = nn(CN.growthCapex[row], CN.capex[row] * 0.4);
     S.growthCapexResolved[row] = growthCapexResolved;
-    S.maintenanceShortfallStreak[row] = comp.maintenanceShortfallStreak ?? 0;
-    S.executionQuality0[row] = comp.executionQuality ?? 1.0;
-    S.inputConstraint0[row] = comp.inputSupplyConstraintFactor ?? 1.0;
-    S.fulfillEMA0[row] = comp.recentFulfillmentEMA ?? 1.0;
-    S.recurringBase0[row] = comp.recurringRevenueBaseUSD ?? NaN;
-    S.baselineGrowthRatioResolved[row] = comp.baselineGrowthCapexToRevenueRatio
-      ?? (growthCapexResolved / Math.max(1, comp.annualRevenue));
-    S.baselineEbitdaMarginResolved[row] = comp.baselineEbitdaMargin ?? (comp.ebitda / Math.max(1, comp.annualRevenue));
-    const openingGross = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
+    S.maintenanceShortfallStreak[row] = nn(CN.maintenanceShortfallStreak[row], 0);
+    S.executionQuality0[row] = nn(CN.executionQuality[row], 1.0);
+    S.inputConstraint0[row] = nn(CN.inputSupplyConstraintFactor[row], 1.0);
+    S.fulfillEMA0[row] = nn(CN.recentFulfillmentEMA[row], 1.0);
+    S.recurringBase0[row] = CN.recurringRevenueBaseUSD[row];
+    S.baselineGrowthRatioResolved[row] = nn(CN.baselineGrowthCapexToRevenueRatio[row],
+      growthCapexResolved / Math.max(1, annualRev));
+    S.baselineEbitdaMarginResolved[row] = nn(CN.baselineEbitdaMargin[row], ebitdaV / Math.max(1, annualRev));
+    const openingGross = nn(CN.grossPPEUSD[row], annualRev * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
     S.openingGrossPpeUSD[row] = openingGross;
-    const openingNet = Math.max(0, openingGross - (comp.accumulatedDepreciationUSD ?? openingGross * 0.45));
+    const openingNet = Math.max(0, openingGross - nn(CN.accumulatedDepreciationUSD[row], openingGross * 0.45));
     S.openingNetPpeUSD[row] = openingNet;
-    S.taxBasisOpenUSD[row] = comp.taxBasisPpeUSD ?? openingNet;
-    S.carryforwardUSD[row] = comp.taxLossCarryforwardUSD ?? 0;
+    S.taxBasisOpenUSD[row] = nn(CN.taxBasisPpeUSD[row], openingNet);
+    S.carryforwardUSD[row] = nn(CN.taxLossCarryforwardUSD[row], 0);
     S.usefulLifeYears[row] = SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12;
     S.baselineInputRateSum[row] = Object.values(firmInputIntensities(comp.productLines, profileKeyOf(comp)))
       .reduce((a, b) => a + b, 0);

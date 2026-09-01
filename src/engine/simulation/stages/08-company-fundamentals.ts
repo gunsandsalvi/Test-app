@@ -189,9 +189,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // pass receives. The pass makes each firm's one front-half draw in the firm's own entity
   // scope and captures the stream position; the loop below resumes from it.
   const v2 = ensureV2(state);
+  // §4.C Stage II.1 — the company row store, refreshed before the front pass so every scalar
+  // lane is current by construction; the seam and the back lanes read/alias its columns.
+  const companyStore = refreshCompanyStore(state);
+  if (process.env.COMPANY_SYNC_CHECK === '1') checkCompanyStore(state, 'post-refresh');
   const F = runStage08FrontPass(state.companies, {
     v2, nextWeek, companyUpdates, updatedRegions,
-    supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion,
+    supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion, companyStore,
   });
   const __p1 = S08_PROF ? performance.now() : 0;
 
@@ -209,10 +213,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // world.
   // §7.317 steps 1.1-1.2 — the back seam: one pass reads every firm's capital-block inputs
   // into typed lanes before the shard loop; the core reads rows, not objects.
-  // §4.C Stage II.1 — the company row store, refreshed at this stage's top so every lane is
-  // current by construction; the seam lanes below alias its 1:1 columns.
-  const companyStore = refreshCompanyStore(state);
-  if (process.env.COMPANY_SYNC_CHECK === '1') checkCompanyStore(state, 'post-refresh');
   const backLanes = buildBackLanes(state.companies, updatedRegions, companyUpdates, new Set(state.institutionalEntities.map(e => e.id)), ctx.carrierFreightRevenue, ctx.channelMarginRevenue, companyStore);
   const backDeps: import('../../../engine2/stage08-back').BackKernelDeps = {
     state, ctx, v2, F, backLanes, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
