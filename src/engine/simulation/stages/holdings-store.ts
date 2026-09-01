@@ -265,6 +265,9 @@ export function finalizeHoldingsStore(ctx: WeeklyStepContext): void {
  * are done, and folding before them left 9,734 duplicates standing at week 15 out of the 18,531
  * there were. Folding at the close means every sweep of the NEXT week walks one row per position.
  */
+/** §7.327 — consolidate's persistent dup-scan marks, per world (batteries clone states). */
+const CONSOLIDATE_SEEN = new WeakMap<object, { epoch: number; byKey: Map<number, number> }>();
+
 export function consolidateRegister(ctx: WeeklyStepContext): void {
   // §7.313 flip — dup-scan and merge on the rows: a (type, instrument) pair is one integer
   // key, the surviving row is the FIRST (the register keeps its order), dollars and shares add
@@ -272,16 +275,22 @@ export function consolidateRegister(ctx: WeeklyStepContext): void {
   const v2 = ctx.v2;
   const H = v2.holdings;
   const pairKey = (r: number): number => H.typeRef[r] * 0x400000 + H.instrRef[r];
+  // §7.327 — the dup-scan's `seen` Set was allocated per BOOK (~3k a week) and hashed every
+  // row into it; one persistent epoch-stamped map does the same test with zero allocation
+  // (§7.315's mark pattern, at (type, instrument)-key grain — a new epoch per book).
+  let seenEpoch = CONSOLIDATE_SEEN.get(v2);
+  if (!seenEpoch) { seenEpoch = { epoch: 0, byKey: new Map<number, number>() }; CONSOLIDATE_SEEN.set(v2, seenEpoch); }
+  const seenByKey = seenEpoch.byKey;
   ctx.updatedInstitutionalEntities.forEach((entity) => {
     // First pass is a scan, not an allocation: the overwhelming majority of books have nothing
     // to merge in a given week and must not pay for a map they do not need.
     let hasDuplicate = false;
     {
-      const seen = new Set<number>();
+      const epoch = ++seenEpoch!.epoch;
       for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
         const k = pairKey(r);
-        if (seen.has(k)) { hasDuplicate = true; break; }
-        seen.add(k);
+        if (seenByKey.get(k) === epoch) { hasDuplicate = true; break; }
+        seenByKey.set(k, epoch);
       }
     }
     if (!hasDuplicate) return;
