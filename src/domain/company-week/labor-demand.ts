@@ -16,7 +16,6 @@
 
 import {
   MATCHING_ELASTICITY, NEUTRAL_LABOR_TIGHTNESS, BASELINE_QUIT_RATE_WEEKLY,
-  LABOR_PRODUCTIVITY_GROWTH_ANNUAL,
   HIRING_ADJUSTMENT_SPEED_MULTIPLE, LAYOFF_SPEED_MULTIPLE, DISTRESS_LAYOFF_SPEED,
   QUIT_ELASTICITY_TO_RELATIVE_WAGE, QUIT_ELASTICITY_TO_EXECUTION,
 } from '../region-macro';
@@ -88,12 +87,14 @@ export function revenueGrowthWindow(
   return { windowWeeks, nominalGrowthAnnual: (currentRevenueUSD / past - 1) * (52 / windowWeeks) };
 }
 
-/** Labor demand grows with real output net of what productivity delivers for free. UNBOUNDED on
- *  purpose (§7.249): what limits hiring is whether the firm can pay for it, not a clamp. */
+/** Labor demand grows with real output net of what productivity delivers for free — and the
+ *  productivity term is the employer's OWN measured learning (§5-PROD, Wright's law), not a
+ *  uniform stated drift: a firm learning fast needs fewer of the workers its growth would
+ *  otherwise demand. UNBOUNDED on purpose (§7.249): affordability limits hiring, not a clamp. */
 export function realEmploymentGrowthAnnual(
-  nominalGrowthAnnual: number, priceGrowthAnnual: number
+  nominalGrowthAnnual: number, priceGrowthAnnual: number, ownProductivityGrowthAnnual: number
 ): number {
-  return nominalGrowthAnnual - priceGrowthAnnual - LABOR_PRODUCTIVITY_GROWTH_ANNUAL;
+  return nominalGrowthAnnual - priceGrowthAnnual - ownProductivityGrowthAnnual;
 }
 
 /**

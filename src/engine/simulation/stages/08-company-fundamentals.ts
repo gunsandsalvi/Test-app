@@ -39,6 +39,7 @@ import { measureBeta, regionIndexOf } from '../../macro/indices';
 import { pay, PartyRef, PaymentJournal, newPaymentJournal } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
 import { planCapitalProgramme, commissionCapital, capacityRetirement } from '../../../domain/company-week/capital-programme';
+import { learningUpdate, seedCumulativeUnits } from '../../../domain/company-week/learning';
 import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '../../../domain/company-week/credit-standing';
 import { callEconomics, callableAmountUSD, dropExhausted } from '../../../domain/company-week/debt-ladder';
 import { industrialIncome, profileIncome } from '../../../domain/company-week/income-statement';
@@ -879,6 +880,27 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     }, 0);
     const avgCompetitiveness = (comp.productLines || []).reduce((acc, l) => acc + l.competitiveness, 0)
       / Math.max(1, (comp.productLines || []).length);
+
+    // §5-PROD — Wright's-law learning: fold this week's making into the firm's own curve. A
+    // seeded firm opens where its curve reproduces the legacy drift for its current run-rate
+    // (§7.4: the world opens growing exactly as it used to and diverges by experience).
+    {
+      const producedUnits = ctx.companyUpdates[comp.ticker]?.producedUnitsThisWeek ?? 0;
+      if (comp.cumulativeOutputUnits === undefined && producedUnits > 0) {
+        comp.cumulativeOutputUnits = seedCumulativeUnits(producedUnits * 52);
+        comp.learningMultiplier = comp.learningMultiplier ?? 1;
+      }
+      if (comp.cumulativeOutputUnits !== undefined) {
+        const learned = learningUpdate({
+          priorCumulativeUnits: comp.cumulativeOutputUnits,
+          producedUnitsThisWeek: producedUnits,
+          priorMultiplier: comp.learningMultiplier ?? 1,
+        });
+        comp.cumulativeOutputUnits = learned.cumulativeUnits;
+        comp.learningMultiplier = learned.multiplier;
+        comp.lastLearningGrowthAnnual = learned.growthAnnual;
+      }
+    }
 
     // §5-DYN — the capacity-retirement STOCK response: integrate this week's measured idle
     // record (stage 05's own §7.139 test) into mothball / restart / scrap. Scrap is the one

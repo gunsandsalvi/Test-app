@@ -87,3 +87,11 @@ test('LAB — a firm out of cash sheds regardless of every friction above', () =
   });
   assert.equal(p.layoffs, 100 * DISTRESS_LAYOFF_SPEED);
 });
+
+test('§5-PROD — labor demand nets out the employer\'s OWN learning, not a uniform drift', async () => {
+  const { realEmploymentGrowthAnnual } = await import('../src/domain/company-week/labor-demand');
+  // Same nominal and price growth: the faster learner demands less labor.
+  const slow = realEmploymentGrowthAnnual(0.05, 0.02, 0.005);
+  const fast = realEmploymentGrowthAnnual(0.05, 0.02, 0.03);
+  assert.ok(fast < slow);
+});

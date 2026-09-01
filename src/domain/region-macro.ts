@@ -509,6 +509,9 @@ export interface OccupationPool {
 
 /** Trend labor-productivity growth: the same real force that lets output per worker rise over
  * time. A structural primitive; IND/BP make it firm-specific once industries differ. */
+/** §5-PROD retired this as the FIRMS' drift — each firm nets out its OWN Wright's-law learning
+ *  rate now (domain/company-week/learning.ts). It survives as the SME pools' convention (a pool
+ *  has no experience curve until DIST gives it one) and inside the learning seed anchor. */
 export const LABOR_PRODUCTIVITY_GROWTH_ANNUAL = 0.012;
 
 /**

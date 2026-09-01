@@ -269,6 +269,13 @@ export interface Company {
    * Consolidation is a VIEW over this link, never a second set of books.
    */
   parentTicker?: string;
+  /** §5-PROD — Wright's-law learning state: cumulative output, the unit-labour multiplier
+   *  (heads needed = baseline heads ÷ multiplier), and this week's own annualized learning
+   *  rate — the number the firm's labour demand nets out in place of the deleted uniform
+   *  drift. See domain/company-week/learning.ts. */
+  cumulativeOutputUnits?: number;
+  learningMultiplier?: number;
+  lastLearningGrowthAnnual?: number;
   /** §5-DYN — the STOCK response the §7.139 produce/idle rule implied: share of the plant
    *  offline (no upkeep, no staffed capacity, restartable), its idle streak, and how long it
    *  has been offline (a §7.138 year mothballed is scrapped for good). */
@@ -610,9 +617,12 @@ export function fullStaffingCapHeads(c: Company): number {
   const baselineHeads = c.baselineEmployeeCount ?? 0;
   if (!(baselineHeads > 0)) return Math.max(1, c.employeeCount ?? 1);
   const netPpeUSD = (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0);
-  if (!(netPpeUSD > 0)) return baselineHeads;
+  // §5-PROD: a firm that has LEARNED runs the same plant with fewer people — the ceiling is
+  // heads-per-plant at the firm's own current unit-labour productivity, not its baseline's.
+  const learning = Math.max(1e-6, c.learningMultiplier ?? 1);
+  if (!(netPpeUSD > 0)) return Math.max(1, baselineHeads / learning);
   if (!(c.baselineNetPpeUSD !== undefined && c.baselineNetPpeUSD > 0)) c.baselineNetPpeUSD = netPpeUSD;
-  return Math.max(1, baselineHeads * (netPpeUSD / c.baselineNetPpeUSD));
+  return Math.max(1, (baselineHeads * (netPpeUSD / c.baselineNetPpeUSD)) / learning);
 }
 
 /**

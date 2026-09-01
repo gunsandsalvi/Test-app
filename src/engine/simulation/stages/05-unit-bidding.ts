@@ -854,6 +854,13 @@ function buildRegionSupplyPlans(
     }
     const uncappedProductionUnits = staffedNormalSeasonUnits * seasonalPlantFactor;
     const targetProductionUnits = coversUnitCost ? uncappedProductionUnits : 0;
+    // §5-PROD — the firm's experience accrues on what it STARTS making, measured here where
+    // production is decided and nowhere else (rule 3).
+    if (targetProductionUnits > 0) {
+      if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
+      const upl = companyUpdates[comp.ticker];
+      upl.producedUnitsThisWeek = (upl.producedUnitsThisWeek ?? 0) + targetProductionUnits;
+    }
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
     // IND10 — the firm offers what it HAS plus what its plant FINISHED this week, not what it
     // started. For a good made on demand these are the same number and nothing changes; for a

@@ -46,6 +46,9 @@ export interface CompanyWeekUpdate {
    *  test (stage 05 is the only place the test runs); stage 08's capacity-retirement rule
    *  integrates it into the mothball/scrap stock response. */
   idleLineRevenueShare?: number;
+  /** §5-PROD — units this firm STARTED making this week (experience accrues on making, not on
+   *  selling); stage 08 folds it into the Wright's-law learning state. */
+  producedUnitsThisWeek?: number;
   /** IND12 — trade credit, both legs, booked and settled. */
   tradeReceivableBookedUSD?: number;
   tradeReceivableCollectedUSD?: number;

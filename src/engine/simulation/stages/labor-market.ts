@@ -36,7 +36,7 @@
 
 import { GameState, Region, RegionId, Company, OccupationType } from '../../../types';
 import {
-  SECTOR_OCCUPATION_MIX,
+  SECTOR_OCCUPATION_MIX, LABOR_PRODUCTIVITY_GROWTH_ANNUAL,
   MATCHING_EFFICIENCY, MATCHING_ELASTICITY,
   HIRING_ADJUSTMENT_SPEED_MULTIPLE, LAYOFF_SPEED_MULTIPLE, DISTRESS_LAYOFF_SPEED,
   VACANCY_WITHDRAWAL_RATE_WEEKLY,
@@ -130,7 +130,10 @@ function desiredGrowthAnnualOf(
   currentRevenueUSD: number,
   fallbackInflationAnnual: number,
   lines: { subUnitId: string; revenueShare?: number }[] | undefined,
-  reg: Region
+  reg: Region,
+  /** §5-PROD — the employer's OWN measured learning rate; the pools keep the legacy drift
+   *  until DIST gives them their own experience. */
+  ownProductivityGrowthAnnual: number
 ): number {
   // Gatherer only — the window, the deflator and the growth rule live in
   // domain/company-week/labor-demand.ts (§5-STRUCT step 2), where their tests are.
@@ -147,7 +150,8 @@ function desiredGrowthAnnualOf(
     });
   });
   return realEmploymentGrowthAnnual(
-    w.nominalGrowthAnnual, ownPriceGrowthAnnual(rows, w.windowWeeks, fallbackInflationAnnual));
+    w.nominalGrowthAnnual, ownPriceGrowthAnnual(rows, w.windowWeeks, fallbackInflationAnnual),
+    ownProductivityGrowthAnnual);
 }
 
 export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -205,7 +209,8 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const current = Math.max(0, comp.employeeCount);
       if (current <= 0) return;
       const growthAnnual = desiredGrowthAnnualOf(
-        comp.revenueHistory, comp.annualRevenue, inflationAnnual, comp.productLines, reg);
+        comp.revenueHistory, comp.annualRevenue, inflationAnnual, comp.productLines, reg,
+        comp.lastLearningGrowthAnnual ?? LABOR_PRODUCTIVITY_GROWTH_ANNUAL);
       const desiredWeeklyChange = current * (growthAnnual / 52);
 
       // HH6: a firm's OWN quit rate. Paying below the going rate loses people faster; paying
@@ -294,8 +299,12 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // delivered capex grew its PP&E can staff the bigger plant; frozen at the seed headcount,
       // no profitable firm could ever absorb a released worker and unemployment only ratcheted.
       const productiveHeadsCap = Math.max(1, fullStaffingCapHeads(comp));
-      const outputNeedHeads = baselineRevPerHeadUSD > 0
-        ? Math.min((realRevenueUSD * demandPull) / baselineRevPerHeadUSD, productiveHeadsCap)
+      // §5-PROD — the need is at the firm's OWN learned productivity: a firm that runs the same
+      // output with fewer people needs fewer people (baseline revenue-per-head × its Wright's-law
+      // multiplier, the same number fullStaffingCapHeads divides by — rule 3, one owner).
+      const learnedRevPerHeadUSD = baselineRevPerHeadUSD * Math.max(1e-6, comp.learningMultiplier ?? 1);
+      const outputNeedHeads = learnedRevPerHeadUSD > 0
+        ? Math.min((realRevenueUSD * demandPull) / learnedRevPerHeadUSD, productiveHeadsCap)
         : current;
       const earningsHeadroomUSD = comp.ebitda - capitalChargeUSD;
       const affordableHireHeads = (earningsHeadroomUSD > 0 && annualWagePerWorkerUSD > 0)
@@ -339,7 +348,8 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
           ?? reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0),
       }));
       const growthAnnual = desiredGrowthAnnualOf(
-        seg.revenueHistoryUSD, seg.annualRevenueUSD, inflationAnnual, segLines, reg
+        seg.revenueHistoryUSD, seg.annualRevenueUSD, inflationAnnual, segLines, reg,
+        LABOR_PRODUCTIVITY_GROWTH_ANNUAL
       );
       const desiredWeeklyChange = current * (growthAnnual / 52);
       const quits = current * quitRateWeekly;
