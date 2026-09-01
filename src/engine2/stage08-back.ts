@@ -312,7 +312,9 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   // PP&E roll-forward (IND13: grows by what was COMMISSIONED; the lag is the capacity cycle).
   const priorGrossPPE = Number.isNaN(gCur) ? L.ppeDefaultUSD[row] : gCur;
   const priorAccumulatedDepreciation = Number.isNaN(aCur) ? (priorGrossPPE * 0.45) : aCur;
-  const weeklyDepreciation = priorGrossPPE / (usefulLifeYearsForCapex * 52);
+  // ONE owner of book depreciation: the capital programme's straight-line rule (§6.1's
+  // "three depreciations in 08" row — this was the second copy of the same formula).
+  const weeklyDepreciation = programme.weeklyDepreciationUSD;
   const newGrossPPEUSD = priorGrossPPE + capexCommissionedThisWeekUSD;
   const newAccumulatedDepreciationUSD = Math.min(newGrossPPEUSD, priorAccumulatedDepreciation + weeklyDepreciation);
   return {

@@ -163,8 +163,10 @@ export function createInitialCategoryDemand(
   // gross output equals final demand by construction and no recipe can change it (§7.117). The
   // registry's BOMs are a real matrix now, so the intermediate half is solved rather than stated.
   const finalDemand: Record<string, number> = {};
+  const householdFinalDemand: Record<string, number> = {};
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
     subUnits.forEach(su => {
+      householdFinalDemand[su.unitId] = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
       // SUPPLY/CHAIN — investment goes where capex is actually spent (the capital-goods basket),
       // not spread across every corporate-bought good. A corporate purchase of a non-capital good
       // is INTERMEDIATE demand, which the solve below produces from the recipes; putting it here
@@ -185,7 +187,8 @@ export function createInitialCategoryDemand(
       // output; the PRICE is not, or intermediate demand becomes price instead of quantity.
       const unitPriceUSD = deriveSubUnitUnitPrice(
         finalDemand[su.unitId] ?? 0, su.buyerMix, population, firmCount, su.unitId,
-        (totalOutput[su.unitId] ?? 0) - (finalDemand[su.unitId] ?? 0)
+        (totalOutput[su.unitId] ?? 0) - (finalDemand[su.unitId] ?? 0),
+        householdFinalDemand[su.unitId] ?? 0
       );
 
       cd[su.unitId] = createSeedCategoryDemandState(demandLevelAnnualUSD, gdpGrowth, unitPriceUSD);

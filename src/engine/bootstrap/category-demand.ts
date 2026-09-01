@@ -46,13 +46,30 @@ export function deriveSubUnitUnitPrice(
   population: number,
   firmCount: number,
   unitId?: string,
-  intermediateDemandUSD?: number
+  intermediateDemandUSD?: number,
+  /** The household's OWN final dollars for this good (the C term of final demand). */
+  householdFinalDemandUSD?: number
 ): number {
   const householdWeight = buyerMix.HOUSEHOLD + buyerMix.GOVERNMENT; // government spending also serves the population
   const corporateWeight = buyerMix.CORPORATE;
   const spec = unitId ? subUnitSpecOf(unitId) : undefined;
   const hhIntensity = spec?.householdUnitsPerCapitaAnnual ?? FALLBACK_HOUSEHOLD_UNITS_PER_CAPITA_ANNUAL;
   const corpIntensity = spec?.corporateUnitsPerFirmAnnual ?? FALLBACK_CORPORATE_UNITS_PER_FIRM_ANNUAL;
+  // LVL (§7.338) — THE SEED PRICE IS WHERE THE HOUSEHOLD'S WANT COSTS ITS BUDGET.
+  //
+  // The registry states what a household physically consumes (`householdUnitsPerCapitaAnnual`)
+  // and stage 03 hands it the dollars it has for the good; the price that makes those two ONE
+  // statement is dollars over want. The rule below this one divided ALL final dollars by a
+  // volume that weighted the population's want by the buyer mix, so the household's money bought
+  // a fraction of its want at the seed price — the want-vs-budget WEDGE (§7.272): every household
+  // good opened with more units demanded than any money could buy, supply sized off dollars sat
+  // 20-50% short in UNITS, and the auction climbed toward the reach-capped step for a year
+  // (the CPI ×2 the model carried its whole life). With this rule the seed's want, budget and
+  // supply agree by construction; a shortage is then something the world DOES, not something
+  // it opens with.
+  if ((householdFinalDemandUSD ?? 0) > 0 && population > 0 && (spec?.householdUnitsPerCapitaAnnual ?? 0) > 0) {
+    return Number(((householdFinalDemandUSD as number) / (population * hhIntensity)).toFixed(2));
+  }
   // A PURE INTERMEDIATE has no final buyer to price it: final demand is $0 by construction, so
   // this rule seeded its price at 0 and every reader shipped it weightless (§7.241's guard is
   // what makes that loud). Its buyers are producers, so the same §7.127 construction applies to

@@ -13,7 +13,7 @@
  */
 import { createRequire } from 'node:module';
 import {
-  PackedClearing, KernelShardResult, registerNativeKernel,
+  PackedClearing, KernelShardResult, registerNativeKernel, runClearingKernel,
 } from './financial-clearing-engine';
 
 interface NativeAddon {
@@ -57,6 +57,9 @@ if (addon) {
       fillFee: new Float64Array(span * packed.pCount),
       fillCount: 0,
     };
+    // The C port predates the adaptive-damper lane: a shard carrying a streak runs the JS
+    // kernel (canonical), so the oracle gate never compares a widened cap against a fixed one.
+    for (let i = from; i < to; i++) if (packed.damperStreak[i] !== 0) return runClearingKernel(packed, from, to);
     scalars[0] = packed.n; scalars[1] = packed.pCount;
     scalars[2] = packed.dealerSpreadBps; scalars[3] = packed.maxWeeklyStatMovePct;
     scalars[4] = packed.unsoldStaysWithHolder ? 1 : 0;

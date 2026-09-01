@@ -22,6 +22,7 @@
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
 import { partyId } from '../../ledger/party';
 import { categoryPriceTier, householdBudgetReachMultiple, householdDemandLadder } from '../../../domain/industry';
+import { TIER_SPEND_MIX } from '../../macro/household-cohorts';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
@@ -415,10 +416,6 @@ interface DemandPlan {
 }
 
 /** A settlement key for a participant that is not a Company: the aggregates, by region. */
-const SELLER_RATING_PD: Record<string, number> = {
-  'AAA': 0.0002, 'AA': 0.001, 'A': 0.003, 'BBB': 0.01, 'BB': 0.03, 'B': 0.08, 'CCC': 0.20,
-};
-
 const householdKey = (regionId: RegionId) => `HOUSEHOLD:${regionId}`;
 const governmentKey = (regionId: RegionId) => `GOVERNMENT:${regionId}`;
 
@@ -795,7 +792,11 @@ function settleContracts(
  * What every supplier in one region will make and offer this week — the decision the firm takes
  * once, before it is split across the two books it sells into.
  */
+/** CAT_TRACE seller-side summary for the traced sub-unit: why a market's offers are what they are. */
+const catTraceSellers = { n: 0, idle: 0, capUnits: 0, targetUnits: 0, costs: [] as number[], expected: 0, staffed: 0, throttle: 0, opCost: 0 };
+
 function buildRegionSupplyPlans(
+  v2: V2World,
   subUnitId: string,
   reg: Region,
   regionId: RegionId,
@@ -911,6 +912,7 @@ function buildRegionSupplyPlans(
     // dollar level, and only the genuinely staff-shaped cost follows the staff.
     const trailingWeeklyCostUSD = Math.max(0, (comp.annualRevenue - comp.ebitda) / 52);
     let firmWeeklyCostUSD = trailingWeeklyCostUSD;
+    let firmAvoidableCostUSD: number | undefined;
     if (comp.payrollWeeklyUSD !== undefined && comp.realInputConsumptionCostWeeklyUSD !== undefined) {
       let currentPayrollWeeklyUSD = index.currentPayrollByFirm.get(comp);
       if (currentPayrollWeeklyUSD === undefined) {
@@ -926,8 +928,22 @@ function buildRegionSupplyPlans(
       const residualWeeklyUSD = Math.max(0,
         trailingWeeklyCostUSD - comp.payrollWeeklyUSD - comp.realInputConsumptionCostWeeklyUSD);
       firmWeeklyCostUSD = currentPayrollWeeklyUSD + comp.realInputConsumptionCostWeeklyUSD + residualWeeklyUSD;
+      firmAvoidableCostUSD = comp.realInputConsumptionCostWeeklyUSD;
     }
     const weeklyOperatingCostUSD = firmWeeklyCostUSD * (line.revenueShare ?? 1.0);
+    // LVL (§7.338) — THE SHORT-RUN DECISION IS TAKEN ON AVOIDABLE COST.
+    //
+    // The week's wages are owed whether or not the plant runs (the labour market hires and sheds
+    // on a weekly clock, §7.110 — quantity weekly, price annual); what a firm SAVES by idling is
+    // the inputs it would consume. The shutdown test asked whether price covered FULL cost, so
+    // one week of dearer inputs against last week's price flipped whole industries off at once
+    // (measured: every consumer-software producer in every region idled in the second market
+    // week, unit cost 204 → 376 against an expected 325, supply 1.19M → 0.08M, the print ×3 on
+    // the sliver) — a bang-bang rule with no hysteresis, exactly what the throttle comment above
+    // warns of. A plant runs while the price covers what running it costs; a firm that cannot
+    // cover its wages sheds them (the labour rule) and, persistently, mothballs (§5-DYN). Until
+    // stage 08 has measured the decomposition (week 1) the seed's break-even full cost stands.
+    const weeklyAvoidableCostUSD = (firmAvoidableCostUSD ?? firmWeeklyCostUSD) * (line.revenueShare ?? 1.0);
 
     // CAP — A FIRM THAT CANNOT COVER UNIT COST STOPS PRODUCING.
     //
@@ -996,7 +1012,7 @@ function buildRegionSupplyPlans(
     // mothballed; what the firm OFFERS below is still only the online, staffed plant.
     const testVolumeUnits = line.weeklyCapacityUnits! * productionThrottle * Math.min(1, staffedShare);
     const prospectiveUnitCostUSD = testVolumeUnits > 0.0001
-      ? weeklyOperatingCostUSD / testVolumeUnits
+      ? weeklyAvoidableCostUSD / testVolumeUnits
       : Infinity;
     const coversUnitCost = supplierExpectedUnitPriceUSD >= prospectiveUnitCostUSD;
     // §5-DYN — the week's idle record, measured where the test runs and nowhere else (rule 3):
@@ -1007,6 +1023,13 @@ function buildRegionSupplyPlans(
     }
     const uncappedProductionUnits = staffedNormalSeasonUnits * seasonalPlantFactor;
     const targetProductionUnits = coversUnitCost ? uncappedProductionUnits : 0;
+    if (process.env.CAT_TRACE === subUnitId) {
+      const t = catTraceSellers;
+      t.n++; if (!coversUnitCost) t.idle++;
+      t.capUnits += line.weeklyCapacityUnits!; t.targetUnits += targetProductionUnits;
+      t.costs.push(prospectiveUnitCostUSD); t.expected = supplierExpectedUnitPriceUSD;
+      t.staffed += staffedShare; t.throttle += productionThrottle; t.opCost += weeklyOperatingCostUSD;
+    }
     // §5-PROD — the firm's experience accrues on what it STARTS making, measured here where
     // production is decided and nowhere else (rule 3).
     if (targetProductionUnits > 0) {
@@ -1054,7 +1077,9 @@ function buildRegionSupplyPlans(
     // The [0.40, 0.98] band on the cost rate goes with it: it existed because the margin it read
     // was a stated number that could be anything, and since IND3 it is the residual of real
     // costs (rule 2).
-    const pd = SELLER_RATING_PD[comp.creditRating] ?? 0.03;
+    // ONE PD model (§6.1's "three PD models in stage 05" row): the structural distance the
+    // credit books price with, not a rating-keyed table beside it.
+    const pd = computeAnnualDefaultProbability(v2, comp);
     const expectedLoss = pd * 0.60;
     const costOfCapital = 0.05 + expectedLoss;
 
@@ -1071,7 +1096,7 @@ function buildRegionSupplyPlans(
     // zero and the ask is unit cost (§7.130), never below — a firm gives up profit to win share,
     // not money.
     const inventoryPricePressure = Math.min(1, Math.max(0, inventoryToCapacityRatio));
-    const marginPremium = costOfCapital * 1.5 * (1 - inventoryPricePressure);
+    const marginPremium = costOfCapital * 1.5;
 
     plans.push({
       key: comp.ticker,
@@ -1085,11 +1110,26 @@ function buildRegionSupplyPlans(
       openOfferUnits,
       // Cost per unit of what this plant actually makes, in dollars. Falls back to the
       // reference-anchored form only when the line has no production to divide by.
+      // The ask runs from FULL cost plus margin (nothing in stock: hold out for it) down to
+      // avoidable cost (warehouse full: move the stock, lose the margin but not the inputs) —
+      // IND6's posture with the floor where the short-run economics puts it.
       minPriceUSD: targetProductionUnits > 0.0001
-        ? (weeklyOperatingCostUSD / targetProductionUnits) * (1 + marginPremium)
+        ? (weeklyAvoidableCostUSD / targetProductionUnits)
+          + ((weeklyOperatingCostUSD / targetProductionUnits) * (1 + marginPremium) - (weeklyAvoidableCostUSD / targetProductionUnits))
+            * (1 - inventoryPricePressure)
         : referencePriceUSD * costRate * (1 + marginPremium),
     });
   });
+
+  if (process.env.CAT_TRACE === subUnitId && catTraceSellers.n > 0) {
+    const t = catTraceSellers;
+    const sorted = [...t.costs].sort((x, y) => x - y);
+    const med = sorted[Math.floor(sorted.length / 2)];
+    console.log(`  [cat-sellers] ${subUnitId} ${regionId} w${week} n${t.n} idle${t.idle} cap${(t.capUnits / 1e6).toFixed(2)}M target${(t.targetUnits / 1e6).toFixed(2)}M`
+      + ` unitCost med${med.toFixed(0)} min${sorted[0].toFixed(0)} expectedPx${t.expected.toFixed(0)} staffed${(t.staffed / t.n).toFixed(2)} throttle${(t.throttle / t.n).toFixed(2)} opCost${(t.opCost / 1e6).toFixed(1)}M/wk`);
+    catTraceSellers.n = 0; catTraceSellers.idle = 0; catTraceSellers.capUnits = 0; catTraceSellers.targetUnits = 0;
+    catTraceSellers.costs = []; catTraceSellers.staffed = 0; catTraceSellers.throttle = 0; catTraceSellers.opCost = 0;
+  }
 
   // ---- SEG-B: the SME pool of the industry that PRODUCES this sub-unit offers into it. ----
   //
@@ -1342,10 +1382,17 @@ function buildRegionDemandPlans(
       // sloping down because `units = money / price` and the money is finite. Every input is
       // measured. **No elasticity, no premium and no price ceiling anywhere** — a household facing
       // a dearer luxury buys less of it, which the curve says on its own.
+      //
+      // LVL (§7.338) — THE SLOPE IS THE COHORTS'. One regional ladder is a single step at the
+      // reach-capped price (its rungs all truncate to the whole-want reservation, §7.209), so a
+      // short staple market jumped straight to the reach multiple with nothing in between — the
+      // knife-edge behind the ×1.4-a-week climbs. The region's households are not one buyer: the
+      // cohorts DIST built each have their own budget for this tier and their own reach, and
+      // the poorest run out of money at a lower price than the richest. Posting one step PER
+      // COHORT makes the aggregate a staircase — a demand curve with a measured slope and no
+      // stated elasticity (§7.157: carry the distribution where the decision is nonlinear).
       const hs = reg.householdState;
-      const budgetReachMultiple = householdBudgetReachMultiple(categoryPriceTier(subUnitId), {
-        STAPLE: hs.stapleSpendShare, STANDARD: hs.standardSpendShare, LUXURY: hs.luxurySpendShare,
-      });
+      const tier = categoryPriceTier(subUnitId);
       // What it has use for: the registry's own per-capita consumption intensity, which is the
       // primitive IND-R3 put there for exactly this and which nothing outside the seed read.
       const perCapitaAnnual = subUnitSpecOf(subUnitId)?.householdUnitsPerCapitaAnnual ?? 0;
@@ -1353,20 +1400,59 @@ function buildRegionDemandPlans(
         ? (perCapitaAnnual * Math.max(0, reg.totalPopulation)) / 52
           * seasonalFactor(subUnitId, week, 'demand')
         : 0;
+      const weeklyBudgetUSD = hhDemandUnits * shelfPrice;
+      const slices: { budgetUSD: number; wantUnits: number; reach: number }[] = [];
+      // The durable-stock category is a replacement flow, not a want; it keeps the one step.
+      const cohorts = subUnitId === 'passenger_vehicles' ? [] : (hs.cohorts ?? []);
+      if (cohorts.length > 0) {
+        const mixKey = tier === 'STAPLE' ? 'staple' : tier === 'STANDARD' ? 'standard' : 'luxury';
+        let weightSum = 0;
+        let personSum = 0;
+        const weights = cohorts.map((c) => {
+          const w = Math.max(0, c.consumptionBudgetUSD) * TIER_SPEND_MIX[c.tier][mixKey];
+          weightSum += w;
+          personSum += Math.max(0, c.earnerCount);
+          return w;
+        });
+        if (weightSum > 0 && personSum > 0) {
+          cohorts.forEach((c, i) => {
+            const share = weights[i] / weightSum;
+            if (!(share > 0)) return;
+            const mix = TIER_SPEND_MIX[c.tier];
+            slices.push({
+              budgetUSD: weeklyBudgetUSD * share,
+              wantUnits: satiationUnits * (Math.max(0, c.earnerCount) / personSum),
+              reach: householdBudgetReachMultiple(tier, { STAPLE: mix.staple, STANDARD: mix.standard, LUXURY: mix.luxury }),
+            });
+          });
+        }
+      }
+      if (slices.length === 0) {
+        slices.push({
+          budgetUSD: weeklyBudgetUSD,
+          wantUnits: satiationUnits,
+          reach: householdBudgetReachMultiple(tier, {
+            STAPLE: hs.stapleSpendShare, STANDARD: hs.standardSpendShare, LUXURY: hs.luxurySpendShare,
+          }),
+        });
+      }
       // IND16: this book clears at the FACTORY GATE, so every rung is the factory-gate price the
       // household's willingness to pay leaves once the channel has taken its cut.
-      householdDemandLadder({
-        weeklyBudgetUSD: hhDemandUnits * shelfPrice,
-        referencePriceUSD,
-        budgetReachMultiple,
-        satiationUnits,
-      }).forEach((rung) => {
-        if (rung.units <= 0.001) return;
-        plans.push({
-          regionId,
-          isHouseholdAggregate: true,
-          demandUnits: rung.units,
-          maxPriceUSD: rung.maxPriceUSD / (1 + channelMargin),
+      slices.forEach((sl) => {
+        householdDemandLadder({
+          weeklyBudgetUSD: sl.budgetUSD,
+          referencePriceUSD,
+          budgetReachMultiple: sl.reach,
+          satiationUnits: sl.wantUnits,
+          rungs: slices.length > 1 ? 1 : undefined,
+        }).forEach((rung) => {
+          if (rung.units <= 0.001) return;
+          plans.push({
+            regionId,
+            isHouseholdAggregate: true,
+            demandUnits: rung.units,
+            maxPriceUSD: rung.maxPriceUSD / (1 + channelMargin),
+          });
         });
       });
     }
@@ -1466,6 +1552,7 @@ function runSubUnitMarkets(
     demandState.smoothedUnitPriceUSD = smoothedBasis * 0.75 + anchorPrice[regionId] * 0.25;
 
     supplyPlans.push(...buildRegionSupplyPlans(
+      v2,
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId], demandState.smoothedUnitPriceUSD,
       nextWeek, isCapexSupplierCategory, capexSupplierWeight, wk));
   });

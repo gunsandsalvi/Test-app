@@ -952,7 +952,11 @@ export function normalizeProducingSectorRevenue(
  */
 export function dealProductLinesAndHeadcount(
   companies: Company[],
-  demandLevelAnnualUSD: (region: RegionId, subUnitId: string) => number
+  demandLevelAnnualUSD: (region: RegionId, subUnitId: string) => number,
+  /** What the SME pools ACTUALLY carry of a sub-unit in this region (§7.227's discipline: the
+   *  registry share is what they were sized from, not what they hold). Absent at the placeholder
+   *  deal, where the stated share stands in. */
+  smeRevenueForSubUnitUSD?: (region: RegionId, subUnitId: string) => number
 ): void {
   const categories: string[] = [];
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
@@ -1037,6 +1041,60 @@ export function dealProductLinesAndHeadcount(
         c.productLines = lines;
       });
     });
+
+    // LVL (§7.338) — COVERAGE IS MADE EXACT AT SUB-UNIT GRAIN, CONSERVING EVERY FIRM'S REVENUE.
+    //
+    // The greedy deal above converges each sector's producer base TOWARD its demand shares, but
+    // three lines a firm and ten firms a sector leave real residue: measured at the seed, the
+    // named tier covered household chemicals at ~0.67 of its demand and consumer software at
+    // 0.04 — and a short market opens the auction at the household's reach-capped step every
+    // week for a year (the §6.1 level row). §7.227 fixed the split BETWEEN sectors by moving
+    // revenue; this fixes the split WITHIN a sector by moving each firm's line SHARES: an
+    // iterative proportional fit that scales every multi-line firm's shares by
+    // target/current for each sub-unit and renormalises them to one, so the firm's revenue,
+    // headcount and books are untouched and only where it sells moves. The target is the
+    // demand the registry says the named tier must carry (demand × (1 − smeShare)); the pool
+    // carries the rest. Exact where the roster can reach it, monotone where it cannot (a
+    // single-line firm holds its line).
+    {
+      const targetUSD = new Map<string, number>();
+      categories.forEach((unitId) => {
+        const industry = industryOfSubUnit(unitId);
+        const smeShare = industry ? (INDUSTRY_REGISTRY[industry]?.smeShareOfActivity ?? 0) : 0;
+        const demandUSD = Math.max(0, demandLevelAnnualUSD(_regionId as RegionId, unitId));
+        const smeUSD = smeRevenueForSubUnitUSD
+          ? Math.max(0, smeRevenueForSubUnitUSD(_regionId as RegionId, unitId))
+          : demandUSD * Math.max(0, smeShare);
+        targetUSD.set(unitId, Math.max(0, demandUSD - smeUSD));
+      });
+      for (let round = 0; round < 24; round++) {
+        const currentUSD = new Map<string, number>();
+        regionComps.forEach((c) => {
+          (c.productLines || []).forEach((line) => {
+            currentUSD.set(line.subUnitId, (currentUSD.get(line.subUnitId) ?? 0) + line.revenueShare * c.baselineAnnualRevenue);
+          });
+        });
+        let maxMove = 0;
+        regionComps.forEach((c) => {
+          const lines = c.productLines || [];
+          if (lines.length < 2) return;
+          const weights = lines.map((line) => {
+            const target = targetUSD.get(line.subUnitId) ?? 0;
+            const current = currentUSD.get(line.subUnitId) ?? 0;
+            const ratio = current > 0 && target > 0 ? Math.min(4, Math.max(0.25, target / current)) : 1;
+            return line.revenueShare * ratio;
+          });
+          const sum = weights.reduce((a, w) => a + w, 0);
+          if (!(sum > 0)) return;
+          lines.forEach((line, i) => {
+            const next = weights[i] / sum;
+            maxMove = Math.max(maxMove, Math.abs(next - line.revenueShare));
+            line.revenueShare = next;
+          });
+        });
+        if (maxMove < 1e-4) break;
+      }
+    }
 
     // Compute category market shares and initialize Region category demand
     const catTotals: Record<string, number> = {};

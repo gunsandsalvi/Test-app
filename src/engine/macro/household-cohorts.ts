@@ -183,7 +183,7 @@ function tierShareOfMeasured(
  * standard ~0.59, luxury ~0.09}) — §7.4: the allocation opens where the old one stood, and
  * moves only when the cohort mix does.
  */
-const TIER_SPEND_MIX: Record<WealthTier, { staple: number; standard: number; luxury: number }> = {
+export const TIER_SPEND_MIX: Record<WealthTier, { staple: number; standard: number; luxury: number }> = {
   BOTTOM_50: { staple: 0.48, standard: 0.50, luxury: 0.02 },
   NEXT_40: { staple: 0.30, standard: 0.64, luxury: 0.06 },
   TOP_9: { staple: 0.14, standard: 0.71, luxury: 0.15 },

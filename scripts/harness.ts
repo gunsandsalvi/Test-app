@@ -2787,13 +2787,17 @@ function runHarness() {
   // §7.288 — the decomposition the number always needed: WHICH BOOK pins its instruments.
   // Every push site tags its ids `book:id`, so this is a read, not a guess.
   {
-    const byBook = new Map<string, number>();
+    const byBook = new Map<string, { n: number; up: number; down: number }>();
     damperPersistentBinds.forEach((id) => {
       const book = id.includes(':') ? id.slice(0, id.indexOf(':')) : 'untagged';
-      byBook.set(book, (byBook.get(book) ?? 0) + 1);
+      const row = byBook.get(book) ?? { n: 0, up: 0, down: 0 };
+      row.n++;
+      if (id.endsWith('+')) row.up++; else if (id.endsWith('-')) row.down++;
+      byBook.set(book, row);
     });
-    const rows = [...byBook.entries()].sort((a, b) => b[1] - a[1])
-      .map(([k, n]) => `${k} ${n}`).join(' | ');
+    // `+` = the market wanted the stat HIGHER than the damper printed, `-` = lower.
+    const rows = [...byBook.entries()].sort((a, b) => b[1].n - a[1].n)
+      .map(([k, r]) => `${k} ${r.n} (${r.up}+/${r.down}-)`).join(' | ');
     console.log(`  [damper-by-book] persistent binds :: ${rows}`);
   }
 

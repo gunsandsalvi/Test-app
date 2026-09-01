@@ -975,3 +975,11 @@ export interface Region {
     tenor30Y: number;
   }[];
 }
+
+/**
+ * THE labour force: the people who can work and are in the market for it. One owner — it was
+ * computed inline twice in the labor-market stage (§6.1's "one quantity, many authors" row).
+ */
+export function laborForceCount(reg: { totalPopulation: number; nonEmployablePct?: number; laborForceParticipation: number }): number {
+  return reg.totalPopulation * (1 - (reg.nonEmployablePct ?? 0.35)) * reg.laborForceParticipation;
+}

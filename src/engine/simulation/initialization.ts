@@ -202,6 +202,7 @@ export function seedRegionCategoryDemand(
     // against a market 2.6x larger than the one it then had to sell into. Rule 3, and the reason
     // the same fix has to be made three times is itself the defect.
     const finalDemandBySubUnit: Record<string, number> = {};
+    const householdFinalDemandBySubUnit: Record<string, number> = {};
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
@@ -219,8 +220,9 @@ export function seedRegionCategoryDemand(
         // and the Leontief solve below already produces it from the recipes — so putting it here
         // as well was counting it twice from the other side.
         const capexWeight = CAPEX_SUPPLIER_WEIGHTS[su.unitId] ?? 0;
+        householdFinalDemandBySubUnit[su.unitId] = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
         finalDemandBySubUnit[su.unitId] =
-          (totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0)
+          householdFinalDemandBySubUnit[su.unitId]
           + suGovDemand
           + capexWeight * I;
       });
@@ -237,7 +239,8 @@ export function seedRegionCategoryDemand(
           // intermediate slice is passed so a PURE intermediate prices off its producer buyers.
           deriveSubUnitUnitPrice(
             finalDemandBySubUnit[su.unitId] ?? 0, su.buyerMix, reg.totalPopulation, regionFirmCount, su.unitId,
-            (totalOutputBySubUnit[su.unitId] ?? 0) - (finalDemandBySubUnit[su.unitId] ?? 0)
+            (totalOutputBySubUnit[su.unitId] ?? 0) - (finalDemandBySubUnit[su.unitId] ?? 0),
+            householdFinalDemandBySubUnit[su.unitId] ?? 0
           )
         );
       });
@@ -281,7 +284,8 @@ export function seedRegionCategoryDemand(
     );
     dealProductLinesAndHeadcount(
       companies.filter(c => c.region === regionId),
-      (_r, unitId) => Number(reg.categoryDemand[unitId]?.demandLevelAnnualUSD) || 0
+      (_r, unitId) => Number(reg.categoryDemand[unitId]?.demandLevelAnnualUSD) || 0,
+      (_r, unitId) => smeRevenueBySubUnit.get(unitId) ?? 0
     );
 
     // PUB1e: the budget stage 05 bids in week 1, seeded here so it is never empty.

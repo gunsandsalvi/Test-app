@@ -34,6 +34,7 @@
  * 03 (category demand reads the household income this stage's employment determines).
  */
 
+import { laborForceCount } from '../../../domain/region-macro';
 import { GameState, Region, RegionId, Company, OccupationType } from '../../../types';
 import { ensureV2, rowOf, revHistFill } from '../../../engine2/world';
 const revHistScratch: number[] = [];
@@ -406,7 +407,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     // ABOVE the headcount the firms wanted, and the reported rate fell to 1% against a real 6%.
     // Rule 3 does not stop applying because both copies are mine.) ----
     const totalLaborForce = Math.max(1,
-      reg.totalPopulation * (1 - (reg.nonEmployablePct ?? 0.35)) * reg.laborForceParticipation);
+      laborForceCount(reg));
     const shares = reg.occupationLaborForceShare || BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
     const pools = reg.occupationPools;
 
@@ -709,7 +710,7 @@ export function reconcileEmploymentView(
   const pools = reg.occupationPools;
   if (!pools) return;
   const totalLaborForce = Math.max(1,
-    reg.totalPopulation * (1 - (reg.nonEmployablePct ?? 0.35)) * reg.laborForceParticipation);
+    laborForceCount(reg));
   const shares = reg.occupationLaborForceShare || BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
 
   const employedByOcc: Record<OccupationType, number> = {

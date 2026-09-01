@@ -57,6 +57,15 @@ export interface ClearingInstrument {
    * fall as it gets cheaper, so demand DECREASES with the statistic.
    */
   statKind: 'YIELD_LIKE' | 'PRICE_LIKE';
+  /**
+   * Consecutive weeks this instrument's print has been held by the damper in one direction
+   * (the harness's streak, read back off `lastWeekDamperBoundIds`). The damper is discrete-time
+   * SMOOTHING: a one-week bind is noise it should absorb, a ten-week bind is a level it is
+   * hiding (§6.1's row). The cap widens by (1 + streak), so a trend converges geometrically
+   * and the print can never be the damper for long. A RESOLUTION rule (rule 19): the answer it
+   * converges to is the schedules', whatever the cap.
+   */
+  damperBindStreak?: number;
   /** Duration in years — retained for adapters that convert the cleared level into a price. */
   durationYears: number;
   /**
@@ -507,6 +516,8 @@ export interface PackedClearing {
   withdrawStat: Float64Array; // NaN = none
   currentStat: Float64Array;
   yieldLike: Uint8Array;
+  /** Per-instrument damper widening (see ClearingInstrument.damperBindStreak). */
+  damperStreak: Uint8Array;
   skip: Uint8Array; // nothing to sell: pass current stat through
   // per (participant x instrument), row-major by participant
   present: Uint8Array;
@@ -543,8 +554,39 @@ export interface KernelShardResult {
 /** Bytes a packed clearing occupies, so a caller can allocate it on shared memory. */
 export function packedClearingBytes(n: number, pCount: number): number {
   const f64 = 8 * (4 * n + 6 * n * pCount);
-  const u8 = 2 * n + n * pCount;
+  const u8 = 3 * n + n * pCount;
   return f64 + u8 + 64; // alignment slack
+}
+
+/**
+ * The week's damper streaks by RAW instrument id (the harness tag's `book:id±` with the book
+ * stripped), set once a week by core.ts off `GameState.damperBindStreakById` so every adapter
+ * widens without each one being taught the lookup. An id two books share takes the wider
+ * streak for a week — a cap, never a level (§1.15).
+ */
+let damperStreakByRawId = new Map<string, number>();
+export function setDamperStreaks(byTaggedId: Record<string, number> | undefined): void {
+  const next = new Map<string, number>();
+  Object.entries(byTaggedId ?? {}).forEach(([tagged, streak]) => {
+    const raw = tagged.includes(':') ? tagged.slice(tagged.indexOf(':') + 1) : tagged;
+    next.set(raw, Math.max(next.get(raw) ?? 0, Math.abs(streak)));
+  });
+  damperStreakByRawId = next;
+}
+
+/** Roll the streak map by one week: same direction extends, a flip or a release resets. */
+export function rollDamperStreaks(
+  prior: Record<string, number> | undefined,
+  boundThisWeek: string[]
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  boundThisWeek.forEach((tagged) => {
+    const sign = tagged.endsWith('-') ? -1 : 1;
+    const key = tagged.replace(/[+-]$/, '');
+    const prev = prior?.[key] ?? 0;
+    out[key] = Math.sign(prev) === sign ? prev + sign : sign;
+  });
+  return out;
 }
 
 export function packClearing(
@@ -566,15 +608,16 @@ export function packClearing(
     const dRes = f64(np), dRange = f64(np), dMaxH = f64(np), dMaxNet = f64(np), dMinH = f64(np), prevHolding = f64(np);
     const u8 = (len: number) => { const v = new Uint8Array(buffer, off, len); off += len; return v; };
     const yieldLike = u8(n), skip = u8(n), present = u8(np);
+    const damperStreak = u8(n);
     packed = {
-      n, pCount, float, offering, withdrawStat, currentStat, yieldLike, skip,
+      n, pCount, float, offering, withdrawStat, currentStat, yieldLike, damperStreak, skip,
       present, dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding,
       dealerSpreadBps: params.dealerSpreadBps,
       maxWeeklyStatMovePct: params.maxWeeklyStatMovePct ?? Number.NaN,
       unsoldStaysWithHolder: params.unsoldStaysWithHolder === true,
     };
     // Shared memory is reused across calls; zero what the packers below only conditionally set.
-    present.fill(0); skip.fill(0); yieldLike.fill(0);
+    present.fill(0); skip.fill(0); yieldLike.fill(0); damperStreak.fill(0);
     dRes.fill(0); dRange.fill(0); dMaxH.fill(0); dMaxNet.fill(0); dMinH.fill(0); prevHolding.fill(0);
   } else {
     packed = {
@@ -584,6 +627,7 @@ export function packClearing(
       withdrawStat: new Float64Array(n),
       currentStat: new Float64Array(n),
       yieldLike: new Uint8Array(n),
+      damperStreak: new Uint8Array(n),
       skip: new Uint8Array(n),
       present: new Uint8Array(n * pCount),
       dRes: new Float64Array(n * pCount),
@@ -604,6 +648,7 @@ export function packClearing(
     packed.withdrawStat[i] = inst.primaryWithdrawStat === undefined ? Number.NaN : inst.primaryWithdrawStat;
     packed.currentStat[i] = inst.currentStat;
     packed.yieldLike[i] = inst.statKind === 'YIELD_LIKE' ? 1 : 0;
+    packed.damperStreak[i] = Math.max(0, Math.min(255, Math.round(inst.damperBindStreak ?? damperStreakByRawId.get(inst.id) ?? 0)));
     packed.skip[i] = inst.tradableFloatUSD + offeringUSD > 0 ? 0 : 1;
   });
   participants.forEach((p, pi) => {
@@ -745,12 +790,16 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
     // Discrete-time damping, not a price bound: see maxWeeklyStatMovePct. Undamped when omitted.
     const maxMove = Number.isNaN(packed.maxWeeklyStatMovePct)
       ? Infinity
-      : Math.abs(currentStat) * packed.maxWeeklyStatMovePct + (isYieldLike ? YIELD_LIKE_MIN_WEEKLY_MOVE_BPS : 0);
+      : (Math.abs(currentStat) * packed.maxWeeklyStatMovePct + (isYieldLike ? YIELD_LIKE_MIN_WEEKLY_MOVE_BPS : 0))
+        * (1 + packed.damperStreak[i]);
     const clearedStat = Number(
       Math.max(currentStat - maxMove, Math.min(currentStat + maxMove, solvedStat)).toFixed(4)
     );
     if (Math.abs(solvedStat - clearedStat) > Math.max(1e-6, Math.abs(solvedStat) * 1e-6)) {
-      out.damper[o] = 1;
+      // 1 = the market wanted a HIGHER stat than the damper let it print, 2 = lower. The
+      // direction is what turns the §6.1 bind count into a diagnosis (a name pinned UP for
+      // sixty weeks has a buyer with no reservation; pinned DOWN, a seller with no bid).
+      out.damper[o] = solvedStat > clearedStat ? 1 : 2;
     }
     out.clearedStat[o] = isFinite(clearedStat) ? clearedStat : currentStat;
 
@@ -892,7 +941,7 @@ function accumulateShard(
   for (let i = shard.from; i < shard.to; i++) {
     const o = i - shard.from;
     result.newStatByIndex[i] = shard.clearedStat[o];
-    if (shard.damper[o]) result.damperBoundByIndex[i] = 1;
+    if (shard.damper[o]) result.damperBoundByIndex[i] = shard.damper[o];
     result.dealerInventoryByIndex[i] = shard.dealerInventory[o];
     if (shard.hasPrimary[o]) {
       result.primaryByIndex[i] = {
@@ -922,7 +971,7 @@ function accumulateShard(
 /** The damper diagnostic ids (small; every book reads them) — eager, from the dense flags. */
 function fillDamperIds(result: ClearingResult, instIds: string[]): void {
   for (let i = 0; i < result.nInstruments; i++) {
-    if (result.damperBoundByIndex[i]) result.damperBoundInstrumentIds.push(instIds[i]);
+    if (result.damperBoundByIndex[i]) result.damperBoundInstrumentIds.push(instIds[i] + (result.damperBoundByIndex[i] === 2 ? '-' : '+'));
   }
 }
 
