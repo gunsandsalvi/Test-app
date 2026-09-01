@@ -500,7 +500,20 @@ interface WeekResolution {
   /** The firm's CompanyWeekUpdate record, ensured once per firm per week (same identity the
    *  string-keyed probes produced). */
   updateOf: (comp: Company) => import('./context').CompanyWeekUpdate;
+  /** Settlement pid for any seller key (company, segment, aggregate), per origin. */
+  pidOfSeller: (key: string, origin: RegionId) => number;
+  pidOfCarrier: (ticker: string) => number;
+  hhPid: Map<RegionId, number>;
+  govPid: Map<RegionId, number>;
 }
+
+/** The walk's reason ids, interned once per process (the interner is global and stable). */
+const R_EXWORKS = internReason('goods purchase (ex-works)');
+const R_FREIGHT = internReason('freight paid to the carrier');
+const R_TRADE_CREDIT = internReason('trade credit extended');
+const R_HH_GOODS = internReason('household goods purchase');
+const R_CHANNEL = internReason('distribution margin paid to the channel');
+const R_GOV_PROC = internReason('government procurement');
 
 function settleContracts(
   v2: V2World,
@@ -519,7 +532,7 @@ function settleContracts(
   const R_PROGRESS = internReason('contract progress payment');
   const R_DELIVERY = internReason('contract delivery');
 
-  const { companyUpdates, nextWeek } = ctx;
+  const { nextWeek } = ctx;
   const rows = contractRows(v2, region, subUnitId);
   const survivors: number[] = [];
   const dead: number[] = [];
@@ -724,7 +737,7 @@ function buildRegionSupplyPlans(
   week: number,
   isCapexSupplierCategory: boolean,
   capexSupplierWeight: number | undefined,
-  companyUpdates: Record<string, import('./context').CompanyWeekUpdate>
+  wk: WeekResolution
 ): SupplyPlan[] {
   const plans: SupplyPlan[] = [];
   const suppliers = index.suppliersBySubUnit.get(subUnitId) ?? [];
@@ -921,8 +934,7 @@ function buildRegionSupplyPlans(
     // §5-DYN — the week's idle record, measured where the test runs and nowhere else (rule 3):
     // stage 08's capacity-retirement rule integrates this into the mothball/scrap stock response.
     if (!coversUnitCost) {
-      if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
-      const up = companyUpdates[comp.ticker];
+      const up = wk.updateOf(comp);
       up.idleLineRevenueShare = (up.idleLineRevenueShare ?? 0) + Math.max(0, line.revenueShare ?? 0);
     }
     const uncappedProductionUnits = staffedNormalSeasonUnits * seasonalPlantFactor;
@@ -930,8 +942,7 @@ function buildRegionSupplyPlans(
     // §5-PROD — the firm's experience accrues on what it STARTS making, measured here where
     // production is decided and nowhere else (rule 3).
     if (targetProductionUnits > 0) {
-      if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
-      const upl = companyUpdates[comp.ticker];
+      const upl = wk.updateOf(comp);
       upl.producedUnitsThisWeek = (upl.producedUnitsThisWeek ?? 0) + targetProductionUnits;
     }
     // §5-PROD — the plant's STRUCTURAL weekly rate, for the learning curve's seed anchor only.
@@ -941,8 +952,7 @@ function buildRegionSupplyPlans(
     // measured regression (USA u +3.8pts by w30 from this line's absence). Capacity is the
     // §7.4 shape — a seeded firm has produced for years AT ITS PLANT'S SCALE.
     {
-      if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
-      const upl = companyUpdates[comp.ticker];
+      const upl = wk.updateOf(comp);
       upl.plantCapacityUnitsThisWeek = (upl.plantCapacityUnitsThisWeek ?? 0) + line.weeklyCapacityUnits!;
     }
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
@@ -1342,7 +1352,7 @@ function runSubUnitMarkets(
   sourcing: SourcingContext
 ): void {
   const CT = v2.contracts;
-  const { companyUpdates, nextWeek } = ctx;
+  const { nextWeek } = ctx;
 
   const isRecipeInputCategory = Object.values(CATEGORY_INPUT_REQUIREMENTS).some(reqs => (reqs as any)?.[subUnitId] !== undefined);
   const capexSupplierWeight = CAPEX_SUPPLIER_WEIGHTS[subUnitId];
@@ -1382,9 +1392,7 @@ function runSubUnitMarkets(
 
     supplyPlans.push(...buildRegionSupplyPlans(
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId], demandState.smoothedUnitPriceUSD,
-      nextWeek, isCapexSupplierCategory, capexSupplierWeight
-    ,
-      ctx.companyUpdates));
+      nextWeek, isCapexSupplierCategory, capexSupplierWeight, wk));
   });
 
   // --- 3. Contracts settle, against what each supplier actually HAS: its opening stock plus
@@ -1578,8 +1586,7 @@ function runSubUnitMarkets(
     const soldValue = sale?.amount ?? 0;
     if (!plan.company) return;
     const comp = plan.company;
-    if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
-    const supUp = companyUpdates[comp.ticker];
+    const supUp = wk.updateOf(comp);
     const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier.get(comp) ?? 0;
     setOutputInventory(
       supUp, subUnitId,
@@ -1629,36 +1636,14 @@ function runSubUnitMarkets(
   // SCALE §7.303 — party and reason ids interned once per market instead of two string-map
   // probes per LEG (this walk emits the bulk of the week's ~170k instructions: ex-works,
   // freight, trade credit and the fx pip, per lot).
-  const sellerPidByKey = new Map<string, number>();
-  const pidOfSeller = (key: string, origin: RegionId): number => {
-    const k = origin + '|' + key;
-    let v = sellerPidByKey.get(k);
-    if (v === undefined) { v = partyId(partyOfKey(key, origin, lookup)); sellerPidByKey.set(k, v); }
-    return v;
-  };
-  const carrierPidByTicker = new Map<string, number>();
-  const pidOfCarrier = (ticker: string): number => {
-    let v = carrierPidByTicker.get(ticker);
-    if (v === undefined) { v = partyId({ kind: 'COMPANY', ticker }); carrierPidByTicker.set(ticker, v); }
-    return v;
-  };
-  const R_EXWORKS = internReason('goods purchase (ex-works)');
-  const R_FREIGHT = internReason('freight paid to the carrier');
-  const R_TRADE_CREDIT = internReason('trade credit extended');
-  const R_HH_GOODS = internReason('household goods purchase');
-  const R_CHANNEL = internReason('distribution margin paid to the channel');
-  const R_GOV_PROC = internReason('government procurement');
-  const hhPid = new Map<RegionId, number>();
-  const govPid = new Map<RegionId, number>();
-  MARKET_REGION_IDS.forEach((r) => {
-    hhPid.set(r, partyId({ kind: 'HOUSEHOLD', region: r }));
-    govPid.set(r, partyId({ kind: 'GOVERNMENT', region: r }));
-  });
+  // SCALE (§7.305 step 3) — the pid caches and aggregate ids live on the weekly bundle now:
+  // they were rebuilt once per MARKET (~200 times a week) for values that are fixed all week.
+  const { pidOfSeller, pidOfCarrier, hhPid, govPid } = wk;
   demandPlans.forEach(plan => {
     if (!plan.company || !plan.key) return;
     if (!purchasedKeys.has(plan.key)) return;
     const comp = plan.company;
-    const buyerPid = partyId({ kind: 'COMPANY', ticker: comp.ticker });
+    const buyerPid = wk.pidOf(comp);
     let units = 0;
     let landedCost = 0;
     MARKET_REGION_IDS.forEach(origin => {
@@ -1677,7 +1662,7 @@ function runSubUnitMarkets(
       // a same-week road delivery is.
       const transit = laneTransitWeeks(origin, plan.regionId, laneDistanceNm(origin, plan.regionId));
       const arrivalWeek = nextWeek + Math.round(transit);
-      if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
+      const buyerUpdate = wk.updateOf(comp);
       (book.lotsByBuyer.get(plan.key!) ?? []).forEach(l => {
         // SETL-C: the auction knows exactly who bought whose lot, so the payment keeps its
         // counterparty instead of both sides netting through the boundary.
@@ -1731,7 +1716,7 @@ function runSubUnitMarkets(
           }
         }
         if (arrivalWeek <= nextWeek) {
-          addInputInventory(v2, companyUpdates[comp.ticker], comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
+          addInputInventory(v2, buyerUpdate, comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
         } else {
           ctx.shipmentsDispatched.push({
             buyerTicker: comp.ticker, sellerKey: l.sellerKey, subUnitId,
@@ -1848,8 +1833,7 @@ function runSubUnitMarkets(
       });
     });
     if (units <= 0.0001) return;
-    if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
-    const custUp = companyUpdates[comp.ticker];
+    const custUp = wk.updateOf(comp);
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + units;
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + landedCost;
     if (purchaseKindOf(subUnitId) === 'CAPITAL_GOOD') custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + landedCost;
@@ -1861,9 +1845,8 @@ function runSubUnitMarkets(
   deferredSaleKeyed.forEach((amount, sellerKey) => {
     const seller = lookup.byTicker.get(sellerKey);
     if (!seller || !(amount > 0)) return;
-    if (!companyUpdates[seller.ticker]) companyUpdates[seller.ticker] = {};
-    companyUpdates[seller.ticker].tradeReceivableBookedUSD =
-      (companyUpdates[seller.ticker].tradeReceivableBookedUSD ?? 0) + amount;
+    const sellerUpdate = wk.updateOf(seller);
+    sellerUpdate.tradeReceivableBookedUSD = (sellerUpdate.tradeReceivableBookedUSD ?? 0) + amount;
   });
 
   // SETL-C: the AGGREGATE buyers pay too. A seller's revenue includes what households and the
@@ -2161,6 +2144,14 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   const refCompCache = new Map<number, Company | undefined>();
   const pidByComp = new Map<Company, number>();
   const updByComp = new Map<Company, import('./context').CompanyWeekUpdate>();
+  const sellerPidByKey = new Map<string, number>();
+  const carrierPidByTicker = new Map<string, number>();
+  const hhPid = new Map<RegionId, number>();
+  const govPid = new Map<RegionId, number>();
+  MARKET_REGION_IDS.forEach((r) => {
+    hhPid.set(r, partyId({ kind: 'HOUSEHOLD', region: r }));
+    govPid.set(r, partyId({ kind: 'GOVERNMENT', region: r }));
+  });
   const wk: WeekResolution = {
     resolveRef: (refId) => {
       if (refCompCache.has(refId)) return refCompCache.get(refId);
@@ -2182,6 +2173,19 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
       }
       return u;
     },
+    pidOfSeller: (key, origin) => {
+      const k = origin + '|' + key;
+      let v = sellerPidByKey.get(k);
+      if (v === undefined) { v = partyId(partyOfKey(key, origin, lookup)); sellerPidByKey.set(k, v); }
+      return v;
+    },
+    pidOfCarrier: (ticker) => {
+      let v = carrierPidByTicker.get(ticker);
+      if (v === undefined) { v = partyId({ kind: 'COMPANY', ticker }); carrierPidByTicker.set(ticker, v); }
+      return v;
+    },
+    hhPid,
+    govPid,
   };
 
   // §7.222 — each market draws from its OWN stream, not from wherever the shared one has reached.
