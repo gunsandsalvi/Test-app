@@ -128,6 +128,26 @@ Standing user directives. Not suggestions.
     identity — and that is a fix, not a rollback. This binds hardest at the end of a project, when
     one number is embarrassing and the old constant is one line away.
 
+1.21 **DEPTH IS UNTOUCHABLE; REPRESENTATION IS FREE (user, 2026-09-01).** Mechanisms, economics,
+    and named boundaries never change under the performance campaign. Storage layout, float
+    summation order, parallel decomposition, and scaffolding deletion are the campaign's to
+    decide without asking. Only an economics change (a T+1-class decision) goes to the user.
+
+1.22 **STRONGEST GATE THE CHANGE ADMITS.** Byte-identical 4/13wk dumps wherever possible. A
+    change that is inherently a relabel (a reordered fold, a dump-format flip) is a DECLARED
+    §7.313 canonical re-baseline, named in the record. Declared reorder points are listed in
+    §4.C; a reorder never lands undeclared.
+
+1.23 **NO FORECAST WITHOUT A FALSIFICATION TEST.** A record may state an expectation only with
+    the measurement that would kill it. Standing kill test for a grind track: two consecutive
+    slices yielding under half their named term → stop the track, re-profile, reorder.
+    (Adopted after §7.316's "the step change is the parallel path" was measured false by
+    §7.326: the parallel arc returned zero while the dismissed serial grind kept paying.)
+
+1.24 **NEW COLUMN STORES ARE SAB-BACKED WITH COPY-ON-GROW.** Every store built under §4.C
+    allocates SharedArrayBuffer-backed columns so later sharding ships nothing (§7.326: the
+    clone transport ate the win), and every growth path copies (§7.309's wipe).
+
 ### 1.10 Verification ladder
 
 | Command | Cost | When |
@@ -424,6 +444,52 @@ MNC — profit booked where rates are lower.
 timing responds to depreciation treatment.
 
 ### SCALE — universe scale-up *(item 6)*
+
+**§4.C — THE END-TO-END COLUMNAR PROGRAM (user-approved 2026-09-01). THE WORK ORDER OF RECORD
+for this campaign, superseding the 7-phase list and the B1–B5 sketch below.** One program:
+columns become the AUTHORITY for every family of state, end to end; sharding follows only where
+columnar; native and demolition last. Rules §1.21–1.24 bind throughout. Battery + §7 record at
+every stage boundary. Baseline at adoption: **1,394 ms/wk** (§7.326's battery).
+
+- **Stage I — adapter/apply column programs (~300 ms named).** 07e demand build dense (per-
+  region company columns, per-entity dense holdings fill, lent/buy-in pre-grouped, required
+  return hoisted); 07b/07d same shape; adapters emit into packClearing's typed arrays DIRECTLY,
+  deleting the object-participants layer the engine immediately re-packs; accumulateShard →
+  columns; corp-action register walk on interned pair keys; accrual pass dense. All byte-gated.
+  Estimate −100…−160 (kill test §1.23).
+- **Stage II — the COMPANY ROW STORE (the spine; §7.317's last big flip).** Mirror +
+  COMPANY_SYNC_CHECK; ~100 scalar lanes; sub-stores one at a time (productLines chains,
+  output/WIP inventories, construction queue, bounded histories as rings, bankBalanceSheet
+  lanes); readers file-by-file (the front pass ~36 ms, buildFrontSeam ~25 and buildBackLanes
+  ~10 DIE — kernels read the store); writers flip; comp objects become week-end dirty-only
+  views (§7.315's law); STATE_DUMP flips to canonical-from-columns — DECLARED, one re-baseline.
+  Dissolves the §7.312 clone-aliasing and §7.320 seam-validity classes (one representation).
+  Estimate −150…−300. Prerequisite for III and VI.
+- **Stage III — back kernel completed on workers.** Rows in SAB, so A AND B run on workers over
+  row ranges (the §7.326 crossing object never exists), redemptions on main, post writes
+  columns; per-shard journals folded PER KEY unordered — declared reorder point, canonical
+  gate. Profile firms main-side; intern seeding as §7.326. GO/NO-GO: the codebase's first
+  measured-positive parallel number, or Stage VI is cancelled and the program stays serial.
+- **Stage IV — stage 05 columnar (~381 ms).** Invoice book columnar; the CONTRACT book as rows
+  (settle's ~8 ms/wk horizon growth capped); buyers walk on lanes; demand/supply plans emitted
+  as columns; aggregate-payers on interned pids. Estimate −120…−200.
+- **Stage V — entity store + the ~490 ms tail.** Entity scalar lanes; mark/NAV/fx/repo/ETF
+  passes flipped; region categoryDemand columns; remaining ctx maps as lanes; strictly
+  profiler-ordered. Estimate −80…−150.
+- **Stage VI — shard the columnar stages** (05 buyers by region×category; each book's
+  participant build by entity range; declared per-key folds). Only if Stage III measured
+  positive. Estimate −150…−300.
+- **Stage VII — native + demolition.** Native only where a COLUMNAR core still profiles
+  arithmetic-heavy; delete the object-participants layer, RegisterIndex remnants, the A-pool
+  clone transport, pre-window shims. Rings only if they profile up.
+
+**The honest landing bands (each with its §1.23 test):** I+IV+V serial ≈ 950–1,100; +II ≈
+750–950; +III/VI if sharding pays ≈ 450–650; +VII ≈ 400–600. **No evidenced path reaches
+100 ms/wk**: at bottom the week IS the register's ~110k rows, ~170k payments and ~2,500
+firm-weeks, which §1.21 obliges the engine to compute. Sequence: I → II → (III ∥ IV) → V →
+VI → VII. Declared-reorder registry: (1) Stage II dump-from-columns; (2) Stage III per-key
+journal folds; (3) Stage VI per-key folds. Empty until each lands.
+
 
 **THE TARGET IS 100 ms/WEEK — set by the user (2026-09-01), superseding §7.222's "~370–490 ms
 honest target" note.** That note was an argument about the CURRENT architecture (stage 05's
