@@ -666,22 +666,66 @@ Remainders, each a registry flip or a named gate, none a redesign:
    vol it implies) is the real work — stage 12's player options stay the legacy layer until then.
 5. **FX swap lines** stay gated on an FX funding market (§7.282's own gate).
 
-### AU — Aurora, the UI rebuild *(item 8 — THE NEXT PROJECT, user 2026-09-01)*
+### AU — Aurora, the UI rebuild *(item 8 — THE NEXT PROJECT; DESIGN BRIEF approved in principle 2026-09-01)*
 
-The DELETE half is done (§7.333): `src/components/` is gone (f277780; the old 21-file tree is
-recoverable from git history for reference, not for resurrection) and `App.tsx` is the bench
-shell, which AU replaces or absorbs (keep the bench reachable — it is the user's on-device
-measurement instrument; a route/toggle, not deletion). Required process UNCHANGED and not yet
-started: **written design brief → mockups → build, in that order; nothing is built before the
-user approves the brief.** Real-world product inspiration. Folded: UI state leaves `GameState`
-(the determinism hash spans it). Inherits §7.240's UI-rot inventory (every fix is "read the
-stored value"). What AU inherits from §7.333–335 for free: a working browser build and deploy
-chain (Pages on every `main` push), PWA install, the TWA APK (tracks Pages, no rebuild), and
-the profiled-step API (`advanceWeeklyStepProfiled`) if the UI wants live timings. Constraint
-that now exists: the UI runs in browsers WITHOUT Node — anything it imports from the engine
-must stay free of Node-only globals (the §7.333 shims cover the current tree; new engine code
-that reaches the browser bundle must keep the guard discipline: bare `process` behind `typeof`,
-SAB behind availability checks).
+**THE GOVERNING RULE (user, verbatim intent): "I want to be able to dig as deep as the world
+allows."** Depth is the product requirement, not a feature. It binds as three obligations:
+(1) **every object the engine names is addressable** — a firm, a fund, a region, a tranche, a
+loan, a derivative contract, a supply contract, an invoice, an estate, an SME pool, a carrier
+lane, a household cohort, a clearing book; (2) **every stored fact is viewable** — the floor
+under every object is a typed field browser (`ALL`) that shows the whole record, nested objects
+as links, so nothing the engine keeps is ever hidden by a screen's editorial choice; (3) **every
+identifier rendered anywhere is a link** — a ticker in a holders table, a bank in a ladder, a
+counterparty on a contract, a region on a curve: tap it and you are inside it. **No dead ends:**
+a function with nothing to show says why (book empty, no history yet, mechanism armed and
+inert), it never vanishes.
+
+**THE METAPHOR: `OBJECT FUNCTION`** (Bloomberg's two nouns). An OBJECT is anything with an
+identity; a FUNCTION is a way of looking at it; the command bar takes `ACME DES`, `usa 10y`,
+`irs usa s5`, `oil 3m` and resolves them; everything on screen is itself an object. Rule 17 for
+the UI: **an object type is one module, a function is one module** (`src/ui/objects/*`,
+`src/ui/functions/*`), each function declaring `appliesTo` types; the shell and no screen ever
+switches on a type outside the registries. Adding a screen or a new kind of thing is one entry.
+
+**PHONE ONLY (user, 2026-09-01).** One full-screen panel; the command bar at the bottom with
+autocomplete over the resolver; a back stack per panel; swipe between recently opened panels;
+long-press an identifier opens it in a new panel. No desktop shell — the deployment target is
+the installed PWA/TWA on the user's phone (§7.335), and the design is made for a thumb.
+
+**THE FUNCTIONS (each a module; first set in build order):** `DES` overview · `ALL` the field
+browser (the depth floor) · `GP` history chart for any series (MoM/YoY per §1.9, level where
+history is short) · `FA` statements (firm / bank sheet / national accounts) · `HDS` holders
+and `PORT` holdings, both off the register · `RV` the peer screener (sortable, any columns) ·
+`DDIS` the ladder and maturity wall · `CRV` curves (sovereign, secured, swap spread, credit by
+rating, commodity, cross-currency basis) · `BOOK` a clearing book's float/demand/damper/print
+and the derivative book by class · `LEDGER` the money trace by reason and category — the
+"1$ is 1$" screen · `REL` the relationship graph (contracts, ownership, bank lines, hedge
+counterparties) · `ECO` a region's macro · `DIAG` the harness instruments live (damper by
+book, boundaries, identity residuals, §6 watchlist) · `N` news · `MON` a grid of
+`object.function` cells refreshed each week · `BENCH` the existing instrument, kept.
+
+**TIME.** The world is turn-based: the shell owns Run / Step / Run N. A week scrubber lets
+`GP` and `MON` look back. Where the engine keeps only a snapshot, the UI keeps its own TAPE
+— a recorder logging the series being watched each week — so no engine state grows for the
+UI's sake (§6.2's drift is real; §1.21 forbids the engine paying for a view).
+
+**ARCHITECTURE.** Strictly read-only: `world` is `GameState` through typed selectors; the UI
+never writes engine state (the determinism hash spans it — §3's rule-3 UI-state defect closes
+here: `isTradeModalOpen`/`selectedInstrument`/`isNewsDrawerOpen`/game-over flags leave
+`GameState`). Workspace state (panels, stacks, watchlists, tape) in a UI store persisted to
+localStorage. React + Vite as today; the engine stays on the main thread as in the bench (a
+week is ~1 s; the UI renders between weeks). The deferred `details`-bag discriminated union
+(§5-STRUCT) lands here — the object registry is where instrument kinds get named. Inherits
+§7.240's UI-rot inventory (every fix is "read the stored value"). Browser guards unchanged
+(§7.333: bare `process` behind `typeof`, SAB behind availability checks).
+
+**PARKED (user, 2026-09-01):** the game layer — player portfolio, trade ticket, dealers
+(stage 12's legacy display-struct positions). Returns as `PORT`/`TRADE` functions later.
+
+**SLICE 1 (approved in principle):** resolver + phone shell + `DES`/`ALL`/`GP`/`FA`/`HDS`/`RV`
+over companies, institutions and regions — enough to click through the whole world and prove
+the registry pattern before it is wide. Then the rest, function by function, each its own
+bounded commit. **PROCESS:** mockups (design canvas) → user approval → build slice 1.
 
 ### DIST-P — the primitive scoreboard *(the rule is §1.19)*
 
