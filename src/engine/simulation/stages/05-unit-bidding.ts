@@ -1362,6 +1362,10 @@ function buildRegionDemandPlans(
  */
 export const s05Phase = { plans: 0, settle: 0, settleCore: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
 const S05_PROF = typeof process !== 'undefined' && process.env?.S05_PROF === '1';
+// One-run diagnostic split INSIDE the buyers walk (§7.315's method: name the term before
+// converting anything). ~3 clock reads per lot — relative shares only, not absolute times.
+const S05B_PROF = typeof process !== 'undefined' && process.env?.S05B_PROF === '1';
+const s05Buyers = { pay: 0, invoice: 0, lots: 0, planRest: 0 };
 function runSubUnitMarkets(
   v2: V2World,
   ctx: WeeklyStepContext,
@@ -1692,13 +1696,19 @@ function runSubUnitMarkets(
       const transit = laneTransitWeeks(origin, plan.regionId, laneDistanceNm(origin, plan.regionId));
       const arrivalWeek = nextWeek + Math.round(transit);
       const buyerUpdate = wk.updateOf(comp);
+      // §7.315's grind: the lane's carrier shares are a per-(origin, buyer-region) fact, probed
+      // once here instead of once per LOT (~25k probes + key strings a week).
+      const laneShares = ctx.freightClearing?.carrierShareByLane.get(laneKey(origin, plan.regionId));
       (book.lotsByBuyer.get(plan.key!) ?? []).forEach(l => {
+        const __b0 = S05B_PROF ? performance.now() : 0;
+        if (S05B_PROF) s05Buyers.lots++;
         // SETL-C: the auction knows exactly who bought whose lot, so the payment keeps its
         // counterparty instead of both sides netting through the boundary.
         // The buyer pays LANDED cost; the seller receives only ex-works. The difference is the
         // freight, which belongs to the carriers — paid on shipped tonnage further down this
         // stage, so it is named here rather than handed to the seller.
-        payByIds(ctx, buyerPid, pidOfSeller(l.sellerKey, origin), l.units * exWorksBuyerMoney, R_EXWORKS);
+        const sellerPid = pidOfSeller(l.sellerKey, origin);
+        payByIds(ctx, buyerPid, sellerPid, l.units * exWorksBuyerMoney, R_EXWORKS);
         // XB3a-2/CASH: THE CARRIER IS PAID BY THE BUYER, by name. The carriers have been real
         // companies since XB3a-2 — real fleets, real fuel at the refined-product price, real crew
         // through the labour market, listed equity, a home bank — but this leg paid the boundary
@@ -1711,8 +1721,7 @@ function runSubUnitMarkets(
         // with what any buyer was charged. What a carrier earned is what its customers paid it.
         const freightUSD = l.units * (perUnit - exWorksBuyerMoney);
         if (freightUSD > 0) {
-          const lane = laneKey(origin, plan.regionId);
-          const shares = ctx.freightClearing?.carrierShareByLane.get(lane);
+          const shares = laneShares;
           let paidUSD = 0;
           shares?.forEach((share, carrierTicker) => {
             const amountUSD = freightUSD * share;
@@ -1744,6 +1753,8 @@ function runSubUnitMarkets(
             });
           }
         }
+        const __b1 = S05B_PROF ? performance.now() : 0;
+        if (S05B_PROF) s05Buyers.pay += __b1 - __b0;
         if (arrivalWeek <= nextWeek) {
           addInputInventory(v2, buyerUpdate, comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
         } else {
@@ -1830,7 +1841,8 @@ function runSubUnitMarkets(
         // posted against the UNMODELED boundary on stage 08's cash walk — 9.2B gross over ten
         // weeks passing through a counterparty that does not exist, when the counterparty is
         // right here and has a name.
-        payByIds(ctx, pidOfSeller(l.sellerKey, origin), buyerPid, invoicedUSD, R_TRADE_CREDIT);
+        payByIds(ctx, sellerPid, buyerPid, invoicedUSD, R_TRADE_CREDIT);
+        if (S05B_PROF) s05Buyers.invoice += performance.now() - __b1;
         // §7.282 — THE FX SPREAD HAS A PAYER NOW. A cross-border trade converts the buyer's
         // money, and until here every real-economy conversion happened at MID: the desks that
         // make the market and warehouse its residual earned nothing on the flow that is most
@@ -1878,6 +1890,7 @@ function runSubUnitMarkets(
     sellerUpdate.tradeReceivableBookedUSD = (sellerUpdate.tradeReceivableBookedUSD ?? 0) + amount;
   });
 
+  const __b2 = S05B_PROF ? performance.now() : 0;
   // SETL-C: the AGGREGATE buyers pay too. A seller's revenue includes what households and the
   // government took, and routing only the company buyers' payments left those sellers credited
   // with revenue nobody had paid. Households and the treasury are real account holders, so each
@@ -1919,9 +1932,14 @@ function runSubUnitMarkets(
     const hhUsdAll = hhUnitsAll * book.clearedPriceUSD;
     const claimUSD = hhUsdAll + govUsdAll;
     if (!(claimUSD > 0)) return;
+    // §7.315's grind: a buyer region with no household fill and no government spend contributes
+    // exact zeros to every leg below — payByIds drops them one call at a time; skipping the
+    // region row skips sellers x legs of dead arithmetic. The emitted legs are unchanged.
+    const activeBuyerRegions = MARKET_REGION_IDS.filter(r =>
+      (book.householdFillUnitsByRegion[r] ?? 0) > 0 || (book.governmentSpendUSDByRegion[r] ?? 0) > 0);
     book.salesByKey.forEach((sale, sellerKey) => {
       const sellerShare = sale.amount / sellerTotalUSD;
-      MARKET_REGION_IDS.forEach(buyerRegion => {
+      activeBuyerRegions.forEach(buyerRegion => {
         const hhUSD = ((book.householdFillUnitsByRegion[buyerRegion] ?? 0) * book.clearedPriceUSD / claimUSD) * aggregateUSD * sellerShare;
         const govUSD = ((book.governmentSpendUSDByRegion[buyerRegion] ?? 0) / claimUSD) * aggregateUSD * sellerShare;
         payByIds(ctx, hhPid.get(buyerRegion)!, pidOfSeller(sellerKey, origin), hhUSD, R_HH_GOODS);
@@ -1951,6 +1969,7 @@ function runSubUnitMarkets(
   });
 
   const __t7 = S05_PROF ? performance.now() : 0;
+  if (S05B_PROF) s05Buyers.planRest += __t7 - __b2;
   // --- 10. Aggregate buyers: the household durable stock and the treasury's realized spend.
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
@@ -2306,6 +2325,11 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   if (S05_PROF) {
     const P = s05Phase;
     console.log(`[s05] plans ${P.plans.toFixed(0)} settle ${P.settle.toFixed(0)} (core ${P.settleCore.toFixed(0)}) demand ${P.demand.toFixed(0)} books ${P.books.toFixed(0)} trade ${P.trade.toFixed(0)} sellers ${P.sellers.toFixed(0)} buyers ${P.buyers.toFixed(0)} tail+publish ${P.tail.toFixed(0)}`);
+    if (S05B_PROF) {
+      const B = s05Buyers;
+      console.log(`[s05b] lots ${B.lots} pay ${B.pay.toFixed(0)} invoice+fx ${B.invoice.toFixed(0)} aggregate-payers ${B.planRest.toFixed(0)}`);
+      B.lots = 0; B.pay = 0; B.invoice = 0; B.planRest = 0;
+    }
     P.plans = 0; P.settle = 0; P.settleCore = 0; P.demand = 0; P.books = 0; P.trade = 0; P.sellers = 0; P.buyers = 0; P.tail = 0;
   }
   const realizedIndexVol = realizedAnnualVol(state.compositeIndices.usaComposite.historical, 13);

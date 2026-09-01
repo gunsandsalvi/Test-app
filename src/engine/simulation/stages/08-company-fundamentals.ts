@@ -68,7 +68,12 @@ function groupSupplyRelationships(
   return out;
 }
 
+// §7.315's method — name the term before converting: a per-phase split of this stage's 280 ms
+// (12wk profile). One-run diagnostic, free when off.
+const S08_PROF = typeof process !== 'undefined' && process.env?.S08_PROF === '1';
+
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
+  const __p0 = S08_PROF ? performance.now() : 0;
   const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, systemicStressFactorGlobal } = ctx;
   let refinanceNews: NewsItem[] = [];
   const retainCashLedger = process.env.CASH_LEDGER === '1';
@@ -184,6 +189,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     v2, nextWeek, companyUpdates, updatedRegions,
     supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion,
   });
+  const __p1 = S08_PROF ? performance.now() : 0;
 
   // SCALE/§7.222 — ONE COMPANY'S WEEK, AND IT DEPENDS ON NOTHING ABOUT WHERE IT SITS.
   // The loop below is order-invariant: reversing it leaves every aggregate identical to
@@ -317,6 +323,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     closeShard(held);
   });
   ctx.updatedCompanies = updatedCompanies;
+  const __p2 = S08_PROF ? performance.now() : 0;
 
   // Every corporate action this stage recorded reaches the real books here, in one pass.
   // WS7: the funds receive/pay the week's net corporate sweep money.
@@ -325,6 +332,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   applyPendingCorporateActionSettlements(ctx);
   // CAL: the week's interest accruals onto the register, and the coupon dates that clear them.
   applyHolderInterestAccruals(ctx);
+  const __p3 = S08_PROF ? performance.now() : 0;
+  if (S08_PROF) {
+    console.log(`[s08] front+indexes ${(__p1 - __p0).toFixed(0)} kernel ${(__p2 - __p1).toFixed(0)}`
+      + ` sweeps+corp-actions+accruals ${(__p3 - __p2).toFixed(0)}`);
+  }
 
   // §4.0 Tier 1 item 9 — A MARKET SHARE IS A RATIO, AND RATIOS SUM TO ONE. Each line's share
   // walked its own competitiveness rate independently, so the category sum drifted: a death
