@@ -449,14 +449,18 @@ timing responds to depreciation treatment.
 for this campaign, superseding the 7-phase list and the B1–B5 sketch below.** One program:
 columns become the AUTHORITY for every family of state, end to end; sharding follows only where
 columnar; native and demolition last. Rules §1.21–1.24 bind throughout. Battery + §7 record at
-every stage boundary. Baseline at adoption: **1,394 ms/wk** (§7.326's battery).
+every stage boundary. Baseline at adoption: **1,305 ms/wk** (§7.327's battery — the §4.C text
+first cited 1,394, a context-loss error corrected here: §7.327's five slices were already
+landed and battery-verified when this program was written).
 
-- **Stage I — adapter/apply column programs (~300 ms named).** 07e demand build dense (per-
-  region company columns, per-entity dense holdings fill, lent/buy-in pre-grouped, required
-  return hoisted); 07b/07d same shape; adapters emit into packClearing's typed arrays DIRECTLY,
-  deleting the object-participants layer the engine immediately re-packs; accumulateShard →
-  columns; corp-action register walk on interned pair keys; accrual pass dense. All byte-gated.
-  Estimate −100…−160 (kill test §1.23).
+- **Stage I — adapter/apply column programs.** LARGELY DONE before this program was written
+  (§7.327's five slices, −89 ms/wk: 07e dense, corp-action walks fused, consolidateRegister
+  epoch map, accumulateShard hoists, accrual hoists; plus Phase 5 slice 1, firm input
+  intensities memoized, gated 4/13wk). REMAINING: 07b/07d dense demand builds (73.6/68.4 ms/wk
+  at the §7.327 re-profile); the ClearingResult int-indexed interface flip (~19 ms/wk,
+  §7.311-style staging); adapters emitting into packClearing's typed arrays directly (deleting
+  the object-participants layer); the corp-action walk's ~17 ms remainder. All byte-gated.
+  Remaining estimate −60…−100 (kill test §1.23).
 - **Stage II — the COMPANY ROW STORE (the spine; §7.317's last big flip).** Mirror +
   COMPANY_SYNC_CHECK; ~100 scalar lanes; sub-stores one at a time (productLines chains,
   output/WIP inventories, construction queue, bounded histories as rings, bankBalanceSheet
