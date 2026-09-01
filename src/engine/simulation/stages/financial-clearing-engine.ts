@@ -172,6 +172,16 @@ export interface ClearingParams {
 }
 
 export interface ClearingResult {
+  /** §4.C Stage I int flip — dense views by instrument/participant INDEX (the build's own
+   *  order). The string-keyed maps below are materialized FROM these after the shards run, in
+   *  the same insertion order the per-fill writes had, and die when the last reader flips. */
+  newStatByIndex: Float64Array;
+  dealerInventoryByIndex: Float64Array;
+  damperBoundByIndex: Uint8Array;
+  primaryByIndex: ({ withdrawn: boolean; marketTakeUSD: number; clearedStat: number } | undefined)[];
+  /** pi * nInstruments + i; only fills > $1 are written, so 0 means absent. */
+  holdingsMatrix: Float64Array;
+  nInstruments: number;
   newStatById: Map<string, number>;
   newParticipantHoldings: Map<string, Map<string, number>>;
   newDealerInventoryById: Map<string, number>;
@@ -811,40 +821,64 @@ function accumulateShard(
   shard: KernelShardResult,
   instruments: ClearingInstrument[],
   result: ClearingResult,
-  // §7.327 — the per-fill string-map probes hoisted: instrument ids and each participant's
-  // holdings map resolved once per book, the net-cash walk on a dense array flushed after the
-  // shards (the map was pre-populated per participant, so insertion order is untouched, and the
-  // dense accumulation runs the same terms in the same fill order the per-fill roundtrip did).
-  instIds: string[],
-  holdByPi: Map<string, number>[],
+  // §4.C Stage I int flip — the shard lands on DENSE VIEWS only (no map writes in the fill
+  // loop at all); `materializeResultMaps` rebuilds the string maps afterward in the exact
+  // insertion order the per-fill writes had. Cash stays the §7.327 dense flush.
   cashByPi: Float64Array,
 ): void {
+  const nI = result.nInstruments;
   for (let i = shard.from; i < shard.to; i++) {
     const o = i - shard.from;
-    result.newStatById.set(instruments[i].id, shard.clearedStat[o]);
-    if (shard.damper[o]) result.damperBoundInstrumentIds.push(instruments[i].id);
-    if (!Number.isNaN(shard.dealerInventory[o])) {
-      result.newDealerInventoryById.set(instruments[i].id, shard.dealerInventory[o]);
-    }
+    result.newStatByIndex[i] = shard.clearedStat[o];
+    if (shard.damper[o]) result.damperBoundByIndex[i] = 1;
+    result.dealerInventoryByIndex[i] = shard.dealerInventory[o];
     if (shard.hasPrimary[o]) {
-      result.primaryOutcomeById.set(instruments[i].id, {
+      result.primaryByIndex[i] = {
         withdrawn: shard.primaryWithdrawn[o] === 1,
         marketTakeUSD: shard.primaryMarketTake[o],
         clearedStat: shard.clearedStat[o],
-      });
+      };
     }
   }
   let f = 0;
   // Fill rows are already globally ordered within the shard.
   for (; f < shard.fillCount; f++) {
-    const pi = shard.fillPart[f];
     const filledUSD = shard.fillFilled[f];
     const tradedUSD = shard.fillTraded[f];
     const feeUSD = shard.fillFee[f];
-    if (filledUSD > 1) holdByPi[pi].set(instIds[shard.fillInst[f]], filledUSD);
-    cashByPi[pi] = cashByPi[pi] - tradedUSD - feeUSD;
+    if (filledUSD > 1) result.holdingsMatrix[shard.fillPart[f] * nI + shard.fillInst[f]] = filledUSD;
+    cashByPi[shard.fillPart[f]] = cashByPi[shard.fillPart[f]] - tradedUSD - feeUSD;
     result.totalDealerRevenueUSD += feeUSD;
     result.dealerNetCashUSD += tradedUSD + feeUSD;
+  }
+}
+
+/** The string-keyed maps, built from the dense views for not-yet-flipped readers: per
+ *  instrument in index order and per participant's map in index order — exactly the insertion
+ *  sequences the per-fill writes produced (shards are contiguous ascending; fills are globally
+ *  ordered, so a participant's fills arrive in instrument order). */
+function materializeResultMaps(
+  result: ClearingResult,
+  instIds: string[],
+  holdByPi: Map<string, number>[],
+): void {
+  const nI = result.nInstruments;
+  for (let i = 0; i < nI; i++) {
+    result.newStatById.set(instIds[i], result.newStatByIndex[i]);
+    if (result.damperBoundByIndex[i]) result.damperBoundInstrumentIds.push(instIds[i]);
+    if (!Number.isNaN(result.dealerInventoryByIndex[i])) {
+      result.newDealerInventoryById.set(instIds[i], result.dealerInventoryByIndex[i]);
+    }
+    const po = result.primaryByIndex[i];
+    if (po) result.primaryOutcomeById.set(instIds[i], po);
+  }
+  for (let pi = 0; pi < holdByPi.length; pi++) {
+    const base = pi * nI;
+    const m = holdByPi[pi];
+    for (let i = 0; i < nI; i++) {
+      const v = result.holdingsMatrix[base + i];
+      if (v !== 0) m.set(instIds[i], v);
+    }
   }
 }
 
@@ -890,6 +924,13 @@ export function registerShardedKernel(api: ShardedKernelApi): void { shardedKern
  * this module still imports nothing. The JS kernel stays canonical; the native one must be
  * value-identical or it may not register (native-kernels.ts owns the gate).
  */
+let denseScratch = new Float64Array(1 << 16);
+function ensureDenseScratch(size: number): Float64Array {
+  if (denseScratch.length < size) denseScratch = new Float64Array(Math.max(size, denseScratch.length * 2));
+  else denseScratch.fill(0, 0, size);
+  return denseScratch.subarray(0, size);
+}
+
 let nativeKernel: ((packed: PackedClearing, from: number, to: number) => KernelShardResult) | null = null;
 export function registerNativeKernel(fn: typeof nativeKernel): void { nativeKernel = fn; }
 
@@ -900,7 +941,15 @@ export function clearFinancialAsset(
   params: ClearingParams
 ): ClearingResult {
   void priorDealerInventoryById;
+  const nDense = instruments.length;
+  const denseHold = ensureDenseScratch(nDense * participants.length);
   const result: ClearingResult = {
+    newStatByIndex: new Float64Array(nDense),
+    dealerInventoryByIndex: new Float64Array(nDense).fill(NaN),
+    damperBoundByIndex: new Uint8Array(nDense),
+    primaryByIndex: new Array(nDense),
+    holdingsMatrix: denseHold,
+    nInstruments: nDense,
     newStatById: new Map(),
     newParticipantHoldings: new Map(),
     newDealerInventoryById: new Map(),
@@ -934,7 +983,8 @@ export function clearFinancialAsset(
       const packed = packClearing(instruments, participants, params, sab);
       const shards = shardedKernel.run(packed, sab);
       if (shards) {
-        for (const shard of shards) accumulateShard(shard as never, instruments, result, instIds, holdByPi, cashByPi);
+        for (const shard of shards) accumulateShard(shard as never, instruments, result, cashByPi);
+        materializeResultMaps(result, instIds, holdByPi);
         flushCash();
         return result;
       }
@@ -942,7 +992,8 @@ export function clearFinancialAsset(
       // the kernel, so fall straight through to the serial path on the same packing.
       growKernelScratch(pCount);
       const shard = (nativeKernel ?? runClearingKernel)(packed, 0, packed.n);
-      accumulateShard(shard, instruments, result, instIds, holdByPi, cashByPi);
+      accumulateShard(shard, instruments, result, cashByPi);
+      materializeResultMaps(result, instIds, holdByPi);
       flushCash();
       return result;
     }
@@ -951,7 +1002,8 @@ export function clearFinancialAsset(
   const packed = packClearing(instruments, participants, params);
   growKernelScratch(packed.pCount);
   const shard = (nativeKernel ?? runClearingKernel)(packed, 0, packed.n);
-  accumulateShard(shard, instruments, result, instIds, holdByPi, cashByPi);
+  accumulateShard(shard, instruments, result, cashByPi);
+  materializeResultMaps(result, instIds, holdByPi);
   flushCash();
   return result;
 }
