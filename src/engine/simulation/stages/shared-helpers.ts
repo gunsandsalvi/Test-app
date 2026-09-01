@@ -415,25 +415,32 @@ export function applyPendingCorporateActionSettlements(
   // Holders OF RECORD — the books as they stand before this week's actions scale them. A call
   // premium belongs to whoever owned the paper when it was called, so the shares are taken from
   // the pre-action notionals and the scaling happens after.
+  // §7.327 — ONE walk per book, not two: the holders-of-record totals and the touched-entity
+  // pre-scan probed the same ~110k rows in two separate full chain-chases (pairKeyOf and the
+  // map probes twice per row, weekly). Fused: the same entity order and chain order, so
+  // `totalByPair` accumulates the exact floats the separate pass did; the hit flags are the
+  // same predicate the pre-scan tested. When no cash is owed the early-exit scan survives.
   const totalByPair = new Map<number, number>();
-  if (hasCash) {
-    ctx.updatedInstitutionalEntities.forEach((entity) => {
+  const entityHit: boolean[] = new Array(ctx.updatedInstitutionalEntities.length);
+  ctx.updatedInstitutionalEntities.forEach((entity, ei) => {
+    let anyHit = false;
+    if (hasCash) {
       for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
         const k = pairKeyOf(r);
-        if (!owedByPair.has(k)) continue;
-        totalByPair.set(k, (totalByPair.get(k) ?? 0) + H.qtyUSD[r]);
+        const owed = owedByPair.has(k);
+        if (owed) totalByPair.set(k, (totalByPair.get(k) ?? 0) + H.qtyUSD[r]);
+        if (!anyHit && (owed || ratioByPair.has(k))) anyHit = true;
       }
-    });
-  }
-
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
-    // Cheap pre-scan: an entity holding none of the touched instruments is returned as-is.
-    let anyHit = false;
-    for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
-      const k = pairKeyOf(r);
-      if (ratioByPair.has(k) || owedByPair.has(k)) { anyHit = true; break; }
+    } else {
+      for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
+        if (ratioByPair.has(pairKeyOf(r))) { anyHit = true; break; }
+      }
     }
-    if (!anyHit) return entity;
+    entityHit[ei] = anyHit;
+  });
+
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity, ei) => {
+    if (!entityHit[ei]) return entity;
     let touched = false;
     let cashUSD = 0;
     // Placements this entity has funded within THIS pass — journalPayment does not update the
