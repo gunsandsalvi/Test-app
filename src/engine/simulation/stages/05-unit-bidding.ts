@@ -493,25 +493,27 @@ function clearBook(
  * it was struck as. A contract is filed in its CUSTOMER's region, and the counterparty lookup
  * spans every region so the foreign leg of one struck in the world book still settles.
  */
+interface WeekResolution {
+  resolveRef: (refId: number) => Company | undefined;
+  /** partyId per firm, computed once per week (was two string-map probes per payment leg). */
+  pidOf: (comp: Company) => number;
+  /** The firm's CompanyWeekUpdate record, ensured once per firm per week (same identity the
+   *  string-keyed probes produced). */
+  updateOf: (comp: Company) => import('./context').CompanyWeekUpdate;
+}
+
 function settleContracts(
   v2: V2World,
   ctx: WeeklyStepContext,
   subUnitId: string,
   region: RegionId,
-  resolveRef: (refId: number) => Company | undefined,
+  wk: WeekResolution,
   regionReferencePrice: Record<RegionId, number>,
-  contractSalesUnitsBySupplier: Record<string, number>,
-  availableBySupplier: Map<string, number>
+  contractSalesUnitsBySupplier: Map<Company, number>,
+  availableBySupplier: Map<Company, number>
 ): number[] {
   const T = v2.contracts;
-  // SCALE §7.303 — party/reason ids interned once per call (three pays per contract, ~47k
-  // contracts a week; each pay cost two string-map probes).
-  const cPid = new Map<string, number>();
-  const pidOfCo = (ticker: string): number => {
-    let v = cPid.get(ticker);
-    if (v === undefined) { v = partyId({ kind: 'COMPANY', ticker }); cPid.set(ticker, v); }
-    return v;
-  };
+  const { resolveRef, pidOf } = wk;
   const R_NONPERF = internReason('non-performance damages');
   const R_CANCEL = internReason('order cancellation damages');
   const R_PROGRESS = internReason('contract progress payment');
@@ -540,8 +542,7 @@ function settleContracts(
       // chronically tight rental market was writing a ~0.7 output cap onto every corporate
       // tenant through this channel, measured as +4pts of unemployment by week 30.
       if (computeRecipeInputNeedUSD(customer, subUnitId) > 0) {
-        if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
-        const custUp = companyUpdates[customer.ticker];
+        const custUp = wk.updateOf(customer);
         custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, 0.70);
       }
       dead.push(r);
@@ -564,7 +565,7 @@ function settleContracts(
       const shortfallUnits = T.backlogUnits[r];
       const buyerLossUSD = shortfallUnits * Math.max(0, marketPriceUSD - T.priceUSD[r]);
       if (buyerLossUSD > 0.01) {
-        payByIds(ctx, pidOfCo(supplier.ticker), pidOfCo(customer.ticker), buyerLossUSD, R_NONPERF);
+        payByIds(ctx, pidOf(supplier), pidOf(customer), buyerLossUSD, R_NONPERF);
       }
     };
 
@@ -614,7 +615,7 @@ function settleContracts(
         // which is exactly right.
         const sellerLossUSD = cancelledUnits * Math.max(0, T.priceUSD[r] - marketPriceUSD);
         if (sellerLossUSD > 0.01) {
-          payByIds(ctx, pidOfCo(customer.ticker), pidOfCo(supplier.ticker), sellerLossUSD, R_CANCEL);
+          payByIds(ctx, pidOf(customer), pidOf(supplier), sellerLossUSD, R_CANCEL);
         }
       }
     }
@@ -622,11 +623,10 @@ function settleContracts(
 
     // What this supplier still has to give, this week, across every contract it holds. A
     // supplier with no plan for this line is not producing it and has only its warehouse.
-    const supplierUnits = availableBySupplier.get(supplier.ticker)
-      ?? availableBySupplier.get(supplier.id)
+    const supplierUnits = availableBySupplier.get(supplier)
       ?? getOutputInventoryUnits(supplier, subUnitId);
     const actualTransacted = Math.min(owedAfterCancellationUnits, supplierUnits);
-    availableBySupplier.set(supplier.ticker, supplierUnits - actualTransacted);
+    availableBySupplier.set(supplier, supplierUnits - actualTransacted);
     T.backlogUnits[r] = Math.max(0, owedAfterCancellationUnits - actualTransacted);
     const paymentUSD = actualTransacted * T.priceUSD[r];
 
@@ -642,7 +642,7 @@ function settleContracts(
     const topUpUSD = Math.max(0, targetDepositUSD - T.prepaidUSD[r]);
     T.prepaidUSD[r] += topUpUSD;
     if (topUpUSD > 0.01) {
-      payByIds(ctx, pidOfCo(customer.ticker), pidOfCo(supplier.ticker), topUpUSD, R_PROGRESS);
+      payByIds(ctx, pidOf(customer), pidOf(supplier), topUpUSD, R_PROGRESS);
     }
     // The fill rate is measured against THIS WEEK's obligation: shipping down a backlog is
     // catching up, not over-performing, so it cannot read above 1.
@@ -650,10 +650,7 @@ function settleContracts(
       ? Math.min(1, actualTransacted / T.qtyPerWeek[r]) : 1.0;
     T.shortWeeks[r] = fillRate < 0.95 ? T.shortWeeks[r] + 1 : 0;
 
-    if (!companyUpdates[supplier.ticker]) companyUpdates[supplier.ticker] = {};
-    if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
-
-    const supUp = companyUpdates[supplier.ticker];
+    const supUp = wk.updateOf(supplier);
     // The contract leg's own inventory write. For a supplier that still produces this sub-unit
     // the open-market settlement below overwrites it with the full week's arithmetic; for one
     // that has stopped producing and is only working off a live contract, this is the only write
@@ -669,20 +666,20 @@ function settleContracts(
     // supUp.salesUnits/salesUSD are deliberately cross-sub-unit totals (other consumers want a
     // company's whole-business sales) — but the inventory settlement below needs THIS sub-unit's
     // contract sales specifically, so track that separately rather than reading the total.
-    contractSalesUnitsBySupplier[supplier.ticker] = (contractSalesUnitsBySupplier[supplier.ticker] ?? 0) + actualTransacted;
+    contractSalesUnitsBySupplier.set(supplier, (contractSalesUnitsBySupplier.get(supplier) ?? 0) + actualTransacted);
     // IND14 — the supplier's own delivery record, kept where the delivery happens: what it owed
     // this week against what it shipped. Stage 08 smooths it onto the firm.
     supUp._contractOwedUnits = (supUp._contractOwedUnits ?? 0) + T.qtyPerWeek[r];
     supUp._contractDeliveredUnits = (supUp._contractDeliveredUnits ?? 0) + Math.min(actualTransacted, T.qtyPerWeek[r]);
 
-    const custUp = companyUpdates[customer.ticker];
+    const custUp = wk.updateOf(customer);
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
     if (isCapitalGoodCategory) custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentUSD;
     // SETL-C: a contract delivery is a payment between two named firms.
     // IND17 — net of what was already paid ahead. Charging the full price again would collect
     // for the same goods twice.
-    payByIds(ctx, pidOfCo(customer.ticker), pidOfCo(supplier.ticker), paymentUSD - appliedFromDepositUSD, R_DELIVERY);
+    payByIds(ctx, pidOf(customer), pidOf(supplier), paymentUSD - appliedFromDepositUSD, R_DELIVERY);
     addInputInventory(v2, custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);
 
     if (fillRate < 0.95 && computeRecipeInputNeedUSD(customer, subUnitId) > 0) {
@@ -1341,7 +1338,7 @@ function runSubUnitMarkets(
   hhShare: number,
   indexes: Record<RegionId, RegionMarketIndex>,
   lookup: GlobalFirmLookup,
-  resolveRef: (refId: number) => Company | undefined,
+  wk: WeekResolution,
   sourcing: SourcingContext
 ): void {
   const CT = v2.contracts;
@@ -1394,16 +1391,16 @@ function runSubUnitMarkets(
   //        what its plant finished this week. The balance is drawn down as it ships, so a
   //        supplier with three contracts cannot deliver the same units to all three — which is
   //        what reading the warehouse fresh inside each contract used to let it do.
-  const availableBySupplier = new Map<string, number>();
+  const availableBySupplier = new Map<Company, number>();
   supplyPlans.forEach(p => {
     if (!p.company) return;
-    availableBySupplier.set(p.key, p.initialInventoryUnits + p.arrivedProductionUnits);
+    availableBySupplier.set(p.company, p.initialInventoryUnits + p.arrivedProductionUnits);
   });
-  const contractSalesUnitsBySupplier: Record<string, number> = {};
+  const contractSalesUnitsBySupplier = new Map<Company, number>();
   const survivingRows = {} as Record<RegionId, number[]>;
   MARKET_REGION_IDS.forEach(regionId => {
     survivingRows[regionId] = settleContracts(
-      v2, ctx, subUnitId, regionId, resolveRef, anchorPrice,
+      v2, ctx, subUnitId, regionId, wk, anchorPrice,
       contractSalesUnitsBySupplier, availableBySupplier
     );
   });
@@ -1433,7 +1430,7 @@ function runSubUnitMarkets(
   // has stopped producing this line) never offered anything to adjust.
   supplyPlans.forEach(p => {
     if (!p.company) return;
-    p.openOfferUnits = Math.max(0, availableBySupplier.get(p.key) ?? 0);
+    p.openOfferUnits = Math.max(0, availableBySupplier.get(p.company) ?? 0);
   });
 
   const offerRegionByKey = new Map<string, RegionId>();
@@ -1583,7 +1580,7 @@ function runSubUnitMarkets(
     const comp = plan.company;
     if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
     const supUp = companyUpdates[comp.ticker];
-    const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier[comp.ticker] ?? 0;
+    const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier.get(comp) ?? 0;
     setOutputInventory(
       supUp, subUnitId,
       // IND10 — what lands in the warehouse is what the pipeline FINISHED, not what was started.
@@ -2162,11 +2159,29 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   // and reassembly passes are gone with the object array they served. Refs resolve to firms
   // once per unique ref per week.
   const refCompCache = new Map<number, Company | undefined>();
-  const resolveRef = (refId: number): Company | undefined => {
-    if (refCompCache.has(refId)) return refCompCache.get(refId);
-    const comp = lookup.byKey.get(v2.internedStrings[refId]);
-    refCompCache.set(refId, comp);
-    return comp;
+  const pidByComp = new Map<Company, number>();
+  const updByComp = new Map<Company, import('./context').CompanyWeekUpdate>();
+  const wk: WeekResolution = {
+    resolveRef: (refId) => {
+      if (refCompCache.has(refId)) return refCompCache.get(refId);
+      const comp = lookup.byKey.get(v2.internedStrings[refId]);
+      refCompCache.set(refId, comp);
+      return comp;
+    },
+    pidOf: (comp) => {
+      let pid = pidByComp.get(comp);
+      if (pid === undefined) { pid = partyId({ kind: 'COMPANY', ticker: comp.ticker }); pidByComp.set(comp, pid); }
+      return pid;
+    },
+    updateOf: (comp) => {
+      let u = updByComp.get(comp);
+      if (u === undefined) {
+        u = ctx.companyUpdates[comp.ticker];
+        if (!u) { u = {}; ctx.companyUpdates[comp.ticker] = u; }
+        updByComp.set(comp, u);
+      }
+      return u;
+    },
   };
 
   // §7.222 — each market draws from its OWN stream, not from wherever the shared one has reached.
@@ -2208,7 +2223,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     runSubUnitMarkets(
       v2, ctx, subUnit.unitId,
       subUnit.buyerMix.GOVERNMENT ?? 0, subUnit.buyerMix.HOUSEHOLD ?? 0,
-      indexes, lookup, resolveRef, sourcing
+      indexes, lookup, wk, sourcing
     );
     endEntityScope(savedStream);
   });
