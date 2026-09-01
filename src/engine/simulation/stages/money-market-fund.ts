@@ -167,7 +167,11 @@ export function corporateSweepDecision(
   if (cashAfterOperationsUSD > bufferUSD) {
     const sweepUSD = cashAfterOperationsUSD - bufferUSD;
     book.netInflowUSD += sweepUSD;
-    book.redeemableUSD += sweepUSD;
+    // §7.323 (user-authorized declared change): a sweep-in credits the fund's SHARE register and
+    // settles as cash, but is NOT intraday liquidity to other redeemers — the redeemable pool is
+    // the fund's OPENING cash, drawn down by redemptions only, and sweep money joins it at next
+    // week's open (T+1, as a real corporate sweep deposit behaves). This is also what unhooks
+    // the back kernel's redemption barrier from the post phase (§7.322's serial chain).
     return { cashDeltaUSD: -sweepUSD, shareDeltaUSD: sweepUSD };
   }
   if (cashAfterOperationsUSD < bufferUSD && sharesUSD > 0) {
