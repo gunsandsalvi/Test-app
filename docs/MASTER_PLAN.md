@@ -692,17 +692,21 @@ autocomplete over the resolver; a back stack per panel; swipe between recently o
 long-press an identifier opens it in a new panel. No desktop shell — the deployment target is
 the installed PWA/TWA on the user's phone (§7.335), and the design is made for a thumb.
 
-**THE FUNCTIONS (each a module; first set in build order):** `DES` overview · `ALL` the field
-browser (the depth floor) · `GP` history chart for any series (MoM/YoY per §1.9, level where
-history is short) · `FA` statements (firm / bank sheet / national accounts) · `HDS` holders
-and `PORT` holdings, both off the register · `RV` the peer screener (sortable, any columns) ·
-`DDIS` the ladder and maturity wall · `CRV` curves (sovereign, secured, swap spread, credit by
-rating, commodity, cross-currency basis) · `BOOK` a clearing book's float/demand/damper/print
-and the derivative book by class · `LEDGER` the money trace by reason and category — the
-"1$ is 1$" screen · `REL` the relationship graph (contracts, ownership, bank lines, hedge
-counterparties) · `ECO` a region's macro · `DIAG` the harness instruments live (damper by
-book, boundaries, identity residuals, §6 watchlist) · `N` news · `MON` a grid of
-`object.function` cells refreshed each week · `BENCH` the existing instrument, kept.
+**THE VOCABULARY IS OURS.** The object/function metaphor is generic; a specific terminal's
+command codes are its own. Functions are short typeable WORDS (a thumb types `chart`, not a
+code), and the command bar reads `<object> <function>`: `krln overview`, `usa 10y chart`.
+**THE FUNCTIONS (each a module; first set in build order):** `overview` · `all` — the typed
+field browser, the depth floor · `chart` — history for any series (MoM/YoY per §1.9, level
+where history is short) · `statements` — firm P&L/balance sheet/cash flow, a bank's sheet, a
+region's national accounts · `holders` and `holdings`, both off the register · `peers` — the
+screener (sortable, any columns) · `ladder` — debt and the maturity wall · `curves` —
+sovereign, secured, swap spread, credit by rating, commodity, cross-currency basis · `book` —
+a clearing book's float/demand/damper/print and the derivative book by class · `money` — the
+payment trace by reason and category, the "1$ is 1$" screen · `links` — the relationship
+graph (contracts, ownership, bank lines, hedge counterparties) · `macro` — a region's
+dashboard · `diag` — the harness instruments live (damper by book, boundaries, identity
+residuals, §6 watchlist) · `news` · `watch` — a grid of `object function` cells refreshed each
+week · `bench` — the existing instrument, kept.
 
 **TIME.** The world is turn-based: the shell owns Run / Step / Run N. A week scrubber lets
 `GP` and `MON` look back. Where the engine keeps only a snapshot, the UI keeps its own TAPE
@@ -720,10 +724,10 @@ week is ~1 s; the UI renders between weeks). The deferred `details`-bag discrimi
 (§7.333: bare `process` behind `typeof`, SAB behind availability checks).
 
 **PARKED (user, 2026-09-01):** the game layer — player portfolio, trade ticket, dealers
-(stage 12's legacy display-struct positions). Returns as `PORT`/`TRADE` functions later.
+(stage 12's legacy display-struct positions). Returns as `portfolio`/`trade` functions later.
 
-**SLICE 1 (approved in principle):** resolver + phone shell + `DES`/`ALL`/`GP`/`FA`/`HDS`/`RV`
-over companies, institutions and regions — enough to click through the whole world and prove
+**SLICE 1 (approved in principle):** resolver + phone shell + `overview`/`all`/`chart`/
+`statements`/`holders`/`peers` over companies, institutions and regions — enough to click through the whole world and prove
 the registry pattern before it is wide. Then the rest, function by function, each its own
 bounded commit. **PROCESS:** mockups (design canvas) → user approval → build slice 1.
 
