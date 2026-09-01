@@ -317,8 +317,21 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // Identical for every entity; the old code re-reduced it inside each entity's closure.
     const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
 
+    // §4.C Stage I — the pair loops on dense columns (the 07e slice's shape, §7.327 (1)): the
+    // per-(entity, name) holding probe becomes an array read; iteration order is companyTerms
+    // order in both passes, so every float accumulates exactly as before.
+    const tiById = new Map<string, number>();
+    companyTerms.forEach((t, ti) => tiById.set(t.id, ti));
+    const heldArr = new Float64Array(companyTerms.length);
+    const heldTouched: number[] = [];
+
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
+      heldTouched.length = 0;
+      currentHoldingByCompany.forEach((usd, id) => {
+        const ti = tiById.get(id);
+        if (ti !== undefined) { heldArr[ti] = usd; heldTouched.push(ti); }
+      });
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
       // Per-entity invariants of the per-name loops below.
       const entityShare = entityShareOfSector / sectorTotal;
@@ -344,14 +357,15 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
       let totalCashDemandWeightUSD = 0;
-      companyTerms.forEach((t, ti) => {
+      for (let ti = 0; ti < companyTerms.length; ti++) {
+        const t = companyTerms[ti];
         const f = t.subIG ? entitySubIGFactor : 1;
         const structuralUSD = t.liveFloatUSD * entityShare * f;
-        const gapToTargetUSD = Math.max(0, structuralUSD - (currentHoldingByCompany.get(t.id) ?? 0));
+        const gapToTargetUSD = Math.max(0, structuralUSD - heldArr[ti]);
         const weightUSD = t.offeringUSD + gapToTargetUSD;
         cashDemandWeightByIndex[ti] = weightUSD;
         totalCashDemandWeightUSD += weightUSD;
-      });
+      }
 
       // This entity's terms, per issuer. The reservation spread is the RV economics used as what
       // they always were — a PRICE. Below the level that covers this issuer's own expected loss
@@ -360,7 +374,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // same numbers to nudge a quantity target, which is why spreads could settle through zero:
       // a nudged quota still has to be filled at whatever price results.
       const demandByIndex: (ParticipantDemand | undefined)[] = new Array(companyTerms.length);
-      companyTerms.forEach((t, ti) => {
+      for (let ti = 0; ti < companyTerms.length; ti++) {
+        const t = companyTerms[ti];
         // Rating enters this book in the two places it really acts: the capital the position
         // consumes and the size of the sub-IG sleeve the holder will run — never a prohibition
         // (see subInvestmentGradeSizeFactor for what modelling it as one did to HY clearing).
@@ -388,7 +403,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
               ? cashDemandWeightByIndex[ti] / totalCashDemandWeightUSD
               : 0),
         };
-      });
+      }
+      for (const ti of heldTouched) heldArr[ti] = 0;
 
       return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId: EMPTY_DEMAND_MAP, demandByIndex };
     });
