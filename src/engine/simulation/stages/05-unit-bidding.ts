@@ -20,11 +20,12 @@
  */
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
+import { partyId } from '../../ledger/party';
 import { categoryPriceTier, householdBudgetReachMultiple, householdDemandLadder } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
-import { pay, PartyRef } from './settlement';
+import { pay, payByIds, internReason, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { channelMarginRate, shelfPriceUSD, DISTRIBUTION_SUBUNIT_ID } from '../../../domain/distribution';
 import { subUnitSpecOf } from '../../../domain/industry-registry';
@@ -483,6 +484,19 @@ function settleContracts(
   contractSalesUnitsBySupplier: Record<string, number>,
   availableBySupplier: Map<string, number>
 ): SupplyContract[] {
+  // SCALE §7.303 — party/reason ids interned once per call (three pays per contract, ~47k
+  // contracts a week; each pay cost two string-map probes).
+  const cPid = new Map<string, number>();
+  const pidOfCo = (ticker: string): number => {
+    let v = cPid.get(ticker);
+    if (v === undefined) { v = partyId({ kind: 'COMPANY', ticker }); cPid.set(ticker, v); }
+    return v;
+  };
+  const R_NONPERF = internReason('non-performance damages');
+  const R_CANCEL = internReason('order cancellation damages');
+  const R_PROGRESS = internReason('contract progress payment');
+  const R_DELIVERY = internReason('contract delivery');
+
   const { companyUpdates, nextWeek } = ctx;
   const remainingContracts: SupplyContract[] = [];
 
@@ -524,12 +538,7 @@ function settleContracts(
       const shortfallUnits = contract.backlogUnits ?? 0;
       const buyerLossUSD = shortfallUnits * Math.max(0, marketPriceUSD - contract.priceUSD);
       if (buyerLossUSD > 0.01) {
-        pay(ctx, {
-          payer: { kind: 'COMPANY', ticker: supplier.ticker },
-          payee: { kind: 'COMPANY', ticker: customer.ticker },
-          amountUSD: buyerLossUSD,
-          reason: 'non-performance damages',
-        });
+        payByIds(ctx, pidOfCo(supplier.ticker), pidOfCo(customer.ticker), buyerLossUSD, R_NONPERF);
       }
     };
 
@@ -579,12 +588,7 @@ function settleContracts(
         // which is exactly right.
         const sellerLossUSD = cancelledUnits * Math.max(0, contract.priceUSD - marketPriceUSD);
         if (sellerLossUSD > 0.01) {
-          pay(ctx, {
-            payer: { kind: 'COMPANY', ticker: customer.ticker },
-            payee: { kind: 'COMPANY', ticker: supplier.ticker },
-            amountUSD: sellerLossUSD,
-            reason: 'order cancellation damages',
-          });
+          payByIds(ctx, pidOfCo(customer.ticker), pidOfCo(supplier.ticker), sellerLossUSD, R_CANCEL);
         }
       }
     }
@@ -612,12 +616,7 @@ function settleContracts(
     const topUpUSD = Math.max(0, targetDepositUSD - contract.prepaidUSD);
     contract.prepaidUSD += topUpUSD;
     if (topUpUSD > 0.01) {
-      pay(ctx, {
-        payer: { kind: 'COMPANY', ticker: customer.ticker },
-        payee: { kind: 'COMPANY', ticker: supplier.ticker },
-        amountUSD: topUpUSD,
-        reason: 'contract progress payment',
-      });
+      payByIds(ctx, pidOfCo(customer.ticker), pidOfCo(supplier.ticker), topUpUSD, R_PROGRESS);
     }
     // The fill rate is measured against THIS WEEK's obligation: shipping down a backlog is
     // catching up, not over-performing, so it cannot read above 1.
@@ -655,14 +654,9 @@ function settleContracts(
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
     if (purchaseKindOf(subUnitId) === 'CAPITAL_GOOD') custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentUSD;
     // SETL-C: a contract delivery is a payment between two named firms.
-    pay(ctx, {
-      payer: { kind: 'COMPANY', ticker: customer.ticker },
-      payee: { kind: 'COMPANY', ticker: supplier.ticker },
-      // IND17 — net of what was already paid ahead. Charging the full price again would collect
-      // for the same goods twice.
-      amountUSD: paymentUSD - appliedFromDepositUSD,
-      reason: 'contract delivery',
-    });
+    // IND17 — net of what was already paid ahead. Charging the full price again would collect
+    // for the same goods twice.
+    payByIds(ctx, pidOfCo(customer.ticker), pidOfCo(supplier.ticker), paymentUSD - appliedFromDepositUSD, R_DELIVERY);
     addInputInventory(custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);
 
     if (fillRate < 0.95 && computeRecipeInputNeedUSD(customer, subUnitId) > 0) {
@@ -1602,10 +1596,39 @@ function runSubUnitMarkets(
   // skipped before the per-origin walk (bit-exact: they returned with no writes anyway).
   const purchasedKeys = new Set<string>();
   MARKET_REGION_IDS.forEach(origin => results[origin].purchasesByKey.forEach((_, k) => purchasedKeys.add(k)));
+  // SCALE §7.303 — party and reason ids interned once per market instead of two string-map
+  // probes per LEG (this walk emits the bulk of the week's ~170k instructions: ex-works,
+  // freight, trade credit and the fx pip, per lot).
+  const sellerPidByKey = new Map<string, number>();
+  const pidOfSeller = (key: string, origin: RegionId): number => {
+    const k = origin + '|' + key;
+    let v = sellerPidByKey.get(k);
+    if (v === undefined) { v = partyId(partyOfKey(key, origin, lookup)); sellerPidByKey.set(k, v); }
+    return v;
+  };
+  const carrierPidByTicker = new Map<string, number>();
+  const pidOfCarrier = (ticker: string): number => {
+    let v = carrierPidByTicker.get(ticker);
+    if (v === undefined) { v = partyId({ kind: 'COMPANY', ticker }); carrierPidByTicker.set(ticker, v); }
+    return v;
+  };
+  const R_EXWORKS = internReason('goods purchase (ex-works)');
+  const R_FREIGHT = internReason('freight paid to the carrier');
+  const R_TRADE_CREDIT = internReason('trade credit extended');
+  const R_HH_GOODS = internReason('household goods purchase');
+  const R_CHANNEL = internReason('distribution margin paid to the channel');
+  const R_GOV_PROC = internReason('government procurement');
+  const hhPid = new Map<RegionId, number>();
+  const govPid = new Map<RegionId, number>();
+  MARKET_REGION_IDS.forEach((r) => {
+    hhPid.set(r, partyId({ kind: 'HOUSEHOLD', region: r }));
+    govPid.set(r, partyId({ kind: 'GOVERNMENT', region: r }));
+  });
   demandPlans.forEach(plan => {
     if (!plan.company || !plan.key) return;
     if (!purchasedKeys.has(plan.key)) return;
     const comp = plan.company;
+    const buyerPid = partyId({ kind: 'COMPANY', ticker: comp.ticker });
     let units = 0;
     let landedCost = 0;
     MARKET_REGION_IDS.forEach(origin => {
@@ -1631,12 +1654,7 @@ function runSubUnitMarkets(
         // The buyer pays LANDED cost; the seller receives only ex-works. The difference is the
         // freight, which belongs to the carriers — paid on shipped tonnage further down this
         // stage, so it is named here rather than handed to the seller.
-        pay(ctx, {
-          payer: { kind: 'COMPANY', ticker: comp.ticker },
-          payee: partyOfKey(l.sellerKey, origin, lookup),
-          amountUSD: l.units * exWorksBuyerMoney,
-          reason: 'goods purchase (ex-works)',
-        });
+        payByIds(ctx, buyerPid, pidOfSeller(l.sellerKey, origin), l.units * exWorksBuyerMoney, R_EXWORKS);
         // XB3a-2/CASH: THE CARRIER IS PAID BY THE BUYER, by name. The carriers have been real
         // companies since XB3a-2 — real fleets, real fuel at the refined-product price, real crew
         // through the labour market, listed equity, a home bank — but this leg paid the boundary
@@ -1664,12 +1682,7 @@ function runSubUnitMarkets(
             const carrierRegion = lookup.byTicker.get(carrierTicker)?.region;
             ctx.carrierFreightRevenue[carrierTicker] = (ctx.carrierFreightRevenue[carrierTicker] ?? 0)
               + (carrierRegion ? convertLocal(amountUSD, plan.regionId, carrierRegion, sourcing.fxToUsd) : amountUSD);
-            pay(ctx, {
-              payer: { kind: 'COMPANY', ticker: comp.ticker },
-              payee: { kind: 'COMPANY', ticker: carrierTicker },
-              amountUSD,
-              reason: 'freight paid to the carrier',
-            });
+            payByIds(ctx, buyerPid, pidOfCarrier(carrierTicker), amountUSD, R_FREIGHT);
           });
           // §7.286 — a lane no NAMED carrier serves is still sailed by SOMEBODY: the unnamed
           // small transporters the SME tier exists to represent. The freight pays the origin
@@ -1773,12 +1786,7 @@ function runSubUnitMarkets(
         // posted against the UNMODELED boundary on stage 08's cash walk — 9.2B gross over ten
         // weeks passing through a counterparty that does not exist, when the counterparty is
         // right here and has a name.
-        pay(ctx, {
-          payer: partyOfKey(l.sellerKey, origin, lookup),
-          payee: { kind: 'COMPANY', ticker: comp.ticker },
-          amountUSD: invoicedUSD,
-          reason: 'trade credit extended',
-        });
+        payByIds(ctx, pidOfSeller(l.sellerKey, origin), buyerPid, invoicedUSD, R_TRADE_CREDIT);
         // §7.282 — THE FX SPREAD HAS A PAYER NOW. A cross-border trade converts the buyer's
         // money, and until here every real-economy conversion happened at MID: the desks that
         // make the market and warehouse its residual earned nothing on the flow that is most
@@ -1874,7 +1882,7 @@ function runSubUnitMarkets(
       MARKET_REGION_IDS.forEach(buyerRegion => {
         const hhUSD = ((book.householdFillUnitsByRegion[buyerRegion] ?? 0) * book.clearedPriceUSD / claimUSD) * aggregateUSD * sellerShare;
         const govUSD = ((book.governmentSpendUSDByRegion[buyerRegion] ?? 0) / claimUSD) * aggregateUSD * sellerShare;
-        pay(ctx, { payer: { kind: 'HOUSEHOLD', region: buyerRegion }, payee: partyOfKey(sellerKey, origin, lookup), amountUSD: hhUSD, reason: 'household goods purchase' });
+        payByIds(ctx, hhPid.get(buyerRegion)!, pidOfSeller(sellerKey, origin), hhUSD, R_HH_GOODS);
         // IND16: AND THE CHANNEL'S CUT, paid by the household that bought out of its stock, to
         // the firms that held it — by name, exactly as the carriers are paid their freight. The
         // producer received the factory gate above; this is the rest of what the household spent.
@@ -1889,18 +1897,13 @@ function runSubUnitMarkets(
             const amountUSD = channelUSD * share;
             if (!(amountUSD > 0)) return;
             ctx.channelMarginRevenue[distributorTicker] = (ctx.channelMarginRevenue[distributorTicker] ?? 0) + amountUSD;
-            pay(ctx, {
-              payer: { kind: 'HOUSEHOLD', region: buyerRegion },
-              payee: { kind: 'COMPANY', ticker: distributorTicker },
-              amountUSD,
-              reason: 'distribution margin paid to the channel',
-            });
+            payByIds(ctx, hhPid.get(buyerRegion)!, pidOfCarrier(distributorTicker), amountUSD, R_CHANNEL);
           });
           // A region with no distribution firm has no channel to pay and no margin is charged —
           // nothing goes to the boundary here, because the margin only exists where somebody
           // earns it.
         }
-        pay(ctx, { payer: { kind: 'GOVERNMENT', region: buyerRegion }, payee: partyOfKey(sellerKey, origin, lookup), amountUSD: govUSD, reason: 'government procurement' });
+        payByIds(ctx, govPid.get(buyerRegion)!, pidOfSeller(sellerKey, origin), govUSD, R_GOV_PROC);
       });
     });
   });

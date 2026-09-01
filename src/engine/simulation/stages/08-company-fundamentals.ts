@@ -36,8 +36,9 @@ import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 import { WeeklyStepContext } from './context';
 import { PROFILE_REGISTRY, profileKeyOf } from './profiles';
 import { measureBeta, regionIndexOf } from '../../macro/indices';
-import { pay, PartyRef, PaymentJournal, newPaymentJournal } from './settlement';
+import { pay, payByIds, internReason, PartyRef, PaymentJournal, newPaymentJournal } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
+import { partyId } from '../../ledger/party';
 import { planCapitalProgramme, commissionCapital, capacityRetirement } from '../../../domain/company-week/capital-programme';
 import { learningUpdate, seedCumulativeUnits } from '../../../domain/company-week/learning';
 import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '../../../domain/company-week/credit-standing';
@@ -1081,6 +1082,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // not have one yet it says so explicitly (`UNMODELED`), and the size of that line is the
     // honest measure of how much of the payment graph is still unnamed — a number to watch down
     // as later slices name each flow, not a plug (rule 13).
+    // SCALE §7.303 — the walk's own party ids, interned once per company: every settled leg
+    // used to re-probe two string maps (partyId x2) per post, ~40k+ legs a week.
+    const selfPartyId = partyId({ kind: 'COMPANY', ticker: comp.ticker });
+    const unmodeledPartyId = partyId({ kind: 'UNMODELED', region: comp.region });
     const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true) => {
       if (!isFinite(amountUSD) || amountUSD === 0) return;
       // SCALE §7.303 — the drill-down rows are display retention with NO consumer anywhere in
@@ -1100,11 +1105,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // name — so the payment instructions come from the settlement of that register, and posting
       // one here as well would move the same money twice.
       if (!settle) return;
-      const other: PartyRef = counterparty ?? { kind: 'UNMODELED', region: comp.region };
-      const self: PartyRef = { kind: 'COMPANY', ticker: comp.ticker };
-      pay(ctx, amountUSD > 0
-        ? { payer: other, payee: self, amountUSD, reason: label }
-        : { payer: self, payee: other, amountUSD: -amountUSD, reason: label });
+      const otherId = counterparty ? partyId(counterparty) : unmodeledPartyId;
+      const reasonId = internReason(label);
+      if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, reasonId);
+      else payByIds(ctx, selfPartyId, otherId, -amountUSD, reasonId);
     };
 
     const update = weekUpdate;

@@ -75,7 +75,7 @@ const reasonById: string[] = [];
 // life of the process, so the rollup and the harness's no-orphans assertion cost nothing per
 // payment.
 const reasonCategoryById: PaymentCategory[] = [];
-function internReason(reason: string): number {
+export function internReason(reason: string): number {
   const existing = reasonIdByText.get(reason);
   if (existing !== undefined) return existing;
   const id = reasonById.length;
@@ -139,6 +139,29 @@ export function pay(ctx: WeeklyStepContext, instruction: PaymentInstruction): vo
   j.reasonId.push(internReason(instruction.reason));
   addPending(ctx, payer, -instruction.amountUSD);
   addPending(ctx, payee, instruction.amountUSD);
+}
+
+/**
+ * SCALE §7.303 — the hot-loop form of `pay`: party and reason already interned by the caller
+ * (hoisted once per company / per plan instead of two string-map probes per leg — the goods
+ * auction and the cash walk emit ~400k legs a week). Same guard, same journal encoding, same
+ * running-net update; a caller that cannot hoist keeps using `pay`.
+ */
+export function payByIds(
+  ctx: WeeklyStepContext, payerId: number, payeeId: number, amountUSD: number, reasonId: number,
+): void {
+  if (!(amountUSD > 1e-9 && isFinite(amountUSD))) {
+    if (amountUSD >= -1e-9 && amountUSD <= 1e-9) return; // exact zero or dust: an honest no-op
+    throw new Error(`ENGINE DEFECT: payByIds reason#${reasonId} carries amountUSD=${amountUSD} — `
+      + 'a NaN or negative amount is a sign/arithmetic error at the caller, not a payment');
+  }
+  const j = ctx.paymentJournal;
+  j.payerId.push(payerId);
+  j.payeeId.push(payeeId);
+  j.amountUSD.push(amountUSD);
+  j.reasonId.push(reasonId);
+  addPending(ctx, payerId, -amountUSD);
+  addPending(ctx, payeeId, amountUSD);
 }
 
 /** The running net, as a dense array indexed by party id. Touched ids are remembered so the
