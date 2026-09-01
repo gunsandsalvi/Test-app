@@ -104,9 +104,15 @@ function keyHash(key: string): number {
  */
 export function beginEntityScope(key: string, salt: number): number {
   const saved = state;
-  const seeded = (keyHash(key) ^ Math.imul(salt | 0, 0x9e3779b9) ^ currentSeed) >>> 0;
-  state = seeded || DEFAULT_SIMULATION_SEED;
+  state = scopedStreamSeed(key, salt);
   return saved;
+}
+
+/** ENGINE V2 — the scope's opening stream word, precomputable per entity so a kernel that has
+ *  shed its strings (or a worker that never had them) opens the identical stream by number. */
+export function scopedStreamSeed(key: string, salt: number): number {
+  const seeded = (keyHash(key) ^ Math.imul(salt | 0, 0x9e3779b9) ^ currentSeed) >>> 0;
+  return seeded || DEFAULT_SIMULATION_SEED;
 }
 
 /** Close an entity's stream and restore the caller's. */

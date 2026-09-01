@@ -141,8 +141,12 @@ function chainOf(L: LotStore, v2: V2World, companyId: string, subUnitId: string)
   if (firmRow === undefined) return { slot: -1, rows: [] };
   const subIdx = SUBUNIT_INDEX.get(subUnitId);
   if (subIdx === undefined) return { slot: -1, rows: [] };
+  return chainOfSlot(L, firmRow, subIdx);
+}
+
+function chainOfSlot(L: LotStore, firmRow: number, subIdx: number): { slot: number; rows: number[] } {
   const slot = firmRow * NSUB + subIdx;
-  if (slot >= L.head.length) return { slot: -1, rows: [] };
+  if (firmRow < 0 || slot >= L.head.length) return { slot: -1, rows: [] };
   const rows: number[] = [];
   for (let r = L.head[slot]; r >= 0; r = L.next[r]) rows.push(r);
   return { slot, rows };
@@ -155,8 +159,18 @@ function chainOf(L: LotStore, v2: V2World, companyId: string, subUnitId: string)
 export function consumeFifo(
   v2: V2World, companyId: string, subUnitId: string, unitsWanted: number
 ): { availableUnits: number; costsUSD: number[] } {
+  const firmRow = v2.rowById.get(companyId);
+  const subIdx = SUBUNIT_INDEX.get(subUnitId);
+  if (firmRow === undefined || subIdx === undefined) return { availableUnits: 0, costsUSD: [] };
+  return consumeFifoByRow(v2, firmRow, subIdx, unitsWanted);
+}
+
+/** ENGINE V2 (§7.305) — the row-addressed draw the numeric core calls: no strings anywhere. */
+export function consumeFifoByRow(
+  v2: V2World, firmRow: number, subIdx: number, unitsWanted: number
+): { availableUnits: number; costsUSD: number[] } {
   const L = v2.lots;
-  const { slot, rows } = chainOf(L, v2, companyId, subUnitId);
+  const { slot, rows } = chainOfSlot(L, firmRow, subIdx);
   if (rows.length === 0) return { availableUnits: 0, costsUSD: [] };
 
   // Sorted almost always (lots append in week order); an out-of-order chain — a delayed
