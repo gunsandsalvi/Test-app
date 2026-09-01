@@ -747,6 +747,13 @@ export function generateInitialCompanies(
         insuranceClaimsPaidUSD: parent.insuranceClaimsPaidUSD,
 
         ...parent,
+        // §7.312 — the spread copies every object field BY REFERENCE, so all padding clones
+        // shared their parent's ladder ARRAY for week 1 (the back rebuild de-aliases at week
+        // end): one firm's week-1 CP issue landed on its whole clone family's books, and the
+        // rebuild then baked the foreign tranches in permanently. The ladder gets its own
+        // tranche objects. (Known remainder, recorded: the copied principals are the PARENT's,
+        // unscaled — the clone's scaled totalDebt is overwritten by the ladder sum at week 1.)
+        debtTranches: (parent.debtTranches ?? []).map((t) => ({ ...t })),
         id: parent.id + "-" + random().toString(36).substring(2, 9),
         ticker: newTicker,
         name: newName,

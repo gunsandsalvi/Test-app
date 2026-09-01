@@ -132,6 +132,24 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       return result;
     } finally {
       if (trace) { trace.end(); ctx = baseCtx; }
+      if (process.env.ALIAS_TRACE === '1' && stage === '01-macro-feedback') {
+        const scan = (label: string, list: { ticker: string; id: string; debtTranches?: unknown }[]): void => {
+          const seen = new Map<object, { ticker: string; id: string }>();
+          let pairs = 0; let cloneFam = 0; const ex: string[] = [];
+          for (const c of list) {
+            if (!c.debtTranches) continue;
+            const prior = seen.get(c.debtTranches as object);
+            if (prior) {
+              pairs++;
+              if (c.id.startsWith(prior.id) || prior.id.startsWith(c.id)) cloneFam++;
+              if (ex.length < 3) ex.push(`${prior.ticker}(${prior.id})~${c.ticker}(${c.id})`);
+            } else seen.set(c.debtTranches as object, { ticker: c.ticker, id: c.id });
+          }
+          console.log(`[alias] w${baseCtx.nextWeek} ${label}: ${pairs} pairs (${cloneFam} clone-family) ${ex.join(' | ')}`);
+        };
+        scan('updatedCompanies', baseCtx.updatedCompanies as never);
+        scan('state.companies', state.companies as never);
+      }
       idTrace?.afterStage(stage, state, baseCtx);
       // MINT_STAGE_TRACE=<companyId> — read-only: prints the stage after which the named
       // issuer's CORP_BOND holder total moved (the §7.289 mint-drift dig's instrument).
