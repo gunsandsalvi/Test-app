@@ -69,8 +69,13 @@ export interface CompanyStore {
   epoch: number;
 }
 
-const sabF64 = (cap: number) => new Float64Array(new SharedArrayBuffer(cap * 8));
-const sabU8 = (cap: number) => new Uint8Array(new SharedArrayBuffer(Math.max(1, cap)));
+// Browsers hide the SharedArrayBuffer global without cross-origin isolation (e.g. plain static
+// hosting); a plain buffer is identical single-threaded, and the pools that need SAB are
+// Node-only anyway.
+const SAB: SharedArrayBufferConstructor | ArrayBufferConstructor =
+  (globalThis as { SharedArrayBuffer?: SharedArrayBufferConstructor }).SharedArrayBuffer ?? ArrayBuffer;
+const sabF64 = (cap: number) => new Float64Array(new SAB(cap * 8));
+const sabU8 = (cap: number) => new Uint8Array(new SAB(Math.max(1, cap)));
 
 function alloc(cap: number): CompanyStore {
   const num = {} as CompanyStore['num'];

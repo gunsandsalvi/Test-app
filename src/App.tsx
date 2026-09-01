@@ -23,7 +23,7 @@ interface WeekSample {
 /** Steady-state means skip the warm-up weeks, matching the harness's convention. */
 const WARMUP_WEEKS = 3;
 
-function buildReport(samples: WeekSample[], running: boolean): string {
+function buildReport(samples: WeekSample[], running: boolean, error: string | null): string {
   const nav = typeof navigator !== 'undefined' ? navigator : undefined;
   const mem = (performance as unknown as { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
   const lines: string[] = [];
@@ -33,6 +33,7 @@ function buildReport(samples: WeekSample[], running: boolean): string {
     + ` | crossOriginIsolated (SharedArrayBuffer usable): ${typeof crossOriginIsolated !== 'undefined' ? crossOriginIsolated : 'n/a'}`);
   if (mem) lines.push(`js heap: ${(mem.usedJSHeapSize / 1e6).toFixed(0)}MB used / ${(mem.jsHeapSizeLimit / 1e6).toFixed(0)}MB limit`);
   lines.push(`status: ${running ? 'RUNNING' : 'STOPPED'} | weeks run: ${samples.length}`);
+  if (error) lines.push(`ERROR: ${error}`);
   if (samples.length === 0) return lines.join('\n');
 
   const all = samples.map((s) => s.ms);
@@ -73,31 +74,52 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const ensureState = (): GameState => {
-    if (!stateRef.current) {
-      setSeeding(true);
-      stateRef.current = createInitialGameState();
-      setSeeding(false);
-    }
-    return stateRef.current;
+  const fail = (e: unknown) => {
+    runningRef.current = false;
+    setRunning(false);
+    setSeeding(false);
+    setError(e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e));
   };
 
   const loop = () => {
     if (!runningRef.current || !stateRef.current) return;
-    const t0 = performance.now();
-    const r = advanceWeeklyStepProfiled(stateRef.current, { profile: true });
-    const ms = performance.now() - t0;
-    stateRef.current = r.state;
-    samplesRef.current.push({ week: r.state.currentWeek, ms, stages: r.timings ?? [] });
+    try {
+      const t0 = performance.now();
+      const r = advanceWeeklyStepProfiled(stateRef.current, { profile: true });
+      const ms = performance.now() - t0;
+      stateRef.current = r.state;
+      samplesRef.current.push({ week: r.state.currentWeek, ms, stages: r.timings ?? [] });
+    } catch (e) {
+      fail(e);
+      return;
+    }
     setTick((t) => t + 1);
     // Yield to the browser between weeks so Stop stays clickable and paints happen.
     setTimeout(loop, 0);
   };
 
   const onRun = () => {
-    ensureState();
-    if (runningRef.current) return;
+    if (runningRef.current || seeding) return;
+    setError(null);
+    if (!stateRef.current) {
+      // Seed on the next tick so the "Seeding…" label paints before the thread blocks.
+      setSeeding(true);
+      setTimeout(() => {
+        try {
+          stateRef.current = createInitialGameState();
+        } catch (e) {
+          fail(e);
+          return;
+        }
+        setSeeding(false);
+        runningRef.current = true;
+        setRunning(true);
+        setTimeout(loop, 0);
+      }, 30);
+      return;
+    }
     runningRef.current = true;
     setRunning(true);
     setTimeout(loop, 0);
@@ -111,12 +133,13 @@ export default function App() {
     setRunning(false);
     stateRef.current = null;
     samplesRef.current = [];
+    setError(null);
     setTick((t) => t + 1);
   };
 
   useEffect(() => () => { runningRef.current = false; }, []);
 
-  const report = buildReport(samplesRef.current, running);
+  const report = buildReport(samplesRef.current, running, error);
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(report);
