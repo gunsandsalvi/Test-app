@@ -56,7 +56,7 @@ const RULES: ReadonlyArray<readonly [RegExp, PaymentCategory]> = [
   [/interest|coupon|redeem|redemption|redeemed|principal (repaid|retired|paydown)|paydown to holders|debt prepayment|deleveraging|facility prepaid|term-out|call premium|funding repaid/, 'DEBT_SERVICE'],
 
   // -- Credit creation: new money being drawn --
-  [/revolver|overdraft|loan origination|trade credit|prime brokerage|repo (drawdown|maturity|collateral)|maintenance funding draw|facility draw/, 'CREDIT_CREATION'],
+  [/revolver|overdraft|loan origination|trade credit|prime brokerage|repo (drawdown|maturity|collateral)|maintenance funding draw|facility draw|funding raised/, 'CREDIT_CREATION'],
 
   // -- Corporate actions and equity distributions --
   [/dividend|buyback|merger|estate|resolution:|firm birth|divestiture|sponsor-to-sponsor|dividend recap|capital call|fund distribution|FDI: subsidiary|repatriated/, 'CORPORATE_ACTION'],

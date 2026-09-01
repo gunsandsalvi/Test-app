@@ -774,6 +774,14 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const cashUSD = Math.max(0, (entity.cashUSD ?? 0)
           + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })) * CP_SHARE_OF_TERM_SLEEVE;
         const demand = new Map<string, ParticipantDemand>();
+        // §7.340 — ONE sleeve, many bids: the per-issuer limit is a CONCENTRATION rule, not a
+        // budget, and with fifty issuers in the book fifty bids at 5% each offered the same
+        // dollar two and a half times over. The engine has no cross-instrument budget (each
+        // bid is affordable on its own), so the cash is divided across the bids it is put
+        // behind: no bid can take more than its share, and the sum can never exceed the sleeve.
+        // Measured: a private-equity fund closed a week overdrawn by 2.9M on a 960M balance
+        // — bills at their cap, then CP at 2× what was left.
+        const bidShare = Math.min(CP_SINGLE_ISSUER_LIMIT, 1 / Math.max(1, cpIssuers.length));
         cpIssuers.forEach((iss) => {
           const lineUSD = sleeveUSD * CP_SINGLE_ISSUER_LIMIT * cpCreditPolicyShare(iss.comp.creditRating);
           demand.set(iss.comp.id, {
@@ -785,7 +793,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             }),
             maxHoldingUSD: lineUSD,
             fullSizeStatRange: CP_FULL_SIZE_YIELD_RANGE_BPS,
-            maxNetPurchaseUSD: cashUSD * CP_SINGLE_ISSUER_LIMIT,
+            maxNetPurchaseUSD: cashUSD * bidShare,
           });
         });
         cpParticipants.push({ id: entity.id, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });

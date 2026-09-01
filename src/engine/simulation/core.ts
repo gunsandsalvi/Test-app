@@ -26,6 +26,7 @@ import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clear
 import { buildHoldingsStore, finalizeHoldingsStore, consolidateRegister } from './stages/holdings-store';
 import { runSettlementStage } from './stages/settlement';
 import { runBankResolutionStage } from './stages/bank-resolution';
+import { runBankFundingCloseStage } from './stages/bank-funding-close';
 import { runSmePoolStage } from './stages/sme-pools';
 import { accrueInstitutionalIncome, markInstitutionalBooks } from './stages/institutional-balance-sheet';
 import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
@@ -359,6 +360,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // §7.339: a bank under prompt corrective action is closed on the week's final sheets and its
   // books go whole to the strongest peer — after the close (an empty journal, every sheet
   // final), before the central bank counts the reserves it just moved.
+  run('bank-funding-close', () => runBankFundingCloseStage(state, ctx));
   run('bank-resolution', () => runBankResolutionStage(state, ctx));
   for (const f of ['cash', 'isDefaulted', 'defaultedWeek', 'bankResolvedWeek', 'employeeCount', 'grossPPEUSD', 'accumulatedDepreciationUSD', 'annualRevenue', 'ebitda', 'ebit', 'bankMarketShare', 'homeBankTicker', 'creditRating', 'stockPrice', 'marketCap'] as const) syncCompanyField(state, f);
   // PUB2: the central bank's week — remittances, the TGA, and the reserves its flows move.

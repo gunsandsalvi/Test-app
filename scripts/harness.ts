@@ -242,6 +242,10 @@ const BOUNDARY_FRONTIERS: Record<string, string> = {
   // it. Shrinks to nothing as the stock unwinds (gone by ~w15); its true close is seeding the
   // matching claim, a re-anchor gated with SEED_BURN_IN (§7.232).
   'wholesale funding repaid': 'the seed wholesale stock, unwinding to a lender the seed never named',
+  // §7.340: the roll's other half — a bank short of its buffer at the close raises wholesale
+  // money from the same lender. The named successor is the interbank unsecured market (surplus
+  // banks lend to short ones at policy plus the borrower's spread; an asset line on the lender).
+  'wholesale funding raised': 'the funding close — wholesale money raised at the close by a bank short of its buffer',
 };
 /** Below this, a week's line is rounding rather than a flow. */
 const BOUNDARY_DE_MINIMIS_USD = 1e6;
@@ -2500,6 +2504,15 @@ function runHarness() {
         violations.push({
           week: w,
           message: `Bank ${c.ticker} balance-sheet identity broken by ${(residualUSD / 1e6).toFixed(1)}M — a flow is missing a leg`
+        });
+      }
+      // §7.340: a bank's reserve account cannot close the week negative — nothing in the model
+      // lends a bank an unsecured overdraft at the central bank. It went unwatched while three
+      // banks ran −0.4 to −1.1B (§6.1); the wholesale raise is what funds the shortfall now.
+      if (bs.cashReservesUSD < -1e6) {
+        violations.push({
+          week: w,
+          message: `Bank ${c.ticker} overdrawn at the central bank by ${(-bs.cashReservesUSD / 1e6).toFixed(1)}M — a shortfall nothing funded`
         });
       }
     });

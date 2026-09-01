@@ -52,7 +52,7 @@ import { SmePool } from '../../../domain/region-macro';
 import { bookPnL } from '../../ledger/bank-book';
 import { remainingLifeExpectancyYears, medianAdultAgeYears } from '../../bootstrap/population';
 import { creditRecoveryRate } from './shared-helpers';
-import { bankTotalAssetsUSD, stressedOutflowUSD, LIQUIDITY_COVERAGE_RATIO } from '../../macro/banking';
+import { bankTotalAssetsUSD, stressedOutflowUSD, LIQUIDITY_COVERAGE_RATIO, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 
 /** Covenant-style ceiling on SME pool leverage — the same real lending constraint the bond
  * market's covenant ladder expresses (§5-RV's "lenders do not fund unlimited leverage"). */
@@ -917,6 +917,24 @@ export function unrenewedWholesaleUSD(sheet: BankingSector): number {
   if (repayUSD < 1e6) return 0;
   sheet.wholesaleFundingUSD = (sheet.wholesaleFundingUSD ?? 0) - repayUSD;
   return repayUSD;
+}
+
+/**
+ * §7.340 — the ROLL'S OTHER HALF: a bank whose week closes short of its operating buffer after
+ * the repo session (its collateral ran out, or it had none) raises wholesale money at its own
+ * cleared spread, from the same lenders the roll repays. Before this the line only ever fell,
+ * and a bank that could not fund itself secured simply ran its reserve account NEGATIVE — an
+ * overdraft at the central bank that nothing lends and the harness did not watch (measured:
+ * three USA/JPN banks −0.4 to −1.1B at week 13, SAXW −0.7B at week 3).
+ *
+ * Writes the liability up and returns the amount; the CALLER settles the cash leg as a payment
+ * instruction (the unmodeled wholesale lender → BANK_SECURITIES).
+ */
+export function raiseWholesaleUSD(sheet: BankingSector, settledCashUSD: number): number {
+  const shortfallUSD = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO - settledCashUSD;
+  if (shortfallUSD < 1e6) return 0;
+  sheet.wholesaleFundingUSD = (sheet.wholesaleFundingUSD ?? 0) + shortfallUSD;
+  return shortfallUSD;
 }
 
 export function applyBankFundingSplit(
