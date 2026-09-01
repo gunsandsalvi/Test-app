@@ -9,7 +9,7 @@
 
 import { absorbBankBook } from '../../ledger';
 import { ensureV2 } from '../../../engine2/world';
-import { syncLadderRows } from '../../../engine2/tranches';
+import { syncLadderRows, materializeLadder } from '../../../engine2/tranches';
 import { pay } from './settlement';
 import { GameState, DebtTranche } from '../../../types';
 import { getSimulationDate } from '../../formatters';
@@ -282,19 +282,22 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // individually with a renamed id and remapped position, exactly as before. Tranches with no
   // open position are pooled across both companies and consolidated by (rateType, tenor
   // bucket) so the combined entity's ladder doesn't grow without bound across repeated mergers.
-  if (target.debtTranches && target.debtTranches.length > 0) {
-    if (!acquirer.debtTranches) acquirer.debtTranches = [];
-
+  // §7.311 writer flip — the ladders are sourced from the ROWS (the authority) and written
+  // back to the rows; the object arrays are a week-end materialized view now.
+  const v2m = ensureV2(state);
+  const targetLadder = materializeLadder(v2m, target.id);
+  const acquirerLadder = materializeLadder(v2m, acquirer.id);
+  if (targetLadder.length > 0) {
     const heldTrancheIds = new Set(
       ctx.workingPositions
         .filter(p => (p.symbol === target.ticker || p.symbol === acquirer.ticker) && p.trancheId)
         .map(p => p.trancheId!)
     );
 
-    const protectedTargetTranches = target.debtTranches.filter(t => heldTrancheIds.has(t.id));
-    const mergeableTargetTranches = target.debtTranches.filter(t => !heldTrancheIds.has(t.id));
-    const protectedAcquirerTranches = acquirer.debtTranches.filter(t => heldTrancheIds.has(t.id));
-    const mergeableAcquirerTranches = acquirer.debtTranches.filter(t => !heldTrancheIds.has(t.id));
+    const protectedTargetTranches = targetLadder.filter(t => heldTrancheIds.has(t.id));
+    const mergeableTargetTranches = targetLadder.filter(t => !heldTrancheIds.has(t.id));
+    const protectedAcquirerTranches = acquirerLadder.filter(t => heldTrancheIds.has(t.id));
+    const mergeableAcquirerTranches = acquirerLadder.filter(t => !heldTrancheIds.has(t.id));
 
     protectedTargetTranches.forEach(t => {
       const transferredTranche = { ...t, id: `${t.id}-acq-${ctx.nextWeek}` };
@@ -313,12 +316,11 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       acquirer.ticker
     );
 
-    acquirer.debtTranches = [...protectedAcquirerTranches, ...consolidatedTranches];
-    syncLadderRows(ensureV2(state), acquirer.id, acquirer.debtTranches);
-    acquirer.totalDebt = acquirer.debtTranches.reduce((s, t) => s + t.principalUSD, 0);
+    const newLadder = [...protectedAcquirerTranches, ...consolidatedTranches];
+    syncLadderRows(v2m, acquirer.id, newLadder);
+    acquirer.totalDebt = newLadder.reduce((s, t) => s + t.principalUSD, 0);
   }
-  target.debtTranches = [];
-  syncLadderRows(ensureV2(state), target.id, target.debtTranches);
+  syncLadderRows(v2m, target.id, []);
   target.totalDebt = 0;
 
   // HH4d (a hole the deposit-unification invariant exposed): an acquired BANK brings its whole

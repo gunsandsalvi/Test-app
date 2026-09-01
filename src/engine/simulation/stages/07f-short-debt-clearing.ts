@@ -31,7 +31,7 @@
 
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import { syncLadderRows } from '../../../engine2/tranches';
+import { ladderRowsOf, pushLadderRow, relinkLadder, TR_FLOATING, TR_CP } from '../../../engine2/tranches';
 import { REGION_IDS } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
@@ -92,7 +92,6 @@ const billInstrumentId = (regionId: RegionId, key: string) => `${regionId}-GOV-$
 
 export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2Mirror = ensureV2(state);
-  const touchedLadders = new Set<Company>();
   const regionIds = REGION_IDS;
 
   regionIds.forEach((regionId) => {
@@ -593,10 +592,15 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       if (comp.region !== regionId || !isActiveCompany(comp) || !isPubliclyListed(comp)) return;
       if (comp.isBankEntity || comp.isInstitutionalEntity) return;
 
-      const existingCP = (comp.debtTranches || []).filter((t) => t.isCommercialPaper);
-      const cpMaturingNow = existingCP.filter((t) => t.maturityWeek <= ctx.nextWeek);
-      const cpOutstandingUSD = existingCP.reduce((s, t) => s + t.principalUSD, 0);
-      const maturedUSD = cpMaturingNow.reduce((s, t) => s + t.principalUSD, 0);
+      // §7.311 writer flip — the ladder lives on the rows; fold order = chain order.
+      const TSf = v2Mirror.tranches;
+      let cpOutstandingUSD = 0;
+      let maturedUSD = 0;
+      for (const r of ladderRowsOf(v2Mirror, comp.id)) {
+        if (!(TSf.flags[r] & TR_CP)) continue;
+        cpOutstandingUSD += TSf.principalUSD[r];
+        if (TSf.maturityWeek[r] <= ctx.nextWeek) maturedUSD += TSf.principalUSD[r];
+      }
       const survivingUSD = Math.max(0, cpOutstandingUSD - maturedUSD);
 
       // What CP actually funds: the WORKING-CAPITAL STOCK — the receivables and inventory the
@@ -608,10 +612,11 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // weeks: almost nobody projects negative cash, but plenty of real issuers paper their
       // working capital, which is who the CP market is. THE SIZE IS STILL THE ISSUER'S; the
       // price is not, and what the book will not fund at that price does not place.
-      const annualInterest = (comp.debtTranches || []).reduce((sum, t) => {
-        if (t.rateType === 'FIXED') return sum + t.principalUSD * (t.couponRate ?? 0.05);
-        return sum + t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000);
-      }, 0);
+      let annualInterest = 0;
+      for (const r of ladderRowsOf(v2Mirror, comp.id)) {
+        if (!(TSf.flags[r] & TR_FLOATING)) annualInterest += TSf.principalUSD[r] * (Number.isNaN(TSf.couponRate[r]) ? 0.05 : TSf.couponRate[r]);
+        else annualInterest += TSf.principalUSD[r] * (reg.policyRate + (Number.isNaN(TSf.floatingMarginBps[r]) ? 200 : TSf.floatingMarginBps[r]) / 10000);
+      }
       const latestSnap = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
       const dividendsQuarterUSD = Math.abs(latestSnap?.cashFlowStatement?.dividendsPaid ?? 0);
       const quarterOutflowsUSD = annualInterest / 4 + (comp.maintenanceCapex ?? 0) / 4 + dividendsQuarterUSD;
@@ -699,9 +704,12 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             });
           }
         });
-        iss.comp.debtTranches = (iss.comp.debtTranches || [])
-          .filter((t) => !(t.isCommercialPaper && t.maturityWeek <= ctx.nextWeek));
-        touchedLadders.add(iss.comp);
+        {
+          const TSr = v2Mirror.tranches;
+          const kept = ladderRowsOf(v2Mirror, iss.comp.id)
+            .filter((r) => !((TSr.flags[r] & TR_CP) && TSr.maturityWeek[r] <= ctx.nextWeek));
+          relinkLadder(v2Mirror, iss.comp.id, kept);
+        }
       });
 
       deskCpRows.forEach((rows, ticker) => {
@@ -723,10 +731,12 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         if (usd > 0) heldByInstitutionsUSD.set(issuerId, (heldByInstitutionsUSD.get(issuerId) ?? 0) + usd);
       }));
       const cpInstruments: ClearingInstrument[] = cpIssuers.map((iss) => {
-        const survivingTranches = (iss.comp.debtTranches || []).filter((t) => t.isCommercialPaper);
-        const weightedCouponBps = iss.survivingUSD > 0
-          ? survivingTranches.reduce((a, t) => a + t.principalUSD * (t.couponRate ?? 0), 0) / iss.survivingUSD * 10000
-          : 0;
+        const TSb = v2Mirror.tranches;
+        let survCouponSum = 0;
+        for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
+          if (TSb.flags[r] & TR_CP) survCouponSum += TSb.principalUSD[r] * (Number.isNaN(TSb.couponRate[r]) ? 0 : TSb.couponRate[r]);
+        }
+        const weightedCouponBps = iss.survivingUSD > 0 ? survCouponSum / iss.survivingUSD * 10000 : 0;
         const fairOpeningBps = cpReservationYieldBps({
           clearedBillYieldBps: billYield13wBps,
           annualDefaultProbability: iss.annualPd,
@@ -825,9 +835,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const placedUSD = outcome && !outcome.withdrawn ? Math.max(0, outcome.marketTakeUSD) : 0;
         // No floor on the level (rule 15): the paper exists at whatever the auction printed.
         if (placedUSD > 1) {
-          iss.comp.debtTranches = iss.comp.debtTranches || [];
-          touchedLadders.add(iss.comp);
-          iss.comp.debtTranches.push({
+          pushLadderRow(v2Mirror, iss.comp.id, {
             id: `${iss.comp.ticker}-CP-${ctx.nextWeek}`,
             principalUSD: placedUSD,
             rateType: 'FIXED',
@@ -845,9 +853,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const rollNeedUSD = Math.min(iss.maturedUSD, iss.wantedUSD);
         const revolverUSD = Math.max(0, rollNeedUSD - placedUSD);
         if (revolverUSD > 1) {
-          iss.comp.debtTranches = iss.comp.debtTranches || [];
-          touchedLadders.add(iss.comp);
-          iss.comp.debtTranches.push({
+          pushLadderRow(v2Mirror, iss.comp.id, {
             id: `${iss.comp.ticker}-REVOLVER-${ctx.nextWeek}`,
             principalUSD: revolverUSD,
             rateType: 'FLOATING',
@@ -861,7 +867,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             // on the other — one real thing represented two ways (rule 3).
             isBankFacility: true,
             facilityBankTicker: iss.comp.homeBankTicker,
-          });
+          } as DebtTranche);
           pay(ctx, {
             payer: { kind: 'BANK_CREDIT', ticker: iss.comp.homeBankTicker ?? '' },
             payee: { kind: 'COMPANY', ticker: iss.comp.ticker },
@@ -894,8 +900,11 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             urgent: true,
           } as NewsItem);
         }
-        const cpNowUSD = (iss.comp.debtTranches || [])
-          .filter((t) => t.isCommercialPaper).reduce((a, t) => a + t.principalUSD, 0);
+        const TSn = v2Mirror.tranches;
+        let cpNowUSD = 0;
+        for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
+          if (TSn.flags[r] & TR_CP) cpNowUSD += TSn.principalUSD[r];
+        }
         iss.comp.totalDebt = Math.max(0,
           iss.comp.totalDebt - (iss.survivingUSD + iss.maturedUSD) + cpNowUSD + revolverUSD);
       });
@@ -919,5 +928,4 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       );
     }
   });
-  touchedLadders.forEach((c) => syncLadderRows(v2Mirror, c.id, c.debtTranches));
 }

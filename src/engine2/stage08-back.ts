@@ -40,13 +40,13 @@ import { partyId } from '../engine/ledger/party';
 import { planCapitalProgramme, capacityRetirement } from '../domain/company-week/capital-programme';
 import { learningUpdate, seedCumulativeUnits } from '../domain/company-week/learning';
 import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '../domain/company-week/credit-standing';
-import { callEconomics, callableAmountUSD, dropExhausted } from '../domain/company-week/debt-ladder';
+import { callEconomics, callableAmountUSD } from '../domain/company-week/debt-ladder';
 import { profileIncome } from '../domain/company-week/income-statement';
 import { dividendDecision } from '../domain/company-week/distributions';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../engine/equity-valuation';
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
-import { syncLadderRows } from './tranches';
+import { ladderRowsOf, pushLadderRow, relinkLadder, materializeTranche, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
 import { V2World } from './world';
 import { totalInputValueUSD } from './lots';
 
@@ -802,11 +802,25 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       }
     }
 
-    const drawnRevolverTranches: DebtTranche[] = [];
+    // §7.311 WRITER FLIP — the ladder lives on the rows. The kernel works a LOCAL list of row
+    // indices (order = ladder order), mutates principals in place, appends via pushLadderRow,
+    // and relinks the chain once at write-back. Fold order everywhere = list order = the order
+    // the object walk had.
+    const TS = v2.tranches;
+    let rowList = ladderRowsOf(v2, comp.id);
+    // Economics views are memoized per row — retirementEconomics and the call arithmetic read
+    // no principal, so a view struck before a principal mutation stays valid.
+    const econViews = new Map<number, DebtTranche>();
+    const viewOf = (r: number): DebtTranche => {
+      let vv = econViews.get(r);
+      if (vv === undefined) { vv = materializeTranche(v2, r); econViews.set(r, vv); }
+      return vv;
+    };
+    let drawnRevolverRow = -1;
     if (!comp.isDefaulted && !comp.mergerAcquired && newCash < 0) {
       const revolverRateAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
-      const alreadyDrawnUSD = (comp.debtTranches || [])
-        .filter(t => t.isBankFacility).reduce((a, t) => a + t.principalUSD, 0);
+      let alreadyDrawnUSD = 0;
+      for (const r of rowList) if (TS.flags[r] & TR_FACILITY) alreadyDrawnUSD += TS.principalUSD[r];
       const headroomUSD = Math.max(0, committedLineHeadroomUSD({
         ebitAnnualUSD: newEbit,
         currentAnnualInterestUSD: annualInterest,
@@ -828,7 +842,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
           isBankFacility: true,
           facilityBankTicker: comp.homeBankTicker,
         };
-        drawnRevolverTranches.push(revolver);
+        drawnRevolverRow = pushLadderRow(v2, comp.id, revolver);
         recordCredit(revolver.id, drawUSD, REVOLVER_MARGIN_BPS, 52, false);
         newTotalDebt += drawUSD;
         post('revolver drawn: liquidity shortfall', drawUSD,
@@ -864,8 +878,15 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // CRD-R1 — the rating reads everything the model already measures about this issuer, not
       // just two ratios (§7.184). Every argument is a measurement taken elsewhere for another
       // purpose; nothing here is a new stated weight.
-      const maturityWallShareOfLadder = maturityWallShare(comp.debtTranches, nextWeek);
-      const ladderUSD = Math.max(1, comp.debtTranches.reduce((a, t) => a + t.principalUSD, 0));
+      // maturityWallShare's own arithmetic on the rows (the revolver drawn above is not in
+      // rowList yet, exactly as it was not in comp.debtTranches here).
+      let wallUSD = 0, ladderSumUSD = 0;
+      for (const r of rowList) {
+        ladderSumUSD += TS.principalUSD[r];
+        if (TS.maturityWeek[r] - nextWeek <= 52) wallUSD += TS.principalUSD[r];
+      }
+      const maturityWallShareOfLadder = wallUSD / Math.max(1, ladderSumUSD);
+      const ladderUSD = Math.max(1, ladderSumUSD);
       const revHist = comp.revenueHistory ?? [];
       const revMean = revHist.length > 2 ? revHist.reduce((a, x) => a + x, 0) / revHist.length : 0;
       const revVol = revMean > 0
@@ -931,7 +952,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // dealer desk before this stage ever runs. Nothing here computes or smooths either one.
 
     // Pre-refinancing trigger roughly one year before maturity
-    let companyTranches = [...comp.debtTranches.map(t => ({ ...t })), ...drawnRevolverTranches];
+    if (drawnRevolverRow >= 0) rowList.push(drawnRevolverRow);
     // The issuer's real float BEFORE any of this week's corporate actions — the accretive call
     // below, the maturity and refinancing further down, all of it. Everything that changes the
     // amount of this issuer's paper in existence is settled against its holders once, at the end,
@@ -949,9 +970,10 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // SCALE — the two filtered reduces as one walk; each accumulator sums its subset in array
     // order and the adjustment adds last, so every float is the one the filters produced.
     let preFixedSumUSD = 0, preFloatingSumUSD = 0;
-    for (const t of companyTranches) {
-      if (t.rateType === 'FIXED') { if (!t.isCommercialPaper) preFixedSumUSD += t.principalUSD; }
-      else if (!t.isBankFacility) preFloatingSumUSD += t.principalUSD;
+    for (const r of rowList) {
+      const fl = TS.flags[r];
+      if (!(fl & TR_FLOATING)) { if (!(fl & TR_CP)) preFixedSumUSD += TS.principalUSD[r]; }
+      else if (!(fl & TR_FACILITY)) preFloatingSumUSD += TS.principalUSD[r];
     }
     const preActionFixedUSD = preFixedSumUSD + primaryFixedAdjUSD;
     const preActionFloatingUSD = preFloatingSumUSD + primaryFloatingAdjUSD;
@@ -961,11 +983,11 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
      * the call premium (`domain/call-protection.ts`). Zero at maturity and on bank facilities;
      * real everywhere else, which is what makes a refinancing an economic decision.
      */
-    const callPremiumUSD = (t: DebtTranche, amountUSD: number): number => {
+    const callPremiumRowUSD = (r: number, amountUSD: number): number => {
       if (!(amountUSD > 0)) return 0;
-      const remainingYears = Math.max(0.5, (t.maturityWeek - state.currentWeek) / 52);
+      const remainingYears = Math.max(0.5, (TS.maturityWeek[r] - state.currentWeek) / 52);
       const riskFree = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams);
-      return amountUSD * (callPricePerDollar(t, state.currentWeek, riskFree) - 1);
+      return amountUSD * (callPricePerDollar(viewOf(r), state.currentWeek, riskFree) - 1);
     };
     /**
      * Is retiring this paper early worth what it costs, and how does it rank against the rest of
@@ -978,16 +1000,17 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
      * treasuries do. Without the test, surplus-cash prepayment make-whole'd 10-year paper at a
      * measured 15% premium and handed bondholders 854M in sixty weeks for nothing.
      */
-    const retirementEconomics = (t: DebtTranche) => {
-      const remainingYears = Math.max(0.5, (t.maturityWeek - state.currentWeek) / 52);
+    const retirementEconomics = (r: number) => {
+      const remainingYears = Math.max(0.5, (TS.maturityWeek[r] - state.currentWeek) / 52);
       const riskFree = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams);
-      const annualRate = t.rateType === 'FIXED'
-        ? (t.couponRate ?? 0)
-        : reg.policyRate + (t.floatingMarginBps ?? 0) / 10000;
-      const fairRateToday = t.rateType === 'FIXED'
+      const isFixed = !(TS.flags[r] & TR_FLOATING);
+      const annualRate = isFixed
+        ? (Number.isNaN(TS.couponRate[r]) ? 0 : TS.couponRate[r])
+        : reg.policyRate + (Number.isNaN(TS.floatingMarginBps[r]) ? 0 : TS.floatingMarginBps[r]) / 10000;
+      const fairRateToday = isFixed
         ? riskFree + comp.oasSpreadBps / 10000
         : reg.policyRate + comp.oasSpreadBps / 10000;
-      const premiumPerDollar = callPremiumUSD(t, 1);
+      const premiumPerDollar = callPremiumRowUSD(r, 1);
       const discount = Math.max(1e-6, fairRateToday);
       const savingPvPerDollar =
         (annualRate - fairRateToday) * ((1 - Math.pow(1 + discount, -remainingYears)) / discount);
@@ -1006,9 +1029,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     /** Premiums owed to holders this week, by the book that owns the paper. */
     let bondCallPremiumUSD = 0;
     let loanCallPremiumUSD = 0;
-    const recordPremium = (t: DebtTranche, premiumUSD: number) => {
+    const recordPremium = (r: number, premiumUSD: number) => {
       if (!(premiumUSD > 0)) return;
-      if (t.rateType === 'FIXED') bondCallPremiumUSD += premiumUSD;
+      if (!(TS.flags[r] & TR_FLOATING)) bondCallPremiumUSD += premiumUSD;
       else loanCallPremiumUSD += premiumUSD;
       // SETL4: reported here, PAID by the register below (`payHoldersCash`) — settling it here as
       // well debited the issuer twice, once to the holders and once to nobody.
@@ -1017,9 +1040,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     // Corporate debt lifecycle: call and refinance when genuinely accretive
     const calledRefinanceTranches: DebtTranche[] = [];
-    companyTranches.forEach(tranche => {
-      if (tranche.rateType !== 'FIXED' || tranche.isCommercialPaper) return;
-      const remainingYears = Math.max(0.5, (tranche.maturityWeek - state.currentWeek) / 52);
+    rowList.forEach(rTr => {
+      if ((TS.flags[rTr] & (TR_FLOATING | TR_CP))) return;
+      const remainingYears = Math.max(0.5, (TS.maturityWeek[rTr] - state.currentWeek) / 52);
       const currentFairRate = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
       // A floating tranche carries a margin rather than a coupon; there is nothing to refinance
       // INTO a lower fixed rate, so its saving is zero rather than NaN.
@@ -1033,9 +1056,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // bond the premium IS the present value of the saving, so a purely rate-driven call never
       // clears this test and an IG issuer calls for a real reason instead.
       // §5-STRUCT step 2 — the call test lives on the ladder (domain/company-week/debt-ladder.ts).
-      const premiumPerDollar = callPricePerDollar(tranche, state.currentWeek, currentFairRate - comp.oasSpreadBps / 10000) - 1;
+      const premiumPerDollar = callPricePerDollar(viewOf(rTr), state.currentWeek, currentFairRate - comp.oasSpreadBps / 10000) - 1;
       const economics = callEconomics({
-        couponRate: tranche.couponRate,
+        couponRate: Number.isNaN(TS.couponRate[rTr]) ? undefined : TS.couponRate[rTr],
         currentFairRate,
         remainingYears,
         premiumPerDollar,
@@ -1043,16 +1066,16 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       });
       if (economics.isAccretive && excessCashAvailable && newRating !== 'CCC' && newRating !== 'D') {
         const calledAmountUSD = callableAmountUSD({
-          tranchePrincipalUSD: tranche.principalUSD,
+          tranchePrincipalUSD: TS.principalUSD[rTr],
           cashUSD: newCash,
           cashFloorUSD: comp.annualRevenue * 0.15,
           premiumPerDollar,
         });
-        tranche.principalUSD -= calledAmountUSD;
+        TS.principalUSD[rTr] -= calledAmountUSD;
         // The ladder change below reaches the holders through the register (settleCorporateAction-
         // OnHolders), which is what pays them; this line reports it on the cash walk only.
         post('accretive call: principal retired', -calledAmountUSD, undefined, false);
-        recordPremium(tranche, calledAmountUSD * premiumPerDollar);
+        recordPremium(rTr, calledAmountUSD * premiumPerDollar);
         // Calling a bond because it is expensive relative to the market is REFINANCING, not
         // deleveraging: the issuer replaces it at today's cheaper rate and keeps the money. The
         // saving is the lower coupon, which is what `callEconomics` above measures.
@@ -1065,7 +1088,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         // flow moved its spread hundreds of basis points a week.
         if (calledAmountUSD > 0.01) {
           calledRefinanceTranches.push({
-            id: `${comp.id}-CALL-${state.currentWeek}-${tranche.id}`,
+            id: `${comp.id}-CALL-${state.currentWeek}-${v2.internedStrings[TS.idRef[rTr]]}`,
             principalUSD: calledAmountUSD,
             rateType: 'FIXED',
             couponRate: currentFairRate,
@@ -1079,8 +1102,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       }
     });
     // Remove any tranche whose principalUSD reaches zero, then add the replacement issues.
-    companyTranches = dropExhausted(companyTranches, 0.01);
-    if (calledRefinanceTranches.length > 0) companyTranches = [...companyTranches, ...calledRefinanceTranches];
+    rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
+    for (const t of calledRefinanceTranches) rowList.push(pushLadderRow(v2, comp.id, t));
 
     // WS8: the year-early pre-refi and the at-maturity formula roll are both gone — a roll now
     // happens in the MARKET. A tranche one week from maturity is announced as a REFINANCE
@@ -1089,9 +1112,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // tranche at the CLEARED terms or — withdrawn/unpriced — the revolver catches the issuer
     // at its penalty rate, the same real funding-squeeze mechanism as a failed CP roll.
     const fiveYearSovRate = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
-    companyTranches.forEach((tranche) => {
-      if (tranche.isCommercialPaper) return;
-      if (tranche.maturityWeek !== nextWeek + 1) return;
+    rowList.forEach((rTr) => {
+      if (TS.flags[rTr] & TR_CP) return;
+      if (TS.maturityWeek[rTr] !== nextWeek + 1) return;
       if (pendingOfferingIssuerIds.has(comp.id)) return; // one live book per issuer
       // IND4: rating decides an issuer's ACCESS to the bond market; the industry tilts it by
       // what the money is buying. Long-lived assets are funded long, asset-light ones float.
@@ -1104,19 +1127,20 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         region: comp.region,
         instrumentType: refinanceAsFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
         purpose: 'REFINANCE',
-        sizeUSD: tranche.principalUSD,
+        sizeUSD: TS.principalUSD[rTr],
         // Need-driven: the issuer walks only where the market is worse than its revolver.
         walkAwayStat: refinanceAsFixed
           ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
           : REVOLVER_MARGIN_BPS,
         rateType: refinanceAsFixed ? 'FIXED' : 'FLOATING',
-        leadBankTicker: leadBankFor(comp, tranche.principalUSD),
+        leadBankTicker: leadBankFor(comp, TS.principalUSD[rTr]),
         announcedWeek: nextWeek,
       });
     });
 
-    const maturingTranche = companyTranches.find(t => t.maturityWeek === nextWeek && !t.isCommercialPaper);
-    let updatedTranches = companyTranches.filter(t => t.maturityWeek !== nextWeek || t.isCommercialPaper);
+    const maturingRow = rowList.find(r => TS.maturityWeek[r] === nextWeek && !(TS.flags[r] & TR_CP));
+    const maturingPrincipalUSD = maturingRow !== undefined ? TS.principalUSD[maturingRow] : 0;
+    rowList = rowList.filter(r => TS.maturityWeek[r] !== nextWeek || (TS.flags[r] & TR_CP) !== 0);
     let debtIssuanceThisWeek = 0;
     let debtRepaymentThisWeek = 0;
     let buybacksThisWeek = 0;
@@ -1155,26 +1179,29 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // A term-out retires the bridges it refinances.
       if (o.purpose === 'MAINTENANCE_TERM_OUT' && o.refinancesTrancheIds?.length) {
         const retire = new Set(o.refinancesTrancheIds);
-        const retiredTranches = updatedTranches.filter(t => retire.has(t.id));
-        const retiredUSD = retiredTranches.reduce((a, t) => a + t.principalUSD, 0);
-        retiredTranches.forEach(t => recordCredit(t.id, t.principalUSD, 0, 0, true));
-        updatedTranches = updatedTranches.filter(t => !retire.has(t.id));
+        let retiredUSD = 0;
+        for (const r of rowList) {
+          if (!retire.has(v2.internedStrings[TS.idRef[r]])) continue;
+          retiredUSD += TS.principalUSD[r];
+          recordCredit(v2.internedStrings[TS.idRef[r]], TS.principalUSD[r], 0, 0, true);
+        }
+        rowList = rowList.filter(r => !retire.has(v2.internedStrings[TS.idRef[r]]));
         debtRepaymentThisWeek += retiredUSD;
         post('term-out: maintenance bridges retired', -retiredUSD, bankCredit);
       }
-      if (placedUSD > 1000) updatedTranches = [...updatedTranches, newTranche];
+      if (placedUSD > 1000) rowList.push(pushLadderRow(v2, comp.id, newTranche));
       debtIssuanceThisWeek += placedUSD;
       // WS8/CASH: reported here, PAID elsewhere by name — the clearing house pays the issuer for
       // what the book took, and the lead pays it for the residual and charges it the fee
       // (book-settlement.ts, primary-settlement.ts). This line settled the whole of it against
       // the boundary while the CCP paid the boundary for the same paper.
       post(`primary ${o.purpose.toLowerCase()} proceeds (net of underwriting fee)`, settlement.proceedsUSD, undefined, false);
-    } else if (settlement && settlement.withdrawn && settlement.offering.purpose === 'REFINANCE' && maturingTranche) {
+    } else if (settlement && settlement.withdrawn && settlement.offering.purpose === 'REFINANCE' && maturingRow !== undefined) {
       // The market said no and the paper still matures: the revolver catches it — real market
       // access closing when spreads gap, with a real penalty cost.
       const revolverTranche: DebtTranche = {
         id: `${comp.id}-REVOLVER-${nextWeek}`,
-        principalUSD: maturingTranche.principalUSD,
+        principalUSD: maturingPrincipalUSD,
         rateType: 'FLOATING',
         floatingMarginBps: REVOLVER_MARGIN_BPS,
         originationWeek: nextWeek,
@@ -1184,7 +1211,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         isBankFacility: true,
         facilityBankTicker: comp.homeBankTicker,
       };
-      updatedTranches = [...updatedTranches, revolverTranche];
+      rowList.push(pushLadderRow(v2, comp.id, revolverTranche));
       debtIssuanceThisWeek += revolverTranche.principalUSD;
       recordCredit(revolverTranche.id, revolverTranche.principalUSD, REVOLVER_MARGIN_BPS,
         Math.max(1, revolverTranche.maturityWeek - nextWeek), false);
@@ -1203,18 +1230,18 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       } as NewsItem);
     }
 
-    if (maturingTranche) {
-      debtRepaymentThisWeek += maturingTranche.principalUSD;
+    if (maturingRow !== undefined) {
+      debtRepaymentThisWeek += maturingPrincipalUSD;
       // The principal leaves through the ledger; the refinancing proceeds (if the offering
       // settled) arrived above. A maturity with neither settlement nor revolver above means the
       // company simply repays from cash — deleveraging by default, which is real.
       // §7.286: this stays the internal VIEW of the payment `settleCorporateActionOnHolders`
       // below makes for real (issuer → holder of record, on the same ladder delta).
-      post('maturing tranche principal repaid', -maturingTranche.principalUSD, undefined, false);
+      post('maturing tranche principal repaid', -maturingPrincipalUSD, undefined, false);
     }
 
     if (maintenanceFundingTranches.length > 0) {
-      updatedTranches = [...updatedTranches, ...maintenanceFundingTranches];
+      for (const t of maintenanceFundingTranches) rowList.push(pushLadderRow(v2, comp.id, t));
       debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
     }
 
@@ -1223,9 +1250,11 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // through a real offering — bridge-then-term-out, the actual corporate funding pattern.
     // IG issuers term out in the bond market, sub-IG in the loan market.
     if (!pendingOfferingIssuerIds.has(comp.id) && !primarySettlementByIssuerId.has(comp.id)) {
-      const bridges = updatedTranches.filter(t => t.id.includes('-MAINT-'));
-      const bridgeUSD = bridges.reduce((a, t) => a + t.principalUSD, 0);
-      const totalDebtForGate = updatedTranches.reduce((a, t) => a + t.principalUSD, 0);
+      const bridges = rowList.filter(r => v2.internedStrings[TS.idRef[r]].includes('-MAINT-'));
+      let bridgeUSD = 0;
+      for (const r of bridges) bridgeUSD += TS.principalUSD[r];
+      let totalDebtForGate = 0;
+      for (const r of rowList) totalDebtForGate += TS.principalUSD[r];
       if (bridgeUSD > Math.max(1e6, totalDebtForGate * 0.02)) {
         const asFixed = fixedShareOf(comp) >= 0.5;  // IND4: rating's access, industry's tilt
         const revolverAllInAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
@@ -1242,7 +1271,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
             ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
             : REVOLVER_MARGIN_BPS,
           rateType: asFixed ? 'FIXED' : 'FLOATING',
-          refinancesTrancheIds: bridges.map(t => t.id),
+          refinancesTrancheIds: bridges.map(r => v2.internedStrings[TS.idRef[r]]),
           leadBankTicker: leadBankFor(comp, bridgeUSD),
           announcedWeek: nextWeek,
         });
@@ -1265,7 +1294,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // maturity first — the paper a treasurer would take out), so cash and the ladder move
     // together and the settled reduction reaches holders via settleCorporateActionOnHolders.
     if (newCash > 2.5 * comp.currentLiabilities) {
-      const ladderTotalUSD = updatedTranches.reduce((sum, t) => sum + t.principalUSD, 0);
+      let ladderTotalUSD = 0;
+      for (const r of rowList) ladderTotalUSD += TS.principalUSD[r];
       if (ladderTotalUSD > 50) {
         let toPrepayUSD = Math.min(ladderTotalUSD * 0.05, (newCash - 2.5 * comp.currentLiabilities) * 0.25);
         if (toPrepayUSD > 1000) {
@@ -1281,41 +1311,44 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
           // SCALE — the economics are computed ONCE per tranche (they read only per-dollar
           // figures, so the map's principal writes cannot change them); the comparator used to
           // re-run a Nelson-Siegel evaluation on every comparison of the sort.
-          const prepayEcon = new Map<DebtTranche, ReturnType<typeof retirementEconomics>>();
-          for (const t of updatedTranches) prepayEcon.set(t, retirementEconomics(t));
-          updatedTranches = updatedTranches
+          const prepayEcon = new Map<number, ReturnType<typeof retirementEconomics>>();
+          for (const r of rowList) prepayEcon.set(r, retirementEconomics(r));
+          rowList = rowList
             .slice()
-            .sort((a, b) => prepayEcon.get(b)!.valuePerCost - prepayEcon.get(a)!.valuePerCost)
-            .map(t => {
-              if (toPrepayUSD <= 0 || t.isCommercialPaper) return t; // CP is 07f's to resize against the real gap
-              const { premiumPerDollar, worthRetiring } = prepayEcon.get(t)!;
-              if (!worthRetiring) return t;
+            .sort((a, b) => prepayEcon.get(b)!.valuePerCost - prepayEcon.get(a)!.valuePerCost);
+          rowList.forEach(rTr => {
+              if (toPrepayUSD <= 0 || (TS.flags[rTr] & TR_CP)) return; // CP is 07f's to resize against the real gap
+              const { premiumPerDollar, worthRetiring } = prepayEcon.get(rTr)!;
+              if (!worthRetiring) return;
               // The budget buys principal AND the premium, so early repayment retires less per
               // dollar of surplus cash than it used to. That is the point: it is not free.
-              const repaid = Math.min(t.principalUSD, toPrepayUSD / (1 + premiumPerDollar));
+              const repaid = Math.min(TS.principalUSD[rTr], toPrepayUSD / (1 + premiumPerDollar));
               toPrepayUSD -= repaid * (1 + premiumPerDollar);
-              recordPremium(t, repaid * premiumPerDollar);
-              const remainingUSD = t.principalUSD - repaid;
-              if (t.isBankFacility && t.facilityBankTicker && repaid > 0) {
+              recordPremium(rTr, repaid * premiumPerDollar);
+              const remainingUSD = TS.principalUSD[rTr] - repaid;
+              if ((TS.flags[rTr] & TR_FACILITY) && TS.bankRef[rTr] >= 0 && repaid > 0) {
+                const bankTicker = v2.internedStrings[TS.bankRef[rTr]];
                 // Pushed DIRECTLY, not via recordCredit: that helper books to homeBankTicker —
                 // the facility's lender is t.facilityBankTicker, and splitting the two put the
                 // deposit destruction on one bank and the loan reduction on another (measured:
                 // PGNX +292.7M of prepay credit against a −4.1M loan move, identity −151.8M).
                 // Its `principalUSD > 0` guard also swallowed full retirements.
                 ctx.creditEventsThisWeek.push({
-                  bankTicker: t.facilityBankTicker, companyId: comp.id, trancheId: t.id,
-                  principalUSD: Math.max(0, remainingUSD), marginBps: t.floatingMarginBps ?? 350,
-                  originationWeek: t.originationWeek, termWeeks: Math.max(1, t.maturityWeek - t.originationWeek),
+                  bankTicker, companyId: comp.id, trancheId: v2.internedStrings[TS.idRef[rTr]],
+                  principalUSD: Math.max(0, remainingUSD), marginBps: Number.isNaN(TS.floatingMarginBps[rTr]) ? 350 : TS.floatingMarginBps[rTr],
+                  originationWeek: TS.originationWeek[rTr], termWeeks: Math.max(1, TS.maturityWeek[rTr] - TS.originationWeek[rTr]),
                   retire: remainingUSD <= 0.01,
                 });
-                facilityRepaidByBank.set(t.facilityBankTicker,
-                  (facilityRepaidByBank.get(t.facilityBankTicker) ?? 0) + repaid);
+                facilityRepaidByBank.set(bankTicker,
+                  (facilityRepaidByBank.get(bankTicker) ?? 0) + repaid);
                 facilityRepaidUSD += repaid;
               }
-              return { ...t, principalUSD: remainingUSD };
-            })
-            .filter(t => t.principalUSD > 0.01);
-          const prepaidUSD = Math.min(ladderTotalUSD, ladderTotalUSD - updatedTranches.reduce((sum, t) => sum + t.principalUSD, 0));
+              TS.principalUSD[rTr] = remainingUSD;
+            });
+          rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
+          let postPrepaySumUSD = 0;
+          for (const r of rowList) postPrepaySumUSD += TS.principalUSD[r];
+          const prepaidUSD = Math.min(ladderTotalUSD, ladderTotalUSD - postPrepaySumUSD);
           facilityRepaidByBank.forEach((repaidUSD, bankTicker) => {
             post('facility prepaid: the loan and the deposit die together', -repaidUSD,
               { kind: 'BANK_CREDIT', ticker: bankTicker });
@@ -1332,7 +1365,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       effectiveTaxRate: reg.effectiveTaxRate,
       ebitdaAnnual: newEbitda,
       ebitAnnual: newEbit,
-      totalDebtUSD: updatedTranches.reduce((sum, t) => sum + t.principalUSD, 0),
+      totalDebtUSD: rowList.reduce((sum, r) => sum + TS.principalUSD[r], 0),
       cashUSD: newCash,
       rating: newRating,
     });
@@ -1387,37 +1420,37 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       let remainingToRepayUSD = -financing.netDebtChangeUSD;
       let facilityRepaidUSD = 0;
       // SCALE — same once-per-tranche economics as the prepayment path above.
-      const deleverEcon = new Map<DebtTranche, ReturnType<typeof retirementEconomics>>();
-      for (const t of updatedTranches) deleverEcon.set(t, retirementEconomics(t));
-      updatedTranches = updatedTranches
+      const deleverEcon = new Map<number, ReturnType<typeof retirementEconomics>>();
+      for (const r of rowList) deleverEcon.set(r, retirementEconomics(r));
+      rowList = rowList
         .slice()
-        .sort((a, b) => deleverEcon.get(b)!.valuePerCost - deleverEcon.get(a)!.valuePerCost)
-        .map(t => {
-          if (remainingToRepayUSD <= 0) return t;
+        .sort((a, b) => deleverEcon.get(b)!.valuePerCost - deleverEcon.get(a)!.valuePerCost);
+      rowList.forEach(rTr => {
+          if (remainingToRepayUSD <= 0) return;
           // CP is 07f's, exactly as the surplus-cash prepayment above already says: its size is
           // the working-capital gap and its holders are a book this stage does not settle. It was
           // NOT excluded here, and the register that repays holders on a ladder change filters CP
           // out — so paper retired on this path left its holders with a claim on nothing and no
           // cash. Measured by the ledger check on its first run: the EUR CP stock falling week
           // after week while its holders' books stood still, 109% held by week eight.
-          if (t.isCommercialPaper) return t;
-          const { premiumPerDollar, worthRetiring } = deleverEcon.get(t)!;
+          if (TS.flags[rTr] & TR_CP) return;
+          const { premiumPerDollar, worthRetiring } = deleverEcon.get(rTr)!;
           // A company that wants less leverage still will not pay a make-whole to get it: if
           // nothing in the stack is economic to retire this week, it holds the cash and waits.
-          if (!worthRetiring) return t;
-          const repaidUSD = Math.min(t.principalUSD, remainingToRepayUSD / (1 + premiumPerDollar));
+          if (!worthRetiring) return;
+          const repaidUSD = Math.min(TS.principalUSD[rTr], remainingToRepayUSD / (1 + premiumPerDollar));
           remainingToRepayUSD -= repaidUSD * (1 + premiumPerDollar);
-          recordPremium(t, repaidUSD * premiumPerDollar);
+          recordPremium(rTr, repaidUSD * premiumPerDollar);
           // A drawn FACILITY retired here is a KNOWN GAP, measured and left alone rather than
           // half-closed: the register below settles market paper only, so the principal leaves
           // the issuer's ladder and reaches no lender. Paying the bank is not enough on its own —
           // the facility is also an itemized loan on that bank's book (G2), and moving the cash
           // without shrinking the asset breaks the per-bank identity, which is exactly what
           // happened when this was tried. One change to both sides, together. Owner: G2.
-          if (t.isBankFacility) facilityRepaidUSD += repaidUSD;
-          return { ...t, principalUSD: t.principalUSD - repaidUSD };
-        })
-        .filter(t => t.principalUSD > 0.01);
+          if (TS.flags[rTr] & TR_FACILITY) facilityRepaidUSD += repaidUSD;
+          TS.principalUSD[rTr] = TS.principalUSD[rTr] - repaidUSD;
+        });
+      rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
       void facilityRepaidUSD;
       const actuallyRepaidUSD = -financing.netDebtChangeUSD - remainingToRepayUSD;
       debtRepaymentThisWeek += actuallyRepaidUSD;
@@ -1604,10 +1637,11 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // position moves with it. Holdings that do not track the real stock are the difference
     // between a market and a random walk — see settleCorporateActionOnHolders.
     let postActionFixedUSD = 0, postActionFloatingUSD = 0, shortTermDebtSumUSD = 0;
-    for (const t of updatedTranches) {
-      if (t.rateType === 'FIXED') { if (!t.isCommercialPaper) postActionFixedUSD += t.principalUSD; }
-      else if (!t.isBankFacility) postActionFloatingUSD += t.principalUSD;
-      if (t.maturityWeek - nextWeek <= 52) shortTermDebtSumUSD += t.principalUSD;
+    for (const r of rowList) {
+      const fl = TS.flags[r];
+      if (!(fl & TR_FLOATING)) { if (!(fl & TR_CP)) postActionFixedUSD += TS.principalUSD[r]; }
+      else if (!(fl & TR_FACILITY)) postActionFloatingUSD += TS.principalUSD[r];
+      if (TS.maturityWeek[r] - nextWeek <= 52) shortTermDebtSumUSD += TS.principalUSD[r];
     }
     settleCorporateActionOnHolders(ctx, comp.id, 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
     settleCorporateActionOnHolders(ctx, comp.id, 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
@@ -1816,12 +1850,11 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.recoveryRate = round3(effectiveRecoveryRate);
 
-    comp.debtTranches = updatedTranches;
-    syncLadderRows(v2, comp.id, updatedTranches);
+    relinkLadder(v2, comp.id, rowList);
 
     comp.productLines = updatedProductLines;
 
-    comp.totalDebt = updatedTranches.reduce((s, t) => s + t.principalUSD, 0);
+    comp.totalDebt = rowList.reduce((s, r) => s + TS.principalUSD[r], 0);
 
     comp.dividendYield = round4(newDividendYield);
 

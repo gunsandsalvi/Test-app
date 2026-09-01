@@ -52,7 +52,7 @@ import { runTradeSettlementStage } from './stages/trade-settlement';
 // Side effect only: registers the (Node-only, env-gated) clearing worker pool with the engine.
 import './stages/clearing-worker-pool';
 import { ensureV2 } from '../../engine2/world';
-import { syncLadderRows, assertLaddersInSync } from '../../engine2/tranches';
+import { syncLadderRows, assertLaddersInSync, materializeLadder } from '../../engine2/tranches';
 import './stages/native-kernels';
 import { runFreightClearingStage } from './stages/freight-clearing';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
@@ -334,6 +334,13 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // walk positions rather than the fills that built them (stages/holdings-store.ts).
   run('register-consolidation', () => consolidateRegister(ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
+  {
+    // §7.311 WRITER FLIP — the rows are the ladder's authority; the object arrays are a view
+    // materialized once here, for the UI, STATE_DUMP and the seed-time readers. One linear pass
+    // replaces the per-writer syncs and every mid-week object rebuild.
+    const v2 = ensureV2(state);
+    for (const c of nextState.companies) c.debtTranches = materializeLadder(v2, c.id);
+  }
   if (process.env.TRANCHE_SYNC_CHECK === '1') assertLaddersInSync(ensureV2(state), nextState.companies);
   idTrace?.report(baseCtx.nextWeek);
 

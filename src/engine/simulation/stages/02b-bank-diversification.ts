@@ -22,7 +22,7 @@
 
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import { syncLadderRows, ladderRowsOf, TR_FACILITY } from '../../../engine2/tranches';
+import { pushLadderRow, ladderRowsOf, TR_FACILITY } from '../../../engine2/tranches';
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
 import { regionalDeskView } from '../../../domain/dealer-desk';
@@ -170,8 +170,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         isBankFacility: true,
         facilityBankTicker: c.homeBankTicker,
       };
-      c.debtTranches = [...(c.debtTranches || []), tranche];
-      syncLadderRows(ensureV2(state), c.id, c.debtTranches);
+      pushLadderRow(ensureV2(state), c.id, tranche);
       c.totalDebt = (c.totalDebt ?? 0) + drawUSD;
       ctx.creditEventsThisWeek.push({
         bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,

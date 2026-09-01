@@ -227,3 +227,70 @@ export function ensureLaddersSynced(v2: V2World, companies: { id: string; debtTr
     if (!v2.tranches.synced.has(c.id)) syncLadderRows(v2, c.id, c.debtTranches);
   }
 }
+
+// ---- §7.311 writer-flip API: rows become the authority; these are the only mutators. ----
+
+/** Append one tranche to the firm's ladder (FIFO tail), returning its row. */
+export function pushLadderRow(v2: V2World, companyId: string, t: DebtTranche): number {
+  const S = v2.tranches;
+  S.synced.add(companyId);
+  const firmRow = rowOf(v2, companyId);
+  const slot = slotFor(S, firmRow);
+  const r = allocRow(S);
+  writeRow(S, r, v2, t);
+  S.next[r] = -1;
+  if (S.tail[slot] >= 0) { S.next[S.tail[slot]] = r; S.tail[slot] = r; }
+  else { S.head[slot] = r; S.tail[slot] = r; }
+  return r;
+}
+
+/** Rebuild the firm's chain to exactly `keptRows` (in order), freeing every other current row. */
+export function relinkLadder(v2: V2World, companyId: string, keptRows: number[]): void {
+  const S = v2.tranches;
+  const firmRow = v2.rowById.get(companyId);
+  if (firmRow === undefined || firmRow >= S.head.length) return;
+  const keep = new Set(keptRows);
+  for (let r = S.head[firmRow]; r >= 0; ) {
+    const nxt = S.next[r];
+    if (!keep.has(r)) { S.callProt[r] = undefined; S.next[r] = S.freeHead; S.freeHead = r; }
+    r = nxt;
+  }
+  let prev = -1;
+  for (const r of keptRows) {
+    S.next[r] = -1;
+    if (prev >= 0) S.next[prev] = r; else S.head[firmRow] = r;
+    prev = r;
+  }
+  S.head[firmRow] = keptRows.length ? S.head[firmRow] : -1;
+  if (keptRows.length === 0) S.head[firmRow] = -1;
+  S.tail[firmRow] = prev;
+}
+
+/** One row materialized back to the canonical object shape (absent = the NaN/-1 sentinels). */
+export function materializeTranche(v2: V2World, r: number): DebtTranche {
+  const S = v2.tranches;
+  const f = S.flags[r];
+  const t: DebtTranche = {
+    id: v2.internedStrings[S.idRef[r]],
+    principalUSD: S.principalUSD[r],
+    rateType: f & TR_FLOATING ? 'FLOATING' : 'FIXED',
+    originationWeek: S.originationWeek[r],
+    maturityWeek: S.maturityWeek[r],
+    seniority: f & TR_SUBORDINATED ? 'SUBORDINATED' : 'SENIOR',
+  };
+  if (!Number.isNaN(S.couponRate[r])) t.couponRate = S.couponRate[r];
+  if (!Number.isNaN(S.floatingMarginBps[r])) t.floatingMarginBps = S.floatingMarginBps[r];
+  if (f & TR_CP) t.isCommercialPaper = true;
+  if (f & TR_FACILITY) t.isBankFacility = true;
+  if (S.bankRef[r] >= 0) t.facilityBankTicker = v2.internedStrings[S.bankRef[r]];
+  if (S.callProt[r]) t.callProtection = S.callProt[r];
+  if (!Number.isNaN(S.paymentsPerYear[r])) t.paymentsPerYear = S.paymentsPerYear[r];
+  if (!Number.isNaN(S.paymentAnchorWeek[r])) t.paymentAnchorWeek = S.paymentAnchorWeek[r];
+  if (f & TR_REFI_INITIATED) t._refinanceInitiated = true;
+  return t;
+}
+
+/** The firm's whole ladder materialized (the week-end view write for dumps and the UI). */
+export function materializeLadder(v2: V2World, companyId: string): DebtTranche[] {
+  return ladderRowsOf(v2, companyId).map((r) => materializeTranche(v2, r));
+}
