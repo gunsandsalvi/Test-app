@@ -628,6 +628,7 @@ function settleContracts(
   const R_DELIVERY = internReason('contract delivery');
 
   const { nextWeek } = ctx;
+  const __sp0 = S05_PROF ? performance.now() : 0;
   const rows = contractRows(v2, region, subUnitId);
   const survivors: number[] = [];
   const dead: number[] = [];
@@ -646,6 +647,23 @@ function settleContracts(
   const supRegPx = new Float64Array(m);
   const slotBySupplier = new Map<Company, number>();
   const slotSuppliers: Company[] = [];
+  // §4.C Stage IV — customers slotted like suppliers: the recipe need is a per-(customer,
+  // sub-unit, week) fact recomputed per CONTRACT (many contracts share a customer), and the
+  // effects loop below re-probes updateOf/pidOf per row for the same few parties.
+  const custSlotBy = new Map<Company, number>();
+  const custSlots: Company[] = [];
+  const custSlot = new Int32Array(m);
+  const needBySlot: number[] = [];
+  const custSlotOf = (customer: Company): number => {
+    let cs = custSlotBy.get(customer);
+    if (cs === undefined) {
+      cs = custSlots.length;
+      custSlotBy.set(customer, cs);
+      custSlots.push(customer);
+      needBySlot.push(computeRecipeInputNeedUSD(customer, subUnitId, nextWeek));
+    }
+    return cs;
+  };
   for (let i = 0; i < m; i++) {
     const r = rows[i];
     const supplier = supplierOf[i] = resolveRef(T.supplierRef[r]);
@@ -654,12 +672,16 @@ function settleContracts(
     if (!isActiveCompany(supplier)) {
       // needUSD gates the customer's constraint write in effects (rule 9: only a production
       // input throttles production — §7.301).
-      needUSD[i] = computeRecipeInputNeedUSD(customer, subUnitId, nextWeek);
+      const cs = custSlotOf(customer);
+      custSlot[i] = cs;
+      needUSD[i] = needBySlot[cs];
       preStatus[i] = CS_DEAD_SUPPLIER;
       continue;
     }
     if (!isActiveCompany(customer)) { preStatus[i] = CS_DEAD_CUSTOMER; continue; }
-    needUSD[i] = computeRecipeInputNeedUSD(customer, subUnitId, nextWeek);
+    const cs = custSlotOf(customer);
+    custSlot[i] = cs;
+    needUSD[i] = needBySlot[cs];
     marketPrice[i] = regionReferencePrice[customer.region as RegionId] ?? T.priceUSD[r];
     supRegPx[i] = regionReferencePrice[supplier.region as RegionId] ?? T.priceUSD[r];
     let slot = slotBySupplier.get(supplier);
@@ -688,40 +710,52 @@ function settleContracts(
   const fillL = new Float64Array(m);
   const availAfter = new Float64Array(m);
   const __c0 = S05_PROF ? performance.now() : 0;
+  if (S05_PROF) s05Phase.settlePre += __c0 - __sp0;
   settleContractsCore(T, rows, contractLeadWeeks, preStatus, supSlot, needUSD, marketPrice,
     avail, status, buyerLoss, sellerLoss, actualT, paymentL, appliedL, topUpL, fillL, availAfter);
-  if (S05_PROF) s05Phase.settleCore += performance.now() - __c0;
+  const __c1 = S05_PROF ? performance.now() : 0;
+  if (S05_PROF) s05Phase.settleCore += __c1 - __c0;
 
   // ---- EFFECTS: replay in row order; the payment sequence and every object write matches the
   // inline walk leg for leg.
+  // Per-slot lazy handles: updateOf CREATES a week record on first touch, so the caches fill
+  // at exactly the old first-call sites (row order) and only the repeat probes disappear.
+  const supUpC: (import('./context').CompanyWeekUpdate | undefined)[] = new Array(slotSuppliers.length);
+  const custUpC: (import('./context').CompanyWeekUpdate | undefined)[] = new Array(custSlots.length);
+  const supPidC = new Int32Array(slotSuppliers.length).fill(-1);
+  const custPidC = new Int32Array(custSlots.length).fill(-1);
   for (let i = 0; i < m; i++) {
     const r = rows[i];
     const st = status[i];
     if (st === CS_DEAD_MISSING || st === CS_DEAD_CUSTOMER) { dead.push(r); continue; }
     const supplier = supplierOf[i]!;
     const customer = customerOf[i]!;
+    const cs = custSlot[i];
     if (st === CS_DEAD_SUPPLIER) {
       if (needUSD[i] > 0) {
-        const custUp = wk.updateOf(customer);
+        const custUp = custUpC[cs] ?? (custUpC[cs] = wk.updateOf(customer));
         custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, 0.70);
       }
       dead.push(r);
       continue;
     }
+    const ss = supSlot[i];
+    const supPid = supPidC[ss] >= 0 ? supPidC[ss] : (supPidC[ss] = pidOf(supplier));
+    const custPid = custPidC[cs] >= 0 ? custPidC[cs] : (custPidC[cs] = pidOf(customer));
     if (st === CS_DEAD_EXPIRY) {
-      if (buyerLoss[i] > 0.01) payByIds(ctx, pidOf(supplier), pidOf(customer), buyerLoss[i], R_NONPERF);
+      if (buyerLoss[i] > 0.01) payByIds(ctx, supPid, custPid, buyerLoss[i], R_NONPERF);
       dead.push(r);
       continue;
     }
     if (sellerLoss[i] > 0.01) {
-      payByIds(ctx, pidOf(customer), pidOf(supplier), sellerLoss[i], R_CANCEL);
+      payByIds(ctx, custPid, supPid, sellerLoss[i], R_CANCEL);
     }
     availableBySupplier.set(supplier, availAfter[i]);
     if (topUpL[i] > 0.01) {
-      payByIds(ctx, pidOf(customer), pidOf(supplier), topUpL[i], R_PROGRESS);
+      payByIds(ctx, custPid, supPid, topUpL[i], R_PROGRESS);
     }
 
-    const supUp = wk.updateOf(supplier);
+    const supUp = supUpC[ss] ?? (supUpC[ss] = wk.updateOf(supplier));
     setOutputInventory(
       supUp, subUnitId,
       Math.max(0, availAfter[i]),
@@ -733,11 +767,11 @@ function settleContracts(
     supUp._contractOwedUnits = (supUp._contractOwedUnits ?? 0) + T.qtyPerWeek[r];
     supUp._contractDeliveredUnits = (supUp._contractDeliveredUnits ?? 0) + Math.min(actualT[i], T.qtyPerWeek[r]);
 
-    const custUp = wk.updateOf(customer);
+    const custUp = custUpC[cs] ?? (custUpC[cs] = wk.updateOf(customer));
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualT[i];
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentL[i];
     if (isCapitalGoodCategory) custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentL[i];
-    payByIds(ctx, pidOf(customer), pidOf(supplier), paymentL[i] - appliedL[i], R_DELIVERY);
+    payByIds(ctx, custPid, supPid, paymentL[i] - appliedL[i], R_DELIVERY);
     addInputInventory(v2, custUp, customer, subUnitId, supplier.ticker, actualT[i], paymentL[i], nextWeek);
 
     if (fillL[i] < 0.95 && needUSD[i] > 0) {
@@ -745,7 +779,7 @@ function settleContracts(
     }
 
     if (st === CS_DEAD_TERMINATION) {
-      if (buyerLoss[i] > 0.01) payByIds(ctx, pidOf(supplier), pidOf(customer), buyerLoss[i], R_NONPERF);
+      if (buyerLoss[i] > 0.01) payByIds(ctx, supPid, custPid, buyerLoss[i], R_NONPERF);
       dead.push(r);
       continue;
     }
@@ -753,6 +787,7 @@ function settleContracts(
   }
 
   relinkChain(v2, region, subUnitId, survivors, dead);
+  if (S05_PROF) s05Phase.settleEff += performance.now() - __c1;
   return survivors;
 }
 
@@ -1373,7 +1408,7 @@ function buildRegionDemandPlans(
  * wedge sits on each buyer's own reservation, which is exactly how it works: a mill quotes at the
  * gate and the buyer pays the freight.
  */
-export const s05Phase = { plans: 0, settle: 0, settleCore: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
+export const s05Phase = { plans: 0, settle: 0, settleCore: 0, settlePre: 0, settleEff: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
 const S05_PROF = typeof process !== 'undefined' && process.env?.S05_PROF === '1';
 // One-run diagnostic split INSIDE the buyers walk (§7.315's method: name the term before
 // converting anything). ~3 clock reads per lot — relative shares only, not absolute times.
@@ -2337,13 +2372,13 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   // Unknown is now unknown: no history, no component.
   if (S05_PROF) {
     const P = s05Phase;
-    console.log(`[s05] plans ${P.plans.toFixed(0)} settle ${P.settle.toFixed(0)} (core ${P.settleCore.toFixed(0)}) demand ${P.demand.toFixed(0)} books ${P.books.toFixed(0)} trade ${P.trade.toFixed(0)} sellers ${P.sellers.toFixed(0)} buyers ${P.buyers.toFixed(0)} tail+publish ${P.tail.toFixed(0)}`);
+    console.log(`[s05] plans ${P.plans.toFixed(0)} settle ${P.settle.toFixed(0)} (pre ${P.settlePre.toFixed(0)} core ${P.settleCore.toFixed(0)} eff ${P.settleEff.toFixed(0)}) demand ${P.demand.toFixed(0)} books ${P.books.toFixed(0)} trade ${P.trade.toFixed(0)} sellers ${P.sellers.toFixed(0)} buyers ${P.buyers.toFixed(0)} tail+publish ${P.tail.toFixed(0)}`);
     if (S05B_PROF) {
       const B = s05Buyers;
       console.log(`[s05b] lots ${B.lots} pay ${B.pay.toFixed(0)} invoice+fx ${B.invoice.toFixed(0)} aggregate-payers ${B.planRest.toFixed(0)}`);
       B.lots = 0; B.pay = 0; B.invoice = 0; B.planRest = 0;
     }
-    P.plans = 0; P.settle = 0; P.settleCore = 0; P.demand = 0; P.books = 0; P.trade = 0; P.sellers = 0; P.buyers = 0; P.tail = 0;
+    P.plans = 0; P.settle = 0; P.settleCore = 0; P.settlePre = 0; P.settleEff = 0; P.demand = 0; P.books = 0; P.trade = 0; P.sellers = 0; P.buyers = 0; P.tail = 0;
   }
   const realizedIndexVol = realizedAnnualVol(state.compositeIndices.usaComposite.historical, 13);
   const baselineVol = 0.16;
