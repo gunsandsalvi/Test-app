@@ -677,7 +677,8 @@ function buildRegionSupplyPlans(
   supplierExpectedUnitPriceUSD: number,
   week: number,
   isCapexSupplierCategory: boolean,
-  capexSupplierWeight: number | undefined
+  capexSupplierWeight: number | undefined,
+  companyUpdates: Record<string, import('./context').CompanyWeekUpdate>
 ): SupplyPlan[] {
   const plans: SupplyPlan[] = [];
   const suppliers = index.suppliersBySubUnit.get(subUnitId) ?? [];
@@ -834,12 +835,23 @@ function buildRegionSupplyPlans(
     // on the plant's NORMAL-season volume, which is the basis its costs were struck on; the
     // calendar then says how much of that ripens this week. No clamp, no floor: the comparison
     // simply gets its units right.
-    const normalSeasonUnits = line.weeklyCapacityUnits! * productionThrottle;
+    // §5-DYN — mothballed plant is OFFLINE: its capacity is not there to staff or run until the
+    // stock response brings it back (domain/company-week/capital-programme.ts). This is what
+    // makes retired capacity's ABSENCE visible in supply, which is the mechanism's whole point.
+    const onlineShare = 1 - Math.max(0, Math.min(1, comp.mothballedPpeShare ?? 0));
+    const normalSeasonUnits = line.weeklyCapacityUnits! * productionThrottle * onlineShare;
     const staffedNormalSeasonUnits = Math.min(normalSeasonUnits, normalSeasonUnits * staffedShare);
     const prospectiveUnitCostUSD = staffedNormalSeasonUnits > 0.0001
       ? weeklyOperatingCostUSD / staffedNormalSeasonUnits
       : Infinity;
     const coversUnitCost = supplierExpectedUnitPriceUSD >= prospectiveUnitCostUSD;
+    // §5-DYN — the week's idle record, measured where the test runs and nowhere else (rule 3):
+    // stage 08's capacity-retirement rule integrates this into the mothball/scrap stock response.
+    if (!coversUnitCost) {
+      if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
+      const up = companyUpdates[comp.ticker];
+      up.idleLineRevenueShare = (up.idleLineRevenueShare ?? 0) + Math.max(0, line.revenueShare ?? 0);
+    }
     const uncappedProductionUnits = staffedNormalSeasonUnits * seasonalPlantFactor;
     const targetProductionUnits = coversUnitCost ? uncappedProductionUnits : 0;
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
@@ -1281,7 +1293,8 @@ function runSubUnitMarkets(
     supplyPlans.push(...buildRegionSupplyPlans(
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId], demandState.smoothedUnitPriceUSD,
       nextWeek, isCapexSupplierCategory, capexSupplierWeight
-    ));
+    ,
+      ctx.companyUpdates));
   });
 
   // --- 3. Contracts settle, against what each supplier actually HAS: its opening stock plus

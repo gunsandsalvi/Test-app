@@ -41,6 +41,8 @@ export interface CapitalProgrammeInputs {
   addressableGrowthAnnual: number;
   categoryShortfall: number;
   capacityCatchupShareAnnual: number;
+  /** §5-DYN — the share of the plant currently mothballed: no upkeep is spent on it. */
+  mothballedPpeShare?: number;
   /** Financial conditions and the firm's standing. */
   effectiveDebtRate: number;
   marketCapUSD: number;
@@ -83,13 +85,16 @@ export function maintenanceTargetUSD(grossPPEUSD: number, usefulLifeYears: numbe
  *  investment grade — a bridge. A distressed company cannot borrow its way out of deferred upkeep. */
 export function maintenanceFundingCapacityUSD(i: CapitalProgrammeInputs): number {
   const weeklyOperatingCashFlow = i.weeklyEbitdaUSD - i.weeklyInterestUSD;
-  const weeklyDesired = maintenanceTargetUSD(i.grossPPEUSD, i.usefulLifeYears) / 52;
+  const activePpeUSD = i.grossPPEUSD * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
+  const weeklyDesired = maintenanceTargetUSD(activePpeUSD, i.usefulLifeYears) / 52;
   const borrowing = i.isInvestmentGrade ? weeklyDesired * 0.5 : 0;
   return Math.max(0, weeklyOperatingCashFlow) + Math.max(0, i.cashUSD) * 0.05 + borrowing;
 }
 
 export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramme {
-  const targetMaintenanceCapexUSD = maintenanceTargetUSD(i.grossPPEUSD, i.usefulLifeYears);
+  // §5-DYN: mothballed plant draws no upkeep — that saving is most of why a firm mothballs.
+  const activePpeUSD = i.grossPPEUSD * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
+  const targetMaintenanceCapexUSD = maintenanceTargetUSD(activePpeUSD, i.usefulLifeYears);
   const weeklyDesiredMaintenance = targetMaintenanceCapexUSD / 52;
   const weeklyOperatingCashFlow = i.weeklyEbitdaUSD - i.weeklyInterestUSD;
   const borrowingCapacity = i.isInvestmentGrade ? weeklyDesiredMaintenance * 0.5 : 0;
@@ -160,6 +165,58 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
     payoutPressure,
     weeklyDepreciationUSD: i.grossPPEUSD / (Math.max(1, i.usefulLifeYears) * 52),
   };
+}
+
+/**
+ * §5-DYN — CAPACITY LEAVES IN DOWNTURNS: mothball, restart, scrap. The §7.139 produce/idle rule
+ * is the FLOW response (a plant that cannot cover unit cost does not run this week); this is the
+ * STOCK response it always implied — plant idle for a sustained quarter is MOTHBALLED (no
+ * maintenance draw, no staffed capacity, restartable), and plant mothballed for the §7.138
+ * measured year is SCRAPPED (written off for good). §7.246 inverted the famine and left the
+ * opposite watch standing: "a sector now OVERSUPPLIED against real bids will idle capacity, and
+ * the model has no mothball/scrap mechanism — DYN's charter." This is that mechanism.
+ *
+ * No new constants: the quarter and the year are the model's own structural clocks (every
+ * structural event runs on 13 weeks; a year of persistence is structural, §7.138), and the
+ * mothballed share MOVES at the same 10%/week stock-adjustment weight the growth-capex EMA uses
+ * (§7.288) — a plant is taken down and brought back over months, not on a Tuesday.
+ */
+export interface CapacityRetirementInputs {
+  /** Revenue share of this firm's lines that FAILED the §7.139 cost-covering test this week —
+   *  measured by stage 05, the only place the test runs. */
+  idleRevenueShareThisWeek: number;
+  priorIdleStreakWeeks: number;
+  priorMothballedShare: number;
+  priorMothballedStreakWeeks: number;
+}
+export interface CapacityRetirement {
+  idleStreakWeeks: number;
+  /** Share of the plant offline: no maintenance target, no staffed capacity, restartable. */
+  mothballedShare: number;
+  mothballedStreakWeeks: number;
+  /** Share of GROSS plant written off THIS week (mothballed the full year): gone for good. */
+  scrappedShare: number;
+}
+const STRUCTURAL_QUARTER_WEEKS = 13;
+const STRUCTURAL_YEAR_WEEKS = 52; // §7.138's measured hold — the same year everywhere.
+const STOCK_ADJUSTMENT_WEEKLY = 0.10; // §7.288's convention for how fast a stock chases a target.
+
+export function capacityRetirement(i: CapacityRetirementInputs): CapacityRetirement {
+  const idle = Math.max(0, Math.min(1, i.idleRevenueShareThisWeek));
+  const idleStreakWeeks = idle > 0 ? i.priorIdleStreakWeeks + 1 : 0;
+  // The target: after a sustained quarter of idling, the persistently idle share comes offline;
+  // the moment the plant covers cost again the target is zero and the same speed brings it back.
+  const targetShare = idleStreakWeeks >= STRUCTURAL_QUARTER_WEEKS ? idle : 0;
+  let mothballedShare = Math.max(0, Math.min(1,
+    i.priorMothballedShare * (1 - STOCK_ADJUSTMENT_WEEKLY) + targetShare * STOCK_ADJUSTMENT_WEEKLY));
+  const mothballedStreakWeeks = mothballedShare > 0.01 ? i.priorMothballedStreakWeeks + 1 : 0;
+  let scrappedShare = 0;
+  if (mothballedStreakWeeks >= STRUCTURAL_YEAR_WEEKS) {
+    // A year mothballed is not coming back: the offline share is scrapped and the clock resets.
+    scrappedShare = mothballedShare;
+    mothballedShare = 0;
+  }
+  return { idleStreakWeeks, mothballedShare, mothballedStreakWeeks, scrappedShare };
 }
 
 /** IND13 — the plant grows by what was COMMISSIONED, not what was ordered or delivered. That lag

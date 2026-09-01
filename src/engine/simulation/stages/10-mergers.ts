@@ -193,7 +193,9 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // not a merger also fires this quarter.
   runDivestitures(ctx);
 
-  const merger = checkForMerger(ctx.updatedCompanies, ctx.nextWeek);
+  const merger = checkForMerger(ctx.updatedCompanies, ctx.nextWeek,
+    (Object.values(ctx.updatedRegions) as { supplyRelationships?: import('../../../domain/market-microstructure').SupplyRelationship[] }[])
+      .flatMap((r) => r.supplyRelationships ?? []));
   if (!merger) return;
 
   const acquirer = ctx.updatedCompanies.find(c => c.ticker === merger.acquirerTicker);

@@ -269,6 +269,12 @@ export interface Company {
    * Consolidation is a VIEW over this link, never a second set of books.
    */
   parentTicker?: string;
+  /** §5-DYN — the STOCK response the §7.139 produce/idle rule implied: share of the plant
+   *  offline (no upkeep, no staffed capacity, restartable), its idle streak, and how long it
+   *  has been offline (a §7.138 year mothballed is scrapped for good). */
+  mothballedPpeShare?: number;
+  idleStreakWeeks?: number;
+  mothballedStreakWeeks?: number;
   /** §5-MNC — consecutive weeks each foreign market's own producers have beaten this firm's
    *  landed exports in the sourcing merit order (reset on any week it wins again); a year of
    *  losing is the structural signal the FDI decision fires on. */

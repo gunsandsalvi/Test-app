@@ -708,10 +708,19 @@ export function runFirmBirthsForRegion(
     const seg = c.smePoolIndustry;
     if (seg) namedBySegment.set(seg, (namedBySegment.get(seg) ?? 0) + c.annualRevenue);
   });
+  // §5-DYN — ENTRY GOES WHERE THE EXPECTED PROFIT OF ENTERING IS: unserved demand TIMES the
+  // margin earned serving it. The pool-vs-named ratio was the demand half alone, so entrants
+  // chased size regardless of profitability; the pool's own measured margin is the other half,
+  // and their PRODUCT needs no coefficient (rule 19). This is what makes category margins
+  // mean-revert through entry instead of by assertion.
   const candidate = segs
-    .map((seg) => ({ seg, ratio: seg.annualRevenueUSD / Math.max(1, namedBySegment.get(seg.industry) ?? 1) }))
+    .map((seg) => ({
+      seg,
+      ratio: (seg.annualRevenueUSD / Math.max(1, namedBySegment.get(seg.industry) ?? 1))
+        * Math.max(0, seg.marginPct ?? 0),
+    }))
     .sort((a, b) => b.ratio - a.ratio)[0];
-  if (!candidate || candidate.seg.annualRevenueUSD <= 0) return [];
+  if (!candidate || candidate.seg.annualRevenueUSD <= 0 || !(candidate.ratio > 0)) return [];
 
   // Born SMALL — a new firm is a fraction of a percent of its pool, which is what a real
   // entrant is. Its leverage is what the SME pools actually carry (G2's serviceable ceiling),

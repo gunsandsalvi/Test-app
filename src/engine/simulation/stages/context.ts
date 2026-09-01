@@ -42,6 +42,10 @@ export interface CompanyWeekUpdate {
   _contractDeliveredUnits?: number;
   /** IND15 — how much of its input basket the firm actually got, which caps what it can make. */
   inputSupplyConstraintFactor?: number;
+  /** §5-DYN — revenue share of the firm's lines that failed this week's §7.139 cost-covering
+   *  test (stage 05 is the only place the test runs); stage 08's capacity-retirement rule
+   *  integrates it into the mothball/scrap stock response. */
+  idleLineRevenueShare?: number;
   /** IND12 — trade credit, both legs, booked and settled. */
   tradeReceivableBookedUSD?: number;
   tradeReceivableCollectedUSD?: number;

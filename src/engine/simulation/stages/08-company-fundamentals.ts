@@ -38,7 +38,7 @@ import { PROFILE_REGISTRY, profileKeyOf } from './profiles';
 import { measureBeta, regionIndexOf } from '../../macro/indices';
 import { pay, PartyRef, PaymentJournal, newPaymentJournal } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
-import { planCapitalProgramme, commissionCapital } from '../../../domain/company-week/capital-programme';
+import { planCapitalProgramme, commissionCapital, capacityRetirement } from '../../../domain/company-week/capital-programme';
 import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '../../../domain/company-week/credit-standing';
 import { callEconomics, callableAmountUSD, dropExhausted } from '../../../domain/company-week/debt-ladder';
 import { industrialIncome, profileIncome } from '../../../domain/company-week/income-statement';
@@ -880,8 +880,29 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const avgCompetitiveness = (comp.productLines || []).reduce((acc, l) => acc + l.competitiveness, 0)
       / Math.max(1, (comp.productLines || []).length);
 
+    // §5-DYN — the capacity-retirement STOCK response: integrate this week's measured idle
+    // record (stage 05's own §7.139 test) into mothball / restart / scrap. Scrap is the one
+    // irreversible act: the written-off plant leaves gross PP&E and its share of accumulated
+    // depreciation together, so net book value falls by only the unrecovered remainder.
+    const retirement = capacityRetirement({
+      idleRevenueShareThisWeek: ctx.companyUpdates[comp.ticker]?.idleLineRevenueShare ?? 0,
+      priorIdleStreakWeeks: comp.idleStreakWeeks ?? 0,
+      priorMothballedShare: comp.mothballedPpeShare ?? 0,
+      priorMothballedStreakWeeks: comp.mothballedStreakWeeks ?? 0,
+    });
+    comp.idleStreakWeeks = retirement.idleStreakWeeks;
+    comp.mothballedPpeShare = retirement.mothballedShare;
+    comp.mothballedStreakWeeks = retirement.mothballedStreakWeeks;
+    if (retirement.scrappedShare > 0) {
+      const scrappedGrossUSD = grossPPEForCapex * retirement.scrappedShare;
+      const scrappedDepUSD = (comp.accumulatedDepreciationUSD ?? grossPPEForCapex * 0.45) * retirement.scrappedShare;
+      comp.grossPPEUSD = Math.max(0, (comp.grossPPEUSD ?? grossPPEForCapex) - scrappedGrossUSD);
+      comp.accumulatedDepreciationUSD = Math.max(0, (comp.accumulatedDepreciationUSD ?? 0) - scrappedDepUSD);
+    }
+
     const programme = planCapitalProgramme({
       grossPPEUSD: grossPPEForCapex,
+      mothballedPpeShare: comp.mothballedPpeShare,
       accumulatedDepreciationUSD: comp.accumulatedDepreciationUSD ?? (grossPPEForCapex * 0.45),
       usefulLifeYears: usefulLifeYearsForCapex,
       weeklyEbitdaUSD: newEbitda / 52,
