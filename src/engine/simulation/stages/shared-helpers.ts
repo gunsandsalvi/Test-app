@@ -642,8 +642,13 @@ export function applyHolderInterestAccruals(
     // instrument out of an Int32Array, so a row of an accruing type costs two typed-array loads
     // and no object is touched at all. Within a type the table preserves register order, so the
     // float totals accumulate exactly as the original nested walk produced them.
-    const totalByKey = new Map<string, number>();
-    const matched: { entityId: string; key: string; qtyUSD: number }[] = [];
+    // SCALE — TWO COLUMN PASSES, NO ROW OBJECTS. The first version of this collected every
+    // matching row into a `{entityId, key, qtyUSD}` object with its own key string — ~40k
+    // allocations per call, twice a week, all garbage by the next line. The rows live in typed
+    // columns; walking them twice costs typed-array loads and allocates nothing, and everything
+    // per-INSTRUMENT (the weekly amount, the holder map, the one key string) is resolved once
+    // into dense arrays keyed by the intern id. Both passes run in register order within each
+    // type and the types in the same map order, so every float accumulates exactly as before.
     const holdings = getHoldingsTable(ctx as never);
     const entities = ctx.updatedInstitutionalEntities;
     const byTypeRows = holdings.byType;
@@ -661,25 +666,36 @@ export function applyHolderInterestAccruals(
         const id = INSTRUMENT_IDS.peek(instrumentText);
         if (id >= 0) accruingRow[id] = instrumentText;
       });
+      // Pass 1 — each instrument's held total, in register order.
+      const totalByInst: number[] = [];
       for (let i = lo; i < hi; i++) {
         const row = byTypeRows[i];
-        const instrumentText = accruingRow[instCol[row]];
-        if (instrumentText === undefined) continue;
-        const key = `${type}:${instrumentText}`;
-        const qtyUSD = qtyCol[row];
-        totalByKey.set(key, (totalByKey.get(key) ?? 0) + qtyUSD);
-        matched.push({ entityId: entities[entCol[row]].id, key, qtyUSD });
+        const iid = instCol[row];
+        if (accruingRow[iid] === undefined) continue;
+        totalByInst[iid] = (totalByInst[iid] ?? 0) + qtyCol[row];
       }
-    });
-    matched.forEach(({ entityId, key, qtyUSD }) => {
-      const weeklyUSD = accruals.get(key);
-      const totalUSD = totalByKey.get(key) ?? 0;
-      if (weeklyUSD === undefined || !(totalUSD > 0)) return;
-      const shareUSD = weeklyUSD * (qtyUSD / totalUSD);
-      if (!(shareUSD > 0)) return;
-      let byHolder = ctx.holderAccruedInterestUSD.get(key);
-      if (!byHolder) { byHolder = new Map(); ctx.holderAccruedInterestUSD.set(key, byHolder); }
-      byHolder.set(entityId, (byHolder.get(entityId) ?? 0) + shareUSD);
+      // Pass 2 — the same rows in the same order; each holder's share of the weekly amount.
+      const byHolderByInst: (Map<string, number> | undefined)[] = [];
+      for (let i = lo; i < hi; i++) {
+        const row = byTypeRows[i];
+        const iid = instCol[row];
+        const instrumentText = accruingRow[iid];
+        if (instrumentText === undefined) continue;
+        const weeklyUSD = byId.get(instrumentText);
+        const totalUSD = totalByInst[iid] ?? 0;
+        if (weeklyUSD === undefined || !(totalUSD > 0)) continue;
+        const shareUSD = weeklyUSD * (qtyCol[row] / totalUSD);
+        if (!(shareUSD > 0)) continue;
+        let byHolder = byHolderByInst[iid];
+        if (byHolder === undefined) {
+          const key = `${type}:${instrumentText}`;
+          byHolder = ctx.holderAccruedInterestUSD.get(key);
+          if (!byHolder) { byHolder = new Map(); ctx.holderAccruedInterestUSD.set(key, byHolder); }
+          byHolderByInst[iid] = byHolder;
+        }
+        const entityId = entities[entCol[row]].id;
+        byHolder.set(entityId, (byHolder.get(entityId) ?? 0) + shareUSD);
+      }
     });
   }
   // THE ACCRUAL IS CONSUMED HERE, NOT AT THE BOTTOM. It used to be cleared only on the payout

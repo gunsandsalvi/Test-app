@@ -121,6 +121,23 @@ function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string): numbe
   return (comp.annualRevenue / 52) * intensity;
 }
 
+/** SCALE — §7.282's fee-earning desks per region, memoised on the firm array's identity (a new
+ *  week hands a new array, so the memo lapses with it). List order is the firms' own, which is
+ *  what keeps the fee pay() sequence and its floats identical to the inline filter's. */
+const fxFeeBanksCache = new WeakMap<object, Map<string, { banks: Company[]; totalShare: number }>>();
+function fxFeeBanksOf(firms: Company[], region: RegionId): { banks: Company[]; totalShare: number } {
+  let byRegion = fxFeeBanksCache.get(firms);
+  if (!byRegion) { byRegion = new Map(); fxFeeBanksCache.set(firms, byRegion); }
+  let entry = byRegion.get(region);
+  if (!entry) {
+    const banks = firms.filter((b) => b.region === region && b.isBankEntity && b.bankBalanceSheet);
+    const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0) || banks.length;
+    entry = { banks, totalShare };
+    byRegion.set(region, entry);
+  }
+  return entry;
+}
+
 /**
  * SETL-C: who a settlement key actually is. The goods auction has always known the pairing —
  * which buyer took which seller's lot — and stage 08 only ever saw each side's weekly total, so
@@ -1730,10 +1747,10 @@ function runSubUnitMarkets(
         if (!isDomestic) {
           const fxFeeUSD = invoicedUSD * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
           if (fxFeeUSD > 0.01) {
-            const buyerBanks = ctx.prevActiveFirms.filter(
-              (b) => b.region === plan.regionId && b.isBankEntity && b.bankBalanceSheet);
-            const totalShare = buyerBanks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0)
-              || buyerBanks.length;
+            // SCALE — the region's fee-earning desks, memoised on the firm array's identity:
+            // this filtered all ~2,500 firms PER CROSS-BORDER INVOICE (same list order kept,
+            // so the pay() sequence and every float are the ones the inline filter produced).
+            const { banks: buyerBanks, totalShare } = fxFeeBanksOf(ctx.prevActiveFirms, plan.regionId);
             buyerBanks.forEach((b) => {
               const share = totalShare > 0
                 ? ((b.bankMarketShare ?? 0) || 1) / totalShare : 0;
