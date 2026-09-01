@@ -17,9 +17,13 @@ import { Company } from '../types';
 import { CogsCostDrivers } from '../engine/companyGenerator';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { V2World } from './world';
-import { buildFrontSeam, allocCoreOut, runFrontCore, applyFrontPost } from './front-core';
+import { buildFrontSeam, allocCoreOut, runFrontCore, applyFrontPost, FRONT_CORE_TABLES } from './front-core';
 import { setSharedLanes, lane64, laneU32, lane8 } from './shared-lanes';
 import { frontWorkerCount, runFrontSharded } from './front-pool';
+import { nativeFrontCore } from '../engine/simulation/stages/native-kernels';
+import { NSUB } from './state';
+import { SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
+import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
 
 type ProductLines = NonNullable<Company['productLines']>;
 type ConstructionLot = { valueUSD: number; entersServiceWeek: number };
@@ -128,7 +132,14 @@ export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs):
   const S = buildFrontSeam(companies, inp);
   const O = allocCoreOut(S);
   if (!runFrontSharded(S, O, F, inp.v2)) {
-    runFrontCore(S, O, F, inp.v2.lots, inp.v2.lots, undefined, 0, companies.length);
+    // §5-SCALE native cores: the C port of runFrontCore, oracle-verified bit-equal; the JS
+    // core is the canonical fallback (no addon, NATIVE_KERNELS=0) — one world either way.
+    const nativeRan = nativeFrontCore(S, O, F, inp.v2.lots, FRONT_CORE_TABLES, {
+      nsub: NSUB, churn: SUBSCRIPTION_WEEKLY_CHURN, weight: RECEIPTS_MEASUREMENT_WEIGHT,
+    });
+    if (!nativeRan) {
+      runFrontCore(S, O, F, inp.v2.lots, inp.v2.lots, undefined, 0, companies.length);
+    }
   }
   applyFrontPost(companies, S, O, F, inp.companyUpdates, inp.updatedRegions);
   return F;

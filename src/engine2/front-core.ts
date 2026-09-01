@@ -89,6 +89,18 @@ const INDUSTRIAL_SET = new Uint8Array(NSUB);
   RECIPE_START[NSUB] = at;
 }
 
+/** §5-SCALE native cores — the static tables above, typed for the native front core's
+ *  marshaling (built once; the registry is fixed for a run). */
+export const FRONT_CORE_TABLES = {
+  RECIPE_START,
+  RECIPE_INPUT: Int32Array.from(RECIPE_INPUT),
+  RECIPE_INTENSITY: Float64Array.from(RECIPE_INTENSITY),
+  HAS_INDUSTRY,
+  IS_SUBSCRIPTION,
+  CARRY_RATE_WEEKLY,
+  INDUSTRIAL_SET,
+};
+
 // ---- the seam's lanes ----
 
 export interface FrontSeam {

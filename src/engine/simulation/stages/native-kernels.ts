@@ -75,3 +75,76 @@ if (addon) {
 
 /** Whether the native addon is active this process (a diagnostic, read by nothing hot). */
 export const nativeKernelsActive = addon !== null;
+
+// ---- the stage-08 front core (engine2/front-core.ts runFrontCore, ported) ----
+
+import type { FrontSeam, FrontCoreOut } from '../../../engine2/front-core';
+import type { FrontPass } from '../../../engine2/stage08-front';
+import type { LotStore } from '../../../engine2/lots';
+
+interface FrontAddon extends NativeAddon {
+  frontCore(
+    seam: ArrayBufferView[], tablesAndLots: ArrayBufferView[],
+    outs: ArrayBufferView[], scalars: Float64Array,
+  ): number;
+}
+
+export interface FrontCoreTables {
+  RECIPE_START: Int32Array; RECIPE_INPUT: Int32Array; RECIPE_INTENSITY: Float64Array;
+  HAS_INDUSTRY: Uint8Array; IS_SUBSCRIPTION: Uint8Array; CARRY_RATE_WEEKLY: Float64Array;
+  INDUSTRIAL_SET: Uint8Array;
+}
+
+/**
+ * Run the native front core in place of `runFrontCore` over [0, n). Returns false when the
+ * addon is absent (caller falls through to the JS core — one world either way). Mutates the
+ * lot table exactly as the JS core does, including the free list via the returned head.
+ * The three positional orders below are mirrored in kernels.c — change both or neither.
+ */
+export function nativeFrontCore(
+  S: FrontSeam, O: FrontCoreOut, F: FrontPass, lots: LotStore, tables: FrontCoreTables,
+  consts: { nsub: number; churn: number; weight: number },
+): boolean {
+  const a = addon as FrontAddon | null;
+  if (!a || typeof a.frontCore !== 'function') return false;
+  const seam: ArrayBufferView[] = [
+    S.regionIdx, S.isActive, S.isProfile, S.rngSeed, S.lotRow,
+    S.employeeCount, S.offeredWageIndex, S.baselineEmployeeCount, S.totalDebt,
+    S.annualRevenue, S.baselineAnnualRevenueResolved, S.ebitda, S.cash, S.currentLiabilities,
+    S.marketCap, S.sharesOutstanding, S.growthCapexResolved, S.maintenanceShortfallStreak,
+    S.executionQuality0, S.inputConstraint0, S.fulfillEMA0, S.recurringBase0,
+    S.baselineGrowthRatioResolved, S.baselineEbitdaMarginResolved, S.openingNetPpeUSD, S.taxBasisOpenUSD,
+    S.carryforwardUSD, S.usefulLifeYears, S.baselineInputRateSum, S.perWorkerAnnualUSD, S.perWorkerBaselineAnnualUSD,
+    S.mktUnitPrice, S.mktFulfill, S.mktCrowding, S.mktExists, S.suppliedMask,
+    S.policyRate, S.effectiveTaxRate,
+    S.trStart, S.trPrincipal, S.trAnnualRate, S.trIsFloating, S.trIsFacility,
+    S.trIsCP, S.trMatWeek, S.trPeriodWeeks, S.trAnchorWeek,
+    S.plStart, S.plSub, S.plShare, S.plComp, S.plMktShare,
+    S.outStart, S.outSub, S.outValue,
+    S.ucStart, S.ucValue, S.ucServiceWeek,
+    S.shStart, S.shSupplierRevenue, S.shInvUSD, S.shStrength,
+    S.updSalesUSD, S.updHasTargetProd, S.updTargetProdUSD,
+  ];
+  const tl: ArrayBufferView[] = [
+    tables.RECIPE_START, tables.RECIPE_INPUT, tables.RECIPE_INTENSITY,
+    tables.HAS_INDUSTRY, tables.IS_SUBSCRIPTION, tables.CARRY_RATE_WEEKLY, tables.INDUSTRIAL_SET,
+    lots.units, lots.priceUSD, lots.acquiredWeek, lots.next, lots.head, lots.tail,
+  ];
+  const outs: ArrayBufferView[] = [
+    F.isActive, F.isProfile, F.rngAfter,
+    F.weeklyPayrollUSD, F.annualInterest, F.facilityInterestWeeklyUSD,
+    F.marketBondAccrualUSD, F.commercialPaperAccrualUSD, F.marketLoanAccrualUSD,
+    F.couponDue, F.effectiveDebtRate, F.capexCommissionedUSD, F.newExecutionQuality,
+    F.carryingCostUSD, F.newRevenue, F.measuredInputConsumptionWeeklyUSD,
+    F.newEbitda, F.newEbit, F.newNetIncome, F.newEps,
+    F.taxPaidAnnualRateUSD, F.newInputSupplyConstraintFactor, F.newRecentFulfillmentEMA, F.targetProductionUSD,
+    O.plNewComp, O.plNewShare, O.outNewValue, O.ucKeep,
+    O.industrialLineAt, O.badLineAt,
+    O.costWage, O.costInput, O.costDecay, O.costCrowd,
+    O.taxCarryforwardOut, O.taxBasisOut, O.deferredTaxOut,
+    O.hasRecurringOut, O.recurringBaseOut,
+  ];
+  const scalars = new Float64Array([S.n, S.nextWeek, consts.nsub, consts.churn, consts.weight, lots.freeHead]);
+  lots.freeHead = a.frontCore(seam, tl, outs, scalars);
+  return true;
+}
