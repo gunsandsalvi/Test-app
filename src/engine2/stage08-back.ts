@@ -650,7 +650,19 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
     primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
   } = d;
-  return (comp: Company, row: number): Company => {
+/**
+ * §7.317 steps 1.5/1.7 — THE BACK CORE, lifted whole: capital → cash walk → liquidity → debt →
+ * rating, verbatim, ending where the earnings/filing/write-back POST begins. Reads lanes and v2
+ * rows only, except the four §7.320 exceptions (the profile branch, mmfSharesUSD, the capital
+ * write application, the revenueHistory fold). Returns the measured 50-value crossing interface
+ * plus the cash poster the post zone keeps writing through.
+ */
+function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
+  const {
+    state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
+    regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
+    primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
+  } = d;
     const __k0 = S08K_PROF ? performance.now() : 0;
     const L8 = d.backLanes;
     /**
@@ -661,10 +673,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
      */
     const perShare = (amountUSD: number): number =>
       L8.sharesOutstanding[row] > 0 ? round2(amountUSD / L8.sharesOutstanding[row]) : 0;
-
-    if (!isActiveCompany(comp)) {
-      return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
-    }
 
     const reg = updatedRegions[L8.region[row]];
     // SCALE §7.303 — ONE hash lookup for the firm's week updates (was ~12 string-keyed hits).
@@ -900,7 +908,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       accruedTaxUSD, currentWeekMod13, weeklyDebtFundedPortion, bankCredit, post,
     });
     accruedTaxUSD = __cw.accruedTaxUSD;
-    const update = weekUpdate;
     let newTotalDebt = L8.totalDebtUSD[row];
 
     const newBaselineDividendYield = round4(L8.baselineDividendYield[row] * 0.998 + L8.dividendYield[row] * 0.002);
@@ -1319,7 +1326,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     rowList = rowList.filter(r => TS.maturityWeek[r] !== nextWeek || (TS.flags[r] & TR_CP) !== 0);
     let debtIssuanceThisWeek = 0;
     let debtRepaymentThisWeek = 0;
-    let buybacksThisWeek = 0;
+    const buybacksThisWeek = 0;
 
     // WS8: consume this week's priced offering, if any (settlement snapshot taken above, where
     // the holder-settlement baseline is built).
@@ -1650,6 +1657,23 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // Asynchronous Quarterly Earnings cycle
     // Reporting is something a LISTED company does. Gating on the modulo alone kept a company
     // that had been taken private reporting quarterly to a market it had left.
+  if (S08K_PROF) s08k.debt += performance.now() - __k2;
+  return { accruedTaxUSD, annualInterest, bondCallPremiumUSD, buybacksThisWeek, newLeverage, newCoverage, cap, capexCommissionedThisWeekUSD, cashLedger, costDriversUSD, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, preActionFixedUSD, preActionFloatingUSD, rowList, sec, settlement, stillUnderConstruction, targetProductionUSD, updatedProductLines, weeklyDepreciation, weeklyPayrollUSD, post, cash };
+}
+
+  return (comp: Company, row: number): Company => {
+    if (!isActiveCompany(comp)) {
+      return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
+    }
+    const core = runBackCore(comp, row, d);
+    const { accruedTaxUSD, annualInterest, bondCallPremiumUSD, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, cap, capexCommissionedThisWeekUSD, cashLedger, costDriversUSD, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, preActionFixedUSD, preActionFloatingUSD, rowList, sec, settlement, stillUnderConstruction, targetProductionUSD, updatedProductLines, weeklyDepreciation, weeklyPayrollUSD, post, cash } = core;
+    const L8 = d.backLanes;
+    const reg = updatedRegions[L8.region[row]];
+    const weekUpdate = companyUpdates[L8.ticker[row]];
+    const TS = v2.tranches;
+    const update = weekUpdate;
+    let buybacksThisWeek = buybacksFromCore;
+    const __k3 = S08K_PROF ? performance.now() : 0;
     const isReportingThisWeek = !isDefaulted && isPubliclyListed(comp)
       && !Number.isNaN(L8.earningsWeekModulo[row]) && L8.earningsWeekModulo[row] === currentWeekMod13;
     let lastEarningsSurprisePct = comp.lastEarningsSurprisePct;
@@ -1766,8 +1790,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // that auction filled.
     const newTreasuryHoldings = weekUpdate?.treasuryHoldings ?? comp.treasuryHoldings ?? [];
 
-    const __k3 = S08K_PROF ? performance.now() : 0;
-    if (S08K_PROF) s08k.debt += __k3 - __k2;
     // Buyback Execution (Part AH)
     let updatedSharesOutstanding = L8.sharesOutstanding[row];
     const targetCashBuffer = Math.max(10, L8.currentLiabilitiesUSD[row] * 1.5);
