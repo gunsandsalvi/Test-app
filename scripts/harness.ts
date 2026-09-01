@@ -16,7 +16,7 @@
  * Violations print inline the week they happen (capped per week), and the end prints a grouped
  * summary. Exit code 1 on any violation.
  */
-import { writeFileSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -41,6 +41,81 @@ const STAGE_TRACE = process.env.STAGE_TRACE === '1';
 let lastStageTrace: import('../src/engine/simulation/stage-deps').StageDependencyTrace | undefined;
 /** §5-STRUCT step 6: the seed's own reading of the §7.4 quantities, taken before week 1. */
 let seededProbe: Record<string, number> | undefined;
+
+// ---------------------------------------------------------------------------------------------
+// §7.307 THE VERIFICATION KIT — two utility modes that run NO world and exit before week 1.
+//
+// DIFF_STATE=a.json,b.json — the identity instrument. Field-by-field differ over two state
+//   dumps (produce them with `STATE_DUMP=<file> STATE_DUMP_WEEK=<n> WEEKS=<n>`). Prints
+//   IDENTICAL, or every differing path (first 40) plus a per-field-family histogram — the
+//   histogram is what localizes a drift (§7.307's wage ULP: cash-adjacent families, clean logs
+//   → payroll). Pair with the stripped log diff:
+//     diff <(sed 's/| *[0-9]*ms$//' a.log | grep -v " ms") <(same for b.log)
+//
+// TIMING_REPORT=label=prefix,label=prefix — per-log total and mean ms/week (parsed from the
+//   weekly "| NNNms" line endings) and the per-group median over <prefix>-1.log, -2.log, …
+//   Protocol: batteries STRICTLY SERIAL, interleaved A/B/A/B, medians of 3; the box's ±12–25%
+//   noise floor makes sub-5% differences unresolvable — report that, never a claim.
+// ---------------------------------------------------------------------------------------------
+if (process.env.DIFF_STATE) {
+  const [pa, pb] = process.env.DIFF_STATE.split(',');
+  const A = JSON.parse(readFileSync(pa, 'utf8'));
+  const B = JSON.parse(readFileSync(pb, 'utf8'));
+  let diffs = 0;
+  const families = new Map<string, number>();
+  const record = (path: string, msg: string): void => {
+    diffs++;
+    const stripped = path.replace(/[0-9]/g, '');
+    const segs = stripped.split('.');
+    const fam = segs.length > 1 ? segs.slice(-2).join('.') : stripped;
+    families.set(fam, (families.get(fam) ?? 0) + 1);
+    if (diffs <= 40) console.log(`${path}: ${msg}`);
+  };
+  const walk = (x: unknown, y: unknown, path: string): void => {
+    if (Array.isArray(x) && Array.isArray(y)) {
+      if (x.length !== y.length) record(path, `LEN ${x.length} vs ${y.length}`);
+      const n = Math.min(x.length, y.length);
+      for (let i = 0; i < n; i++) walk(x[i], y[i], `${path}[${i}]`);
+    } else if (x !== null && y !== null && typeof x === 'object' && typeof y === 'object') {
+      const xo = x as Record<string, unknown>, yo = y as Record<string, unknown>;
+      for (const k of new Set([...Object.keys(xo), ...Object.keys(yo)])) {
+        if (!(k in xo)) record(`${path}.${k}`, 'MISSING-IN-A');
+        else if (!(k in yo)) record(`${path}.${k}`, 'MISSING-IN-B');
+        else walk(xo[k], yo[k], `${path}.${k}`);
+      }
+    } else if (x !== y) {
+      record(path, `${JSON.stringify(x)} vs ${JSON.stringify(y)}`);
+    }
+  };
+  walk(A, B, '');
+  if (diffs === 0) console.log('IDENTICAL');
+  else {
+    console.log(`\n${diffs} diffs across ${families.size} field families:`);
+    for (const [f, n] of [...families].sort((a, b) => b[1] - a[1])) {
+      console.log(`  ${String(n).padStart(6)}  ${f}`);
+    }
+  }
+  process.exit(diffs === 0 ? 0 : 2);
+}
+
+if (process.env.TIMING_REPORT) {
+  for (const arg of process.env.TIMING_REPORT.split(',')) {
+    const [label, prefix] = arg.split('=');
+    const totals: number[] = [], means: number[] = [];
+    for (let i = 1; i <= 9; i++) {
+      const p = `${prefix}-${i}.log`;
+      if (!existsSync(p)) continue;
+      const ms = [...readFileSync(p, 'utf8').matchAll(/\|\s*(\d+)ms$/gm)].map((m) => Number(m[1]));
+      if (!ms.length) { console.log(`${label} ${p}: NO TIMING LINES`); continue; }
+      const total = ms.reduce((a, b) => a + b, 0);
+      totals.push(total); means.push(total / ms.length);
+      console.log(`${label} ${p}: ${ms.length} wk, total ${total}ms, mean ${(total / ms.length).toFixed(0)}ms/wk`);
+    }
+    const median = (v: number[]): number => [...v].sort((a, b) => a - b)[v.length >> 1];
+    if (totals.length) console.log(`${label} MEDIAN: total ${median(totals).toFixed(0)}ms, mean ${median(means).toFixed(0)}ms/wk\n`);
+  }
+  process.exit(0);
+}
 
 import { advanceWeeklyStep, advanceWeeklyStepProfiled } from '../src/engine/simulation/core';
 import { GameState, RegionId, Position } from '../src/types';
