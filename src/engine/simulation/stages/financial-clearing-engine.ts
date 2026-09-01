@@ -853,32 +853,10 @@ function accumulateShard(
   }
 }
 
-/** The string-keyed maps, built from the dense views for not-yet-flipped readers: per
- *  instrument in index order and per participant's map in index order — exactly the insertion
- *  sequences the per-fill writes produced (shards are contiguous ascending; fills are globally
- *  ordered, so a participant's fills arrive in instrument order). */
-function materializeResultMaps(
-  result: ClearingResult,
-  instIds: string[],
-  holdByPi: Map<string, number>[],
-): void {
-  const nI = result.nInstruments;
-  for (let i = 0; i < nI; i++) {
-    result.newStatById.set(instIds[i], result.newStatByIndex[i]);
+/** The damper diagnostic ids (small; every book reads them) — eager, from the dense flags. */
+function fillDamperIds(result: ClearingResult, instIds: string[]): void {
+  for (let i = 0; i < result.nInstruments; i++) {
     if (result.damperBoundByIndex[i]) result.damperBoundInstrumentIds.push(instIds[i]);
-    if (!Number.isNaN(result.dealerInventoryByIndex[i])) {
-      result.newDealerInventoryById.set(instIds[i], result.dealerInventoryByIndex[i]);
-    }
-    const po = result.primaryByIndex[i];
-    if (po) result.primaryOutcomeById.set(instIds[i], po);
-  }
-  for (let pi = 0; pi < holdByPi.length; pi++) {
-    const base = pi * nI;
-    const m = holdByPi[pi];
-    for (let i = 0; i < nI; i++) {
-      const v = result.holdingsMatrix[base + i];
-      if (v !== 0) m.set(instIds[i], v);
-    }
   }
 }
 
@@ -925,7 +903,9 @@ export function registerShardedKernel(api: ShardedKernelApi): void { shardedKern
  * value-identical or it may not register (native-kernels.ts owns the gate).
  */
 let denseScratch = new Float64Array(1 << 16);
+let denseEpoch = 0;
 function ensureDenseScratch(size: number): Float64Array {
+  denseEpoch++;
   if (denseScratch.length < size) denseScratch = new Float64Array(Math.max(size, denseScratch.length * 2));
   else denseScratch.fill(0, 0, size);
   return denseScratch.subarray(0, size);
@@ -943,6 +923,19 @@ export function clearFinancialAsset(
   void priorDealerInventoryById;
   const nDense = instruments.length;
   const denseHold = ensureDenseScratch(nDense * participants.length);
+  const myEpoch = denseEpoch;
+  const instIds = instruments.map((i) => i.id);
+  // §4.C int flip — the string maps are LAZY: built on first access from the dense views, in
+  // the exact insertion order the per-fill writes had, so a book whose adapter reads only the
+  // dense views never pays for them. The holdings scratch is REUSED across books, so touching a
+  // stale result after the next book cleared is a defect and fails loudly here.
+  let statMap: Map<string, number> | null = null;
+  let holdMaps: Map<string, Map<string, number>> | null = null;
+  let dealerMap: Map<string, number> | null = null;
+  let primaryMap: Map<string, { withdrawn: boolean; marketTakeUSD: number; clearedStat: number }> | null = null;
+  const assertFresh = (): void => {
+    if (myEpoch !== denseEpoch) throw new Error('ClearingResult read after the next book cleared — the dense scratch is reused; consume each result before the next clearFinancialAsset call');
+  };
   const result: ClearingResult = {
     newStatByIndex: new Float64Array(nDense),
     dealerInventoryByIndex: new Float64Array(nDense).fill(NaN),
@@ -950,23 +943,57 @@ export function clearFinancialAsset(
     primaryByIndex: new Array(nDense),
     holdingsMatrix: denseHold,
     nInstruments: nDense,
-    newStatById: new Map(),
-    newParticipantHoldings: new Map(),
-    newDealerInventoryById: new Map(),
+    get newStatById() {
+      if (!statMap) {
+        statMap = new Map();
+        for (let i = 0; i < nDense; i++) statMap.set(instIds[i], this.newStatByIndex[i]);
+      }
+      return statMap;
+    },
+    get newParticipantHoldings() {
+      if (!holdMaps) {
+        assertFresh();
+        holdMaps = new Map();
+        for (let pi = 0; pi < participants.length; pi++) {
+          const m = new Map<string, number>();
+          const base = pi * nDense;
+          for (let i = 0; i < nDense; i++) {
+            const v = this.holdingsMatrix[base + i];
+            if (v !== 0) m.set(instIds[i], v);
+          }
+          holdMaps.set(participants[pi].id, m);
+        }
+      }
+      return holdMaps;
+    },
+    get newDealerInventoryById() {
+      if (!dealerMap) {
+        dealerMap = new Map();
+        for (let i = 0; i < nDense; i++) {
+          if (!Number.isNaN(this.dealerInventoryByIndex[i])) dealerMap.set(instIds[i], this.dealerInventoryByIndex[i]);
+        }
+      }
+      return dealerMap;
+    },
+    get primaryOutcomeById() {
+      if (!primaryMap) {
+        primaryMap = new Map();
+        for (let i = 0; i < nDense; i++) {
+          const po = this.primaryByIndex[i];
+          if (po) primaryMap.set(instIds[i], po);
+        }
+      }
+      return primaryMap;
+    },
     totalDealerRevenueUSD: 0,
     netCashDeltaByParticipantId: new Map(),
     dealerNetCashUSD: 0,
     damperBoundInstrumentIds: [],
-    primaryOutcomeById: new Map(),
     anyCeilingAboveHolding: anyCeilingAboveHolding(instruments, participants),
   };
   participants.forEach((p) => {
-    result.newParticipantHoldings.set(p.id, new Map<string, number>());
     result.netCashDeltaByParticipantId.set(p.id, 0);
   });
-  // §7.327 — accumulate's hoisted lookups (see accumulateShard).
-  const instIds = instruments.map((i) => i.id);
-  const holdByPi = participants.map((p) => result.newParticipantHoldings.get(p.id)!);
   const cashByPi = new Float64Array(participants.length);
   const flushCash = () => {
     participants.forEach((p, pi) => result.netCashDeltaByParticipantId.set(p.id, cashByPi[pi]));
@@ -984,7 +1011,7 @@ export function clearFinancialAsset(
       const shards = shardedKernel.run(packed, sab);
       if (shards) {
         for (const shard of shards) accumulateShard(shard as never, instruments, result, cashByPi);
-        materializeResultMaps(result, instIds, holdByPi);
+        fillDamperIds(result, instIds);
         flushCash();
         return result;
       }
@@ -993,7 +1020,7 @@ export function clearFinancialAsset(
       growKernelScratch(pCount);
       const shard = (nativeKernel ?? runClearingKernel)(packed, 0, packed.n);
       accumulateShard(shard, instruments, result, cashByPi);
-      materializeResultMaps(result, instIds, holdByPi);
+      fillDamperIds(result, instIds);
       flushCash();
       return result;
     }
@@ -1003,7 +1030,7 @@ export function clearFinancialAsset(
   growKernelScratch(packed.pCount);
   const shard = (nativeKernel ?? runClearingKernel)(packed, 0, packed.n);
   accumulateShard(shard, instruments, result, cashByPi);
-  materializeResultMaps(result, instIds, holdByPi);
+  fillDamperIds(result, instIds);
   flushCash();
   return result;
 }
