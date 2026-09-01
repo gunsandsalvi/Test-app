@@ -441,7 +441,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       };
     });
 
-    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants, ...(householdParticipant ? [householdParticipant] : [])], new Map(), {
+    const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants, ...(householdParticipant ? [householdParticipant] : [])];
+    const result = clearFinancialAsset(instruments, allParticipants, new Map(), {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
       // OWN7: the float here is a stock these participants already hold, so an unsold
@@ -454,7 +455,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // participant: Σ(new − prev) must be zero for a stock book with no primary; a nonzero sum
     // is a participant whose shares moved with no cash leg, valued at the cleared price.
     if (process.env.EQ_CONS_TRACE === '1') {
-      const allParts = [...participants, ...indexFundParticipants, ...deskParticipants, ...(householdParticipant ? [householdParticipant] : [])];
+      const allParts = allParticipants;
       const deltaByInstrument = new Map<string, number>();
       allParts.forEach((p) => {
         const news = result.newParticipantHoldings.get(p.id) ?? new Map<string, number>();
@@ -484,12 +485,18 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
 
     // Apply the cleared price. Stage 08 runs after this and reads it as already-real, exactly as
     // it reads the cleared OAS — it no longer computes a price of its own.
-    result.newStatById.forEach((newPrice, companyId) => {
-      const comp = companyById.get(companyId);
-      if (!comp || !(newPrice > 0)) return;
+    // §4.C int flip — instruments[i] IS regionCompanies[i]; map insertion order was index order.
+    const piById = new Map(allParticipants.map((pp, pi) => [pp.id, pi]));
+    const nI = result.nInstruments;
+    const holdAt = (pi: number | undefined, ii: number): number =>
+      pi === undefined ? 0 : result.holdingsMatrix[pi * nI + ii];
+    for (let ii = 0; ii < nI; ii++) {
+      const newPrice = result.newStatByIndex[ii];
+      if (!(newPrice > 0)) continue;
+      const comp = regionCompanies[ii];
       comp.stockPrice = Number(newPrice.toFixed(2));
       comp.marketCap = comp.stockPrice * comp.sharesOutstanding;
-    });
+    }
 
     // Apply each entity's real new share register, with its cash leg.
     // SCALE C1: fills append to the store for the single write-back after this, the last book.
@@ -497,19 +504,21 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const netCashByEntityId = new Map<string, number>();
     let bookFeeUSD = 0;
     bookEntities.forEach((entity) => {
-      const newShares = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
+      const epi = piById.get(entity.id);
       const equityHoldings: ItemizedHolding[] = [];
-      newShares.forEach((shares, companyId) => {
-        const comp = companyById.get(companyId);
-        if (!comp || shares <= 0.0001) return;
+      for (let ii = 0; ii < nI; ii++) {
+        const shares = holdAt(epi, ii);
+        if (shares === 0) continue;
+        const comp = regionCompanies[ii];
+        if (shares <= 0.0001) continue;
         equityHoldings.push({
-          instrumentId: companyId,
+          instrumentId: comp.id,
           instrumentType: 'EQUITY',
           issuerRegion: regionId,
           quantityShares: shares,
           quantityOrNotionalUSD: shares * comp.stockPrice,
         });
-      });
+      }
       // The engine's cash delta is in the same unit as the quantity — shares — so convert the
       // traded share flow into money at each name's cleared price. G3e: and charge the desks'
       // spread on it, which this adapter never did because the engine's fee came back
@@ -522,14 +531,15 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         cashDeltaUSD -= f;
         feeUSD += f;
       };
-      newShares.forEach((shares, companyId) => {
-        const comp = companyById.get(companyId);
-        if (!comp) return;
-        const prev = currentSharesByEntity.get(entity.id)?.get(companyId) ?? 0;
-        chargeUSD(shares - prev, comp);
-      });
+      for (let ii = 0; ii < nI; ii++) {
+        const shares = holdAt(epi, ii);
+        if (shares === 0) continue;
+        const prev = currentSharesByEntity.get(entity.id)?.get(regionCompanies[ii].id) ?? 0;
+        chargeUSD(shares - prev, regionCompanies[ii]);
+      }
       currentSharesByEntity.get(entity.id)!.forEach((prevShares, companyId) => {
-        if (newShares.has(companyId)) return;
+        const ti = ciById.get(companyId);
+        if (ti !== undefined && holdAt(epi, ti) !== 0) return;
         const comp = companyById.get(companyId);
         if (comp) chargeUSD(-prevShares, comp);
       });
@@ -543,7 +553,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // adapter. A desk pays the book's spread on its own flow exactly as a client does.
     const deskCashUSD = new Map<string, number>();
     deskParticipants.forEach((desk) => {
-      const newShares = result.newParticipantHoldings.get(desk.id) ?? new Map<string, number>();
+      const dpi = piById.get(desk.id);
       let cashDeltaUSD = 0;
       const charge = (tradedShares: number, comp: Company) => {
         cashDeltaUSD -= tradedShares * comp.stockPrice;
@@ -551,13 +561,14 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         cashDeltaUSD -= f;
         bookFeeUSD += f;
       };
-      newShares.forEach((shares, companyId) => {
-        const comp = companyById.get(companyId);
-        if (!comp) return;
-        charge(shares - (desk.currentHoldingsByInstrumentId.get(companyId) ?? 0), comp);
-      });
+      for (let ii = 0; ii < nI; ii++) {
+        const shares = holdAt(dpi, ii);
+        if (shares === 0) continue;
+        charge(shares - (desk.currentHoldingsByInstrumentId.get(regionCompanies[ii].id) ?? 0), regionCompanies[ii]);
+      }
       desk.currentHoldingsByInstrumentId.forEach((prevShares, companyId) => {
-        if (newShares.has(companyId)) return;
+        const ti = ciById.get(companyId);
+        if (ti !== undefined && holdAt(dpi, ti) !== 0) return;
         const comp = companyById.get(companyId);
         if (comp) charge(-prevShares, comp);
       });
@@ -569,12 +580,13 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // (it simply rejoins the residual the register measures). The proceeds land on the
     // HOUSEHOLD party at settlement below, which is the whole point of the channel.
     if (householdParticipant) {
-      const newShares = result.newParticipantHoldings.get(householdParticipantId) ?? new Map<string, number>();
+      const hpi = piById.get(householdParticipantId);
       let cashDeltaUSD = 0;
       householdPriorShares.forEach((prevShares, companyId) => {
         const comp = companyById.get(companyId);
         if (!comp) return;
-        const soldShares = Math.max(0, prevShares - (newShares.get(companyId) ?? 0));
+        const ti = ciById.get(companyId);
+        const soldShares = Math.max(0, prevShares - (ti !== undefined ? holdAt(hpi, ti) : 0));
         if (soldShares <= 0) return;
         const f = soldShares * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
         cashDeltaUSD += soldShares * comp.stockPrice - f;

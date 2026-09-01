@@ -466,13 +466,17 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       inst.tradableFloatUSD = (heldByInstitutionsUSD.get(inst.id) ?? 0) + (deskHeldUSD.get(inst.id) ?? 0);
     });
 
-    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants], priorDealerInventoryById, {
+    const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
+    const result = clearFinancialAsset(instruments, allParticipants, priorDealerInventoryById, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
       // OWN7: the float here is a stock these participants already hold, so an unsold
       // position stays with its holder rather than falling to a dealer nobody names.
       unsoldStaysWithHolder: true,
     });
+    // §4.C int flip — participant index for the dense holdings matrix (a fund filtered out of
+    // the book has no row, exactly as it had no map entry).
+    const piById = new Map(allParticipants.map((pp, pi) => [pp.id, pi]));
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `corporate bond:${id}`));
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} corporate bond`);
     // WS8: settle this week's priced offerings — lead bank pays the unsold residual and takes
@@ -488,12 +492,13 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // Apply: real cleared OAS, mutated in place so stage 8 (which runs next) reads it as this
     // week's already-real value rather than recomputing one. Also extend each company's rolling
     const companyById = new Map(regionCompanies.map((c) => [c.id, c]));
-    result.newStatById.forEach((newOasBps, companyId) => {
-      const comp = companyById.get(companyId);
-      if (!comp) return;
+    // §4.C int flip — instruments[i] IS regionCompanies[i]; the map's insertion order was this
+    // index order, so the walk and its floats are unchanged.
+    for (let ii = 0; ii < result.nInstruments; ii++) {
+      const comp = regionCompanies[ii];
       v2.oasRing = ringPush(v2.oasRing, rowOf(v2, comp.id), comp.oasSpreadBps);
-      comp.oasSpreadBps = newOasBps;
-    });
+      comp.oasSpreadBps = result.newStatByIndex[ii];
+    }
 
     // Apply: each entity's real new CORP_BOND holdings. Loans are a genuinely different real
     // market (different investor base, different technicals) and get their own real clearing
@@ -502,11 +507,15 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // to the store for the single write-back after 07e. SETL6: the cash leg is settled below as
     // payment instructions, not mutated here.
     bookEntities.forEach((entity) => {
-      const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
+      const pi = piById.get(entity.id);
       const newCorpHoldings: ItemizedHolding[] = [];
-      newHoldings.forEach((newHoldingUSD, companyId) => {
-        if (newHoldingUSD > 1) newCorpHoldings.push({ instrumentId: companyId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD });
-      });
+      if (pi !== undefined) {
+        const base = pi * result.nInstruments;
+        for (let ii = 0; ii < result.nInstruments; ii++) {
+          const newHoldingUSD = result.holdingsMatrix[base + ii];
+          if (newHoldingUSD > 1) newCorpHoldings.push({ instrumentId: regionCompanies[ii].id, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD });
+        }
+      }
       store.append(entity.id, newCorpHoldings);
     });
 

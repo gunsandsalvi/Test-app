@@ -426,7 +426,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       inst.tradableFloatUSD = (heldByInstitutionsUSD.get(inst.id) ?? 0) + (deskHeldUSD.get(inst.id) ?? 0);
     });
 
-    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants], priorDealerInventoryById, {
+    const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
+    const result = clearFinancialAsset(instruments, allParticipants, priorDealerInventoryById, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
       // OWN7: the float here is a stock these participants already hold, so an unsold
@@ -451,10 +452,12 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // Apply: real cleared discount margin + derived price-to-par, mutated in place so stage 8
     // reads it as an already-real value. Also extend the rolling history for momentum.
     const companyById = new Map(regionCompanies.map((c) => [c.id, c]));
-    result.newStatById.forEach((newDiscountMarginBps, companyId) => {
-      const comp = companyById.get(companyId);
-      if (!comp) return;
-      if (!comp.leveragedLoan) return;
+    // §4.C int flip — instruments[i] IS regionCompanies[i]; map insertion order was index order.
+    const piById = new Map(allParticipants.map((pp, pi) => [pp.id, pi]));
+    for (let ii = 0; ii < result.nInstruments; ii++) {
+      const newDiscountMarginBps = result.newStatByIndex[ii];
+      const comp = regionCompanies[ii];
+      if (!comp.leveragedLoan) continue;
       const history = [...(comp.leveragedLoan.discountMarginBpsHistory || []), comp.leveragedLoan.discountMarginBps];
       const marginDeltaBps = newDiscountMarginBps - comp.leveragedLoan.quotedMarginBps;
       const creditDuration = loanCreditDurationYears(comp);
@@ -464,17 +467,21 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         pricePar: Number((100 - (marginDeltaBps / 10000) * creditDuration * 100).toFixed(2)),
         discountMarginBpsHistory: history.slice(-8),
       };
-    });
+    }
 
     // Apply: each entity's real new LEVERAGED_LOAN holdings.
     // SCALE C1: fills append to the store for the single write-back after 07e. SETL6: the cash
     // leg is settled below as payment instructions.
     bookEntities.forEach((entity) => {
-      const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
+      const pi = piById.get(entity.id);
       const newLoanHoldings: ItemizedHolding[] = [];
-      newHoldings.forEach((newHoldingUSD, companyId) => {
-        if (newHoldingUSD > 1) newLoanHoldings.push({ instrumentId: companyId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD });
-      });
+      if (pi !== undefined) {
+        const base = pi * result.nInstruments;
+        for (let ii = 0; ii < result.nInstruments; ii++) {
+          const newHoldingUSD = result.holdingsMatrix[base + ii];
+          if (newHoldingUSD > 1) newLoanHoldings.push({ instrumentId: regionCompanies[ii].id, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD });
+        }
+      }
       store.append(entity.id, newLoanHoldings);
     });
 
