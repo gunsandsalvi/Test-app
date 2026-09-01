@@ -133,6 +133,20 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     byCompanyId.set(comp.id, estate);
   });
 
+  // SCALE — the open estates' receivables in ONE pass over the invoice book. This was a full
+  // filter of the ~170k-invoice book PER OPEN ESTATE — O(invoices × estates) every week, and
+  // estates stay open for weeks. Per seller the accumulation runs in the book's own order, so
+  // each estate's sum is the float-for-float value the per-estate reduce produced.
+  const receivablesBySellerUSD = new Map<string, number>();
+  estates.forEach((e) => { if (e.closedWeek === undefined) receivablesBySellerUSD.set(e.ticker, 0); });
+  if (receivablesBySellerUSD.size > 0) {
+    (state.tradeInvoices ?? []).forEach((iv) => {
+      const acc = receivablesBySellerUSD.get(iv.sellerTicker);
+      if (acc === undefined) return;
+      receivablesBySellerUSD.set(iv.sellerTicker, acc + iv.amountCurrency * iv.bookedUsdPerCurrency);
+    });
+  }
+
   // ---- Run every open workout one week further. ----
   estates.forEach((estate) => {
     if (estate.closedWeek !== undefined) return;
@@ -142,11 +156,9 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
 
     // §7.286 — receivables are the REAL invoice book now, not a schedule beside it. The
     // buyers' payments arrive on the dead firm's account through trade-settlement on the
-    // invoices' own due dates; here they are only COUNTED, so the close condition knows when
-    // the last one is in.
-    estate.assets.receivablesUSD = (state.tradeInvoices ?? [])
-      .filter((iv) => iv.sellerTicker === estate.ticker)
-      .reduce((a, iv) => a + iv.amountCurrency * iv.bookedUsdPerCurrency, 0);
+    // invoices' own due dates; here they are only COUNTED (via the one-pass sums above), so
+    // the close condition knows when the last one is in.
+    estate.assets.receivablesUSD = receivablesBySellerUSD.get(estate.ticker) ?? 0;
 
     // Inventory leaves at the company's OWN turnover — the rate its market was taking the goods
     // before it failed — and at the discount a buyer needs for holding it that long.

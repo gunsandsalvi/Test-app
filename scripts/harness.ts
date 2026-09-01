@@ -1910,10 +1910,13 @@ function canonicalFingerprint(state: GameState): string {
   visit(state);
   return h.digest('hex');
 }
+/** FP_WEEKS=n widens the window past the default 3 — a change on a quarterly or annual clock
+ *  (mergers, retirement, FDI) needs a fingerprint that crosses its firing week. */
+const FP_WEEKS = Number(process.env.FP_WEEKS) > 0 ? Number(process.env.FP_WEEKS) : 3;
 const fpModule: HarnessModule = {
   name: 'FP fingerprint',
   week(_prev, state, w) {
-    if (!FP || w > 3) return;
+    if (!FP || w > FP_WEEKS) return;
     console.log(`  [FP] w${w} ${canonicalFingerprint(state)}`);
   },
 };
