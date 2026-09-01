@@ -720,6 +720,33 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     financingProfile: { fixedRateTilt: 1.2, maxPayoutRatio: 0.75 },
     subUnits: [
       {
+        // §5-CRE — COMMERCIAL SPACE, the rule-17 way: one registry entry and the machinery the
+        // model already owns does the rest. Landlords are DEALT as ordinary producers of this
+        // line (plus the industry's SME pool — the small-landlord tier, §7.229's gap closed for
+        // this profile); their buildings arrive as CAPEX through the commercial_construction
+        // market; a LEASE is a SUBSCRIPTION (IND2's contracted base: it survives a week with no
+        // new lettings and decays by churn — which is what a lease IS) struck through the same
+        // contract machinery every supply relationship uses; VACANCY is this book's unsold
+        // capacity, priced by the same auction; a landlord that cannot cover its unit cost
+        // idles (§7.139), mothballs and scraps (§5-DYN) — and its bank's CRE exposure is just
+        // its facilities and bonds on named books, so the vacancy → landlord default → bank
+        // capital channel is the existing estate machinery with nothing new to teach it.
+        unitId: 'commercial_rental_services',
+        // A firm's premises requirement (space per firm is TECHNOLOGY — the registry's class of
+        // number). NOTE the market's VALUE scale is pinned by the demand-level identity (C+G,
+        // §7.272), so a 92%-corporate service seeds at its government slice — the same
+        // structural under-sizing every corporate-heavy service rides (logistics at 0.08% of
+        // GDP against a real 5-6% is the named specimen). That is §6.1's level row, not this
+        // entry's: the MECHANISM here is complete at whatever scale the level hands it.
+        householdUnitsPerCapitaAnnual: 0, corporateUnitsPerFirmAnnual: 400.0,
+        recipeInputs: { repair_and_maintenance: 0.12, electricity: 0.05, professional_services: 0.05, facilities_and_logistics: 0.02 },
+        label: "Commercial Property & Leasing",
+        buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.08, CORPORATE: 0.92 },
+        deliveryMode: 'IN_PLACE',
+        productionLeadWeeks: 0,
+        revenueMechanism: 'SUBSCRIPTION',
+      },
+      {
         // SVC: the largest single line in household consumption in every developed economy, and
         // the model had no market for it — rent was inside a consumption budget that only ever
         // bid for goods.
