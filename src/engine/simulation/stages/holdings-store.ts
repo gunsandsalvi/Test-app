@@ -29,7 +29,7 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
-import { bookHeadOf, pushBookRow, relinkBook } from '../../../engine2/holdings';
+import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, markBookDirty } from '../../../engine2/holdings';
 import { V2World } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
@@ -173,6 +173,7 @@ export class HoldingsStore {
           const H = this.v2.holdings;
           H.shares[rid] = next;
           H.qtyUSD[rid] = next * pricePerShare;
+          markBookDirty(this.v2, entityId);
         }
         remaining -= take;
         if (Math.abs(remaining) <= 1e-9) return;
@@ -218,13 +219,19 @@ export class HoldingsStore {
         && !slot.rowIds.includes(-1)
         && slot.claimed.every((c) => c === 0);
       if (untouched) return;
+      // Fate of every row is already known, so the chain is rebuilt directly: allocations first
+      // (they may reuse earlier frees, never this entity's — its frees come after), then the
+      // claimed rows to the free list, then one link pass. No Set anywhere (§7.315).
       const ids: number[] = [];
       for (let i = 0; i < slot.rows.length; i++) {
         if (slot.claimed[i]) continue;
-        ids.push(slot.rowIds[i] >= 0 ? slot.rowIds[i] : pushBookRow(v2, slot.entity.id, slot.rows[i]));
+        ids.push(slot.rowIds[i] >= 0 ? slot.rowIds[i] : newBookRow(v2, slot.rows[i]));
       }
-      for (const r of slot.appended) ids.push(pushBookRow(v2, slot.entity.id, r));
-      relinkBook(v2, slot.entity.id, ids);
+      for (const r of slot.appended) ids.push(newBookRow(v2, r));
+      for (let i = 0; i < slot.rows.length; i++) {
+        if (slot.claimed[i] && slot.rowIds[i] >= 0) freeBookRow(v2, slot.rowIds[i]);
+      }
+      setBookChain(v2, slot.entity.id, ids);
     });
   }
 }

@@ -25,7 +25,7 @@
  */
 
 import { institutionProfile } from '../../../domain/institution-profiles';
-import { bookHeadOf, pushBookRow, relinkBook } from '../../../engine2/holdings';
+import { bookHeadOf, pushBookRow, relinkBook, markBookDirty } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { pay } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
@@ -593,6 +593,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
             if (!Number.isNaN(sh)) H.shares[r] = sh * (1 - share);
             H.qtyUSD[r] = H.qtyUSD[r] * (1 - share);
           }
+          markBookDirty(ctx.v2, fundId);
         }
         fundAssetsUSD.set(fundId, totalUSD * (1 - share));
       });
@@ -748,7 +749,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
           const sh = H.shares[found];
           const held = (Number.isNaN(sh) ? 0 : sh) + shares;
           if (held <= 1e-6) removed.add(found);
-          else { H.shares[found] = held; H.qtyUSD[found] = held * navPerShare; }
+          else { H.shares[found] = held; H.qtyUSD[found] = held * navPerShare; markBookDirty(ctx.v2, entity.id); }
         } else if (shares > 1e-6) {
           pushBookRow(ctx.v2, entity.id, {
             instrumentId: fundId,
@@ -788,13 +789,16 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const H = ctx.v2.holdings;
     const etfShareRefM = internString(ctx.v2, 'ETF_SHARE');
     ctx.updatedInstitutionalEntities.forEach((entity) => {
+      let touched = false;
       for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== etfShareRefM) continue;
         const navPerShare = finalNavPerShareByFund.get(ctx.v2.internedStrings[H.instrRef[r]]);
         if (navPerShare === undefined) continue;
         const sh = H.shares[r];
         H.qtyUSD[r] = (Number.isNaN(sh) ? 0 : sh) * navPerShare;
+        touched = true;
       }
+      if (touched) markBookDirty(ctx.v2, entity.id);
     });
   }
 

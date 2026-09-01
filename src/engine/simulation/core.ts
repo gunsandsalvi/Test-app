@@ -345,8 +345,16 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     const v2 = ensureV2(state);
     for (const c of nextState.companies) c.debtTranches = materializeLadder(v2, c.id);
     // §7.313 flip, holdings — same pattern: the rows are the register's authority; the object
-    // books are a view materialized once here, for the UI, STATE_DUMP and the seed-time readers.
-    for (const e of nextState.institutionalEntities ?? []) e.itemizedHoldings = materializeBook(v2, e.id);
+    // books are a view materialized here for the UI, STATE_DUMP and the seed-time readers —
+    // but only the books a writer touched (§7.315): a clean book's view from last close is
+    // still exact, and nothing mutates view arrays any more (all writers are row-native), so
+    // carrying the array forward aliases nothing. A missed dirty mark cannot survive gating:
+    // HOLDINGS_SYNC_CHECK compares EVERY book to its rows.
+    const dirtyBooks = v2.holdings.dirty;
+    for (const e of nextState.institutionalEntities ?? []) {
+      if (dirtyBooks.has(e.id)) e.itemizedHoldings = materializeBook(v2, e.id);
+    }
+    dirtyBooks.clear();
   }
   if (process.env.TRANCHE_SYNC_CHECK === '1') assertLaddersInSync(ensureV2(state), nextState.companies);
   if (process.env.HOLDINGS_SYNC_CHECK === '1') assertBooksInSync(ensureV2(state), nextState.institutionalEntities ?? []);

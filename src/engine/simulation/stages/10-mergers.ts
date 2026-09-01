@@ -8,7 +8,7 @@
  */
 
 import { absorbBankBook } from '../../ledger';
-import { bookHeadOf, pushBookRow } from '../../../engine2/holdings';
+import { bookHeadOf, pushBookRow, markBookDirty } from '../../../engine2/holdings';
 import { ensureV2, internString } from '../../../engine2/world';
 import { syncLadderRows, materializeLadder } from '../../../engine2/tranches';
 import { pay } from './settlement';
@@ -461,7 +461,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           H.instrRef[r] = acquirerIdRef;
           H.regionRef[r] = acquirerRegionRef;
         }
-        if (touched) bumpRegister(ctx);
+        if (touched) { markBookDirty(ctx.v2, e.id); bumpRegister(ctx); }
       });
     }
   }

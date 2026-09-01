@@ -19,7 +19,7 @@ import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { isActiveCompany } from '../../../domain/company';
 import { SOV_BILL_BUCKETS } from './shared-helpers';
-import { bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, markBookDirty } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 
 /** Weekly accretion factor for a bill bucket, off the region's own cleared bill curve. */
@@ -82,13 +82,16 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
     const regionRef = internString(ctx.v2, regionId);
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.region !== regionId) return;
+      let touched = false;
       for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
         const key = govBucketKeyOf(ctx.v2.internedStrings[H.instrRef[r]], regionId);
         const rate = key ? rateByBucket.get(key) : undefined;
         if (!rate) continue;
         H.qtyUSD[r] = H.qtyUSD[r] * (1 + rate);
+        touched = true;
       }
+      if (touched) markBookDirty(ctx.v2, e.id);
     });
 
     // The central bank's bill book accretes too — its income is remitted to the treasury, which

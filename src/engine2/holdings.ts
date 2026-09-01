@@ -32,6 +32,12 @@ export interface HoldingStore {
   tail: Int32Array;
   /** Entities whose book has ever been synced — the week-start catch-up spots newcomers. */
   synced: Set<string>;
+  /** Scratch per-row mark for relink's keep test — an epoch stamp, never a Set (§7.315). */
+  mark: Int32Array;
+  markEpoch: number;
+  /** Books a writer touched since the last materialization — the week-end view rebuilds only
+   *  these (a missed mark is caught by HOLDINGS_SYNC_CHECK comparing EVERY book to its rows). */
+  dirty: Set<string>;
 }
 
 export function newHoldingStore(): HoldingStore {
@@ -49,6 +55,9 @@ export function newHoldingStore(): HoldingStore {
     head: new Int32Array(0),
     tail: new Int32Array(0),
     synced: new Set<string>(),
+    mark: new Int32Array(cap),
+    markEpoch: 0,
+    dirty: new Set<string>(),
   };
 }
 
@@ -59,6 +68,7 @@ function growHoldings(H: HoldingStore): void {
   H.typeRef = gI(H.typeRef); H.instrRef = gI(H.instrRef); H.regionRef = gI(H.regionRef);
   H.qtyUSD = gF(H.qtyUSD); H.shares = gF(H.shares);
   const next = new Int32Array(cap).fill(-1); next.set(H.next); H.next = next;
+  const mark = new Int32Array(cap); mark.set(H.mark); H.mark = mark;
   H.cap = cap;
 }
 
@@ -86,6 +96,7 @@ function slotFor(H: HoldingStore, entRow: number): number {
 export function syncBookRows(v2: V2World, entityId: string, book: ItemizedHolding[] | undefined): void {
   const H = v2.holdings;
   H.synced.add(entityId);
+  H.dirty.add(entityId);
   const entRow = rowOf(v2, entityId);
   const slot = slotFor(H, entRow);
   for (let r = H.head[slot]; r >= 0; ) {
@@ -135,6 +146,7 @@ export function bookRowsOf(v2: V2World, entityId: string): number[] {
 export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): number {
   const H = v2.holdings;
   H.synced.add(entityId);
+  H.dirty.add(entityId);
   const slot = slotFor(H, rowOf(v2, entityId));
   const r = allocRow(H);
   H.typeRef[r] = internString(v2, h.instrumentType);
@@ -155,12 +167,15 @@ export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): 
 export function relinkBook(v2: V2World, entityId: string, rows: number[]): void {
   const H = v2.holdings;
   H.synced.add(entityId);
+  H.dirty.add(entityId);
   const slot = slotFor(H, rowOf(v2, entityId));
   if (rows.length > 0) {
-    const keep = new Set(rows);
+    // The keep test is an epoch stamp on a typed column, not a Set — no hashing, no allocation.
+    const epoch = ++H.markEpoch;
+    for (let i = 0; i < rows.length; i++) H.mark[rows[i]] = epoch;
     for (let r = H.head[slot]; r >= 0; ) {
       const nxt = H.next[r];
-      if (!keep.has(r)) { H.next[r] = H.freeHead; H.freeHead = r; }
+      if (H.mark[r] !== epoch) { H.next[r] = H.freeHead; H.freeHead = r; }
       r = nxt;
     }
     for (let i = 0; i < rows.length; i++) H.next[rows[i]] = i + 1 < rows.length ? rows[i + 1] : -1;
@@ -176,6 +191,50 @@ export function relinkBook(v2: V2World, entityId: string, rows: number[]): void 
     H.head[slot] = -1;
     H.tail[slot] = -1;
   }
+}
+
+/** Allocate and fill a row WITHOUT touching any chain — for writers that assemble a whole
+ *  chain themselves and install it with `setBookChain` (the clearing write-back). */
+export function newBookRow(v2: V2World, h: ItemizedHolding): number {
+  const H = v2.holdings;
+  const r = allocRow(H);
+  H.typeRef[r] = internString(v2, h.instrumentType);
+  H.instrRef[r] = internString(v2, h.instrumentId);
+  H.regionRef[r] = internString(v2, h.issuerRegion);
+  H.qtyUSD[r] = h.quantityOrNotionalUSD ?? 0;
+  H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
+  H.next[r] = -1;
+  return r;
+}
+
+/** Return one row to the free list. The caller owns the invariant that nothing links to it. */
+export function freeBookRow(v2: V2World, r: number): void {
+  const H = v2.holdings;
+  H.next[r] = H.freeHead;
+  H.freeHead = r;
+}
+
+/** Install `ids` as the entity's whole chain, in order. Rows dropped from the old chain must
+ *  already have been freed by the caller (freeBookRow) — this only links what it is given. */
+export function setBookChain(v2: V2World, entityId: string, ids: number[]): void {
+  const H = v2.holdings;
+  H.synced.add(entityId);
+  H.dirty.add(entityId);
+  const slot = slotFor(H, rowOf(v2, entityId));
+  let prev = -1;
+  for (let i = 0; i < ids.length; i++) {
+    const r = ids[i];
+    if (prev >= 0) H.next[prev] = r; else H.head[slot] = r;
+    prev = r;
+  }
+  if (prev >= 0) H.next[prev] = -1; else H.head[slot] = -1;
+  H.tail[slot] = prev;
+}
+
+/** Direct column writers (in-place qty/shares scaling) call this so the week-end view knows to
+ *  re-materialize the book; a missed call is caught by HOLDINGS_SYNC_CHECK. */
+export function markBookDirty(v2: V2World, entityId: string): void {
+  v2.holdings.dirty.add(entityId);
 }
 
 /** The entity's book as objects — the WEEK-END VIEW once rows are the authority (§7.313's
