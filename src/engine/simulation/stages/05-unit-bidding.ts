@@ -270,6 +270,10 @@ interface RegionMarketIndex {
   lineBySupplierBySubUnit: Map<string, Map<Company, NonNullable<Company['productLines']>[number]>>;
   /** Firms with real capex, the customer base for every capital-goods category. */
   capexBuyers: Company[];
+  /** SCALE — the firm's wage bill at current staffing, computed once per firm per week: the
+   *  §7.246 floor decomposition asked weeklyWageBillUSD once per LINE per market, with inputs
+   *  that cannot change inside the stage (a supplier sits only in its own region's index). */
+  currentPayrollByFirm: Map<Company, number>;
 }
 
 /**
@@ -300,6 +304,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
       suppliersBySubUnit: new Map(),
       lineBySupplierBySubUnit: new Map(),
       capexBuyers: [],
+      currentPayrollByFirm: new Map(),
     };
   });
   const lookup: GlobalFirmLookup = { byTicker: new Map(), byId: new Map(), byKey: new Map() };
@@ -396,6 +401,10 @@ interface DemandPlan {
 }
 
 /** A settlement key for a participant that is not a Company: the aggregates, by region. */
+const SELLER_RATING_PD: Record<string, number> = {
+  'AAA': 0.0002, 'AA': 0.001, 'A': 0.003, 'BBB': 0.01, 'BB': 0.03, 'B': 0.08, 'CCC': 0.20,
+};
+
 const householdKey = (regionId: RegionId) => `HOUSEHOLD:${regionId}`;
 const governmentKey = (regionId: RegionId) => `GOVERNMENT:${regionId}`;
 
@@ -817,13 +826,17 @@ function buildRegionSupplyPlans(
     const trailingWeeklyCostUSD = Math.max(0, (comp.annualRevenue - comp.ebitda) / 52);
     let firmWeeklyCostUSD = trailingWeeklyCostUSD;
     if (comp.payrollWeeklyUSD !== undefined && comp.realInputConsumptionCostWeeklyUSD !== undefined) {
-      const currentPayrollWeeklyUSD = weeklyWageBillUSD(
-        comp.employeeCount,
-        SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
-        getBaseAnnualWageUSD(regionId),
-        reg.occupationPools,
-        comp.offeredWageIndex ?? 1.0
-      );
+      let currentPayrollWeeklyUSD = index.currentPayrollByFirm.get(comp);
+      if (currentPayrollWeeklyUSD === undefined) {
+        currentPayrollWeeklyUSD = weeklyWageBillUSD(
+          comp.employeeCount,
+          SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
+          getBaseAnnualWageUSD(regionId),
+          reg.occupationPools,
+          comp.offeredWageIndex ?? 1.0
+        );
+        index.currentPayrollByFirm.set(comp, currentPayrollWeeklyUSD);
+      }
       const residualWeeklyUSD = Math.max(0,
         trailingWeeklyCostUSD - comp.payrollWeeklyUSD - comp.realInputConsumptionCostWeeklyUSD);
       firmWeeklyCostUSD = currentPayrollWeeklyUSD + comp.realInputConsumptionCostWeeklyUSD + residualWeeklyUSD;
@@ -958,10 +971,7 @@ function buildRegionSupplyPlans(
     // The [0.40, 0.98] band on the cost rate goes with it: it existed because the margin it read
     // was a stated number that could be anything, and since IND3 it is the residual of real
     // costs (rule 2).
-    const ratingPdMap: Record<string, number> = {
-      'AAA': 0.0002, 'AA': 0.001, 'A': 0.003, 'BBB': 0.01, 'BB': 0.03, 'B': 0.08, 'CCC': 0.20
-    };
-    const pd = ratingPdMap[comp.creditRating] ?? 0.03;
+    const pd = SELLER_RATING_PD[comp.creditRating] ?? 0.03;
     const expectedLoss = pd * 0.60;
     const costOfCapital = 0.05 + expectedLoss;
 
