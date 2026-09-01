@@ -40,7 +40,7 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
-import { ensureV2, V2World } from '../../../engine2/world';
+import { ringPush, rowOf, ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP } from '../../../engine2/tranches';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { isActiveCompany } from '../../../domain/company';
@@ -475,8 +475,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     result.newStatById.forEach((newOasBps, companyId) => {
       const comp = companyById.get(companyId);
       if (!comp) return;
-      const history = [...(comp.oasSpreadBpsHistory || []), comp.oasSpreadBps];
-      comp.oasSpreadBpsHistory = history.slice(-8);
+      v2.oasRing = ringPush(v2.oasRing, rowOf(v2, comp.id), comp.oasSpreadBps);
       comp.oasSpreadBps = newOasBps;
     });
 

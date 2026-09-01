@@ -15,6 +15,7 @@
  */
 
 import { GameState, RegionId, Company } from '../../../types';
+import { ensureV2, ringFill, rowOf } from '../../../engine2/world';
 import {
   SecurityLoan, loanWeeklyFeeUSD, loanOneWeekGap, lendingReservationFeeBps, shortSizeShares,
   stockLoanNetUSD,
@@ -37,7 +38,10 @@ export const positionKey = (entityId: string, companyId: string) => `${entityId}
 /** A borrow fee is a rate on a stock, so it reprices like the credit books it is quoted beside. */
 const MAX_WEEKLY_FEE_MOVE_PCT = 0.25;
 
+const priceScratchSl: number[] = [];
+
 export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepContext): void {
+  const v2sl = ensureV2(state);
   void state;
   const regionIds = REGION_IDS;
   const store = ctx.holdingsStore!;
@@ -284,7 +288,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     }
 
     const gapByCompanyId = new Map(borrowNames.map((c) => [c.id, loanOneWeekGap({
-      annualVol: realizedAnnualVol(c.historicalPrices, 26),
+      annualVol: realizedAnnualVol(ringFill(v2sl.priceRing, rowOf(v2sl, c.id), priceScratchSl), 26),
       bookWeeklyMoveCap: MAX_WEEKLY_PRICE_MOVE_PCT,
     })]));
 

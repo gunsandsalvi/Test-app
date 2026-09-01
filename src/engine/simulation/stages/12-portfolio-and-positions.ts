@@ -8,7 +8,7 @@
  */
 
 import { GameState, Position } from '../../../types';
-import { ensureV2 } from '../../../engine2/world';
+import { ringFill, rowOf, ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { isActiveCompany } from '../../../domain/company';
 import { assertNever } from '../../../domain/defect';
@@ -22,6 +22,8 @@ import { WeeklyStepContext } from './context';
 import { realizedAnnualVol } from '../../../domain/volatility';
 import { regionIndexOf } from '../../macro/indices';
 
+const priceScratch12: number[] = [];
+
 export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2 = ensureV2(state);
   const TS = v2.tranches;
@@ -31,7 +33,8 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
     updatedCompanies,
     updatedRegions,
     updatedCommodities,
-    state.compositeIndices
+    state.compositeIndices,
+    v2
   );
 
   let closedCount = 0;
@@ -411,7 +414,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         // model measures: this underlying's own realised vol. A name too new to estimate one
         // falls back to its region's index, which is estimable — no constant anywhere in the
         // chain. `marketVolComponent` rides on top, as the market-wide premium it always was.
-        const nameVol = realizedAnnualVol(comp?.historicalPrices, 26);
+        const nameVol = comp ? realizedAnnualVol(ringFill(v2.priceRing, rowOf(v2, comp.id), priceScratch12), 26) : undefined;
         const indexVol = realizedAnnualVol(
           regionIndexOf(state.compositeIndices, pos.region).historical, 26);
         const vol = (pos.impliedVol ?? nameVol ?? indexVol ?? 0) + ctx.marketVolComponent;

@@ -420,7 +420,7 @@ export interface Company {
   leverage: number;
   interestCoverage: number;
   creditRating: CreditRating;
-  ratingHistory: CreditRating[];
+  // §4.C II.5 — ratingHistory lives on v2.ratingRing (codes; world.ts).
   isDefaulted: boolean;
   mergerAcquired?: boolean; // Set true when company is acquired in M&A (disjoint from isDefaulted)
   acquiredByTicker?: string; // Ticker of acquiring company
@@ -429,7 +429,7 @@ export interface Company {
 
   // Market & Pricing
   stockPrice: number;
-  historicalPrices: number[];
+  // §4.C II.5 — historicalPrices lives on v2.priceRing (world.ts).
   // §4.C II.5 — revenueHistory lives on v2.revRing (world.ts); the object field is gone.
   forwardPE: number;
   marketCap: number;
@@ -507,7 +507,7 @@ export interface Company {
   // credit investors weigh recent spread momentum (a name that's been widening fast is a riskier
   // "catch the falling knife" buy even if it already looks cheap) alongside static fair value.
   // See 07b-corporate-bond-clearing.ts's attractiveness scoring.
-  oasSpreadBpsHistory?: number[];
+  // §4.C II.5 — oasSpreadBpsHistory lives on v2.oasRing (world.ts).
 
   // Production
   inputSupplyConstraintFactor: number;

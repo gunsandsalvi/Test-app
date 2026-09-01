@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { rowOf, ringFill, ringLen, ringAt, ratingTextOf } from '../../engine2/world';
 import { AlertTriangle } from 'lucide-react';
 import { GameState, Company } from '../../types';
 import { getOutputInventoryUSD } from '../../domain/company';
@@ -12,6 +13,11 @@ import { priceCorporateBond, priceLeveragedLoan } from '../../engine/pricing';
 type DeepDiveTab = 'performance' | 'financials' | 'supplychain' | 'credit' | 'management';
 
 export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onOpenTrade: (i: any) => void }> = ({ company, state, onOpenTrade }) => {
+  // §4.C II.5 — histories read the rings.
+  const v2ui = ensureV2(state);
+  const ratingRow = rowOf(v2ui, company.id);
+  const ratingLen = ringLen(v2ui.ratingRing, ratingRow);
+  const prevRating = ratingLen > 1 ? ratingTextOf(ringAt(v2ui.ratingRing, ratingRow, ratingLen - 2)) : undefined;
   const [tab, setTab] = useState<DeepDiveTab>('performance');
   // ENGINE V2 (§7.304) — input lots live on the persistent columnar table; one materialisation
   // per render serves every read below.
@@ -80,7 +86,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
           <>
             <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] mb-2">
               <div className="flex-1 min-w-0 pr-4">
-                <TapToChart label="Stock Price" value={formatCurrency(company.stockPrice, { compact: false })} history={company.historicalPrices} />
+                <TapToChart label="Stock Price" value={formatCurrency(company.stockPrice, { compact: false })} history={ringFill(ensureV2(state).priceRing, rowOf(ensureV2(state), company.id), [])} />
               </div>
               <button
                 onClick={(e) => {
@@ -810,7 +816,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
           <>
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">Credit Rating</span>
-              <span className="font-bold">{company.creditRating} {(company.ratingHistory?.length ?? 0) > 1 && `(was ${company.ratingHistory[company.ratingHistory.length - 2]})`}</span>
+              <span className="font-bold">{company.creditRating} {prevRating !== undefined && `(was ${prevRating})`}</span>
             </div>
             <TapToChart label="Leverage (Debt/EBITDA)" value={isNaN(company.leverage) ? '—' : `${company.leverage.toFixed(2)}x`} history={(company.historicalFundamentals || []).map(f => f.leverage ?? 0)} />
             <TapToChart label="Interest Coverage" value={isNaN(company.interestCoverage) ? '—' : `${company.interestCoverage.toFixed(1)}x`} history={(company.historicalFundamentals || []).map(f => f.interestCoverage ?? 0)} />

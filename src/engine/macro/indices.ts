@@ -1,4 +1,5 @@
 import { isActiveCompany, CreditRating } from '../../domain/company';
+import { rowOf, ringLen, ringAt } from '../../engine2/world';
 import { Company, RegionId, Region, Commodity, CompositeBenchmarkIndices, IndexMetric } from '../../types';
 import { generate52WeekHistory } from './utils';
 import { getRegionPopulation, getRegionProductivityPerCapitaUSD, POPULATION_UNIT, PRODUCTIVITY_UNIT_USD } from '../bootstrap/population';
@@ -23,8 +24,17 @@ export function calculateCompositeIndices(
   companies: Company[],
   regions: Record<RegionId, Region>,
   commodities?: Commodity[],
-  prevIndices?: CompositeBenchmarkIndices
+  prevIndices?: CompositeBenchmarkIndices,
+  // §4.C II.5 — prices read the ring; absent (the seed call) the len-0 path is the same
+  // `|| stockPrice` fallback the old length-1 seed array took.
+  v2?: import('../../engine2/world').V2World
 ): CompositeBenchmarkIndices {
+  const prevPriceOf = (c: Company): number => {
+    if (!v2) return c.stockPrice;
+    const row = rowOf(v2, c.id);
+    const n = ringLen(v2.priceRing, row);
+    return (n >= 2 ? ringAt(v2.priceRing, row, n - 2) : 0) || c.stockPrice;
+  };
   // 1. Equities Cap-weighted calculations
   // Indices are PUBLIC-market objects: a private firm (HC Wave 1) has no quote and no index
   // membership, so it must not enter a cap-weighted average with a zero market cap.
@@ -55,7 +65,7 @@ const getCapWeightedAvgPrice = (firms: Company[], baseIndex: number) => {
     if (firms.length === 0) return baseIndex;
     const totalCap = firms.reduce((sum, f) => sum + f.marketCap, 0);
     const avgChange = firms.reduce((sum, f) => {
-      const prevP = f.historicalPrices[f.historicalPrices.length - 2] || f.stockPrice;
+      const prevP = prevPriceOf(f);
       const chg = prevP > 0 ? (f.stockPrice - prevP) / prevP : 0;
       return sum + chg * (f.marketCap / Math.max(1, totalCap));
     }, 0);
@@ -106,7 +116,7 @@ const getCapWeightedAvgPrice = (firms: Company[], baseIndex: number) => {
 
 
   const advancingCompanies = companies.filter((c) => {
-    const prevP = c.historicalPrices[c.historicalPrices.length - 2] || c.stockPrice;
+    const prevP = prevPriceOf(c);
     return c.stockPrice > prevP;
   }).length;
   const marketBreadth = companies.length > 0 ? (advancingCompanies / companies.length) * 100 : 50;

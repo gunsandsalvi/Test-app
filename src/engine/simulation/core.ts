@@ -32,6 +32,7 @@ import { runShortDebtClearingStage } from './stages/07f-short-debt-clearing';
 import { runEquityClearingStage } from './stages/07e-equity-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { auditCompanyStore, syncCompanyField } from '../../engine2/company-store';
+import { drainSeedRings } from '../../engine2/world';
 import { runPeLifecycleForRegion, settlePeLifecycleDeals, runFirmBirthsForRegion } from './stages/pe-lifecycle';
 import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } from './stages/shared-helpers';
 import { runIndexCalculationStage } from './stages/index-calculation';
@@ -270,6 +271,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       const born = runFirmBirthsForRegion(regionId, reg, ctx, ctx.nextWeek, generatePrivateCompanies);
       if (born.length > 0) {
         ctx.updatedCompanies.push(...born);
+      drainSeedRings({ v2: ensureV2(state), companies: born });
         const v2b = ensureV2(state);
         for (const b of born) syncLadderRows(v2b, b.id, b.debtTranches);
       }
@@ -279,6 +281,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     const fdiBorn = runForeignDirectInvestment(ctx, ctx.nextWeek, generatePrivateCompanies);
     if (fdiBorn.length > 0) {
       ctx.updatedCompanies.push(...fdiBorn);
+      drainSeedRings({ v2: ensureV2(state), companies: fdiBorn });
       const v2f = ensureV2(state);
       for (const b of fdiBorn) syncLadderRows(v2f, b.id, b.debtTranches);
     }

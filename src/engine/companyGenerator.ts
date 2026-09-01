@@ -1,4 +1,5 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE, REGION_IDS_SEED_ORDER } from '../types';
+import { stashSeedRing, peekSeedRing } from '../engine2/world';
 import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf, industryOfSubUnit } from '../domain/industry-registry';
 import { defect } from '../domain/defect';
 import { callProtectionForIssue } from '../domain/call-protection';
@@ -638,13 +639,11 @@ export function generateInitialCompanies(
         leverage,
         interestCoverage,
         creditRating: tmpl.initialRating,
-        ratingHistory: [tmpl.initialRating],
         isDefaulted: false,
         recoveryRate: 0.40,
         baselineRecoveryRate: 0.40,
         
         stockPrice,
-        historicalPrices,
         forwardPE: eps > 0 ? Number((stockPrice / eps).toFixed(2)) : sectorConfig.basePE,
         marketCap: Math.round((stockPrice * tmpl.shares)),
         dividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
@@ -709,6 +708,8 @@ export function generateInitialCompanies(
         producedCommodityId: (tmpl as any).producedCommodityId,
       };
 
+      stashSeedRing(company, 'rating', [tmpl.initialRating]);
+      stashSeedRing(company, 'price', historicalPrices);
       companies.push(company);
     });
     // Flat per region rather than scaled to region size, matching SECTOR_FIRM_COUNT's
@@ -765,9 +766,10 @@ export function generateInitialCompanies(
         grossPPEUSD: parent.grossPPEUSD * revenueScale,
         accumulatedDepreciationUSD: parent.accumulatedDepreciationUSD * revenueScale,
         employeeCount: newEmployeeCount,
-        historicalPrices: [...parent.historicalPrices],
+
         historicalFundamentals: [...parent.historicalFundamentals]
       };
+      stashSeedRing(newCompany, 'price', [...(peekSeedRing(parent, 'price') ?? [])]);
       companies.push(newCompany as any);
     }
 
@@ -1140,7 +1142,7 @@ export function generatePrivateCompanies(
     const ppeIntensity = SECTOR_PPE_INTENSITY[sector] ?? 0.5;
     const grossPPEUSD = Math.round(revBase * ppeIntensity / 0.65);
 
-    return {
+    const pc = {
       id: `${region}_PRV_${ticker}`,
       ticker, name, region, sector,
       listingStatus: 'PRIVATE',
@@ -1176,7 +1178,7 @@ export function generatePrivateCompanies(
       grossPPEUSD, accumulatedDepreciationUSD: Math.round(grossPPEUSD * 0.35),
       executionQuality: 1.0,
       occupationMixDrift: {},
-      creditRating: rating, ratingHistory: [rating],
+      creditRating: rating,
       isDefaulted: false,
       // Seeded from the same rating-keyed primitive the public bootstrap uses, so the name's
       // first real clearing week (HC2) starts from a defensible level instead of zero and the
@@ -1224,5 +1226,7 @@ export function generatePrivateCompanies(
       recentFulfillmentEMA: 1.0,
       treasuryHoldings: [],
     } as unknown as Company;
+    stashSeedRing(pc, 'rating', [rating]); // §4.C II.5
+    return pc;
   });
 }

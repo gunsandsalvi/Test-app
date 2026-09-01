@@ -40,7 +40,16 @@ export interface V2World {
    *  batteries deep-clone v2 with structuredClone, and SAB-backed lanes would SHARE memory
    *  across clones (noted §1.24 deviation: clone-safety wins; workers get mirrors, §7.306). */
   revRing: { slots: Float64Array; len: Uint8Array; start: Uint8Array; cap: number };
+  /** §4.C II.5 — the other Company history rings (same clone-safety note as revRing). */
+  priceRing: F64Ring;
+  ratingRing: F64Ring;
+  oasRing: F64Ring;
 }
+
+/** A per-row fixed-capacity ring of f64 slots. `len` is the actual entry count (these rings'
+ *  object fields had no unset-vs-empty distinction to preserve — revRing's does, and keeps
+ *  its own encoding). */
+export interface F64Ring { slots: Float64Array; len: Uint8Array; start: Uint8Array; capRows: number; slotCap: number }
 
 /** The host: any object graph that carries a v2 world (GameState, structurally). */
 export interface V2Host { v2?: V2World }
@@ -57,6 +66,9 @@ export function ensureV2(state: V2Host): V2World {
     tranches: newTrancheStore(),
     holdings: newHoldingStore(),
     revRing: { slots: new Float64Array(13 << 12), len: new Uint8Array(1 << 12), start: new Uint8Array(1 << 12), cap: 1 << 12 },
+    priceRing: makeF64Ring(52, 1 << 12),
+    ratingRing: makeF64Ring(16, 1 << 12),
+    oasRing: makeF64Ring(8, 1 << 12),
   };
   state.v2 = v2;
   return v2;
@@ -168,4 +180,92 @@ export function drainSeedRevenueHistories(state: V2Host & { companies: { id: str
     n++;
   }
   return n;
+}
+
+export function makeF64Ring(slotCap: number, rows: number): F64Ring {
+  return { slots: new Float64Array(rows * slotCap), len: new Uint8Array(rows), start: new Uint8Array(rows), capRows: rows, slotCap };
+}
+
+function ensureRingRow(r: F64Ring, row: number): F64Ring {
+  if (row < r.capRows) return r;
+  const capRows = Math.max(row + 1, r.capRows * 2);
+  const g = makeF64Ring(r.slotCap, capRows);
+  g.slots.set(r.slots); g.len.set(r.len); g.start.set(r.start);
+  return g;
+}
+
+/** The exact `[...arr.slice(-(cap-1)), v]` write: append, dropping the oldest at capacity. */
+export function ringPush(r: F64Ring, row: number, v: number): F64Ring {
+  r = ensureRingRow(r, row);
+  const c = r.slotCap;
+  if (r.len[row] < c) { r.slots[row * c + ((r.start[row] + r.len[row]) % c)] = v; r.len[row]++; }
+  else { r.slots[row * c + r.start[row]] = v; r.start[row] = (r.start[row] + 1) % c; }
+  return r;
+}
+
+export const ringLen = (r: F64Ring, row: number): number => (row < r.capRows ? r.len[row] : 0);
+/** i = 0 is the OLDEST entry (array index order). */
+export const ringAt = (r: F64Ring, row: number, i: number): number =>
+  r.slots[row * r.slotCap + ((r.start[row] + i) % r.slotCap)];
+
+export function ringSeed(r: F64Ring, row: number, values: number[]): F64Ring {
+  r = ensureRingRow(r, row);
+  const c = r.slotCap;
+  const n = Math.min(values.length, c);
+  for (let i = 0; i < n; i++) r.slots[row * c + i] = values[values.length - n + i];
+  r.len[row] = n; r.start[row] = 0;
+  return r;
+}
+
+export function ringCopyRow(r: F64Ring, from: number, to: number): F64Ring {
+  r = ensureRingRow(r, Math.max(from, to));
+  const c = r.slotCap;
+  for (let i = 0; i < c; i++) r.slots[to * c + i] = r.slots[from * c + i];
+  r.len[to] = r.len[from]; r.start[to] = r.start[from];
+  return r;
+}
+
+/** Fill a REUSED scratch with the ring's entries in array order. */
+export function ringFill(r: F64Ring, row: number, out: number[]): number[] {
+  const n = ringLen(r, row);
+  out.length = n;
+  for (let i = 0; i < n; i++) out[i] = ringAt(r, row, i);
+  return out;
+}
+
+// Credit ratings are a small closed set — interned to codes for the rating ring.
+const RATING_CODES: string[] = [];
+const RATING_CODE_BY_TEXT = new Map<string, number>();
+export function ratingCodeOf(rating: string): number {
+  let c = RATING_CODE_BY_TEXT.get(rating);
+  if (c === undefined) { c = RATING_CODES.length; RATING_CODES.push(rating); RATING_CODE_BY_TEXT.set(rating, c); }
+  return c;
+}
+export const ratingTextOf = (code: number): string => RATING_CODES[code];
+
+// §4.C II.5 — generalized seed stash: creation code runs before any GameState exists.
+const seedRingStash = new WeakMap<object, { price?: number[]; rating?: string[]; oas?: number[] }>();
+export function stashSeedRing(comp: object, kind: 'price' | 'rating' | 'oas', values: number[] | string[]): void {
+  const e = seedRingStash.get(comp) ?? {};
+  if (kind === 'rating') e.rating = values as string[];
+  else if (kind === 'price') e.price = values as number[];
+  else e.oas = values as number[];
+  seedRingStash.set(comp, e);
+}
+export function peekSeedRing(comp: object, kind: 'price' | 'rating' | 'oas'): number[] | undefined {
+  const e = seedRingStash.get(comp);
+  return kind === 'price' ? e?.price : kind === 'oas' ? e?.oas : undefined;
+}
+
+export function drainSeedRings(state: V2Host & { companies: { id: string }[] }): void {
+  const v2 = ensureV2(state);
+  for (const c of state.companies) {
+    const e = seedRingStash.get(c);
+    if (!e) continue;
+    const row = rowOf(v2, c.id);
+    if (e.price) v2.priceRing = ringSeed(v2.priceRing, row, e.price);
+    if (e.rating) v2.ratingRing = ringSeed(v2.ratingRing, row, e.rating.map(ratingCodeOf));
+    if (e.oas) v2.oasRing = ringSeed(v2.oasRing, row, e.oas);
+    seedRingStash.delete(c);
+  }
 }

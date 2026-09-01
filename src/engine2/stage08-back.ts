@@ -48,7 +48,7 @@ import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from 
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
 import { ladderRowsOf, pushLadderRow, relinkLadder, materializeTranche, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
-import { revHistLen, revHistAt, rowOf, V2World } from './world';
+import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World } from './world';
 import { totalInputValueUSD } from './lots';
 
 /**
@@ -86,6 +86,7 @@ export const learnTraceRows: { m: number; g: number }[] = [];
 export const bypassTraceByLabel = new Map<string, number>();
 /** BOUNDARY_TRACE=1 — who collects 'non-auction operating receipts', per firm. */
 export const boundaryTraceByFirm = new Map<string, number>();
+const priceScratch: number[] = [];
 
 export interface BackKernelDeps {
   state: GameState;
@@ -1924,7 +1925,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // IDX: beta is measured off this name's own cleared returns against its region's index —
     // both series this model publishes every week — instead of being read from its sector label.
     const newBeta = isPubliclyListed(comp)
-      ? measureBeta(comp.historicalPrices, regionIndexOf(state.compositeIndices, L8.region[row]).historical, Number.isNaN(L8.beta[row]) ? 1 : L8.beta[row])
+      ? measureBeta(ringFill(v2.priceRing, rowOf(v2, L8.companyId[row]), priceScratch), regionIndexOf(state.compositeIndices, L8.region[row]).historical, Number.isNaN(L8.beta[row]) ? 1 : L8.beta[row])
       : (Number.isNaN(L8.beta[row]) ? 1 : L8.beta[row]);
     const newForwardPE = newEps > 0 ? round2(newStockPrice / newEps) : comp.forwardPE;
     // The book-value x cycle-P/B branch that used to price banks and institutions here is GONE.
@@ -1932,7 +1933,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // cycle regime, applied to a book value, dividing into a share count — everything WS4 removed
     // from every other name. They clear in 07e now, on their own real earnings and their own real
     // balance-sheet equity, so this stage reads their price exactly as it reads everyone else's.
-    const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
+
 
     // CASH — the corporate treasury book. It is not decided here any more.
     //
@@ -2271,7 +2272,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.creditRating = newRating;
 
-    comp.ratingHistory = [...comp.ratingHistory.slice(-15), newRating];
+    v2.ratingRing = ringPush(v2.ratingRing, rowOf(v2, L8.companyId[row]), ratingCodeOf(newRating));
 
     comp.historicalFundamentals = histFundamentals;
 
@@ -2283,7 +2284,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.antitrustWeeksAboveThreshold = newAntitrustWeeks;
 
-    comp.historicalPrices = hist;
+    v2.priceRing = ringPush(v2.priceRing, rowOf(v2, L8.companyId[row]), newStockPrice);
 
     comp.marketCap = newMarketCap;
 

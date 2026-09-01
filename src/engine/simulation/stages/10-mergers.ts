@@ -9,7 +9,7 @@
 
 import { absorbBankBook } from '../../ledger';
 import { bookHeadOf, pushBookRow, markBookDirty } from '../../../engine2/holdings';
-import { ensureV2, internString, revHistSeed, rowOf } from '../../../engine2/world';
+import { ensureV2, internString, revHistSeed, rowOf, ringCopyRow } from '../../../engine2/world';
 import { syncLadderRows, materializeLadder } from '../../../engine2/tranches';
 import { pay } from './settlement';
 import { GameState, DebtTranche } from '../../../types';
@@ -136,6 +136,14 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     if (spin.baselineNetPpeUSD !== undefined) spin.baselineNetPpeUSD = spin.baselineNetPpeUSD * share;
     spin.antitrustWeeksAboveThreshold = 0;
     revHistSeed(ctx.v2!, rowOf(ctx.v2!, spin.id), spin.annualRevenue);
+    // §4.C II.5 — structuredClone(parent) used to carry the histories; the rings copy rows.
+    {
+      const v2r = ctx.v2!;
+      const pf = rowOf(v2r, parent.id), sf = rowOf(v2r, spin.id);
+      v2r.priceRing = ringCopyRow(v2r.priceRing, pf, sf);
+      v2r.ratingRing = ringCopyRow(v2r.ratingRing, pf, sf);
+      v2r.oasRing = ringCopyRow(v2r.oasRing, pf, sf);
+    }
 
     // THE MINT: each holder of parent equity receives its pro-rata spin-co register rows,
     // BEFORE the parent's price steps down (the stake fraction reads the pre-split register).

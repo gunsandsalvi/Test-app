@@ -18,7 +18,7 @@
  */
 
 import { Company, CreditRating, Region, RegionId } from '../../types';
-import { stashSeedRevenueHistory } from '../../engine2/world';
+import { stashSeedRevenueHistory, stashSeedRing } from '../../engine2/world';
 import { INDUSTRY_SUBUNITS } from '../../domain/industry';
 import { laneDistanceNm } from '../../domain/geography';
 import {
@@ -331,7 +331,7 @@ function buildCarrierCompany(
     netIncome: Math.round((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE)),
     eps: Number(((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE) / sharesOutstanding).toFixed(2)),
     sharesOutstanding, stockPrice, marketCap: stockPrice * sharesOutstanding,
-    historicalPrices: [stockPrice], forwardPE: 0,
+    forwardPE: 0,
     cash: Math.round(Math.max(0, ebitda) * 0.6),
     totalDebt: debtBase,
     currentLiabilities: Math.round(debtBase * 0.2),
@@ -345,7 +345,7 @@ function buildCarrierCompany(
     accumulatedDepreciationUSD: Math.round(grossPPEUSD * 0.35),
     executionQuality: 1.0,
     occupationMixDrift: {},
-    creditRating: rating, ratingHistory: [rating],
+    creditRating: rating,
     isDefaulted: false,
     oasSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
     cdsSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
@@ -368,5 +368,7 @@ function buildCarrierCompany(
     _carrierIndex: idx,
   } as unknown as Company;
   stashSeedRevenueHistory(__c, [annualRevenue]); // §4.C II.5 — lands on the ring at drain
+  stashSeedRing(__c, 'rating', [rating]);
+  stashSeedRing(__c, 'price', [stockPrice]);
   return __c;
 }

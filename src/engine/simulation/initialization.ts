@@ -1,6 +1,6 @@
 
 import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
-import { stashSeedRevenueHistory, drainSeedRevenueHistories } from '../../engine2/world';
+import { stashSeedRevenueHistory, drainSeedRevenueHistories, drainSeedRings, peekSeedRing } from '../../engine2/world';
 import { getSimulationDate } from '../formatters';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
@@ -332,6 +332,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   const state = buildSeededGameState(seed);
   // §4.C II.5 — the seed's revenue histories land on the ring now that the world exists.
   drainSeedRevenueHistories(state);
+  drainSeedRings(state);
   // §5-STRUCT step 6 — OFF unless asked for. Burn-in hands back a world the ENGINE produced rather
   // than one this function asserted, which is the end state for every §7.4 defect. It changes every
   // number in the project at once, so it is a switch someone turns deliberately after reading the
@@ -975,7 +976,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         itemizedHoldings,
         assetAllocationTarget: targetFor(role, comp.hedgeFundStrategy),
         isDefaulted: comp.isDefaulted,
-        historicalPrices: [...comp.historicalPrices],
+        historicalPrices: [...(peekSeedRing(comp, 'price') ?? [])],
       });
     });
 
