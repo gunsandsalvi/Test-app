@@ -52,6 +52,11 @@ import { realizedAnnualVol } from '../../../domain/volatility';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 
+/** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
+ *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
+const roundN = (v: number, pow: number) => Math.round(v * pow) / pow;
+
+
 export const MARKET_REGION_IDS = REGION_IDS;
 
 // 1$ is 1$ Phase 3: a private-sector "company ID" for the auction — distinguishable from any
@@ -1956,8 +1961,8 @@ function runSubUnitMarkets(
   MARKET_REGION_IDS.forEach(regionId => {
     const demandState = ctx.updatedRegions[regionId].categoryDemand[subUnitId];
     if (!demandState) return;
-    demandState.exWorksUnitPriceUSD = Number(results[regionId].clearedPriceUSD.toFixed(2));
-    demandState.unitPriceUSD = Number(publishedPrice[regionId].toFixed(2));
+    demandState.exWorksUnitPriceUSD = roundN(results[regionId].clearedPriceUSD, 1e2);
+    demandState.unitPriceUSD = roundN(publishedPrice[regionId], 1e2);
     // §7.249 — the category's own price, one entry per week, so a firm's real output growth can
     // be deflated by the price of what IT sells over the SAME window (rule 9 twice over: the
     // aggregate CPI is a different population AND a 52-week period against a 12-week growth).
@@ -1969,8 +1974,8 @@ function runSubUnitMarkets(
     // real steps, each with a real payee; recipes and the price indices keep reading the landed
     // one, because that is genuinely what a firm pays.
     const reg05 = ctx.updatedRegions[regionId];
-    demandState.shelfUnitPriceUSD = Number(shelfPriceUSD(
-      publishedPrice[regionId], subUnitId, reg05?.zeroRates?.tenor3M ?? reg05?.policyRate ?? 0).toFixed(2));
+    demandState.shelfUnitPriceUSD = roundN(shelfPriceUSD(
+      publishedPrice[regionId], subUnitId, reg05?.zeroRates?.tenor3M ?? reg05?.policyRate ?? 0), 1e2);
 
     const contracts = survivingContracts[regionId];
     const contractUnits = contracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
@@ -1986,7 +1991,7 @@ function runSubUnitMarkets(
     const priorBase = demandState.baseUnitPriceUSD ?? 0;
     const basePrice = priorBase > 0 ? priorBase : landedPrice;
     demandState.baseUnitPriceUSD = basePrice;
-    demandState.clearedInputPriceIndex = Number((landedPrice / basePrice).toFixed(4));
+    demandState.clearedInputPriceIndex = roundN(landedPrice / basePrice, 1e4);
   });
 
     return survivingContracts;
@@ -2086,8 +2091,8 @@ function formContracts(
       supplierCompanyId: supplierPlan.key,
       customerCompanyId: bidPlan.key,
       subUnitId,
-      priceUSD: Number(contractPrice.toFixed(2)),
-      quantityUnitsPerWeek: Number(baseContractUnits.toFixed(2)),
+      priceUSD: roundN(contractPrice, 1e2),
+      quantityUnitsPerWeek: roundN(baseContractUnits, 1e2),
       weeksRemaining: duration,
       backlogUnits: 0,
       shortWeeks: 0,

@@ -25,6 +25,11 @@ import { runStage08FrontPass } from '../../../engine2/stage08-front';
 import { ensureV2 } from '../../../engine2/world';
 import { makeStage08BackKernel, learnTraceRows, bypassTraceByLabel, boundaryTraceByFirm } from '../../../engine2/stage08-back';
 
+/** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
+ *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
+const roundN = (v: number, pow: number) => Math.round(v * pow) / pow;
+
+
 /** SCALE: the supply list's own derived indexes, memoised on the array that produced them. */
 interface GroupedSupply {
   byCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeUSD: number; relationshipStrength: number }[]>;
@@ -351,7 +356,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         const sum = shareSumByKey.get(`${c.region}:${pl.subUnitId}`) ?? 0;
         if (!(sum > 1e-9) || Math.abs(sum - 1) < 1e-9) return pl;
         touched = true;
-        return { ...pl, categoryMarketShare: Number((pl.categoryMarketShare / sum).toFixed(6)) };
+        return { ...pl, categoryMarketShare: roundN(pl.categoryMarketShare / sum, 1e6) };
       });
       if (touched) c.productLines = lines;
     });

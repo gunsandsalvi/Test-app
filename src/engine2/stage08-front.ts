@@ -44,6 +44,19 @@ import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../engine/bootstrap/lab
 import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/profiles';
 import { random, beginEntityScope, endEntityScope, getRngState } from '../engine/rng';
 
+/**
+ * SCALE / DECLARED RELABEL (the user's drift acceptance, 2026-09-01): decimal rounding by
+ * arithmetic instead of a string round-trip. `Number(x.toFixed(n))` allocated, formatted and
+ * re-parsed a string ~55k times a week across the kernel; these round the same numbers the
+ * arithmetic way. Half-point and far-ULP cases can land one ULP differently than the decimal
+ * string did — accepted numeric drift, no mechanism changes.
+ */
+const round1 = (v: number) => Math.round(v * 10) / 10;
+const round2 = (v: number) => Math.round(v * 100) / 100;
+const round3 = (v: number) => Math.round(v * 1000) / 1000;
+const round4 = (v: number) => Math.round(v * 10000) / 10000;
+
+
 type ProductLines = NonNullable<Company['productLines']>;
 type ConstructionLot = { valueUSD: number; entersServiceWeek: number };
 
@@ -375,7 +388,7 @@ export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs):
       const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
       const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
       const targetCompetitiveness = 2.0 * Math.tanh((marginEdge * 16 + growthInvestmentSignal * 0.5) / 2.0);
-      const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
+      const newCompetitiveness = round3(line.competitiveness * 0.98 + targetCompetitiveness * 0.02);
       const shareGainRate = (newCompetitiveness * 0.035 - dominanceDrag);
       const newCategoryMarketShare = Math.max(0, line.categoryMarketShare * (1 + shareGainRate / 52)); // math guard, not a clamp
 
@@ -432,7 +445,7 @@ export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs):
     const newEbitda = industrialPnl.ebitdaUSD;
     const newEbit = industrialPnl.ebitUSD;
     const newNetIncome = industrialPnl.netIncomeUSD;
-    const newEps = comp.sharesOutstanding > 0 ? Number((newNetIncome / comp.sharesOutstanding).toFixed(2)) : 0;
+    const newEps = comp.sharesOutstanding > 0 ? round2(newNetIncome / comp.sharesOutstanding) : 0;
     // §5-TAXR — the statement rolled the attributes one week; the firm carries them.
     F.taxPaidAnnualRateUSD[row] = industrialPnl.taxPaidAnnualUSD;
     comp.taxLossCarryforwardUSD = industrialPnl.taxLossCarryforwardUSD;

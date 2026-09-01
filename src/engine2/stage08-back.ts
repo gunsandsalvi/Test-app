@@ -49,6 +49,19 @@ import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
 import { V2World } from './world';
 import { totalInputValueUSD } from './lots';
 
+/**
+ * SCALE / DECLARED RELABEL (the user's drift acceptance, 2026-09-01): decimal rounding by
+ * arithmetic instead of a string round-trip. `Number(x.toFixed(n))` allocated, formatted and
+ * re-parsed a string ~55k times a week across the kernel; these round the same numbers the
+ * arithmetic way. Half-point and far-ULP cases can land one ULP differently than the decimal
+ * string did — accepted numeric drift, no mechanism changes.
+ */
+const round1 = (v: number) => Math.round(v * 10) / 10;
+const round2 = (v: number) => Math.round(v * 100) / 100;
+const round3 = (v: number) => Math.round(v * 1000) / 1000;
+const round4 = (v: number) => Math.round(v * 10000) / 10000;
+
+
 const STANDARD_CORP_TENOR_YEARS = 5;
 
 /** IND4 — a firm's payout discipline is its INDUSTRY's, from the registry. */
@@ -112,7 +125,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
      * count that the generator used to hand every private firm.
      */
     const perShare = (amountUSD: number): number =>
-      comp.sharesOutstanding > 0 ? Number((amountUSD / comp.sharesOutstanding).toFixed(2)) : 0;
+      comp.sharesOutstanding > 0 ? round2(amountUSD / comp.sharesOutstanding) : 0;
 
     if (!isActiveCompany(comp)) {
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
@@ -715,7 +728,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     }
     let newTotalDebt = comp.totalDebt;
 
-    const newBaselineDividendYield = Number((comp.baselineDividendYield * 0.998 + comp.dividendYield * 0.002).toFixed(4));
+    const newBaselineDividendYield = round4(comp.baselineDividendYield * 0.998 + comp.dividendYield * 0.002);
     const targetDivYield = newBaselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0)) * (1 + programme.payoutPressure * 2.5);
     const newDividendYield = Math.max(0, comp.dividendYield * 0.9 + targetDivYield * 0.1);
 
@@ -842,7 +855,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       if (!comp.isDefaulted) {
         ctx.defaultedTickers.push(comp.ticker);
         comp.defaultedWeek = nextWeek;
-        newRevenue = Number((newRevenue * 0.4).toFixed(1));
+        newRevenue = round1(newRevenue * 0.4);
         newEbitda = 0;
         newEbit = 0;
       }
@@ -1442,11 +1455,11 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const alphaEps = comp.dealerConsensus?.alpha?.eps ?? comp.eps;
       const betaEps = comp.dealerConsensus?.beta?.eps ?? comp.eps;
       const gammaEps = comp.dealerConsensus?.gamma?.eps ?? comp.eps;
-      const consensusEps = Number(((alphaEps + betaEps + gammaEps) / 3).toFixed(2));
+      const consensusEps = round2((alphaEps + betaEps + gammaEps) / 3);
       const actualEps = newEps;
       const epsDiff = actualEps - consensusEps;
       const rawSurprise = epsDiff / Math.max(Math.abs(consensusEps), Math.abs(actualEps), 1.0);
-      lastEarningsSurprisePct = Number((rawSurprise).toFixed(3));
+      lastEarningsSurprisePct = round3(rawSurprise);
 
       // Management commentary & guidance snippet generation
       let guidanceSnippet: string;
@@ -1474,16 +1487,16 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
       // Update next quarter 3-dealer forecasts
       const nextQuarterBaseEps = actualEps * (1 + sec.growthRate / 4);
-      const nextAlphaEps = Number((nextQuarterBaseEps * 0.96).toFixed(2));
-      const nextBetaEps = Number((nextQuarterBaseEps * (1 + reg.gdpGrowth)).toFixed(2));
-      const nextGammaEps = Number((nextQuarterBaseEps * 1.08).toFixed(2));
-      const newConsensusEps = Number(((nextAlphaEps + nextBetaEps + nextGammaEps) / 3).toFixed(2));
+      const nextAlphaEps = round2(nextQuarterBaseEps * 0.96);
+      const nextBetaEps = round2(nextQuarterBaseEps * (1 + reg.gdpGrowth));
+      const nextGammaEps = round2(nextQuarterBaseEps * 1.08);
+      const newConsensusEps = round2((nextAlphaEps + nextBetaEps + nextGammaEps) / 3);
 
       const nextQuarterBaseRev = newRevenue * (1 + sec.growthRate / 4);
-      const alphaRev = Number((nextQuarterBaseRev * 0.98).toFixed(1));
-      const betaRev = Number((nextQuarterBaseRev * 1.02).toFixed(1));
-      const gammaRev = Number((nextQuarterBaseRev * 1.06).toFixed(1));
-      const newConsensusRev = Number(((alphaRev + betaRev + gammaRev) / 3).toFixed(1));
+      const alphaRev = round1(nextQuarterBaseRev * 0.98);
+      const betaRev = round1(nextQuarterBaseRev * 1.02);
+      const gammaRev = round1(nextQuarterBaseRev * 1.06);
+      const newConsensusRev = round1((alphaRev + betaRev + gammaRev) / 3);
 
       updatedConsensus = {
         alpha: { eps: nextAlphaEps, revenue: alphaRev },
@@ -1511,7 +1524,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // company whose equity the market has decided is worthless approaches zero — the endgame is
     // delisting and default, not a ten-cent bound that then feeds market cap, index levels and
     // the take-private arithmetic. Only the non-negativity remains, which is arithmetic.
-    const newStockPrice = isDefaulted ? 0.0 : Math.max(0, Number(comp.stockPrice.toFixed(2)));
+    const newStockPrice = isDefaulted ? 0.0 : Math.max(0, round2(comp.stockPrice));
     // IND7: the antitrust clock. It counts UP while this firm is dominant in some category it
     // sells into and resets when it is not, so the consequence attaches to a sustained position
     // rather than one good quarter.
@@ -1524,7 +1537,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const newBeta = isPubliclyListed(comp)
       ? measureBeta(comp.historicalPrices, regionIndexOf(state.compositeIndices, comp.region).historical, comp.beta ?? 1)
       : (comp.beta ?? 1);
-    const newForwardPE = newEps > 0 ? Number((newStockPrice / newEps).toFixed(2)) : comp.forwardPE;
+    const newForwardPE = newEps > 0 ? round2(newStockPrice / newEps) : comp.forwardPE;
     // The book-value x cycle-P/B branch that used to price banks and institutions here is GONE.
     // It was the last formula price setter for a listed cohort: a multiple looked up from the
     // cycle regime, applied to a book value, dividing into a share count — everything WS4 removed
@@ -1649,12 +1662,12 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // justified it — recovery is what selling real assets against real claims produces, and if
     // that is near zero for an issuer with nothing to sell, that is the answer (rule 2).
     const regionRecovery = creditRecoveryRate(reg);
-    const newBaselineRecoveryRate = Number(((comp.baselineRecoveryRate ?? regionRecovery) * 0.998 + regionRecovery * 0.002).toFixed(4));
+    const newBaselineRecoveryRate = round4((comp.baselineRecoveryRate ?? regionRecovery) * 0.998 + regionRecovery * 0.002);
     const effectiveRecoveryRate = Math.max(0, newBaselineRecoveryRate * (1 - systemicStressFactor));
     const trendWeeklyGrowth = (reg.potentialGdpGrowth + reg.targetInflation) / 52;
     const newBaselineAnnualRevenue = isDefaulted
-      ? Number((comp.baselineAnnualRevenue * 0.995).toFixed(1))
-      : Number((comp.baselineAnnualRevenue * (1 + trendWeeklyGrowth)).toFixed(1));
+      ? round1(comp.baselineAnnualRevenue * 0.995)
+      : round1(comp.baselineAnnualRevenue * (1 + trendWeeklyGrowth));
 
     const revHist = comp.revenueHistory || [newRevenue];
     let calculatedRevVol = 0;
@@ -1716,7 +1729,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // instant its contents have been copied one field at a time into `comp`. The copy is the same
     // work either way; the object is pure waste. `Object.assign` writes own enumerable properties
     // in source order, so writing them in that same order here is the identical mutation.
-    comp.revenueVolatility = Number(calculatedRevVol.toFixed(4));
+    comp.revenueVolatility = round4(calculatedRevVol);
 
     comp.segmentFinancials = calculatedSegmentFinancials;
 
@@ -1740,31 +1753,31 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.previousCapex = comp.capex;
 
-    comp.maintenanceCapex = Number(newMaintenanceCapex.toFixed(1));
+    comp.maintenanceCapex = round1(newMaintenanceCapex);
 
-    comp.growthCapex = Number(newGrowthCapex.toFixed(1));
+    comp.growthCapex = round1(newGrowthCapex);
 
-    comp.grossPPEUSD = Number(newGrossPPEUSD.toFixed(1));
+    comp.grossPPEUSD = round1(newGrossPPEUSD);
 
       // IND1: read by stage 05's capacity growth — real net investment is what arrived.
       // IND13 — the plant grew by what entered service. Both lines are named on the rebuild
       // because a fixed field list drops what it does not name (§7.41), and a dropped
       // construction queue is capital that arrives and then never exists.
-    comp.capexCommissionedLastWeekUSD = Number(capexCommissionedThisWeekUSD.toFixed(1));
+    comp.capexCommissionedLastWeekUSD = round1(capexCommissionedThisWeekUSD);
 
     comp.assetsUnderConstruction = stillUnderConstruction;
 
-    comp.accumulatedDepreciationUSD = Number(newAccumulatedDepreciationUSD.toFixed(1));
+    comp.accumulatedDepreciationUSD = round1(newAccumulatedDepreciationUSD);
 
-    comp.rndExpense = Number(newRndExpense.toFixed(1));
+    comp.rndExpense = round1(newRndExpense);
 
     comp.maintenanceShortfallStreak = newMaintenanceShortfallStreak;
 
-    comp.executionQuality = Number(newExecutionQuality.toFixed(3));
+    comp.executionQuality = round3(newExecutionQuality);
 
     comp.occupationMixDrift = newOccupationMixDrift;
 
-    comp.inputSupplyConstraintFactor = Number(newInputSupplyConstraintFactor.toFixed(4));
+    comp.inputSupplyConstraintFactor = round4(newInputSupplyConstraintFactor);
 
     comp._targetProductionUSD = (weekUpdate?._targetProductionUSD ?? targetProductionUSD);
 
@@ -1783,24 +1796,24 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // pipeline is a firm whose half-built output vanishes every week.
     comp.wipBySubUnit = update?.wipBySubUnit ?? comp.wipBySubUnit;
 
-    comp.recentFulfillmentEMA = Number(newRecentFulfillmentEMA.toFixed(4));
+    comp.recentFulfillmentEMA = round4(newRecentFulfillmentEMA);
 
       // IND14 — the delivery record, smoothed slowly onto the firm. A week in which this
       // supplier owed nothing tells us nothing, so it leaves the record where it was.
-    comp.deliveryReliability = Number((() => {
+    comp.deliveryReliability = round4((() => {
         const owed = update?._contractOwedUnits ?? 0;
         const prior = comp.deliveryReliability ?? 1;
         if (!(owed > 0)) return prior;
         const shipped = update?._contractDeliveredUnits ?? 0;
         return prior * 0.9 + Math.max(0, Math.min(1, shipped / owed)) * 0.1;
-      })().toFixed(4));
+      })());
 
     comp.recurringRevenueBaseUSD = newRecurringBaseUSD === undefined
         ? undefined : Math.round(newRecurringBaseUSD);
 
     comp.employeeCount = isDefaulted ? 0 : newEmployeeCount;
 
-    comp.recoveryRate = Number(effectiveRecoveryRate.toFixed(3));
+    comp.recoveryRate = round3(effectiveRecoveryRate);
 
     comp.debtTranches = updatedTranches;
 
@@ -1808,27 +1821,27 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.totalDebt = updatedTranches.reduce((s, t) => s + t.principalUSD, 0);
 
-    comp.dividendYield = Number(newDividendYield.toFixed(4));
+    comp.dividendYield = round4(newDividendYield);
 
-    comp.capex = Number(newCapex.toFixed(1));
+    comp.capex = round1(newCapex);
 
-    comp.annualRevenue = Number(newRevenue.toFixed(1));
+    comp.annualRevenue = round1(newRevenue);
 
     comp.baselineAnnualRevenue = newBaselineAnnualRevenue;
 
-    comp.ebitda = Number(newEbitda.toFixed(1));
+    comp.ebitda = round1(newEbitda);
 
     // §7.246 — the week's two measured cost lines, persisted for stage 05's floor decomposition.
-    comp.payrollWeeklyUSD = Number(weeklyPayrollUSD.toFixed(1));
-    comp.realInputConsumptionCostWeeklyUSD = Number(measuredInputConsumptionWeeklyUSD.toFixed(1));
+    comp.payrollWeeklyUSD = round1(weeklyPayrollUSD);
+    comp.realInputConsumptionCostWeeklyUSD = round1(measuredInputConsumptionWeeklyUSD);
 
-    comp.ebit = Number(newEbit.toFixed(1));
+    comp.ebit = round1(newEbit);
 
-    comp.netIncome = Number(newNetIncome.toFixed(1));
+    comp.netIncome = round1(newNetIncome);
 
     comp.eps = newEps;
 
-    comp.sharesOutstanding = Number(updatedSharesOutstanding.toFixed(3));
+    comp.sharesOutstanding = round3(updatedSharesOutstanding);
 
       // Wall Street Phase 1: real per-bank balance sheet computed this week in
       // 02b-bank-diversification.ts (which runs before this stage), carried forward otherwise.
