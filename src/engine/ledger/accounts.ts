@@ -366,7 +366,37 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     openRow(s, partyId({ kind: 'CENTRAL_BANK', region }), AT_NOWHERE, 'VOID', 0);
     openRow(s, partyId({ kind: 'CLEARING_HOUSE', region }), AT_NOWHERE, 'VOID', 0);
   });
+  // A3.6b: a bank's corporate and institutional lines ARE its depositors' rows; a line that
+  // moved without them since the last projection is reported here, where the pass opens.
+  const lines = lineSumsByBank(s);
+  banks.forEach((b) => {
+    const bi = s.bankIdxOfTicker.get(b.ticker)!;
+    const t = lines.get(bi) ?? blankLines();
+    const sheet = b.bankBalanceSheet!;
+    const gate = (what: string, lineUSD: number, rowsUSD: number) => {
+      if (Math.abs(lineUSD - rowsUSD) > Math.max(1, Math.abs(lineUSD) * 1e-9)) {
+        console.log(`  [accounts] w${ctx.nextWeek} ${b.region}:${b.ticker} ${what} line ${(lineUSD / 1e6).toFixed(3)}M moved without its rows ${(rowsUSD / 1e6).toFixed(3)}M`);
+      }
+    };
+    gate('corporate', sheet.corporateDepositsUSD ?? 0, t.CORPORATE);
+    gate('institutional', sheet.institutionalDepositsUSD ?? 0, t.INSTITUTIONAL);
+  });
   return s;
+}
+
+const blankLines = (): Record<AccountClass, number> => ({ CORPORATE: 0, INSTITUTIONAL: 0, SME: 0, HOUSEHOLD: 0, RESERVES: 0, TREASURY: 0, CREATED: 0, SECURITIES: 0, VOID: 0 });
+
+/** Per bank, the sum of the rows at it by class — its deposit lines, in row order. */
+function lineSumsByBank(s: AccountStore): Map<number, Record<AccountClass, number>> {
+  const out = new Map<number, Record<AccountClass, number>>();
+  for (let r = 0; r < s.n; r++) {
+    const bi = s.bankIdx[r];
+    if (bi < 0) continue;
+    let t = out.get(bi);
+    if (!t) { t = blankLines(); out.set(bi, t); }
+    t[ACCOUNT_CLASSES[s.classId[r]]] += s.balanceUSD[r];
+  }
+  return out;
 }
 
 /** One settled row, by the one rule. A party the store has no row for is reported, not dropped. */
@@ -401,17 +431,8 @@ function leg(s: AccountStore, row: number, deltaUSD: number): void {
  * stays the pass's own (the bank's own-account legs are its income and expense).
  */
 export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
-  const classOf = (r: number): AccountClass => ACCOUNT_CLASSES[s.classId[r]];
-  // Per-bank line deltas, by class.
-  const deltaByBank = new Map<number, Record<AccountClass, number>>();
-  const blank = (): Record<AccountClass, number> => ({ CORPORATE: 0, INSTITUTIONAL: 0, SME: 0, HOUSEHOLD: 0, RESERVES: 0, TREASURY: 0, CREATED: 0, SECURITIES: 0, VOID: 0 });
-  for (let r = 0; r < s.n; r++) {
-    const bi = s.bankIdx[r];
-    if (bi < 0) continue;
-    let d = deltaByBank.get(bi);
-    if (!d) { d = blank(); deltaByBank.set(bi, d); }
-    d[classOf(r)] += s.balanceUSD[r] - s.openingUSD[r];
-  }
+  // A3.6b: a bank's corporate and institutional lines are the sums of its depositors' rows.
+  const lines = lineSumsByBank(s);
   // A3.3/A3.4: the sector parties' pass rows land on their persistent per-bank rows FIRST — the
   // bank sheets below read the SME and household lines off them.
   const landSectorRows = (party: PartyRef) => {
@@ -429,7 +450,7 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
     if (c.isBankEntity && c.bankBalanceSheet) {
       const bi = s.bankIdxOfTicker.get(c.ticker); if (bi === undefined) return;
       const rr = s.reserveRowOfBank[bi];
-      const d = deltaByBank.get(bi) ?? blank();
+      const t = lines.get(bi) ?? blankLines();
       const reserveDeltaUSD = s.balanceUSD[rr] - s.openingUSD[rr];
       const sheet = c.bankBalanceSheet;
       // A3.6a: the pass's result is the persistent row, and the line is the row.
@@ -439,8 +460,8 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
         cashReservesUSD: s.balanceUSD[rr],
         // A3.4: the household line IS the household sector's row at this bank (landed above).
         depositsUSD: householdDepositsAt(ctx.v2, c.ticker),
-        corporateDepositsUSD: (sheet.corporateDepositsUSD ?? 0) + d.CORPORATE,
-        institutionalDepositsUSD: (sheet.institutionalDepositsUSD ?? 0) + d.INSTITUTIONAL,
+        corporateDepositsUSD: t.CORPORATE,
+        institutionalDepositsUSD: t.INSTITUTIONAL,
         // A3.3: the SME line IS the pool rows at this bank (written back below, before this runs).
         smeDepositsUSD: smeDepositsAt(ctx.v2, c.ticker),
       };
