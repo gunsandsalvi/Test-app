@@ -877,7 +877,6 @@ export interface Region {
   accruedSmeTaxUSD?: number;
   accruedHouseholdTaxUSD?: number;
   accruedConsumptionTaxUSD?: number;
-  accruedPayrollTaxUSD?: number;
   /** PUB2 — this week's gross issuance proceeds and principal redeemed, so the TGA has the
    * financing leg that funds the deficit it is debited by. Written by stage 11. */
   lastIssuanceProceedsUSD?: number;

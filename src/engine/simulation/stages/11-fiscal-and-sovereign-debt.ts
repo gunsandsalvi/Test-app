@@ -486,19 +486,20 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     });
     const householdAccrualWeeklyUSD = (reg.householdState.cohorts ?? []).reduce((a, c) => a + c.taxUSD, 0) / 52;
     const consumptionAccrualWeeklyUSD = (reg.householdState.cohorts ?? []).reduce((a, c) => a + (c.consumptionTaxUSD ?? 0), 0) / 52;
-    const payrollAccrualWeeklyUSD = reg.employerPayrollTaxWeeklyUSD ?? 0;
 
     reg.accruedSmeTaxUSD = (reg.accruedSmeTaxUSD ?? 0) + smeAccrualWeeklyUSD;
     reg.accruedHouseholdTaxUSD = (reg.accruedHouseholdTaxUSD ?? 0) + householdAccrualWeeklyUSD;
     reg.accruedConsumptionTaxUSD = (reg.accruedConsumptionTaxUSD ?? 0) + consumptionAccrualWeeklyUSD;
-    reg.accruedPayrollTaxUSD = (reg.accruedPayrollTaxUSD ?? 0) + payrollAccrualWeeklyUSD;
 
     const smeTaxWeeklyUSD = isQuarterEnd ? reg.accruedSmeTaxUSD : 0;
     const consumptionTaxWeeklyUSD = isQuarterEnd ? reg.accruedConsumptionTaxUSD : 0;
     const householdTaxWeeklyUSD = isMonthEnd ? reg.accruedHouseholdTaxUSD : 0;
-    const payrollTaxWeeklyUSD = isMonthEnd ? reg.accruedPayrollTaxUSD : 0;
+    // §5-CLOSE F2: payroll tax is what the employers REMITTED this week (firms in 08, pools in
+    // 03, each on its own wage bill) — no accrual from the macro wage bill, no month-end credit
+    // from nobody.
+    const payrollTaxWeeklyUSD = ctx.payrollTaxByRegion[regionId] ?? 0;
     if (isQuarterEnd) { reg.accruedSmeTaxUSD = 0; reg.accruedConsumptionTaxUSD = 0; }
-    if (isMonthEnd) { reg.accruedHouseholdTaxUSD = 0; reg.accruedPayrollTaxUSD = 0; }
+    if (isMonthEnd) { reg.accruedHouseholdTaxUSD = 0; }
 
     // HH: households remit their own tax. It used to be deducted inside the income identity and
     // credited to the treasury with no payer on either side — the household half of the same

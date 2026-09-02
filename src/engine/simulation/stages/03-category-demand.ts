@@ -10,7 +10,7 @@ import { categoryPriceTier, HouseholdPriceTier } from '../../../domain/industry'
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { formSupplyRelationships } from './shared-helpers';
-import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
+import { GOV_PROCUREMENT_SHARE_OF_SPENDING, EMPLOYER_PAYROLL_TAX_RATE } from '../../bootstrap/national-accounts';
 import { isActiveCompany } from '../../../domain/company';
 import { firmInputIntensities } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
@@ -122,6 +122,15 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
               amountUSD: wagesUSD,
               reason: 'private-sector tier wages',
             });
+            // §5-CLOSE F2: the pool remits the employer payroll tax on its own wage bill.
+            const payrollTaxUSD = wagesUSD * EMPLOYER_PAYROLL_TAX_RATE;
+            pay(ctx, {
+              payer: { kind: 'SEGMENT', region: regionId, industry: pool.industry },
+              payee: { kind: 'GOVERNMENT', region: regionId },
+              amountUSD: payrollTaxUSD,
+              reason: 'employer payroll tax',
+            });
+            ctx.payrollTaxByRegion[regionId] = (ctx.payrollTaxByRegion[regionId] ?? 0) + payrollTaxUSD;
           }
         });
       }

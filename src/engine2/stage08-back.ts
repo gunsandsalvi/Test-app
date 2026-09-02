@@ -35,6 +35,7 @@ import { openCorporateSweepBooks, corporateSweepDecision, findRegionMmf } from '
 import { decideCorporateFinancing, committedLineHeadroomUSD } from '../engine/simulation/stages/corporate-financing';
 import { PrimaryOffering } from '../domain/primary-market';
 import { REVOLVER_MARGIN_BPS } from '../engine/simulation/stages/07f-short-debt-clearing';
+import { EMPLOYER_PAYROLL_TAX_RATE } from '../engine/bootstrap/national-accounts';
 import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/profiles';
 import { measureBeta, regionIndexOf } from '../engine/macro/indices';
 import { pay, payByIds, internReason, PartyRef } from '../engine/simulation/stages/settlement';
@@ -483,6 +484,12 @@ function runCashWalk(args: {
       // households' deposits in — and because a bank's payment is on its OWN account the other
       // leg is its equity, which is where a real bank's wage bill lands.
       post('wages paid to households', -weeklyPayrollUSD, { kind: 'HOUSEHOLD', region: region as Company['region'] });
+      // §5-CLOSE F2: and the employer's payroll tax on it, remitted to the treasury as a payment.
+      {
+        const payrollTaxUSD = weeklyPayrollUSD * EMPLOYER_PAYROLL_TAX_RATE;
+        post('employer payroll tax', -payrollTaxUSD, { kind: 'GOVERNMENT', region: region as Company['region'] });
+        ctx.payrollTaxByRegion[region] = (ctx.payrollTaxByRegion[region] ?? 0) + payrollTaxUSD;
+      }
     } else {
       // XB3a-2: a CARRIER sells no units into the goods auction, so its `salesUSD` is zero — but
       // its freight is settled, by name, by the buyers who shipped with it (stage 05). Counting
@@ -568,6 +575,15 @@ function runCashWalk(args: {
       // The same payroll the P&L above was charged — one number, computed once (rule 3).
       const wagesPaidUSD = weeklyPayrollUSD;
       post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: region as Company['region'] });
+      // §5-CLOSE F2: THE EMPLOYER'S PAYROLL TAX IS A PAYMENT. The treasury used to accrue it from
+      // the macro wage bill and credit itself at month end with money no employer had paid — the
+      // last "revenue from nobody" (F2: JPN 4.2B reported against 3.0B remitted, every month-end
+      // week). Every employer remits it on its own wage bill, weekly.
+      {
+        const payrollTaxUSD = wagesPaidUSD * EMPLOYER_PAYROLL_TAX_RATE;
+        post('employer payroll tax', -payrollTaxUSD, { kind: 'GOVERNMENT', region: region as Company['region'] });
+        ctx.payrollTaxByRegion[region] = (ctx.payrollTaxByRegion[region] ?? 0) + payrollTaxUSD;
+      }
       // SVC: services are a real market now — professional, facilities and repair sub-units sit
       // in the registry, this firm's recipe includes them, and it BIDS for them in stage 05
       // against real sellers like any other input. What remains on this line is the operating

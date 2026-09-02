@@ -107,6 +107,9 @@ export interface WeeklyStepContext {
   bankSheetChannelClosed?: boolean;
   /** PUB1b: corporate tax remitted this week, by region — collected into the TGA in stage 11. */
   taxCollectedByRegion: Record<string, number>;
+  /** §5-CLOSE F2: employer payroll tax remitted this week by every employer (firms in 08, pools in
+   *  03), as payments to the treasury — what stage 11 reports as payroll revenue. */
+  payrollTaxByRegion: Record<string, number>;
   /** PUB1b: corporate tax ACCRUED this week — the smooth expectation behind the lumpy remittance. */
   taxAccruedByRegion: Record<string, number>;
   prevActiveFirms: Company[];
@@ -327,6 +330,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
 
     companyUpdates: {},
     taxCollectedByRegion: {},
+    payrollTaxByRegion: {},
     taxAccruedByRegion: {},
     // The containment gate for the private tier (HC Wave 1): every existing stage consumes
     // prevActiveFirms and therefore sees only the public universe it was built against. Private
