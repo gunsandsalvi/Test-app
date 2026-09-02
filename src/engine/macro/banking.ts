@@ -253,8 +253,6 @@ export function evolveBankingSector(
    * instead — the deposit-competition channel. The fund's credit happens in 02b; here the
    * deposits simply never arrive. */
   householdMmfDiversionUSD: number = 0,
-  /** HH4d: last week's household ETF purchases, settling out of deposits this week (T+1). */
-  priorHouseholdEtfPurchasesUSD: number = 0,
   /** G2 slice 5: the money fund's net yield this region — what this bank's deposits COMPETE
    * with. A bank losing funding to the fund raises its own rate toward it; funding cost stops
    * being a fixed beta on policy. */
@@ -284,7 +282,7 @@ export function evolveBankingSector(
   traceLabel?: string
 ): BankingSector {
   // ---- The ledger. Every mutation below is a named flow posting to both of its sides. ----
-  let cashUSD = prevBanking.cashReservesUSD;
+  const cashUSD = prevBanking.cashReservesUSD;
   let equityUSD = prevBanking.bankEquityUSD;
   let depositsUSD = prevBanking.depositsUSD;
   // G2/HH3: both credit books are ITEMIZED on the named banks and only the lending passes move
@@ -331,9 +329,8 @@ export function evolveBankingSector(
   // next week like every other post-bank-pass household flow — subtracting it here as well
   // would move it twice. `householdMmfDiversionUSD` survives only as the funding-pressure
   // signal below, which is what it was always genuinely measuring.
-  const householdDepositFlowUSD = -priorHouseholdEtfPurchasesUSD;
-  depositsUSD += householdDepositFlowUSD;
-  cashUSD += householdDepositFlowUSD;
+  // §5-WIRES A2: the household sector's flows land on this bank at settlement, by share — nothing
+  // settles here a week late any more.
 
   // §5-CLOSE: the central bank's loan (the lender of last resort at the funding close) pays its
   // interest as a PAYMENT to the central bank, posted by 02b; it is counted here only as the

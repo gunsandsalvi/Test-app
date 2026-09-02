@@ -697,7 +697,7 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
       .filter((c) => c.region === region && c.isBankEntity && !c.isDefaulted && !c.mergerAcquired && c.bankBalanceSheet)
       .reduce((a, c) => a + c.bankBalanceSheet!.depositsUSD, 0);
     if (bankDepositsUSD > 0) {
-      const hsView = (hs.depositsUSD ?? 0) - (hs.pendingBankSettlementUSD ?? 0);
+      const hsView = hs.depositsUSD ?? 0;
       if (Math.abs(hsView - bankDepositsUSD) / bankDepositsUSD > 1e-3) {
         violations.push({
           week,
@@ -1049,7 +1049,7 @@ const hhModule: HarnessModule = (() => {
         const bankDeposits = s.companies
           .filter(c => c.region === r && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
           .reduce((a, c) => a + c.bankBalanceSheet!.depositsUSD, 0);
-        const depGap = Math.abs(((hs.depositsUSD ?? 0) - (hs.pendingBankSettlementUSD ?? 0)) - bankDeposits) / Math.max(1, bankDeposits);
+        const depGap = Math.abs((hs.depositsUSD ?? 0) - bankDeposits) / Math.max(1, bankDeposits);
         out.push(`  ${r}: instLiab=${B(instLiab)} held=${B(held)} (gap ${pct(gap)}) | netWorth parts gap ${pct(nwGap)} | tier-sum gap ${pct(tierGap)} | deposits-vs-banks gap ${pct(depGap)}`);
       });
       out.push('--- household liquidity: how many weeks of committed outflow the cash covers ---');

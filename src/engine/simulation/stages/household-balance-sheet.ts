@@ -292,8 +292,6 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       homeEquityUSD,
       depositsUSD,
       mmfSharesUSD,
-      // §7.248: settlement writes the pending bank leg when the etf-flows payment applies.
-      pendingBankSettlementUSD: Math.round((hs.pendingBankSettlementUSD ?? 0)),
       etfShares,
       etfHoldingsUSD,
       directEquityUSD,

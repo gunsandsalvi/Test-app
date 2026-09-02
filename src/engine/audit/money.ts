@@ -26,11 +26,10 @@ function m1(state: GameState, week: number): AuditFinding[] {
     const cb = reg?.centralBankSheet;
     if (!cb) return;
     const reserves = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.cashReservesUSD);
-    const inTransit = (reg.householdState as unknown as { pendingBankSettlementUSD?: number }).pendingBankSettlementUSD ?? 0;
     const assets = centralBankAssetsUSD(cb);
-    const residual = reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD + inTransit - assets;
+    const residual = reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD - assets;
     if (Math.abs(residual) > Math.max(1e6, assets * 1e-4)) {
-      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(cb.treasuryAccountUSD)} + currency ${B(cb.currencyInCirculationUSD)} + in transit ${B(inTransit)} exceed the central bank's assets ${B(assets)} (foreign claims ${B(cb.foreignOfficialClaimsUSD ?? 0)}, window ${B(cb.standingFacilityLentUSD ?? 0)}) by ${B(residual)} — bank money nothing was bought against` });
+      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(cb.treasuryAccountUSD)} + currency ${B(cb.currencyInCirculationUSD)} exceed the central bank's assets ${B(assets)} (foreign claims ${B(cb.foreignOfficialClaimsUSD ?? 0)}, window ${B(cb.standingFacilityLentUSD ?? 0)}) by ${B(residual)} — bank money nothing was bought against` });
     }
   });
   // C4b: the official-settlement claims are bilateral, so the world's sum is zero or a leak.
@@ -94,10 +93,8 @@ function m3(state: GameState, week: number): AuditFinding[] {
     const pools = sum(reg.smePools ?? [], (p) => p.cashUSD ?? 0);
     if (Math.abs(smeLine - pools) > Math.max(1e7, Math.abs(pools) * 0.005)) out.push({ family: 'M', check: 'M3 sme deposits = pools\' cash', week, usd: smeLine - pools, message: `${r}: the pools hold ${B(pools)} while the banks' SME lines say ${B(smeLine)}` });
     const hhLine = sum(banks, (b) => b.bankBalanceSheet!.depositsUSD);
-    const hs = reg.householdState as unknown as { depositsUSD?: number; pendingBankSettlementUSD?: number };
-    const hh = (hs.depositsUSD ?? 0);
-    const pending = hs.pendingBankSettlementUSD ?? 0;
-    if (Math.abs(hhLine - hh + pending) > Math.max(1e7, Math.abs(hh) * 0.005)) out.push({ family: 'M', check: 'M3 household deposits = banks\' line', week, usd: hhLine - hh + pending, message: `${r}: households say ${B(hh)} (pending ${B(pending)}), the banks' household line says ${B(hhLine)}` });
+    const hh = reg.householdState?.depositsUSD ?? 0;
+    if (Math.abs(hhLine - hh) > Math.max(1e7, Math.abs(hh) * 0.005)) out.push({ family: 'M', check: 'M3 household deposits = banks\' line', week, usd: hhLine - hh, message: `${r}: households say ${B(hh)}, the banks' household line says ${B(hhLine)}` });
   });
   return out;
 }
@@ -153,11 +150,9 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
     if (!before || !cb || !reg) return;
-    // Money is the bank lines, the treasury's account AND the households' money in transit —
-    // settled to the household sector this week, on a bank's line next week (T+1).
-    const inTransit = (reg.householdState as unknown as { pendingBankSettlementUSD?: number })?.pendingBankSettlementUSD ?? 0;
-    const now = sum(banksOf(state, r), (b) => depositsOf(b.bankBalanceSheet!)) + cb.treasuryAccountUSD + inTransit;
-    const moneyBefore = before.bankDepositsUSD + before.treasuryAccountUSD + before.householdInTransitUSD;
+    // Money is the bank lines and the treasury's account (§5-WIRES A2: nothing is in transit).
+    const now = sum(banksOf(state, r), (b) => depositsOf(b.bankBalanceSheet!)) + cb.treasuryAccountUSD;
+    const moneyBefore = before.bankDepositsUSD + before.treasuryAccountUSD;
     // Every creator, by name: the payment ledger's (bank credit written, reserves the central
     // bank issued, what the banks paid out of their own account, money from other regions), the
     // household books' deposit writes, the interest the banks credited to deposits, and the

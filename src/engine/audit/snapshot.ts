@@ -19,8 +19,6 @@ export interface RegionSnapshot {
   centralBankAssetsUSD: number;
   sovereignOutstandingUSD: number;
   bankDepositsUSD: number;
-  /** The households' money settled this week and on a bank's line next week (T+1). */
-  householdInTransitUSD: number;
   bankLoansUSD: number;
 }
 export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number> };
@@ -39,7 +37,6 @@ export function snapshotOf(state: GameState): AuditSnapshot {
       sovereignOutstandingUSD: (reg.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0),
       // §7.373: the SAME read M6 takes at week end — every deposit class, the margin line included.
       bankDepositsUSD: banks.reduce((a, b) => a + depositsOf(b.bankBalanceSheet!), 0),
-      householdInTransitUSD: (reg.householdState as unknown as { pendingBankSettlementUSD?: number })?.pendingBankSettlementUSD ?? 0,
       bankLoansUSD: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!), 0),
     };
   });

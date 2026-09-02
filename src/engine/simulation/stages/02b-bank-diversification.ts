@@ -323,10 +323,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           (a, [k, v]) => a + ((Number(v) || 0) * (sovCouponByBucket[k] ?? 0)) / 52, 0
         ),
         regionDivertedUSD * share,
-        // HH4d: last week's post-bank-pass household flows settle on this bank's book (T+1) —
-        // ETF purchases out, insurance premiums/benefits and PE calls/distributions net. The
-        // parameter is an OUTFLOW, so the signed pending flips sign.
-        -(reg.householdState.pendingBankSettlementUSD ?? 0) * share,
         // Slice 5: the rate this bank's deposits must compete with.
         findRegionMmf(ctx.updatedInstitutionalEntities, regionId)?.mmfNetYieldAnnual ?? 0,
         // G3c: what the market charges THIS bank for money — its own cleared credit spread,
@@ -693,7 +689,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       ...hs,
       depositsUSD: Math.round(bankHouseholdDepositsUSD),
       mmfSharesUSD: Math.round(((hs.mmfSharesUSD ?? 0) + regionDivertedUSD)),
-      pendingBankSettlementUSD: 0,
       mortgageDebtUSD,
       creditCardDebtUSD,
       otherConsumerLoanDebtUSD,

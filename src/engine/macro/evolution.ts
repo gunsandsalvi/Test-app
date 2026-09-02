@@ -1229,7 +1229,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       // reserves had left and no bank ever received them — money destroyed when households were
       // net receivers after the bank pass, created when they were net payers (±5–8B a week,
       // the whole of M1's periodic residual after C5).
-      pendingBankSettlementUSD: prevHS.pendingBankSettlementUSD ?? 0,
       privateBusinessEquityUSD: prevHS.privateBusinessEquityUSD ?? 0,
       // HH4: this week's cohort decomposition — the cross-section the aggregates above sum from.
       cohorts: cohortResult.cohorts,

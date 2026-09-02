@@ -35,9 +35,8 @@ export class CentralBankIdentityTrace {
         const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[c.ticker]?.bankBalanceSheet) || c.bankBalanceSheet;
         if (sheet) reserves += sheet.cashReservesUSD;
       });
-      const inTransit = (reg.householdState as unknown as { pendingBankSettlementUSD?: number })?.pendingBankSettlementUSD ?? 0;
-      out.set(r, reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD + inTransit - centralBankAssetsUSD(cb));
-      parts.set(r, { reserves, tga: cb.treasuryAccountUSD, inTransit, assets: centralBankAssetsUSD(cb) });
+      out.set(r, reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD - centralBankAssetsUSD(cb));
+      parts.set(r, { reserves, tga: cb.treasuryAccountUSD, assets: centralBankAssetsUSD(cb) });
     });
     this.parts = parts;
     return out;

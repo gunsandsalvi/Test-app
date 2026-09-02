@@ -14,6 +14,13 @@
  *   reserves, the treasury) IS the central-bank side, so it carries no second leg; a row with no
  *   bank (a clearing house, the central bank's own issuance, money in transit) carries none.
  *
+ * SECOND SLICE — THE AUTHORITY OF THE PASS (§7.378). Settlement applies the settled rows to the
+ * store and PROJECTS the books from it (`projectBooks`): a party's balance is its rows, a bank's
+ * reserves its own row, a bank's deposit lines move by its depositors' rows, the treasury's
+ * account and advance are the two signs of its net position. The nine-way switch keeps only its
+ * tallies. The household sector's legs land on its region's banks by market share AT ONCE — the
+ * T+1 transit (`pendingBankSettlementUSD`) is gone, and with it N's money in transit.
+ *
  * FIRST SLICE — A MIRROR WITH A GATE (§7.377). The store is REBUILT from the balance fields
  * before every settlement pass, the pass applies each settled row to it beside the legacy
  * per-kind writes, and `compareToBooks` proves the two agree after the pass — per party, per
@@ -40,6 +47,8 @@ export interface AccountStore {
   bankIdx: Int32Array;
   classId: Int8Array;
   balanceUSD: Float64Array;
+  /** The balance the row opened the pass with — a line moves by (balance − opening). */
+  openingUSD: Float64Array;
   /** Bank tickers by index, and the row of each bank's OWN reserve account. */
   banks: string[];
   reserveRowOfBank: Int32Array;
@@ -55,13 +64,13 @@ function grow(s: AccountStore): void {
   const gi = (o: Int32Array) => { const a = new Int32Array(cap); a.set(o); return a; };
   const g8 = (o: Int8Array) => { const a = new Int8Array(cap); a.set(o); return a; };
   const gf = (o: Float64Array) => { const a = new Float64Array(cap); a.set(o); return a; };
-  s.partyId = gi(s.partyId); s.bankIdx = gi(s.bankIdx); s.classId = g8(s.classId); s.balanceUSD = gf(s.balanceUSD);
+  s.partyId = gi(s.partyId); s.bankIdx = gi(s.bankIdx); s.classId = g8(s.classId); s.balanceUSD = gf(s.balanceUSD); s.openingUSD = gf(s.openingUSD);
 }
 
 export function newAccountStore(): AccountStore {
   const cap = 1 << 12;
   return {
-    n: 0, partyId: new Int32Array(cap), bankIdx: new Int32Array(cap), classId: new Int8Array(cap), balanceUSD: new Float64Array(cap),
+    n: 0, partyId: new Int32Array(cap), bankIdx: new Int32Array(cap), classId: new Int8Array(cap), balanceUSD: new Float64Array(cap), openingUSD: new Float64Array(cap),
     banks: [], reserveRowOfBank: new Int32Array(0), bankIdxOfTicker: new Map(), rowsOfParty: new Map(), splitOfParty: new Map(),
   };
 }
@@ -75,7 +84,7 @@ function bankIndex(s: AccountStore, ticker: string): number {
 export function openRow(s: AccountStore, party: number, bankIdx: number, cls: AccountClass, balanceUSD: number): number {
   if (s.n >= s.partyId.length) grow(s);
   const r = s.n++;
-  s.partyId[r] = party; s.bankIdx[r] = bankIdx; s.classId[r] = ACCOUNT_CLASSES.indexOf(cls); s.balanceUSD[r] = balanceUSD;
+  s.partyId[r] = party; s.bankIdx[r] = bankIdx; s.classId[r] = ACCOUNT_CLASSES.indexOf(cls); s.balanceUSD[r] = balanceUSD; s.openingUSD[r] = balanceUSD;
   const rows = s.rowsOfParty.get(party);
   if (rows) rows.push(r); else s.rowsOfParty.set(party, [r]);
   return r;
@@ -123,13 +132,15 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     if (!reg) return;
     const regionBanks = banks.filter((b) => b.region === region && !b.isDefaulted);
     const shareSum = regionBanks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
-    // The household sector: its balance at each bank is that bank's household line; the slice
-    // the banks have not posted yet (HH4d's T+1 hand-off) is in transit at nobody.
+    // The household sector: its balance at each bank is that bank's household line, and a leg
+    // lands on the banks by market share at once — the split the pools' legs always had.
     const hh = partyId({ kind: 'HOUSEHOLD', region });
     const hhSplit: number[] = [];
-    regionBanks.forEach((b) => { openRow(s, hh, s.bankIdxOfTicker.get(b.ticker)!, 'HOUSEHOLD', b.bankBalanceSheet!.depositsUSD); hhSplit.push(0); });
-    openRow(s, hh, AT_NOWHERE, 'HOUSEHOLD', (reg.householdState as { pendingBankSettlementUSD?: number })?.pendingBankSettlementUSD ?? 0);
-    hhSplit.push(1); // today a household leg lands in transit; A2 lands it on the banks by share
+    regionBanks.forEach((b) => {
+      openRow(s, hh, s.bankIdxOfTicker.get(b.ticker)!, 'HOUSEHOLD', b.bankBalanceSheet!.depositsUSD);
+      hhSplit.push(shareSum > 0 ? (b.bankMarketShare ?? 0) / shareSum : 1 / Math.max(1, regionBanks.length));
+    });
+    if (regionBanks.length === 0) { openRow(s, hh, AT_NOWHERE, 'HOUSEHOLD', reg.householdState?.depositsUSD ?? 0); hhSplit.push(1); }
     s.splitOfParty.set(hh, Float64Array.from(hhSplit));
     // The pools: a balance at each bank by market share (settlement's own split).
     (reg.smePools ?? []).forEach((seg) => {
@@ -174,6 +185,60 @@ function leg(s: AccountStore, row: number, deltaUSD: number): void {
     const rr = s.reserveRowOfBank[bi];
     if (rr >= 0) s.balanceUSD[rr] += deltaUSD;
   }
+}
+
+/**
+ * THE PROJECTION — the books, written from the store after a pass. Every balance field a party
+ * carries is its rows; a bank's reserves are its own row and its deposit lines move by its
+ * depositors' rows (by class); the treasury's account is the positive side of its net position
+ * and the advance the negative (§5-CLOSE M4's rule, in one place). Equity is not a balance and
+ * stays the pass's own (the bank's own-account legs are its income and expense).
+ */
+export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
+  const classOf = (r: number): AccountClass => ACCOUNT_CLASSES[s.classId[r]];
+  // Per-bank line deltas, by class.
+  const deltaByBank = new Map<number, Record<AccountClass, number>>();
+  const blank = (): Record<AccountClass, number> => ({ CORPORATE: 0, INSTITUTIONAL: 0, SME: 0, HOUSEHOLD: 0, RESERVES: 0, TREASURY: 0, CREATED: 0, SECURITIES: 0, VOID: 0 });
+  for (let r = 0; r < s.n; r++) {
+    const bi = s.bankIdx[r];
+    if (bi < 0) continue;
+    let d = deltaByBank.get(bi);
+    if (!d) { d = blank(); deltaByBank.set(bi, d); }
+    d[classOf(r)] += s.balanceUSD[r] - s.openingUSD[r];
+  }
+  ctx.updatedCompanies.forEach((c) => {
+    if (c.isBankEntity && c.bankBalanceSheet) {
+      const bi = s.bankIdxOfTicker.get(c.ticker); if (bi === undefined) return;
+      const rr = s.reserveRowOfBank[bi];
+      const d = deltaByBank.get(bi) ?? blank();
+      const reserveDeltaUSD = s.balanceUSD[rr] - s.openingUSD[rr];
+      const sheet = c.bankBalanceSheet;
+      c.bankBalanceSheet = {
+        ...sheet,
+        cashReservesUSD: sheet.cashReservesUSD + reserveDeltaUSD,
+        depositsUSD: sheet.depositsUSD + d.HOUSEHOLD,
+        corporateDepositsUSD: (sheet.corporateDepositsUSD ?? 0) + d.CORPORATE,
+        institutionalDepositsUSD: (sheet.institutionalDepositsUSD ?? 0) + d.INSTITUTIONAL,
+        smeDepositsUSD: (sheet.smeDepositsUSD ?? 0) + d.SME,
+      };
+      const agg = ctx.updatedRegions[c.region];
+      if (agg && reserveDeltaUSD !== 0) agg.bankingSector = { ...agg.bankingSector, cashReservesUSD: agg.bankingSector.cashReservesUSD + reserveDeltaUSD };
+      return;
+    }
+    c.cash = balanceOfParty(s, partyId({ kind: 'COMPANY', ticker: c.ticker }));
+  });
+  ctx.updatedInstitutionalEntities.forEach((e) => { e.cashUSD = balanceOfParty(s, partyId({ kind: 'INSTITUTION', id: e.id })); });
+  (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
+    const reg = ctx.updatedRegions[region]; if (!reg) return;
+    (reg.smePools ?? []).forEach((seg) => { seg.cashUSD = balanceOfParty(s, partyId({ kind: 'SEGMENT', region, industry: seg.industry })); });
+    if (reg.householdState) reg.householdState.depositsUSD = balanceOfParty(s, partyId({ kind: 'HOUSEHOLD', region }));
+    const cb = reg.centralBankSheet;
+    if (cb) {
+      const net = balanceOfParty(s, partyId({ kind: 'GOVERNMENT', region }));
+      cb.treasuryAccountUSD = Math.max(0, net);
+      cb.waysAndMeansUSD = Math.max(0, -net);
+    }
+  });
 }
 
 export interface AccountMismatch { what: string; bookUSD: number; storeUSD: number }
