@@ -25,6 +25,11 @@ import { issueHolding, transferHolding } from '../../ledger/holdings-ledger';
 import { heldInShares } from '../../../domain/assets';
 import { marketCapOf } from '../../../domain/company';
 import { cashOf, moveSectorRowsToBank, moveBankReserves, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
+import { moveOutputUnits, moveInputUnits } from '../../ledger/goods-ledger';
+import { materializeInputInventory, inputUnitsHeld } from '../../../engine2/lots';
+import { novateContracts } from '../../../engine2/contracts';
+import { derivativesBookOf } from './derivative-lifecycle';
+import { DerivativeParty } from '../../../domain/derivatives/contract';
 
 /**
  * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
@@ -330,8 +335,10 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       });
     });
 
+    // §5-FINALIZATION step 9 (N2): a target tranche that consolidates alone keeps its row but
+    // is the acquirer's now — its id says so, the old id inside for the lineage.
     const consolidatedTranches = consolidateTranches(
-      [...mergeableAcquirerTranches, ...mergeableTargetTranches],
+      [...mergeableAcquirerTranches, ...mergeableTargetTranches.map((t) => ({ ...t, id: `${acquirer.ticker}-ACQ${ctx.nextWeek}-${t.id}` }))],
       ctx.nextWeek,
       acquirer.ticker
     );
@@ -391,12 +398,15 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       const equityRefR = internString(ctx.v2, 'EQUITY');
       const corpBondRef = internString(ctx.v2, 'CORP_BOND');
       const levLoanRef = internString(ctx.v2, 'LEVERAGED_LOAN');
+      // Step 9 (O3): the target's commercial paper is on the acquirer's ladder too — its holders'
+      // rows exchange like the bonds' (it was the one company-keyed kind the exchange skipped).
+      const cpRef = internString(ctx.v2, 'COMMERCIAL_PAPER');
       ctx.updatedInstitutionalEntities.forEach((e) => {
         const swaps: { type: ItemizedHolding['instrumentType']; valueUSD: number; shares: number | undefined }[] = [];
         for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
           if (H.instrRef[r] !== targetIdRef) continue;
           const t = H.typeRef[r];
-          if (t !== equityRefR && t !== corpBondRef && t !== levLoanRef) continue;
+          if (t !== equityRefR && t !== corpBondRef && t !== levLoanRef && t !== cpRef) continue;
           swaps.push({ type: ctx.v2.internedStrings[t] as ItemizedHolding['instrumentType'], valueUSD: H.qtyUSD[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r] });
         }
         if (swaps.length === 0) return;
@@ -418,6 +428,24 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       });
     }
   }
+
+  // §5-FINALIZATION step 9 — NOTHING STAYS BEHIND ON THE TARGET. Its standing derivatives
+  // novate to the acquirer (a bank's already did through `rekeyBankLinks`), the consignments
+  // still on their way to it are the acquirer's to take delivery of, its finished stock and
+  // input lots move onto the acquirer's books by wire, and its supply contracts name the
+  // acquirer on either side. A merged firm is not dead — an acquired firm's rows cannot exist.
+  if (!target.bankBalanceSheet) {
+    const rekey = (p: DerivativeParty): DerivativeParty => (p.kind === 'COMPANY' && p.ticker === target.ticker ? { kind: 'COMPANY', ticker: acquirer.ticker } : p);
+    ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekey(c.a), b: rekey(c.b) }));
+  }
+  (state.goodsInTransit ?? []).forEach((sh) => { if (sh.buyerTicker === target.ticker) sh.buyerTicker = acquirer.ticker; });
+  Object.entries(target.outputInventoryBySubUnit ?? {}).forEach(([subUnitId, row]) => {
+    moveOutputUnits(target, acquirer, subUnitId, row.unitsHeld, row.valueUSD, 'merger: finished stock assumed');
+  });
+  Object.keys(materializeInputInventory(ctx.v2, target.id)).forEach((subUnitId) => {
+    moveInputUnits(ctx.v2, target, acquirer, subUnitId, inputUnitsHeld(ctx.v2, target.id, subUnitId), ctx.nextWeek, 'merger: input lots assumed');
+  });
+  novateContracts(ctx.v2, [target.ticker, target.id], acquirer.ticker);
 
   // Target is absorbed and exits active operations
   target.mergerAcquired = true;

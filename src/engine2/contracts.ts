@@ -135,6 +135,20 @@ export function formContractRow(
   }
 }
 
+/** §5-FINALIZATION step 9 — a merger NOVATES the target's contracts to the acquirer: every row
+ *  naming the target (by either key the table stores, ticker or id) names the acquirer now. */
+export function novateContracts(v2: V2World, fromKeys: string[], toKey: string): number {
+  const T = v2.contracts;
+  const from = new Set(fromKeys.map((k) => internString(v2, k)));
+  const to = internString(v2, toKey);
+  let n = 0;
+  for (let r = 0; r < T.used; r++) {
+    if (from.has(T.supplierRef[r])) { T.supplierRef[r] = to; n++; }
+    if (from.has(T.customerRef[r])) { T.customerRef[r] = to; n++; }
+  }
+  return n;
+}
+
 /** The (region, sub-unit) chain as row indexes, in bucket order. */
 export function contractRows(v2: V2World, region: string, subUnitId: string): number[] {
   const T = v2.contracts;
