@@ -64,9 +64,9 @@ export interface BankingSector {
   // §5-WIRES D: the two loan books are READS of the rows — `businessLoanBookOf` (Σ businessLoans)
   // and `consumerLoanBookOf` (Σ householdLoans). The regional aggregate carries no rows and so
   // no loan book of its own: a region's book is `regionLoanBooksUSD` over its named banks.
-  depositsUSD: number;
+  // §5-WIRES A3.6c: a bank's reserves are its account (`bankReservesOf`) and its four deposit
+  // lines are its depositors' accounts (`DepositLines`, `depositLinesAt`) — no field carries them.
   sovereignBondHoldingsUSD: number;
-  // §5-WIRES A3.6c: a bank's reserves are its account (`bankReservesOf`) — no field carries them.
   bankEquityUSD: number;
   bankCapitalRatio: number;
   netInterestMarginPct: number;
@@ -170,11 +170,6 @@ export interface BankingSector {
   centralBankLoanUSD?: number;
   /** §5-CLOSE — FX clients' margin held by this bank's desk: their money, a liability. */
   clientMarginUSD?: number;
-  /** SEG1 — the private-sector segment pools' balances here (this bank's market-share slice of
-   * each pool's `cashUSD`). A real liability with reserves behind it, maintained by settlement
-   * and reconciled weekly like the corporate and institutional lines. Mostly transaction
-   * balances of small firms, so it pays nothing — which is what small-business checking pays. */
-  smeDepositsUSD?: number;
   /** HH — a reported weekly FLOW (not a stock): interest this bank paid its household
    *  depositors, at its own deposit rate. Part of measured household income. */
   householdDepositInterestWeeklyUSD?: number;

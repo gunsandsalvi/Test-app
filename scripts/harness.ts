@@ -18,7 +18,7 @@
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
-import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, resetAccount, adjustBankReserves, bankReservesOf, stateDepositLines } from '../src/engine/ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, householdDepositsAt, resetAccount, adjustBankReserves, bankReservesOf, stateDepositLines } from '../src/engine/ledger/accounts';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -700,7 +700,7 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
     // between two formula-fed representations is the defect this check keeps dead.
     const bankDepositsUSD = state.companies
       .filter((c) => c.region === region && c.isBankEntity && !c.isDefaulted && !c.mergerAcquired && c.bankBalanceSheet)
-      .reduce((a, c) => a + c.bankBalanceSheet!.depositsUSD, 0);
+      .reduce((a, c) => a + householdDepositsAt(ensureV2(state), c.ticker), 0);
     if (bankDepositsUSD > 0) {
       const hsView = householdDepositsOf(ensureV2(state), region);
       if (Math.abs(hsView - bankDepositsUSD) / bankDepositsUSD > 1e-3) {
@@ -1054,7 +1054,7 @@ const hhModule: HarnessModule = (() => {
         const tierGap = Math.abs(tierSum - (hs.netWorthUSD ?? 0)) / Math.max(1, Math.abs(hs.netWorthUSD ?? 1));
         const bankDeposits = s.companies
           .filter(c => c.region === r && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
-          .reduce((a, c) => a + c.bankBalanceSheet!.depositsUSD, 0);
+          .reduce((a, c) => a + householdDepositsAt(ensureV2(s), c.ticker), 0);
         const depGap = Math.abs(householdDepositsOf(ensureV2(s), r) - bankDeposits) / Math.max(1, bankDeposits);
         out.push(`  ${r}: instLiab=${B(instLiab)} held=${B(held)} (gap ${pct(gap)}) | netWorth parts gap ${pct(nwGap)} | tier-sum gap ${pct(tierGap)} | deposits-vs-banks gap ${pct(depGap)}`);
       });
@@ -1410,27 +1410,12 @@ const xbModule: HarnessModule = (() => {
       });
       out.push(`  intra-firm share of cross-border invoices: ${crossUSD > 0 ? pct(intraUSD / crossUSD) : 'n/a (no cross-border book)'} [real: ~one third; EMERGES from who owns whom]`);
       out.push('--- transit, the currency boundary, reserves ---');
-  // CASH — how much money moved on a holder's book with NO payment instruction behind it. 02b
-  // invents the matching reserves so the per-bank identity cannot drift, which is why this has
-  // been invisible: every check passed while a second, unrouted way of moving money survived
-  // beside the settlement layer (rule 3). Its own comment has always called it the migration's
-  // progress meter; this prints it. Watch it DOWN.
+  // CASH — §5-WIRES A3.6c: the deposit lines ARE the holders' accounts, so 02b's reconcile
+  // meter (money moved on a book with no instruction behind it) has nothing left to measure and
+  // is gone. What remains is the overdraft count it also kept.
   {
-    const byRegion = ((s as any).lastCashReconcileUSD ?? {}) as Record<string, number>;
-    const totalUSD = Object.values(byRegion).reduce((a, v) => a + (Number(v) || 0), 0);
-    if (totalUSD > 0) {
-      out.push(`  settlement bypass (02b reconcile, gross): ${B(totalUSD)} — ${Object.entries(byRegion)
-        .filter(([, v]) => Math.abs(Number(v) || 0) > 0)
-        .map(([r, v]) => `${r} ${B(Number(v))}`).join(', ')}`);
-      const byClass = (s as any).lastCashReconcileByClassUSD as { sme: number } | undefined;
-      if (byClass) {
-        out.push(`    by holder class: SME ${B(byClass.sme)} (the corporate and institutional lines are the accounts themselves — A3.6c)`);
-      }
-      const overdraftUSD = Number((s as any).lastCashOverdraftUSD ?? 0);
-      if (overdraftUSD > 0) {
-        out.push(`    of which clamped OVERDRAFTS (a holder spending money it does not have): ${B(overdraftUSD)}`);
-      }
-    }
+    const overdraftUSD = Number((s as any).lastCashOverdraftUSD ?? 0);
+    if (overdraftUSD > 0) out.push(`  institutions overdrawn (money spent that was not there): ${B(overdraftUSD)}`);
   }
 
       const inTransit = s.goodsInTransit ?? [];
@@ -1986,7 +1971,7 @@ const fpModule: HarnessModule = {
       // dump carries them as columns read off the ledger so the differ still sees every balance.
       const dumpV2 = ensureV2(state);
       writeFileSync(process.env.STATE_DUMP,
-        JSON.stringify(state.companies.map((c) => ({ ...c, cash: cashOf(dumpV2, c), ...(c.bankBalanceSheet ? { reserves: bankReservesOf(dumpV2, c.ticker) } : {}) })),
+        JSON.stringify(state.companies.map((c) => ({ ...c, cash: cashOf(dumpV2, c), ...(c.bankBalanceSheet ? { reserves: bankReservesOf(dumpV2, c.ticker), lines: stateDepositLines(state, c.ticker) } : {}) })),
           (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Number(v.toPrecision(15)) : v)));
     }
     if (!FP || w > FP_WEEKS) return;

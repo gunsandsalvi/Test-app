@@ -284,10 +284,10 @@ export function evolveBankingSector(
   /** NIM_TRACE=1 instrument only: a `${region}:${ticker}` label; when set and the env flag is
    * on, the NIM's income and funding legs print for this evolution. Never read by the ledger. */
   traceLabel?: string
-): BankingSector {
+): { sheet: BankingSector; householdLineUSD: number } {
   // ---- The ledger. Every mutation below is a named flow posting to both of its sides. ----
   let equityUSD = prevBanking.bankEquityUSD;
-  let depositsUSD = prevBanking.depositsUSD;
+  let depositsUSD = deposits.householdUSD;
   // G2/HH3: both credit books are ITEMIZED on the named banks and only the lending passes move
   // them; §5-WIRES D: this aggregate reads them as the caller's sum over those rows.
   const businessLoanUSD = loanBooks.businessLoanUSD;
@@ -509,7 +509,7 @@ export function evolveBankingSector(
   // real deposit flows and net origination, which is the check G2 asked for.
   const newMoneySupplyM2USD = depositsUSD + deposits.corporateUSD;
 
-  return {
+  const sheet: BankingSector = {
     // HH: a reported FLOW, not a balance-sheet line — what this bank actually paid its household
     // depositors this week, at its own deposit rate. Read by 02b and summed per region so
     // household income can MEASURE it instead of re-deriving it as `policyRate x 0.6`.
@@ -519,7 +519,6 @@ export function evolveBankingSector(
     reservesInterestWeeklyUSD: Math.round(reservesInterestUSD),
     corporateDepositInterestWeeklyUSD: Math.round(corporateDepositInterestUSD),
     dividendWeeklyUSD: Math.round(dividendWeeklyUSD),
-    depositsUSD: Math.round(depositsUSD),
     sovereignBondHoldingsUSD: Math.round(sovereignUSD),
     bankEquityUSD: Math.round(equityUSD),
     bankCapitalRatio: Number(newBankCapitalRatio.toFixed(4)),
@@ -558,7 +557,6 @@ export function evolveBankingSector(
     // violations). Same trap stage 08 documents; carried explicitly.
     centralBankLoanUSD: prevBanking.centralBankLoanUSD ?? 0,
     clientMarginUSD: prevBanking.clientMarginUSD ?? 0,
-    smeDepositsUSD: prevBanking.smeDepositsUSD ?? 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
     // G3c: the rate this bank actually decided to pay, published so nothing else has to
@@ -571,4 +569,8 @@ export function evolveBankingSector(
     sovBondDealerInventory: prevBanking.sovBondDealerInventory || [],
     loanDealerInventory: prevBanking.loanDealerInventory || [],
   };
+  // §5-WIRES A3.6c-iii: the household line after this evolution's two flows (the loan interest
+  // debited, the deposit interest credited), TO THE DOLLAR — the stated rounding the field carried.
+  // 02b posts the household sector's row at this bank from it and the lending pass's flows.
+  return { sheet, householdLineUSD: Math.round(depositsUSD) };
 }

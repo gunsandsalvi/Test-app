@@ -41,13 +41,12 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
 import { SRF_SPREAD_BPS } from '../../macro/banking';
-import { cashOf, entityCashOf, poolCashOf, adjustSectorRow, adjustBankReserves, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, adjustSectorRow, adjustBankReserves, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
   Object.entries(bs.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => { scaledBuckets[k] = v * share; });
   return {
-    depositsUSD: bs.depositsUSD * share,
     sovereignBondHoldingsUSD: bs.sovereignBondHoldingsUSD * share,
     bankEquityUSD: bs.bankEquityUSD * share,
     bankCapitalRatio: bs.bankCapitalRatio,
@@ -270,7 +269,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       }, 0);
 
       const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
-      const sheet = evolveBankingSector(
+      const householdOpenUSD = householdDepositsAt(ctx.v2, bank.ticker);
+      const { sheet, householdLineUSD: evolvedHouseholdLineUSD } = evolveBankingSector(
         prevSheet,
         { businessLoanUSD: businessLoanBookOf(prevSheet), consumerLoanUSD: consumerLoanBookOf(prevSheet) },
         reservesUSD,
@@ -370,10 +370,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         ),
       };
       ctx.g2DeclinedOriginationUSD[regionId] = (ctx.g2DeclinedOriginationUSD[regionId] ?? 0) + lending.declinedOriginationUSD;
-      // §5-WIRES A3.4: what this bank's own book did to its household line this stage — the
-      // loans it wrote and retired, the amortization and interest it took, the deposit interest
-      // it paid — is the household sector's row at this bank moving by the same amount.
-      adjustSectorRow(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, bank.ticker, withDeposits.depositsUSD - prevSheet.depositsUSD);
+      // §5-WIRES A3.4/A3.6c-iii: what this bank's own book did to its household line this stage
+      // — the evolution's interest debit and deposit-interest credit (to the dollar), then the
+      // loans it wrote and retired and the amortization it took — is the household sector's row
+      // at this bank moving by the same amount, posted here as the one account operation.
+      const householdLineUSD = evolvedHouseholdLineUSD + household.mortgageOriginationUSD - household.mortgageDischargeUSD
+        + household.consumerCreditOriginationUSD - household.principalWeeklyUSD;
+      adjustSectorRow(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, bank.ticker, householdLineUSD - householdOpenUSD);
       // A3.6a/c: the evolution used to return the reserves rounded to the dollar; the rounding is
       // the bank's account moving by the fraction (a stated artifact kept for the run's identity).
       adjustBankReserves(ctx.v2, bank.ticker, Math.round(reservesUSD) - reservesUSD);
@@ -475,13 +478,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       updateBankSheet(ctx, bank.ticker, sheet);
     });
 
-    // §7.288: the SME assertion at the level it is real — the region's pools' cash against
-    // the region's SME deposit lines, allocation-free (the per-bank split is settlement's own
-    // record and needs no second derivation to check it against).
-    {
-      const smeLineUSD = newSheets.reduce((a, { sheet }) => a + (sheet.smeDepositsUSD ?? 0), 0);
-      ctx.cashReconcileByClassUSD.sme += Math.abs(segmentCashUSD - smeLineUSD);
-    }
 
     // The region-level bankingSector every other stage reads becomes the real sum of these
     // named banks, replacing (not supplementing) the single-formula aggregate stage 2 computed
@@ -505,7 +501,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // BankingSector field fails to compile here until it is summed, averaged, or explicitly
     // declared per-bank-only.
     reg.bankingSector = {
-      depositsUSD: sumField((s) => s.depositsUSD),
       sovereignBondHoldingsUSD: sumField((s) => s.sovereignBondHoldingsUSD),
       bankEquityUSD: sumField((s) => s.bankEquityUSD),
       bankCapitalRatio: Number(weightedAvg((s) => s.bankCapitalRatio).toFixed(4)),
@@ -555,7 +550,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       householdLoans: [],
       centralBankLoanUSD: sumField((s) => s.centralBankLoanUSD ?? 0),
       clientMarginUSD: sumField((s) => s.clientMarginUSD ?? 0),
-      smeDepositsUSD: sumField((s) => s.smeDepositsUSD ?? 0),
       sovereignAccruedCouponUSD: sumField((s) => s.sovereignAccruedCouponUSD ?? 0),
       primeBrokerageLoansUSD: sumField((s) => s.primeBrokerageLoansUSD ?? 0),
       householdDepositInterestWeeklyUSD: sumField((s) => s.householdDepositInterestWeeklyUSD ?? 0),

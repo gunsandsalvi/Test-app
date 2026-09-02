@@ -22,7 +22,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { ladderTotalUSD } from '../../../engine2/tranches';
-import { cashOf, bankReservesOf } from '../../ledger/accounts';
+import { cashOf, bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 
 type Ref = NonNullable<NewsItem['refs']>[number];
 
@@ -240,7 +240,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         kind: 'central bank window',
         category: 'CENTRAL_BANK',
         title: `${b.name} borrows at the central bank`,
-        description: `${b.ticker} draws ${M(now)} at the standing facility: reserves ${M(bankReservesOf(ctx.v2, b.ticker))} against ${M(sheet.depositsUSD)} of deposits, capital ratio ${P(sheet.bankCapitalRatio)}, central bank loan ${M(sheet.centralBankLoanUSD ?? 0)}.`,
+        description: `${b.ticker} draws ${M(now)} at the standing facility: reserves ${M(bankReservesOf(ctx.v2, b.ticker))} against ${M(householdDepositsAt(ctx.v2, b.ticker))} of household deposits, capital ratio ${P(sheet.bankCapitalRatio)}, central bank loan ${M(sheet.centralBankLoanUSD ?? 0)}.`,
         refs: [company(b), region(b.region)],
         materialityUSD: now,
         impactRegion: b.region, impactSector: b.sector, affectedTicker: b.ticker,

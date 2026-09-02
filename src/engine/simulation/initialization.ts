@@ -73,7 +73,7 @@ import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGOR
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
-import { openAccount, openingCashOf, stashOpeningCash, sectorRowAt } from '../ledger/accounts';
+import { openAccount, openingCashOf, stashOpeningCash, sectorRowAt, stashSeedHouseholdLine } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand } from '../../domain/industry-registry';
@@ -674,10 +674,10 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const bs = bank.bankBalanceSheet!;
         // §5-WIRES D: the seed's STATED loan books (the rows arrive with the migrations below)
         // stand in the funding side here exactly as the stored scalars did.
-        bs.depositsUSD = Math.round((
+        stashSeedHouseholdLine(bs, Math.round((
           seedLoanBookShareUSD(reg, bank, 'business') + seedLoanBookShareUSD(reg, bank, 'consumer') + bs.sovereignBondHoldingsUSD +
           openingCashOf(bs) - bs.bankEquityUSD
-        ));
+        )));
       });
 
       // The region aggregate is the derived sum of the named banks (the 02b/S7 doctrine),
@@ -694,7 +694,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         ...reg.bankingSector,
         sovereignBondHoldingsByTenor: aggByTenor,
         sovereignBondHoldingsUSD: sumBank(bs => bs.sovereignBondHoldingsUSD),
-        depositsUSD: sumBank(bs => bs.depositsUSD),
         bankEquityUSD: sumBank(bs => bs.bankEquityUSD),
       };
       // OWN6/OWN7: whatever the central bank and the capital-constrained banks left is the
@@ -721,7 +720,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       reg.bankingSector = {
         ...reg.bankingSector,
         bankEquityUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0),
-        depositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
       };
 
       // PUB2 (§7.4): close the central bank's balance sheet at birth, now that the banks whose
@@ -776,7 +774,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           seedV2.accounts.balanceUSD[sectorRowAt(seedV2, { kind: 'SEGMENT', region: regionId, industry: seg.industry }, b.ticker)] = rowUSD;
           smeUSD += rowUSD;
         });
-        b.bankBalanceSheet!.smeDepositsUSD = smeUSD;
         // SETL2 (§7.4 — the seed must open in the shape the weekly engine maintains): a corporate
         // balance is a real liability now, so the bank holds the real asset behind it. The money
         // its customers deposited is central-bank money, exactly as a week-1 deposit inflow would
@@ -787,10 +784,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
         applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
       });
-      reg.bankingSector = {
-        ...reg.bankingSector,
-        depositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
-      };
     }
 
     reg.institutionalSector.itemizedHoldings = [
@@ -1304,10 +1297,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + instUSD);
       applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
-    reg.bankingSector = {
-      ...reg.bankingSector,
-      depositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
-    };
   });
 
   const commodities = getInitialCommodities();
@@ -1590,10 +1579,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       stashOpeningCash(sheet, openingCashOf(sheet) + corpUSD + instUSD);
       applyBankFundingSplit(sheet, openingCashOf(sheet), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
-    reg.bankingSector = {
-      ...reg.bankingSector,
-      depositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
-    };
   });
 
   // §5-WIRES A3.1/A3.6c-ii: the seed opens every firm's and institution's account where it wrote

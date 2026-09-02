@@ -14,7 +14,7 @@
  * reserve account at or above its buffer and the central bank counts real balances.
  */
 
-import { bankReservesOf } from '../../ledger/accounts';
+import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 import { GameState } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { raiseCentralBankLoanUSD } from './bank-lending';
@@ -34,7 +34,7 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
       if (!bank.isBankEntity || !bank.bankBalanceSheet || !isActiveCompany(bank)) return;
       const sheet = bank.bankBalanceSheet;
       const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
-      const raisedUSD = raiseCentralBankLoanUSD(sheet, reservesUSD, bankCashBufferRatioOf(bank));
+      const raisedUSD = raiseCentralBankLoanUSD(sheet, householdDepositsAt(ctx.v2, bank.ticker), reservesUSD, bankCashBufferRatioOf(bank));
       if (raisedUSD <= 0) return;
       raisedAny = true;
       // §5-CLOSE: the lender of last resort. The central bank pays with reserves it creates and

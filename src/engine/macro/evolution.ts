@@ -792,7 +792,7 @@ export function evolveRegionMacro(
   const newCbBalance = region.centralBankBalanceSheet;
   const cbChangePct = 0;
 
-  const newBankingSector = evolveBankingSector(
+  const { sheet: newBankingSector } = evolveBankingSector(
     region.bankingSector,
     // §5-WIRES D: the region's loan books are its named banks' rows, summed here.
     regionLoanBooksUSD(allCompanies.filter((c) => c.region === region.id && c.isBankEntity && !!c.bankBalanceSheet)),

@@ -422,8 +422,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     derivativesBook: ctx.derivativesBook ?? state.derivativesBook,
     holderAccruedInterestUSD: ctx.holderAccruedInterestUSD,
     sovereignAccruedInterestUSD: ctx.sovereignAccruedInterestUSD,
-    lastCashReconcileUSD: ctx.cashReconcileUSD,
-    lastCashReconcileByClassUSD: ctx.cashReconcileByClassUSD,
     lastCashOverdraftUSD: ctx.cashOverdraftUSD,
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.

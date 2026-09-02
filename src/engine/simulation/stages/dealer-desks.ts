@@ -7,7 +7,7 @@
  * auction already knows how to price, and writing the fills back onto the bank that carried them.
  */
 
-import { bankReservesOf } from '../../ledger/accounts';
+import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 import { bankCashBufferRatioOf } from '../../macro/banking';
 import { Company, RegionId } from '../../../types';
 import {
@@ -87,7 +87,7 @@ export function buildDealerDeskParticipants(args: {
     // with capital ratio to spare can still be unable to bid.
     const settledCashUSD = bankReservesOf(ctx.v2, bank.ticker)
       + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
-    const fundableUSD = Math.max(0, settledCashUSD - sheet.depositsUSD * bankCashBufferRatioOf(bank));
+    const fundableUSD = Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker) * bankCashBufferRatioOf(bank));
 
     const currentHoldingsByInstrumentId = new Map<string, number>();
     const demandByIndex: (ParticipantDemand | undefined)[] = new Array(instruments.length);

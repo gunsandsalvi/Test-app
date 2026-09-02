@@ -285,11 +285,6 @@ export interface WeeklyStepContext {
    *  weeks until the assets are gone and the residual is written off. */
   estates: import('../../../domain/estate').Estate[];
   /** CAL — this week's interest accruals to distribute over the register, by instrument. */
-  /** CASH — gross reserves 02b had to invent this week because a balance moved outside the
-   *  settlement layer. The migration's completion meter; zero means every stage posts. */
-  cashReconcileUSD: Partial<Record<RegionId, number>>;
-  /** CASH — the same meter split by which holder class's balance moved unrouted. */
-  cashReconcileByClassUSD: { sme: number };
   /** CASH — balances that are NEGATIVE and clamped to zero by the deposit reconciliation: a
    *  holder spending money it does not have, which the plug then hides. Not unrouted flow. */
   cashOverdraftUSD: number;
@@ -411,8 +406,6 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     shipmentsDispatched: [],
     tradeInvoicesBooked: [],
     estates: state.estates,
-    cashReconcileUSD: {},
-    cashReconcileByClassUSD: { sme: 0 },
     cashOverdraftUSD: 0,
     pendingHolderAccrualUSD: new Map(),
     pendingHolderAccrualPayout: new Set(),

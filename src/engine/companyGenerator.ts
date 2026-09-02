@@ -1,6 +1,6 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE, REGION_IDS_SEED_ORDER } from '../types';
 import { stashSeedRing, peekSeedRing } from '../engine2/world';
-import { stashOpeningCash, openingCashOf } from './ledger/accounts';
+import { stashOpeningCash, openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf } from './ledger/accounts';
 import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf, industryOfSubUnit } from '../domain/industry-registry';
 import { defect } from '../domain/defect';
 import { callProtectionForIssue } from '../domain/call-protection';
@@ -658,7 +658,6 @@ export function generateInitialCompanies(
           const share = tmpl.bankMarketShare ?? 0.25;
           if (!bs) return undefined;
           const sheet = {
-            depositsUSD: bs.depositsUSD * share,
             sovereignBondHoldingsUSD: bs.sovereignBondHoldingsUSD * share,
             bankEquityUSD: bs.bankEquityUSD * share,
             bankCapitalRatio: bs.bankCapitalRatio,
@@ -682,6 +681,7 @@ export function generateInitialCompanies(
           };
           // A3.6c: this bank's share of the seed's stated reserves, stashed until close-seed opens its account.
           stashOpeningCash(sheet, openingCashOf(bs) * share);
+          stashSeedHouseholdLine(sheet, seedHouseholdLineOf(bs) * share);
           return sheet;
         })() : undefined,
         // Persistent idiosyncratic risk: smaller/higher-rank banks run a real, generated risk

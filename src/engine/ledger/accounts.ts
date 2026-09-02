@@ -98,6 +98,13 @@ const openingCashStash = new WeakMap<object, number>();
 export function stashOpeningCash(comp: object, usd: number): void { openingCashStash.set(comp, usd); }
 export function openingCashOf(comp: object): number { return openingCashStash.get(comp) ?? 0; }
 
+/** A3.6c-iii — THE SEED'S PROVISIONAL HOUSEHOLD LINE of a bank sheet: sized as the funding
+ *  residual while the seed builds the books (the migrations split by it), replaced by close-seed,
+ *  which opens the household sector's row at each bank at the line it strikes. Never a field. */
+const seedHouseholdLineStash = new WeakMap<object, number>();
+export function stashSeedHouseholdLine(sheet: object, usd: number): void { seedHouseholdLineStash.set(sheet, usd); }
+export function seedHouseholdLineOf(sheet: object): number { return seedHouseholdLineStash.get(sheet) ?? 0; }
+
 // ---- A3.3/A3.4 — THE SECTOR PARTIES' ROWS, ONE PER BANK, CARRIED. A pool (an SME tier) and the
 // household sector bank at every bank of their region: the balance is a row at each, moved by
 // settlement's split of each leg and CARRIED week to week — never re-guessed from a total by
@@ -457,17 +464,9 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
     if (c.isBankEntity && c.bankBalanceSheet) {
       const bi = s.bankIdxOfTicker.get(c.ticker); if (bi === undefined) return;
       const rr = s.reserveRowOfBank[bi];
-      const sheet = c.bankBalanceSheet;
-      // A3.6a/c: the pass's result is the persistent row; the sheet carries no reserves line.
+      // A3.6: the pass's result is the persistent row; the sheet carries no reserves line and no
+      // deposit line (the sector rows landed above ARE its household and SME lines).
       ctx.v2.accounts.balanceUSD[reserveRowOf(ctx.v2, c.ticker, 0)] = s.balanceUSD[rr];
-      c.bankBalanceSheet = {
-        ...sheet,
-        // A3.4: the household line IS the household sector's row at this bank (landed above).
-        depositsUSD: householdDepositsAt(ctx.v2, c.ticker),
-        // A3.6c-ii: the corporate and institutional lines are reads (`depositLinesAt`); no field.
-        // A3.3: the SME line IS the pool rows at this bank (written back below, before this runs).
-        smeDepositsUSD: smeDepositsAt(ctx.v2, c.ticker),
-      };
       return;
     }
     // A3.1: the pass's result is the persistent balance.

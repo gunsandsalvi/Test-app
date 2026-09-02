@@ -1,4 +1,4 @@
-import { stashOpeningCash } from '../ledger/accounts';
+import { stashOpeningCash, stashSeedHouseholdLine } from '../ledger/accounts';
 import { govBondTrancheId } from '../../domain/sovereign-id';
 import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { openingSovereignRating } from './evolution';
@@ -474,7 +474,6 @@ function buildRegion(regionId: RegionId): Region {
   // stated loan-to-GDP ratios survive only where the seed SIZES something off them
   // (`seedLoanBookUSD`: a bank's opening revenue, the consumer scalar the HH3 migration replaced).
   const bankingSector = {
-    depositsUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.depositsToGdp)),
     sovereignBondHoldingsUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp)),
     bankEquityUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.bankEquityToGdp)),
     bankCapitalRatio: BANK_CAPITAL_RATIO,
@@ -502,6 +501,7 @@ function buildRegion(regionId: RegionId): Region {
   // §5-WIRES A3.6c: the seed's stated reserves ride the opening-cash stash (the same channel a
   // firm's opening cash rides) until close-seed opens each bank's account; no sheet carries them.
   stashOpeningCash(bankingSector, Math.round(estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.cashReservesToGdp));
+  stashSeedHouseholdLine(bankingSector, Math.round(estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.depositsToGdp));
 
   const institutionalSector = {
     corpBondHoldingsUSD: 0,

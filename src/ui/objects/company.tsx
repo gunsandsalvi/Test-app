@@ -36,7 +36,7 @@ export function companyColumns(bank: boolean): PeerColumn<Company>[] {
       name,
       { key: 'cap', label: 'capital', render: (r) => pctLevel(r.obj.bankBalanceSheet?.bankCapitalRatio, 1), value: (r) => r.obj.bankBalanceSheet?.bankCapitalRatio ?? -1 },
       { key: 'nim', label: 'nim', render: (r) => pctLevel(r.obj.bankBalanceSheet?.netInterestMarginPct, 2), value: (r) => r.obj.bankBalanceSheet?.netInterestMarginPct ?? -1 },
-      { key: 'deposits', label: 'deposits', render: (r, w) => { if (!r.obj.bankBalanceSheet) return money(undefined); const l = stateDepositLines(w.state, r.obj.ticker); return money(l.householdUSD + l.corporateUSD + l.institutionalUSD + l.smeUSD); }, value: (r) => r.obj.bankBalanceSheet?.depositsUSD ?? 0 },
+      { key: 'deposits', label: 'deposits', render: (r, w) => { if (!r.obj.bankBalanceSheet) return money(undefined); const l = stateDepositLines(w.state, r.obj.ticker); return money(l.householdUSD + l.corporateUSD + l.institutionalUSD + l.smeUSD); }, value: (r, w) => (r.obj.bankBalanceSheet ? stateDepositLines(w.state, r.obj.ticker).householdUSD : 0) },
       { key: 'loans', label: 'loans', render: (r) => money(r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet) : undefined), value: (r) => (r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet) : 0) },
       { key: 'share', label: 'share', render: (r) => pctLevel(r.obj.bankMarketShare, 0), value: (r) => r.obj.bankMarketShare ?? 0 },
       { key: 'window', label: 'window', render: (r) => money(r.obj.bankBalanceSheet?.srfBorrowingUSD), value: (r) => r.obj.bankBalanceSheet?.srfBorrowingUSD ?? 0 },

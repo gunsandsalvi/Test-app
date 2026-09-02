@@ -52,17 +52,19 @@ export function closeSeedMoney(
       // funding residual is struck on the rounded lines.
       const lines = depositLinesAt(v2, companies, institutionalEntities, b.ticker);
       const otherDepositsUSD = Math.round(Math.max(0, lines.corporateUSD)) + Math.round(Math.max(0, lines.institutionalUSD))
-        + Math.max(0, s.smeDepositsUSD ?? 0) + Math.max(0, s.clientMarginUSD ?? 0) + Math.max(0, s.centralBankLoanUSD ?? 0);
+        + Math.max(0, lines.smeUSD) + Math.max(0, s.clientMarginUSD ?? 0) + Math.max(0, s.centralBankLoanUSD ?? 0);
       const needUSD = bankTotalAssetsUSD(s, openingCashOf(s)) - s.bankEquityUSD - (s.repoBorrowedUSD ?? 0) - (s.srfBorrowingUSD ?? 0) - otherDepositsUSD;
+      let lineUSD = 0;
       if (needUSD >= 0) {
-        s.depositsUSD = Math.round(needUSD);
+        lineUSD = Math.round(needUSD);
       } else {
         // Over-funded: the depositors' money is real, so the bank holds it as reserves.
-        s.depositsUSD = 0;
         stashOpeningCash(s, Math.round(openingCashOf(s) - needUSD));
       }
-      householdDepositsUSD += s.depositsUSD;
-      v2.accounts.balanceUSD[sectorRowAt(v2, { kind: 'HOUSEHOLD', region: regionId }, b.ticker)] = s.depositsUSD;
+      householdDepositsUSD += lineUSD;
+      // A3.4/A3.6c-iii: the household sector's row at this bank opens at the line struck — the
+      // only place the line exists (the seed's provisional sizing was a stash, retired here).
+      v2.accounts.balanceUSD[sectorRowAt(v2, { kind: 'HOUSEHOLD', region: regionId }, b.ticker)] = lineUSD;
       // A3.6a: the bank's own account opens at the reserves the close strikes.
       openAccount(v2, { kind: 'BANK', ticker: b.ticker }, openingCashOf(s));
     });
@@ -71,10 +73,6 @@ export function closeSeedMoney(
     // net worth was struck on; the residual replaces it and net worth moves by the difference.
     const priorHouseholdDepositsUSD = openingCashOf(hs);
     hs.netWorthUSD = Math.round((hs.netWorthUSD ?? 0) + (Math.round(householdDepositsUSD) - priorHouseholdDepositsUSD));
-    reg.bankingSector = {
-      ...reg.bankingSector,
-      depositsUSD: Math.round(banks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0)),
-    };
 
     // ---- 2. The central bank's book backs reserves and the treasury's account exactly. ----
     const reservesUSD = banks.reduce((a, b) => a + openingCashOf(b.bankBalanceSheet!), 0);

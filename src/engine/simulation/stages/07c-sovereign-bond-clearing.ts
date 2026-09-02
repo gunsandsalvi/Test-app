@@ -43,7 +43,7 @@
  * stage 8, 11, and 12 (all of which read yieldCurveParams/zeroRates as already-real values).
  */
 
-import { bankReservesOf, bankDepositLines } from '../../ledger/accounts';
+import { bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { govBucketId, govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS, sovBucketKey } from './shared-helpers';
@@ -445,7 +445,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const settledCashUSD = reservesUSD
         + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
       const fundableUSD = Math.min(
-        Math.max(0, settledCashUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
+        Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker) * MIN_CASH_BUFFER_RATIO)
           + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
         leverageHeadroomUSD(sheet, reservesUSD)
       );

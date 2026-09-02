@@ -1,4 +1,4 @@
-import { openingCashOf } from '../../ledger/accounts';
+import { openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf } from '../../ledger/accounts';
 /**
  * G2 — itemized bank lending and endogenous money.
  *
@@ -144,11 +144,11 @@ export function migrateSmeDebtAtSeed(
   const carriableUSD = Math.max(0, totalEquityUSD / BANK_WORKING_CAPITAL_RATIO - usedRwaUSD);
   const migratedUSD = Math.min(serviceableUSD, carriableUSD);
 
-  const totalDepositsUSD = banks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0) || 1;
+  const totalDepositsUSD = banks.reduce((a, b) => a + seedHouseholdLineOf(b.bankBalanceSheet!), 0) || 1;
   banks.forEach((bank) => {
     const sheet = bank.bankBalanceSheet!;
     const bankHurdle = bankRequiredReturnAnnual(bank, reg);
-    const bankShare = sheet.depositsUSD / totalDepositsUSD;
+    const bankShare = seedHouseholdLineOf(sheet) / totalDepositsUSD;
     const loans: BankLoan[] = [];
     segs.forEach((seg, i) => {
       const principalUSD = Math.round(migratedUSD * bankShare * (segEbitdaUSD[i] / totalEbitdaUSD));
@@ -170,9 +170,9 @@ export function migrateSmeDebtAtSeed(
     // balances (same discipline as the WS6 seed); the consumer side is the seed's stated book
     // until HH3 seeds the real pools and re-derives this again.
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-    sheet.depositsUSD = Math.round((
+    stashSeedHouseholdLine(sheet, Math.round((
       businessLoanBookOf(sheet) + seedConsumerLoanBookUSD(reg, bank) + sovUSD + openingCashOf(sheet) - sheet.bankEquityUSD
-    ));
+    )));
   });
 
   // The segments' recorded debt becomes the loans that actually exist.
@@ -347,11 +347,9 @@ export function runBankWeeklyLending(
         Math.min(0, facilityNetOriginationUSD), 'facility left the ladders without a payment', bank.ticker
       ),
       businessLoans: loans,
-      // SEG2e: loans still create deposits, but the pool's new money now lands on ITS OWN line
+      // SEG2e: loans still create deposits, but the pool's new money lands on ITS OWN account
       // through settlement — the caller pays BANK_CREDIT → SEGMENT with the per-segment map
-      // below, so the deposit appears on `smeDepositsUSD` (and the pool's cash) with no reserve
-      // move, instead of being quietly folded into the household deposit line here.
-      depositsUSD: sheet.depositsUSD,
+      // below (the pool's row at this bank IS the bank's SME line), with no reserve move.
       // SETL2b: a facility is DEPOSIT CREATION, and both halves happen in one statement at
       // settlement — the loan is booked there in the same week the borrower draws it, so no
       // reserve moves and nothing is left for this reconciliation to fund. What remains here is
@@ -422,10 +420,10 @@ export function migrateHouseholdDebtAtSeed(
     requiredReturnAnnual: seedHurdle,
   });
 
-  const totalDepositsUSD = banks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0) || 1;
+  const totalDepositsUSD = banks.reduce((a, b) => a + seedHouseholdLineOf(b.bankBalanceSheet!), 0) || 1;
   banks.forEach((bank) => {
     const sheet = bank.bankBalanceSheet!;
-    const share = sheet.depositsUSD / totalDepositsUSD;
+    const share = seedHouseholdLineOf(sheet) / totalDepositsUSD;
     const pools: HouseholdLoanPool[] = ([
       // DIST/HSG — THE BOOK IS SEEDED AS VINTAGES, NOT AS ONE AVERAGE LOAN.
       //
@@ -889,11 +887,8 @@ export function runBankHouseholdLending(
       // every one of these is a deposit event at this bank: a loan creates the borrower's
       // deposit (mortgage and card/term alike), the seller's retired loan destroys one, and
       // amortization is the borrower's deposit paying the book down. Interest is the same
-      // debit, posted by evolveBankingSector on the prior book. Before this, principal came
-      // home to reserves from nobody and card origination left reserves to nobody — the
-      // household side of the second money engine the audit measured.
-      depositsUSD: sheet.depositsUSD + mortgageOriginationUSD - mortgageDischargeUSD
-        + consumerCreditOriginationUSD - principalWeeklyUSD,
+      // debit, posted by evolveBankingSector on the prior book. A3.6c-iii: the four flows below
+      // are what 02b posts to the household sector's row at this bank — no line is written here.
     },
     interestWeeklyUSD,
     principalWeeklyUSD,
@@ -950,8 +945,8 @@ export function repayCentralBankLoanUSD(sheet: BankingSector, cashUSD: number, l
  * Writes the liability up and returns the amount; the CALLER settles the cash leg as a payment
  * (CENTRAL_BANK → BANK_SECURITIES) and books the central bank's asset.
  */
-export function raiseCentralBankLoanUSD(sheet: BankingSector, settledCashUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
-  const shortfallUSD = sheet.depositsUSD * bufferRatio - settledCashUSD;
+export function raiseCentralBankLoanUSD(sheet: BankingSector, householdDepositsUSD: number, settledCashUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
+  const shortfallUSD = householdDepositsUSD * bufferRatio - settledCashUSD;
   if (shortfallUSD < 1e6) return 0;
   sheet.centralBankLoanUSD = (sheet.centralBankLoanUSD ?? 0) + shortfallUSD;
   return shortfallUSD;
@@ -1013,5 +1008,5 @@ export function applyBankFundingSplit(
   // §5-CLOSE: household money funds what the real corporate, institutional and segment
   // balances do not; nothing is written to a lender that does not exist. The seed's own close
   // (`close-seed.ts`) re-derives this line once every book exists.
-  sheet.depositsUSD = Math.min(fundingNeedUSD, Math.max(0, householdDepositsUSD));
+  stashSeedHouseholdLine(sheet, Math.min(fundingNeedUSD, Math.max(0, householdDepositsUSD)));
 }

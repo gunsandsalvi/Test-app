@@ -15,11 +15,9 @@ import { BankResolutionPlan, mergeDesks, mergeHouseholdPool } from '../../domain
  * sides).
  */
 export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, centralBankLoanAssumedUSD: number): void {
-  // Deposits, every class.
-  acquirer.depositsUSD += target.depositsUSD; target.depositsUSD = 0;
-  // A3.6c-ii: the corporate and institutional lines are the depositors' accounts — they follow
-  // the depositors' house bank (`rekeyBankLinks`), nothing to move here.
-  acquirer.smeDepositsUSD = (acquirer.smeDepositsUSD ?? 0) + (target.smeDepositsUSD ?? 0); target.smeDepositsUSD = 0;
+  // A3.6c: the deposit lines are the depositors' accounts — the household sector's and the
+  // pools' rows move with `moveSectorRowsToBank` at the caller, the firms' and institutions'
+  // accounts follow their house bank (`rekeyBankLinks`); nothing to move here.
   acquirer.centralBankLoanUSD = (acquirer.centralBankLoanUSD ?? 0) + centralBankLoanAssumedUSD; target.centralBankLoanUSD = 0;
   acquirer.clientMarginUSD = (acquirer.clientMarginUSD ?? 0) + (target.clientMarginUSD ?? 0); target.clientMarginUSD = 0;
   // Secured lines and the paper behind them.

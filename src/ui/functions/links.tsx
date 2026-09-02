@@ -4,6 +4,7 @@
  * index, portfolio; a region's central bank, curve, banks, funds, lanes, books.
  */
 
+import { stateDepositLines } from '../../engine/ledger/accounts';
 import { ReactNode } from 'react';
 import { FunctionModule } from '../fn';
 import { Card, KV, Link, Table, T, Nav } from '../ui';
@@ -99,7 +100,7 @@ export const links: FunctionModule = {
     }
     const r = regionOf(world, ref.id);
     if (!r) return null;
-    const banks = world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && isActiveCompany(c)).map((c) => ({ ref: { type: 'company' as const, id: c.id }, v: money(c.bankBalanceSheet?.depositsUSD) }));
+    const banks = world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && isActiveCompany(c)).map((c) => ({ ref: { type: 'company' as const, id: c.id }, v: money(c.bankBalanceSheet ? stateDepositLines(world.state, c.ticker).householdUSD : undefined) }));
     const lanes = Object.keys(world.state.freightRatePerTonneLaneMoneyByLane ?? {}).filter((k) => k.startsWith(r.id + '>') || k.endsWith('>' + r.id)).map((k) => ({ ref: { type: 'lane' as const, id: k } }));
     const pairs = world.state.fxPairs.filter((p) => p.pair.includes(r.currency)).map((p) => ({ ref: { type: 'fx' as const, id: p.pair } }));
     const indexes = (world.state.marketIndexes ?? []).filter((x) => x.id.startsWith(r.id)).map((x) => ({ ref: { type: 'index' as const, id: x.id } }));

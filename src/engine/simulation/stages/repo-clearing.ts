@@ -39,7 +39,7 @@
  * counterparty and closes that boundary).
  */
 
-import { bankReservesOf } from '../../ledger/accounts';
+import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 import { RegionId, Region, InstitutionalEntity } from '../../../types';
 import { overPledgedByBucket } from '../../../domain/collateral';
 import { BankingSector } from '../../../domain/banking';
@@ -296,7 +296,7 @@ export function runRegionalRepoSession(
     // short. The same read 07c makes before it bids.
     const settledCashUSD = bankReservesOf(ctx.v2, bank.ticker)
       + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
-    const shortfallUSD = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO - settledCashUSD;
+    const shortfallUSD = householdDepositsAt(ctx.v2, bank.ticker) * MIN_CASH_BUFFER_RATIO - settledCashUSD;
     if (shortfallUSD <= 0) return;
     const capacityUSD = unencumberedBorrowingCapacityUSD(sheet, haircuts, encumberedByTicker.get(bank.ticker));
     const needUSD = Math.min(shortfallUSD, capacityUSD);
@@ -374,7 +374,7 @@ export function runRegionalRepoSession(
     if (!sheet) return;
     const surplusUSD = bankReservesOf(ctx.v2, bank.ticker)
       + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker })
-      - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO;
+      - householdDepositsAt(ctx.v2, bank.ticker) * MIN_CASH_BUFFER_RATIO;
     if (surplusUSD > 0) bankSurplusUSD.set(bank.ticker, surplusUSD);
   });
   const entitySleeveUSD = new Map(overnightSleeveByEntity);

@@ -81,9 +81,6 @@ export interface GameState {
    *  stages/sovereign-calendar.ts. Party-keyed rather than holder-keyed because a bank holds
    *  government paper on its own balance sheet and is not on the institutional register. */
   sovereignAccruedInterestUSD: Map<string, number>;
-  /** CASH — reserves 02b invented this week to cover balances that moved outside settlement. */
-  lastCashReconcileUSD?: Partial<Record<import('./geography').RegionId, number>>;
-  lastCashReconcileByClassUSD?: { sme: number };
   /** CASH — clamped negative balances, summed over the week's reconciliations. */
   lastCashOverdraftUSD?: number;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */

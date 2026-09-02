@@ -69,17 +69,7 @@ function m3(state: GameState, week: number): AuditFinding[] {
   const orphanCorp = sum(state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c) && !c.homeBankTicker), (c) => cashOf(v2, c));
   const orphanInst = sum(state.institutionalEntities.filter((e) => !e.isDefaulted && !e.homeBankTicker), (e) => entityCashOf(v2, e));
   if (Math.abs(orphanCorp) + Math.abs(orphanInst) > 1e6) out.push({ family: 'M', check: 'M3 balances with no bank', week, usd: orphanCorp + orphanInst, message: `${B(orphanCorp)} of firm cash and ${B(orphanInst)} of fund cash sit with no house bank` });
-  REGION_IDS.forEach((r) => {
-    const reg = state.regions[r];
-    if (!reg) return;
-    const banks = banksOf(state, r);
-    const smeLine = sum(banks, (b) => b.bankBalanceSheet!.smeDepositsUSD ?? 0);
-    const pools = sum(reg.smePools ?? [], (p) => poolCashOf(v2, r, p.industry));
-    if (Math.abs(smeLine - pools) > Math.max(1e7, Math.abs(pools) * 0.005)) out.push({ family: 'M', check: 'M3 sme deposits = pools\' cash', week, usd: smeLine - pools, message: `${r}: the pools hold ${B(pools)} while the banks' SME lines say ${B(smeLine)}` });
-    const hhLine = sum(banks, (b) => b.bankBalanceSheet!.depositsUSD);
-    const hh = householdDepositsOf(v2, r);
-    if (Math.abs(hhLine - hh) > Math.max(1e7, Math.abs(hh) * 0.005)) out.push({ family: 'M', check: 'M3 household deposits = banks\' line', week, usd: hhLine - hh, message: `${r}: households say ${B(hh)}, the banks' household line says ${B(hhLine)}` });
-  });
+  // The household and SME lines are the sector rows themselves (A3.3/A3.4): nothing to compare.
   return out;
 }
 

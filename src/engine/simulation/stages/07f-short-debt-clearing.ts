@@ -58,7 +58,7 @@ import {
   cpCreditPolicyShare, cpReservationYieldBps,
 } from '../../../domain/commercial-paper';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
-import { cashOf, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
+import { cashOf, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
@@ -183,7 +183,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // REPO2: the floor is the face of THIS bill bucket actually pledged, not a blended share.
         const encumberedFace = encumberedFaceByBucket(reg.repoBook ?? [], bank.ticker);
         const fundableUSD = Math.min(
-          Math.max(0, settledCashUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
+          Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker) * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
           leverageHeadroomUSD(sheet, reservesUSD)
         );
