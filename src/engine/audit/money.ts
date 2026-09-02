@@ -148,18 +148,28 @@ function m5(state: GameState, week: number): AuditFinding[] {
 function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   if (!prev) return out;
+  const ls = state.lastSettlement;
   REGION_IDS.forEach((r) => {
     const before = prev[r];
-    const cb = state.regions[r]?.centralBankSheet;
-    if (!before || !cb) return;
+    const reg = state.regions[r];
+    const cb = reg?.centralBankSheet;
+    if (!before || !cb || !reg) return;
     const now = sum(banksOf(state, r), (b) => depositsOf(b.bankBalanceSheet!)) + cb.treasuryAccountUSD;
-    const loansNow = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.businessLoanBookUSD + b.bankBalanceSheet!.consumerLoanBookUSD);
-    const cbNow = centralBankAssetsUSD(cb);
     const moneyBefore = before.bankDepositsUSD + before.treasuryAccountUSD;
-    // Money grows with net lending and central-bank purchases; everything else nets to zero.
-    const explained = (loansNow - before.bankLoansUSD) + (cbNow - before.centralBankAssetsUSD);
+    // Every creator, by name: the payment ledger's (bank credit written, reserves the central
+    // bank issued, what the banks paid out of their own account, money from other regions), the
+    // household books' deposit writes, the interest the banks credited to deposits, and the
+    // central bank's advance to the treasury. Everything else is a transfer and nets to zero.
+    const credit = ls?.creditCreatedByRegion?.[r] ?? 0;
+    const issued = ls?.centralBankIssuanceByRegion?.[r] ?? 0;
+    const ownAccount = -(ls?.bankOwnAccountByRegion?.[r] ?? 0);
+    const crossBorder = ls?.crossBorderByRegion?.[r] ?? 0;
+    const book = reg.householdBookDepositFlowWeeklyUSD ?? 0;
+    const depositInterest = reg.householdDepositInterestWeeklyUSD ?? 0;
+    const advance = (cb.waysAndMeansUSD ?? 0) - before.waysAndMeansUSD;
+    const explained = credit + issued + ownAccount + crossBorder + book + depositInterest + advance;
     const gap = (now - moneyBefore) - explained;
-    if (Math.abs(gap) > Math.max(5e8, moneyBefore * 0.01)) out.push({ family: 'M', check: 'M6 money moves only by credit and the central bank', week, usd: gap, message: `${r}: money stock moved ${B(now - moneyBefore)}; net lending ${B(loansNow - before.bankLoansUSD)} + central bank ${B(cbNow - before.centralBankAssetsUSD)} explain ${B(explained)}; ${B(gap)} unexplained` });
+    if (Math.abs(gap) > Math.max(5e8, moneyBefore * 0.005)) out.push({ family: 'M', check: 'M6 money moves only by its creators', week, usd: gap, message: `${r}: money stock moved ${B(now - moneyBefore)}; credit ${B(credit)} + central bank ${B(issued)} + banks' own account ${B(ownAccount)} + cross-border ${B(crossBorder)} + household books ${B(book)} + deposit interest ${B(depositInterest)} + advance ${B(advance)} = ${B(explained)}; ${B(gap)} unexplained` });
   });
   return out;
 }

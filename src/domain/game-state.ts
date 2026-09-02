@@ -106,6 +106,13 @@ export interface GameState {
     centralBankResidualUSD: number;
     /** §5-CLOSE C5 — the treasury's week by reason, per region: what the account moved by. */
     treasuryFlowsByRegion: Record<string, Record<string, number>>;
+    /** §5-CLOSE M6 — the week's money creators, per region: deposits written by bank credit,
+     *  reserves the central bank issued, what the banks paid out of (−) or took into (+) their
+     *  own account, and money that arrived from other regions. */
+    creditCreatedByRegion: Record<string, number>;
+    centralBankIssuanceByRegion: Record<string, number>;
+    bankOwnAccountByRegion: Record<string, number>;
+    crossBorderByRegion: Record<string, number>;
   };
   /** SEG1 — payments recorded AFTER the week's settlement cutoff (hc-lifecycle's tender
    * settlements, birth carves). A real net-settlement system rolls after-cutoff payments into

@@ -233,7 +233,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     // HH3: the week's real household-credit flows, per bank, for the region roll-up below.
     const householdFlowsByBank = new Map<string, {
-      interestUSD: number; debtServicePrincipalUSD: number;
+      interestUSD: number; debtServicePrincipalUSD: number; principalUSD: number;
       mortgageOriginationUSD: number; mortgageDischargeUSD: number; mortgageRateQuotedAnnual: number; turnoverRateAnnual: number; mortgageBookUSD: number;
       consumerCreditOriginationUSD: number;
     }>();
@@ -387,6 +387,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         mortgageBookUSD: (household.sheet.householdLoans ?? [])
           .filter((pl) => pl.kind === 'MORTGAGE').reduce((a, pl) => a + pl.principalUSD, 0),
         consumerCreditOriginationUSD: household.consumerCreditOriginationUSD,
+        principalUSD: household.principalWeeklyUSD,
       });
       const lentSheet = household.sheet;
       // Slice 4: the corporate-deposit line is the derived view of the borrowers' real cash.
@@ -660,9 +661,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // book each one measured it on.
     let turnoverWeightedUSD = 0;
     let turnoverBookUSD = 0;
+    let bookPrincipalUSD = 0;
     householdFlowsByBank.forEach((f) => {
       interestUSD += f.interestUSD;
       servicePrincipalUSD += f.debtServicePrincipalUSD;
+      bookPrincipalUSD += f.principalUSD;
       mortgageOriginationUSD += f.mortgageOriginationUSD;
       mortgageDischargeUSD += f.mortgageDischargeUSD;
       consumerCreditUSD += f.consumerCreditOriginationUSD;
@@ -679,6 +682,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // purchases from the view and records them for next week's bank settlement). The diverted
     // savings become a real money-fund share stock on the household book instead of money that
     // vanished from the household view at the yield gate.
+    // §5-CLOSE M6: the deposits the household BOOK wrote this week — a loan creates the
+    // borrower's deposit, a repayment and the interest destroy it — reported so the money-stock
+    // decomposition can count the banks' second creator (the first is the payment ledger).
+    reg.householdBookDepositFlowWeeklyUSD = Math.round(
+      mortgageOriginationUSD - mortgageDischargeUSD + consumerCreditUSD - bookPrincipalUSD - interestUSD);
     const bankHouseholdDepositsUSD = newSheets.reduce((a, { sheet }) => a + sheet.depositsUSD, 0);
     reg.householdState = {
       ...hs,

@@ -854,6 +854,9 @@ export interface Region {
   cashBridgeBillIssuanceUSD?: number;
   /** PUB2 — the central bank's real balance sheet (`centralBank` above is just its name). The
    * treasury's account lives on it as a liability, which is what makes TGA flows move reserves. */
+  /** §5-CLOSE M6 — the deposits the household loan books wrote this week (origination less
+   *  discharge, amortization and interest), the banks' second money creator. Written by 02b. */
+  householdBookDepositFlowWeeklyUSD?: number;
   /** §5-CLOSE C5 — last week's dividends paid to the public float (the household sector), a
    *  slice of `lastWeekHouseholdReceiptsUSD`, split out for the cohorts' allocation. */
   lastWeekHouseholdDividendsUSD?: number;

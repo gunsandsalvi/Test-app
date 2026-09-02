@@ -431,6 +431,23 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         Array.from(ctx.lastSettlementReport.treasuryFlowsByRegion.entries())
           .map(([r, m]) => [r, Object.fromEntries(m.entries())])
       ),
+      ...(() => {
+        const regionOfBank = new Map(ctx.updatedCompanies.filter((c) => c.isBankEntity).map((c) => [c.ticker, c.region as string]));
+        const mergeMapsForRegion = (x: Map<string, number>, y: Map<string, number>): Map<string, number> => {
+          const out = new Map(x); y.forEach((v, k) => out.set(k, (out.get(k) ?? 0) + v)); return out;
+        };
+        const byRegion = (m: Map<string, number>): Record<string, number> => {
+          const out: Record<string, number> = {};
+          m.forEach((v, ticker) => { const r = regionOfBank.get(ticker); if (r) out[r] = (out[r] ?? 0) + v; });
+          return out;
+        };
+        return {
+          creditCreatedByRegion: byRegion(ctx.lastSettlementReport.creditCreatedByBank),
+          bankOwnAccountByRegion: byRegion(mergeMapsForRegion(ctx.lastSettlementReport.bankEquityDeltaByBank, ctx.lastSettlementReport.bankSecuritiesDeltaByBank)),
+          centralBankIssuanceByRegion: Object.fromEntries(ctx.lastSettlementReport.centralBankIssuanceByRegion.entries()),
+          crossBorderByRegion: Object.fromEntries(ctx.lastSettlementReport.crossBorderByRegion.entries()),
+        };
+      })(),
     },
     // SEG1: payments recorded after this week's settlement cutoff settle next cycle instead of
     // dying with the context (they used to be silently dropped — tender proceeds never landed).

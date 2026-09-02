@@ -307,6 +307,12 @@ export interface SettlementReport {
    *  party whose payments are not funded from a balance, so the reserves that appear at the
    *  sellers' banks are new — and the identity below has to know that or it reads as a leak. */
   centralBankIssuanceUSD: number;
+  /** §5-CLOSE M6 — the same, per region (the central bank a payment was drawn on). */
+  centralBankIssuanceByRegion: Map<string, number>;
+  /** §5-CLOSE M6 — reserves a bank's own SECURITIES account paid (−) or received (+): a desk
+   *  buying paper from a fund destroys the fund's deposit, selling creates one. Own-account money
+   *  the equity ledger above does not see (no P&L, one asset for another). */
+  bankSecuritiesDeltaByBank: Map<string, number>;
   /** What the central bank's own books were left holding — see `centralBankResidualUSD`. Zero. */
   centralBankResidualUSD: number;
   /** §5-CLOSE C4b — per region, the money that arrived from other regions less what left for
@@ -370,6 +376,8 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
     householdDeferredUSD: a.householdDeferredUSD + b.householdDeferredUSD,
     clearingHouseResidualUSD: a.clearingHouseResidualUSD + b.clearingHouseResidualUSD,
     centralBankIssuanceUSD: a.centralBankIssuanceUSD + b.centralBankIssuanceUSD,
+    centralBankIssuanceByRegion: mergeMap(a.centralBankIssuanceByRegion, b.centralBankIssuanceByRegion),
+    bankSecuritiesDeltaByBank: mergeMap(a.bankSecuritiesDeltaByBank, b.bankSecuritiesDeltaByBank),
     centralBankResidualUSD: a.centralBankResidualUSD + b.centralBankResidualUSD,
     crossBorderByRegion: mergeMap(a.crossBorderByRegion, b.crossBorderByRegion),
     unresolvedUSD: a.unresolvedUSD + b.unresolvedUSD,
@@ -397,6 +405,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     householdDeferredUSD: 0,
     clearingHouseResidualUSD: 0,
     centralBankIssuanceUSD: 0,
+    centralBankIssuanceByRegion: new Map(),
+    bankSecuritiesDeltaByBank: new Map(),
     centralBankResidualUSD: 0,
     crossBorderByRegion: new Map(),
     unresolvedUSD: 0,
@@ -579,6 +589,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         // clearing stage that recorded this writes the security in the same pass. No equity
         // leg, because nothing was earned or spent; one asset became another.
         addTo(report.reserveDeltaByBank, party.ticker, deltaUSD);
+        addTo(report.bankSecuritiesDeltaByBank, party.ticker, deltaUSD);
         return;
       }
       case 'CLEARING_HOUSE': {
@@ -600,6 +611,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         // reserves it creates, so nothing is debited here and the reserves simply appear at the
         // payee's bank. Recorded because that is money entering the system, not moving within it.
         report.centralBankIssuanceUSD -= deltaUSD;
+        addTo(report.centralBankIssuanceByRegion, party.region, -deltaUSD);
         return;
       default:
         // §7.241: without this, a new party kind's settled money fell through the switch and was
