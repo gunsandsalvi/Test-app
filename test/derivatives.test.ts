@@ -20,6 +20,7 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
   overnightRateAnnual: () => 0.03,
   parRateAnnual: () => 0.04,
   cdsSpreadBps: () => 150,
+  isInvestmentGrade: () => false,
   recoveryRate: () => 0.4,
   commodityPrint: () => 110,
   commoditySpot: () => 105,

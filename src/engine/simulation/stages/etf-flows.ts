@@ -27,12 +27,11 @@
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { bookHeadOf, pushBookRow, relinkBook, markBookDirty } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
-import { pay } from './settlement';
+import { pay, institutionSpendableUSD } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { mandatePctOf } from '../../../domain/institutions';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
-import { pendingSettlementUSD } from './settlement';
 import { INDEX_DEFINITIONS, IndexDefinition, MarketIndex } from '../../../domain/indexes';
 import { apWeeklyCapacityUSD, basketAssemblyCostRate, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
 import { ItemizedHolding } from '../../../domain/banking';
@@ -44,6 +43,7 @@ import { MAX_WEEKLY_PRICE_MOVE_PCT } from './07e-equity-clearing';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { REGION_IDS } from '../../../domain/geography';
+
 
 /** An entity's money for one asset class, from its own mandate weights. */
 function classAppetiteUSD(entity: InstitutionalEntity, def: IndexDefinition): number {
@@ -88,8 +88,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // fund whose cash-plus-pending was already spent dug the small persistent overdrafts the
     // harness flags (USAIGX −18M, the IGX/LLX residue); the sponsor of a cash-short fund waits,
     // and next week's ratio is computed fresh off the NAV as before.
-    const payableCapUSD = Math.max(0, (fund.cashUSD ?? 0)
-      + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id }));
+    const payableCapUSD = institutionSpendableUSD(ctx, fund);
     const feeUSD = Math.min((navUSD * fund.etf!.expenseRatioAnnual) / 52, payableCapUSD);
     // §7.241: ONE fee, ONE payment. The old form computed the fee twice from two different NAVs
     // — the sponsor's credit off the pre-flow book here, the fund's debit off the post-flow book
@@ -315,8 +314,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   const budgetOf = (inv: { id: string; cashUSD?: number }): number => {
     const existing = budgetRemainingByInvestor.get(inv.id);
     if (existing !== undefined) return existing;
-    const opening = Math.max(0, (inv.cashUSD ?? 0)
-      + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: inv.id }));
+    const opening = institutionSpendableUSD(ctx, inv);
     budgetRemainingByInvestor.set(inv.id, opening);
     return opening;
   };
@@ -406,8 +404,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // no cash at all. That is the next slice of this row, and it is why the cap here is a
     // constraint rather than a fix — until the basket moves, a fund short of cash genuinely
     // cannot honour the redemption.
-    const fundCashAvailableUSD = Math.max(0, (fund.cashUSD ?? 0)
-      + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id }));
+    const fundCashAvailableUSD = institutionSpendableUSD(ctx, fund);
     // ETF2 — AND NOW IT IS IN KIND, which is what makes the cash cap unnecessary rather than
     // merely honest. An institutional redemption hands over the BASKET: the fund delivers the
     // redeemer its pro-rata slice of everything it owns — securities and cash together — and no
@@ -539,8 +536,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       // §7.307 holdings flip: row walk on the mirror.
       let holdingsUSD = 0;
       { const H = ctx.v2.holdings; for (let r = bookHeadOf(ctx.v2, fundId); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r]; }
-      fundAssetsUSD.set(fundId, holdingsUSD + Math.max(0, fund.cashUSD ?? 0));
-      remainingCashByFund.set(fundId, Math.max(0, fund.cashUSD ?? 0));
+      fundAssetsUSD.set(fundId, holdingsUSD + institutionSpendableUSD(ctx, fund, false));
+      remainingCashByFund.set(fundId, institutionSpendableUSD(ctx, fund, false));
     });
     inKindRedemptionsByInvestor.forEach((byFund, investorId) => {
       byFund.forEach((owedUSD, fundId) => {

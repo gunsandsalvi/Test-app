@@ -524,6 +524,7 @@ const R_TRADE_CREDIT = internReason('trade credit extended');
 const R_HH_GOODS = internReason('household goods purchase');
 const R_CHANNEL = internReason('distribution margin paid to the channel');
 const R_GOV_PROC = internReason('government procurement');
+const R_FX_SPREAD = internReason('fx conversion spread');
 
 // §5-SCALE native cores — settleContracts in the §7.304 seam pattern: PRE reads every object
 // once into lanes; CORE is pure arithmetic over lanes and the contract columns (the portable
@@ -2130,6 +2131,23 @@ function runSubUnitMarkets(
           // earns it.
         }
         payByIds(ctx, govPid.get(buyerRegion)!, pidOfSeller(sellerKey, origin), govUSD, R_GOV_PROC);
+        // §7.341 — the FX spread's LAST payers. §7.282 charged the converting FIRM; a household
+        // or a treasury buying abroad converted at mid. Same pip, same desks (the buyer
+        // region's banks, pro rata), paid by the aggregate that converts.
+        if (origin !== buyerRegion) {
+          const hhFeeUSD = hhUSD * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
+          const govFeeUSD = govUSD * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
+          if (hhFeeUSD > 0.01 || govFeeUSD > 0.01) {
+            const { banks: fxBanks, totalShare } = fxFeeBanksOf(ctx.prevActiveFirms, buyerRegion);
+            fxBanks.forEach((b) => {
+              const share = totalShare > 0 ? ((b.bankMarketShare ?? 0) || 1) / totalShare : 0;
+              if (share <= 0) return;
+              const bankPid = partyId({ kind: 'BANK', ticker: b.ticker });
+              if (hhFeeUSD > 0.01) payByIds(ctx, hhPid.get(buyerRegion)!, bankPid, hhFeeUSD * share, R_FX_SPREAD);
+              if (govFeeUSD > 0.01) payByIds(ctx, govPid.get(buyerRegion)!, bankPid, govFeeUSD * share, R_FX_SPREAD);
+            });
+          }
+        }
       });
     });
   });
@@ -2445,9 +2463,12 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     // is buildings and cannot answer inside a year, and the compounding price leaks through
     // the shared industry's wage and revenue signals into the housing categories households
     // DO buy. REOPENING CONDITION, named: the §6.1 level-row decision re-sizes the market
-    // (or corporate premises demand gets a real elasticity). CRE_MARKET_LIVE=1 runs it live
-    // for that re-measurement.
-    if (process.env.CRE_MARKET_LIVE !== '1' && subUnit.unitId === 'commercial_rental_services') return;
+    // (or corporate premises demand gets a real elasticity).
+    // §7.341 — REOPENED. The level row closed at its owner (§7.338: the seed price rule) and
+    // the re-measurement no longer shows the spiral: 30 weeks live vs gated, USA CPI 159.2 vs
+    // 158.9, goods fill 0.763 vs 0.754, u 29.6/28.8/24.6/20.8 vs 28.9/31.2/23.1/25.3. The
+    // market is live; CRE_MARKET_LIVE=0 gates it off for an A/B.
+    if (process.env.CRE_MARKET_LIVE === '0' && subUnit.unitId === 'commercial_rental_services') return;
     const savedStream = beginEntityScope(subUnit.unitId, ctx.nextWeek);
     runSubUnitMarkets(
       v2, ctx, subUnit.unitId,

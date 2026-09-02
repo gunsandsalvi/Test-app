@@ -31,12 +31,12 @@ import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { entityRequiredReturn, MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
-import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, damperStreakOf } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
-import { pendingSettlementUSD } from './settlement';
+import { institutionSpendableUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
@@ -353,10 +353,10 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         // one bidder that never walks away from a rising print. Committing at the WORST
         // admissible price this week makes the cash constraint hold at settlement whatever
         // clears — the residual sticky −0.02B overdrafts after the in-kind fix were this.
-        const worstPriceUSD = Math.max(1e-9, refPrice * (1 + MAX_WEEKLY_PRICE_MOVE_PCT));
+        const worstPriceUSD = Math.max(1e-9, refPrice * (1 + MAX_WEEKLY_PRICE_MOVE_PCT * (1 + damperStreakOf(c.instrumentId))));
         demandByInstrumentId.set(
           c.instrumentId,
-          indexFundDemand(targetShares, Math.max(0, (fund.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })) * c.weight / worstPriceUSD, 'PRICE_LIKE')
+          indexFundDemand(targetShares, institutionSpendableUSD(ctx, fund) * c.weight / worstPriceUSD, 'PRICE_LIKE')
         );
       });
       return { id: fund.id, currentHoldingsByInstrumentId: currentShares, demandByInstrumentId };
@@ -366,8 +366,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       // Equity is bought with money the entity actually has: its cash, at the weight its mandate
       // puts on equities. Unlike credit, there is no leverage allowance here — nobody in this
       // model runs a levered equity book.
-      const budgetUSD = entity.assetAllocationTarget.equityPct * Math.max(0, (entity.cashUSD ?? 0)
-        + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }));
+      const budgetUSD = entity.assetAllocationTarget.equityPct * institutionSpendableUSD(ctx, entity);
       const entityPoolUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.equityPct
         * mandateWeightForIssuer(entity.entityType, entity.region, regionId, mcapByRegion);
       // Same discipline as the credit books: this week's money goes where shares are actually

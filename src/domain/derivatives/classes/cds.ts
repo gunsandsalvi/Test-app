@@ -43,9 +43,11 @@ export const CDS_PROFILE: DerivativeClassProfile = {
   id: 'CDS',
   roleA: 'PROTECTION_BUYER',
   roleB: 'PROTECTION_SELLER',
-  // Basel CEM credit-derivative add-on (non-investment-grade reference rate, taken flat: the
-  // per-rating split is a refinement the registry can carry when a measurement asks for it).
+  // Basel CEM credit-derivative add-on: 5% on an investment-grade reference, 10% below it. The
+  // flat rate is the capacity denominator (a desk sizes what it can write before it knows the
+  // name); the contract-level rule charges the book it actually carries.
   pfeAddOnRate: 0.10,
+  pfeAddOnRateFor: (_c, isInvestmentGrade) => (isInvestmentGrade ? 0.05 : 0.10),
   initialMarginRate: 0,
   /** The buyer pays the struck spread on the notional, weekly, for the life of the trade. */
   periodicLegUSDToB: (c) => ({

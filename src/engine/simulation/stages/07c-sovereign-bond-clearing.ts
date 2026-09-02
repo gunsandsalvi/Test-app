@@ -53,7 +53,7 @@ import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nels
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
-import { pendingSettlementUSD } from './settlement';
+import { pendingSettlementUSD, institutionUnsettledLessCollateralUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
@@ -393,7 +393,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // The entity's real money for this auction (S11), apportioned across tenor buckets by
       // their share of the market. Banks below carry no such cap: their real constraint is the
       // reserve position S2 already built, not a cash budget.
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'GOV_BOND', pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }));
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'GOV_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);
         const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;

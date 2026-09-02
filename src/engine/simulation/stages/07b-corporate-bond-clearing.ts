@@ -58,7 +58,7 @@ import {
 } from './asset-allocation';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
-import { pendingSettlementUSD } from './settlement';
+import { institutionUnsettledLessCollateralUSD, institutionSpendableUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
@@ -355,7 +355,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // money. Apportioning it across the whole STOCK instead gave a new issue a slice the size
       // of its issuer's index weight rather than of the deal, which starved the primary market by
       // construction (see the same fix and its measurement in 07d).
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'CORP_BOND', pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }));
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'CORP_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
@@ -438,7 +438,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
           // §7.270: the kernel's cash leg is traded PLUS the dealer fee, so a bound spent to
           // the last dollar overdraws by spread × gross — the fee rides outside the bound. A
           // fund that never walks away rides the bound exactly; shave it by the spread.
-          indexFundDemand(targetUSD, Math.max(0, (fund.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })) * c.weight / (1 + DEALER_SPREAD_BPS / 10000), 'YIELD_LIKE')
+          indexFundDemand(targetUSD, institutionSpendableUSD(ctx, fund) * c.weight / (1 + DEALER_SPREAD_BPS / 10000), 'YIELD_LIKE')
         );
       });
       return {

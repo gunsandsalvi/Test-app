@@ -41,7 +41,7 @@ import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-he
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
-import { pendingSettlementUSD } from './settlement';
+import { institutionUnsettledLessCollateralUSD, institutionSpendableUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
@@ -324,7 +324,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // issuer's index weight rather than its own size. Measured on an LBO financing: the book
       // could HOLD it (53.7M of capacity against a 40.1M post-issue float) but could only FUND
       // 14.0M, so the solve ran past the sponsor's walk-away and every deal was pulled.
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'LEVERAGED_LOAN', pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }));
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'LEVERAGED_LOAN', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
@@ -401,7 +401,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
           c.instrumentId,
           // §7.270: shaved by the dealer spread — the kernel's cash leg is traded PLUS fee,
           // and a bound spent exactly overdraws by spread × gross (see 07b).
-          indexFundDemand(targetUSD, Math.max(0, (fund.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })) * c.weight / (1 + DEALER_SPREAD_BPS / 10000), 'YIELD_LIKE')
+          indexFundDemand(targetUSD, institutionSpendableUSD(ctx, fund) * c.weight / (1 + DEALER_SPREAD_BPS / 10000), 'YIELD_LIKE')
         );
       });
       return {

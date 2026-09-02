@@ -45,16 +45,25 @@ export const DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM = 0.25;
 export function standingPfeChargeUSD(
   book: DerivativeContract[],
   partyKey: string,
-  week: number
+  week: number,
+  /** The reference's grade this week; absent, every class charges its flat rate. */
+  isInvestmentGrade?: (referenceId: string) => boolean
 ): number {
   let usd = 0;
   for (const c of book) {
     if (c.maturityWeek <= week) continue;
     if (derivativePartyKey(c.a) === partyKey || derivativePartyKey(c.b) === partyKey) {
-      usd += c.notionalUSD * DERIVATIVE_CLASSES[c.classId].pfeAddOnRate;
+      usd += c.notionalUSD * pfeAddOnRateOf(c, isInvestmentGrade);
     }
   }
   return usd;
+}
+
+/** One contract's add-on rate: the class's contract-level rule when it has one, else its flat rate. */
+export function pfeAddOnRateOf(c: DerivativeContract, isInvestmentGrade?: (referenceId: string) => boolean): number {
+  const profile = DERIVATIVE_CLASSES[c.classId];
+  if (profile.pfeAddOnRateFor && isInvestmentGrade) return profile.pfeAddOnRateFor(c, isInvestmentGrade(c.referenceId));
+  return profile.pfeAddOnRate;
 }
 
 /**

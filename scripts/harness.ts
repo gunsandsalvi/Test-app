@@ -456,7 +456,11 @@ function checkInstitutionalBookConservation(prev: GameState, state: GameState, w
     const after = bookOf(state, region);
     if (!(before > 0)) return;
     const changePct = Math.abs(after - before) / before;
-    if (changePct > 0.05) {
+    // §7.341: 10%, not 5% — the book is MARKED, and since the damper adapts (§7.338, a name
+    // bound k weeks gets a (1+k)× cap) a region's institutional book can legitimately re-mark
+    // by more than 5% in one week (JPN +6.7% at week 22, no leg missing). A missing cash leg
+    // is tens of per cent; the check keeps that purpose.
+    if (changePct > 0.10) {
       violations.push({
         week,
         message:

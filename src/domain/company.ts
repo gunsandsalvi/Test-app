@@ -14,6 +14,9 @@ export type FinancialStatementProfile = 'STANDARD_OPERATING' | 'INSURER' | 'ASSE
 export type Sector = 'Tech' | 'Energy' | 'Financials' | 'Industrials' | 'Consumer' | 'Banks';
 
 export type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
+/** Investment grade is BBB and above — the line the credit-derivative add-on and call protection draw. */
+export const isInvestmentGradeRating = (r: CreditRating | undefined): boolean =>
+  r === 'AAA' || r === 'AA' || r === 'A' || r === 'BBB';
 
 export interface ProductLine {
   industry: Industry;

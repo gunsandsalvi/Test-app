@@ -18,7 +18,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
-import { isActiveCompany } from '../../../domain/company';
+import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import {
   DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey,
 } from '../../../domain/derivatives/contract';
@@ -44,7 +44,11 @@ export function strikeDerivatives(ctx: WeeklyStepContext, state: GameState, stru
 
 /** A desk's standing PFE charge against the one budget, off the live book (registry.ts). */
 export function deskStandingPfeChargeUSD(ctx: WeeklyStepContext, state: GameState, ticker: string): number {
-  return standingPfeChargeUSD(derivativesBookOf(ctx, state), `BANK:${ticker}`, ctx.nextWeek);
+  const ratingById = new Map<string, CreditRating>();
+  for (const c of ctx.updatedCompanies) ratingById.set(c.id, c.creditRating);
+  for (const c of ctx.prevActivePrivateFirms) if (!ratingById.has(c.id)) ratingById.set(c.id, c.creditRating);
+  return standingPfeChargeUSD(derivativesBookOf(ctx, state), `BANK:${ticker}`, ctx.nextWeek,
+    (referenceId) => isInvestmentGradeRating(ratingById.get(referenceId)));
 }
 
 type PartyState = 'ALIVE' | 'DEFAULTED' | 'GONE';
@@ -56,13 +60,13 @@ type PartyState = 'ALIVE' | 'DEFAULTED' | 'GONE';
  */
 export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMarketView & { partyState(p: DerivativeParty): PartyState } {
   const companyByTicker = new Map<string, { isDefaulted?: boolean; isActive: boolean; cdsSpreadBps?: number }>();
-  const companyById = new Map<string, { isDefaulted?: boolean; cdsSpreadBps?: number }>();
+  const companyById = new Map<string, { isDefaulted?: boolean; cdsSpreadBps?: number; creditRating?: CreditRating }>();
   for (const c of ctx.updatedCompanies) {
     companyByTicker.set(c.ticker, { isDefaulted: c.isDefaulted, isActive: isActiveCompany(c), cdsSpreadBps: c.cdsSpreadBps });
-    companyById.set(c.id, { isDefaulted: c.isDefaulted, cdsSpreadBps: c.cdsSpreadBps });
+    companyById.set(c.id, { isDefaulted: c.isDefaulted, cdsSpreadBps: c.cdsSpreadBps, creditRating: c.creditRating });
   }
   for (const c of ctx.prevActivePrivateFirms) {
-    if (!companyById.has(c.id)) companyById.set(c.id, { isDefaulted: c.isDefaulted, cdsSpreadBps: c.cdsSpreadBps });
+    if (!companyById.has(c.id)) companyById.set(c.id, { isDefaulted: c.isDefaulted, cdsSpreadBps: c.cdsSpreadBps, creditRating: c.creditRating });
   }
   const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
   const commodityById = new Map(ctx.updatedCommodities.map((c) => [c.id, c]));
@@ -91,6 +95,7 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
       const v = companyById.get(issuerId)?.cdsSpreadBps;
       return typeof v === 'number' && v > 0 ? v : Number.NaN;
     },
+    isInvestmentGrade: (issuerId) => isInvestmentGradeRating(companyById.get(issuerId)?.creditRating),
     recoveryRate: (r) => creditRecoveryRate(region(r)),
     commodityPrint: (commodityId, termKey) => {
       const comm = commodityById.get(commodityId);

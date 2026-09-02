@@ -47,7 +47,7 @@ import {
   repoBorrowedUSD, repoLentUSD, srfBorrowedUSD, encumberedFaceByBucket,
 } from '../../../domain/repo';
 import { WeeklyStepContext, updateBankSheet } from './context';
-import { pay, PartyRef, pendingSettlementUSD } from './settlement';
+import { pay, PartyRef, pendingSettlementUSD, institutionSpendableUSD } from './settlement';
 import {
   clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
   YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
@@ -310,7 +310,7 @@ export function runRegionalRepoSession(
   const overnightSleeveByEntity = new Map<string, number>();
   regionEntities.forEach((e) => {
     // Its balance plus what its own matured contracts are about to pay it back.
-    const availableUSD = Math.max(0, (e.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: e.id }));
+    const availableUSD = institutionSpendableUSD(ctx, e);
     const sleeveUSD = availableUSD * CASH_SLEEVE_OVERNIGHT_SHARE;
     if (sleeveUSD > 0) overnightSleeveByEntity.set(e.id, sleeveUSD);
   });

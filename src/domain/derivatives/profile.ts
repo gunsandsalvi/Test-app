@@ -30,6 +30,8 @@ export interface DerivativeMarketView {
   parRateAnnual(regionId: RegionId, termKey: string): number;
   /** Last cleared CDS spread for an issuer; NaN when none has printed. */
   cdsSpreadBps(issuerId: string): number;
+  /** Whether the reference is investment grade this week — the CEM add-on's one split. */
+  isInvestmentGrade(issuerId: string): boolean;
   recoveryRate(regionId: RegionId): number;
   /** This week's futures print for (commodity, tenor bucket); NaN when the book did not clear. */
   commodityPrint(commodityId: string, termKey: string): number;
@@ -54,6 +56,10 @@ export interface DerivativeClassProfile {
    * rule 4). The one capacity rule in registry.ts consumes it for every class alike.
    */
   pfeAddOnRate: number;
+  /** A class whose add-on depends on the CONTRACT (CDS: 5% investment-grade / 10% below, CEM's
+   *  credit-derivative row) states it here; the flat rate above is the class's default and its
+   *  capacity denominator. */
+  pfeAddOnRateFor?(c: DerivativeContract, isInvestmentGrade: boolean): number;
   /** Initial margin the A side posts to the B side at inception. 0 = uncollateralized today;
    *  turning margin on for a class is this one number, because the strike path is shared. */
   initialMarginRate: number;

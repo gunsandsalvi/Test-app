@@ -65,15 +65,24 @@ export function consumerAnnualLossRate(
   creditTierBooks: CreditTierBook[] | undefined
 ): number {
   const base = Math.max(0.005, Math.min(0.12, Math.max(0, unemploymentRate - 0.03) * 1.2));
-  if (!creditTierBooks || creditTierBooks.length === 0) {
-    return Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
-  }
+  // §7.341 — ONE curve. A region with no measured tier books used to get a second curve of its
+  // own (`min(0.09, (u − 4.5%) × 1.4)`), which is the "two consumer loss curves in one function"
+  // row: the mix is the only thing a missing measurement leaves unknown, so it takes the tier
+  // ladder's seed shares and the same curve.
   const share = (tier: string, fallback: number) =>
-    creditTierBooks.find((t) => t.tier === tier)?.shareOfHouseholds ?? fallback;
+    creditTierBooks?.find((t) => t.tier === tier)?.shareOfHouseholds ?? fallback;
   const weightedMultiplier =
     share('SUPER_PRIME', 0.25) * 0.2 + share('PRIME', 0.50) * 1.0 +
     share('NEAR_PRIME', 0.15) * 3.0 + share('SUBPRIME', 0.10) * 10.0;
   return base * weightedMultiplier;
+}
+
+/** An instalment loan loses half of what a revolving balance does on the same borrower: it
+ *  amortises, so the exposure at default is smaller and the borrower who stops paying is
+ *  further into the schedule. One owner for the ratio the seed quote and the weekly book share. */
+export const CONSUMER_TERM_LOSS_SHARE_OF_CARD = 0.5;
+export function consumerTermAnnualLossRate(cardAnnualLossRate: number): number {
+  return cardAnnualLossRate * CONSUMER_TERM_LOSS_SHARE_OF_CARD;
 }
 
 /** One margin quote for unsecured household credit: measured loss + capital + operating cost. */

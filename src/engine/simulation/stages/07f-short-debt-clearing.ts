@@ -44,7 +44,7 @@ import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from '
 import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
-import { pay, pendingSettlementUSD, PartyRef } from './settlement';
+import { pay, pendingSettlementUSD, PartyRef, institutionSpendableUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
@@ -224,8 +224,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             reservationStat: reg.policyRate * 10000 + INSTITUTIONAL_BILL_TERM_PREMIUM_BPS_PER_YEAR * b.years,
             maxHoldingUSD: sleeveUSD * bucketShare,
             fullSizeStatRange: BILL_FULL_SIZE_YIELD_RANGE_BPS,
-            maxNetPurchaseUSD: Math.max(0, (entity.cashUSD ?? 0)
-              + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })) * CASH_SLEEVE_BILL_SHARE * bucketShare,
+            maxNetPurchaseUSD: institutionSpendableUSD(ctx, entity) * CASH_SLEEVE_BILL_SHARE * bucketShare,
           });
         });
         participants.push({ id: entity.id, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
@@ -771,8 +770,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const sleeveUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.cashPct * CP_SHARE_OF_TERM_SLEEVE;
         const holdings = heldByIssuerByEntity.get(entity.id) ?? new Map<string, number>();
         if (!(sleeveUSD > 0) && holdings.size === 0) return;
-        const cashUSD = Math.max(0, (entity.cashUSD ?? 0)
-          + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })) * CP_SHARE_OF_TERM_SLEEVE;
+        const cashUSD = institutionSpendableUSD(ctx, entity) * CP_SHARE_OF_TERM_SLEEVE;
         const demand = new Map<string, ParticipantDemand>();
         // §7.340 — ONE sleeve, many bids: the per-issuer limit is a CONCENTRATION rule, not a
         // budget, and with fifty issuers in the book fifty bids at 5% each offered the same

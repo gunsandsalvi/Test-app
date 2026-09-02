@@ -21,8 +21,7 @@ import {
   stockLoanNetUSD,
 } from '../../../domain/securities-lending';
 import { WeeklyStepContext } from './context';
-import { pay } from './settlement';
-import { pendingSettlementUSD } from './settlement';
+import { pay, institutionSpendableUSD } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { entityRequiredReturn, MAX_OVERWEIGHT_MULTIPLE, FULL_SIZE_SPREAD_RANGE_BPS } from './asset-allocation';
@@ -234,9 +233,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       // A short is collateralised at the market value on the day it is struck, so a fund cannot
       // put on more of one than it can fund — its own cash, what this week's settlement already
       // owes it, and whatever its prime broker still has open to it.
-      let fundableUSD = Math.max(0, (fund.cashUSD ?? 0)
-        + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })
-        + (fund.primeBrokerageAvailableUSD ?? 0));
+      let fundableUSD = institutionSpendableUSD(ctx, fund) + Math.max(0, fund.primeBrokerageAvailableUSD ?? 0);
       const wants: { companyId: string; shares: number }[] = [];
       listed.forEach((c) => {
         const fair = c.isDefaulted ? 0 : fairValuePerShare({

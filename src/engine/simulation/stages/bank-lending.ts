@@ -61,11 +61,11 @@ export const SME_SERVICEABLE_LEVERAGE = 3.0;
 // step 2), where their tests are; re-exported here so no call site moved.
 export {
   BANK_WORKING_CAPITAL_RATIO, BANK_TARGET_ROE,
-  quoteLoanMarginBps, quoteHouseholdMarginBps, consumerAnnualLossRate,
+  quoteLoanMarginBps, quoteHouseholdMarginBps, consumerAnnualLossRate, consumerTermAnnualLossRate,
 } from '../../../domain/bank-pricing';
 import {
   BANK_WORKING_CAPITAL_RATIO, BANK_TARGET_ROE, BANK_MIN_CAPITAL_RATIO,
-  quoteLoanMarginBps, quoteHouseholdMarginBps, consumerAnnualLossRate,
+  quoteLoanMarginBps, quoteHouseholdMarginBps, consumerAnnualLossRate, consumerTermAnnualLossRate,
 } from '../../../domain/bank-pricing';
 /**
  * Return the bank needs on the equity a loan consumes — and therefore, through
@@ -397,7 +397,7 @@ export function migrateHouseholdDebtAtSeed(
     requiredReturnAnnual: seedHurdle,
   });
   const termMarginBps = quoteHouseholdMarginBps({
-    annualLossRate: lossRate * 0.5, riskWeight: CONSUMER_CREDIT_RISK_WEIGHT, operatingCostBps: CONSUMER_TERM_OPERATING_COST_BPS,
+    annualLossRate: consumerTermAnnualLossRate(lossRate), riskWeight: CONSUMER_CREDIT_RISK_WEIGHT, operatingCostBps: CONSUMER_TERM_OPERATING_COST_BPS,
     requiredReturnAnnual: seedHurdle,
   });
 
@@ -833,7 +833,7 @@ export function runBankHouseholdLending(
       const rate = policyRate + (pl.marginBps ?? 500) / 10000;
       const interestUSD = (pl.principalUSD * rate) / 52;
       const scheduledUSD = annuityWeeklyPrincipalUSD(pl.principalUSD, rate, pl.wamWeeks ?? CONSUMER_TERM_SEED_WAM_WEEKS);
-      const lossUSD = (pl.principalUSD * unsecuredLossRateAnnual * 0.5) / 52;
+      const lossUSD = (pl.principalUSD * consumerTermAnnualLossRate(unsecuredLossRateAnnual)) / 52;
       interestWeeklyUSD += interestUSD;
       principalWeeklyUSD += scheduledUSD;
       debtServicePrincipalWeeklyUSD += scheduledUSD;
@@ -846,7 +846,7 @@ export function runBankHouseholdLending(
       if (grantedUSD > 0) {
         const total = pl.principalUSD + grantedUSD;
         pl.marginBps = quoteHouseholdMarginBps({
-          annualLossRate: unsecuredLossRateAnnual * 0.5, riskWeight: CONSUMER_CREDIT_RISK_WEIGHT,
+          annualLossRate: consumerTermAnnualLossRate(unsecuredLossRateAnnual), riskWeight: CONSUMER_CREDIT_RISK_WEIGHT,
           operatingCostBps: CONSUMER_TERM_OPERATING_COST_BPS, requiredReturnAnnual: bankHurdle,
         });
         pl.wamWeeks = Math.round((((pl.wamWeeks ?? CONSUMER_TERM_SEED_WAM_WEEKS) - 1) * pl.principalUSD + CONSUMER_TERM_WEEKS * grantedUSD) / Math.max(1, total));

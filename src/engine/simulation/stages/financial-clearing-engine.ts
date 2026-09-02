@@ -565,6 +565,14 @@ export function packedClearingBytes(n: number, pCount: number): number {
  * streak for a week — a cap, never a level (§1.15).
  */
 let damperStreakByRawId = new Map<string, number>();
+/** §7.341 — the streak an instrument carries into this week's clearing, for a buyer sizing its
+ *  worst case: the cap a name bound k weeks running gets is (1+k)× the flat one, and a budget
+ *  struck against the flat cap overspends by exactly the widening (the small-cap ETF ran
+ *  overdrawn by ~10M a week from week 15 for that reason). */
+export function damperStreakOf(rawId: string): number {
+  return damperStreakByRawId.get(rawId) ?? 0;
+}
+
 export function setDamperStreaks(byTaggedId: Record<string, number> | undefined): void {
   const next = new Map<string, number>();
   Object.entries(byTaggedId ?? {}).forEach(([tagged, streak]) => {

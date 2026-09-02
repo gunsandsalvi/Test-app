@@ -59,7 +59,7 @@ import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
  */
 const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42 };
 
-import { isActiveCompany } from '../../domain/company';
+import { isActiveCompany, managedEntityIdsOf } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
 import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashUSD, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../domain/central-bank';
 import { reconcileEmploymentView } from './stages/labor-market';
@@ -1003,7 +1003,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const isManager = comp.financialStatementProfile === 'ASSET_MANAGER';
       const isInsurer = comp.financialStatementProfile === 'INSURER';
       if (!isManager && !isInsurer) return;
-      const entity = institutionalEntities.find(e => e.id === comp.id);
+      const entity = institutionalEntities.find(e => e.id === managedEntityIdsOf(comp)[0]);
       if (!entity) return;
       if (isManager && !((comp.managementFeeRate ?? 0) > 0)) return;
       // A manager's revenue is a fee on the book it runs; an insurer's is the premium its own

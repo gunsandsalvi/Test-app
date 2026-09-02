@@ -224,6 +224,47 @@ export function pendingSettlementUSD(ctx: WeeklyStepContext, party: PartyRef): n
   return ctx.pendingNetById[partyId(party)] ?? 0;
 }
 
+/**
+ * §7.341 — STOCK-LOAN COLLATERAL A LENDER HOLDS IS NOT ITS MONEY TO SPEND. A fund that lends
+ * shares receives the borrower's cash and must hand it back when the shares return; it sits in
+ * `cashUSD` beside the fund's own balance, and every book that sized a bid on `cash + pending`
+ * spent it — the small-cap ETF bought equity with it, redeemed it away in kind, and then ran
+ * ~10M under for fifteen weeks returning collateral it no longer had. Memoised per loan-book
+ * array (the lending stage rebuilds the array when it writes).
+ */
+const collateralHeldByBook = new WeakMap<object, Map<string, number>>();
+export function stockLoanCollateralHeldUSD(ctx: WeeklyStepContext, entityId: string): number {
+  let heldUSD = 0;
+  for (const reg of Object.values(ctx.updatedRegions)) {
+    const book = reg?.securityLoanBook;
+    if (!book || book.length === 0) continue;
+    let byLender = collateralHeldByBook.get(book);
+    if (!byLender) {
+      byLender = new Map<string, number>();
+      for (const loan of book) {
+        if (loan.lender.kind !== 'INSTITUTION') continue;
+        byLender.set(loan.lender.id, (byLender.get(loan.lender.id) ?? 0) + Math.max(0, loan.collateralUSD));
+      }
+      collateralHeldByBook.set(book, byLender);
+    }
+    heldUSD += byLender.get(entityId) ?? 0;
+  }
+  return heldUSD;
+}
+
+/** What an institution can put behind a bid this week: its balance, plus what settlement already
+ *  owes it, less the stock-loan collateral it is only holding. Never negative. */
+export function institutionSpendableUSD(ctx: WeeklyStepContext, entity: { id: string; cashUSD?: number }, withPending = true): number {
+  const pendingUSD = withPending ? pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }) : 0;
+  return Math.max(0, (entity.cashUSD ?? 0) + pendingUSD - stockLoanCollateralHeldUSD(ctx, entity.id));
+}
+
+/** The pending figure the class-budget rule takes, with the held collateral netted as if it were
+ *  already owed — which it is. */
+export function institutionUnsettledLessCollateralUSD(ctx: WeeklyStepContext, entityId: string): number {
+  return pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entityId }) - stockLoanCollateralHeldUSD(ctx, entityId);
+}
+
 export interface SettlementReport {
   instructions: number;
   grossUSD: number;
