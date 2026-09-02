@@ -28,6 +28,12 @@ export function formatMonthShort(week: number): string {
   return MONTHS[dateOfWeek(week).getUTCMonth()];
 }
 
+/** "Apr 27" — a due date in a narrow column. */
+export function formatMonthYear(week: number): string {
+  const d = dateOfWeek(week);
+  return `${MONTHS[d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}`;
+}
+
 /** A span of weeks as a duration in months or years, never weeks: "3 months", "1.5 years". */
 export function formatSpan(weeks: number): string {
   if (weeks < 4) return 'under a month';

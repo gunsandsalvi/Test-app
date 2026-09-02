@@ -8,8 +8,18 @@ import { useState } from 'react';
 import { FunctionModule } from '../fn';
 import { Card, Hint, Link, Table, Tabs, T } from '../ui';
 import { money, pctLevel, count } from '../format';
-import { World, ObjectRef, companyOf, institutionOf, regionOf, holdersOf, bookOf, sovereignHoldersOf, refOfIdentifier, labelOf } from '../world';
+import { World, companyOf, institutionOf, regionOf, holdersOf, bookOf, sovereignHoldersOf } from '../world';
+import { refOfIdentifier, labelOf } from '../objects';
+import { instrumentName } from '../objects/book';
 import { isActiveCompany } from '../../domain/company';
+
+/** A sovereign instrument id's tenor, read aloud: `…-t10` → "10y", `…-b13` → "13w bill". */
+function tenorWord(id: string): string {
+  const tail = id.replace(/^[A-Z]+[_-](?:[A-Z]+[_-])?(?:GOV[_-]?)?/i, '');
+  const t = tail.match(/^t(\d+)$/i); if (t) return `${t[1]}y`;
+  const b = tail.match(/^b(\d+)$/i); if (b) return `${b[1]}w bill`;
+  return tail.replace(/_/g, ' ').toLowerCase();
+}
 
 function typeWord(t: string): string {
   return ({ EQUITY: 'equity', CORP_BOND: 'bond', LEVERAGED_LOAN: 'loan', COMMERCIAL_PAPER: 'cp', GOV_BOND: 'sovereign', ETF_SHARE: 'etf', PE_FUND_INTEREST: 'pe interest', BANK_FACILITY: 'facility' } as Record<string, string>)[t] ?? t.toLowerCase();
@@ -68,10 +78,10 @@ function InstitutionHoldings({ world, id, nav }: { world: World; id: string; nav
       <Table
         rows={sorted} keyOf={(r) => `${r.instrumentId}:${r.instrumentType}:${r.region}`} sortKey={sort} onSort={setSort}
         columns={[
-          { key: 'name', label: 'name', sortable: true, render: (r) => { const ref = refOfIdentifier(world, r.instrumentId) ?? (r.instrumentType === 'GOV_BOND' ? refOfIdentifier(world, r.region) : undefined); return ref ? <Link to={ref} nav={nav}>{ref.type === 'region' ? `${r.region} ${r.instrumentId.replace(/^.*?_/, '')}` : labelOf(world, ref).ticker}</Link> : r.instrumentId; } },
-          { key: 'usd', label: 'value', sortable: true, render: (r) => money(r.usd) },
-          { key: 'nav', label: '% assets', render: (r) => (nav_ > 0 ? (100 * r.usd / nav_).toFixed(1) : '—') },
-          { key: 'type', label: 'type', sortable: true, render: (r) => typeWord(r.instrumentType) },
+          { key: 'name', label: 'name', sortable: true, width: 1.7, render: (r) => { const ref = refOfIdentifier(world, r.instrumentId) ?? (r.instrumentType === 'GOV_BOND' ? refOfIdentifier(world, r.region) : undefined); return ref ? <Link to={ref} nav={nav}>{ref.type === 'region' ? `${r.region} ${tenorWord(r.instrumentId)}` : instrumentName(world, r.instrumentId)}</Link> : r.instrumentId; } },
+          { key: 'usd', label: 'value', sortable: true, width: 0.9, render: (r) => money(r.usd) },
+          { key: 'nav', label: '% of', width: 0.7, render: (r) => (nav_ > 0 ? (100 * r.usd / nav_).toFixed(1) : '—') },
+          { key: 'type', label: 'type', sortable: true, width: 1.1, render: (r) => typeWord(r.instrumentType) },
         ]}
       />
     )}
@@ -105,8 +115,9 @@ function RegionHolders({ world, id, nav }: { world: World; id: string; nav: impo
 
 export const holders: FunctionModule = {
   name: 'holders',
-  appliesTo: ['company', 'institution', 'region'],
-  blurb: 'who holds it · what it holds',
+  appliesTo: ['company', 'region', 'curve'],
+  blurb: 'who holds it',
+  argKey: 'tab',
   render({ world, ref, args, nav }) {
     if (ref.type === 'company') return <CompanyHolders world={world} id={ref.id} nav={nav} tab={args.tab ?? ''} />;
     if (ref.type === 'institution') return <InstitutionHoldings world={world} id={ref.id} nav={nav} />;
@@ -114,6 +125,5 @@ export const holders: FunctionModule = {
   },
 };
 
-export const holdings: FunctionModule = { ...holders, name: 'holdings', blurb: 'the book, position by position' };
+export const holdings: FunctionModule = { ...holders, name: 'holdings', appliesTo: ['institution'], blurb: 'the book, position by position' };
 
-export type { ObjectRef };

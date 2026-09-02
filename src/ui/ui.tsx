@@ -113,10 +113,10 @@ export function Empty({ children }: { children: ReactNode }) {
 
 /** A sortable, statement-style table: first column left, the rest right-aligned numerals. */
 export function Table<R>({ columns, rows, sortKey, onSort, keyOf }: {
-  columns: { key: string; label: string; render: (r: R) => ReactNode; sortable?: boolean }[];
+  columns: { key: string; label: string; render: (r: R) => ReactNode; sortable?: boolean; width?: number }[];
   rows: R[]; sortKey?: string; onSort?: (k: string) => void; keyOf: (r: R) => string;
 }) {
-  const grid = `minmax(0, 1.4fr) ${columns.slice(1).map(() => 'minmax(0, 1fr)').join(' ')}`;
+  const grid = columns.map((c, i) => `minmax(0, ${c.width ?? (i === 0 ? 1.4 : 1)}fr)`).join(' ');
   return (
     <Card style={{ overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: grid, gap: 6, alignItems: 'center', height: 34, padding: '0 12px', background: '#161c25' }}>

@@ -1,7 +1,7 @@
 /**
- * AU — THE WORLD, READ-ONLY. `GameState` through typed selectors: the resolver (a typed query
- * becomes an object), the object registry's data side, and the TAPE — the UI's own recorder for
- * series the engine keeps only as a snapshot (§5-AU: no engine state grows for a view).
+ * AU — THE WORLD, READ-ONLY. `GameState` through typed selectors, and the TAPE — the UI's own
+ * recorder for series the engine keeps only as a snapshot (§5-AU: no engine state grows for a
+ * view). Object resolution lives in `objects/` (the registry); this file knows the state.
  *
  * Nothing here writes engine state.
  */
@@ -10,13 +10,9 @@ import { GameState, Company, InstitutionalEntity, Region, RegionId } from '../ty
 import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/world';
 import { bookHeadOf } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
-import { isActiveCompany } from '../domain/company';
 
-export type ObjectType = 'company' | 'institution' | 'region';
-export interface ObjectRef { type: ObjectType; id: string }
-export const refKey = (r: ObjectRef): string => `${r.type}:${r.id}`;
-export const sameRef = (a: ObjectRef | undefined, b: ObjectRef | undefined): boolean =>
-  !!a && !!b && a.type === b.type && a.id === b.id;
+export type { ObjectRef, ObjectType, ObjectLabel, Series } from './types';
+export { refKey, sameRef } from './types';
 
 /** Series the engine keeps only as a snapshot, recorded by the UI each week. */
 export interface Tape {
@@ -36,34 +32,100 @@ export function worldOf(state: GameState, tape: Tape): World {
   return { state, v2: ensureV2(state), tape };
 }
 
-/** One recording per week end: the regional macro prints and every institution's book size. */
+/** The week shown on screen: the engine's count less the burn-in the world was handed over with. */
+export const displayWeek = (state: GameState, week?: number): number =>
+  (week ?? state.currentWeek) - (state.burnInWeeks ?? 0);
+
+/** One recording per week end: the regional prints, every market, pool, cohort, occupation,
+ *  curve tenor, central bank line, bank and institution the engine keeps only as a snapshot. */
 export function recordTape(tape: Tape, state: GameState): void {
   const week = state.currentWeek;
   if (tape.weeks.length > 0 && tape.weeks[tape.weeks.length - 1] === week) return;
   tape.weeks.push(week);
-  const put = (key: string, v: number) => {
+  const put = (key: string, v: number | undefined) => {
     let arr = tape.series.get(key);
     if (!arr) { arr = new Array(tape.weeks.length - 1).fill(NaN); tape.series.set(key, arr); }
     while (arr.length < tape.weeks.length - 1) arr.push(NaN);
-    arr.push(Number.isFinite(v) ? v : NaN);
+    arr.push(v !== undefined && Number.isFinite(v) ? v : NaN);
   };
+  let firms = 0; let defaults = 0;
+  for (const c of state.companies) { if (!c.isDefaulted && !c.mergerAcquired) firms++; if (c.defaultedWeek === week) defaults++; }
+  put('world:active firms', firms);
+  put('world:defaults', defaults);
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     if (!reg) return;
     put(`region:${r}:unemployment`, reg.unemploymentRate);
     put(`region:${r}:policy`, reg.policyRate);
-    put(`region:${r}:10y`, reg.zeroRates?.tenor10Y ?? NaN);
-    put(`region:${r}:2y`, reg.zeroRates?.tenor2Y ?? NaN);
+    put(`region:${r}:10y`, reg.zeroRates?.tenor10Y);
+    put(`region:${r}:2y`, reg.zeroRates?.tenor2Y);
     put(`region:${r}:inflation`, reg.inflation);
     put(`region:${r}:repo`, reg.repoRateAnnual);
-    put(`region:${r}:bank nim`, reg.bankingSector?.netInterestMarginPct ?? NaN);
-    put(`region:${r}:bank capital`, reg.bankingSector?.bankCapitalRatio ?? NaN);
+    put(`region:${r}:gdp`, reg.derivedNominalGdpUSD ?? reg.estimatedNominalGdpUSD);
+    put(`region:${r}:wage growth`, reg.wageGrowth);
+    put(`region:${r}:bank nim`, reg.bankingSector?.netInterestMarginPct);
+    put(`region:${r}:bank capital`, reg.bankingSector?.bankCapitalRatio);
+    put(`region:${r}:household deposits`, reg.householdState?.depositsUSD);
+    put(`region:${r}:household net worth`, reg.householdState?.netWorthUSD);
+    put(`region:${r}:government revenue`, reg.governmentRevenueUSD);
+    put(`region:${r}:government outlays`, reg.governmentOutlaysUSD ?? reg.governmentSpendingWeeklyUSD);
+    put(`region:${r}:tightness`, reg.laborMarketTightness);
+    const z = reg.zeroRates;
+    if (z) { put(`curve:${r}:3M`, z.tenor3M); put(`curve:${r}:2Y`, z.tenor2Y); put(`curve:${r}:5Y`, z.tenor5Y); put(`curve:${r}:10Y`, z.tenor10Y); put(`curve:${r}:30Y`, z.tenor30Y); }
+    const cb = reg.centralBankSheet;
+    if (cb) {
+      put(`centralbank:${r}:treasury account`, cb.treasuryAccountUSD);
+      put(`centralbank:${r}:sovereign book`, Object.values(cb.sovereignHoldingsByTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0));
+      put(`centralbank:${r}:currency`, cb.currencyInCirculationUSD);
+      put(`centralbank:${r}:reserves`, reg.bankingSector?.centralBankReservesUSD);
+    }
+    Object.entries(reg.categoryDemand).forEach(([su, d]) => {
+      if (!d) return;
+      put(`market:${r}:${su}:price`, d.unitPriceUSD);
+      put(`market:${r}:${su}:supplied`, d.totalUnitsSuppliedThisWeek);
+      put(`market:${r}:${su}:demanded`, d.totalUnitsDemandedThisWeek);
+      put(`market:${r}:${su}:demand usd`, d.demandLevelAnnualUSD);
+    });
+    (reg.smePools ?? []).forEach((p) => {
+      put(`pool:${r}:${p.industry}:revenue`, p.annualRevenueUSD);
+      put(`pool:${r}:${p.industry}:margin`, p.marginPct);
+      put(`pool:${r}:${p.industry}:employment`, p.employment);
+      put(`pool:${r}:${p.industry}:default rate`, p.defaultRateAnnualPct);
+      put(`pool:${r}:${p.industry}:cash`, p.cashUSD);
+    });
+    (reg.householdState?.cohorts ?? []).forEach((c) => {
+      const k = `cohort:${r}:${c.occupation}:${c.tier}`;
+      put(`${k}:budget`, c.consumptionBudgetUSD);
+      put(`${k}:disposable income`, c.disposableIncomeUSD);
+      put(`${k}:employed`, c.employedCount);
+      put(`${k}:savings`, c.savingsUSD);
+    });
+    Object.entries(reg.occupationPools ?? {}).forEach(([occ, p]) => {
+      put(`occupation:${r}:${occ}:wage index`, p.wageIndex);
+      put(`occupation:${r}:${occ}:employed`, p.employed);
+      put(`occupation:${r}:${occ}:vacancies`, p.vacancies);
+    });
   });
   state.institutionalEntities.forEach((e) => {
     put(`institution:${e.id}:assets`, e.totalAssetsUSD);
-    put(`institution:${e.id}:cash`, e.cashUSD ?? NaN);
+    put(`institution:${e.id}:cash`, e.cashUSD);
     put(`institution:${e.id}:price`, e.stockPrice);
+    put(`institution:${e.id}:equity`, e.equityCapitalUSD);
   });
+  state.companies.forEach((c) => {
+    if (!c.isBankEntity || !c.bankBalanceSheet) return;
+    const s = c.bankBalanceSheet;
+    put(`bank:${c.id}:capital ratio`, s.bankCapitalRatio);
+    put(`bank:${c.id}:nim`, s.netInterestMarginPct);
+    put(`bank:${c.id}:deposits`, s.depositsUSD + (s.corporateDepositsUSD ?? 0) + (s.institutionalDepositsUSD ?? 0) + (s.smeDepositsUSD ?? 0));
+    put(`bank:${c.id}:reserves`, s.cashReservesUSD);
+    put(`bank:${c.id}:wholesale`, s.wholesaleFundingUSD);
+    put(`bank:${c.id}:loans`, s.businessLoanBookUSD + s.consumerLoanBookUSD);
+  });
+  const boundByBook = new Map<string, number>();
+  (state.lastWeekDamperBoundIds ?? []).forEach((id) => { const book = id.split(':')[0]; boundByBook.set(book, (boundByBook.get(book) ?? 0) + 1); });
+  boundByBook.forEach((n, book) => put(`book:${book}:bound`, n));
+  put('world:bound', (state.lastWeekDamperBoundIds ?? []).length);
 }
 
 export function tapeSeries(world: World, key: string): { weeks: number[]; values: number[] } {
@@ -71,7 +133,7 @@ export function tapeSeries(world: World, key: string): { weeks: number[]; values
   return { weeks: world.tape.weeks.slice(0, values.length), values };
 }
 
-// ---- the objects ----
+// ---- the objects the state holds directly ----
 
 export function companyOf(world: World, id: string): Company | undefined {
   return world.state.companies.find((c) => c.id === id);
@@ -81,69 +143,6 @@ export function institutionOf(world: World, id: string): InstitutionalEntity | u
 }
 export function regionOf(world: World, id: string): Region | undefined {
   return world.state.regions[id as RegionId];
-}
-
-export function objectOf(world: World, ref: ObjectRef): Company | InstitutionalEntity | Region | undefined {
-  if (ref.type === 'company') return companyOf(world, ref.id);
-  if (ref.type === 'institution') return institutionOf(world, ref.id);
-  return regionOf(world, ref.id);
-}
-
-export interface ObjectLabel { ticker: string; name: string; kind: string; region?: string }
-
-export function labelOf(world: World, ref: ObjectRef): ObjectLabel {
-  const o = objectOf(world, ref);
-  if (!o) return { ticker: ref.id, name: 'gone', kind: ref.type };
-  if (ref.type === 'company') {
-    const c = o as Company;
-    const kind = c.isBankEntity ? 'bank' : c.institutionalRole ? 'manager' : c.listingStatus === 'PRIVATE' ? 'private company' : 'company';
-    return { ticker: c.ticker, name: c.name, kind, region: c.region };
-  }
-  if (ref.type === 'institution') {
-    const e = o as InstitutionalEntity;
-    return { ticker: e.ticker ?? e.id, name: e.name, kind: e.entityType.toLowerCase().replace(/_/g, ' '), region: e.region };
-  }
-  const r = o as Region;
-  return { ticker: r.id, name: r.name, kind: 'region' };
-}
-
-/** A ticker or id anywhere on screen resolves to its object, or to nothing. */
-export function refOfIdentifier(world: World, s: string | undefined | null): ObjectRef | undefined {
-  if (!s) return undefined;
-  const q = s.trim();
-  if (!q) return undefined;
-  const region = world.state.regions[q as RegionId];
-  if (region) return { type: 'region', id: q };
-  const byId = world.state.companies.find((c) => c.id === q) ?? world.state.companies.find((c) => c.ticker === q);
-  if (byId) return { type: 'company', id: byId.id };
-  const e = world.state.institutionalEntities.find((x) => x.id === q) ?? world.state.institutionalEntities.find((x) => x.ticker === q);
-  if (e) return { type: 'institution', id: e.id };
-  return undefined;
-}
-
-export interface SearchHit { ref: ObjectRef; label: ObjectLabel; score: number }
-
-/** The command bar's matches: exact ticker first, then ticker prefix, then a word of the name. */
-export function searchObjects(world: World, query: string, limit = 12): SearchHit[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  const hits: SearchHit[] = [];
-  const consider = (ref: ObjectRef, ticker: string, name: string, gone: boolean) => {
-    const t = ticker.toLowerCase(); const n = name.toLowerCase();
-    let score = 0;
-    if (t === q) score = 100;
-    else if (t.startsWith(q)) score = 80 - (t.length - q.length);
-    else if (n.startsWith(q)) score = 60;
-    else if (n.split(/\s+/).some((w) => w.startsWith(q))) score = 40;
-    else if (n.includes(q)) score = 20;
-    if (score === 0) return;
-    if (gone) score -= 30;
-    hits.push({ ref, label: labelOf(world, ref), score });
-  };
-  REGION_IDS.forEach((r) => { const reg = world.state.regions[r]; if (reg) consider({ type: 'region', id: r }, r, reg.name, false); });
-  world.state.companies.forEach((c) => consider({ type: 'company', id: c.id }, c.ticker, c.name, !isActiveCompany(c)));
-  world.state.institutionalEntities.forEach((e) => consider({ type: 'institution', id: e.id }, e.ticker ?? e.id, e.name, !!e.isDefaulted));
-  return hits.sort((a, b) => b.score - a.score || a.label.ticker.localeCompare(b.label.ticker)).slice(0, limit);
 }
 
 // ---- histories the engine keeps ----
@@ -218,4 +217,26 @@ export function sovereignHoldersOf(world: World, regionId: string): { holderId: 
     }
   });
   return [...out.entries()].map(([holderId, usd]) => ({ holderId, usd })).sort((a, b) => b.usd - a.usd);
+}
+
+/** The bank lines to one borrower, across every bank's book. */
+export function bankLinesTo(world: World, borrowerId: string): { bankId: string; principalUSD: number; marginBps: number; maturityWeek: number; status: string }[] {
+  const out: { bankId: string; principalUSD: number; marginBps: number; maturityWeek: number; status: string }[] = [];
+  world.state.companies.forEach((b) => {
+    const sheet = b.bankBalanceSheet;
+    if (!b.isBankEntity || !sheet) return;
+    (sheet.businessLoans ?? []).forEach((l) => {
+      if (l.borrowerId !== borrowerId) return;
+      out.push({ bankId: b.id, principalUSD: l.principalUSD, marginBps: l.marginBps, maturityWeek: l.originationWeek + l.termWeeks, status: l.status });
+    });
+  });
+  return out;
+}
+
+/** The derivative contracts a party is on either side of. */
+export function contractsOf(world: World, party: { kind: string; key: string }): import('../domain/derivatives/contract').DerivativeContract[] {
+  const same = (p: { kind: string; ticker?: string; id?: string; region?: string }) =>
+    (p.kind === party.kind || (party.kind === 'BANK' && (p.kind === 'BANK' || p.kind === 'BANK_SECURITIES' || p.kind === 'BANK_CREDIT')))
+    && ((p.ticker ?? p.id ?? p.region) === party.key);
+  return (world.state.derivativesBook ?? []).filter((k) => same(k.a as never) || same(k.b as never));
 }

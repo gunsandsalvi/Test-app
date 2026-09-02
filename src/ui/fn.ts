@@ -4,7 +4,8 @@
  */
 
 import { ReactNode } from 'react';
-import { ObjectRef, ObjectType, World } from './world';
+import { ObjectRef, ObjectType } from './types';
+import { World } from './world';
 import { Nav } from './ui';
 
 export interface FnProps {
@@ -19,5 +20,8 @@ export interface FunctionModule {
   appliesTo: ObjectType[];
   /** One line for the command bar's function chips. */
   blurb: string;
+  /** What a trailing word means to this function ("series", "tab", "path"); the shell passes the
+   *  rest of the command under this key. */
+  argKey?: string;
   render(props: FnProps): ReactNode;
 }

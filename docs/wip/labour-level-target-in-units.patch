@@ -1,0 +1,51 @@
+diff --git a/src/domain/company.ts b/src/domain/company.ts
+index 3f99292..0203d69 100644
+--- a/src/domain/company.ts
++++ b/src/domain/company.ts
+@@ -528,6 +528,9 @@ export interface Company {
+   /** §7.345 — units sold last week by line (stage 08 carries it from the week's update) and the
+    *  sales this management EXPECTS by line (owner: stage 05, where production is decided). */
+   lastWeekSalesUnitsBySubUnit?: Record<string, number>;
++  /** §7.348 — last week's plant utilisation (units produced / plant capacity), the PHYSICAL
++   *  level the labour rule staffs to. Undefined until the first production week. */
++  lastWeekUtilisation?: number;
+   expectedSalesUnitsBySubUnit?: Record<string, number>;
+   outputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }>;
+   // 1$ is 1$ Phase 2/6: real input inventory, keyed by the input sub-unit category (e.g.
+diff --git a/src/engine/simulation/stages/labor-market.ts b/src/engine/simulation/stages/labor-market.ts
+index d66deea..b86f46d 100644
+--- a/src/engine/simulation/stages/labor-market.ts
++++ b/src/engine/simulation/stages/labor-market.ts
+@@ -332,8 +332,16 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
+       // instant multiplier) and a double-count: the firm's OWN learning already reaches its
+       // labour demand through the netting (the flow) and the ceiling below (the cap). Both
+       // sides of this ratio are struck at the BASELINE vintage, deliberately.
+-      const outputNeedHeads = baselineRevPerHeadUSD > 0
+-        ? Math.min((realRevenueUSD * demandPull) / baselineRevPerHeadUSD, productiveHeadsCap)
++      // §7.348 — THE LEVEL TARGET IS PHYSICAL. The dollar form above (revenue deflated by the
++      // firm's own price, over baseline revenue per head) read a repriced world as an overstaffed
++      // one: with demand budget-anchored, a price ×2.5 leaves nominal revenue where it was, so
++      // "real revenue" fell 60% while the plant made and sold the same UNITS — and every firm shed
++      // toward a target 40% of its books with no vacancy anywhere (the burn-in's cause trace).
++      // The plant's own utilisation is the level: heads = full staffing × (units it plans to make
++      // / units it can make), pulled up by the demand its markets left unserved and capped by
++      // the plant. No dollars, no deflator. The first week (no record yet) keeps the books.
++      const outputNeedHeads = comp.lastWeekUtilisation !== undefined
++        ? Math.min(productiveHeadsCap * comp.lastWeekUtilisation * demandPull, productiveHeadsCap)
+         : current;
+       // §7.345 — A CUT THAT LOWERS EARNINGS CANNOT CLOSE AN EARNINGS SHORTFALL. The affordability
+       // rule fired a head for every wage of shortfall, and outranked the level target — so a
+diff --git a/src/engine2/stage08-back.ts b/src/engine2/stage08-back.ts
+index 45c3c36..cf488ca 100644
+--- a/src/engine2/stage08-back.ts
++++ b/src/engine2/stage08-back.ts
+@@ -2170,6 +2170,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
+     comp.expectedEbitdaUSD = weekUpdate?.expectedEbitdaUSD ?? comp.expectedEbitdaUSD;
+     // §7.345 — last week's sales by line, for next week's production decision (no update = no sales).
+     comp.lastWeekSalesUnitsBySubUnit = weekUpdate?.salesUnitsBySubUnit ?? {};
++    comp.lastWeekUtilisation = (weekUpdate?.plantCapacityUnitsThisWeek ?? 0) > 0
++      ? Math.min(1, (weekUpdate?.producedUnitsThisWeek ?? 0) / (weekUpdate!.plantCapacityUnitsThisWeek as number))
++      : comp.lastWeekUtilisation;
+ 
+     comp.unfilledVacancyShare = weekUpdate?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0;
+ 

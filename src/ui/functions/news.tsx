@@ -8,7 +8,9 @@ import { ReactNode } from 'react';
 import { FunctionModule } from '../fn';
 import { Card, Empty, Hint, Link, Muted, T, mono } from '../ui';
 import { formatDate } from '../calendar';
-import { World, ObjectRef, refOfIdentifier, labelOf } from '../world';
+import { World } from '../world';
+import { ObjectRef } from '../types';
+import { refOfIdentifier, labelOf, storyMentions, OBJECT_TYPES } from '../objects';
 import { NewsItem } from '../../domain/events';
 import { Nav } from '../ui';
 
@@ -31,18 +33,10 @@ export function Linked({ text, world, nav }: { text: string; world: World; nav: 
   return <>{parts}</>;
 }
 
-function mentions(item: NewsItem, ref: ObjectRef, world: World): boolean {
-  if (item.refs?.some((r) => r.type === ref.type && r.id === ref.id)) return true;
-  if (ref.type === 'region') return item.impactRegion === ref.id;
-  const label = labelOf(world, ref);
-  if (item.affectedTicker && item.affectedTicker === label.ticker) return true;
-  return new RegExp(`\\b${label.ticker}\\b`).test(item.title + ' ' + item.description);
-}
-
 /** The stories for an object (undefined = the whole world), newest week first, material first within a week. */
 export function storiesFor(world: World, ref?: ObjectRef, limit = 60): NewsItem[] {
   const feed = world.state.newsFeed ?? [];
-  const mine = ref ? feed.filter((n) => mentions(n, ref, world)) : feed;
+  const mine = ref ? feed.filter((n) => storyMentions(world, ref, n)) : feed;
   return [...mine].sort((a, b) => b.week - a.week || (b.materialityUSD ?? 0) - (a.materialityUSD ?? 0) || Number(b.urgent) - Number(a.urgent)).slice(0, limit);
 }
 
@@ -68,7 +62,7 @@ export function Story({ item, world, nav, compact }: { item: NewsItem; world: Wo
 
 export const news: FunctionModule = {
   name: 'news',
-  appliesTo: ['company', 'institution', 'region'],
+  appliesTo: OBJECT_TYPES,
   blurb: 'what happened, and why',
   render({ world, ref, nav }) {
     const items = storiesFor(world, ref);

@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { FunctionModule } from '../fn';
 import { Card, Hint, Link, Muted, Num, T, mono } from '../ui';
 import { money, num, pct } from '../format';
-import { objectOf, refOfIdentifier } from '../world';
+import { objectOf, refOfIdentifier, OBJECT_TYPES } from '../objects';
 
 const MONEY_KEY = /USD$|^cash$|^totalDebt$|^marketCap$|Revenue$|^ebitda$|^ebit$|^netIncome$|^capex$|Capex$|^currentLiabilities$|^rndExpense$|^treasuryHoldings$/;
 const RATE_KEY = /Rate$|Ratio$|Pct$|Share$|Margin$|^leverage$|Growth$|^inflation$|^coreInflation$|^nairu$|^savingsRate$/;
@@ -58,8 +58,9 @@ function Scalar({ k, v, world, nav }: { k: string; v: unknown; world: import('..
 
 export const all: FunctionModule = {
   name: 'all',
-  appliesTo: ['company', 'institution', 'region'],
+  appliesTo: OBJECT_TYPES,
   blurb: 'every stored field',
+  argKey: 'path',
   render({ world, ref, args, nav }) {
     return <AllView world={world} refv={ref} args={args} nav={nav} />;
   },

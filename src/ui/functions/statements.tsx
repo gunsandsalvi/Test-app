@@ -10,7 +10,7 @@ import { FunctionModule } from '../fn';
 import { Card, Hint, KV, Tabs, T, mono } from '../ui';
 import { statementUSD, pct, pctLevel, ratio, changePct, money } from '../format';
 import { formatDate, quarterLabel } from '../calendar';
-import { World, ObjectRef, companyOf, institutionOf, regionOf, bookOf } from '../world';
+import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
 import { bankRwaUSD } from '../../domain/bank-pricing';
 
 interface Line { label: string; usd?: number; prior?: number; total?: boolean; text?: string }
@@ -266,13 +266,13 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
 
 export const statements: FunctionModule = {
   name: 'statements',
-  appliesTo: ['company', 'institution', 'region'],
+  appliesTo: ['company', 'institution', 'region', 'centralbank'],
   blurb: 'P&L · balance sheet · cash flow',
+  argKey: 'tab',
   render({ world, ref, args, nav }) {
     if (ref.type === 'company') { const c = companyOf(world, ref.id); return c ? <CompanyStatements world={world} c={c} tab={args.tab ?? ''} nav={nav} /> : null; }
     if (ref.type === 'institution') { const e = institutionOf(world, ref.id); return e ? <InstitutionStatements world={world} e={e} /> : null; }
-    const r = regionOf(world, ref.id); return r ? <RegionStatements world={world} r={r} tab={args.tab ?? ''} nav={nav} /> : null;
+    const r = regionOf(world, ref.id); return r ? <RegionStatements world={world} r={r} tab={ref.type === 'centralbank' && !args.tab ? 'treasury' : args.tab ?? ''} nav={nav} /> : null;
   },
 };
 
-export type { ObjectRef };
