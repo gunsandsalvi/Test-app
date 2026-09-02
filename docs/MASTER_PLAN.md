@@ -1003,11 +1003,17 @@ defect is found, it becomes a step at its logical place. The scoreboard (§7.378
 judge; every step names the line it closes.
 
 **Part 0 — the week's cost (§7.380: 9.1 s at week 4 and rising; four stages are 73% of it).**
-0. **07i-commodity-futures (25%) and fx-hedging (19%)** — a per-contract walk where a per-instrument
-   one would do (§7.328's row growth is the driver); then 05-unit-bidding (16%) and
-   08-company-fundamentals (13%). Profile again after each (`PROFILE=1 WEEKS=4`, 30 s, allowed at
-   any time — a profile is not a run). The state-growth drift (weeks 1–4: 4.4 → 9.1 s) is measured
-   here too before the long-run step 25 needs it.
+0. **FINISH THE DERIVATIVE MERGE — one class, one stage.** DRV (§7.337) unified the CONTRACT (one
+   type, one book, one lifecycle, one hedging arithmetic, four profiles behind a registry) but left
+   four market STAGES standing — `07i-commodity-futures` (270 lines, 25% of the week),
+   `fx-hedging` (424, 19%), `07g-swap-clearing` (257), `07h-cds-clearing` (245) — each still
+   owning its own walk over the contract book and its own desk arithmetic. That is the merge
+   half-done, and the profile is the proof: 44% of the week in two of them. One `derivatives`
+   stage runs the four profiles from the registry over ONE walk of the book per instrument (the
+   per-contract walks are the cost — §7.328's row growth drives them); the four files go. Then
+   05-unit-bidding (16%) and 08-company-fundamentals (13%). Profile after each (`PROFILE=1
+   WEEKS=4`, 30 s, allowed at any time — a profile is not a run). The state-growth drift (weeks
+   1–4: 4.4 → 9.1 s) is measured here too before the long-run step 25 needs it.
 
 **Part I — the ledger becomes the only book (A3–A4).**
 1. **A3.1 companies' `cash` is a read of the persistent account store** (design and survey in
