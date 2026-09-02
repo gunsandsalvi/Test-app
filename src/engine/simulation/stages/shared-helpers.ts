@@ -5,6 +5,7 @@
  */
 
 import { journalPayment, partyId } from './settlement';
+import { defect } from '../../../domain/defect';
 import { bookHeadOf, relinkBook } from '../../../engine2/holdings';
 import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
@@ -362,8 +363,6 @@ export function applyPendingCorporateActionSettlements(
      *  payments from the issuer rather than cash appearing on the holder's book. */
     paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
-    /** §7.241: a payer-less credit (unmapped issuer) is counted here instead of being silent. */
-    unbackedLedger?: import('../../ledger/balance').UnbackedLedger;
     /** §4.0 Tier 1 item 6: the running settlement net, so a placement's budget sees what the
      *  holder's week has already committed. Present on the real context. */
     pendingNetById?: import('./context').WeeklyStepContext['pendingNetById'];
@@ -445,7 +444,6 @@ export function applyPendingCorporateActionSettlements(
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity, ei) => {
     if (!entityHit[ei]) return entity;
     let touched = false;
-    let cashUSD = 0;
     // Placements this entity has funded within THIS pass — journalPayment does not update the
     // running settlement net, so two placements in one week must see each other here.
     let committedPlacementUSD = 0;
@@ -461,24 +459,17 @@ export function applyPendingCorporateActionSettlements(
           // holder's book while the issuer's ledger says it left.
           const shareUSD = owedUSD * (H.qtyUSD[r] / totalUSD);
           const issuerTicker = ctx.issuerTickerById?.get(v2.internedStrings[H.instrRef[r]]);
-          if (ctx.paymentJournal && issuerTicker) {
-            journalPayment(ctx.paymentJournal, {
-              payer: { kind: 'COMPANY', ticker: issuerTicker },
-              payee: { kind: 'INSTITUTION', id: entity.id },
-              amountUSD: shareUSD,
-              reason: 'security payment to holder of record',
-            });
-          } else {
-            // §7.241: an unmapped issuer used to credit the holder with NO payer, silently —
-            // one measured feeder of 02b's reconcile plug. Still credited (deleting the
-            // holder's money would break the other leg), but COUNTED now, like creditUnbacked.
-            cashUSD += shareUSD;
-            if (ctx.unbackedLedger) {
-              ctx.unbackedLedger.totalUSD += Math.abs(shareUSD);
-              ctx.unbackedLedger.byReason['security payment with unmapped issuer'] =
-                (ctx.unbackedLedger.byReason['security payment with unmapped issuer'] ?? 0) + shareUSD;
-            }
+          // §5-CLOSE C4: a holder paid by an issuer nobody can name is money from nobody — a
+          // defect at the site that recorded the action, never a credit.
+          if (!ctx.paymentJournal || !issuerTicker) {
+            defect(`security payment of ${(shareUSD / 1e6).toFixed(3)}M to ${entity.id} from an issuer with no ticker (${v2.internedStrings[H.instrRef[r]]})`);
           }
+          journalPayment(ctx.paymentJournal, {
+            payer: { kind: 'COMPANY', ticker: issuerTicker },
+            payee: { kind: 'INSTITUTION', id: entity.id },
+            amountUSD: shareUSD,
+            reason: 'security payment to holder of record',
+          });
           touched = true;
         }
       }
@@ -502,7 +493,7 @@ export function applyPendingCorporateActionSettlements(
         const pendingUSD = ctx.pendingNetById
           ? (ctx.pendingNetById[partyId({ kind: 'INSTITUTION', id: entity.id })] ?? 0)
           : 0;
-        const availableUSD = Math.max(0, (entity.cashUSD ?? 0) + cashUSD + pendingUSD
+        const availableUSD = Math.max(0, (entity.cashUSD ?? 0) + pendingUSD
           - committedPlacementUSD);
         const owedUSD = -principalCashUSD;
         const fundedShare = owedUSD > 0 ? Math.min(1, availableUSD / owedUSD) : 1;
@@ -529,15 +520,9 @@ export function applyPendingCorporateActionSettlements(
             amountUSD: -principalCashUSD,
             reason: 'placement paid by holder of record',
           });
-      } else {
-        // §7.241: same counting as the coupon leg above — an unmapped issuer's redemption
-        // money reached the holder with no payer; it is now visible on the unbacked ledger.
-        cashUSD += principalCashUSD;
-        if (ctx.unbackedLedger && principalCashUSD !== 0) {
-          ctx.unbackedLedger.totalUSD += Math.abs(principalCashUSD);
-          ctx.unbackedLedger.byReason['principal moved with unmapped issuer'] =
-            (ctx.unbackedLedger.byReason['principal moved with unmapped issuer'] ?? 0) + principalCashUSD;
-        }
+      } else if (principalCashUSD !== 0) {
+        // §5-CLOSE C4: principal moving with no named issuer is money from (or to) nobody.
+        defect(`principal of ${(principalCashUSD / 1e6).toFixed(3)}M moved for ${entity.id} on an instrument with no issuer ticker`);
       }
       const scaledUSD = H.qtyUSD[r] * effectiveRatio;
       H.qtyUSD[r] = scaledUSD;
@@ -547,7 +532,7 @@ export function applyPendingCorporateActionSettlements(
     relinkBook(v2, entity.id, kept);
     return {
       ...entity,
-      cashUSD: (entity.cashUSD ?? 0) + cashUSD,
+      cashUSD: entity.cashUSD ?? 0,
     };
   });
   pending.clear();
@@ -628,8 +613,6 @@ export function applyHolderInterestAccruals(
     holderAccruedInterestUSD: Map<string, Map<string, number>>;
     paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
-    /** §7.241: a payer-less credit (unmapped issuer) is counted here instead of being silent. */
-    unbackedLedger?: import('../../ledger/balance').UnbackedLedger;
   }
 ): void {
   const { pendingHolderAccrualUSD: accruals, pendingHolderAccrualPayout: payouts } = ctx;
@@ -736,16 +719,10 @@ export function applyHolderInterestAccruals(
     const issuerId = instrumentKey.slice(instrumentKey.indexOf(':') + 1);
     const ticker = ctx.issuerTickerById?.get(issuerId);
     if (!ticker || !ctx.paymentJournal) {
-      // §7.241: the old path deleted every holder's accrued receivable even when the issuer
-      // lookup missed and nothing was paid — an obligation extinguished without payment, silently.
-      // The receivable now SURVIVES to the next payout date, and the miss is counted where the
-      // money reports already look.
-      if (ctx.unbackedLedger) {
-        const owedUSD = Array.from(byHolder.values()).reduce((a, v) => a + Math.max(0, v), 0);
-        ctx.unbackedLedger.byReason['coupon skipped: issuer unmapped'] =
-          (ctx.unbackedLedger.byReason['coupon skipped: issuer unmapped'] ?? 0) + owedUSD;
-      }
-      return;
+      // §5-CLOSE C4: a coupon due from an issuer nobody can name is a defect at the site that
+      // accrued it, not a receivable that quietly survives.
+      const owedUSD = Array.from(byHolder.values()).reduce((a, v) => a + Math.max(0, v), 0);
+      return defect(`coupon of ${(owedUSD / 1e6).toFixed(3)}M due on ${instrumentKey} from an issuer with no ticker`);
     }
     const payer = { kind: 'COMPANY', ticker } as import('./settlement').PartyRef;
     byHolder.forEach((accruedUSD, holderId) => {

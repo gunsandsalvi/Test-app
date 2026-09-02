@@ -28,7 +28,7 @@ import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
 import { regionalDeskView } from '../../../domain/dealer-desk';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { sovereignCouponByBucket } from '../../../domain/government';
-import { sovBucketKey } from './shared-helpers';
+import { sovBucketKey, payHoldersCash } from './shared-helpers';
 import {
   evolveBankingSector, computeSovereignBookAnnualYield, savingsToDepositsShare,
 } from '../../macro/banking';
@@ -344,6 +344,20 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         `${regionId}:${bank.ticker}`
       );
 
+      // §5-CLOSE C4: the three flows the evolution DECIDED are PAID here, as instructions between
+      // named parties. Interest on reserves is the central bank's expense — it settles by
+      // creating the reserves, and its remittance to the treasury is already net of it.
+      if ((sheet.reservesInterestWeeklyUSD ?? 0) > 0) {
+        pay(ctx, {
+          payer: { kind: 'CENTRAL_BANK', region: regionId },
+          payee: { kind: 'BANK', ticker: bank.ticker },
+          amountUSD: sheet.reservesInterestWeeklyUSD!,
+          reason: 'interest on reserves',
+        });
+      }
+      // The dividend goes to the register: the paying agent settles it pro rata to the holders
+      // of record as a payment from this bank (reserves and equity leave at settlement).
+      if ((sheet.dividendWeeklyUSD ?? 0) > 0) payHoldersCash(ctx, bank.id, 'EQUITY', sheet.dividendWeeklyUSD!);
       // G2: the itemized book's own week — facility reconciliation, real interest accrual
       // basis, real SME write-offs, and priced origination under the real capital constraint.
       const lending = runBankWeeklyLending(bank, sheet, reg, regionId, facilityTranchesByBank, ctx.nextWeek);
@@ -484,6 +498,27 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           reason: 'central bank loan repaid',
         });
       }
+      // §5-CLOSE C4: interest on corporate balances is paid to the depositors who earn it —
+      // each firm with a positive balance at this bank, pro rata to its balance, at the rate
+      // the evolution decided. (Estates and defaulted firms hold balances too; a balance is
+      // a balance.)
+      const corpInterestUSD = sheet.corporateDepositInterestWeeklyUSD ?? 0;
+      if (corpInterestUSD > 0) {
+        const depositors = ctx.updatedCompanies.filter(
+          (c) => c.region === regionId && !c.isBankEntity && !c.mergerAcquired && c.homeBankTicker === bank.ticker && c.cash > 0
+        );
+        const positiveUSD = depositors.reduce((a, c) => a + c.cash, 0);
+        if (positiveUSD > 0) {
+          depositors.forEach((c) => {
+            pay(ctx, {
+              payer: { kind: 'BANK', ticker: bank.ticker },
+              payee: { kind: 'COMPANY', ticker: c.ticker },
+              amountUSD: corpInterestUSD * (c.cash / positiveUSD),
+              reason: 'interest on corporate deposits',
+            });
+          });
+        }
+      }
       const cbLoanInterestUSD = ((sheet.centralBankLoanUSD ?? 0) * (reg.policyRate + (SRF_SPREAD_BPS + CENTRAL_BANK_LOAN_PENALTY_BPS) / 10000)) / 52;
       if (cbLoanInterestUSD > 0) {
         pay(ctx, {
@@ -585,6 +620,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       primeBrokerageLoansUSD: sumField((s) => s.primeBrokerageLoansUSD ?? 0),
       householdDepositInterestWeeklyUSD: sumField((s) => s.householdDepositInterestWeeklyUSD ?? 0),
       lastBillAccretionWeeklyUSD: sumField((s) => s.lastBillAccretionWeeklyUSD ?? 0),
+      reservesInterestWeeklyUSD: sumField((s) => s.reservesInterestWeeklyUSD ?? 0),
+      corporateDepositInterestWeeklyUSD: sumField((s) => s.corporateDepositInterestWeeklyUSD ?? 0),
+      dividendWeeklyUSD: sumField((s) => s.dividendWeeklyUSD ?? 0),
       depositRateAnnual: Number(weightedAvg((s) => s.depositRateAnnual ?? 0).toFixed(6)),
       // Per-bank-only books: a desk position and an FX book belong to the bank that took them; a
       // regional copy would be a second ledger. Declared, not omitted, so the satisfies holds.

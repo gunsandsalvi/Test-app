@@ -1,8 +1,8 @@
 /** F — STOCKS AGAINST FLOWS. The accounting closes: what a statement says moved is what the ledger moved. */
 
-import { GameState } from '../../src/types';
-import { REGION_IDS } from '../../src/domain/geography';
-import { isActiveCompany } from '../../src/domain/company';
+import { GameState } from '../../types';
+import { REGION_IDS } from '../../domain/geography';
+import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, sum } from './types';
 
 /** F1 — a firm's balance sheet closes and its statement cash is its ledger balance. */

@@ -51,6 +51,7 @@ import {
 import { AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
 import { SmePool } from '../../../domain/region-macro';
 import { bookPnL } from '../../ledger/bank-book';
+import { defect } from '../../../domain/defect';
 import { remainingLifeExpectancyYears, medianAdultAgeYears } from '../../bootstrap/population';
 import { creditRecoveryRate } from './shared-helpers';
 import { bankTotalAssetsUSD, stressedOutflowUSD, LIQUIDITY_COVERAGE_RATIO, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
@@ -326,9 +327,15 @@ export function runBankWeeklyLending(
   });
 
   const businessLoanBookUSD = Math.round(loans.reduce((a, l) => a + l.principalUSD, 0));
+  if (facilityNetOriginationUSD > 1e6) {
+    defect(`${bank.ticker}: ${(facilityNetOriginationUSD / 1e6).toFixed(1)}M of facility principal appeared on the ladders with no payment behind it`);
+  }
   return {
     sheet: {
-      ...bookPnL(sheet, -loanLossWeeklyUSD, 'business loan losses'),
+      ...bookPnL(
+        bookPnL(sheet, -loanLossWeeklyUSD, 'business loan losses', bank.ticker),
+        Math.min(0, facilityNetOriginationUSD), 'facility left the ladders without a payment', bank.ticker
+      ),
       businessLoans: loans,
       businessLoanBookUSD,
       // SEG2e: loans still create deposits, but the pool's new money now lands on ITS OWN line
@@ -342,8 +349,11 @@ export function runBankWeeklyLending(
       // the sync itself, which is level-based: a tranche settlement already booked is found with
       // its principal matching and contributes nothing. `facilityNetOriginationUSD` is therefore
       // the residue of anything settlement did NOT see (a merger moving a book, a default), and
-      // that residue still moves reserves because it is a change with no payment behind it.
-      cashReservesUSD: sheet.cashReservesUSD - facilityNetOriginationUSD,
+      // §5-CLOSE C4: that residue NEVER moves reserves. A loan that left the ladders without a
+      // payment (a borrower that died, a book a merger moved) is a WRITE-OFF — the asset is
+      // gone and equity absorbs it; a loan that appeared with no payment behind it is a claim
+      // minted from nothing, and that is a defect at whichever stage pushed the row.
+      cashReservesUSD: sheet.cashReservesUSD,
     },
     loanInterestWeeklyUSD,
     loanLossWeeklyUSD,
@@ -868,15 +878,15 @@ export function runBankHouseholdLending(
       ...bookPnL(sheet, -lossWeeklyUSD, 'household loan losses'),
       householdLoans: pools,
       consumerLoanBookUSD,
-      // Interest is NOT posted here: it accrues on the PRIOR book and evolveBankingSector
-      // posts it (cash +, equity +, and the NIM statistic) exactly as the business book's —
-      // the caller passes the accrual in. Principal comes home from household income as cash
-      // (boundary in, like the savings inflow); card/term origination leaves at once to
-      // merchants.
-      cashReservesUSD: sheet.cashReservesUSD + principalWeeklyUSD - consumerCreditOriginationUSD,
-      // The buyer's new debt is the seller's new deposit, net of the seller's own loan the
-      // sale proceeds retire — deposits grow with NET mortgage credit, not gross churn.
-      depositsUSD: sheet.depositsUSD + mortgageOriginationUSD - mortgageDischargeUSD,
+      // §5-CLOSE C4: NO RESERVE MOVES HERE. The household sector banks where it borrows, so
+      // every one of these is a deposit event at this bank: a loan creates the borrower's
+      // deposit (mortgage and card/term alike), the seller's retired loan destroys one, and
+      // amortization is the borrower's deposit paying the book down. Interest is the same
+      // debit, posted by evolveBankingSector on the prior book. Before this, principal came
+      // home to reserves from nobody and card origination left reserves to nobody — the
+      // household side of the second money engine the audit measured.
+      depositsUSD: sheet.depositsUSD + mortgageOriginationUSD - mortgageDischargeUSD
+        + consumerCreditOriginationUSD - principalWeeklyUSD,
     },
     interestWeeklyUSD,
     principalWeeklyUSD,

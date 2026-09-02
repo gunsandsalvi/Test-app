@@ -1,8 +1,8 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
-import { GameState, RegionId } from '../../src/types';
-import { REGION_IDS } from '../../src/domain/geography';
-import { isActiveCompany } from '../../src/domain/company';
+import { GameState, RegionId } from '../../types';
+import { REGION_IDS } from '../../domain/geography';
+import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, sum } from './types';
 
 /** O1 — two-sided: what the books hold of each debt class equals what is outstanding, in both directions. */

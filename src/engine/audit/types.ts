@@ -5,7 +5,7 @@
  * table knows what is broken without opening the file.
  */
 
-import { GameState } from '../../src/types';
+import { GameState } from '../../types';
 
 export interface AuditFinding {
   family: 'M' | 'O' | 'P' | 'X' | 'F' | 'N';

@@ -27,12 +27,13 @@ fi
 #    number. `initialization.ts` builds the opening world and is allowed to; everything else routes
 #    through engine/ledger.
 MONEY_FIELDS='(cashUSD|cashReservesUSD|depositsUSD|corporateDepositsUSD|institutionalDepositsUSD|smeDepositsUSD|unmodeledDepositsUSD|wholesaleFundingUSD|bankEquityUSD)'
-# Owners of a balance: the ledger, the two bootstraps that build the opening world, and (until the
+# Owners of a balance: the ledger, the three bootstraps that build the opening world (the two
+# initializations and §5-CLOSE's close-seed, which sizes the week-0 deposit stock), and (until the
 # migration finishes) settlement's own apply pass and bank-lending's funding composition.
 # bank-identity-trace is a READ-ONLY instrument (BANK_IDENTITY_TRACE=1): it rebuilds the harness's
 # identity residual per stage and mutates nothing — its field maps trip the spread regex without
 # being writes.
-LEDGER_OWNED='^src/engine/ledger/|^src/engine/simulation/initialization\.ts:|^src/engine/macro/initialization\.ts:|^src/engine/simulation/stages/settlement\.ts:|^src/engine/simulation/stages/bank-lending\.ts:|^src/engine/simulation/bank-identity-trace\.ts:'
+LEDGER_OWNED='^src/engine/ledger/|^src/engine/simulation/initialization\.ts:|^src/engine/macro/initialization\.ts:|^src/engine/bootstrap/close-seed\.ts:|^src/engine/simulation/stages/settlement\.ts:|^src/engine/simulation/stages/bank-lending\.ts:|^src/engine/simulation/bank-identity-trace\.ts:'
 STRAY=$(grep -rnE "(\.|\][[:space:]]*)${MONEY_FIELDS}[[:space:]]*(=[^=>]|\+=|-=)" src --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE "$LEDGER_OWNED" \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)

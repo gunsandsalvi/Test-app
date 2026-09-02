@@ -43,16 +43,6 @@ export interface Account {
   balanceUSD: number;
 }
 
-/** What an unbacked credit was for, and how much of it there was — the boundary, made countable. */
-export interface UnbackedLedger {
-  totalUSD: number;
-  byReason: Record<string, number>;
-}
-
-export function newUnbackedLedger(): UnbackedLedger {
-  return { totalUSD: 0, byReason: {} };
-}
-
 /**
  * Move a holder's own balance. **This is the only function in the engine that may do so** — see
  * `check-hygiene.sh`, which fails the build on an assignment to a money field anywhere else.
@@ -102,30 +92,3 @@ export function creditHolderBalance(
       return false;
   }
 }
-
-/**
- * A movement with no counterparty named yet. **This is a defect with a name, not an escape hatch.**
- *
- * It exists so a migration can proceed one stage at a time without either (a) leaving direct writes
- * in place, or (b) inventing a counterparty that is not real. Every call lands in a counter the
- * harness prints by reason, exactly like `BOUNDARY_FRONTIERS` — so the number is a to-do list that
- * has to go down, and an unbacked movement can never again be indistinguishable from a payment.
- *
- * If you are adding a call to this, you are recording that you do not yet know who paid. Say so in
- * the reason string, because that string is what someone will read when they come to close it.
- */
-export function creditUnbacked(
-  ctx: WeeklyStepContext,
-  party: PartyRef,
-  deltaUSD: number,
-  reason: string
-): void {
-  if (!isFinite(deltaUSD) || deltaUSD === 0) return;
-  const ok = creditHolderBalance(ctx, party, deltaUSD);
-  const ledger = ctx.unbackedLedger;
-  if (!ledger) return;
-  const key = ok ? reason : `${reason} (party unresolved)`;
-  ledger.totalUSD += Math.abs(deltaUSD);
-  ledger.byReason[key] = (ledger.byReason[key] ?? 0) + deltaUSD;
-}
-

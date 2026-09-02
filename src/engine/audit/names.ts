@@ -1,6 +1,6 @@
 /** N — NAMES AND IDENTITIES. A thing has one id in one shape, and its parts carry its name. */
 
-import { GameState } from '../../src/types';
+import { GameState } from '../../types';
 import { AuditFinding } from './types';
 
 export function auditNames(_prev: GameState | undefined, state: GameState, week: number): AuditFinding[] {

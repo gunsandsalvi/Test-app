@@ -4,9 +4,9 @@
  * and their count; the identity in each message is the relation asserted.
  */
 
-import { GameState } from '../../src/types';
-import { REGION_IDS } from '../../src/domain/geography';
-import { isActiveCompany } from '../../src/domain/company';
+import { GameState } from '../../types';
+import { REGION_IDS } from '../../domain/geography';
+import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, spearman, sum } from './types';
 
 const RATING_RANK: Record<string, number> = { AAA: 0, AA: 1, A: 2, BBB: 3, BB: 4, B: 5, CCC: 6, D: 7 };

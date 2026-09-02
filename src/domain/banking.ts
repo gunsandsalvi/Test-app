@@ -188,6 +188,13 @@ export interface BankingSector {
    *  accretion stage so the NIM income measure can count the return the book actually earned
    *  (non-cash: it is already in equity; never credit cash from it). */
   lastBillAccretionWeeklyUSD?: number;
+  /** §5-CLOSE C4 — reported FLOWS the weekly evolution decides and 02b pays as settlement
+   *  payments: interest on reserves (CENTRAL_BANK → this bank), interest on corporate balances
+   *  (this bank → each depositor pro rata) and the dividend (this bank → the register's holders).
+   *  None of them is written to cash by the evolution itself. */
+  reservesInterestWeeklyUSD?: number;
+  corporateDepositInterestWeeklyUSD?: number;
+  dividendWeeklyUSD?: number;
 }
 
 /**

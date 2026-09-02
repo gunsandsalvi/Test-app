@@ -5,10 +5,10 @@
  * true, and a size when it is not.
  */
 
-import { GameState, RegionId, Company } from '../../src/types';
-import { REGION_IDS } from '../../src/domain/geography';
-import { isActiveCompany } from '../../src/domain/company';
-import { centralBankAssetsUSD } from '../../src/domain/central-bank';
+import { GameState, RegionId, Company } from '../../types';
+import { REGION_IDS } from '../../domain/geography';
+import { isActiveCompany } from '../../domain/company';
+import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, pct, sum } from './types';
 
 type Sheet = NonNullable<Company['bankBalanceSheet']>;

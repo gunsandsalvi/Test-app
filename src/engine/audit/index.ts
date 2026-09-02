@@ -4,7 +4,7 @@
  * identity that failed.
  */
 
-import { GameState } from '../../src/types';
+import { GameState } from '../../types';
 import { AuditFinding, B } from './types';
 import { auditMoney } from './money';
 import { auditOwnership } from './ownership';

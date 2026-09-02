@@ -345,9 +345,10 @@ export function evolveBankingSector(
   // moment the bank underpays — so the rate a corporate balance commands is the fund's own yield.
   const corporateDepositsUSD = prevBanking.corporateDepositsUSD ?? 0;
   const corporateDepositRateAnnual = Math.max(0, competingMmfYieldAnnual);
+  // §5-CLOSE C4: PAID, not written — 02b posts it as BANK → COMPANY to each positive-balance
+  // depositor pro rata, so the treasurer who earns it is credited and this bank's reserves and
+  // equity leave through settlement. Here it is only the cost it is in the margin statistic.
   const corporateDepositInterestUSD = (corporateDepositsUSD * corporateDepositRateAnnual) / 52;
-  cashUSD -= corporateDepositInterestUSD;
-  equityUSD -= corporateDepositInterestUSD;
 
   // ---- 3. Lending: loans create deposits, repayment destroys them — the actual mechanism
   // (both sides of the sheet move together; reserves do not move at origination). Sizes are
@@ -407,7 +408,11 @@ export function evolveBankingSector(
   // PUB1: the sovereign book earns its real COUPONS (passed in, paid by the government in
   // stage 11), not a carry-at-market-yield the issuer never funded. `sovereignBookAnnualYield`
   // is still the curve read used elsewhere; it no longer credits income here.
-  const weeklyInterestIncomeUSD = (Math.max(0, cashUSD) * policyRate) / 52
+  // §5-CLOSE C4: interest on reserves is PAID by the central bank — 02b posts it as
+  // CENTRAL_BANK → BANK, the reserves it creates are the central bank's expense, and the
+  // remittance to the treasury is already net of it (central-bank.ts). Nothing here writes it.
+  const reservesInterestUSD = (Math.max(0, cashUSD) * policyRate) / 52;
+  const weeklyInterestIncomeUSD = reservesInterestUSD
     + itemizedLoanInterestWeeklyUSD + householdLoanInterestWeeklyUSD + sovereignCouponWeeklyUSD
     + settlementPaidInterestWeeklyUSD;
   // CAL: the income statement is smooth and the CASH is lumpy — a coupon is earned every week and
@@ -418,9 +423,15 @@ export function evolveBankingSector(
   // the ledger the treasury pays from, which is the only way the holder's claim and the issuer's
   // payable stay the same number. Everything else here is money that genuinely arrived this week.
   // ...and the settlement-paid slice, whose cash the settlement pass itself delivers.
-  const cashInterestIncomeUSD = weeklyInterestIncomeUSD - sovereignCouponWeeklyUSD - settlementPaidInterestWeeklyUSD;
-  cashUSD += cashInterestIncomeUSD;
-  equityUSD += cashInterestIncomeUSD;
+  // §5-CLOSE C4: the household books' interest is a DEBIT OF THE BORROWERS' DEPOSITS at this
+  // bank — the household sector banks and borrows here, so the payment is the deposit leaving
+  // and the equity arriving; no reserve moves and nothing arrives from outside. (Before this the
+  // interest was credited to reserves from nobody while the households' deposit line never
+  // paid it — the second money engine the audit's M1 row measured.) The itemized business
+  // slice is zero by construction: every business loan is a facility or an SME pool and both
+  // pay through settlement; the parameter survives as the measure it always was.
+  depositsUSD -= householdLoanInterestWeeklyUSD;
+  equityUSD += householdLoanInterestWeeklyUSD;
   const weeklyDepositInterestUSD = (depositsUSD * depositRate) / 52;
   depositsUSD += weeklyDepositInterestUSD;
   equityUSD -= weeklyDepositInterestUSD;
@@ -449,15 +460,17 @@ export function evolveBankingSector(
   const priorCapitalRatio = prevBanking.bankCapitalRatio;
   const targetPayoutRatio = priorCapitalRatio > 0.14 ? 0.90 : priorCapitalRatio < 0.11 ? 0.05 : 0.40;
   const distributableCashUSD = () => Math.max(0, cashUSD - depositsUSD * MIN_CASH_BUFFER_RATIO);
+  // §5-CLOSE C4: DECIDED here, PAID by the register. The amount is reported on the sheet and
+  // 02b hands it to the paying agent (`payHoldersCash`), which settles it pro rata to the
+  // holders of record as a payment from this bank — reserves and equity leave at settlement,
+  // and every dollar arrives on a named holder's book. Nothing here moves cash.
   const regularDividendUSD = Math.min(Math.max(0, weeklyNetIncomeUSD) * targetPayoutRatio, distributableCashUSD());
-  cashUSD -= regularDividendUSD;
-  equityUSD -= regularDividendUSD;
-  const excessCapitalUSD = riskWeightedAssetsUSD > 0 ? equityUSD - riskWeightedAssetsUSD * 0.140 : 0;
-  const specialDividendUSD = (riskWeightedAssetsUSD > 0 && equityUSD / riskWeightedAssetsUSD > 0.145)
-    ? Math.min(excessCapitalUSD, distributableCashUSD())
+  const equityAfterRegularUSD = equityUSD - regularDividendUSD;
+  const excessCapitalUSD = riskWeightedAssetsUSD > 0 ? equityAfterRegularUSD - riskWeightedAssetsUSD * 0.140 : 0;
+  const specialDividendUSD = (riskWeightedAssetsUSD > 0 && equityAfterRegularUSD / riskWeightedAssetsUSD > 0.145)
+    ? Math.min(excessCapitalUSD, Math.max(0, distributableCashUSD() - regularDividendUSD))
     : 0;
-  cashUSD -= specialDividendUSD;
-  equityUSD -= specialDividendUSD;
+  const dividendWeeklyUSD = regularDividendUSD + specialDividendUSD;
 
   // ---- 7. Statistics — readings of the ledger, never drivers of it. The NIM damping factor
   // that clamped loan yields whenever the margin exceeded 5% is deleted (a clamp on a price,
@@ -498,6 +511,11 @@ export function evolveBankingSector(
     // depositors this week, at its own deposit rate. Read by 02b and summed per region so
     // household income can MEASURE it instead of re-deriving it as `policyRate x 0.6`.
     householdDepositInterestWeeklyUSD: Math.round(weeklyDepositInterestUSD),
+    // §5-CLOSE C4: the three flows this evolution DECIDES and 02b PAYS — as payments between
+    // named parties, through settlement. Reported here so the payer is the sheet's own reading.
+    reservesInterestWeeklyUSD: Math.round(reservesInterestUSD),
+    corporateDepositInterestWeeklyUSD: Math.round(corporateDepositInterestUSD),
+    dividendWeeklyUSD: Math.round(dividendWeeklyUSD),
     businessLoanBookUSD: Math.round(businessLoanUSD),
     consumerLoanBookUSD: Math.round(consumerLoanUSD),
     depositsUSD: Math.round(depositsUSD),

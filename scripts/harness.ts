@@ -143,7 +143,7 @@ import { laneKey, laneTransitWeeks } from '../src/domain/carrier';
 import { isCarrier } from '../src/engine/simulation/stages/freight-clearing';
 import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
 import { DERIVATIVE_CLASSES } from '../src/domain/derivatives/registry';
-import { auditWeek, auditSummary, AuditFinding } from './audit';
+import { auditWeek, auditSummary, AuditFinding } from '../src/engine/audit';
 
 interface Violation {
   week: number;
