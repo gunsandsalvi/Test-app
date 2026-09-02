@@ -8,6 +8,9 @@ import { REGION_IDS } from '../../domain/geography';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { isActiveCompany } from '../../domain/company';
 import { trancheKindOf } from '../../domain/assets';
+import { V2World } from '../../engine2/world';
+import { inputUnitsHeld } from '../../engine2/lots';
+import { SUBUNITS } from '../../engine2/state';
 
 export interface RegionSnapshot {
   treasuryAccountUSD: number;
@@ -19,10 +22,10 @@ export interface RegionSnapshot {
   householdInTransitUSD: number;
   bankLoansUSD: number;
 }
-export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number> };
+export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number> };
 
 export function snapshotOf(state: GameState): AuditSnapshot {
-  const out: AuditSnapshot = { moneyPendingUSD: state.lastWires?.moneyPendingUSD ?? 0, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined };
+  const out: AuditSnapshot = { moneyPendingUSD: state.lastWires?.moneyPendingUSD ?? 0, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined, goodsUnitsByKey: goodsUnitsByKey(state) };
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
@@ -64,6 +67,33 @@ export function ladderUSDByTicker(state: GameState): Record<string, number> {
       const key = `${c.ticker}|${trancheKindOf(t)}`;
       out[key] = (out[key] ?? 0) + t.principalUSD;
     }
+  }
+  return out;
+}
+
+/** §5-WIRES W4: every unit of goods in the world, per `region|subUnit` — a firm's finished stock and
+ *  input lots in its region, a consignment in the carrier's region while it is in transit. */
+export function goodsUnitsByKey(state: GameState, parts?: Record<string, [number, number, number]>): Record<string, number> {
+  const out: Record<string, number> = {};
+  const add = (region: string, sub: string, units: number, part = 0) => {
+    if (units) { const k = `${region}|${sub}`; out[k] = (out[k] ?? 0) + units; if (parts) { const p = parts[k] ?? (parts[k] = [0, 0, 0]); p[part] += units; } }
+  };
+  const v2 = state.v2 as V2World | undefined;
+  for (const c of state.companies) {
+    for (const [sub, inv] of Object.entries(c.outputInventoryBySubUnit ?? {})) add(c.region, sub, inv.unitsHeld);
+    if (v2) {
+      const firmRow = v2.rowById.get(c.id);
+      const touched = firmRow === undefined ? undefined : v2.lots.touchedSubs[firmRow];
+      if (touched) for (const subIdx of touched) add(c.region, SUBUNITS[subIdx], inputUnitsHeld(v2, c.id, SUBUNITS[subIdx]), 1);
+    }
+  }
+  const regionOf = new Map(state.companies.map((c) => [c.ticker, c.region]));
+  // A consignment is stock in its NAMED carrier's region; one the transport pool carries (no
+  // ticker) passed through a source-and-sink and reappears at arrival from it.
+  for (const sh of state.goodsInTransit ?? []) {
+    if (!sh.carrierTicker) continue;
+    const region = sh.carrierRegion ?? regionOf.get(sh.carrierTicker);
+    if (region) add(region, sh.subUnitId, sh.units, 2);
   }
   return out;
 }

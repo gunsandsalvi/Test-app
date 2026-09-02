@@ -50,11 +50,16 @@ export interface WireJournal {
   priceUSD: Float64Array;
   reasonId: Int32Array;
   settleWeek: Int32Array;
+  /** §5-WIRES W4: the week's transformations of goods (produced, consumed, scrapped) per
+   *  `region|subUnit` — not moves, so not wires, but the other half of the stock identity. */
+  goodsFlows: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number; mintedUnits: number }>;
+  /** GOODS_TRACE=1: units the sellers' settlements counted as delivered, per `region|subUnit`. */
+  goodsDelivered?: Record<string, number>;
 }
 
 export function newWireJournal(base: number, week: number, cap = 1 << 14): WireJournal {
   return {
-    n: 0, base, week,
+    n: 0, base, week, goodsFlows: {},
     fromId: new Int32Array(cap), toId: new Int32Array(cap), kindId: new Int8Array(cap),
     assetRef: new Int32Array(cap), quantity: new Float64Array(cap), priceUSD: new Float64Array(cap),
     reasonId: new Int32Array(cap), settleWeek: new Int32Array(cap),
@@ -140,14 +145,42 @@ export interface WireSummary {
   issuerNetUSDByKey: Record<string, number>;
   /** LADDER_TRACE=1 only: the same net per issuer ticker and kind, keyed `ticker|kind`. */
   issuerNetUSDByTicker?: Record<string, number>;
+  /** §5-WIRES W4: goods wires in minus out per holder region and sub-unit, in UNITS, keyed
+   *  `region|subUnit`; a household or a treasury is a sink (its region's stock does not hold
+   *  what it bought), a carrier holds its consignments. */
+  goodsNetUnitsByKey: Record<string, number>;
+  /** §5-WIRES W4: the week's transformations per `region|subUnit`. */
+  goodsFlowByKey: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number; mintedUnits: number }>;
+  goodsOutUnitsByKey?: Record<string, number>;
+  goodsInUnitsByKey?: Record<string, number>;
+  goodsDeliveredByKey?: Record<string, number>;
+  goodsInByTicker?: Record<string, number>;
 }
 
-export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssuer?: (ticker: string) => string | undefined): WireSummary {
+export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssuer?: (ticker: string) => string | undefined, reasonTextOf?: (id: number) => string): WireSummary {
   const byKind: Record<string, number> = {}; const valueUSDByKind: Record<string, number> = {};
   const houseNetUSDByKey: Record<string, number> = {};
   const issuerNetUSDByKey: Record<string, number> = {};
   const trace = typeof process !== 'undefined' && process.env?.LADDER_TRACE === '1';
   const issuerNetUSDByTicker: Record<string, number> | undefined = trace ? {} : undefined;
+  const goodsNetUnitsByKey: Record<string, number> = {};
+  const goodsTrace = typeof process !== 'undefined' && process.env?.GOODS_TRACE === '1';
+  const goodsOutUnitsByKey: Record<string, number> | undefined = goodsTrace ? {} : undefined;
+  const goodsInUnitsByKey: Record<string, number> | undefined = goodsTrace ? {} : undefined;
+  const goodsInByTicker: Record<string, number> | undefined = goodsTrace ? {} : undefined;
+  const holderRegionOf = (p: PartyRef): string | undefined => {
+    switch (p.kind) {
+      case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': return regionOfIssuer?.(p.ticker);
+      // A pool sells from no stock and consumes what it buys: a source and a sink, never a
+      // holder — the consignments the transport pool carries on lanes no named fleet serves
+      // pass through it the same way (a NAMED carrier holds its consignments; a pool's own
+      // purchases and its carriage cannot be told apart on one aggregate party).
+      case 'SEGMENT': return undefined;
+      case 'CLEARING_HOUSE': case 'CENTRAL_BANK': return p.region;
+      case 'HOUSEHOLD': case 'GOVERNMENT': return undefined; // a sink: consumed on receipt
+      default: return undefined;
+    }
+  };
   for (let i = 0; i < j.n; i++) {
     const k = ASSET_KINDS[j.kindId[i]];
     const valueUSD = j.quantity[i] * j.priceUSD[i];
@@ -155,6 +188,15 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
     valueUSDByKind[k] = (valueUSDByKind[k] ?? 0) + valueUSD;
     if (k === 'MONEY') continue;
     const from = partyOf(j.fromId[i]), to = partyOf(j.toId[i]);
+    if (k === 'GOOD') {
+      const asset = assetText(j.assetRef[i]);
+      const rf = holderRegionOf(from), rt = holderRegionOf(to);
+      if (rf) { const key = `${rf}|${asset}`; goodsNetUnitsByKey[key] = (goodsNetUnitsByKey[key] ?? 0) - j.quantity[i]; if (goodsOutUnitsByKey) goodsOutUnitsByKey[key] = (goodsOutUnitsByKey[key] ?? 0) + j.quantity[i]; }
+      if (rt) { const key = `${rt}|${asset}`; goodsNetUnitsByKey[key] = (goodsNetUnitsByKey[key] ?? 0) + j.quantity[i]; if (goodsInUnitsByKey) goodsInUnitsByKey[key] = (goodsInUnitsByKey[key] ?? 0) + j.quantity[i]; }
+      if (goodsInByTicker && rt) { const kk = `${rt}|${asset}|KIND:${to.kind}`; goodsInByTicker[kk] = (goodsInByTicker[kk] ?? 0) + j.quantity[i]; }
+      if (goodsInByTicker && to.kind === 'COMPANY') { const tk = `${to.ticker}|${asset}|${reasonTextOf?.(j.reasonId[i]) ?? j.reasonId[i]}`; goodsInByTicker[tk] = (goodsInByTicker[tk] ?? 0) + j.quantity[i]; }
+      continue;
+    }
     if (to.kind === 'CLEARING_HOUSE') { const key = `${to.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) + valueUSD; }
     if (from.kind === 'CLEARING_HOUSE') { const key = `${from.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) - valueUSD; }
     if (regionOfIssuer) {
@@ -162,5 +204,5 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
       if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueUSD; if (issuerNetUSDByTicker) { const tk = `${to.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueUSD; } } }
     }
   }
-  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey, issuerNetUSDByKey, issuerNetUSDByTicker };
+  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey, issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
 }

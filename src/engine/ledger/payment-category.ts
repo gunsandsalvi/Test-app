@@ -66,7 +66,7 @@ const RULES: ReadonlyArray<readonly [RegExp, PaymentCategory]> = [
   [/clearing|primary|proceeds|placement|desk fill|commercial paper placed|paper (placed|retired) pro rata|security payment|holder of record|etf |shares created|money fund|dealer inventory|stock loan|collateral|variation margin|initial margin|close-out|derivative settled|futures|CDS|cash slice|tender|ISSUE_CHEAP_DEBT|DELEVER_EXPENSIVE_DEBT|accretive call/, 'SECURITIES'],
 
   // -- Goods, services, and the operating boundary --
-  [/goods|contract|freight|procurement|invoice|opex|operating receipts|carrying cost|delivery|damages|settled (purchases|sales)/, 'GOODS_AND_SERVICES'],
+  [/goods|contract|freight|procurement|invoice|opex|operating receipts|carrying cost|delivery|consign|damages|settled (purchases|sales)|household purchase|inventory/, 'GOODS_AND_SERVICES'],
 
   // -- Named legacy/edge labels that fit no phrase family --
   [/^NONE$|opening balance|cash absorbed|net income accrual|liquidity shortfall|withdrawn refinancing/, 'CORPORATE_ACTION'],

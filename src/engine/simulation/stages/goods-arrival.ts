@@ -15,7 +15,9 @@
 import { GameState } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { ensureV2 } from '../../../engine2/world';
-import { pushLot } from '../../../engine2/lots';
+import { deliverGoods, receiveInputLot, scrapGoods, consumeGoods } from '../../ledger/goods-ledger';
+import { RegionId } from '../../../types';
+import { PartyRef } from '../../ledger/party';
 import { purchaseKindOf, commissioningLeadWeeksOf } from '../../../domain/industry-registry';
 
 /** A consignment bought, paid for, and still on its way. */
@@ -27,6 +29,10 @@ export interface InTransitShipment {
   /** What the buyer paid per unit, in its own money — price, freight and all. */
   landedCostPerUnit: number;
   arrivalWeek: number;
+  /** §5-WIRES W4: who holds the consignment while it moves — a named carrier, or the origin
+   *  region's transport pool (no ticker) on a lane no named fleet serves. */
+  carrierTicker?: string;
+  carrierRegion?: RegionId;
 }
 
 export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -52,9 +58,19 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     if (!companyUpdates[shipment.buyerTicker]) companyUpdates[shipment.buyerTicker] = {};
     const update = companyUpdates[shipment.buyerTicker];
     const buyer = firmByTicker.get(shipment.buyerTicker);
+    const carrier: PartyRef = shipment.carrierTicker
+      ? { kind: 'COMPANY', ticker: shipment.carrierTicker }
+      : { kind: 'SEGMENT', region: shipment.carrierRegion ?? (buyer?.region ?? 'USA'), industry: 'AutomotiveTransport' };
     // A buyer that no longer exists cannot take delivery; the consignment is written off rather
-    // than landed on nobody, which would be inventory with no owner.
-    if (!buyer) return;
+    // than landed on nobody, which would be inventory with no owner — the carrier scraps it.
+    if (!buyer) {
+      // A named carrier held it (it was stock, in the carrier's region) and now writes it off; one
+      // the transport pool carried passed through a sink at dispatch and was never stock.
+      if (shipment.carrierTicker && shipment.carrierRegion) scrapGoods(shipment.carrierRegion, shipment.subUnitId, shipment.units);
+      return;
+    }
+    // §5-WIRES W4: the consignment leaves the carrier's hands for the buyer's, by wire.
+    const wireNo = deliverGoods(carrier, { kind: 'COMPANY', ticker: buyer.ticker }, shipment.subUnitId, shipment.units, shipment.landedCostPerUnit, 'consignment delivered');
     // Copy once on first touch, append in place after — same list, none of the per-shipment
     // whole-array rebuilds (the GC was 10% of the weekly step before this pass).
     // IND1: what arrives is routed by what it IS — a machine crossing an ocean becomes PP&E the
@@ -71,11 +87,14 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
         });
       }
       arrivedUnits += shipment.units;
+      // §5-WIRES W4: a machine becomes plant and an operating purchase is used on landing —
+      // consumed on receipt, never stock.
+      consumeGoods(buyer.region, shipment.subUnitId, shipment.units);
       return;
     }
     // ENGINE V2 (§7.304) — the consignment lands on the persistent lot table.
-    pushLot(v2, buyer.id, shipment.subUnitId, shipment.sellerKey,
-      shipment.units, shipment.landedCostPerUnit, state.currentWeek);
+    receiveInputLot(v2, buyer.id, shipment.subUnitId, shipment.sellerKey,
+      shipment.units, shipment.landedCostPerUnit, state.currentWeek, wireNo);
     arrivedUnits += shipment.units;
   });
 

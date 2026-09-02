@@ -21,7 +21,9 @@ import { buildFrontSeam, allocCoreOut, runFrontCore, applyFrontPost, FRONT_CORE_
 import { setSharedLanes, lane64, laneU32, lane8 } from './shared-lanes';
 import { frontWorkerCount, runFrontSharded } from './front-pool';
 import { nativeFrontCore } from '../engine/simulation/stages/native-kernels';
-import { NSUB } from './state';
+import { NSUB, SUBUNITS, SUBUNIT_INDEX } from './state';
+import { mutableLots } from './lots';
+import { consumeGoods } from '../engine/ledger/goods-ledger';
 import { SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
 import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
 
@@ -54,6 +56,8 @@ export interface FrontPass {
   updatedProductLines: ProductLines[];
   newRevenue: Float64Array;
   measuredInputConsumptionWeeklyUSD: Float64Array;
+  /** §5-WIRES W4: units drawn from the input lots per (row × NSUB + sub) — the consumption record. */
+  inputUnitsConsumed: Float64Array;
   newEbitda: Float64Array;
   newEbit: Float64Array;
   newNetIncome: Float64Array;
@@ -70,6 +74,9 @@ let scratch: FrontPass | undefined;
 
 function allocScratch(n: number): FrontPass {
   if (scratch && scratch.n >= n) {
+    // §5-WIRES W4: the consumption record ACCUMULATES within the week (+= per recipe input), so
+    // a reused scratch starts it at zero — measured: unreset, week 2's record carried week 1's.
+    scratch.inputUnitsConsumed.fill(0);
     // Object-ref lanes must not leak last week's refs past this week's roster length.
     scratch.stillUnderConstruction.length = n;
     scratch.outputInv.length = n;
@@ -99,6 +106,7 @@ function allocScratch(n: number): FrontPass {
     updatedProductLines: new Array(n),
     newRevenue: lane64(n),
     measuredInputConsumptionWeeklyUSD: lane64(n),
+    inputUnitsConsumed: lane64(n * NSUB),
     newEbitda: lane64(n),
     newEbit: lane64(n),
     newNetIncome: lane64(n),
@@ -132,16 +140,32 @@ export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs):
   const F = allocScratch(companies.length);
   const S = buildFrontSeam(companies, inp);
   const O = allocCoreOut(S);
+  const traceSub = process.env.GOODS_TRACE === '1' ? SUBUNIT_INDEX.get('electricity') : undefined;
+  const storeUnitsOf = (si: number): number => { const L = inp.v2.lots; let t = 0; for (let fr = 0; fr * NSUB + si < L.head.length; fr++) { for (let r = L.head[fr * NSUB + si]; r >= 0; r = L.next[r]) t += L.units[r]; } return t; };
+  const before = traceSub !== undefined ? storeUnitsOf(traceSub) : 0;
   if (!runFrontSharded(S, O, F, inp.v2)) {
     // §5-SCALE native cores: the C port of runFrontCore, oracle-verified bit-equal; the JS
     // core is the canonical fallback (no addon, NATIVE_KERNELS=0) — one world either way.
-    const nativeRan = nativeFrontCore(S, O, F, inp.v2.lots, FRONT_CORE_TABLES, {
+    const nativeRan = nativeFrontCore(S, O, F, mutableLots(inp.v2), FRONT_CORE_TABLES, {
       nsub: NSUB, churn: SUBSCRIPTION_WEEKLY_CHURN, weight: RECEIPTS_MEASUREMENT_WEIGHT,
     });
     if (!nativeRan) {
-      runFrontCore(S, O, F, inp.v2.lots, inp.v2.lots, undefined, 0, companies.length);
+      runFrontCore(S, O, F, mutableLots(inp.v2), mutableLots(inp.v2), undefined, 0, companies.length);
     }
   }
+  if (traceSub !== undefined) {
+    let lane = 0; for (let row = 0; row < companies.length; row++) lane += F.inputUnitsConsumed[row * NSUB + traceSub];
+    console.log(`  [front-trace] electricity: store before ${before.toFixed(1)} after ${storeUnitsOf(traceSub).toFixed(1)} drawn(store) ${(before - storeUnitsOf(traceSub)).toFixed(1)} lane ${lane.toFixed(1)} firms ${companies.length} rows ${inp.v2.lots.head.length / NSUB}`);
+  }
   applyFrontPost(companies, S, O, F, inp.v2, inp.companyUpdates, inp.updatedRegions);
+  // §5-WIRES W4: what the recipes drew from the lots this week, recorded on the goods ledger —
+  // the transformation half of the stock identity (the lots' own rows moved in the kernel).
+  for (let row = 0; row < companies.length; row++) {
+    const base = row * NSUB;
+    for (let si = 0; si < NSUB; si++) {
+      const u = F.inputUnitsConsumed[base + si];
+      if (u > 0) consumeGoods(companies[row].region, SUBUNITS[si], u);
+    }
+  }
   return F;
 }

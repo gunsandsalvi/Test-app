@@ -16,6 +16,7 @@ import { StageDependencyTrace, stageTraceEnabled } from './stage-deps';
 import { BankIdentityTrace, bankIdentityTraceEnabled } from './bank-identity-trace';
 import { CentralBankIdentityTrace, centralBankIdentityTraceEnabled } from './central-bank-identity-trace';
 import { setActiveWireJournal, summarizeWires } from '../ledger/wire';
+import { reasonText } from './stages/settlement';
 import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
 import { runRegionMacroStage } from './stages/02-region-macro';
@@ -463,7 +464,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // dying with the context (they used to be silently dropped — tender proceeds never landed).
     pendingPaymentJournal: ctx.paymentJournal,
     nextWireId: ctx.wireJournal.base + ctx.wireJournal.n,
+    ...(process.env.GOODS_TRACE === '1' ? { lotReceiptsTrace: (ctx.wireJournal as unknown as { lotReceipts?: Record<string, number> }).lotReceipts ?? {} } : {}),
     lastWires: summarizeWires(ctx.wireJournal, (() => { let s = 0; for (let i = 0; i < ctx.paymentJournal.n; i++) s += ctx.paymentJournal.amountUSD[i]; return s; })(),
-      (() => { const m = new Map<string, string>(); for (const c of nextState.companies) m.set(c.ticker, c.region); return (t: string) => m.get(t); })()),
+      (() => { const m = new Map<string, string>(); for (const c of nextState.companies) m.set(c.ticker, c.region); return (t: string) => m.get(t); })(), reasonText),
   }, timings, stageTrace: trace };
 }

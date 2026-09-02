@@ -128,7 +128,9 @@ export interface GameState {
   /** §5-WIRES — the next wire number (every asset move is numbered; the counter never resets). */
   nextWireId?: number;
   /** §5-WIRES — last week's wires, summarised: count and value by asset kind. */
-  lastWires?: { count: number; byKind: Record<string, number>; valueUSDByKind: Record<string, number>; /** money wires recorded after the last pass — they settle next week (N: dated wires) */ moneyPendingUSD: number; /** §5-WIRES W2: the clearing house's net per `region|kind` after the week's wires */ houseNetUSDByKey?: Record<string, number>; /** §5-WIRES W3: the issuers' net per `region|kind` */ issuerNetUSDByKey?: Record<string, number>; issuerNetUSDByTicker?: Record<string, number> };
+  /** GOODS_TRACE=1 only: lot receipts per `companyId|subUnit`. */
+  lotReceiptsTrace?: Record<string, number>;
+  lastWires?: { count: number; byKind: Record<string, number>; valueUSDByKind: Record<string, number>; /** money wires recorded after the last pass — they settle next week (N: dated wires) */ moneyPendingUSD: number; /** §5-WIRES W2: the clearing house's net per `region|kind` after the week's wires */ houseNetUSDByKey?: Record<string, number>; /** §5-WIRES W3: the issuers' net per `region|kind` */ issuerNetUSDByKey?: Record<string, number>; issuerNetUSDByTicker?: Record<string, number>; /** §5-WIRES W4 */ goodsNetUnitsByKey?: Record<string, number>; goodsFlowByKey?: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number; mintedUnits: number }>; goodsOutUnitsByKey?: Record<string, number>; goodsInUnitsByKey?: Record<string, number>; goodsDeliveredByKey?: Record<string, number>; goodsInByTicker?: Record<string, number> };
   regions: Record<RegionId, Region>;
   fxPairs: FxPair[];
   companies: Company[];

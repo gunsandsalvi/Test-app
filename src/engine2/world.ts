@@ -14,7 +14,7 @@
  * static within a run). Strings die at this boundary (interned seller keys).
  */
 
-import { LotStore, newLotStore } from './lots';
+import { LotStore, newLotStore, ReadonlyLotStore } from './lots';
 import { ContractTable, newContractTable } from './contracts';
 import { TrancheStore, newTrancheStore, ReadonlyTrancheStore } from './tranches';
 import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
@@ -27,7 +27,7 @@ export interface V2World {
   internedStrings: string[];
   internedIdByString: Map<string, number>;
   /** IND1/1$-is-1$ — every firm's real input lots, FIFO by acquisition week. */
-  lots: LotStore;
+  lots: ReadonlyLotStore;
   /** IND11 — the bilateral supply-contract book (§7.304's measured scaling monster). */
   contracts: ContractTable;
   /** §7.307/§7.310 — the debt ladder as rows (rows are the authority since §7.313). */

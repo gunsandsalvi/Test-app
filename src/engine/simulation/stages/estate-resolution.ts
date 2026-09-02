@@ -17,6 +17,7 @@
 import { assertNever } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { retireHolding, closeEmptyPositions } from '../../ledger/holdings-ledger';
+import { moveOutputUnits, scrapOutputUnitsTo } from '../../ledger/goods-ledger';
 import { internString } from '../../../engine2/world';
 import { GameState, RegionId, Company, InstitutionalEntity, ItemizedHolding } from '../../../types';
 import {
@@ -250,6 +251,9 @@ function sellAssetsToPeers(
   const totalPeerCashUSD = peers.reduce((a, c) => a + c.cash, 0);
   if (totalPeerCashUSD <= 1) return;
   const weekPriceUSD = invPriceUSD + ppePriceUSD;
+  const preInvUSD = Object.values(comp?.outputInventoryBySubUnit ?? {}).reduce((a, r) => a + Math.max(0, r.valueUSD), 0);
+  const origRows: Record<string, { unitsHeld: number; valueUSD: number }> = {};
+  Object.entries(comp?.outputInventoryBySubUnit ?? {}).forEach(([k, r]) => { origRows[k] = { unitsHeld: r.unitsHeld, valueUSD: r.valueUSD }; });
   peers.forEach((peer) => {
     const share = peer.cash / totalPeerCashUSD;
     const payUSD = Math.min(weekPriceUSD * share, peer.cash);
@@ -266,30 +270,22 @@ function sellAssetsToPeers(
     if (ppeShareUSD > 0) {
       peer.grossPPEUSD = (peer.grossPPEUSD ?? 0) + ppeShareUSD;
     }
-    if (comp?.outputInventoryBySubUnit && invSoldUSD > 0) {
-      const preInvUSD = Object.values(comp.outputInventoryBySubUnit)
-        .reduce((a, r) => a + Math.max(0, r.valueUSD), 0);
-      if (preInvUSD > 0) {
-        const frac = Math.min(1, (invSoldUSD * share) / preInvUSD);
-        Object.entries(comp.outputInventoryBySubUnit).forEach(([subUnitId, row]) => {
-          if (!(row.unitsHeld > 0)) return;
-          const buyerInv = peer.outputInventoryBySubUnit ?? (peer.outputInventoryBySubUnit = {});
-          const dst = buyerInv[subUnitId] ?? (buyerInv[subUnitId] = { unitsHeld: 0, valueUSD: 0 });
-          dst.unitsHeld += row.unitsHeld * frac;
-          dst.valueUSD += row.valueUSD * frac;
-        });
-      }
+    if (comp?.outputInventoryBySubUnit && invSoldUSD > 0 && preInvUSD > 0) {
+      // §5-WIRES W4: the slice each peer takes moves by wire, off the ORIGINAL rows (the shares
+      // are of the week's slice, not of what earlier peers left).
+      const frac = Math.min(1, (invSoldUSD * share) / preInvUSD);
+      Object.entries(origRows).forEach(([subUnitId, row]) => {
+        moveOutputUnits(comp, peer, subUnitId, row.unitsHeld * frac, row.valueUSD * frac, 'estate inventory sold to peers');
+      });
     }
   });
-  // The sold units leave the dead firm's rows whatever fraction the peers took; the rest of
-  // the week's slice is the scrappage above.
-  if (comp?.outputInventoryBySubUnit && invSoldUSD > 0) {
-    const preInvUSD = Object.values(comp.outputInventoryBySubUnit)
-      .reduce((a, r) => a + Math.max(0, r.valueUSD), 0);
-    const keepFrac = preInvUSD > 0 ? Math.max(0, 1 - invSoldUSD / preInvUSD) : 0;
-    Object.values(comp.outputInventoryBySubUnit).forEach((row) => {
-      row.unitsHeld *= keepFrac;
-      row.valueUSD *= keepFrac;
+  // The rest of the week's slice is scrappage — unsold distressed inventory perishes.
+  if (comp?.outputInventoryBySubUnit && invSoldUSD > 0 && preInvUSD > 0) {
+    // The rows land exactly where the old scaling put them (`row *= keepFrac`): what the peers
+    // did not take of the week's slice is scrapped, by wire-less transformation.
+    const keepFrac = Math.max(0, 1 - invSoldUSD / preInvUSD);
+    Object.entries(origRows).forEach(([subUnitId, row]) => {
+      scrapOutputUnitsTo(comp, subUnitId, row.unitsHeld * keepFrac, row.valueUSD * keepFrac);
     });
   }
 }

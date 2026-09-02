@@ -5,7 +5,7 @@
  */
 import { GameState } from '../../types';
 import { AuditFinding, B } from './types';
-import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker } from './snapshot';
+import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey } from './snapshot';
 import { isTrancheKind } from '../../domain/assets';
 
 export function auditWires(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
@@ -64,6 +64,60 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
     if (gaps.length > 0) {
       const usd = gaps.reduce((a, [, g]) => a + Math.abs(g), 0);
       out.push({ family: 'W', check: 'W3 wires reproduce the ladders', week, usd, message: `${gaps.length} region-kinds' ladders moved by other than their wires (${gaps.map(([k, g]) => `${k.replace('|', ' ')} ${B(g)}`).slice(0, 4).join(' | ')}${gaps.length > 4 ? ' | …' : ''}) — face written on a ladder without a wire, or a wire no ladder took` });
+    }
+  }
+  // W4b: a unit sold that did not exist — the seller's settlement clamped a negative stock to zero
+  // and the sale went through anyway. Counted so the identity closes, named so it is a defect.
+  {
+    const minted = Object.entries(w.goodsFlowByKey ?? {}).filter(([, f]) => f.mintedUnits > 1e-3).sort((a, b) => b[1].mintedUnits - a[1].mintedUnits);
+    if (minted.length > 0) {
+      out.push({ family: 'W', check: 'W4 no unit sold that did not exist', week, usd: minted.reduce((a, [, f]) => a + f.mintedUnits, 0), message: `${minted.length} region-goods sold units their sellers never held (${minted.slice(0, 4).map(([k, f]) => `${k.replace('|', ' ')} ${f.mintedUnits.toFixed(1)}u`).join(' | ')}${minted.length > 4 ? ' | …' : ''}) — the stock settlement clamped a negative balance` });
+    }
+  }
+  // W4: the goods identity — per region and sub-unit, in units, the stock's change is what was
+  // produced less consumed and scrapped, plus what the wires brought in less what they took out.
+  if (prev?.goodsUnitsByKey) {
+    const now = goodsUnitsByKey(state);
+    const flows = w.goodsFlowByKey ?? {}; const nets = w.goodsNetUnitsByKey ?? {};
+    const keys = new Set([...Object.keys(now), ...Object.keys(prev.goodsUnitsByKey), ...Object.keys(flows), ...Object.keys(nets)]);
+    const gaps: [string, number][] = [];
+    keys.forEach((key) => {
+      const delta = (now[key] ?? 0) - (prev.goodsUnitsByKey![key] ?? 0);
+      const f = flows[key]; const explained = (f ? f.producedUnits + f.mintedUnits - f.consumedUnits - f.scrappedUnits : 0) + (nets[key] ?? 0);
+      // The tolerance is floating-point dust on the GROSS flow (a lot's 0.0001u residue, the sum
+      // of thousands of products), never a share of the stock.
+      const gross = (f ? f.producedUnits + f.consumedUnits + f.scrappedUnits : 0) + Math.abs(nets[key] ?? 0) + Math.abs(delta);
+      if (Math.abs(delta - explained) > Math.max(0.5, gross * 1e-6)) gaps.push([key, delta - explained]);
+    });
+    if (gaps.length > 0 && process.env.GOODS_TRACE === '1') {
+      // The decomposition of the worst gaps: stock by part (output, lots, transit) before and
+      // after, the transformations, the wires' net.
+      gaps.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+      const partsNow: Record<string, [number, number, number]> = {}; goodsUnitsByKey(state, partsNow);
+      gaps.slice(0, 5).forEach(([key, g]) => {
+        const f = flows[key]; const pn = partsNow[key] ?? [0, 0, 0];
+        const [rg, sb] = key.split('|');
+        let receipts = 0;
+        const byId = new Map(state.companies.map((c) => [c.id, c]));
+        Object.entries((state as { lotReceiptsTrace?: Record<string, number> }).lotReceiptsTrace ?? {}).forEach(([k, u]) => { const [cid, s2] = k.split('|'); if (s2 === sb && byId.get(cid)?.region === rg) receipts += u; });
+        if (rg === 'USA' && sb === 'electricity') {
+          const byTicker = new Map(state.companies.map((c) => [c.ticker, c]));
+          const inBy: Record<string, number> = {}; const reasonsBy: Record<string, Set<string>> = {};
+          Object.entries(w.goodsInByTicker ?? {}).forEach(([k, u]) => { const [tk, s2, rs] = k.split('|'); if (s2 !== sb) return; const c = byTicker.get(tk); if (c?.region !== rg) return; inBy[tk] = (inBy[tk] ?? 0) + u; (reasonsBy[tk] ??= new Set()).add(rs); });
+          const recBy: Record<string, number> = {};
+          Object.entries((state as { lotReceiptsTrace?: Record<string, number> }).lotReceiptsTrace ?? {}).forEach(([k, u]) => { const [cid, s2] = k.split('|'); if (s2 !== sb) return; const c = byId.get(cid); if (c?.region === rg) recBy[c.ticker] = (recBy[c.ticker] ?? 0) + u; });
+          const rows = Object.keys({ ...inBy, ...recBy }).map((tk) => [tk, (inBy[tk] ?? 0) - (recBy[tk] ?? 0)] as [string, number]).filter(([, d]) => Math.abs(d) > 1).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+          const kinds = Object.entries(w.goodsInByTicker ?? {}).filter(([k]) => k.startsWith(`${rg}|${sb}|KIND:`)).map(([k, u]) => `${k.split('KIND:')[1]} ${u.toFixed(1)}`).join(', ');
+          console.log(`  [goods-kind-trace] in by holder kind: ${kinds}; in transit now: ${(state.goodsInTransit ?? []).filter((s2) => s2.subUnitId === sb).length} consignments`);
+          console.log(`  [goods-firm-trace] ${rows.length} firms off: ` + rows.slice(0, 6).map(([tk, d]) => `${tk} ${d.toFixed(1)} in ${(inBy[tk] ?? 0).toFixed(1)} rec ${(recBy[tk] ?? 0).toFixed(1)} [${[...(reasonsBy[tk] ?? [])].join(',')}] ${byTicker.get(tk)?.isDefaulted ? 'DEAD' : ''}${byTicker.get(tk)?.sector ?? ''}`).join(' | '));
+        }
+        console.log(`  [goods-trace] w${week} ${key.replace('|', ' ')}: wires in ${(w.goodsInUnitsByKey?.[key] ?? 0).toFixed(1)} out ${(w.goodsOutUnitsByKey?.[key] ?? 0).toFixed(1)} delivered ${(w.goodsDeliveredByKey?.[key] ?? 0).toFixed(1)} | lot receipts ${receipts.toFixed(1)} | gap ${g.toFixed(1)} | stock prev ${(prev.goodsUnitsByKey![key] ?? 0).toFixed(1)} now ${(now[key] ?? 0).toFixed(1)} (out ${pn[0].toFixed(1)} lots ${pn[1].toFixed(1)} transit ${pn[2].toFixed(1)}) | produced ${(f?.producedUnits ?? 0).toFixed(1)} consumed ${(f?.consumedUnits ?? 0).toFixed(1)} scrapped ${(f?.scrappedUnits ?? 0).toFixed(1)} | wires net ${(nets[key] ?? 0).toFixed(1)}`);
+      });
+    }
+    if (gaps.length > 0) {
+      gaps.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+      const units = gaps.reduce((a, [, g]) => a + Math.abs(g), 0);
+      out.push({ family: 'W', check: 'W4 wires reproduce the goods stock', week, usd: units, message: `${gaps.length} region-goods' stock moved by other than production, consumption and wires (${gaps.slice(0, 4).map(([k, g]) => `${k.replace('|', ' ')} ${g.toFixed(1)}u`).join(' | ')}${gaps.length > 4 ? ' | …' : ''}) — goods that moved with no wire, or were made or used with no record` });
     }
   }
   return out;

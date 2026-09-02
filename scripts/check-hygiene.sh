@@ -135,5 +135,17 @@ if [ -n "$TR_STRAY" ]; then
   echo "$TR_STRAY"
   exit 1
 fi
+# §5-WIRES W4 — the same boundary for goods: the lot store's writers are the goods ledger's and the
+# kernels' FIFO draw; a firm's finished stock is written by the ledger only.
+LOT_MUTATORS='(pushLot|mutableLots|freeLotRows)'
+LOT_STRAY=$(grep -rnE "import \{[^}]*\b${LOT_MUTATORS}\b[^}]*\} from '[^']*engine2/lots(\.ts)?'" src --include=*.ts --include=*.tsx 2>/dev/null \
+  | grep -vE '^src/engine/ledger/|^src/engine2/' || true)
+OUT_STRAY=$(grep -rnE "outputInventoryBySubUnit(\[[^]]+\])?(\.[a-zA-Z]+)?\s*(=[^=]|\+=|-=|\*=)" src --include=*.ts 2>/dev/null \
+  | grep -vE '^src/engine/ledger/|^src/engine2/stage08-back\.ts:|^src/engine/simulation/initialization\.ts:|^src/engine/companyGenerator\.ts:|^src/engine/bootstrap/' || true)
+if [ -n "$LOT_STRAY$OUT_STRAY" ]; then
+  echo "ERROR: goods written outside engine/ledger/goods-ledger.ts — every move of goods is a wire:"
+  echo "$LOT_STRAY$OUT_STRAY"
+  exit 1
+fi
 
 echo "Repo hygiene check passed."

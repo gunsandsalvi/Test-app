@@ -47,6 +47,21 @@ export interface LotStore {
   touchedSubs: number[][];
 }
 
+/**
+ * §5-WIRES W4 — THE LOT STORE IS SEALED. Outside `src/engine/ledger/` and the kernels' own FIFO
+ * draw the store is a read-only view; `engine/ledger/goods-ledger.ts` is where a lot lands (with
+ * the wire that delivered it) and the kernels record what they consume.
+ */
+export type ReadonlyLotStore = {
+  readonly [K in keyof LotStore]:
+    LotStore[K] extends Float64Array ? Readonly<Float64Array>
+    : LotStore[K] extends Int32Array ? Readonly<Int32Array>
+    : LotStore[K] extends number[][] ? readonly (readonly number[])[]
+    : LotStore[K];
+};
+/** The ledger's and the kernels' own handle on the store. Nothing else may hold one. */
+export const mutableLots = (v2: V2World): LotStore => v2.lots as unknown as LotStore;
+
 export function newLotStore(): LotStore {
   const cap = 1 << 12;
   return {
@@ -110,9 +125,12 @@ function slotOf(L: LotStore, firmRow: number, subIdx: number): number {
 /** Append one real purchase lot to the firm's holding (FIFO tail). */
 export function pushLot(
   v2: V2World, companyId: string, subUnitId: string,
-  sellerKey: string, unitsHeld: number, unitPriceUSD: number, acquiredWeek: number
+  sellerKey: string, unitsHeld: number, unitPriceUSD: number, acquiredWeek: number,
+  /** §5-WIRES W4: the wire that delivered the lot — a lot with no wire does not compile. */
+  wireNo: number
 ): void {
-  const L = v2.lots;
+  void wireNo;
+  const L = mutableLots(v2);
   const firmRow = rowOf(v2, companyId);
   const subIdx = SUBUNIT_INDEX.get(subUnitId);
   if (subIdx === undefined) throw new Error(`ENGINE DEFECT: unknown sub-unit ${subUnitId} pushed as an input lot`);
@@ -185,16 +203,16 @@ export interface LotViews {
 export function consumeFifoByRow(
   v2: V2World, firmRow: number, subIdx: number, unitsWanted: number, deadSink?: number[]
 ): { availableUnits: number; costsUSD: number[] } {
-  return consumeFifoOnViews(v2.lots, firmRow, subIdx, unitsWanted, deadSink === undefined ? v2.lots : null, deadSink);
+  return consumeFifoOnViews(mutableLots(v2), firmRow, subIdx, unitsWanted, deadSink === undefined ? mutableLots(v2) : null, deadSink);
 }
 
 export function consumeFifoOnViews(
   LV: LotViews, firmRow: number, subIdx: number, unitsWanted: number,
   freeInto: LotStore | null, deadSink?: number[]
-): { availableUnits: number; costsUSD: number[] } {
+): { availableUnits: number; takenUnits: number; costsUSD: number[] } {
   const L = LV;
   const { slot, rows } = chainOfSlotViews(L, firmRow, subIdx);
-  if (rows.length === 0) return { availableUnits: 0, costsUSD: [] };
+  if (rows.length === 0) return { availableUnits: 0, takenUnits: 0, costsUSD: [] };
 
   // Sorted almost always (lots append in week order); an out-of-order chain — a delayed
   // cross-border consignment landing behind a later domestic buy — is stably re-sorted by
@@ -219,6 +237,7 @@ export function consumeFifoOnViews(
 
   let left = Math.min(availableUnits, Math.max(0, unitsWanted));
   const costsUSD: number[] = [];
+  let takenUnits = 0;
   let firstKept = -1;
   let i = 0;
   for (; i < rows.length; i++) {
@@ -228,6 +247,9 @@ export function consumeFifoOnViews(
     left -= take;
     costsUSD.push(take * L.priceUSD[r]);
     const unitsLeftInLot = L.units[r] - take;
+    // §5-WIRES W4: a residue too small to keep goes with the draw — the units taken are what
+    // the lot store actually lost, so the consumption record is exact.
+    takenUnits += unitsLeftInLot > 0.0001 ? take : L.units[r];
     if (unitsLeftInLot > 0.0001) {
       L.units[r] = unitsLeftInLot;
       firstKept = r;
@@ -249,12 +271,12 @@ export function consumeFifoOnViews(
   } else {
     L.head[slot] = firstKept;
   }
-  return { availableUnits, costsUSD };
+  return { availableUnits, takenUnits, costsUSD };
 }
 
 /** Per-lot value sum for one holding, in chain order (§7.237's float-order rule). */
 export function slotValueUSD(v2: V2World, companyId: string, subUnitId: string): number {
-  const L = v2.lots;
+  const L = mutableLots(v2);
   const { rows } = chainOf(L, v2, companyId, subUnitId);
   let v = 0;
   for (const r of rows) v += L.units[r] * L.priceUSD[r];
@@ -263,7 +285,7 @@ export function slotValueUSD(v2: V2World, companyId: string, subUnitId: string):
 
 /** The firm's whole input-inventory value, iterated in first-touch sub-unit order. */
 export function totalInputValueUSD(v2: V2World, companyId: string): number {
-  const L = v2.lots;
+  const L = mutableLots(v2);
   const firmRow = v2.rowById.get(companyId);
   if (firmRow === undefined) return 0;
   const touched = L.touchedSubs[firmRow];
@@ -280,7 +302,7 @@ export function totalInputValueUSD(v2: V2World, companyId: string): number {
 
 /** The firm's input units, one sub-unit or all, in the same iteration order. */
 export function inputUnitsHeld(v2: V2World, companyId: string, subUnitId?: string): number {
-  const L = v2.lots;
+  const L = mutableLots(v2);
   if (subUnitId !== undefined) {
     const { rows } = chainOf(L, v2, companyId, subUnitId);
     let u = 0;
@@ -303,7 +325,7 @@ export function inputUnitsHeld(v2: V2World, companyId: string, subUnitId?: strin
 
 /** The old record shape, materialised on demand (the UI's read; not a weekly path). */
 export function materializeInputInventory(v2: V2World, companyId: string): Record<string, InputLot[]> {
-  const L = v2.lots;
+  const L = mutableLots(v2);
   const out: Record<string, InputLot[]> = {};
   const firmRow = v2.rowById.get(companyId);
   if (firmRow === undefined) return out;
@@ -327,7 +349,7 @@ export function materializeInputInventory(v2: V2World, companyId: string): Recor
 
 /** Merge worker dead-row sinks back onto the free list (main thread, after a sharded pass). */
 export function freeLotRows(v2: V2World, rows: number[]): void {
-  const L = v2.lots;
+  const L = mutableLots(v2);
   for (const r of rows) {
     L.next[r] = L.freeHead;
     L.freeHead = r;

@@ -37,7 +37,7 @@ import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, fullStaffingCapHeads } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { revHistLen, revHistAt, rowOf, V2World, ensureV2 } from '../../../engine2/world';
-import { pushLot } from '../../../engine2/lots';
+import { deliverGoods, receiveInputLot, settleOutputInventory, setOutputStock, consumeGoods } from '../../ledger/goods-ledger';
 import { contractRows, relinkChain, formContractRow, endOfWeekCompact } from '../../../engine2/contracts';
 import { random, beginEntityScope, endEntityScope } from '../../rng';
 import { capacityMixShares } from '../../../domain/sme-pool';
@@ -184,14 +184,8 @@ function partyOfKey(key: string, regionId: RegionId, lookup: GlobalFirmLookup): 
   return defect(`seller key '${key}' (market region ${regionId}) names no party this model can pay`);
 }
 
-function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, unitPriceUSD: number) {
-  if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
-  // IND1: a good that cannot be held is never held. Software is copied on demand and a building
-  // is made where it stands — neither has a warehouse, so unsold capacity is capacity that went
-  // unused, not stock. (It used to accumulate as inventory and decay like steel, §7.50.)
-  const held = isStorable(subUnitId) ? unitsHeld : 0;
-  update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: held, valueUSD: held * unitPriceUSD };
-}
+// §5-WIRES W4: a firm's finished stock is written by the goods ledger only (`settleOutputInventory`
+// at the week's settlement, `setOutputStock` for the contract deliveries' running balance).
 
 // 1$ is 1$ Phase 2/6: credit a real purchase onto the buyer's persisted input inventory as a
 // NEW LOT — appended on top of whatever this same company already holds (and whatever it
@@ -199,7 +193,7 @@ function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, u
 // seller), not merged into one blended average, since the whole point is to keep each real
 // purchase's real counterparty and real price distinguishable (see domain/company.ts's
 // InputLot doc comment) rather than collapsing them the moment they're credited.
-function addInputInventory(v2: V2World, update: any, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number) {
+function addInputInventory(v2: V2World, update: any, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number, wireNo: number) {
   if (addedUnits <= 0.0001) return;
   // IND1: only material that will be CONSUMED is inventory. A machine delivered is capital; a
   // general operating purchase is used and expensed. Writing all three as lots is what made a
@@ -213,12 +207,15 @@ function addInputInventory(v2: V2World, update: any, baseComp: Company, subUnitI
       valueUSD: addedValueUSD,
       entersServiceWeek: week + commissioningLeadWeeksOf(subUnitId),
     });
+    // §5-WIRES W4: as GOODS the machine is consumed on receipt — it becomes plant, not stock.
+    consumeGoods(baseComp.region, subUnitId, addedUnits);
     return;
   }
-  if (kind === 'OPERATING') return;
+  // §5-WIRES W4: an operating purchase is used the week it lands — consumed on receipt.
+  if (kind === 'OPERATING') { consumeGoods(baseComp.region, subUnitId, addedUnits); return; }
   // ENGINE V2 (§7.304) — the lot lands on the persistent table, in stage order, which is the
   // same order the copy-on-first-touch week arrays used to carry. No copy, no write-back.
-  pushLot(v2, baseComp.id, subUnitId, sellerId, addedUnits, addedValueUSD / addedUnits, week);
+  receiveInputLot(v2, baseComp.id, subUnitId, sellerId, addedUnits, addedValueUSD / addedUnits, week, wireNo);
 }
 
 /** One week's lot in a production pipeline: what was started, and what it cost to start it. */
@@ -783,11 +780,7 @@ function settleContracts(
     }
 
     const supUp = supUpC[ss] ?? (supUpC[ss] = wk.updateOf(supplier));
-    setOutputInventory(
-      supUp, subUnitId,
-      Math.max(0, availAfter[i]),
-      supRegPx[i]
-    );
+    setOutputStock(supUp, subUnitId, Math.max(0, availAfter[i]), supRegPx[i]);
     supUp.salesUnits = (supUp.salesUnits ?? 0) + actualT[i];
     (supUp.salesUnitsBySubUnit ??= {})[subUnitId] = (supUp.salesUnitsBySubUnit[subUnitId] ?? 0) + actualT[i];
     supUp.salesUSD = (supUp.salesUSD ?? 0) + paymentL[i];
@@ -800,7 +793,9 @@ function settleContracts(
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentL[i];
     if (isCapitalGoodCategory) custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentL[i];
     payByIds(ctx, custPid, supPid, paymentL[i] - appliedL[i], R_DELIVERY);
-    addInputInventory(v2, custUp, customer, subUnitId, supplier.ticker, actualT[i], paymentL[i], nextWeek);
+    // §5-WIRES W4: the goods move supplier → customer by wire; the lot lands with it.
+    const deliveryWire = deliverGoods({ kind: 'COMPANY', ticker: supplier.ticker }, { kind: 'COMPANY', ticker: customer.ticker }, subUnitId, actualT[i], actualT[i] > 0 ? paymentL[i] / actualT[i] : 0, 'contract delivery');
+    addInputInventory(v2, custUp, customer, subUnitId, supplier.ticker, actualT[i], paymentL[i], nextWeek, deliveryWire);
 
     if (fillL[i] < 0.95 && needUSD[i] > 0) {
       custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, Math.max(0, fillL[i]));
@@ -1831,12 +1826,11 @@ function runSubUnitMarkets(
     const comp = plan.company;
     const supUp = wk.updateOf(comp);
     const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier.get(comp) ?? 0;
-    setOutputInventory(
-      supUp, subUnitId,
-      // IND10 — what lands in the warehouse is what the pipeline FINISHED, not what was started.
-      Math.max(0, plan.initialInventoryUnits + plan.arrivedProductionUnits - contractSalesUnitsThisSubUnit - soldUnits),
-      results[plan.regionId].clearedPriceUSD
-    );
+    // IND10 — what lands in the warehouse is what the pipeline FINISHED, not what was started.
+    // §5-WIRES W4: the ledger records the production and sets the stock; every unit delivered
+    // (contract or market) left by a wire written where the buyer was known.
+    settleOutputInventory(supUp, plan.regionId, subUnitId, plan.initialInventoryUnits, plan.arrivedProductionUnits,
+      contractSalesUnitsThisSubUnit, soldUnits, results[plan.regionId].clearedPriceUSD);
     if (plan.wipQueue) {
       if (!supUp.wipBySubUnit) supUp.wipBySubUnit = { ...(comp.wipBySubUnit ?? {}) };
       supUp.wipBySubUnit[subUnitId] = plan.wipQueue;
@@ -1998,13 +1992,34 @@ function runSubUnitMarkets(
         }
         const __b1 = S05B_PROF ? performance.now() : 0;
         if (S05B_PROF) s05Buyers.pay += __b1 - __b0;
+        const sellerParty = partyOfKey(l.sellerKey, origin, lookup);
         if (arrivalWeek <= nextWeek) {
-          addInputInventory(v2, buyerUpdate, comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
+          // §5-WIRES W4: a same-week delivery moves seller → buyer by one wire.
+          const w = deliverGoods(sellerParty, { kind: 'COMPANY', ticker: comp.ticker }, subUnitId, l.units, perUnit, 'goods sold: delivered');
+          addInputInventory(v2, buyerUpdate, comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek, w);
         } else {
-          ctx.shipmentsDispatched.push({
-            buyerTicker: comp.ticker, sellerKey: l.sellerKey, subUnitId,
-            units: l.units, landedCostPerUnit: perUnit, arrivalWeek,
+          // §5-WIRES W4: a consignment is HELD BY ITS CARRIER while it moves — the lane's named
+          // fleets by their shares, the origin's transport pool for the share no fleet serves —
+          // and reaches the buyer at arrival (goods-arrival.ts). One consignment per holder.
+          let consignedUnits = 0;
+          laneCarriers?.forEach(({ share, ticker: carrierTicker, region: carrierRegion }) => {
+            const units = l.units * share;
+            if (!(units > 1e-9)) return;
+            consignedUnits += units;
+            deliverGoods(sellerParty, { kind: 'COMPANY', ticker: carrierTicker }, subUnitId, units, perUnit, 'goods sold: consigned to the carrier');
+            ctx.shipmentsDispatched.push({
+              buyerTicker: comp.ticker, sellerKey: l.sellerKey, subUnitId,
+              units, landedCostPerUnit: perUnit, arrivalWeek, carrierTicker, carrierRegion: carrierRegion ?? origin,
+            });
           });
+          const poolUnits = l.units - consignedUnits;
+          if (poolUnits > 1e-9) {
+            deliverGoods(sellerParty, { kind: 'SEGMENT', region: origin, industry: 'AutomotiveTransport' }, subUnitId, poolUnits, perUnit, 'goods sold: consigned to the carrier');
+            ctx.shipmentsDispatched.push({
+              buyerTicker: comp.ticker, sellerKey: l.sellerKey, subUnitId,
+              units: poolUnits, landedCostPerUnit: perUnit, arrivalWeek, carrierRegion: origin,
+            });
+          }
         }
         // XB3a-5: a cross-border sale between two real books is INVOICED — in whichever currency
         // costs the pair least to carry the risk in, on terms the buyer's own credit supports —
@@ -2230,6 +2245,33 @@ function runSubUnitMarkets(
 
   const __t7 = S05_PROF ? performance.now() : 0;
   if (S05B_PROF) s05Buyers.planRest += __t7 - __b2;
+  // §5-WIRES W4: what a household, a treasury or a segment pool bought leaves the seller by wire
+  // too — to a SINK (consumed on receipt), so no stock lands anywhere. Written AFTER the money
+  // legs above so every party is interned in the order it always was (the engine's fingerprint
+  // reads party ids by first sight).
+  if (process.env.GOODS_TRACE === '1') {
+    MARKET_REGION_IDS.forEach(origin => {
+      const book = results[origin];
+      let sold = 0; book.salesByKey.forEach((s) => { sold += s.quantity; });
+      let lots = 0; const byBuyerKind = { firm: 0, other: 0 };
+      book.lotsByBuyer.forEach((ls, buyerKey) => { ls.forEach((l) => { lots += l.units; if (lookup.byKey.get(buyerKey)) byBuyerKind.firm += l.units; else byBuyerKind.other += l.units; }); });
+      let bought = 0; book.purchasesByKey.forEach((p) => { bought += p.quantity; });
+      if (Math.abs(sold - lots) > 1e-3 || Math.abs(bought - lots) > 1e-3) console.log(`  [book-trace] ${origin} ${subUnitId}: sold ${sold.toFixed(1)} bought ${bought.toFixed(1)} lots ${lots.toFixed(1)} (firms ${byBuyerKind.firm.toFixed(1)} other ${byBuyerKind.other.toFixed(1)}) cleared ${book.clearedUnits.toFixed(1)}`);
+    });
+  }
+  MARKET_REGION_IDS.forEach(origin => {
+    const book = results[origin];
+    book.lotsByBuyer.forEach((lots, buyerKey) => {
+      if (lookup.byKey.get(buyerKey)) return; // a firm's lots: the buyer loop below
+      const buyerRegion = buyerRegionOfKey(buyerKey, lookup);
+      if (!buyerRegion) return;
+      const buyer = partyOfKey(buyerKey, buyerRegion, lookup);
+      const reason = buyer.kind === 'HOUSEHOLD' ? 'household purchase' : buyer.kind === 'GOVERNMENT' ? 'government procurement' : 'goods sold to the segment';
+      lots.forEach(l => {
+        deliverGoods(partyOfKey(l.sellerKey, origin, lookup), buyer, subUnitId, l.units, book.clearedPriceUSD, reason);
+      });
+    });
+  });
   // --- 10. Aggregate buyers: the household durable stock and the treasury's realized spend.
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];

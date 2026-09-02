@@ -649,6 +649,7 @@ export function runFrontCore(
         const inputUnitPrice = S.mktExists[mktBase + inputSi] ? S.mktUnitPrice[mktBase + inputSi] : 1;
         const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice);
         const drawn = consumeFifoOnViews(lots, lotRow, inputSi, neededUnits, freeInto, deadSink);
+        F.inputUnitsConsumed[row * NSUB + inputSi] += drawn.takenUnits;
         physicalFulfillment = Math.min(physicalFulfillment, fulfillmentRatio(drawn.availableUnits, neededUnits));
         for (const lotCostUSD of drawn.costsUSD) realInputConsumptionCostUSD += lotCostUSD;
       }
