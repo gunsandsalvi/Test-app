@@ -720,11 +720,6 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
     facilityBankTicker: c.homeBankTicker,
   };
   issueTranche(ctx.v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'firm birth: facility lent by the home bank');
-  ctx.creditEventsThisWeek.push({
-    bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,
-    principalUSD: tranche.principalUSD, marginBps,
-    originationWeek: nextWeek, termWeeks: STANDARD_CORP_TENOR_YEARS * 52, retire: false,
-  });
   pay(ctx, {
     payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
     payee: { kind: 'COMPANY', ticker: c.ticker },

@@ -32,7 +32,7 @@
 import { riskAversionOf } from '../../../domain/preferences';
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, TR_CP } from '../../../engine2/tranches';
+import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf } from '../../../engine2/tranches';
 import { REGION_IDS } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
@@ -178,6 +178,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // SETL6: reserves plus this week's already-agreed securities settlement — 07c's bids
         // are commitments that have not settled yet, and the same reserves cannot fund both.
         const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
+        const facilityBookUSD = facilityBookOf(ctx.v2, bank.ticker);
         const settledCashUSD = reservesUSD
           + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
         // REPO2: the floor is the face of THIS bill bucket actually pledged, not a blended share.
@@ -185,9 +186,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const fundableUSD = Math.min(
           Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker) * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
-          leverageHeadroomUSD(sheet, reservesUSD)
+          leverageHeadroomUSD(sheet, reservesUSD, facilityBookUSD)
         );
-        const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD);
+        const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD, facilityBookUSD);
         const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD, bankDepositLines(ctx, bank.ticker));
         activeBuckets.forEach((b) => {
           const heldUSD = sheet.sovereignBondHoldingsByTenor?.[b.key] ?? 0;
@@ -905,19 +906,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             amountUSD: revolverUSD,
             reason: 'revolver drawn: commercial paper roll failed',
           });
-          // SETL2b, the leg this draw was missing: a BANK_CREDIT payment writes the borrower's
-          // deposit at settlement, and the matching LOAN lands on the lender only through a
-          // credit event — stage 08's draws record one (recordCredit), this one did not, so the
-          // house bank gained a deposit with no asset behind it and its identity broke by
-          // exactly this draw (measured: CLFP w14 +6.81M against a 6.815M roll-fail draw).
-          if (iss.comp.homeBankTicker) {
-            ctx.creditEventsThisWeek.push({
-              bankTicker: iss.comp.homeBankTicker, companyId: iss.comp.id,
-              trancheId: `${iss.comp.ticker}-REVOLVER-${ctx.nextWeek}`,
-              principalUSD: revolverUSD, marginBps: REVOLVER_MARGIN_BPS,
-              originationWeek: ctx.nextWeek, termWeeks: 52, retire: false,
-            });
-          }
+          // SETL2b / step 10: a BANK_CREDIT payment writes the borrower's deposit at settlement,
+          // and the matching asset is the facility row itself on the borrower's ladder — the
+          // lender's book is a read of that row (`facilityBookOf`), so nothing else is recorded.
           ctx.newsItems.push({
             id: `cp-fail-${iss.comp.ticker}-${ctx.nextWeek}`,
             week: ctx.nextWeek,

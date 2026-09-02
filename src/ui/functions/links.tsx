@@ -15,6 +15,8 @@ import { ObjectRef } from '../types';
 import { labelOf } from '../objects';
 import { SectionLabel, words } from '../objects/common';
 import { isActiveCompany } from '../../domain/company';
+import { ensureV2 } from '../../engine2/world';
+import { facilityRowsOf } from '../../engine2/tranches';
 
 function Refs({ title, refs, world, nav, empty }: { title: string; refs: { ref: ObjectRef; hint?: ReactNode; v?: ReactNode }[]; world: World; nav: Nav; empty?: string }) {
   return (<>
@@ -69,7 +71,7 @@ export const links: FunctionModule = {
           <Card style={{ padding: '2px 0' }}>
             <KV k="firms banking here" v={count(clients.length)} onTap={() => nav.go('peers')} />
             <KV k="funds banking here" v={count(fundClients.length)} />
-            <KV k="business loans on the book" v={count((c.bankBalanceSheet?.businessLoans ?? []).length)} />
+            <KV k="facilities on the book" hint="rows on the borrowers' ladders" v={count(facilityRowsOf(ensureV2(world.state), c.ticker).length)} />
           </Card>
           {clients.length ? <Card style={{ padding: '2px 0' }}>{clients.slice(0, 40).map((x) => <KV key={x.id} k={<Link to={{ type: 'company', id: x.id }} nav={nav}>{x.ticker}</Link>} hint={x.sector} v={money(x.annualRevenue)} />)}</Card> : null}
         </>) : null}

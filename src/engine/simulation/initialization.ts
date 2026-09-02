@@ -10,6 +10,7 @@ import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, applyBankFundingSplit
 import { loanBooksOf } from '../../domain/banking';
 import { leverageHeadroomUSD } from '../macro/banking';
 import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
+import { facilityBookOf } from '../../engine2/tranches';
 
 /**
  * OWN6 — the institutional sector's OPENING BOOK, and the one thing it is not.
@@ -641,7 +642,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // holder of the stock the central bank and the institutions do not take; where the
       // cohort's headroom cannot absorb that residual it is rationed pro-rata, never forced.
       const headroomByBank = new Map(regionBanksForSov.map(b =>
-        [b.ticker, leverageHeadroomUSD(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!))]));
+        [b.ticker, leverageHeadroomUSD(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.ticker))]));
       const totalHeadroomUSD = Array.from(headroomByBank.values()).reduce((a, v) => a + v, 0);
       const takenByOthersUSD = (reg.institutionalSector.sovBondHoldingsUSD || 0)
         + totalSovBucketedUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
@@ -710,13 +711,13 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // what the pools can service AND the banks' capital can carry.
     const regionBanksForLending = regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet);
     if (regionBanksForLending.length > 0) {
-      migrateSmeDebtAtSeed(regionId, reg, regionBanksForLending);
+      migrateSmeDebtAtSeed(seedV2, regionId, reg, regionBanksForLending);
       // HH3: the household debt the region already carries becomes real mortgage / card / term
       // pools on the same named banks, replacing the consumer scalar (which covered 11.67% of
       // the same debt and owed the rest to nobody). Equity tops up at each bank's own opening
       // capital ratio and deposits re-derive as the balancing funding — §7.4's discipline: the
       // seed opens in the exact shape the weekly lending pass maintains.
-      migrateHouseholdDebtAtSeed(regionId, reg, regionBanksForLending);
+      migrateHouseholdDebtAtSeed(seedV2, regionId, reg, regionBanksForLending);
       reg.bankingSector = {
         ...reg.bankingSector,
         bankEquityUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0),
@@ -782,7 +783,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // Now that the corporate leg is known, the funding identity is re-derived: wholesale is
         // the residual AFTER real deposits, not a plug carrying money the companies already
         // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
-        applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
+        applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.ticker), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
       });
     }
 
@@ -1076,7 +1077,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const sheet = c.bankBalanceSheet!;
       const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
         .reduce((a, v) => a + (Number(v) || 0), 0);
-      const earningAssetsUSD = loanBooksOf(sheet) + sovUSD;
+      const earningAssetsUSD = loanBooksOf(sheet, facilityBookOf(seedV2, c.ticker)) + sovUSD;
       const nimRevenueUSD = earningAssetsUSD * reg.bankingSector.netInterestMarginPct;
       if (!(nimRevenueUSD > 0)) return;
       c.annualRevenue = Math.round(nimRevenueUSD);
@@ -1297,7 +1298,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     regionBanks.forEach(b => {
       const instUSD = Math.round(byBank.get(b.ticker) ?? 0);
       stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + instUSD);
-      applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+      applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.ticker), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
   });
 
@@ -1312,7 +1313,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   });
 
   // G3b: the dealers the player trades with ARE the named banks' desks.
-  const dealers = dealersFromBanks((b) => openingCashOf(b.bankBalanceSheet!), companies);
+  const dealers = dealersFromBanks((b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.ticker), companies);
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);
   const recentIPOs: { ticker: string; name: string; category: string; week: number }[] = [];
   const recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[] = [];
@@ -1579,7 +1580,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const corpUSD = Math.round(lateCorporateByBank.get(b.ticker) ?? 0);
       const instUSD = Math.round(lateInstitutionalByBank.get(b.ticker) ?? 0);
       stashOpeningCash(sheet, openingCashOf(sheet) + corpUSD + instUSD);
-      applyBankFundingSplit(sheet, openingCashOf(sheet), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+      applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookOf(seedV2, b.ticker), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
   });
 

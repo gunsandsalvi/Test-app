@@ -13,6 +13,7 @@ import { trancheKindOf } from '../../domain/assets';
 import { V2World, ensureV2 } from '../../engine2/world';
 import { inputUnitsHeld } from '../../engine2/lots';
 import { SUBUNITS } from '../../engine2/state';
+import { facilityBookOf } from '../../engine2/tranches';
 
 export interface RegionSnapshot {
   treasuryAccountUSD: number;
@@ -38,7 +39,7 @@ export function snapshotOf(state: GameState): AuditSnapshot {
       sovereignOutstandingUSD: (reg.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0),
       // §7.373: the SAME read M6 takes at week end — every deposit class, the margin line included.
       bankDepositsUSD: banks.reduce((a, b) => a + depositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker)), 0),
-      bankLoansUSD: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!), 0),
+      bankLoansUSD: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!, facilityBookOf(ensureV2(state), b.ticker)), 0),
     };
   });
   return out;

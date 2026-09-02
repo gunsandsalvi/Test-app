@@ -22,7 +22,7 @@
 
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import {  ladderRowsOf, TR_FACILITY } from '../../../engine2/tranches';
+import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
@@ -108,25 +108,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const regionSavingsDepositInflowUSD = (reg.householdState.savingsRate * reg.estimatedHouseholdIncomeUSD) / 52 * depositShare;
     const regionDivertedUSD = divertHouseholdSavingsToMmf(regionId, reg, regionSavingsDepositInflowUSD, ctx);
 
-    // G2: the corporate bank facilities each named bank holds, read off the borrowers' REAL
-    // ladders — the bank's loan records mirror them 1:1 rather than being a second stock.
-    const facilityTranchesByBank = new Map<string, { companyId: string; trancheId: string; principalUSD: number; marginBps: number; originationWeek: number; maturityWeek: number }[]>();
-    const v2r = ensureV2(state);
-    const TSr = v2r.tranches;
-    ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
-      if (c.region !== regionId || c.isDefaulted) return;
-      // §7.311 — the facility scan on rows (walk order = ladder order).
-      for (const r of ladderRowsOf(v2r, c.id)) {
-        if (!(TSr.flags[r] & TR_FACILITY) || TSr.bankRef[r] < 0) continue;
-        const bankTicker = v2r.internedStrings[TSr.bankRef[r]];
-        (facilityTranchesByBank.get(bankTicker) ?? facilityTranchesByBank.set(bankTicker, []).get(bankTicker)!)
-          .push({
-            companyId: c.id, trancheId: v2r.internedStrings[TSr.idRef[r]], principalUSD: TSr.principalUSD[r],
-            marginBps: Number.isNaN(TSr.floatingMarginBps[r]) ? 350 : TSr.floatingMarginBps[r],
-            originationWeek: TSr.originationWeek[r], maturityWeek: TSr.maturityWeek[r],
-          });
-      }
-    });
     // G2 slice 4: corporate deposits ARE the home companies' S5 cash — one representation,
     // derived weekly from the real ledger rather than stored twice.
     // SETL5: the institutional deposit line, reconciled to the entities' real balances the same
@@ -169,11 +150,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         facilityBankTicker: c.homeBankTicker,
       };
       issueTranche(ensureV2(state), { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
-      ctx.creditEventsThisWeek.push({
-        bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,
-        principalUSD: drawUSD, marginBps,
-        originationWeek: ctx.nextWeek, termWeeks: 52, retire: false,
-      });
       pay(ctx, {
         payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
         payee: { kind: 'COMPANY', ticker: c.ticker },
@@ -228,18 +204,20 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const share = bank.bankMarketShare ?? 1 / banks.length;
       const prevSheet = bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, share);
       const riskFactor = bank.bankRiskFactor ?? 1.0;
+      // §5-FINALIZATION step 10: the bank's facility book is its rows on the borrowers' ladders.
+      const facilityRows = facilityRowsOf(ctx.v2, bank.ticker);
+      const facilityBookUSD = facilityBookOf(ctx.v2, bank.ticker);
 
       // G2: last week's itemized book earns its real interest — computed here so the margin
       // reads the same loans the book actually holds.
       const priorLoanInterestWeeklyUSD = (prevSheet.businessLoans || [])
         .filter((l) => l.status === 'PERFORMING')
         .reduce((a, l) => a + (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
-      // SETL4: the FACILITY slice of that interest is now paid by the borrower as a real payment
-      // (stage 08 → settlement), so the evolution must not credit it a second time. SME pools
-      // have no cash ledger of their own and still pay through the book.
-      const priorFacilityInterestWeeklyUSD = (prevSheet.businessLoans || [])
-        .filter((l) => l.status === 'PERFORMING' && l.borrowerKind === 'COMPANY_FACILITY')
-        .reduce((a, l) => a + (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
+      // SETL4: the FACILITY interest is paid by the borrower as a real payment (stage 08 →
+      // settlement), so the evolution measures it and never credits it; the facilities are the
+      // ladder rows (step 10). SME pools have no cash ledger of their own and pay through the book.
+      const priorFacilityInterestWeeklyUSD = facilityRows
+        .reduce((a, f) => a + (f.principalUSD * (reg.policyRate + f.marginBps / 10000)) / 52, 0);
       // SEG2d: the SME slice is a real payment now too — each pool pays its own interest from
       // its own book (SEGMENT → BANK through settlement), on the same prior-week basis the
       // facility exclusion uses, so the evolution must not credit it either.
@@ -272,7 +250,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const householdOpenUSD = householdDepositsAt(ctx.v2, bank.ticker);
       const { sheet, householdLineUSD: evolvedHouseholdLineUSD } = evolveBankingSector(
         prevSheet,
-        { businessLoanUSD: businessLoanBookOf(prevSheet), consumerLoanUSD: consumerLoanBookOf(prevSheet) },
+        { businessLoanUSD: businessLoanBookOf(prevSheet, facilityBookUSD), consumerLoanUSD: consumerLoanBookOf(prevSheet) },
         reservesUSD,
         bankDepositLines(ctx, bank.ticker),
         reg.estimatedHouseholdIncomeUSD * share,
@@ -292,7 +270,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         maturingRepo(bank.ticker).borrowInterestUSD,
         maturingRepo(bank.ticker).lendPrincipalUSD,
         maturingRepo(bank.ticker).lendInterestUSD,
-        priorLoanInterestWeeklyUSD - priorFacilityInterestWeeklyUSD - priorSmeInterestWeeklyUSD,
+        priorLoanInterestWeeklyUSD - priorSmeInterestWeeklyUSD,
         priorHouseholdInterestWeeklyUSD,
         // PUB1: real coupons on this bank's own sovereign book.
         Object.entries(prevSheet.sovereignBondHoldingsByTenor || {}).reduce(
@@ -333,7 +311,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       if ((sheet.dividendWeeklyUSD ?? 0) > 0) payHoldersCash(ctx, bank.id, 'EQUITY', sheet.dividendWeeklyUSD!);
       // G2: the itemized book's own week — facility reconciliation, real interest accrual
       // basis, real SME write-offs, and priced origination under the real capital constraint.
-      const lending = runBankWeeklyLending(bank, sheet, reg, regionId, facilityTranchesByBank, ctx.nextWeek);
+      const lending = runBankWeeklyLending(bank, sheet, reg, regionId, ctx.nextWeek);
       // SEG2e: a loan creates a deposit — the pool's new money is written by this bank's own
       // credit (no reserve moves) and lands on the pool's cash and this bank's smeDepositsUSD
       // line at settlement, in the same week the loan appeared on the book above.
@@ -366,7 +344,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const withDeposits: BankingSector = {
         ...lentSheet,
         loanLossProvisionRateAnnualPct: Number(
-          (businessLoanBookOf(lentSheet) > 0 ? (lending.loanLossWeeklyUSD * 52) / businessLoanBookOf(lentSheet) : 0).toFixed(4)
+          (businessLoanBookOf(lentSheet, facilityBookUSD) > 0 ? (lending.loanLossWeeklyUSD * 52) / businessLoanBookOf(lentSheet, facilityBookUSD) : 0).toFixed(4)
         ),
       };
       ctx.g2DeclinedOriginationUSD[regionId] = (ctx.g2DeclinedOriginationUSD[regionId] ?? 0) + lending.declinedOriginationUSD;
@@ -488,7 +466,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const deskView = (book: string) =>
       Array.from(regionalDeskView(newSheets.map(({ sheet }) => sheet.dealerDeskInventory), book).entries())
         .filter(([, usd]) => Math.abs(usd) > 1);
-    const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet) + sheet.sovereignBondHoldingsUSD + bankReservesOf(ctx.v2, bank.ticker);
+    const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.ticker)) + sheet.sovereignBondHoldingsUSD + bankReservesOf(ctx.v2, bank.ticker);
     const totalAssets = newSheets.reduce((s, e) => s + assetsOf(e), 0);
     const weightedAvg = (f: (s: BankingSector) => number) =>
       totalAssets > 0

@@ -243,7 +243,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const updatedCompanies: Company[] = new Array(companyRows.length);
 
   interface CompanyShardAccumulators {
-    creditEvents: WeeklyStepContext['creditEventsThisWeek'];
     defaulted: string[];
     ratings: WeeklyStepContext['ratingChanges'];
     earnings: unknown[];
@@ -264,7 +263,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   /** The current accumulator set, by reference — §7.321 primitives shared by the shard path
    *  and the barrier path. */
   const snapshotAccums = (): CompanyShardAccumulators => ({
-    creditEvents: ctx.creditEventsThisWeek,
     defaulted: ctx.defaultedTickers,
     ratings: ctx.ratingChanges,
     earnings: ctx.earningsReportedThisTurn,
@@ -278,7 +276,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     holderSettlements: ctx.pendingHolderSettlements,
   });
   const installAccums = (a: CompanyShardAccumulators): void => {
-    ctx.creditEventsThisWeek = a.creditEvents;
     ctx.defaultedTickers = a.defaulted;
     ctx.ratingChanges = a.ratings;
     ctx.earningsReportedThisTurn = a.earnings;
@@ -295,7 +292,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const openShard = (): CompanyShardAccumulators => {
     const held = snapshotAccums();
     installAccums({
-      creditEvents: [], defaulted: [], ratings: [], earnings: [], offerings: [], news: [],
+      defaulted: [], ratings: [], earnings: [], offerings: [], news: [],
       taxAccrued: {}, journal: newPaymentJournal(),
       holderAccruals: new Map(), holderCash: new Map(),
       holderPayout: new Set(), holderSettlements: new Map(),
@@ -306,7 +303,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   /** Fold `mine` into the CURRENT accumulators, in order — the §7.321 merge primitive. */
   const mergeAccums = (mine: CompanyShardAccumulators, deferMergeAppliesNet = false): void => {
 
-    for (const e of mine.creditEvents) ctx.creditEventsThisWeek.push(e);
     for (const t of mine.defaulted) ctx.defaultedTickers.push(t);
     for (const r of mine.ratings) ctx.ratingChanges.push(r);
     for (const e of mine.earnings) ctx.earningsReportedThisTurn.push(e);
@@ -361,7 +357,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // row via d.taxCapture and the replay adds those same floats in firm order — a delta
     // recovered by subtraction would be a different float (§7.324's lesson).
     interface PhaseMarks {
-      credit: Int32Array; def: Int32Array; ratings: Int32Array; earnings: Int32Array;
+      def: Int32Array; ratings: Int32Array; earnings: Int32Array;
       offerings: Int32Array; news: Int32Array; journalN: Int32Array;
       hAcc: Int32Array; hCash: Int32Array; hPay: Int32Array; hSettle: Int32Array;
     }
@@ -369,14 +365,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const held = openShard();
       const acc = snapshotAccums();
       const marks: PhaseMarks = {
-        credit: new Int32Array(n), def: new Int32Array(n), ratings: new Int32Array(n),
+        def: new Int32Array(n), ratings: new Int32Array(n),
         earnings: new Int32Array(n), offerings: new Int32Array(n), news: new Int32Array(n),
         journalN: new Int32Array(n), hAcc: new Int32Array(n), hCash: new Int32Array(n),
         hPay: new Int32Array(n), hSettle: new Int32Array(n),
       };
       for (let i = 0; i < n; i++) {
         body(i);
-        marks.credit[i] = acc.creditEvents.length; marks.def[i] = acc.defaulted.length;
+        marks.def[i] = acc.defaulted.length;
         marks.ratings[i] = acc.ratings.length; marks.earnings[i] = acc.earnings.length;
         marks.offerings[i] = acc.offerings.length; marks.news[i] = acc.news.length;
         marks.journalN[i] = acc.journal.n; marks.hAcc[i] = acc.holderAccruals.size;
@@ -504,7 +500,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         ctx.pendingHolderCashUSD.set(key, (ctx.pendingHolderCashUSD.get(key) ?? 0) + v);
       }
       for (let k = st(sh.holderPayMark); k < sh.holderPayMark[i]; k++) ctx.pendingHolderAccrualPayout.add(sh.holderPay[k]);
-      for (let k = st(sh.creditMark); k < sh.creditMark[i]; k++) ctx.creditEventsThisWeek.push(sh.credits[k]);
     };
     for (let i = 0; i < n; i++) {
       for (let p = 0; p < nPhases; p++) {
@@ -512,7 +507,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         const { acc, marks } = phases[p];
         const sl = slices[p];
         const s = (m: Int32Array) => (i > 0 ? m[i - 1] : 0);
-        for (let k = s(marks.credit); k < marks.credit[i]; k++) ctx.creditEventsThisWeek.push(acc.creditEvents[k]);
         for (let k = s(marks.def); k < marks.def[i]; k++) ctx.defaultedTickers.push(acc.defaulted[k]);
         for (let k = s(marks.ratings); k < marks.ratings[i]; k++) ctx.ratingChanges.push(acc.ratings[k]);
         for (let k = s(marks.earnings); k < marks.earnings[i]; k++) ctx.earningsReportedThisTurn.push(acc.earnings[k]);

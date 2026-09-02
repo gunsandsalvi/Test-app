@@ -87,12 +87,12 @@ export function bankCashBufferRatioOf(bank: { management?: import('../../domain/
 export const BASEL_MIN_LEVERAGE_RATIO = 0.03;
 
 /** Unweighted total assets — the leverage ratio's denominator. */
-export function bankTotalAssetsUSD(sheet: BankingSector, cashUSD: number): number {
+export function bankTotalAssetsUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
   // G3a: the desks' inventory is an asset the bank OWNS and finances, and a cash security
   // consumes the leverage ratio one-for-one. Before the desks had owners it consumed nothing,
   // which is precisely what let a book with no capital behind it absorb any imbalance.
-  return loanBooksOf(sheet) + sovUSD
+  return loanBooksOf(sheet, facilityBookUSD) + sovUSD
     + Math.max(0, cashUSD) + (sheet.repoLentUSD ?? 0)
     // CAL: a coupon earned and not yet paid is an asset the bank holds against the treasury.
     + (sheet.sovereignAccruedCouponUSD ?? 0)
@@ -102,8 +102,8 @@ export function bankTotalAssetsUSD(sheet: BankingSector, cashUSD: number): numbe
 }
 
 /** How much balance sheet the bank's equity still supports under the leverage floor. */
-export function leverageHeadroomUSD(sheet: BankingSector, cashUSD: number): number {
-  return Math.max(0, sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsUSD(sheet, cashUSD));
+export function leverageHeadroomUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
+  return Math.max(0, sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsUSD(sheet, cashUSD, facilityBookUSD));
 }
 
 /**
@@ -166,10 +166,10 @@ export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector, cashUSD: 
  * securities book is bounded by what it can FINANCE, and a funding market is what makes that
  * bound real rather than notional.
  */
-export function sovereignBookCapacityUSD(sheet: BankingSector, cashUSD: number): number {
+export function sovereignBookCapacityUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
-  return Math.max(0, sovUSD) + leverageHeadroomUSD(sheet, cashUSD);
+  return Math.max(0, sovUSD) + leverageHeadroomUSD(sheet, cashUSD, facilityBookUSD);
 }
 
 const TENOR_BUCKET_YEARS: Record<string, number> = {

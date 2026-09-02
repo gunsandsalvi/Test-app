@@ -23,6 +23,7 @@ import { leverageHeadroomUSD } from '../../macro/banking';
 import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { facilityBookOf } from '../../../engine2/tranches';
 
 /**
  * The haircut a broker takes on each kind of collateral: the most that market's own clearing
@@ -129,7 +130,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
 
       // What the fund's OWN capital supports at that haircut, and what the broker can carry.
       const fundEquityUSD = Math.max(0, institutionTotalAssetsUSD(ctx, fund) - drawnUSD);
-      const brokerRoomUSD = Math.max(0, leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, brokerTicker))) + lentByBroker(priorBook, brokerTicker);
+      const brokerRoomUSD = Math.max(0, leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, brokerTicker), facilityBookOf(ctx.v2, brokerTicker))) + lentByBroker(priorBook, brokerTicker);
       const lineUSD = Math.min(maxDrawnUSD(fundEquityUSD, haircutRate), brokerRoomUSD);
 
       // The price: what the broker's own money costs it, plus the return it needs on the capital

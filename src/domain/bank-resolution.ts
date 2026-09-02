@@ -27,22 +27,22 @@ export const PCA_CAPITAL_RATIO = 0.02;
 
 /** What an assuming bank must hold against a book it takes on: the ratio a bank's treasury
  *  actually runs at, on the book's own risk weight. */
-export function assumingCapitalUSD(sheet: BankingSector): number {
-  return bankRwaUSD(sheet) * BANK_WORKING_CAPITAL_RATIO;
+export function assumingCapitalUSD(sheet: BankingSector, facilityBookUSD: number): number {
+  return bankRwaUSD(sheet, facilityBookUSD) * BANK_WORKING_CAPITAL_RATIO;
 }
 
 /** Under prompt corrective action: capital below the closure ratio, or no capital at all. */
-export function isBankUnderPca(sheet: BankingSector): boolean {
-  const rwaUSD = bankRwaUSD(sheet);
+export function isBankUnderPca(sheet: BankingSector, facilityBookUSD: number): boolean {
+  const rwaUSD = bankRwaUSD(sheet, facilityBookUSD);
   if (rwaUSD > 0) return sheet.bankEquityUSD < rwaUSD * PCA_CAPITAL_RATIO;
   return sheet.bankEquityUSD < 0;
 }
 
 /** Every asset on the sheet, cash included — the one asset side the identity counts. */
-export function bankSheetAssetsUSD(sheet: BankingSector, cashUSD: number): number {
+export function bankSheetAssetsUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
-  return loanBooksOf(sheet) + sovUSD + cashUSD
+  return loanBooksOf(sheet, facilityBookUSD) + sovUSD + cashUSD
     + (sheet.repoLentUSD ?? 0) + (sheet.onRrpLendingUSD ?? 0)
     + (sheet.sovereignAccruedCouponUSD ?? 0)
     + dealerDeskGrossUSD(sheet.dealerDeskInventory)
@@ -86,12 +86,12 @@ export interface BankResolutionPlan {
  * behind as a claim), the wholesale lenders are written down next, and the treasury pays the rest.
  */
 export function planBankResolution(
-  sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number, cashUSD: number, lines: DepositLines,
+  sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number, cashUSD: number, lines: DepositLines, facilityBookUSD: number,
 ): BankResolutionPlan {
   const wholesaleUSD = Math.max(0, sheet.centralBankLoanUSD ?? 0);
   const ladderStaysUSD = Math.min(wholesaleUSD, Math.max(0, ownLadderPrincipalUSD));
   const transferableUSD = wholesaleUSD - ladderStaysUSD;
-  const netBookUSD = bankSheetAssetsUSD(sheet, cashUSD) - bankAssumedLiabilitiesUSD(sheet, lines) - transferableUSD;
+  const netBookUSD = bankSheetAssetsUSD(sheet, cashUSD, facilityBookUSD) - bankAssumedLiabilitiesUSD(sheet, lines) - transferableUSD;
   const capitalUSD = Math.max(0, acquirerCapitalUSD);
   const estateUSD = Math.max(0, netBookUSD - capitalUSD);
   const shortfallUSD = Math.max(0, capitalUSD - netBookUSD);
@@ -112,9 +112,9 @@ export function planBankResolution(
  * floor, by equity among those (size is what lets it carry the deposits), and failing any at the
  * floor, the largest equity that is not itself under PCA. Nobody → no resolution this week.
  */
-export function chooseAssumingBank<T extends { sheet: BankingSector }>(candidates: T[], minCapitalRatio: number): T | undefined {
-  const live = candidates.filter((c) => !isBankUnderPca(c.sheet));
-  const ratioOf = (c: T) => { const rwa = bankRwaUSD(c.sheet); return rwa > 0 ? c.sheet.bankEquityUSD / rwa : Infinity; };
+export function chooseAssumingBank<T extends { sheet: BankingSector; facilityBookUSD: number }>(candidates: T[], minCapitalRatio: number): T | undefined {
+  const live = candidates.filter((c) => !isBankUnderPca(c.sheet, c.facilityBookUSD));
+  const ratioOf = (c: T) => { const rwa = bankRwaUSD(c.sheet, c.facilityBookUSD); return rwa > 0 ? c.sheet.bankEquityUSD / rwa : Infinity; };
   const atFloor = live.filter((c) => ratioOf(c) >= minCapitalRatio);
   const pool = atFloor.length > 0 ? atFloor : live;
   if (pool.length === 0) return undefined;
@@ -164,8 +164,8 @@ export function mergeDesks(mine: DealerDeskInventory | undefined, theirs: Dealer
 }
 
 /** The statistics a sheet reports, re-read after its lines moved (readings, never drivers). */
-export function restateBankSheetStatistics(sheet: BankingSector, cashUSD: number, lines: DepositLines): void {
-  const rwaUSD = bankRwaUSD(sheet);
+export function restateBankSheetStatistics(sheet: BankingSector, cashUSD: number, lines: DepositLines, facilityBookUSD: number): void {
+  const rwaUSD = bankRwaUSD(sheet, facilityBookUSD);
   sheet.bankCapitalRatio = Number((rwaUSD > 0 ? sheet.bankEquityUSD / rwaUSD : 0.13).toFixed(4));
   sheet.centralBankReservesUSD = Math.max(0, cashUSD);
   sheet.moneySupplyM2USD = lines.householdUSD + lines.corporateUSD;

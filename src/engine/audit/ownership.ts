@@ -5,6 +5,8 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, sum } from './types';
 import { marketCapOf } from '../../domain/company';
+import { ensureV2 } from '../../engine2/world';
+import { TR_FACILITY } from '../../engine2/tranches';
 
 /** O1 — two-sided: what the books hold of each debt class equals what is outstanding, in both directions. */
 function o1(state: GameState, week: number): AuditFinding[] {
@@ -94,30 +96,27 @@ function o3(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
-/** O4 — bank loans and the borrowers' ladders are the same facilities. */
+/** O4 — every facility has a live borrower and a live lender. §5-FINALIZATION step 10: the
+ *  lender's book IS the facility rows on the borrowers' ladders (there is no second list to
+ *  disagree with), so what is left to check is that each row names a borrower that is active
+ *  or in an open estate, and a lender that still has a sheet. */
 function o4(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  const onBanks = new Map<string, number>();
-  let orphanLoans = 0, orphanUSD = 0;
+  const v2 = ensureV2(state);
+  const S = v2.tranches;
   const byId = new Map(state.companies.map((c) => [c.id, c]));
-  state.companies.forEach((b) => {
-    const bs = b.bankBalanceSheet; if (!b.isBankEntity || !bs || !isActiveCompany(b)) return;
-    (bs.businessLoans ?? []).forEach((l) => {
-      if (l.borrowerKind !== 'COMPANY_FACILITY') return;
-      const c = byId.get(l.borrowerId);
-      if (!c || !isActiveCompany(c)) { orphanLoans++; orphanUSD += l.principalUSD; return; }
-      onBanks.set(l.borrowerId, (onBanks.get(l.borrowerId) ?? 0) + l.principalUSD);
-    });
-  });
-  let mismatch = 0, mismatchUSD = 0;
-  state.companies.forEach((c) => {
-    if (!isActiveCompany(c)) return;
-    const onLadder = sum((c.debtTranches ?? []).filter((t) => t.isBankFacility), (t) => t.principalUSD);
-    const onBank = onBanks.get(c.id) ?? 0;
-    if (Math.abs(onLadder - onBank) > Math.max(1e6, onLadder * 0.02)) { mismatch++; mismatchUSD += onLadder - onBank; }
-  });
-  if (orphanLoans) out.push({ family: 'O', check: 'O4 every loan has a live borrower', week, usd: orphanUSD, message: `${orphanLoans} bank loans (${B(orphanUSD)}) are to firms that are gone or dead` });
-  if (mismatch) out.push({ family: 'O', check: 'O4 facilities on ladders = loans on banks', week, usd: mismatchUSD, message: `${mismatch} borrowers' facility tranches differ from the banks' loans by ${B(mismatchUSD)} net` });
+  const bankByTicker = new Map(state.companies.filter((c) => c.isBankEntity).map((c) => [c.ticker, c]));
+  const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
+  let orphanLoans = 0, orphanUSD = 0, lenderless = 0, lenderlessUSD = 0;
+  for (let r = 0; r < S.used; r++) {
+    if (!(S.flags[r] & TR_FACILITY) || S.bankRef[r] < 0 || S.issuerRef[r] < 0 || !(S.principalUSD[r] > 0.01)) continue;
+    const c = byId.get(v2.internedStrings[S.issuerRef[r]]);
+    if (!c || !(isActiveCompany(c) || openEstates.has(c.id))) { orphanLoans++; orphanUSD += S.principalUSD[r]; }
+    const b = bankByTicker.get(v2.internedStrings[S.bankRef[r]]);
+    if (!b || !b.bankBalanceSheet || !isActiveCompany(b)) { lenderless++; lenderlessUSD += S.principalUSD[r]; }
+  }
+  if (orphanLoans) out.push({ family: 'O', check: 'O4 every facility has a live borrower', week, usd: orphanUSD, message: `${orphanLoans} facilities (${B(orphanUSD)}) sit on the ladders of firms that are gone or dead with no open estate` });
+  if (lenderless) out.push({ family: 'O', check: 'O4 every facility has a live lender', week, usd: lenderlessUSD, message: `${lenderless} facilities (${B(lenderlessUSD)}) name a lender that has no sheet` });
   return out;
 }
 

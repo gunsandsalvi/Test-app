@@ -19,6 +19,7 @@ import { totalDebtOf } from '../../domain/company';
 import { cashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { entityCashOf } from '../../engine/ledger/accounts';
+import { facilityBookOf } from '../../engine2/tranches';
 
 interface Line { label: string; usd?: number; prior?: number; total?: boolean; text?: string }
 
@@ -60,11 +61,12 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     const deposits = lines.householdUSD + lines.corporateUSD + lines.institutionalUSD + lines.smeUSD;
     const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);
     const reservesUSD = bankReservesOf(ensureV2(world.state), c.ticker);
-    const assets = loanBooksOf(bank) + sov + reservesUSD + (bank.repoLentUSD ?? 0) + (bank.sovereignAccruedCouponUSD ?? 0) + desks + (bank.primeBrokerageLoansUSD ?? 0);
+    const facilityBookUSD = facilityBookOf(ensureV2(world.state), c.ticker);
+    const assets = loanBooksOf(bank, facilityBookUSD) + sov + reservesUSD + (bank.repoLentUSD ?? 0) + (bank.sovereignAccruedCouponUSD ?? 0) + desks + (bank.primeBrokerageLoansUSD ?? 0);
     const liabilities = deposits + (bank.clientMarginUSD ?? 0) + (bank.centralBankLoanUSD ?? 0) + (bank.repoBorrowedUSD ?? 0) + (bank.srfBorrowingUSD ?? 0);
     body = (<>
       <Statement units="USD millions · the live sheet" asOf={formatDate(world.state.currentWeek)} lines={[
-        { label: 'Business loans', usd: businessLoanBookOf(bank) },
+        { label: 'Business loans', usd: businessLoanBookOf(bank, facilityBookUSD) },
         { label: 'Household loans', usd: consumerLoanBookOf(bank) },
         { label: 'Sovereign bonds', usd: sov },
         { label: 'Reserves at the central bank', usd: reservesUSD },
@@ -85,7 +87,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
         { label: 'Identity residual', usd: liabilities + bank.bankEquityUSD - assets },
       ]} />
       <Card style={{ padding: '2px 0' }}>
-        <KV k="capital ratio" hint={`rwa ${money(bankRwaUSD(bank))} · floor 8% · closed at 2%`} v={pctLevel(bank.bankCapitalRatio, 2)} />
+        <KV k="capital ratio" hint={`rwa ${money(bankRwaUSD(bank, facilityBookUSD))} · floor 8% · closed at 2%`} v={pctLevel(bank.bankCapitalRatio, 2)} />
         <KV k="net interest margin" v={pctLevel(bank.netInterestMarginPct, 2)} />
         <KV k="loan loss rate" hint="annual, own book" v={pctLevel(bank.loanLossProvisionRateAnnualPct, 2)} />
         <KV k="deposit rate paid" v={pctLevel(bank.depositRateAnnual, 2)} />
@@ -238,7 +240,7 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
     ]} />;
   } else if (active === 'banks') {
     const sov = bs?.sovereignBondHoldingsUSD ?? 0;
-    const books = regionLoanBooksUSD(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted));
+    const books = regionLoanBooksUSD(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.ticker));
     const regionLines = world.state.companies.reduce((a, c) => (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? addDepositLines(a, stateDepositLines(world.state, c.ticker)) : a), ZERO_DEPOSIT_LINES);
     body = <Statement units="USD millions · the region's banks, summed" asOf={asOf} lines={[
       { label: 'Business loans', usd: books.businessLoanUSD },

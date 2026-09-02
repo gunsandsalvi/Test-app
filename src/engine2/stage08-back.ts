@@ -722,23 +722,11 @@ export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapi
   }
 }
 
-/** §7.325 W2 — the firm's credit-event channel, one closure shape shared by A and by the
- *  worker-result rebuild (a worker's own recordCredit captures into its shard instead). */
-export function makeRecordCredit(row: number, L8: BackLanes, ctx: WeeklyStepContext, nextWeek: number) {
-  return (trancheId: string, principalUSD: number, marginBps: number, termWeeks: number, retire: boolean) => {
-    if (!L8.homeBankTicker[row] || !(principalUSD > 0)) return;
-    ctx.creditEventsThisWeek.push({
-      bankTicker: L8.homeBankTicker[row]!, companyId: L8.companyId[row], trancheId,
-      principalUSD, marginBps, originationWeek: nextWeek, termWeeks, retire,
-    });
-  };
-}
-
 /** §7.325 W2 — the fields a worker STRIPS from its A result before postMessage (functions,
  *  the mutable cash box, and the F/benchmark pass-throughs the main thread re-attaches from
  *  its own structures), shipped instead as `cashAfterAUSD` plus the numeric/cloneable rest. */
 export type ShippedBackCoreA = Omit<ReturnType<typeof runBackCoreA>,
-  'post' | 'recordCredit' | 'cash' | 'cashLedger' | 'sec' | 'costDriversUSD'
+  'post' | 'cash' | 'cashLedger' | 'sec' | 'costDriversUSD'
   | 'newOutputInventoryBySubUnit' | 'updatedProductLines' | 'stillUnderConstruction'
   | 'newRecurringBaseUSD'> & { cashAfterAUSD: number };
 
@@ -753,7 +741,6 @@ export function rebuildBackCoreA(shipped: ShippedBackCoreA, row: number, d: Back
   const a = shipped as unknown as ReturnType<typeof runBackCoreA> & { cashAfterAUSD?: number };
   a.cashAfterAUSD = undefined; // not `delete` — dictionary-mode conversion taxes every later read
   a.post = post; a.cash = cash; a.cashLedger = cashLedger;
-  a.recordCredit = makeRecordCredit(row, L8, d.ctx, d.nextWeek);
   a.sec = SECTOR_BENCHMARKS[L8.sector[row]];
   a.costDriversUSD = d.F.costDrivers[row];
   a.newOutputInventoryBySubUnit = d.F.outputInv[row];
@@ -811,8 +798,6 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     const bankCredit: PartyRef | undefined = L8.homeBankTicker[row]
       ? { kind: 'BANK_CREDIT', ticker: L8.homeBankTicker[row] }
       : undefined;
-    const recordCredit = makeRecordCredit(row, L8, ctx, nextWeek);
-
 
     // SCALE §7.303 — ONE PASS OVER THE LADDER, now made in the front pass (same walk, same
     // array order, same floats).
@@ -955,10 +940,6 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     const newMaintenanceShortfallStreak = cap.maintenanceShortfallStreak;
     const weeklyDebtFundedPortion = cap.debtFundedMaintenanceUSD;
     const maintenanceFundingTranches = cap.maintenanceFundingTranches;
-    if (maintenanceFundingTranches.length > 0) {
-      recordCredit(maintenanceFundingTranches[0].id, weeklyDebtFundedPortion,
-        maintenanceFundingTranches[0].floatingMarginBps ?? 0, STANDARD_CORP_TENOR_YEARS * 52, false);
-    }
     const newGrowthCapex = cap.growthCapexUSD;
     const newRndExpense = cap.rndExpenseUSD;
     const newOccupationMixDrift = cap.occupationMixDrift;
@@ -1061,7 +1042,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // line, and default only when both are gone. The full sweep decision at the bottom still
     // runs — by then cash is at or below the buffer, so it cannot double-redeem.
   if (S08K_PROF) s08k.cash += performance.now() - __k1;
-  return { annualInterest, bankCredit, cap, capexCommissionedThisWeekUSD, carryingCostUSD, cash, cashLedger, costDriversUSD, effectiveDebtRate, facilityInterestWeeklyUSD, maintenanceFundingTranches, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCoverage, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLeverage, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, post, recordCredit, sec, stillUnderConstruction, targetProductionUSD, taxPaidAnnualRateUSD, updatedProductLines, weeklyDepreciation, weeklyInterest, weeklyPayrollUSD };
+  return { annualInterest, bankCredit, cap, capexCommissionedThisWeekUSD, carryingCostUSD, cash, cashLedger, costDriversUSD, effectiveDebtRate, facilityInterestWeeklyUSD, maintenanceFundingTranches, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCoverage, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLeverage, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, post, sec, stillUnderConstruction, targetProductionUSD, taxPaidAnnualRateUSD, updatedProductLines, weeklyDepreciation, weeklyInterest, weeklyPayrollUSD };
 }
 
 /** §7.321 the BARRIER: the liquidity redemption against the regional book, first-come in row
@@ -1139,7 +1120,6 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
   const newRndExpense = a.newRndExpense;
   let newTotalDebt = a.newTotalDebt;
   const post = a.post;
-  const recordCredit = a.recordCredit;
   const sec = a.sec;
   const stillUnderConstruction = a.stillUnderConstruction;
   const targetProductionUSD = a.targetProductionUSD;
@@ -1191,7 +1171,6 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           facilityBankTicker: L8.homeBankTicker[row],
         };
         drawnRevolverRow = issueTranche(v2, issuer, revolver, 'revolver drawn: liquidity shortfall');
-        recordCredit(revolver.id, drawUSD, L8.facilityMarginBps[row], 52, false);
         newTotalDebt += drawUSD;
         post('revolver drawn: liquidity shortfall', drawUSD,
           L8.homeBankTicker[row] ? { kind: 'BANK_CREDIT', ticker: L8.homeBankTicker[row] } : undefined);
@@ -1550,7 +1529,6 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         for (const r of rowList) {
           if (!retire.has(v2.internedStrings[TS.idRef[r]])) continue;
           retiredUSD += TS.principalUSD[r];
-          recordCredit(v2.internedStrings[TS.idRef[r]], TS.principalUSD[r], 0, 0, true);
           retireTranche(v2, issuer, r, TS.principalUSD[r], 'term-out: maintenance bridges retired');
         }
         rowList = rowList.filter(r => !retire.has(v2.internedStrings[TS.idRef[r]]));
@@ -1581,8 +1559,6 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       };
       rowList.push(issueTranche(v2, issuer, revolverTranche, 'revolver draw: withdrawn refinancing'));
       debtIssuanceThisWeek += revolverTranche.principalUSD;
-      recordCredit(revolverTranche.id, revolverTranche.principalUSD, L8.facilityMarginBps[row],
-        Math.max(1, revolverTranche.maturityWeek - nextWeek), false);
       post('revolver draw: withdrawn refinancing', revolverTranche.principalUSD, bankCredit);
       pushNews({
         id: `refi-fail-${L8.ticker[row]}-${nextWeek}`,
@@ -1695,18 +1671,12 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
               recordPremium(rTr, repaid * premiumPerDollar);
               const remainingUSD = TS.principalUSD[rTr] - repaid;
               if ((TS.flags[rTr] & TR_FACILITY) && TS.bankRef[rTr] >= 0 && repaid > 0) {
+                // The deposit destruction is posted to the facility's LENDER (t.facilityBankTicker),
+                // not the home bank — splitting the two put the deposit on one bank and the
+                // asset on another (measured: PGNX +292.7M of prepay credit against a −4.1M
+                // loan move, identity −151.8M). Step 10: the asset half is the ladder row
+                // `retireTranche` reduces below; the lender's book is a read of it.
                 const bankTicker = v2.internedStrings[TS.bankRef[rTr]];
-                // Pushed DIRECTLY, not via recordCredit: that helper books to homeBankTicker —
-                // the facility's lender is t.facilityBankTicker, and splitting the two put the
-                // deposit destruction on one bank and the loan reduction on another (measured:
-                // PGNX +292.7M of prepay credit against a −4.1M loan move, identity −151.8M).
-                // Its `principalUSD > 0` guard also swallowed full retirements.
-                ctx.creditEventsThisWeek.push({
-                  bankTicker, companyId: L8.companyId[row], trancheId: v2.internedStrings[TS.idRef[rTr]],
-                  principalUSD: Math.max(0, remainingUSD), marginBps: Number.isNaN(TS.floatingMarginBps[rTr]) ? 350 : TS.floatingMarginBps[rTr],
-                  originationWeek: TS.originationWeek[rTr], termWeeks: Math.max(1, TS.maturityWeek[rTr] - TS.originationWeek[rTr]),
-                  retire: remainingUSD <= 0.01,
-                });
                 facilityRepaidByBank.set(bankTicker,
                   (facilityRepaidByBank.get(bankTicker) ?? 0) + repaid);
                 facilityRepaidUSD += repaid;

@@ -17,13 +17,13 @@ import {
 import { LeadBankCandidate } from '../../../domain/primary-market';
 import { leverageHeadroomUSD, BASEL_MIN_LEVERAGE_RATIO } from '../../macro/banking';
 import { ClearingInstrument, ClearingParticipant, ClearingResult, ParticipantDemand } from './financial-clearing-engine';
-import { BankLoan } from '../../../domain/banking';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { pendingSettlementUSD } from './settlement';
 import { PartyRef } from './settlement';
 import { clearedBookDelta, HoldingKind } from '../../ledger/holdings-ledger';
 import { defect } from '../../../domain/defect';
+import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
 
 /** §5-WIRES W2: the register kind each desk book carries — the wire's asset kind. */
 const DESK_BOOK_KIND: Record<string, HoldingKind> = {
@@ -74,7 +74,7 @@ export function buildDealerDeskParticipants(args: {
     const prior = priorPositions(sheet.dealerDeskInventory, book);
     const capacityUSD = dealerDeskCapacityUSD({
       balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker)),
+      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
@@ -285,7 +285,7 @@ export function totalDeskCapacityUSD(ctx: WeeklyStepContext, banks: Company[], b
     if (!sheet) return;
     capacityUSD += dealerDeskCapacityUSD({
       balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker)),
+      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
@@ -308,13 +308,13 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
     if (!sheet) return;
     freeUSD.set(bank.ticker, dealerDeskCapacityUSD({
       balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker)),
+      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
     }));
     const byBorrower = new Map<string, number>();
-    (sheet.businessLoans || []).forEach((l: BankLoan) => {
-      if (l.status !== 'PERFORMING') return;
+    // Step 10: the relationship is the facilities this bank has lent — its rows on the ladders.
+    facilityRowsOf(ctx.v2, bank.ticker).forEach((l) => {
       byBorrower.set(l.borrowerId, (byBorrower.get(l.borrowerId) ?? 0) + l.principalUSD);
     });
     lentByBankByBorrower.set(bank.ticker, byBorrower);

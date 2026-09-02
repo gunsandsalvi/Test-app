@@ -32,13 +32,13 @@ import {
 import { getOutputInventoryUSD, isActiveCompany } from '../../../domain/company';
 import { bumpRegister } from './register-index';
 import { BankingSector } from '../../../domain/banking';
-import { BankLoan } from '../../../domain/banking';
 import { bookPnL } from '../../ledger/bank-book';
 import { WeeklyStepContext } from './context';
 import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { cashOf } from '../../ledger/accounts';
+import { facilitiesOfBorrower } from '../../../engine2/tranches';
 
 /** How many resolutions the realised recovery rate averages over before it displaces the prior. */
 export const RECOVERY_HISTORY_LENGTH = 24;
@@ -443,31 +443,24 @@ function reduceHolding(
     // defaulted borrower's loan was never written off the lender's book and the write-down
     // never reached its equity — silently, both legs together (§7.103's trap, write side).
     const sheet: BankingSector = company.bankBalanceSheet!;
-    let leftUSD = amountUSD;
-    const loans = (sheet.businessLoans || []).map((l) => {
-      if (l.borrowerId !== companyId || leftUSD <= 0) return l;
-      const takeUSD = Math.min(leftUSD, l.principalUSD);
-      leftUSD -= takeUSD;
-      return { ...l, principalUSD: l.principalUSD - takeUSD };
-    }).filter((l) => l.principalUSD > 1);
-    const bookUSD = loans.reduce((a, l) => a + l.principalUSD, 0);
-    // §7.250: equity moves by what the BOOK moved. The borrower's rows here can carry less than
-    // the estate's allocation (the loan mirror is rebuilt from tranches elsewhere and drifts), so:
-    // a LOSS writes equity down by what was actually extinguished — no more; a RECOVERY is an
-    // asset swap for the matched slice (cash in, loan out) and INCOME for the unmatched slice —
-    // cash arriving against an asset this ledger no longer carries. Both branches then balance
-    // by construction, whatever the rows hold.
+    // §5-FINALIZATION step 10: the bank's claim IS the facility rows on the dead firm's ladder
+    // (there is no loan row to write down); what the ladder still carries for this lender bounds
+    // what this write can extinguish.
+    const onLadderUSD = facilitiesOfBorrower(index.v2, companyId)
+      .filter((f) => f.bankTicker === ticker).reduce((a, f) => a + f.principalUSD, 0);
+    const leftUSD = Math.max(0, amountUSD - onLadderUSD);
+    // §7.250: equity moves by what the BOOK moved: a LOSS writes equity down by what was actually
+    // extinguished — no more; a RECOVERY is an asset swap for the matched slice (cash in, facility
+    // off the ladder) and INCOME for the unmatched slice — cash arriving against an asset the
+    // ladder no longer carries. Both branches balance by construction, whatever the rows hold.
     const extinguishedUSD = amountUSD - leftUSD;
     // §5-WIRES W6: the facility comes off the dead issuer's ladder by the same face, bank → issuer.
     const deadFirm = index.companyById.get(companyId);
     if (deadFirm && extinguishedUSD > 0) {
       retireLadderFace(index.v2, { id: deadFirm.id, ticker: deadFirm.ticker, region: deadFirm.region }, 'BANK_FACILITY', extinguishedUSD, isLoss ? 'estate: facility written off' : 'estate: facility recovered');
     }
-    company.bankBalanceSheet = {
-      ...bookPnL(sheet, isLoss ? -extinguishedUSD : leftUSD,
-        isLoss ? 'estate loan write-off' : 'estate recovery income', ticker),
-      businessLoans: loans,
-    };
+    company.bankBalanceSheet = bookPnL(sheet, isLoss ? -extinguishedUSD : leftUSD,
+      isLoss ? 'estate loan write-off' : 'estate recovery income', ticker);
   }
 }
 
@@ -515,13 +508,14 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
       }
     }
   });
-  // The banks' own facilities: secured, and they rank with the first-lien loans.
+  // The banks' own facilities: secured, and they rank with the first-lien loans. Step 10: the
+  // lender's claim is the facility row on this firm's ladder, one claim per lender.
+  const facilityByLender = new Map<string, number>();
+  facilitiesOfBorrower(ctx.v2, comp.id).forEach((f) => facilityByLender.set(f.bankTicker, (facilityByLender.get(f.bankTicker) ?? 0) + f.principalUSD));
   ctx.updatedCompanies.forEach((bank) => {
-    const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
-    (sheet?.businessLoans || []).forEach((l: BankLoan) => {
-      if (l.borrowerId !== comp.id) return;
-      addClaim({ holder: { kind: 'BANK', ticker: bank.ticker }, instrumentType: 'BANK_FACILITY', seniority: CLAIM_SENIORITY.SECURED, principalUSD: l.principalUSD, recoveredUSD: 0 });
-    });
+    const usd = facilityByLender.get(bank.ticker);
+    if (!bank.isBankEntity || !usd) return;
+    addClaim({ holder: { kind: 'BANK', ticker: bank.ticker }, instrumentType: 'BANK_FACILITY', seniority: CLAIM_SENIORITY.SECURED, principalUSD: usd, recoveredUSD: 0 });
   });
   if (claims.length === 0) return undefined;
 

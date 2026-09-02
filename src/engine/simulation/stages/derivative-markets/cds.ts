@@ -25,7 +25,6 @@ import { institutionProfile } from '../../../../domain/institution-profiles';
 import { CDS_TENOR_WEEKS, protectionNeedUSD } from '../../../../domain/derivatives/classes/cds';
 import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
 import { deskNotionalCapacityUSD } from '../../../../domain/derivatives/registry';
-import { BankLoan } from '../../../../domain/banking';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { isActiveCompany } from '../../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from '../shared-helpers';
@@ -36,6 +35,7 @@ import { REGION_IDS } from '../../../../domain/geography';
 import { strikeDerivatives } from '../derivative-lifecycle';
 import { institutionTotalAssetsUSD } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
+import { facilityBookOf, facilityRowsOf } from '../../../../engine2/tranches';
 
 const cdsInstrumentId = (regionId: RegionId, issuerId: string) => `${regionId}-CDS-${issuerId}`;
 
@@ -60,8 +60,8 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const exposureByIssuer = new Map<string, number>();
-      (sheet.businessLoans || []).forEach((l: BankLoan) => {
-        if (l.borrowerKind !== 'COMPANY_FACILITY') return;
+      // Step 10: the bank's exposure to a name is its facility rows on that name's ladder.
+      facilityRowsOf(ctx.v2, bank.ticker).forEach((l) => {
         exposureByIssuer.set(l.borrowerId, (exposureByIssuer.get(l.borrowerId) ?? 0) + Math.max(0, l.principalUSD));
       });
       const party: DerivativeParty = { kind: 'BANK', ticker: bank.ticker };
@@ -119,7 +119,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       const capacityUSD = deskNotionalCapacityUSD(
-        leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'CDS');
+        leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'CDS');
       if (!(capacityUSD > 0)) return;
       referenceIssuers.forEach((c) => {
         const annualPd = pdByIssuerId.get(c.id)!;

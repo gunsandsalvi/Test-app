@@ -61,7 +61,7 @@ import { runTradeSettlementStage } from './stages/trade-settlement';
 // Side effect only: registers the (Node-only, env-gated) clearing worker pool with the engine.
 import './stages/clearing-worker-pool';
 import { ensureV2 } from '../../engine2/world';
-import {  assertLaddersInSync, materializeLadder } from '../../engine2/tranches';
+import {  assertLaddersInSync, materializeLadder, facilityBookOf } from '../../engine2/tranches';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { ensureBooksSynced, assertBooksInSync, materializeBook, clearDirtyBooks } from '../../engine2/holdings';
 import './stages/native-kernels';
@@ -425,7 +425,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     lastCashOverdraftUSD: ctx.cashOverdraftUSD,
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.
-    dealers: dealersFromBanks((b) => bankReservesOf(ctx.v2, b.ticker), nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, damperBindStreakById: rollDamperStreaks(state.damperBindStreakById, ctx.damperBoundInstrumentIds), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
+    dealers: dealersFromBanks((b) => bankReservesOf(ctx.v2, b.ticker), (b) => facilityBookOf(ctx.v2, b.ticker), nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, damperBindStreakById: rollDamperStreaks(state.damperBindStreakById, ctx.damperBoundInstrumentIds), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
     // SETL2: the week's settlement, decomposed. §6 watches the boundary line DOWN, and a number
     // you cannot attribute is a number you cannot watch — this carries what hit it and why.
     lastSettlement: ctx.lastSettlementReport && {

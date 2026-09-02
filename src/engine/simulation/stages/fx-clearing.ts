@@ -49,6 +49,7 @@ import { deskStandingPfeChargeUSD } from './derivative-lifecycle';
 import { leverageHeadroomUSD } from '../../macro/banking';
 import { REGION_IDS } from '../../../domain/geography';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { facilityBookOf } from '../../../engine2/tranches';
 
 const REGIONS = REGION_IDS;
 
@@ -127,7 +128,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const sheet = c.bankBalanceSheet;
     if (!sheet) return;
     // DRV: the desk's remaining derivative budget is ONE number across every class it writes.
-    const capUSD = deskNotionalCapacityUSD(leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, c.ticker)), deskStandingPfeChargeUSD(ctx, state, c.ticker), 'FX_FORWARD');
+    const capUSD = deskNotionalCapacityUSD(leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, c.ticker), facilityBookOf(ctx.v2, c.ticker)), deskStandingPfeChargeUSD(ctx, state, c.ticker), 'FX_FORWARD');
     if (capUSD > 0) deskCapacityByTicker.set(c.ticker, capUSD);
     arbitrageCapacityUSD += capUSD;
   });

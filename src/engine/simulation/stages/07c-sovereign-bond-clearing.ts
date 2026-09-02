@@ -67,6 +67,7 @@ import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { REGION_IDS } from '../../../domain/geography';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { facilityBookOf } from '../../../engine2/tranches';
 
 type ZeroRateField = 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y';
 const TENOR_BUCKETS: { key: string; years: number; zeroRateField: ZeroRateField }[] = [
@@ -442,12 +443,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // the books clear before the settlement pass, so a commitment lives in the unsettled
       // position until then and a bank cannot fund two books with the same reserves.
       const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
+      const facilityBookUSD = facilityBookOf(ctx.v2, bank.ticker);
       const settledCashUSD = reservesUSD
         + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
       const fundableUSD = Math.min(
         Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker) * MIN_CASH_BUFFER_RATIO)
           + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
-        leverageHeadroomUSD(sheet, reservesUSD)
+        leverageHeadroomUSD(sheet, reservesUSD, facilityBookUSD)
       );
       // REPO2: collateral already pledged cannot simultaneously be sold, and the pledge names
       // the paper. The floor is now the face of THIS bucket that is actually encumbered — a
@@ -458,7 +460,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // bonds-versus-reserves choice that anchors the front end, now expressed as a price rather
       // than as a scaling factor on a quantity target.
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD);
+      const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD, facilityBookUSD);
       const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD, bankDepositLines(ctx, bank.ticker));
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);

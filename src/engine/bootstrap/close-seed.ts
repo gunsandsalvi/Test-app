@@ -25,6 +25,7 @@ import { centralBankFxReservesUSD, centralBankAssetsUSD } from '../../domain/cen
 import { govBucketKeyOf } from '../../domain/sovereign-id';
 import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { weeklyInterestExpenseUSD } from '../../domain/government';
+import { facilityBookOf } from '../../engine2/tranches';
 
 const sumByTenor = (byTenor: Record<string, number> | undefined): number =>
   Object.values(byTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0);
@@ -53,7 +54,7 @@ export function closeSeedMoney(
       const lines = depositLinesAt(v2, companies, institutionalEntities, b.ticker);
       const otherDepositsUSD = Math.round(Math.max(0, lines.corporateUSD)) + Math.round(Math.max(0, lines.institutionalUSD))
         + Math.max(0, lines.smeUSD) + Math.max(0, s.clientMarginUSD ?? 0) + Math.max(0, s.centralBankLoanUSD ?? 0);
-      const needUSD = bankTotalAssetsUSD(s, openingCashOf(s)) - s.bankEquityUSD - (s.repoBorrowedUSD ?? 0) - (s.srfBorrowingUSD ?? 0) - otherDepositsUSD;
+      const needUSD = bankTotalAssetsUSD(s, openingCashOf(s), facilityBookOf(v2, b.ticker)) - s.bankEquityUSD - (s.repoBorrowedUSD ?? 0) - (s.srfBorrowingUSD ?? 0) - otherDepositsUSD;
       let lineUSD = 0;
       if (needUSD >= 0) {
         lineUSD = Math.round(needUSD);

@@ -14,6 +14,7 @@ import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
+import { facilityBookOf } from '../../engine2/tranches';
 
 const banksOf = (s: GameState, r?: RegionId) =>
   s.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c) && (!r || c.region === r));
@@ -104,7 +105,7 @@ function m5(state: GameState, week: number): AuditFinding[] {
     const bs = b.bankBalanceSheet!;
     const sov = sum(Object.values(bs.sovereignBondHoldingsByTenor ?? {}), (v) => Number(v) || 0);
     const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryUSD));
-    const assets = loanBooksOf(bs) + sov + bankReservesOf(ensureV2(state), b.ticker) + (bs.repoLentUSD ?? 0) + (bs.sovereignAccruedCouponUSD ?? 0) + desks + (bs.primeBrokerageLoansUSD ?? 0);
+    const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.ticker)) + sov + bankReservesOf(ensureV2(state), b.ticker) + (bs.repoLentUSD ?? 0) + (bs.sovereignAccruedCouponUSD ?? 0) + desks + (bs.primeBrokerageLoansUSD ?? 0);
     const liabilities = depositsOf(bs, stateDepositLines(state, b.ticker)) + (bs.centralBankLoanUSD ?? 0) + (bs.repoBorrowedUSD ?? 0) + (bs.srfBorrowingUSD ?? 0);
     const residual = assets - liabilities - bs.bankEquityUSD;
     if (Math.abs(residual) > Math.max(1e7, assets * 2e-3)) out.push({ family: 'M', check: 'M5 bank sheet closes', week, usd: residual, message: `${b.region}:${b.ticker} assets ${B(assets)} − liabilities ${B(liabilities)} − equity ${B(bs.bankEquityUSD)} = ${B(residual)}` });

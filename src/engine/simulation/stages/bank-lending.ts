@@ -55,6 +55,7 @@ import { remainingLifeExpectancyYears, medianAdultAgeYears } from '../../bootstr
 import { creditRecoveryRate, computeAnnualDefaultProbability } from './shared-helpers';
 import { V2World } from '../../../engine2/world';
 import { bankTotalAssetsUSD, stressedOutflowUSD, LIQUIDITY_COVERAGE_RATIO, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
+import { facilityBookOf } from '../../../engine2/tranches';
 
 /** Covenant-style ceiling on SME pool leverage — the same real lending constraint the bond
  * market's covenant ladder expresses (§5-RV's "lenders do not fund unlimited leverage"). */
@@ -126,6 +127,8 @@ function seedConsumerRwaUSD(reg: Region, bank: Company): number {
 }
 
 export function migrateSmeDebtAtSeed(
+  /** Step 10: the seed's world — a bank's facility book is its rows on the borrowers' ladders. */
+  v2: V2World,
   regionId: RegionId,
   reg: Region,
   banks: Company[]
@@ -140,7 +143,7 @@ export function migrateSmeDebtAtSeed(
   // §5-WIRES D: the sheets carry no loan-book scalar; what the seed's stated consumer book
   // still occupies of each bank's capital (until HH3 replaces it with real pools) is counted
   // through the same stated number HH3 replaces — the two migrations read one seed.
-  const usedRwaUSD = banks.reduce((a, b) => a + bankRwaUSD(b.bankBalanceSheet!) + seedConsumerRwaUSD(reg, b), 0);
+  const usedRwaUSD = banks.reduce((a, b) => a + bankRwaUSD(b.bankBalanceSheet!, facilityBookOf(v2, b.ticker)) + seedConsumerRwaUSD(reg, b), 0);
   const carriableUSD = Math.max(0, totalEquityUSD / BANK_WORKING_CAPITAL_RATIO - usedRwaUSD);
   const migratedUSD = Math.min(serviceableUSD, carriableUSD);
 
@@ -171,7 +174,7 @@ export function migrateSmeDebtAtSeed(
     // until HH3 seeds the real pools and re-derives this again.
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     stashSeedHouseholdLine(sheet, Math.round((
-      businessLoanBookOf(sheet) + seedConsumerLoanBookUSD(reg, bank) + sovUSD + openingCashOf(sheet) - sheet.bankEquityUSD
+      businessLoanBookOf(sheet, facilityBookOf(v2, bank.ticker)) + seedConsumerLoanBookUSD(reg, bank) + sovUSD + openingCashOf(sheet) - sheet.bankEquityUSD
     )));
   });
 
@@ -193,9 +196,6 @@ export interface WeeklyLendingResult {
   /** Real write-offs this week (loan − and equity − legs applied here). */
   loanLossWeeklyUSD: number;
   declinedOriginationUSD: number;
-  /** Net facility money created (+) / destroyed (−) this week — excluded from the reserve
-   * settlement of the corporate-deposit view. */
-  facilityNetOriginationUSD: number;
   /** SEG2e — this week's SME origination per industry. The caller (02b) books the deposit
    * half through settlement (BANK_CREDIT → SEGMENT), so the pool's new money lands on its own
    * line with no reserve move; the loan half was already written in place here. */
@@ -203,18 +203,20 @@ export interface WeeklyLendingResult {
 }
 
 /**
- * One bank's weekly loan-book operations: interest accrual at each loan's own real terms, SME
- * pool losses at the pool's own real default rate, SME origination as a PRICED decision under
- * the bank's real capital constraint, and facility reconciliation against the borrowers' real
- * tranche ladders (companies create/retire facilities in stage 08; the bank's book mirrors
- * them 1:1 — one loan per facility tranche, never two representations).
+ * One bank's weekly loan-book operations on its SME rows: interest accrual at each pool's own
+ * real terms, pool losses at the pool's own real default rate, and SME origination as a PRICED
+ * decision under the bank's real capital constraint.
+ *
+ * §5-FINALIZATION step 10: the corporate facilities are NOT rows here. A facility is the tranche
+ * on the borrower's ladder, and the lender's book is a read of those rows (`facilityBookOf`,
+ * engine2/tranches.ts) — one ledger, so the weekly sync that mirrored the ladders into loan
+ * rows (and drifted between syncs: O4 lived on that drift) is gone with the rows.
  */
 export function runBankWeeklyLending(
   bank: Company,
   sheet: BankingSector,
   reg: Region,
   regionId: RegionId,
-  facilityTranchesByBank: Map<string, { companyId: string; trancheId: string; principalUSD: number; marginBps: number; originationWeek: number; maturityWeek: number }[]>,
   nextWeek: number
 ): WeeklyLendingResult {
   const policyRate = reg.policyRate;
@@ -222,43 +224,8 @@ export function runBankWeeklyLending(
   const bankHurdle = bankRequiredReturnAnnual(bank, reg);
   let loans = [...(sheet.businessLoans || [])];
 
-  // ---- Facility reconciliation: the bank's records mirror the borrowers' real ladders. The
-  // NET origination is returned so the corporate-deposit settlement (slice 4) can exclude
-  // created/destroyed money from interbank reserve movement — endogenous money does not move
-  // reserves; only money CHANGING banks does. ----
-  const facilities = facilityTranchesByBank.get(bank.ticker) ?? [];
-  const facilityIds = new Set(facilities.map((f) => f.trancheId));
-  let facilityNetOriginationUSD = 0;
-  loans = loans.filter((l) => {
-    if (l.borrowerKind !== 'COMPANY_FACILITY') return true;
-    if (facilityIds.has(l.id)) return true;
-    facilityNetOriginationUSD -= l.principalUSD; // repaid/retired: money destroyed
-    return false;
-  });
-  const existingIds = new Set(loans.map((l) => l.id));
-  facilities.forEach((f) => {
-    if (existingIds.has(f.trancheId)) {
-      const l = loans.find((x) => x.id === f.trancheId)!;
-      facilityNetOriginationUSD += f.principalUSD - l.principalUSD;
-      l.principalUSD = f.principalUSD;
-      return;
-    }
-    facilityNetOriginationUSD += f.principalUSD;
-    loans.push({
-      id: f.trancheId,
-      borrowerId: f.companyId,
-      borrowerKind: 'COMPANY_FACILITY',
-      principalUSD: f.principalUSD,
-      marginBps: f.marginBps,
-      originationWeek: f.originationWeek,
-      termWeeks: f.maturityWeek - f.originationWeek,
-      status: 'PERFORMING',
-    });
-  });
-
-  // ---- Interest at each loan's own terms. The corporate side is already expensed through the
-  // borrowers' S5 ledgers (facility tranches); the SME side's payer is the segment P&L, a
-  // recorded boundary until MS/BP close it. ----
+  // ---- Interest at each pool's own terms; the payer is the pool's own account (02b pays it
+  // SEGMENT → BANK through settlement). ----
   let loanInterestWeeklyUSD = 0;
   loans.forEach((l) => {
     if (l.status !== 'PERFORMING') return;
@@ -337,34 +304,21 @@ export function runBankWeeklyLending(
     // does with a credit line when it is squeezed.
   });
 
-  if (facilityNetOriginationUSD > 1e6) {
-    defect(`${bank.ticker}: ${(facilityNetOriginationUSD / 1e6).toFixed(1)}M of facility principal appeared on the ladders with no payment behind it`);
-  }
   return {
     sheet: {
-      ...bookPnL(
-        bookPnL(sheet, -loanLossWeeklyUSD, 'business loan losses', bank.ticker),
-        Math.min(0, facilityNetOriginationUSD), 'facility left the ladders without a payment', bank.ticker
-      ),
+      ...bookPnL(sheet, -loanLossWeeklyUSD, 'business loan losses', bank.ticker),
       businessLoans: loans,
       // SEG2e: loans still create deposits, but the pool's new money lands on ITS OWN account
       // through settlement — the caller pays BANK_CREDIT → SEGMENT with the per-segment map
       // below (the pool's row at this bank IS the bank's SME line), with no reserve move.
-      // SETL2b: a facility is DEPOSIT CREATION, and both halves happen in one statement at
-      // settlement — the loan is booked there in the same week the borrower draws it, so no
-      // reserve moves and nothing is left for this reconciliation to fund. What remains here is
-      // the sync itself, which is level-based: a tranche settlement already booked is found with
-      // its principal matching and contributes nothing. `facilityNetOriginationUSD` is therefore
-      // the residue of anything settlement did NOT see (a merger moving a book, a default), and
-      // §5-CLOSE C4: that residue NEVER moves reserves. A loan that left the ladders without a
-      // payment (a borrower that died, a book a merger moved) is a WRITE-OFF — the asset is
-      // gone and equity absorbs it; a loan that appeared with no payment behind it is a claim
-      // minted from nothing, and that is a defect at whichever stage pushed the row.
+      // Step 10: a facility draw is the same deposit creation, and its asset half is the ladder
+      // row the borrower's stage wrote — nothing here books, syncs or writes it off; a facility
+      // that leaves a ladder leaves the lender's book in the same write (an estate's write-off
+      // moves the lender's equity there, a merger or resolution wires the lender).
     },
     loanInterestWeeklyUSD,
     loanLossWeeklyUSD,
     declinedOriginationUSD,
-    facilityNetOriginationUSD,
     smeOriginationBySegment,
   };
 }
@@ -400,6 +354,7 @@ export function currentMortgageRateAnnual(reg: Region): number {
  * books moves only through the lending pass below.
  */
 export function migrateHouseholdDebtAtSeed(
+  v2: V2World,
   regionId: RegionId,
   reg: Region,
   banks: Company[]
@@ -505,7 +460,8 @@ export function migrateHouseholdDebtAtSeed(
     // §5-WIRES D: the consumer scalar this replaces is the seed's STATED book (never stored on
     // the sheet); it stands in the prior RWA exactly as the stored copy used to.
     const replacedRwaUSD = seedConsumerRwaUSD(reg, bank);
-    const priorRwaUSD = bankRwaUSD(sheet) + replacedRwaUSD;
+    const facilityBookUSD = facilityBookOf(v2, bank.ticker);
+    const priorRwaUSD = bankRwaUSD(sheet, facilityBookUSD) + replacedRwaUSD;
     const priorRatio = priorRwaUSD > 0 ? sheet.bankEquityUSD / priorRwaUSD : BANK_WORKING_CAPITAL_RATIO;
     const newHouseholdRwaUSD = householdBookRwaUSD(pools);
     sheet.householdLoans = pools;
@@ -514,10 +470,10 @@ export function migrateHouseholdDebtAtSeed(
     sheet.bankEquityUSD = Math.round((sheet.bankEquityUSD + Math.max(0, newHouseholdRwaUSD - replacedRwaUSD) * priorRatio));
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     const fundingNeedUSD = Math.round((
-      loanBooksOf(sheet) + sovUSD + openingCashOf(sheet) - sheet.bankEquityUSD
+      loanBooksOf(sheet, facilityBookUSD) + sovUSD + openingCashOf(sheet) - sheet.bankEquityUSD
     ));
-    applyBankFundingSplit(sheet, openingCashOf(sheet), Math.round(openingCashOf(hs) * share)); // the seed's provisional sizing (close-seed strikes the line)
-    sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet))).toFixed(4));
+    applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookUSD, Math.round(openingCashOf(hs) * share)); // the seed's provisional sizing (close-seed strikes the line)
+    sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet, facilityBookUSD))).toFixed(4));
   });
 
   // The household lines become the derived sums they will be every week from here on, and the
@@ -980,6 +936,8 @@ export function applyBankFundingSplit(
   sheet: BankingSector,
   /** The bank's reserves (its account; at the seed, the stash close-seed opens it from). */
   cashUSD: number,
+  /** Step 10: the bank's facility book — its rows on the borrowers' ladders (`facilityBookOf`). */
+  facilityBookUSD: number,
   householdDepositsUSD: number,
   /** CASH: reserves this bank has already been billed for or promised but that have not settled
    *  yet. The sheet's repo and facility LIABILITIES are struck post-maturity the moment the
@@ -1002,7 +960,7 @@ export function applyBankFundingSplit(
   // this split is not responsible for. Whatever is left is what deposits and wholesale money
   // have to cover.
   const fundingNeedUSD = Math.round((
-    bankTotalAssetsUSD(sheet, cashUSD) + pendingCashUSD - sheet.bankEquityUSD
+    bankTotalAssetsUSD(sheet, cashUSD, facilityBookUSD) + pendingCashUSD - sheet.bankEquityUSD
       - (sheet.repoBorrowedUSD ?? 0) - (sheet.srfBorrowingUSD ?? 0)
   ));
   // §5-CLOSE: household money funds what the real corporate, institutional and segment

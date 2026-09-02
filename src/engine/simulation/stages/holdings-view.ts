@@ -23,7 +23,7 @@
 
 import { govBucketId } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import { ladderRowsOf, ensureLaddersSynced } from '../../../engine2/tranches';
+import { ladderRowsOf, ensureLaddersSynced, facilityRowsOf } from '../../../engine2/tranches';
 import { bookHeadOf, ensureBooksSynced } from '../../../engine2/holdings';
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../domain/assets';
@@ -317,8 +317,8 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   state.companies.forEach((c) => {
     const sheet = c.bankBalanceSheet;
     if (!sheet || !isActiveCompany(c)) return;
-    (sheet.businessLoans || []).forEach((l) => {
-      if (l.borrowerKind !== 'COMPANY_FACILITY') return;
+    // Step 10: the bank's facilities are its rows on the borrowers' ladders.
+    facilityRowsOf(v2hv, c.ticker).forEach((l) => {
       const issuerRegion = companyRegionById.get(l.borrowerId);
       const a = issuerRegion ? acc(issuerRegion) : undefined;
       if (a) a.corpBond.bankUSD += Math.max(0, l.principalUSD);

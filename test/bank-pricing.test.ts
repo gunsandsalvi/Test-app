@@ -48,11 +48,12 @@ test('§7.291 — a bank at its regulatory floor prices at coin-flip PD; a capit
   // change to either side breaks this pin.
   const { bankRwaUSD } = await import('../src/domain/bank-pricing');
   const sheet = (equityUSD: number) => ({
-    businessLoans: [{ id: 'l', borrowerId: 'b', borrowerKind: 'COMPANY_FACILITY', principalUSD: 10e9, marginBps: 0, originationWeek: 0, termWeeks: 52, status: 'PERFORMING' }],
+    businessLoans: [],
     householdLoans: [{ kind: 'CREDIT_CARD', principalUSD: 10e9, marginBps: 0 }],
     bankEquityUSD: equityUSD, loanLossProvisionRateAnnualPct: 0.02,
   }) as never;
-  const rwa = bankRwaUSD(sheet(0));
+  // Step 10: the facility book is the bank's rows on the borrowers' ladders, read by the caller.
+  const rwa = bankRwaUSD(sheet(0), 10e9);
   // RWA = 10B x 1.0 + 10B x 0.75 (a card book's weight) = 17.5B — §5-WIRES D: both books are rows.
   if (Math.abs(rwa - 17.5e9) > 1) throw new Error(`rwa ${rwa}`);
 });

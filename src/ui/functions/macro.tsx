@@ -14,6 +14,7 @@ import { money, pctLevel, num, count, ratio, pct } from '../format';
 import { regionOf, tapeSeries } from '../world';
 import { ChangeSub, SectionLabel, words } from '../objects/common';
 import { WEEKS_PER_MONTH } from '../calendar';
+import { facilityBookOf } from '../../engine2/tranches';
 
 export const macro: FunctionModule = {
   name: 'macro',
@@ -25,7 +26,7 @@ export const macro: FunctionModule = {
     const tape = (k: string) => tapeSeries(world, `region:${r.id}:${k}`).values;
     const sub = (k: string) => { const s = tape(k); return s.filter(Number.isFinite).length > WEEKS_PER_MONTH ? <ChangeSub series={s} /> : undefined; };
     const hs = r.householdState; const bs = r.bankingSector; const hm = r.housingMarket;
-    const books = regionLoanBooksUSD(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted));
+    const books = regionLoanBooksUSD(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.ticker));
     const gdp = r.derivedNominalGdpUSD ?? r.estimatedNominalGdpUSD ?? 0;
     return (<>
       <SectionLabel>activity</SectionLabel>

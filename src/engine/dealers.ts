@@ -46,6 +46,8 @@ const ALL_ASSET_CLASSES = Object.keys(DESK_BOOK_BY_ASSET_TYPE) as AssetType[];
 export function dealersFromBanks(
   /** A3.6c: a bank's reserves — its account in the week (`bankReservesOf`), its opening stash at the seed. */
   reservesOf: (bank: Company) => number,
+  /** Step 10: the bank's facility book — its rows on the borrowers' ladders (`facilityBookOf`). */
+  facilityBookOf: (bank: Company) => number,
   banks: Company[]
 ): Dealer[] {
   return banks
@@ -55,7 +57,7 @@ export function dealersFromBanks(
       const grossUSD = dealerDeskGrossUSD(sheet.dealerDeskInventory);
       const capacityUSD = dealerDeskCapacityUSD({
         balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
-        leverageHeadroomUSD: leverageHeadroomUSD(sheet, reservesOf(bank)),
+        leverageHeadroomUSD: leverageHeadroomUSD(sheet, reservesOf(bank), facilityBookOf(bank)),
         inventory: sheet.dealerDeskInventory,
         book: '',
       });

@@ -26,8 +26,6 @@ import { WeeklyStepContext } from '../engine/simulation/stages/context.ts';
 
 void parentPort;
 
-type CreditEvent = WeeklyStepContext['creditEventsThisWeek'][number];
-
 export interface BackAJob {
   lanes: BackLanes;
   f: Partial<FrontPass>;
@@ -61,8 +59,6 @@ export interface BackAShardOut {
   holderCashMark: Int32Array;
   holderPay: string[];
   holderPayMark: Int32Array;
-  credits: CreditEvent[];
-  creditMark: Int32Array;
   taxAccrue: Float64Array;
   crossings: (ShippedBackCoreA | null)[];
 }
@@ -91,14 +87,12 @@ port.on('message', (job: BackAJob) => {
   const holderAcc = new Map<string, number>();
   const holderCash = new Map<string, number>();
   const holderPay = new Set<string>();
-  const credits: CreditEvent[] = [];
   const fakeCtx = {
     paymentJournal: journal,
     deferPendingNet: true,
     pendingHolderAccrualUSD: holderAcc,
     pendingHolderCashUSD: holderCash,
     pendingHolderAccrualPayout: holderPay,
-    creditEventsThisWeek: credits,
     taxAccruedByRegion: {},
     channelShareByRegion: job.channelShareByRegion,
     carrierFreightRevenue: {},
@@ -132,7 +126,6 @@ port.on('message', (job: BackAJob) => {
   const holderAccMark = new Int32Array(n);
   const holderCashMark = new Int32Array(n);
   const holderPayMark = new Int32Array(n);
-  const creditMark = new Int32Array(n);
   const crossings: (ShippedBackCoreA | null)[] = new Array(n).fill(null);
 
   const isActive = job.f.isActive!;
@@ -140,10 +133,10 @@ port.on('message', (job: BackAJob) => {
   for (let i = job.lo; i < job.hi; i++) {
     if (isActive[i] === 1 && isProfile[i] !== 1) {
       const a = runBackCoreA(null, i, d);
-      const { post, recordCredit, cash, cashLedger, sec, costDriversUSD,
+      const { post, cash, cashLedger, sec, costDriversUSD,
         newOutputInventoryBySubUnit, updatedProductLines, stillUnderConstruction,
         newRecurringBaseUSD, ...rest } = a;
-      void post; void recordCredit; void cashLedger; void sec; void costDriversUSD;
+      void post; void cashLedger; void sec; void costDriversUSD;
       void newOutputInventoryBySubUnit; void updatedProductLines; void stillUnderConstruction;
       void newRecurringBaseUSD;
       crossings[i] = { ...rest, cashAfterAUSD: cash.usd };
@@ -152,7 +145,6 @@ port.on('message', (job: BackAJob) => {
     holderAccMark[i] = holderAcc.size;
     holderCashMark[i] = holderCash.size;
     holderPayMark[i] = holderPay.size;
-    creditMark[i] = credits.length;
   }
 
   // The identity discipline: nothing this shard emitted may have needed a NEW intern.
@@ -174,7 +166,6 @@ port.on('message', (job: BackAJob) => {
     holderAcc: [...holderAcc], holderAccMark,
     holderCash: [...holderCash], holderCashMark,
     holderPay: [...holderPay], holderPayMark,
-    credits, creditMark,
     taxAccrue: taxCapture.accrueUSD,
     crossings,
   };

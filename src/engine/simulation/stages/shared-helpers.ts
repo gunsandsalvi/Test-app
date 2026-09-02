@@ -9,7 +9,7 @@ import { defect } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { transferHolding } from '../../ledger/holdings-ledger';
 import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
+import { ladderRowsOf, TR_FLOATING, facilityBookOf } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
 import { INSTRUMENT_IDS } from '../../columns/intern';
 import { Company, Region, SmePool, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
@@ -110,7 +110,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
   // PD ~0.5, which is what a bank at the floor is.
   if (comp.isBankEntity && comp.bankBalanceSheet) {
     const sheet = comp.bankBalanceSheet;
-    const rwaUSD = Math.max(1, bankRwaUSD(sheet));
+    const rwaUSD = Math.max(1, bankRwaUSD(sheet, facilityBookOf(v2, comp.ticker)));
     const bufferUSD = sheet.bankEquityUSD - rwaUSD * BANK_MIN_CAPITAL_RATIO;
     // The book's own measured provision rate (02b re-derives it weekly from the pools' real
     // default experience); the floor is consumerAnnualLossRate's own de-minimis.

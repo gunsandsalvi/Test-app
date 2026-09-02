@@ -16,6 +16,7 @@ import { marketCapOf, totalDebtOf } from '../../domain/company';
 import { institutionTotalAssetsFromState } from '../../engine/simulation/stages/institutional-balance-sheet';
 import { entityCashOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
+import { facilitiesOfBorrower } from '../../engine2/tranches';
 
 /** A sovereign instrument id's tenor, read aloud: `…-t10` → "10y", `…-b13` → "13w bill". */
 function tenorWord(id: string): string {
@@ -33,9 +34,11 @@ function CompanyHolders({ world, id, nav, tab }: { world: World; id: string; nav
   const c = companyOf(world, id);
   if (!c) return null;
   const rows = holdersOf(world, id);
-  const facilities = world.state.companies
-    .filter((b) => b.isBankEntity && b.bankBalanceSheet && isActiveCompany(b))
-    .flatMap((b) => (b.bankBalanceSheet!.businessLoans || []).filter((l) => l.borrowerId === id).map((l) => ({ holderId: b.id, instrumentType: 'BANK_FACILITY', usd: l.principalUSD, shares: NaN })));
+  // Step 10: the lenders' claims are the facility rows on this firm's own ladder.
+  const bankIdByTicker = new Map(world.state.companies.filter((b) => b.isBankEntity && b.bankBalanceSheet && isActiveCompany(b)).map((b) => [b.ticker, b.id]));
+  const facilities = facilitiesOfBorrower(ensureV2(world.state), id)
+    .filter((f) => bankIdByTicker.has(f.bankTicker))
+    .map((f) => ({ holderId: bankIdByTicker.get(f.bankTicker)!, instrumentType: 'BANK_FACILITY', usd: f.principalUSD, shares: NaN }));
   const kinds = ['equity', 'debt'];
   const active = kinds.includes(tab) ? tab : 'equity';
   const [sort, setSort] = useState('usd');

@@ -14,6 +14,7 @@ import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/worl
 import { bookHeadOf } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
 import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
+import { facilityBookOf, facilitiesOfBorrower } from '../engine2/tranches';
 
 export type { ObjectRef, ObjectType, ObjectLabel, Series } from './types';
 export { refKey, sameRef } from './types';
@@ -125,7 +126,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     put(`bank:${c.id}:deposits`, depositsOf(s, stateDepositLines(state, c.ticker)) - (s.clientMarginUSD ?? 0));
     put(`bank:${c.id}:reserves`, bankReservesOf(ensureV2(state), c.ticker));
     put(`bank:${c.id}:central bank loan`, s.centralBankLoanUSD ?? 0);
-    put(`bank:${c.id}:loans`, loanBooksOf(s));
+    put(`bank:${c.id}:loans`, loanBooksOf(s, facilityBookOf(ensureV2(state), c.ticker)));
   });
   const boundByBook = new Map<string, number>();
   (state.lastWeekDamperBoundIds ?? []).forEach((id) => { const book = id.split(':')[0]; boundByBook.set(book, (boundByBook.get(book) ?? 0) + 1); });
@@ -224,18 +225,12 @@ export function sovereignHoldersOf(world: World, regionId: string): { holderId: 
   return [...out.entries()].map(([holderId, usd]) => ({ holderId, usd })).sort((a, b) => b.usd - a.usd);
 }
 
-/** The bank lines to one borrower, across every bank's book. */
+/** The bank lines to one borrower — its facility rows, seen from each lender (step 10). */
 export function bankLinesTo(world: World, borrowerId: string): { bankId: string; principalUSD: number; marginBps: number; maturityWeek: number; status: string }[] {
-  const out: { bankId: string; principalUSD: number; marginBps: number; maturityWeek: number; status: string }[] = [];
-  world.state.companies.forEach((b) => {
-    const sheet = b.bankBalanceSheet;
-    if (!b.isBankEntity || !sheet) return;
-    (sheet.businessLoans ?? []).forEach((l) => {
-      if (l.borrowerId !== borrowerId) return;
-      out.push({ bankId: b.id, principalUSD: l.principalUSD, marginBps: l.marginBps, maturityWeek: l.originationWeek + l.termWeeks, status: l.status });
-    });
-  });
-  return out;
+  const bankIdByTicker = new Map(world.state.companies.filter((b) => b.isBankEntity).map((b) => [b.ticker, b.id]));
+  return facilitiesOfBorrower(world.v2, borrowerId).map((f) => ({
+    bankId: bankIdByTicker.get(f.bankTicker) ?? f.bankTicker, principalUSD: f.principalUSD, marginBps: f.marginBps, maturityWeek: f.maturityWeek, status: 'PERFORMING',
+  }));
 }
 
 /** The derivative contracts a party is on either side of. */

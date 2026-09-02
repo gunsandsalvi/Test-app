@@ -30,16 +30,16 @@ import { WeeklyStepContext } from './context';
 import { derivativesBookOf } from './derivative-lifecycle';
 import { pay, runSettlementStage } from './settlement';
 import { fieldsOf, residualOf } from '../bank-identity-trace';
-import { ladderRowsOf } from '../../../engine2/tranches';
+import { ladderRowsOf, facilityBookOf } from '../../../engine2/tranches';
 import { moveFacilityLender } from '../../ledger/tranche-ledger';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../../domain/banking';
 import { moveSectorRowsToBank, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
 
-const sheetLinesUSD = (s: BankingSector, cashUSD: number, lines: DepositLines): number =>
+const sheetLinesUSD = (s: BankingSector, cashUSD: number, lines: DepositLines, facilityBookUSD: number): number =>
   Math.abs(lines.householdUSD) + Math.abs(lines.corporateUSD) + Math.abs(lines.institutionalUSD)
   + Math.abs(s.clientMarginUSD ?? 0) + Math.abs(lines.smeUSD) + Math.abs(s.centralBankLoanUSD ?? 0)
   + Math.abs(s.bankEquityUSD) + Math.abs(s.srfBorrowingUSD ?? 0) + Math.abs(s.repoBorrowedUSD ?? 0)
-  + Math.abs(businessLoanBookOf(s)) + Math.abs(consumerLoanBookOf(s)) + Math.abs(s.sovereignBondHoldingsUSD)
+  + Math.abs(businessLoanBookOf(s, facilityBookUSD)) + Math.abs(consumerLoanBookOf(s)) + Math.abs(s.sovereignBondHoldingsUSD)
   + Math.abs(cashUSD) + Math.abs(s.repoLentUSD ?? 0) + Math.abs(s.onRrpLendingUSD ?? 0)
   + Math.abs(s.sovereignAccruedCouponUSD ?? 0) + Math.abs(s.primeBrokerageLoansUSD ?? 0);
 
@@ -89,7 +89,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
   // mechanism can be exercised on a world where no bank is under PCA. Inert unless set.
   const forced = (process.env.BANK_RESOLUTION_FORCE ?? '').split(',')
     .map((s) => s.split('@')).filter(([t, w]) => t && Number(w) === week).map(([t]) => t);
-  const failing = liveBanks().filter((c) => isBankUnderPca(c.bankBalanceSheet!) || forced.includes(c.ticker))
+  const failing = liveBanks().filter((c) => isBankUnderPca(c.bankBalanceSheet!, facilityBookOf(ctx.v2, c.ticker)) || forced.includes(c.ticker))
     .sort((a, b) => a.bankBalanceSheet!.bankEquityUSD - b.bankBalanceSheet!.bankEquityUSD);
   if (failing.length === 0) return;
   const failingIds = new Set(failing.map((c) => c.id));
@@ -98,7 +98,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     const regionId = bank.region as RegionId;
     const candidates = liveBanks()
       .filter((c) => c.region === regionId && !failingIds.has(c.id))
-      .map((c) => ({ comp: c, sheet: c.bankBalanceSheet! }));
+      .map((c) => ({ comp: c, sheet: c.bankBalanceSheet!, facilityBookUSD: facilityBookOf(ctx.v2, c.ticker) }));
     const chosen = chooseAssumingBank(candidates, BANK_MIN_CAPITAL_RATIO);
     if (!chosen) {
       // §7.342 — THE LAST BANK STANDING IS RECAPITALISED BY ITS TREASURY. With no peer to
@@ -110,12 +110,12 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       // are not diluted here (no share mechanics on a bank's equity yet — recorded), which
       // overstates what they keep; the injection itself is real money.
       const sheet = bank.bankBalanceSheet!;
-      const injectionUSD = Math.max(0, assumingCapitalUSD(sheet) - sheet.bankEquityUSD);
+      const injectionUSD = Math.max(0, assumingCapitalUSD(sheet, facilityBookOf(ctx.v2, bank.ticker)) - sheet.bankEquityUSD);
       if (injectionUSD > 0) {
         pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'BANK', ticker: bank.ticker },
           amountUSD: injectionUSD, reason: 'resolution: public recapitalisation' });
         runSettlementStage(ctx);
-        restateBankSheetStatistics(bank.bankBalanceSheet!, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker));
+        restateBankSheetStatistics(bank.bankBalanceSheet!, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker), facilityBookOf(ctx.v2, bank.ticker));
       }
       console.log(`  [bank-resolution] w${week} ${regionId}:${bank.ticker} under PCA with NO assuming bank — recapitalised by the treasury ${(injectionUSD / 1e9).toFixed(2)}B, ratio now ${bank.bankBalanceSheet!.bankCapitalRatio}`);
       ctx.newsItems.push({
@@ -129,12 +129,13 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     const acquirer = chosen.comp;
     const ladderUSD = ladderRowsOf(ctx.v2, bank.id).reduce((a, r) => a + ctx.v2.tranches.principalUSD[r], 0);
     const cashUSD = bankReservesOf(ctx.v2, bank.ticker);
-    const plan = planBankResolution(bank.bankBalanceSheet!, ladderUSD, assumingCapitalUSD(bank.bankBalanceSheet!), cashUSD, bankDepositLines(ctx, bank.ticker));
+    const failingFacilityBookUSD = facilityBookOf(ctx.v2, bank.ticker);
+    const plan = planBankResolution(bank.bankBalanceSheet!, ladderUSD, assumingCapitalUSD(bank.bankBalanceSheet!, failingFacilityBookUSD), cashUSD, bankDepositLines(ctx, bank.ticker), failingFacilityBookUSD);
     const traceOn = process.env.BANK_RESOLUTION_TRACE === '1';
     const traceSheet = (label: string, c: typeof bank) => {
       if (!traceOn || !c.bankBalanceSheet) return;
-      const f = fieldsOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.ticker), bankDepositLines(ctx, c.ticker));
-      console.log(`  [res-trace] ${label} ${c.ticker} resid ${(residualOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.ticker), bankDepositLines(ctx, c.ticker)) / 1e6).toFixed(3)}M :: `
+      const f = fieldsOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.ticker), bankDepositLines(ctx, c.ticker), facilityBookOf(ctx.v2, c.ticker));
+      console.log(`  [res-trace] ${label} ${c.ticker} resid ${(residualOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.ticker), bankDepositLines(ctx, c.ticker), facilityBookOf(ctx.v2, c.ticker)) / 1e6).toFixed(3)}M :: `
         + Object.entries(f).map(([k, v]) => `${k} ${(v / 1e9).toFixed(3)}B`).join(' | '));
     };
     traceSheet('before', bank); traceSheet('before', acquirer);
@@ -173,7 +174,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // Settlement rebuilds a bank's sheet as a new object; the handles above are last week's.
     const F = bank.bankBalanceSheet!;
     traceSheet('settled', bank); traceSheet('settled', acquirer);
-    const leftUSD = sheetLinesUSD(F, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker));
+    const leftUSD = sheetLinesUSD(F, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker), facilityBookOf(ctx.v2, bank.ticker));
     if (leftUSD > 1e4) {
       const lines = Object.entries(F as unknown as Record<string, unknown>)
         .filter(([, v]) => typeof v === 'number' && Math.abs(v as number) > 1e4)
@@ -198,7 +199,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
         amountUSD: plan.estateUSD, reason: 'resolution: net book value paid to the receivership' });
       runSettlementStage(ctx);
     }
-    restateBankSheetStatistics(acquirer.bankBalanceSheet!, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker));
+    restateBankSheetStatistics(acquirer.bankBalanceSheet!, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker), facilityBookOf(ctx.v2, acquirer.ticker));
 
     const gb = (v: number) => `${(v / 1e9).toFixed(2)}B`;
     console.log(`  [bank-resolution] w${week} ${regionId}:${bank.ticker} -> ${acquirer.ticker}`

@@ -12,6 +12,7 @@
 import { ProfileInput, ProfilePnl } from './types';
 import { ensureV2, rowOf, revHistPush } from '../../../../engine2/world';
 import { loanBooksOf } from '../../../../domain/banking';
+import { facilityBookOf } from '../../../../engine2/tranches';
 
 export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, reg } = input;
@@ -24,7 +25,7 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
     ? Object.values(own.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0)
     : reg.bankingSector.sovereignBondHoldingsUSD * share;
   // §5-WIRES D: the credit books are the sheet's rows; a bank with no sheet holds no rows.
-  const creditBookUSD = own ? loanBooksOf(own) : 0;
+  const creditBookUSD = own ? loanBooksOf(own, facilityBookOf(ensureV2(input.state), comp.ticker)) : 0;
   const totalAssets = creditBookUSD + sovUSD;
   const weeklyNim = bs.netInterestMarginPct / 52;
   const impliedNimRev = totalAssets * weeklyNim;

@@ -35,6 +35,8 @@ export interface TrancheStore {
   flags: Uint8Array;
   idRef: Int32Array;               // interned tranche id
   bankRef: Int32Array;             // interned facilityBankTicker; -1 = absent
+  /** §5-FINALIZATION step 10: the issuer's company id on the row — a lender's book is one scan. */
+  issuerRef: Int32Array;           // -1 = a freed row
   /** §5-WIRES W3: the wire that created the row (-1 for a seeded or born ladder — B's gap). */
   wireRef: Int32Array;
   /** Call protection rides as the plain object it is — one per row, undefined when absent. */
@@ -81,6 +83,7 @@ export function newTrancheStore(): TrancheStore {
     flags: new Uint8Array(cap),
     idRef: new Int32Array(cap),
     bankRef: new Int32Array(cap),
+    issuerRef: new Int32Array(cap).fill(-1),
     wireRef: new Int32Array(cap).fill(-1),
     callProt: new Array(cap),
     next: new Int32Array(cap).fill(-1),
@@ -102,10 +105,17 @@ function growTranches(S: TrancheStore): void {
   S.originationWeek = gI(S.originationWeek); S.maturityWeek = gI(S.maturityWeek);
   const flags = new Uint8Array(cap); flags.set(S.flags); S.flags = flags;
   S.idRef = gI(S.idRef); S.bankRef = gI(S.bankRef);
+  const issuerRef = new Int32Array(cap).fill(-1); issuerRef.set(S.issuerRef); S.issuerRef = issuerRef;
   const wireRef = new Int32Array(cap).fill(-1); wireRef.set(S.wireRef); S.wireRef = wireRef;
   S.callProt.length = cap;
   const next = new Int32Array(cap).fill(-1); next.set(S.next); S.next = next;
   S.cap = cap;
+}
+
+/** A freed row carries nothing a scan could mistake for a live tranche. */
+function freeRow(S: TrancheStore, r: number): void {
+  S.callProt[r] = undefined; S.flags[r] = 0; S.bankRef[r] = -1; S.issuerRef[r] = -1; S.principalUSD[r] = 0;
+  S.next[r] = S.freeHead; S.freeHead = r;
 }
 
 function allocRow(S: TrancheStore): number {
@@ -158,9 +168,7 @@ export function syncLadderRows(v2: V2World, companyId: string, ladder: DebtTranc
   // free the old chain
   for (let r = S.head[slot]; r >= 0; ) {
     const nxt = S.next[r];
-    S.callProt[r] = undefined;
-    S.next[r] = S.freeHead;
-    S.freeHead = r;
+    freeRow(S, r);
     r = nxt;
   }
   S.head[slot] = -1;
@@ -170,6 +178,7 @@ export function syncLadderRows(v2: V2World, companyId: string, ladder: DebtTranc
   for (let i = 0; i < ladder.length; i++) {
     const r = allocRow(S);
     writeRow(S, r, v2, ladder[i]);
+    S.issuerRef[r] = internString(v2, companyId);
     S.wireRef[r] = -1;
     S.next[r] = -1;
     if (prev >= 0) S.next[prev] = r; else S.head[slot] = r;
@@ -262,6 +271,7 @@ export function pushLadderRow(v2: V2World, companyId: string, t: DebtTranche, wi
   const slot = slotFor(S, firmRow);
   const r = allocRow(S);
   writeRow(S, r, v2, t);
+  S.issuerRef[r] = internString(v2, companyId);
   S.wireRef[r] = wireNo;
   S.next[r] = -1;
   if (S.tail[slot] >= 0) { S.next[S.tail[slot]] = r; S.tail[slot] = r; }
@@ -277,7 +287,7 @@ export function relinkLadder(v2: V2World, companyId: string, keptRows: number[])
   const keep = new Set(keptRows);
   for (let r = S.head[firmRow]; r >= 0; ) {
     const nxt = S.next[r];
-    if (!keep.has(r)) { S.callProt[r] = undefined; S.next[r] = S.freeHead; S.freeHead = r; }
+    if (!keep.has(r)) freeRow(S, r);
     r = nxt;
   }
   let prev = -1;
@@ -322,6 +332,50 @@ export function materializeLadder(v2: V2World, companyId: string): DebtTranche[]
 
 /** The wire that created a ladder row (-1: seeded or born without one). */
 export const trancheWireOf = (v2: V2World, r: number): number => v2.tranches.wireRef[r];
+
+/** §5-FINALIZATION step 10 — A LENDER'S FACILITY BOOK IS A READ OF THE BORROWERS' LADDERS. The
+ *  bank used to carry one loan row per facility tranche, synced weekly and drifting between
+ *  syncs (O4 lived on that drift). The facility row on the ladder IS the loan, seen from the
+ *  lender: one scan of the store, in row order. */
+export interface FacilityRow {
+  row: number; borrowerId: string; bankTicker: string; trancheId: string; principalUSD: number;
+  /** The tranche's floating margin; a facility with none stated rides the 350bp the mirror used. */
+  marginBps: number; originationWeek: number; maturityWeek: number;
+}
+function facilityRowOf(v2: V2World, r: number): FacilityRow {
+  const S = v2.tranches;
+  return {
+    row: r, borrowerId: v2.internedStrings[S.issuerRef[r]], bankTicker: v2.internedStrings[S.bankRef[r]],
+    trancheId: v2.internedStrings[S.idRef[r]], principalUSD: S.principalUSD[r],
+    marginBps: Number.isNaN(S.floatingMarginBps[r]) ? 350 : S.floatingMarginBps[r],
+    originationWeek: S.originationWeek[r], maturityWeek: S.maturityWeek[r],
+  };
+}
+/** Every live facility a bank has lent, across every borrower's ladder. */
+export function facilityRowsOf(v2: V2World, bankTicker: string): FacilityRow[] {
+  const S = v2.tranches;
+  const ref = v2.internedIdByString.get(bankTicker);
+  const out: FacilityRow[] = [];
+  if (ref === undefined) return out;
+  for (let r = 0; r < S.used; r++) {
+    if ((S.flags[r] & TR_FACILITY) && S.bankRef[r] === ref && S.issuerRef[r] >= 0 && S.principalUSD[r] > 0.01) out.push(facilityRowOf(v2, r));
+  }
+  return out;
+}
+/** The bank's facility book: Σ face of every facility it has lent. */
+export function facilityBookOf(v2: V2World, bankTicker: string): number {
+  const S = v2.tranches;
+  const ref = v2.internedIdByString.get(bankTicker);
+  if (ref === undefined) return 0;
+  let usd = 0;
+  for (let r = 0; r < S.used; r++) if ((S.flags[r] & TR_FACILITY) && S.bankRef[r] === ref && S.issuerRef[r] >= 0) usd += S.principalUSD[r];
+  return usd;
+}
+/** The facilities on one borrower's ladder — the same rows seen from the borrower. */
+export function facilitiesOfBorrower(v2: V2World, companyId: string): FacilityRow[] {
+  const S = v2.tranches;
+  return ladderRowsOf(v2, companyId).filter((r) => (S.flags[r] & TR_FACILITY) && S.bankRef[r] >= 0 && S.principalUSD[r] > 0.01).map((r) => facilityRowOf(v2, r));
+}
 
 /** §5-WIRES D: the ladder's face on the live rows — total debt as a read. */
 export function ladderTotalUSD(v2: V2World, companyId: string): number {

@@ -1,5 +1,6 @@
 import { householdDepositsOf, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
-import { addDepositLines, ZERO_DEPOSIT_LINES } from '../../../domain/banking';
+import { addDepositLines, ZERO_DEPOSIT_LINES, regionLoanBooksUSD } from '../../../domain/banking';
+import { facilityBookOf } from '../../../engine2/tranches';
 /**
  * Stage 2: Region Macro Evolution
  *
@@ -85,6 +86,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         householdDepositsUSD: householdDepositsOf(ctx.v2, regionId),
         bankReservesUSD: ctx.updatedCompanies.reduce((a, c) => a + (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? bankReservesOf(ctx.v2, c.ticker) : 0), 0),
         bankDepositLines: ctx.updatedCompanies.reduce((a, c) => (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? addDepositLines(a, bankDepositLines(ctx, c.ticker)) : a), ZERO_DEPOSIT_LINES),
+        bankLoanBooks: regionLoanBooksUSD(ctx.updatedCompanies.filter((c) => c.region === regionId && c.isBankEntity && !!c.bankBalanceSheet), (b) => facilityBookOf(ctx.v2, b.ticker)),
       },
       ctx.nextWeek,
       equityRet,

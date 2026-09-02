@@ -135,13 +135,6 @@ export interface WeeklyStepContext {
   deadCeilingBooks: string[];
   /** SETL3/4 — issuer id → ticker, so the register's payments name a real payer. */
   issuerTickerById: Map<string, string>;
-  /** SETL2b — facilities WRITTEN or RETIRED this week, recorded where the tranche is created so
-   * the loan and the deposit it creates appear in the same statement. Consumed by settlement;
-   * bank-lending's level-based reconciliation then finds them already booked and nets to zero. */
-  creditEventsThisWeek: {
-    bankTicker: string; companyId: string; trancheId: string; principalUSD: number;
-    marginBps: number; originationWeek: number; termWeeks: number; retire: boolean;
-  }[];
   /** CASH/SETL1 — the week's payment instructions. Stages record; the settlement stage executes
    * (see stages/settlement.ts). A stage must not move money any other way. */
   /** SCALE: the register's CSR index, cached across stages and dropped by `bumpRegister`
@@ -360,7 +353,6 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     pendingNetById: [],
     wireJournal: newWireJournal((state as { nextWireId?: number }).nextWireId ?? 1, state.currentWeek + 1),
     pendingTouchedIds: [],
-    creditEventsThisWeek: [],
     issuerTickerById: new Map(state.companies.map((c) => [c.id, c.ticker])),
     g2DeclinedOriginationUSD: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],

@@ -35,6 +35,7 @@ import { leverageHeadroomUSD } from '../../../macro/banking';
 import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
 import { strikeDerivatives } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
+import { facilityBookOf } from '../../../../engine2/tranches';
 
 const contractId = (commodityId: string, tenor: number) => `FUT-${commodityId}-${tenor}M`;
 
@@ -119,7 +120,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         banks.forEach((bank) => {
           const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
           const capacityUSD = deskNotionalCapacityUSD(
-            leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'COMMODITY_FUTURE');
+            leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'COMMODITY_FUTURE');
           const units = capacityUSD / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
           if (units > 0.0001) {
             sellers.push({ party: { kind: 'BANK', ticker: bank.ticker }, units });

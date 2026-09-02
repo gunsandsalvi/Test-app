@@ -43,6 +43,7 @@ import { REGION_IDS } from '../../../../domain/geography';
 import { derivativesBookOf, initialMarginUSD, strikeDerivatives } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { cashOf, entityCashOf, bankReservesOf } from '../../../ledger/accounts';
+import { facilityBookOf } from '../../../../engine2/tranches';
 
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
 
@@ -132,7 +133,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     const sheet = c.bankBalanceSheet;
     desks.set(c.ticker, {
       book: emptyFxDealerBook(),
-      headroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, c.ticker)),
+      headroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, c.ticker), facilityBookOf(ctx.v2, c.ticker)),
       chargedPfeUSD: standing.pfeChargeUSD(`BANK:${c.ticker}`),
       marginReceivedUSD: 0,
     });

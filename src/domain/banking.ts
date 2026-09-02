@@ -441,17 +441,19 @@ export const addDepositLines = (a: DepositLines, b: DepositLines): DepositLines 
 
 /** §5-WIRES D — THE LOAN BOOKS ARE READS. A stored sum of stored rows can disagree with its rows
  *  (O4's "facilities on ladders = loans on banks" lived on exactly that); the read cannot. */
-export const businessLoanBookOf = (s: { businessLoans?: BankLoan[] }): number =>
-  (s.businessLoans ?? []).reduce((a, l) => a + l.principalUSD, 0);
+/** The business book: the SME pool rows on the sheet plus the bank's facilities, which are the
+ *  borrowers' ladder rows (`facilityBookOf`, read by the caller — step 10). */
+export const businessLoanBookOf = (s: { businessLoans?: BankLoan[] }, facilityBookUSD: number): number =>
+  (s.businessLoans ?? []).reduce((a, l) => a + l.principalUSD, 0) + facilityBookUSD;
 export const consumerLoanBookOf = (s: { householdLoans?: HouseholdLoanPool[] }): number =>
   (s.householdLoans ?? []).reduce((a, p) => a + p.principalUSD, 0);
 /** Both credit books together — the RWA's and the leverage ratio's credit term. */
-export const loanBooksOf = (s: { businessLoans?: BankLoan[]; householdLoans?: HouseholdLoanPool[] }): number =>
-  businessLoanBookOf(s) + consumerLoanBookOf(s);
+export const loanBooksOf = (s: { businessLoans?: BankLoan[]; householdLoans?: HouseholdLoanPool[] }, facilityBookUSD: number): number =>
+  businessLoanBookOf(s, facilityBookUSD) + consumerLoanBookOf(s);
 /** A region's loan books: the sum over its named banks' rows (the aggregate holds no rows). */
-export function regionLoanBooksUSD(banks: { bankBalanceSheet?: BankingSector }[]): { businessLoanUSD: number; consumerLoanUSD: number } {
+export function regionLoanBooksUSD<T extends { bankBalanceSheet?: BankingSector }>(banks: T[], facilityBookOf: (b: T) => number): { businessLoanUSD: number; consumerLoanUSD: number } {
   let businessLoanUSD = 0, consumerLoanUSD = 0;
-  banks.forEach((b) => { if (b.bankBalanceSheet) { businessLoanUSD += businessLoanBookOf(b.bankBalanceSheet); consumerLoanUSD += consumerLoanBookOf(b.bankBalanceSheet); } });
+  banks.forEach((b) => { if (b.bankBalanceSheet) { businessLoanUSD += businessLoanBookOf(b.bankBalanceSheet, facilityBookOf(b)); consumerLoanUSD += consumerLoanBookOf(b.bankBalanceSheet); } });
   return { businessLoanUSD, consumerLoanUSD };
 }
 
@@ -523,9 +525,11 @@ export function annuityWeeklyPrincipalUSD(principalUSD: number, rateAnnual: numb
 /** G2: one real loan to one named borrower on one named bank's book. */
 export interface BankLoan {
   id: string;
-  /** A company.id, or an SME pool id "<region>_SEG_<industry>". */
+  /** An SME pool id "<region>_SEG_<industry>". §5-FINALIZATION step 10: a corporate facility is
+   *  not a row here — it is the tranche on the borrower's ladder, seen from the lender
+   *  (`facilityRowsOf`/`facilityBookOf`, engine2/tranches.ts). */
   borrowerId: string;
-  borrowerKind: 'COMPANY_FACILITY' | 'SME_POOL';
+  borrowerKind: 'SME_POOL';
   principalUSD: number;
   /** Spread over policyRate, annual bps — quoted by the bank's own credit arithmetic at
    * origination (slice 3), the same expected-loss + capital-cost pricing the bond market uses. */

@@ -12,7 +12,8 @@ import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { ensureV2, internString, revHistSeed, rowOf, ringCopyRow } from '../../../engine2/world';
-import { materializeLadder } from '../../../engine2/tranches';
+import { materializeLadder, facilityBookOf } from '../../../engine2/tranches';
+import { moveFacilityLender } from '../../ledger/tranche-ledger';
 import { rebuildLadder } from '../../ledger/tranche-ledger';
 import { pay } from './settlement';
 import { GameState, DebtTranche, RegionId, ItemizedHolding } from '../../../types';
@@ -361,7 +362,14 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     mergeBankSheets(ab, tb);
     moveSectorRowsToBank(ctx.v2, target.ticker, acquirer.ticker); // A3.3: the sector parties' rows at the target join the acquirer's
     moveBankReserves(ctx.v2, target.ticker, acquirer.ticker); // A3.6a: and its reserves join the acquirer's row
-    restateBankSheetStatistics(ab, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker));
+    // §5-FINALIZATION step 10: the target's facilities are rows on its borrowers' ladders that
+    // name it as lender; the acquirer's equity now carries them, so each is wired lender to
+    // lender (before this the loan rows moved and the ladders kept naming the absorbed bank,
+    // and the next sync wrote the whole book off the acquirer as "left the ladders").
+    ctx.updatedCompanies.concat(ctx.prevActivePrivateFirms).forEach((c) => {
+      moveFacilityLender(ctx.v2, { id: c.id, ticker: c.ticker, region: c.region }, target.ticker, acquirer.ticker, 'merger: facilities move to the acquiring bank');
+    });
+    restateBankSheetStatistics(ab, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker), facilityBookOf(ctx.v2, acquirer.ticker));
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (target.bankMarketShare ?? 0)).toFixed(4));
     target.bankBalanceSheet = undefined;
 

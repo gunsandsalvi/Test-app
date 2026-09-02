@@ -572,38 +572,11 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     cb.foreignOfficialClaimsUSD = (cb.foreignOfficialClaimsUSD ?? 0) + deltaUSD;
   });
 
-  // ---- 4b. SETL2b: a loan and the deposit it creates, in ONE statement. The borrower's balance
-  // was written by the BANK_CREDIT leg above (no reserves moved); here the matching asset appears
-  // on the same bank in the same week. Doing these a week apart is what broke the identity when
-  // this was first attempted (§7.89) — the reconciliation in bank-lending.ts is level-based, so
-  // once the loan is booked here it finds nothing left to do.
-  ctx.creditEventsThisWeek.forEach((event) => {
-    const bank = bankByTicker.get(event.bankTicker);
-    if (!bank?.bankBalanceSheet) { report.unresolvedUSD += event.retire ? -event.principalUSD : event.principalUSD; return; }
-    const sheet = bank.bankBalanceSheet;
-    const loans = [...(sheet.businessLoans || [])];
-    if (event.retire) {
-      const idx = loans.findIndex((l) => l.id === event.trancheId);
-      if (idx >= 0) loans.splice(idx, 1);
-    } else {
-      const existing = loans.findIndex((l) => l.id === event.trancheId);
-      if (existing >= 0) loans[existing] = { ...loans[existing], principalUSD: event.principalUSD };
-      else loans.push({
-        id: event.trancheId,
-        borrowerId: event.companyId,
-        borrowerKind: 'COMPANY_FACILITY',
-        principalUSD: event.principalUSD,
-        marginBps: event.marginBps,
-        originationWeek: event.originationWeek,
-        termWeeks: event.termWeeks,
-        status: 'PERFORMING',
-      });
-    }
-    // §5-WIRES D: the book IS the rows; nothing (the bank's sheet, the region's aggregate) stores
-    // their sum, so there is no second copy to patch.
-    bank.bankBalanceSheet = { ...sheet, businessLoans: loans };
-  });
-  ctx.creditEventsThisWeek = [];
+  // ---- 4b (retired, §5-FINALIZATION step 10). SETL2b booked a loan row on the lender here for
+  // every facility written this week, so the loan and the deposit appeared in one statement.
+  // The asset half is now the facility row itself on the borrower's ladder, written where the
+  // draw is made; the lender's book is a read of those rows (`facilityBookOf`). The BANK_CREDIT
+  // leg above still writes the deposit half with no reserve moving.
 
   // The treasury banks at the central bank, so its balance is a central-bank liability: what the
   // government collects has left the banking system's reserves, which is why a tax date tightens

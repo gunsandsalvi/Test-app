@@ -43,7 +43,6 @@ export const DELIBERATE_PIPELINE_FIELDS: Record<string, string> = {
   holdingsTable: 'register store, same build/consume/write-back epoch shape as holdingsStore',
   primaryOfferingsWorking: 'the 07x books consume the offerings stage 08 replenished LAST week — a deliberate one-week primary pipeline',
   lastSettlementReport: 'last week\'s report by name; readers want the prior close',
-  creditEventsThisWeek: 'events pushed by earlier stages, consumed at settlement — same-week queue, cleared at close',
 };
 
 export interface StageAccess {

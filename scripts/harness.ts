@@ -22,6 +22,7 @@ import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, householdDeposit
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
+import { facilityBookOf, facilityRowsOf } from '../src/engine2/tranches';
 
 // Same seed, same world. Pass SEED=<n> to check a result against a genuinely different economy
 // rather than against the noise an unseeded run used to produce.
@@ -284,9 +285,9 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     // A drawn facility is floating corporate debt on the BORROWER's region, which is not
     // necessarily the lender's. Pool loans are excluded: an SME pool's debt is a scalar on the
     // pool (`seg.debtUSD`), not a tranche on any company, so it has no outstanding to score
-    // against and counting it here reported 41% over from week 1.
-    (bs.businessLoans || []).forEach((l: any) => {
-      if (l.borrowerKind !== 'COMPANY_FACILITY') return;
+    // against and counting it here reported 41% over from week 1. §5-FINALIZATION step 10: the
+    // bank's facilities are the borrowers' ladder rows, read from the lender's side.
+    facilityRowsOf(ensureV2(state), c.ticker).forEach((l) => {
       const region = companyRegionById.get(l.borrowerId);
       if (!region) return;
       const lb = held[region];
@@ -2149,13 +2150,14 @@ const spiralModule: HarnessModule = {
           .filter((c) => c.region === region && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
           .forEach((c) => {
             const bs = c.bankBalanceSheet!;
-            const rwa = businessLoanBookOf(bs) * 1.0 + householdBookRwaUSD(bs.householdLoans);
+            const facilityBookUSD = facilityBookOf(ensureV2(state), c.ticker);
+            const rwa = businessLoanBookOf(bs, facilityBookUSD) * 1.0 + householdBookRwaUSD(bs.householdLoans);
             const deskUSD = Object.values(bs.dealerDeskInventory ?? {})
               .reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);
             console.log(`  [cap] w${w} ${region}:${c.ticker}`
               + ` eq ${(bs.bankEquityUSD / 1e9).toFixed(2)}B rwa ${(rwa / 1e9).toFixed(2)}B`
               + ` ratio ${(rwa > 0 ? bs.bankEquityUSD / rwa : 0).toFixed(4)}`
-              + ` | biz ${(businessLoanBookOf(bs) / 1e9).toFixed(2)}B hh ${(consumerLoanBookOf(bs) / 1e9).toFixed(2)}B`
+              + ` | biz ${(businessLoanBookOf(bs, facilityBookUSD) / 1e9).toFixed(2)}B hh ${(consumerLoanBookOf(bs) / 1e9).toFixed(2)}B`
               + ` cash ${(bankReservesOf(ensureV2(state), c.ticker) / 1e9).toFixed(2)}B cbloan ${((bs.centralBankLoanUSD ?? 0) / 1e9).toFixed(2)}B`
               + ` desk ${(deskUSD / 1e9).toFixed(2)}B`
               + ` oas ${(c.oasSpreadBps ?? 0).toFixed(0)}bps rating ${c.creditRating}`);
