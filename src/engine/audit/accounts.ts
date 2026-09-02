@@ -38,8 +38,10 @@ function f2(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const settled = sum(Object.values(byReason), (v) => v);
     const taxes = sum(Object.entries(byReason).filter(([k, v]) => v > 0 && /tax/i.test(k)), ([, v]) => v);
     if (prev?.[r]) {
-      const dTga = cb.treasuryAccountUSD - prev[r]!.treasuryAccountUSD;
-      if (Math.abs(dTga - settled) > 1e6) out.push({ family: 'F', check: 'F2 treasury account moves by its payments', week, usd: dTga - settled, message: `${r}: the account moved ${B(dTga)} but its payments net to ${B(settled)}; ${B(dTga - settled)} written by something that is not a payment` });
+      // The account's own balance moves by its payments; the ways-and-means advance (M4) is the
+      // central bank funding the part of them the balance could not, repaid by the next money in.
+      const dTga = (cb.treasuryAccountUSD - (cb.waysAndMeansUSD ?? 0)) - (prev[r]!.treasuryAccountUSD - prev[r]!.waysAndMeansUSD);
+      if (Math.abs(dTga - settled) > 1e6) out.push({ family: 'F', check: 'F2 treasury account moves by its payments', week, usd: dTga - settled, message: `${r}: the account (net of the ways-and-means advance) moved ${B(dTga)} but its payments net to ${B(settled)}; ${B(dTga - settled)} written by something that is not a payment` });
     }
     if (Math.abs(reg.governmentRevenueUSD - taxes) > Math.max(1e6, taxes * 1e-3)) out.push({ family: 'F', check: 'F2 revenue = tax remitted', week, usd: reg.governmentRevenueUSD - taxes, message: `${r}: revenue reported ${B(reg.governmentRevenueUSD)} against ${B(taxes)} of tax actually remitted` });
   });

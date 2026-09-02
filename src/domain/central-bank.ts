@@ -38,6 +38,11 @@ export interface CentralBank {
    *  the repo session; each draw creates reserves against pledged collateral). Derived from the
    *  region's repo book by the session that writes it — one writer. */
   standingFacilityLentUSD: number;
+  /** §5-CLOSE M4 — Asset: the WAYS AND MEANS advance. The treasury banks here and cannot
+   *  overdraw; when its payments exceed its account the central bank advances the difference,
+   *  at the policy rate, and the next money into the account repays it. Written by settlement
+   *  with the account itself (one writer for both lines). */
+  waysAndMeansUSD: number;
   /** §5-CLOSE C5 — last week's reverse-repo interest the window paid the funds (a central-bank
    *  expense, netted in the remittance like the interest on reserves). */
   lastReverseRepoInterestUSD?: number;
@@ -98,7 +103,7 @@ export function centralBankFxReservesUSD(cb: CentralBank): number {
  */
 export function centralBankAssetsUSD(cb: CentralBank): number {
   return centralBankSovereignBookUSD(cb) + centralBankFxReservesUSD(cb) + (cb.loansToBanksUSD ?? 0)
-    + (cb.foreignOfficialClaimsUSD ?? 0) + (cb.standingFacilityLentUSD ?? 0);
+    + (cb.foreignOfficialClaimsUSD ?? 0) + (cb.standingFacilityLentUSD ?? 0) + (cb.waysAndMeansUSD ?? 0);
 }
 
 /**

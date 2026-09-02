@@ -616,6 +616,7 @@ function buildRegion(regionId: RegionId): Region {
       loansToBanksUSD: 0,
       foreignOfficialClaimsUSD: 0,
       standingFacilityLentUSD: 0,
+      waysAndMeansUSD: 0,
       lastRemittanceUSD: 0,
       // PUB2b: no order outstanding at birth — the first week's redemptions set the first one.
       plannedPurchasesByTenor: {},

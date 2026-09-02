@@ -10,6 +10,7 @@ import { isActiveCompany } from '../../domain/company';
 
 export interface RegionSnapshot {
   treasuryAccountUSD: number;
+  waysAndMeansUSD: number;
   centralBankAssetsUSD: number;
   sovereignOutstandingUSD: number;
   bankDepositsUSD: number;
@@ -26,6 +27,7 @@ export function snapshotOf(state: GameState): AuditSnapshot {
     const banks = state.companies.filter((c) => c.region === r && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet);
     out[r] = {
       treasuryAccountUSD: cb.treasuryAccountUSD,
+      waysAndMeansUSD: cb.waysAndMeansUSD ?? 0,
       centralBankAssetsUSD: centralBankAssetsUSD(cb),
       sovereignOutstandingUSD: (reg.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0),
       bankDepositsUSD: banks.reduce((a, b) => {

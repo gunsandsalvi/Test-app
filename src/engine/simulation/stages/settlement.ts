@@ -700,6 +700,18 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     const cb = ctx.updatedRegions[region as RegionId]?.centralBankSheet;
     if (!cb) { report.unresolvedUSD += deltaUSD; return; }
     cb.treasuryAccountUSD += deltaUSD;
+    // §5-CLOSE M4: the treasury cannot overdraw its account. Below zero, the central bank
+    // advances the difference (ways and means — an asset on its book, so the reserves the
+    // treasury's payments created are backed); above zero, the account repays the advance
+    // first. Both lines move here, in the one pass that owns the account.
+    if (cb.treasuryAccountUSD < 0) {
+      cb.waysAndMeansUSD = (cb.waysAndMeansUSD ?? 0) - cb.treasuryAccountUSD;
+      cb.treasuryAccountUSD = 0;
+    } else if ((cb.waysAndMeansUSD ?? 0) > 0) {
+      const repayUSD = Math.min(cb.waysAndMeansUSD, cb.treasuryAccountUSD);
+      cb.waysAndMeansUSD -= repayUSD;
+      cb.treasuryAccountUSD -= repayUSD;
+    }
   });
 
   report.centralBankResidualUSD = centralBankResidualUSD(report);

@@ -3,7 +3,8 @@ import { runNewsDerivationStage } from './stages/news-derivation';
 import { rollDamperStreaks, setDamperStreaks } from './stages/financial-clearing-engine';
 import { GameState, RegionId } from '../../types';
 import { dealersFromBanks } from '../dealers';
-import { runPrimeBrokerageStage, runPrimeBrokerageCloseSweep } from './stages/prime-brokerage';
+import { runPrimeBrokerageStage } from './stages/prime-brokerage';
+import { runOverdraftSweep } from './stages/overdraft-sweep';
 import { runSwapClearingStage } from './stages/07g-swap-clearing';
 import { runCdsClearingStage } from './stages/07h-cds-clearing';
 import { runCommodityFuturesStage } from './stages/07i-commodity-futures';
@@ -362,7 +363,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('labor-reconciliation', () => runLaborReconciliationStage(state, ctx));
   // §4.0 Tier 1 item 6: a leveraged fund's mid-week debit is financed the same week — the
   // margin account's sweep, run against everything the close is about to settle.
-  run('prime-brokerage-close-sweep', () => runPrimeBrokerageCloseSweep(ctx));
+  // §5-CLOSE M4: every negative balance — firm, fund, pool — is named credit before the close.
+  run('overdraft-sweep', () => runOverdraftSweep(ctx));
   // CASH: the CLOSE. Everything the late stages posted — the insurers, the money fund, the ETFs,
   // the FX desks, the estates, the treasury's redemptions — settles here. A week has two cycles
   // because a day does, and without the second one those stages had nowhere to send a payment.
