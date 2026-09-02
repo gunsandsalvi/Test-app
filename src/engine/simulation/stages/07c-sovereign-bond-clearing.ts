@@ -43,7 +43,7 @@
  * stage 8, 11, and 12 (all of which read yieldCurveParams/zeroRates as already-real values).
  */
 
-import { bankReservesOf } from '../../ledger/accounts';
+import { bankReservesOf, bankDepositLines } from '../../ledger/accounts';
 import { govBucketId, govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS, sovBucketKey } from './shared-helpers';
@@ -459,7 +459,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // than as a scaling factor on a quantity target.
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD);
-      const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD);
+      const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD, bankDepositLines(ctx, bank.ticker));
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);
         const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;

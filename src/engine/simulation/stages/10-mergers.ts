@@ -24,7 +24,7 @@ import { WeeklyStepContext } from './context';
 import { issueHolding, transferHolding } from '../../ledger/holdings-ledger';
 import { heldInShares } from '../../../domain/assets';
 import { marketCapOf } from '../../../domain/company';
-import { cashOf, moveSectorRowsToBank, moveBankReserves, bankReservesOf } from '../../ledger/accounts';
+import { cashOf, moveSectorRowsToBank, moveBankReserves, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
 
 /**
  * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
@@ -354,7 +354,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     mergeBankSheets(ab, tb);
     moveSectorRowsToBank(ctx.v2, target.ticker, acquirer.ticker); // A3.3: the sector parties' rows at the target join the acquirer's
     moveBankReserves(ctx.v2, target.ticker, acquirer.ticker); // A3.6a: and its reserves join the acquirer's row
-    restateBankSheetStatistics(ab, bankReservesOf(ctx.v2, acquirer.ticker));
+    restateBankSheetStatistics(ab, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker));
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (target.bankMarketShare ?? 0)).toFixed(4));
     target.bankBalanceSheet = undefined;
 

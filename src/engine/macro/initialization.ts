@@ -498,7 +498,6 @@ function buildRegion(regionId: RegionId): Region {
     businessLoans: [],
     householdLoans: [],
     wholesaleFundingUSD: 0,
-    corporateDepositsUSD: 0,
   };
   // §5-WIRES A3.6c: the seed's stated reserves ride the opening-cash stash (the same channel a
   // firm's opening cash rides) until close-seed opens each bank's account; no sheet carries them.

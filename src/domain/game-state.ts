@@ -83,7 +83,7 @@ export interface GameState {
   sovereignAccruedInterestUSD: Map<string, number>;
   /** CASH — reserves 02b invented this week to cover balances that moved outside settlement. */
   lastCashReconcileUSD?: Partial<Record<import('./geography').RegionId, number>>;
-  lastCashReconcileByClassUSD?: { corporate: number; institutional: number; sme: number };
+  lastCashReconcileByClassUSD?: { sme: number };
   /** CASH — clamped negative balances, summed over the week's reconciliations. */
   lastCashOverdraftUSD?: number;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */

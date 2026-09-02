@@ -679,7 +679,6 @@ export function generateInitialCompanies(
             repoEncumberedCollateralUSD: 0,
             businessLoans: [],
             householdLoans: [],
-            corporateDepositsUSD: 0,
           };
           // A3.6c: this bank's share of the seed's stated reserves, stashed until close-seed opens its account.
           stashOpeningCash(sheet, openingCashOf(bs) * share);

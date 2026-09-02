@@ -289,7 +289,7 @@ export interface WeeklyStepContext {
    *  settlement layer. The migration's completion meter; zero means every stage posts. */
   cashReconcileUSD: Partial<Record<RegionId, number>>;
   /** CASH — the same meter split by which holder class's balance moved unrouted. */
-  cashReconcileByClassUSD: { corporate: number; institutional: number; sme: number };
+  cashReconcileByClassUSD: { sme: number };
   /** CASH — balances that are NEGATIVE and clamped to zero by the deposit reconciliation: a
    *  holder spending money it does not have, which the plug then hides. Not unrouted flow. */
   cashOverdraftUSD: number;
@@ -412,7 +412,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     tradeInvoicesBooked: [],
     estates: state.estates,
     cashReconcileUSD: {},
-    cashReconcileByClassUSD: { corporate: 0, institutional: 0, sme: 0 },
+    cashReconcileByClassUSD: { sme: 0 },
     cashOverdraftUSD: 0,
     pendingHolderAccrualUSD: new Map(),
     pendingHolderAccrualPayout: new Set(),

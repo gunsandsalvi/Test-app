@@ -158,15 +158,8 @@ export interface BankingSector {
    * household-lending pass in bank-lending.ts; `consumerLoanBookUSD` is their derived sum.
    */
   householdLoans: HouseholdLoanPool[];
-  /**
-   * G2 slice 4 — corporate deposits: the sum of home-companies' S5 cash, derived weekly (a
-   * VIEW of the one cash ledger, never a second store). Kept beside the household deposit
-   * stock that `depositsUSD` carries; total funding = depositsUSD + corporateDepositsUSD.
-   */
-  corporateDepositsUSD: number;
-  /** SETL5 — institutional balances held here (funds, insurers, pensions, dealers' clients).
-   * A real liability with reserves behind it, maintained by settlement and reconciled weekly. */
-  institutionalDepositsUSD?: number;
+  /** §5-WIRES A3.6c: the corporate and institutional deposit lines are READS of the depositors'
+   *  accounts (`depositLinesAt`, ledger/accounts.ts) — no field carries them. */
   /** SETL2 — the named boundary's balance here: money owed to counterparties the model has not
    * built yet (see settlement.ts's UNMODELED). A real liability with real reserves behind it, so
    * the identity closes; its SIZE is the measure of how much of the payment graph is still
@@ -437,8 +430,19 @@ export const MORTGAGE_MIN_LOSS_SEVERITY = 0.05;
  *  lines and the clients' margin held. ONE definition (§7.373): the money audit's snapshot
  *  omitted the margin line while its week-end read included it, and the whole margin STOCK
  *  printed as "unexplained" money every week the desks held any. */
-export const depositsOf = (s: BankingSector): number =>
-  s.depositsUSD + (s.corporateDepositsUSD ?? 0) + (s.institutionalDepositsUSD ?? 0) + (s.smeDepositsUSD ?? 0) + (s.clientMarginUSD ?? 0);
+export const depositsOf = (s: BankingSector, lines: DepositLines): number =>
+  lines.householdUSD + lines.corporateUSD + lines.institutionalUSD + lines.smeUSD + (s.clientMarginUSD ?? 0);
+
+/** §5-WIRES A3.6c — A BANK'S DEPOSIT LINES, READ OFF THE LEDGER. The four classes are the
+ *  depositors' accounts at the bank: the household sector's row, the pools' rows, and the
+ *  firms' and institutions' accounts whose house bank it is (`depositLinesAt`, ledger/accounts.ts).
+ *  A sheet-taking function that needs a line takes this beside the sheet, as it takes the cash. */
+export interface DepositLines { householdUSD: number; corporateUSD: number; institutionalUSD: number; smeUSD: number }
+export const ZERO_DEPOSIT_LINES: DepositLines = { householdUSD: 0, corporateUSD: 0, institutionalUSD: 0, smeUSD: 0 };
+export const addDepositLines = (a: DepositLines, b: DepositLines): DepositLines => ({
+  householdUSD: a.householdUSD + b.householdUSD, corporateUSD: a.corporateUSD + b.corporateUSD,
+  institutionalUSD: a.institutionalUSD + b.institutionalUSD, smeUSD: a.smeUSD + b.smeUSD,
+});
 
 /** §5-WIRES D — THE LOAN BOOKS ARE READS. A stored sum of stored rows can disagree with its rows
  *  (O4's "facilities on ladders = loans on banks" lived on exactly that); the read cannot. */

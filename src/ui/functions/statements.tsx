@@ -8,7 +8,7 @@ import { RegionId } from '../../domain/geography';
 
 import { Company, InstitutionalEntity, Region } from '../../types';
 import { undueOwedByPayerUSD, partyId, internReason, CORPORATE_TAX_REASON } from '../../engine/simulation/stages/settlement';
-import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksUSD } from '../../domain/banking';
+import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksUSD, addDepositLines, ZERO_DEPOSIT_LINES } from '../../domain/banking';
 import { FunctionModule } from '../fn';
 import { Card, Hint, KV, Tabs, T, mono } from '../ui';
 import { statementUSD, pct, pctLevel, ratio, changePct, money } from '../format';
@@ -16,7 +16,7 @@ import { formatDate, quarterLabel } from '../calendar';
 import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
 import { bankRwaUSD } from '../../domain/bank-pricing';
 import { totalDebtOf } from '../../domain/company';
-import { cashOf, householdDepositsOf, bankReservesOf } from '../../engine/ledger/accounts';
+import { cashOf, householdDepositsOf, bankReservesOf, stateDepositLines } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { entityCashOf } from '../../engine/ledger/accounts';
 
@@ -56,7 +56,8 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
   let body: React.ReactNode;
   if (active === 'bank sheet' && bank) {
     const sov = Object.values(bank.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-    const deposits = bank.depositsUSD + (bank.corporateDepositsUSD ?? 0) + (bank.institutionalDepositsUSD ?? 0) + (bank.smeDepositsUSD ?? 0);
+    const lines = stateDepositLines(world.state, c.ticker);
+    const deposits = lines.householdUSD + lines.corporateUSD + lines.institutionalUSD + lines.smeUSD;
     const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);
     const reservesUSD = bankReservesOf(ensureV2(world.state), c.ticker);
     const assets = loanBooksOf(bank) + sov + reservesUSD + (bank.repoLentUSD ?? 0) + (bank.sovereignAccruedCouponUSD ?? 0) + desks + (bank.primeBrokerageLoansUSD ?? 0);
@@ -73,8 +74,8 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
         { label: 'Accrued sovereign coupon', usd: bank.sovereignAccruedCouponUSD ?? 0 },
         { label: 'Total assets', usd: assets, total: true },
         { label: 'Household deposits', usd: bank.depositsUSD },
-        { label: 'Corporate deposits', usd: bank.corporateDepositsUSD ?? 0 },
-        { label: 'Institutional deposits', usd: bank.institutionalDepositsUSD ?? 0 },
+        { label: 'Corporate deposits', usd: lines.corporateUSD },
+        { label: 'Institutional deposits', usd: lines.institutionalUSD },
         { label: 'Small-business deposits', usd: bank.smeDepositsUSD ?? 0 },
         { label: 'Client margin held', usd: bank.clientMarginUSD ?? 0 },
         { label: 'Central bank loan', usd: bank.centralBankLoanUSD ?? 0 },
@@ -238,14 +239,15 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
   } else if (active === 'banks') {
     const sov = bs?.sovereignBondHoldingsUSD ?? 0;
     const books = regionLoanBooksUSD(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted));
+    const regionLines = world.state.companies.reduce((a, c) => (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? addDepositLines(a, stateDepositLines(world.state, c.ticker)) : a), ZERO_DEPOSIT_LINES);
     body = <Statement units="USD millions · the region's banks, summed" asOf={asOf} lines={[
       { label: 'Business loans', usd: books.businessLoanUSD },
       { label: 'Household loans', usd: books.consumerLoanUSD },
       { label: 'Sovereign bonds', usd: sov },
       { label: 'Reserves', usd: world.state.companies.reduce((a, c) => a + (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? bankReservesOf(ensureV2(world.state), c.ticker) : 0), 0) },
       { label: 'Household deposits', usd: bs?.depositsUSD, total: true },
-      { label: 'Corporate deposits', usd: bs?.corporateDepositsUSD },
-      { label: 'Institutional deposits', usd: bs?.institutionalDepositsUSD },
+      { label: 'Corporate deposits', usd: regionLines.corporateUSD },
+      { label: 'Institutional deposits', usd: regionLines.institutionalUSD },
       { label: 'Central bank loans', usd: bs?.centralBankLoanUSD },
       { label: 'Equity', usd: bs?.bankEquityUSD, total: true },
       { label: 'Capital ratio', text: pctLevel(bs?.bankCapitalRatio, 2) },

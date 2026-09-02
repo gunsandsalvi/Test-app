@@ -1,4 +1,4 @@
-import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount } from '../ledger/accounts';
+import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount, depositLinesAt } from '../ledger/accounts';
 import { V2World } from '../../engine2/world';
 /**
  * CLOSE C2 — THE SEED CLOSES (§5-CLOSE). Run once, after every book has been seeded and before
@@ -46,7 +46,12 @@ export function closeSeedMoney(
     let householdDepositsUSD = 0;
     banks.forEach((b) => {
       const s: BankingSector = b.bankBalanceSheet!;
-      const otherDepositsUSD = Math.max(0, s.corporateDepositsUSD ?? 0) + Math.max(0, s.institutionalDepositsUSD ?? 0)
+      // A3.6c-ii: the corporate and institutional lines are the depositors' accounts, open by now
+      // (the seed opens them before this close). The seed sizes its lines TO THE DOLLAR (the stated
+      // rule the field carried; a sub-dollar change here moved the week-2 print — §7.392), so the
+      // funding residual is struck on the rounded lines.
+      const lines = depositLinesAt(v2, companies, institutionalEntities, b.ticker);
+      const otherDepositsUSD = Math.round(Math.max(0, lines.corporateUSD)) + Math.round(Math.max(0, lines.institutionalUSD))
         + Math.max(0, s.smeDepositsUSD ?? 0) + Math.max(0, s.clientMarginUSD ?? 0) + Math.max(0, s.centralBankLoanUSD ?? 0);
       const needUSD = bankTotalAssetsUSD(s, openingCashOf(s)) - s.bankEquityUSD - (s.repoBorrowedUSD ?? 0) - (s.srfBorrowingUSD ?? 0) - otherDepositsUSD;
       if (needUSD >= 0) {

@@ -58,7 +58,7 @@ import {
   cpCreditPolicyShare, cpReservationYieldBps,
 } from '../../../domain/commercial-paper';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
-import { cashOf, bankReservesOf } from '../../ledger/accounts';
+import { cashOf, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
@@ -188,7 +188,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           leverageHeadroomUSD(sheet, reservesUSD)
         );
         const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD);
-        const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD);
+        const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD, bankDepositLines(ctx, bank.ticker));
         activeBuckets.forEach((b) => {
           const heldUSD = sheet.sovereignBondHoldingsByTenor?.[b.key] ?? 0;
           holdings.set(billInstrumentId(regionId, b.key), heldUSD);

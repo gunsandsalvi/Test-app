@@ -766,7 +766,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const bankShareTotal = regionBanksForLending.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
       regionBanksForLending.forEach(b => {
         const corpUSD = Math.round(corpDepositsByBank.get(b.ticker) ?? 0);
-        b.bankBalanceSheet!.corporateDepositsUSD = corpUSD;
         // §5-WIRES A3.3: each pool's row at this bank opens at its share of the pool's opening
         // cash, and the bank's SME line is the sum of those rows — one number, two views.
         let smeUSD = 0;
@@ -790,7 +789,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       });
       reg.bankingSector = {
         ...reg.bankingSector,
-        corporateDepositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0),
         depositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
       };
     }
@@ -1303,13 +1301,11 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     });
     regionBanks.forEach(b => {
       const instUSD = Math.round(byBank.get(b.ticker) ?? 0);
-      b.bankBalanceSheet!.institutionalDepositsUSD = instUSD;
       stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + instUSD);
       applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
     reg.bankingSector = {
       ...reg.bankingSector,
-      institutionalDepositsUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0),
       depositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
     };
   });
@@ -1591,18 +1587,20 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const sheet = b.bankBalanceSheet!;
       const corpUSD = Math.round(lateCorporateByBank.get(b.ticker) ?? 0);
       const instUSD = Math.round(lateInstitutionalByBank.get(b.ticker) ?? 0);
-      sheet.corporateDepositsUSD += corpUSD;
-      sheet.institutionalDepositsUSD = (sheet.institutionalDepositsUSD ?? 0) + instUSD;
       stashOpeningCash(sheet, openingCashOf(sheet) + corpUSD + instUSD);
       applyBankFundingSplit(sheet, openingCashOf(sheet), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
     reg.bankingSector = {
       ...reg.bankingSector,
-      corporateDepositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0),
-      institutionalDepositsUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0),
       depositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
     };
   });
+
+  // §5-WIRES A3.1/A3.6c-ii: the seed opens every firm's and institution's account where it wrote
+  // its opening cash — before the close, which reads the banks' corporate and institutional lines
+  // off them.
+  companies.forEach((c) => openAccount(seedV2, { kind: 'COMPANY', ticker: c.ticker }, openingCashOf(c)));
+  institutionalEntities.forEach((e) => openAccount(seedV2, { kind: 'INSTITUTION', id: e.id }, openingCashOf(e)));
 
   // §5-CLOSE C2: the seed closes — depositors fund the banks (wholesale is nobody's and is
   // zero), the central bank's book backs reserves and the treasury's account to the dollar, and
@@ -1691,13 +1689,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       },
     ],
   };
-  // §5-WIRES A3.1: the seed opens every firm's account where it wrote `cash`. A bank's company
-  // row carries the seed's number too, until A3's bank slice makes a bank's cash its reserves.
-  {
-    const v2 = seedV2;
-    companies.forEach((c) => openAccount(v2, { kind: 'COMPANY', ticker: c.ticker }, openingCashOf(c)));
-    institutionalEntities.forEach((e) => openAccount(v2, { kind: 'INSTITUTION', id: e.id }, openingCashOf(e)));
-  }
   return state;
 }
 

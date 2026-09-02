@@ -37,8 +37,7 @@ import { openingCashOf } from '../../ledger/accounts';
 import { Preferences, riskAversionOf } from '../../../domain/preferences';
 import { Company, Region, RegionId } from '../../../types';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
-import {
-  BankingSector, BankLoan, HouseholdLoanPool, HouseholdLoanKind,
+import { BankingSector, BankLoan, HouseholdLoanPool, HouseholdLoanKind,
   MORTGAGE_RISK_WEIGHT, CONSUMER_CREDIT_RISK_WEIGHT, householdBookRwaUSD, annuityWeeklyPrincipalUSD,
   MORTGAGE_TERM_WEEKS, MORTGAGE_SEED_WAM_WEEKS, CONSUMER_TERM_WEEKS, CONSUMER_TERM_SEED_WAM_WEEKS,
   MORTGAGE_SEED_VINTAGE_COHORTS, MortgageVintage, bookMortgageSeverity, vintageCurrentLtv,
@@ -47,8 +46,7 @@ import {
   MORTGAGE_SEED_SPREAD_OVER_10Y_BPS, MORTGAGE_OPERATING_COST_BPS, CARD_POOL_PAYMENT_RATE_WEEKLY, CARD_MIN_PRINCIPAL_RATE_WEEKLY,
   CARD_OPERATING_COST_BPS,
   CONSUMER_TERM_OPERATING_COST_BPS, HOUSING_TURNOVER_SEED_RATE_ANNUAL, housingTurnoverAnnual, MORTGAGE_LTV_AT_ORIGINATION,
-  MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER,
-} from '../../../domain/banking';
+  MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER, DepositLines } from '../../../domain/banking';
 import { AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
 import { SmePool } from '../../../domain/region-macro';
 import { bookPnL } from '../../ledger/bank-book';
@@ -932,8 +930,8 @@ export function runBankHouseholdLending(
  * payment instruction (BANK_SECURITIES → the unmodeled wholesale lender), so the reserves move
  * where money moves and the boundary meter sees the flow under its own reason.
  */
-export function repayCentralBankLoanUSD(sheet: BankingSector, cashUSD: number): number {
-  const bufferUSD = stressedOutflowUSD(sheet) * LIQUIDITY_COVERAGE_RATIO;
+export function repayCentralBankLoanUSD(sheet: BankingSector, cashUSD: number, lines: DepositLines): number {
+  const bufferUSD = stressedOutflowUSD(sheet, lines) * LIQUIDITY_COVERAGE_RATIO;
   const excessCashUSD = Math.max(0, cashUSD - bufferUSD);
   const repayUSD = Math.min(Math.max(0, sheet.centralBankLoanUSD ?? 0), excessCashUSD);
   if (repayUSD < 1e6) return 0;

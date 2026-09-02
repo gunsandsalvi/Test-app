@@ -8,7 +8,7 @@ import {
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
 import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking';
-import { regionLoanBooksUSD } from '../../domain/banking';
+import { regionLoanBooksUSD, DepositLines } from '../../domain/banking';
 import { governmentOf } from '../../domain/government-entity';
 
 /** §7.280 — the budget's own red line on the fiscal stance: a treasury whose weekly coupon bill
@@ -113,6 +113,8 @@ export function evolveRegionMacro(
     householdDepositsUSD: number;
     /** §5-WIRES A3.6c: the region's bank reserves — its named banks' accounts, summed by the caller. */
     bankReservesUSD: number;
+    /** §5-WIRES A3.6c-ii: the region's deposit lines — its named banks' lines, summed by the caller. */
+    bankDepositLines: DepositLines;
   },
   week: number,
   equityReturn: number = 0,
@@ -795,6 +797,7 @@ export function evolveRegionMacro(
     // §5-WIRES D: the region's loan books are its named banks' rows, summed here.
     regionLoanBooksUSD(allCompanies.filter((c) => c.region === region.id && c.isBankEntity && !!c.bankBalanceSheet)),
     microFeedback.bankReservesUSD,
+    microFeedback.bankDepositLines,
     newEstimatedHouseholdIncomeUSD,
     newSavingsRate,
     region.policyRate,

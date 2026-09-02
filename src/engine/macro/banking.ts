@@ -1,5 +1,5 @@
 import { riskAversionOf } from '../../domain/preferences';
-import { loanBooksOf } from '../../domain/banking';
+import { loanBooksOf, DepositLines } from '../../domain/banking';
 import { BankingSector, householdBookRwaUSD, CONSUMER_CREDIT_RISK_WEIGHT, WHOLESALE_FUNDING_SPREAD_BPS } from '../../types';
 import { dealerDeskGrossUSD } from '../../domain/dealer-desk';
 
@@ -127,10 +127,9 @@ export const WHOLESALE_FUNDING_RUNOFF_RATE = 0.40;
 export const LIQUIDITY_COVERAGE_RATIO = 1.0;
 
 /** Funding that runs in a stress month, weighted by how fast each kind of it runs. */
-export function stressedOutflowUSD(sheet: BankingSector): number {
-  const wholesaleUSD = (sheet.corporateDepositsUSD ?? 0) + (sheet.institutionalDepositsUSD ?? 0)
-    + (sheet.smeDepositsUSD ?? 0) + (sheet.clientMarginUSD ?? 0);
-  return Math.max(0, sheet.depositsUSD) * RETAIL_DEPOSIT_RUNOFF_RATE
+export function stressedOutflowUSD(sheet: BankingSector, lines: DepositLines): number {
+  const wholesaleUSD = lines.corporateUSD + lines.institutionalUSD + lines.smeUSD + (sheet.clientMarginUSD ?? 0);
+  return Math.max(0, lines.householdUSD) * RETAIL_DEPOSIT_RUNOFF_RATE
     + Math.max(0, wholesaleUSD) * WHOLESALE_FUNDING_RUNOFF_RATE;
 }
 
@@ -140,8 +139,8 @@ export function stressedOutflowUSD(sheet: BankingSector): number {
  * which is the reserves-versus-bonds substitution S2 found to be load-bearing (§7.10), now
  * acting on the size of the book rather than on a scaling factor.
  */
-export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector, cashUSD: number): number {
-  const requiredHqlaUSD = stressedOutflowUSD(sheet) * LIQUIDITY_COVERAGE_RATIO;
+export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector, cashUSD: number, lines: DepositLines): number {
+  const requiredHqlaUSD = stressedOutflowUSD(sheet, lines) * LIQUIDITY_COVERAGE_RATIO;
   return Math.max(0, requiredHqlaUSD - Math.max(0, cashUSD));
 }
 
@@ -221,6 +220,8 @@ export function evolveBankingSector(
   /** §5-WIRES A3.6c: the bank's reserves, its account read by the caller (a region's: the sum
    *  of its named banks' accounts) — the sheet carries no line. */
   cashUSD: number,
+  /** §5-WIRES A3.6c-ii: the bank's deposit lines, read off the ledger by the caller. */
+  deposits: DepositLines,
   estimatedHouseholdIncomeUSD: number,
   savingsRate: number,
   policyRate: number,
@@ -345,7 +346,7 @@ export function evolveBankingSector(
   // And funding costs money: what a corporate treasurer is owed is not a chosen number, because
   // this model already simulates the alternative it would take — sweeping to the money fund the
   // moment the bank underpays — so the rate a corporate balance commands is the fund's own yield.
-  const corporateDepositsUSD = prevBanking.corporateDepositsUSD ?? 0;
+  const corporateDepositsUSD = deposits.corporateUSD;
   const corporateDepositRateAnnual = Math.max(0, competingMmfYieldAnnual);
   // §5-CLOSE C4: PAID, not written — 02b posts it as BANK → COMPANY to each positive-balance
   // depositor pro rata, so the treasurer who earns it is credited and this bank's reserves and
@@ -398,7 +399,7 @@ export function evolveBankingSector(
   const fundingPressure = contestableInflowUSD > 0
     ? Math.max(0, Math.min(1, householdMmfDiversionUSD / contestableInflowUSD))
     : 0;
-  const stressedUSD = stressedOutflowUSD(prevBanking) * LIQUIDITY_COVERAGE_RATIO;
+  const stressedUSD = stressedOutflowUSD(prevBanking, deposits) * LIQUIDITY_COVERAGE_RATIO;
   const liquidityShortfallShare = stressedUSD > 0
     ? Math.max(0, Math.min(1, (stressedUSD - Math.max(0, cashUSD)) / stressedUSD))
     : 0;
@@ -506,7 +507,7 @@ export function evolveBankingSector(
   // a tenth of a phantom 1e12 scalar to a real number and called the total a money stock, so
   // M2 moved when nothing in the economy did. Money-stock changes now decompose exactly into
   // real deposit flows and net origination, which is the check G2 asked for.
-  const newMoneySupplyM2USD = depositsUSD + (prevBanking.corporateDepositsUSD ?? 0);
+  const newMoneySupplyM2USD = depositsUSD + deposits.corporateUSD;
 
   return {
     // HH: a reported FLOW, not a balance-sheet line — what this bank actually paid its household
@@ -550,12 +551,11 @@ export function evolveBankingSector(
     // HH3: the household pools are owned by the household lending pass; carried untouched.
     householdLoans: prevBanking.householdLoans || [],
     // §5-CLOSE: no funding residual is written here. The banks are funded by depositors, the
-    // repo book and the central bank's loan — every one a named creditor.
-    corporateDepositsUSD,
+    // repo book and the central bank's loan — every one a named creditor. A3.6c-ii: the
+    // corporate and institutional lines are reads of the depositors' accounts, not fields.
     // This return rebuilds the sheet from a FIXED FIELD LIST, so anything not named here is
-    // silently dropped — these two vanished every week until the identity caught it (804
+    // silently dropped — two lines vanished every week until the identity caught it (804
     // violations). Same trap stage 08 documents; carried explicitly.
-    institutionalDepositsUSD: prevBanking.institutionalDepositsUSD ?? 0,
     centralBankLoanUSD: prevBanking.centralBankLoanUSD ?? 0,
     clientMarginUSD: prevBanking.clientMarginUSD ?? 0,
     smeDepositsUSD: prevBanking.smeDepositsUSD ?? 0,

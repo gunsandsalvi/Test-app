@@ -18,7 +18,7 @@
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
-import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, resetAccount, adjustBankReserves, bankReservesOf } from '../src/engine/ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, resetAccount, adjustBankReserves, bankReservesOf, stateDepositLines } from '../src/engine/ledger/accounts';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -1422,9 +1422,9 @@ const xbModule: HarnessModule = (() => {
       out.push(`  settlement bypass (02b reconcile, gross): ${B(totalUSD)} — ${Object.entries(byRegion)
         .filter(([, v]) => Math.abs(Number(v) || 0) > 0)
         .map(([r, v]) => `${r} ${B(Number(v))}`).join(', ')}`);
-      const byClass = (s as any).lastCashReconcileByClassUSD as { corporate: number; institutional: number; sme: number } | undefined;
+      const byClass = (s as any).lastCashReconcileByClassUSD as { sme: number } | undefined;
       if (byClass) {
-        out.push(`    by holder class: corporate ${B(byClass.corporate)}, institutional ${B(byClass.institutional)}, SME ${B(byClass.sme)}`);
+        out.push(`    by holder class: SME ${B(byClass.sme)} (the corporate and institutional lines are the accounts themselves — A3.6c)`);
       }
       const overdraftUSD = Number((s as any).lastCashOverdraftUSD ?? 0);
       if (overdraftUSD > 0) {
@@ -2424,13 +2424,14 @@ function runHarness() {
       if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted || c.mergerAcquired) return;
       const bs = c.bankBalanceSheet;
       const reservesUSD = bankReservesOf(ensureV2(state), c.ticker);
+      const lines = stateDepositLines(state, c.ticker);
       const sovUSD = Object.values((bs.sovereignBondHoldingsByTenor || {}) as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
       const residualUSD: number =
         // SETL2: `corporateDepositsUSD` IS a liability now. Company payments settle through bank
         // books (stages/settlement.ts), so the line has real reserves behind it and excluding it
         // would leave the ASSET unmatched — the mirror of the error this comment used to record.
         // HH4d: wholesale funding is a real liability line split out of the deposit label.
-        bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + ((bs as any).institutionalDepositsUSD ?? 0) + ((bs as any).clientMarginUSD ?? 0) + ((bs as any).smeDepositsUSD ?? 0) + ((bs as any).centralBankLoanUSD ?? 0) + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
+        lines.householdUSD + lines.corporateUSD + lines.institutionalUSD + ((bs as any).clientMarginUSD ?? 0) + lines.smeUSD + ((bs as any).centralBankLoanUSD ?? 0) + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
         - bs.businessLoanBookUSD - bs.consumerLoanBookUSD - sovUSD - reservesUSD
         - ((bs as any).repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0)
         // CAL: a sovereign coupon earned and not yet paid is this bank's asset against the
@@ -2448,9 +2449,9 @@ function runHarness() {
         // prints one bank's composition every week so the jumping line can be diffed.
         const bsx = bs as unknown as Record<string, number | undefined>;
         const gb = (v: number | undefined) => ((v ?? 0) / 1e9).toFixed(1);
-        console.log(`  [bank-identity] w${w} ${c.ticker} resid ${(residualUSD / 1e9).toFixed(2)}B: hhDep ${gb(bs.depositsUSD)}B`
-          + ` corp ${gb(bs.corporateDepositsUSD)}B inst ${gb(bsx.institutionalDepositsUSD)}B`
-          + ` sme ${gb(bsx.smeDepositsUSD)}B margin ${gb(bsx.clientMarginUSD)}B`
+        console.log(`  [bank-identity] w${w} ${c.ticker} resid ${(residualUSD / 1e9).toFixed(2)}B: hhDep ${gb(lines.householdUSD)}B`
+          + ` corp ${gb(lines.corporateUSD)}B inst ${gb(lines.institutionalUSD)}B`
+          + ` sme ${gb(lines.smeUSD)}B margin ${gb(bsx.clientMarginUSD)}B`
           + ` cbloan ${gb(bsx.centralBankLoanUSD)}B eq ${gb(bs.bankEquityUSD)}B`
           + ` srf ${gb(bs.srfBorrowingUSD)}B repoB ${gb(bsx.repoBorrowedUSD)}B`
           + ` || bizL ${gb(bs.businessLoanBookUSD)}B consL ${gb(bs.consumerLoanBookUSD)}B`

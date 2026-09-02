@@ -16,7 +16,7 @@
  * difference between that and zero moves as a named flow.
  */
 
-import { BankingSector, HouseholdLoanPool , loanBooksOf } from './banking';
+import { BankingSector, HouseholdLoanPool , loanBooksOf, DepositLines } from './banking';
 import { bankRwaUSD, BANK_WORKING_CAPITAL_RATIO } from './bank-pricing';
 import { dealerDeskGrossUSD, DealerDeskInventory } from './dealer-desk';
 
@@ -51,9 +51,9 @@ export function bankSheetAssetsUSD(sheet: BankingSector, cashUSD: number): numbe
 
 /** The liabilities an assuming bank takes on whole: every deposit class and the secured lines.
  *  Wholesale money and equity are the two the plan decides. */
-export function bankAssumedLiabilitiesUSD(sheet: BankingSector): number {
-  return sheet.depositsUSD + (sheet.corporateDepositsUSD ?? 0) + (sheet.institutionalDepositsUSD ?? 0)
-    + (sheet.smeDepositsUSD ?? 0) + (sheet.clientMarginUSD ?? 0)
+export function bankAssumedLiabilitiesUSD(sheet: BankingSector, lines: DepositLines): number {
+  return lines.householdUSD + lines.corporateUSD + lines.institutionalUSD
+    + lines.smeUSD + (sheet.clientMarginUSD ?? 0)
     + (sheet.repoBorrowedUSD ?? 0) + (sheet.srfBorrowingUSD ?? 0);
 }
 
@@ -86,12 +86,12 @@ export interface BankResolutionPlan {
  * behind as a claim), the wholesale lenders are written down next, and the treasury pays the rest.
  */
 export function planBankResolution(
-  sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number, cashUSD: number,
+  sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number, cashUSD: number, lines: DepositLines,
 ): BankResolutionPlan {
   const wholesaleUSD = Math.max(0, sheet.centralBankLoanUSD ?? 0);
   const ladderStaysUSD = Math.min(wholesaleUSD, Math.max(0, ownLadderPrincipalUSD));
   const transferableUSD = wholesaleUSD - ladderStaysUSD;
-  const netBookUSD = bankSheetAssetsUSD(sheet, cashUSD) - bankAssumedLiabilitiesUSD(sheet) - transferableUSD;
+  const netBookUSD = bankSheetAssetsUSD(sheet, cashUSD) - bankAssumedLiabilitiesUSD(sheet, lines) - transferableUSD;
   const capitalUSD = Math.max(0, acquirerCapitalUSD);
   const estateUSD = Math.max(0, netBookUSD - capitalUSD);
   const shortfallUSD = Math.max(0, capitalUSD - netBookUSD);
@@ -164,9 +164,9 @@ export function mergeDesks(mine: DealerDeskInventory | undefined, theirs: Dealer
 }
 
 /** The statistics a sheet reports, re-read after its lines moved (readings, never drivers). */
-export function restateBankSheetStatistics(sheet: BankingSector, cashUSD: number): void {
+export function restateBankSheetStatistics(sheet: BankingSector, cashUSD: number, lines: DepositLines): void {
   const rwaUSD = bankRwaUSD(sheet);
   sheet.bankCapitalRatio = Number((rwaUSD > 0 ? sheet.bankEquityUSD / rwaUSD : 0.13).toFixed(4));
   sheet.centralBankReservesUSD = Math.max(0, cashUSD);
-  sheet.moneySupplyM2USD = sheet.depositsUSD + (sheet.corporateDepositsUSD ?? 0);
+  sheet.moneySupplyM2USD = lines.householdUSD + lines.corporateUSD;
 }

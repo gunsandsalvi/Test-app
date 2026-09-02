@@ -33,7 +33,8 @@ import { partyId, partyOf, partyKey, partyFromKey } from './party';
 import { RegionId } from '../../domain/geography';
 import { Company } from '../../domain/company';
 import { InstitutionalEntity } from '../../domain/institutions';
-import { V2World, internString } from '../../engine2/world';
+import { DepositLines } from '../../domain/banking';
+import { V2World, internString, ensureV2 } from '../../engine2/world';
 
 // ---------------------------------------------------------------------------------------------
 // THIRD SLICE — THE PERSISTENT ACCOUNTS, COMPANIES FIRST (A3.1, §7.384). A company's balance
@@ -146,6 +147,49 @@ function sectorDepositsAt(v2: V2World, bankTicker: string, kind: 'SEGMENT' | 'HO
 export const smeDepositsAt = (v2: V2World, bankTicker: string): number => sectorDepositsAt(v2, bankTicker, 'SEGMENT');
 /** A bank's household deposit line: the household sector's row at it (A3.4). */
 export const householdDepositsAt = (v2: V2World, bankTicker: string): number => sectorDepositsAt(v2, bankTicker, 'HOUSEHOLD');
+
+// ---- A3.6c-ii — THE CORPORATE AND INSTITUTIONAL LINES ARE THE DEPOSITORS' ACCOUNTS. A bank's
+// corporate line is the sum of the accounts of the firms whose house bank it is (a resolved
+// bank's shell banks at its acquirer like any firm), its institutional line the sum of the
+// institutions' — summed in the holders' order, the order the pass rows sum in, so the read
+// is the number the projection used to write. No field carries either. ----
+
+type Depositor = { homeBankTicker?: string };
+/** A bank's corporate deposit line: every firm banking there, its account. */
+export function corporateDepositsAt(v2: V2World, companies: readonly (Depositor & Pick<Company, 'ticker' | 'isBankEntity' | 'bankBalanceSheet'>)[], bankTicker: string): number {
+  let usd = 0;
+  for (const c of companies) {
+    if (c.homeBankTicker !== bankTicker || (c.isBankEntity && c.bankBalanceSheet)) continue;
+    usd += cashOf(v2, c);
+  }
+  return usd;
+}
+/** A bank's institutional deposit line: every institution banking there, its account. */
+export function institutionalDepositsAt(v2: V2World, entities: readonly (Depositor & Pick<InstitutionalEntity, 'id'>)[], bankTicker: string): number {
+  let usd = 0;
+  for (const e of entities) if (e.homeBankTicker === bankTicker) usd += entityCashOf(v2, e);
+  return usd;
+}
+/** A bank's four deposit lines, read off the ledger. */
+export function depositLinesAt(
+  v2: V2World,
+  companies: readonly (Depositor & Pick<Company, 'ticker' | 'isBankEntity' | 'bankBalanceSheet'>)[],
+  entities: readonly (Depositor & Pick<InstitutionalEntity, 'id'>)[],
+  bankTicker: string
+): DepositLines {
+  return {
+    householdUSD: householdDepositsAt(v2, bankTicker),
+    corporateUSD: corporateDepositsAt(v2, companies, bankTicker),
+    institutionalUSD: institutionalDepositsAt(v2, entities, bankTicker),
+    smeUSD: smeDepositsAt(v2, bankTicker),
+  };
+}
+/** The lines in the week: the pass's own holders. */
+export const bankDepositLines = (ctx: WeeklyStepContext, bankTicker: string): DepositLines =>
+  depositLinesAt(ctx.v2, ctx.updatedCompanies, ctx.updatedInstitutionalEntities, bankTicker);
+/** The lines off a state (the audits, the UI, the harness). */
+export const stateDepositLines = (state: { companies: readonly Company[]; institutionalEntities: readonly InstitutionalEntity[]; v2?: unknown }, bankTicker: string): DepositLines =>
+  depositLinesAt(ensureV2(state as never), state.companies, state.institutionalEntities, bankTicker);
 
 /**
  * A3.4 — A BANK'S OWN BOOK MOVES A SECTOR ROW. The household loan pass and the evolution move a
@@ -361,37 +405,7 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     openRow(s, partyId({ kind: 'CENTRAL_BANK', region }), AT_NOWHERE, 'VOID', 0);
     openRow(s, partyId({ kind: 'CLEARING_HOUSE', region }), AT_NOWHERE, 'VOID', 0);
   });
-  // A3.6b: a bank's corporate and institutional lines ARE its depositors' rows; a line that
-  // moved without them since the last projection is reported here, where the pass opens.
-  const lines = lineSumsByBank(s);
-  banks.forEach((b) => {
-    const bi = s.bankIdxOfTicker.get(b.ticker)!;
-    const t = lines.get(bi) ?? blankLines();
-    const sheet = b.bankBalanceSheet!;
-    const gate = (what: string, lineUSD: number, rowsUSD: number) => {
-      if (Math.abs(lineUSD - rowsUSD) > Math.max(1, Math.abs(lineUSD) * 1e-9)) {
-        console.log(`  [accounts] w${ctx.nextWeek} ${b.region}:${b.ticker} ${what} line ${(lineUSD / 1e6).toFixed(3)}M moved without its rows ${(rowsUSD / 1e6).toFixed(3)}M`);
-      }
-    };
-    gate('corporate', sheet.corporateDepositsUSD ?? 0, t.CORPORATE);
-    gate('institutional', sheet.institutionalDepositsUSD ?? 0, t.INSTITUTIONAL);
-  });
   return s;
-}
-
-const blankLines = (): Record<AccountClass, number> => ({ CORPORATE: 0, INSTITUTIONAL: 0, SME: 0, HOUSEHOLD: 0, RESERVES: 0, TREASURY: 0, CREATED: 0, SECURITIES: 0, VOID: 0 });
-
-/** Per bank, the sum of the rows at it by class — its deposit lines, in row order. */
-function lineSumsByBank(s: AccountStore): Map<number, Record<AccountClass, number>> {
-  const out = new Map<number, Record<AccountClass, number>>();
-  for (let r = 0; r < s.n; r++) {
-    const bi = s.bankIdx[r];
-    if (bi < 0) continue;
-    let t = out.get(bi);
-    if (!t) { t = blankLines(); out.set(bi, t); }
-    t[ACCOUNT_CLASSES[s.classId[r]]] += s.balanceUSD[r];
-  }
-  return out;
 }
 
 /** One settled row, by the one rule. A party the store has no row for is reported, not dropped. */
@@ -426,8 +440,6 @@ function leg(s: AccountStore, row: number, deltaUSD: number): void {
  * stays the pass's own (the bank's own-account legs are its income and expense).
  */
 export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
-  // A3.6b: a bank's corporate and institutional lines are the sums of its depositors' rows.
-  const lines = lineSumsByBank(s);
   // A3.3/A3.4: the sector parties' pass rows land on their persistent per-bank rows FIRST — the
   // bank sheets below read the SME and household lines off them.
   const landSectorRows = (party: PartyRef) => {
@@ -445,7 +457,6 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
     if (c.isBankEntity && c.bankBalanceSheet) {
       const bi = s.bankIdxOfTicker.get(c.ticker); if (bi === undefined) return;
       const rr = s.reserveRowOfBank[bi];
-      const t = lines.get(bi) ?? blankLines();
       const sheet = c.bankBalanceSheet;
       // A3.6a/c: the pass's result is the persistent row; the sheet carries no reserves line.
       ctx.v2.accounts.balanceUSD[reserveRowOf(ctx.v2, c.ticker, 0)] = s.balanceUSD[rr];
@@ -453,8 +464,7 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
         ...sheet,
         // A3.4: the household line IS the household sector's row at this bank (landed above).
         depositsUSD: householdDepositsAt(ctx.v2, c.ticker),
-        corporateDepositsUSD: t.CORPORATE,
-        institutionalDepositsUSD: t.INSTITUTIONAL,
+        // A3.6c-ii: the corporate and institutional lines are reads (`depositLinesAt`); no field.
         // A3.3: the SME line IS the pool rows at this bank (written back below, before this runs).
         smeDepositsUSD: smeDepositsAt(ctx.v2, c.ticker),
       };

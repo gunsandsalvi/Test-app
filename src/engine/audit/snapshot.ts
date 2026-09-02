@@ -3,6 +3,7 @@
  * mutate in place, so "previous week" cannot be a reference — it is the handful of numbers the
  * week-over-week checks need, copied out when the audit runs.
  */
+import { stateDepositLines } from '../ledger/accounts';
 import { GameState, RegionId } from '../../types';
 import { loanBooksOf, depositsOf } from '../../domain/banking';
 import { REGION_IDS } from '../../domain/geography';
@@ -36,7 +37,7 @@ export function snapshotOf(state: GameState): AuditSnapshot {
       centralBankAssetsUSD: centralBankAssetsUSD(cb),
       sovereignOutstandingUSD: (reg.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0),
       // §7.373: the SAME read M6 takes at week end — every deposit class, the margin line included.
-      bankDepositsUSD: banks.reduce((a, b) => a + depositsOf(b.bankBalanceSheet!), 0),
+      bankDepositsUSD: banks.reduce((a, b) => a + depositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker)), 0),
       bankLoansUSD: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!), 0),
     };
   });
