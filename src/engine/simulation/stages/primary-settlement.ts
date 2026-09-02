@@ -23,7 +23,8 @@ import { DealerDeskInventory } from '../../../domain/dealer-desk';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { ClearingResult } from './financial-clearing-engine';
 import { pay } from './settlement';
-import { transferHolding } from '../../ledger/holdings-ledger';
+import { transferHolding, issueHolding, HoldingSpec } from '../../ledger/holdings-ledger';
+import { PartyRef } from '../../ledger/party';
 import { heldInShares } from '../../../domain/assets';
 
 /**
@@ -138,6 +139,16 @@ export function settlePricedOfferings(
       }
       inventory[deskBook] = rows;
       updateBankSheet(ctx, lead.ticker, { ...existingSheet, dealerDeskInventory: inventory });
+      // §5-FINALIZATION step 13 (W2): the residual is paper that MOVED — for the credit books
+      // the issuer's tranche went to the clearing house whole (W3) and the book took the placed
+      // part, so the lead takes the rest from the house; for equity the issuer's new shares are
+      // created onto the lead (the CCP leg carried only the take).
+      const leadDesk: PartyRef = { kind: 'BANK_SECURITIES', ticker: lead.ticker };
+      const spec: HoldingSpec = heldInShares(instrumentType)
+        ? { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueUSD: residualUSD, shares: residualUnits }
+        : { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueUSD: residualUSD };
+      if (heldInShares(instrumentType)) issueHolding(ctx.v2, { kind: 'COMPANY', ticker: issuerCompany!.ticker }, leadDesk, spec, 'underwriting residual taken by the lead');
+      else transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: regionId }, leadDesk, spec, 'underwriting residual taken by the lead');
       // §5-WIRES W2/W3: the paper the lead is left holding comes off the clearing house, by wire —
       // the issuer delivered the WHOLE deal to the house when its tranche was issued (the tranche
       // ledger, stage 08), the book's fills took the market's share, the lead takes the rest.

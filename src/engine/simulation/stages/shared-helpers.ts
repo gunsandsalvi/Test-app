@@ -18,6 +18,7 @@ import { SECTOR_OCCUPATION_MIX, GOVERNMENT_OCCUPATION_MIX } from '../../../domai
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { bankRwaUSD, BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
+import { heldInShares } from '../../../domain/assets';
 
 const FOREIGN_GROWTH_SENSITIVITY = 3.0;
 
@@ -590,11 +591,19 @@ export function applyPendingCorporateActionSettlements(
       // the issuer's wires count once. Equity (no ladder) settles the same way for symmetry.
       const house = { kind: 'CLEARING_HOUSE' as const, region: a.region };
       const holder = { kind: 'INSTITUTION' as const, id: entity.id };
+      // §5-FINALIZATION step 13 (W2): equity has no ladder, so its issuer's side of the action is
+      // wired HERE — a buyback returns the shares from the house to the issuer, a placement
+      // creates them from the issuer to the house — and the house nets to zero on equity too.
+      const equityIssuerTicker = heldInShares(a.type) ? ctx.issuerTickerById?.get(a.id) : undefined;
       if (a.retiredUSD > 0) {
-        transferHolding(v2, holder, house, { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.retiredUSD, shares: a.anyShares ? a.retiredSh : undefined }, 'corporate action: paper retired pro rata');
+        const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.retiredUSD, shares: a.anyShares ? a.retiredSh : undefined };
+        transferHolding(v2, holder, house, spec, 'corporate action: paper retired pro rata');
+        if (equityIssuerTicker) transferHolding(v2, house, { kind: 'COMPANY', ticker: equityIssuerTicker }, spec, 'corporate action: shares retired by the issuer');
       }
       if (a.placedUSD > 0) {
-        transferHolding(v2, house, holder, { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.placedUSD, shares: a.anyShares ? a.placedSh : undefined }, 'corporate action: paper placed pro rata');
+        const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.placedUSD, shares: a.anyShares ? a.placedSh : undefined };
+        if (equityIssuerTicker) transferHolding(v2, { kind: 'COMPANY', ticker: equityIssuerTicker }, house, spec, 'corporate action: shares placed by the issuer');
+        transferHolding(v2, house, holder, spec, 'corporate action: paper placed pro rata');
       }
     });
     void kept;

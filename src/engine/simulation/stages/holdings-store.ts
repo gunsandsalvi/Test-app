@@ -217,6 +217,17 @@ export class HoldingsStore {
    */
   finalize(): void {
     const v2 = this.v2;
+    // §5-FINALIZATION step 13 (W2): the week's MARK per share instrument is what this epoch's
+    // books wrote on any appended row (shares × the cleared print) — one price for every wire
+    // of that instrument, the seller's included, so the house nets in value as it does in shares.
+    const markById = new Map<string, number>();
+    this.slots.forEach((slot) => {
+      for (const h of slot.appended) {
+        if (h.quantityShares !== undefined && h.quantityShares > 0 && !markById.has(`${h.instrumentType}|${h.issuerRegion}|${h.instrumentId}`)) {
+          markById.set(`${h.instrumentType}|${h.issuerRegion}|${h.instrumentId}`, (h.quantityOrNotionalUSD ?? 0) / h.quantityShares);
+        }
+      }
+    });
     this.slots.forEach((slot) => {
       const untouched = slot.appended.length === 0
         && !slot.rowIds.includes(-1)
@@ -244,9 +255,22 @@ export class HoldingsStore {
         const keys = new Set([...before.keys(), ...after.keys()]);
         keys.forEach((key) => {
           const [type, region] = key.split('|');
+          const b = before.get(key) ?? new Map(), a = after.get(key) ?? new Map();
+          // §5-FINALIZATION step 13 (W2): a share book's wire is priced at THIS week's mark (the
+          // appended row's), never at the value delta — the delta carries the revaluation of the
+          // shares the holder kept, which is a mark, not a move (measured: USA EQUITY −66.7B at
+          // the house in one week from exactly that).
+          const priceOf = (id: string): number | undefined => {
+            const mark = markById.get(`${key}|${id}`);
+            if (mark !== undefined) return mark;
+            const x = a.get(id), y = b.get(id);
+            if (x?.shares && x.shares > 0) return x.valueUSD / x.shares;
+            if (y?.shares && y.shares > 0) return y.valueUSD / y.shares;
+            return undefined;
+          };
           clearedBookDelta(
             { kind: 'INSTITUTION', id: slot.entity.id }, region as RegionId, type as ItemizedHolding['instrumentType'],
-            before.get(key) ?? new Map(), after.get(key) ?? new Map(), () => undefined, `${type.toLowerCase().replace('_', ' ')} clearing fill`
+            b, a, priceOf, `${type.toLowerCase().replace('_', ' ')} clearing fill`
           );
         });
       }

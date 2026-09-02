@@ -61,7 +61,8 @@ import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, d
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { maxOverweightMultipleOf } from './asset-allocation';
-import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
+import { centralBankParticipant, applyCentralBankFills, wireCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
+import { clearedBookDelta } from '../../ledger/holdings-ledger';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
@@ -552,13 +553,17 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // institutional path at the time and sitting unnoticed here until the per-bank identity
       // invariant existed to catch it (measured: 26.6B of USA bank bills vanished in week 1).
       const newBuckets: Record<string, number> = {};
+      // Step 13 (W2): the bank's bond book moves by wire against the house, bucket by bucket.
+      const bondsBefore = new Map<string, { valueUSD: number }>(), bondsAfter = new Map<string, { valueUSD: number }>();
       Object.entries(existingSheet?.sovereignBondHoldingsByTenor || {}).forEach(([key, v]) => {
         if (!ownBucketInstrumentIds.has(bucketInstrumentId(regionId, key))) newBuckets[key] = Number(v) || 0;
+        else bondsBefore.set(bucketInstrumentId(regionId, key), { valueUSD: Number(v) || 0 });
       });
       newHoldings.forEach((usd, instrumentId) => {
         const key = govBucketKeyOf(instrumentId, regionId);
-        if (key) newBuckets[key] = usd;
+        if (key) { newBuckets[key] = usd; bondsAfter.set(instrumentId, { valueUSD: usd }); }
       });
+      clearedBookDelta({ kind: 'BANK_SECURITIES', ticker: bank.ticker }, regionId, 'GOV_BOND', bondsBefore, bondsAfter, () => undefined, 'sovereign bond clearing fill');
       const prevClearedUSD = activeBuckets.reduce((s, b) => s + (existingSheet?.sovereignBondHoldingsByTenor?.[b.key] ?? 0), 0);
       const newClearedUSD = activeBuckets.reduce((s, b) => s + (newBuckets[b.key] ?? 0), 0);
       const newTotalUSD = Object.values(newBuckets).reduce((s, v) => s + v, 0);
@@ -586,9 +591,11 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       reg.centralBankSheet.lastOrderPlacedUSD = cbOrder?.orderedUSD ?? 0;
     }
     if (cbOrder && reg.centralBankSheet) {
+      const cbFills = result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>();
+      // Step 13 (W2): the central bank's fills are wires from the house.
+      wireCentralBankFills(regionId, reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k), cbFills, 'sovereign bond clearing fill');
       const filled = applyCentralBankFills(
-        reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k),
-        result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>()
+        reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k), cbFills
       );
       reg.centralBankSheet.lastOpenMarketPurchasesUSD = Math.round(filled);
     }

@@ -554,6 +554,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
       feeDesksForRegion(ctx, regionId),
       // WS8: the CCP pays each issuer for the paper its deal actually placed.
+      // The paper's leg is the tranche's own wire (issuer → house at issue, W3) — no asset here.
       primaryTakes(result, (issuerId) => {
         const issuer = companyById.get(issuerId);
         return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;

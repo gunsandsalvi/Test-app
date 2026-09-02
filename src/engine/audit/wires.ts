@@ -25,6 +25,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
     const kind = key.split('|')[1];
     return Math.abs(net) > Math.max(1e4, (w.valueUSDByKind[kind] ?? 0) * 1e-6);
   });
+  if (nets.length > 0 && process.env.W2_TRACE === '1') console.log(`  [w2-trace] w${week}: ` + nets.map(([k, n]) => `${k.replace('|', ' ')} ${B(n)}`).join(' | '));
   if (nets.length > 0) {
     const worst = nets.reduce((a, b) => (Math.abs(b[1]) > Math.abs(a[1]) ? b : a));
     const usd = nets.reduce((a, [, n]) => a + Math.abs(n), 0);

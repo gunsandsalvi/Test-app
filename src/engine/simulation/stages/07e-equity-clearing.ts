@@ -37,7 +37,8 @@ import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, Clea
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { institutionSpendableUSD } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
+import { clearedBookDelta } from '../../ledger/holdings-ledger';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
@@ -602,6 +603,9 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     if (householdParticipant) {
       const hpi = piById.get(householdParticipantId);
       let cashDeltaUSD = 0;
+      // Step 13 (W2): the shares the households sold go to the house by wire, at the print.
+      const hhBefore = new Map<string, { valueUSD: number; shares?: number }>(), hhAfter = new Map<string, { valueUSD: number; shares?: number }>();
+      const hhPrice = new Map<string, number>();
       householdPriorShares.forEach((prevShares, companyId) => {
         const comp = companyById.get(companyId);
         if (!comp) return;
@@ -611,7 +615,11 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const f = soldShares * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
         cashDeltaUSD += soldShares * comp.stockPrice - f;
         bookFeeUSD += f;
+        hhBefore.set(companyId, { shares: soldShares, valueUSD: soldShares * comp.stockPrice });
+        hhAfter.set(companyId, { shares: 0, valueUSD: 0 });
+        hhPrice.set(companyId, comp.stockPrice);
       });
+      clearedBookDelta({ kind: 'HOUSEHOLD', region: regionId }, regionId, 'EQUITY', hhBefore, hhAfter, (id) => hhPrice.get(id), 'equity clearing fill');
       if (cashDeltaUSD > 0) netCashByEntityId.set(householdParticipantId, cashDeltaUSD);
       reg.householdState.pendingDirectEquitySaleUSD = 0;
     }
@@ -654,7 +662,9 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
       },
       (takeShares, clearedStat) => takeShares * clearedStat,
-      primaryAssetOf('EQUITY', regionId)
+      // Step 13 (W2): the paper leg at the PRINT every holder's row carries (the rounded
+      // stockPrice), so the house nets in value as it does in shares.
+      (issuerId, takeShares) => (takeShares > 0 ? { instrumentType: 'EQUITY', instrumentId: issuerId, issuerRegion: regionId, valueUSD: takeShares * (companyById.get(issuerId)?.stockPrice ?? 0), shares: takeShares } : undefined)
     );
     const entityIds = new Set(bookEntities.map((e) => e.id));
     if (process.env.LEFTOVER_TRACE === '1') {

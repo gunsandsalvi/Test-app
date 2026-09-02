@@ -417,13 +417,17 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
         // back to its house, the acquirer's comes from its own; the issuers' wires are the
         // ladders' (`rebuildLadder` below) and the equity issuer's, counted once.
         swaps.forEach((sw) => {
-          transferHolding(ctx.v2, holder, { kind: 'CLEARING_HOUSE', region: target.region },
-            { instrumentType: sw.type, instrumentId: target.id, issuerRegion: target.region, valueUSD: sw.valueUSD, shares: sw.shares }, 'merger: target paper exchanged');
           const isEquity = heldInShares(sw.type);
+          const oldSpec = { instrumentType: sw.type, instrumentId: target.id, issuerRegion: target.region, valueUSD: sw.valueUSD, shares: sw.shares };
+          transferHolding(ctx.v2, holder, { kind: 'CLEARING_HOUSE', region: target.region }, oldSpec, 'merger: target paper exchanged');
+          // Step 13 (W2): the equity issuers' sides — the target's shares are cancelled (house →
+          // target), the acquirer's created (acquirer → house); the credit kinds' are the ladders'.
+          if (isEquity) transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: target.region }, { kind: 'COMPANY', ticker: target.ticker }, oldSpec, 'merger: target shares cancelled');
           const newValueUSD = isEquity ? sw.valueUSD * stockRatio : sw.valueUSD;
           if (newValueUSD > 1) {
-            transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: acquirer.region }, holder,
-              { instrumentType: sw.type, instrumentId: acquirer.id, issuerRegion: acquirer.region, valueUSD: newValueUSD, shares: isEquity && acquirer.stockPrice > 0 ? newValueUSD / acquirer.stockPrice : sw.shares }, 'merger: acquirer paper delivered');
+            const newSpec = { instrumentType: sw.type, instrumentId: acquirer.id, issuerRegion: acquirer.region, valueUSD: newValueUSD, shares: isEquity && acquirer.stockPrice > 0 ? newValueUSD / acquirer.stockPrice : sw.shares };
+            if (isEquity) transferHolding(ctx.v2, { kind: 'COMPANY', ticker: acquirer.ticker }, { kind: 'CLEARING_HOUSE', region: acquirer.region }, newSpec, 'merger: acquirer shares issued');
+            transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: acquirer.region }, holder, newSpec, 'merger: acquirer paper delivered');
           }
         });
         bumpRegister(ctx);

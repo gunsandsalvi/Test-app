@@ -12,7 +12,9 @@
  */
 
 import { CentralBank } from '../../../domain/central-bank';
+import { RegionId } from '../../../domain/geography';
 import { ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { clearedBookDelta } from '../../ledger/holdings-ledger';
 
 export const CENTRAL_BANK_PARTICIPANT_ID = 'CENTRAL-BANK';
 
@@ -55,6 +57,23 @@ export function centralBankParticipant(
     participant: { id: CENTRAL_BANK_PARTICIPANT_ID, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand },
     orderedUSD,
   };
+}
+
+/** §5-FINALIZATION step 13 (W2): the CB's fills as wires from the clearing house — the paper it
+ *  bought with the reserves it created; the buckets this auction priced, before against after. */
+export function wireCentralBankFills(
+  regionId: RegionId, cb: CentralBank, bucketKeys: string[], instrumentIdFor: (bucketKey: string) => string,
+  newHoldings: Map<string, number>, reason: string
+): void {
+  const before = new Map<string, { valueUSD: number }>(), after = new Map<string, { valueUSD: number }>();
+  bucketKeys.forEach((key) => {
+    const id = instrumentIdFor(key);
+    const filledUSD = newHoldings.get(id);
+    if (filledUSD === undefined) return;
+    before.set(id, { valueUSD: Number(cb.sovereignHoldingsByTenor?.[key]) || 0 });
+    after.set(id, { valueUSD: filledUSD });
+  });
+  clearedBookDelta({ kind: 'CENTRAL_BANK', region: regionId }, regionId, 'GOV_BOND', before, after, () => undefined, reason);
 }
 
 /**
