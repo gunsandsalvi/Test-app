@@ -8,7 +8,7 @@
 
 import { GameState, Company, InstitutionalEntity, Region, RegionId } from '../types';
 import { loanBooksOf } from '../domain/banking';
-import { entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines } from '../engine/ledger/accounts';
+import { entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../engine/ledger/accounts';
 import { depositsOf } from '../domain/banking';
 import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/world';
 import { bookHeadOf } from '../engine2/holdings';
@@ -78,7 +78,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     if (z) { put(`curve:${r}:3M`, z.tenor3M); put(`curve:${r}:2Y`, z.tenor2Y); put(`curve:${r}:5Y`, z.tenor5Y); put(`curve:${r}:10Y`, z.tenor10Y); put(`curve:${r}:30Y`, z.tenor30Y); }
     const cb = reg.centralBankSheet;
     if (cb) {
-      put(`centralbank:${r}:treasury account`, cb.treasuryAccountUSD);
+      put(`centralbank:${r}:treasury account`, treasuryAccountOf(ensureV2(state), r));
       put(`centralbank:${r}:sovereign book`, Object.values(cb.sovereignHoldingsByTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0));
       put(`centralbank:${r}:currency`, cb.currencyInCirculationUSD);
       put(`centralbank:${r}:foreign claims`, cb.foreignOfficialClaimsUSD);

@@ -18,7 +18,7 @@
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
-import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, householdDepositsAt, resetAccount, adjustBankReserves, bankReservesOf, stateDepositLines } from '../src/engine/ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, householdDepositsAt, resetAccount, adjustBankReserves, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../src/engine/ledger/accounts';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -578,12 +578,7 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     // §5-CLOSE: the identity itself is the audit's M1 (scripts/audit/money.ts), asserted to the
     // dollar with no unbacked term; what stays here are the central bank's own operating rules.
     void assets; void reserves;
-    if (cb.treasuryAccountUSD < 0) {
-      violations.push({
-        week,
-        message: `${region} treasury account is negative (${(cb.treasuryAccountUSD / 1e9).toFixed(2)}B) — the government spent money it had not financed`,
-      });
-    }
+    // A3.5: the treasury cannot overdraw — the negative side of its account row is the advance.
     // PUB2b: the book may only move by redemption and by fills against an order it actually
     // placed. A week whose fill exceeds the order is the auction handing the central bank paper
     // it never bid for — the forced-placement failure mode, in the other direction.
@@ -1247,8 +1242,8 @@ const pubModule: HarnessModule = (() => {
       series.procSpent.push(reg.governmentProcurementSpentUSD ?? 0);
       series.unspentProc.push(reg.unspentProcurementBudgetUSD ?? 0);
       series.stance.push(reg.fiscalStanceScore);
-      series.tga.push(cb?.treasuryAccountUSD ?? 0);
-      series.cbBook.push(centralBankAssetsUSD(cb));
+      series.tga.push(treasuryAccountOf(ensureV2(s), 'USA'));
+      series.cbBook.push(centralBankAssetsUSD(cb, waysAndMeansOf(ensureV2(s), 'USA')));
       series.reinvest.push(cb?.reinvestmentShare ?? 1);
       series.remit.push(cb?.lastRemittanceUSD ?? 0);
       series.policy.push(reg.policyRate);
@@ -1257,10 +1252,10 @@ const pubModule: HarnessModule = (() => {
       series.cmb.push(reg.cashBridgeBillIssuanceUSD ?? 0);
       series.debtGdp.push(reg.debtToGdpPctBottomUp ?? 0);
       const cbCoupon = couponReceipts(s, 'USA').central * 52;
-      series.portYield.push(centralBankAssetsUSD(cb) > 0 ? cbCoupon / centralBankAssetsUSD(cb) : 0);
+      series.portYield.push(centralBankAssetsUSD(cb, waysAndMeansOf(ensureV2(s), 'USA')) > 0 ? cbCoupon / centralBankAssetsUSD(cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0);
       REGIONS.forEach(r => {
         const rr: any = s.regions[r];
-        if ((rr.centralBankSheet?.treasuryAccountUSD ?? 0) < 0) negativeTga++;
+        if (waysAndMeansOf(ensureV2(s), r) > 0) negativeTga++;
         if (rr.zeroRates.tenor2Y < 0 || rr.zeroRates.tenor10Y < 0) negativeYield++;
       });
     },
@@ -1290,7 +1285,7 @@ const pubModule: HarnessModule = (() => {
       out.push(`  corr(policy - portfolio yield, remittance): levels ${corr(excess, series.remit).toFixed(3)} changes ${corr(dd(excess), dd(series.remit)).toFixed(3)} (negative = the real post-hiking phenomenon)`);
       out.push(`  remittance negative in ${series.remit.filter(v => v < 0).length}/${weeks} weeks; CB book ${B(series.cbBook[0])} -> ${B(series.cbBook[series.cbBook.length - 1])}; QT weeks ${series.reinvest.filter(v => v < 0.999).length}/${weeks}`);
       out.push('--- the treasury account ---');
-      out.push(`  TGA range ${B(Math.min(...series.tga))}..${B(Math.max(...series.tga))}; negative in ${negativeTga} region-weeks (must be 0); negative nominal yields in ${negativeYield} region-weeks`);
+      out.push(`  TGA range ${B(Math.min(...series.tga))}..${B(Math.max(...series.tga))}; the ways-and-means advance drawn in ${negativeTga} region-weeks; negative nominal yields in ${negativeYield} region-weeks`);
       const rev = series.revenue;
       const meanDeficit = series.outlays.reduce((a, v, i) => a + (v - rev[i]), 0) / series.outlays.length;
       out.push(`  mean weekly deficit ${B(meanDeficit)}; dry weeks (<0.1B collected) ${rev.filter(v => v < 1e8).length}/${weeks}, peak ${B(Math.max(...rev))} — the swing a TGA exists to absorb`);
@@ -1308,9 +1303,9 @@ const pubModule: HarnessModule = (() => {
         const bad: string[] = [];
         const chk = (n: string, v: number | undefined) => { if (v === undefined || !isFinite(v)) bad.push(n); };
         chk('revenue', reg.governmentRevenueUSD); chk('outlays', reg.governmentOutlaysUSD);
-        chk('interest', reg.governmentInterestWeeklyUSD); chk('tga', cb?.treasuryAccountUSD);
-        chk('cbBook', centralBankAssetsUSD(cb)); chk('2Y', reg.zeroRates.tenor2Y); chk('10Y', reg.zeroRates.tenor10Y);
-        out.push(`  ${r}: rev ${B(reg.governmentRevenueUSD)} outlays ${B(reg.governmentOutlaysUSD ?? 0)} interest ${B(reg.governmentInterestWeeklyUSD ?? 0)} tga ${B(cb?.treasuryAccountUSD ?? 0)} 2Y ${pct(reg.zeroRates.tenor2Y)} 10Y ${pct(reg.zeroRates.tenor10Y)} ${bad.length ? 'NON-FINITE: ' + bad.join(',') : 'all finite'}`);
+        chk('interest', reg.governmentInterestWeeklyUSD); chk('tga', treasuryAccountOf(ensureV2(s), r));
+        chk('cbBook', centralBankAssetsUSD(cb, waysAndMeansOf(ensureV2(s), r))); chk('2Y', reg.zeroRates.tenor2Y); chk('10Y', reg.zeroRates.tenor10Y);
+        out.push(`  ${r}: rev ${B(reg.governmentRevenueUSD)} outlays ${B(reg.governmentOutlaysUSD ?? 0)} interest ${B(reg.governmentInterestWeeklyUSD ?? 0)} tga ${B(treasuryAccountOf(ensureV2(s), r))} 2Y ${pct(reg.zeroRates.tenor2Y)} 10Y ${pct(reg.zeroRates.tenor10Y)} ${bad.length ? 'NON-FINITE: ' + bad.join(',') : 'all finite'}`);
       });
       return out;
     },
@@ -2183,7 +2178,7 @@ const spiralModule: HarnessModule = {
         + ` overrun ${(overrunUSD / 1e9).toFixed(2)}B`
         + ` transfers ${((r.governmentTransfersWeeklyUSD ?? 0) / 1e9).toFixed(2)}B`
         + ` payrollGov ${((r.governmentPayrollWeeklyUSD ?? 0) / 1e9).toFixed(2)}B`
-        + ` tga ${((r.centralBankSheet?.treasuryAccountUSD ?? 0) / 1e9).toFixed(1)}B`
+        + ` tga ${(treasuryAccountOf(ensureV2(state), r.id as RegionId) / 1e9).toFixed(1)}B`
         + ` | smeEmp ${(smeEmployment / 1e6).toFixed(2)}M poolNeg ${poolCashNeg}`
         + ` govEmp ${((r.governmentEmployment ?? 0) / 1e6).toFixed(2)}M`
         + ` | fx ${(state.fxPairs.find((p) => p.base === region && p.quote === 'USA')?.rate ?? 1).toFixed(3)}`);

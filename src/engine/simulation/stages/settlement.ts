@@ -30,7 +30,7 @@
  */
 
 import { RegionId } from '../../../types';
-import { buildAccountMirror, applySettledRow, compareToBooks, projectBooks, settledTallies, AccountMismatch, entityCashOf } from '../../ledger/accounts';
+import { buildAccountMirror, applySettledRow, projectBooks, settledTallies, entityCashOf } from '../../ledger/accounts';
 import { WeeklyStepContext } from './context';
 
 /** Who is paying or being paid. Every party either holds a deposit at a named bank, or is one of
@@ -374,10 +374,7 @@ export interface SettlementReport {
   /** Money that could not be applied: a party that does not exist, or a holder with no bank.
    *  Must be zero. A non-zero value is money leaving the system — the §7.86 defect's shape. */
   unresolvedUSD: number;
-  /** §5-WIRES A — the account store's gate: Σ|book − store| after the pass, the worst line, and
-   *  the settled rows the store could not map to a party's row. All three must be zero. */
-  accountMismatchUSD: number;
-  accountMismatchWorst: string;
+  /** §5-WIRES A — the settled rows the store could not map to a party's row. Must be zero. */
   accountRowsUnmapped: number;
 }
 
@@ -431,8 +428,6 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
     bankSecuritiesDeltaByBank: mergeMap(a.bankSecuritiesDeltaByBank, b.bankSecuritiesDeltaByBank),
     centralBankResidualUSD: a.centralBankResidualUSD + b.centralBankResidualUSD,
     crossBorderByRegion: mergeMap(a.crossBorderByRegion, b.crossBorderByRegion),
-    accountMismatchUSD: a.accountMismatchUSD + b.accountMismatchUSD,
-    accountMismatchWorst: a.accountMismatchWorst || b.accountMismatchWorst,
     accountRowsUnmapped: a.accountRowsUnmapped + b.accountRowsUnmapped,
     unresolvedUSD: a.unresolvedUSD + b.unresolvedUSD,
   };
@@ -459,8 +454,6 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     centralBankResidualUSD: 0,
     crossBorderByRegion: new Map(),
     unresolvedUSD: 0,
-    accountMismatchUSD: 0,
-    accountMismatchWorst: '',
     accountRowsUnmapped: 0,
   };
   if (nInstructions === 0) {
@@ -490,9 +483,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     ? new Map(ctx.updatedCompanies.filter((c) => c.isBankEntity).map((c) => [c.ticker, !!c.bankBalanceSheet]))
     : undefined;
   const week = settlementWeek();
-  // §5-WIRES A: the account store, mirrored from the books as they stand, takes every settled
-  // row by the one rule; the tallies are read off its rows' deltas (A4); the gate at the end of
-  // the pass compares it to what the books still carry by name.
+  // §5-WIRES A: the pass store, opened from the persistent accounts, takes every settled row by
+  // the one rule; the tallies are read off its rows' deltas (A4); the projection writes it back.
   const accounts = buildAccountMirror(ctx);
   for (let n = 0; n < nInstructions; n++) {
     if (!rowDue(journal, n, week)) continue; // §5-WIRES N: dated past this pass — carried below
@@ -624,11 +616,6 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   });
 
   report.centralBankResidualUSD = centralBankResidualUSD(report);
-  // §5-WIRES A — the gate.
-  const mismatches = compareToBooks(ctx, accounts);
-  let worst: AccountMismatch | undefined;
-  mismatches.forEach((m) => { report.accountMismatchUSD += Math.abs(m.bookUSD - m.storeUSD); if (!worst || Math.abs(m.bookUSD - m.storeUSD) > Math.abs(worst.bookUSD - worst.storeUSD)) worst = m; });
-  if (worst) report.accountMismatchWorst = `${worst.what}: book ${(worst.bookUSD / 1e6).toFixed(3)}M store ${(worst.storeUSD / 1e6).toFixed(3)}M (${mismatches.length} lines)`;
   ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;
   // §5-WIRES N: the rows dated past this pass are CARRIED — the same journal, the same wires,
   // settled by the pass of their own week. Nothing else survives the pass.

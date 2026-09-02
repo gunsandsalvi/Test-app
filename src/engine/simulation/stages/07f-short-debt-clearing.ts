@@ -567,7 +567,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // §5-CLOSE O1: bills the auction did not place are withdrawn from the ladder (paper
       // nobody holds is not debt); the treasury's need rolls forward.
       {
-        let withdrawnUSD = 0;
         instruments.forEach((inst) => {
           const o = result.primaryOutcomeById.get(inst.id);
           const placedUSD = o && !o.withdrawn ? Math.max(0, o.marketTakeUSD) : 0;
@@ -576,9 +575,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           if (!key || unplacedUSD <= 1) return;
           const r = withdrawUnplacedIssuance(reg.govDebtTranches, sovBucketKey, key, unplacedUSD);
           reg.govDebtTranches = r.tranches;
-          withdrawnUSD += r.withdrawnUSD;
         });
-        if (withdrawnUSD > 0) reg.pendingUnfundedDeficitUSD = (reg.pendingUnfundedDeficitUSD ?? 0) + withdrawnUSD;
       }
       // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the
       // same regional array as bonds under their own keys, and the bond rows pass through.

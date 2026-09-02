@@ -623,7 +623,6 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // §5-CLOSE O1: what this auction did not place is withdrawn from the ladder — paper nobody
     // holds is not debt — and the need rolls forward to the next issuance.
-    let withdrawnUSD = 0;
     instruments.forEach((inst) => {
       const o = result.primaryOutcomeById.get(inst.id);
       const placedUSD = o && !o.withdrawn ? Math.max(0, o.marketTakeUSD) : 0;
@@ -632,8 +631,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       if (!key || unplacedUSD <= 1) return;
       const r = withdrawUnplacedIssuance(reg.govDebtTranches, sovBucketKey, key, unplacedUSD);
       reg.govDebtTranches = r.tranches;
-      withdrawnUSD += r.withdrawnUSD;
+      // A3.5: withdrawn paper rolls into no side map — the treasury's account runs lower and the
+      // next block sees the advance it drew.
     });
-    if (withdrawnUSD > 0) reg.pendingUnfundedDeficitUSD = (reg.pendingUnfundedDeficitUSD ?? 0) + withdrawnUSD;
   });
 }

@@ -885,7 +885,6 @@ export interface Region {
    *  smooth (`governmentInterestWeeklyUSD`); its ACCOUNT moves by this (stages/central-bank.ts). */
   sovereignCouponPaidUSD?: number;
   govDebtTranches: GovDebtTranche[];
-  pendingUnfundedDeficitUSD?: number;
   debtToGdpPctBottomUp: number;
 
   householdState: HouseholdState;

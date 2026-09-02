@@ -726,7 +726,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // cash is its reserve liability exist. Currency is the residual; the weekly stage
       // re-derives it by the same arithmetic.
       const cbSheet = reg.centralBankSheet;
-      if (cbSheet) reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cbSheet));
+      if (cbSheet) reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cbSheet, 0)); // no advance at birth
 
       // Every company banks somewhere: its cash IS a deposit at its house bank (the same
       // relationship lead WS8 mandates for its offerings, so one firm has one bank).
@@ -1587,6 +1587,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // A3.1b: a bank has no company account — its money is its reserves (close-seed opens that row).
   companies.forEach((c) => { if (!(c.isBankEntity && c.bankBalanceSheet)) openAccount(seedV2, { kind: 'COMPANY', ticker: c.ticker }, openingCashOf(c)); });
   institutionalEntities.forEach((e) => openAccount(seedV2, { kind: 'INSTITUTION', id: e.id }, openingCashOf(e)));
+  // A3.5: the treasury's account opens at the operating balance the seed sized (macro/initialization.ts).
+  (Object.keys(regions) as RegionId[]).forEach((r) => { const cb = regions[r]?.centralBankSheet; if (cb) openAccount(seedV2, { kind: 'GOVERNMENT', region: r }, openingCashOf(cb)); });
 
   // §5-CLOSE C2: the seed closes — depositors fund the banks (wholesale is nobody's and is
   // zero), the central bank's book backs reserves and the treasury's account to the dollar, and

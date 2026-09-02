@@ -617,13 +617,13 @@ function buildRegion(regionId: RegionId): Region {
         acc[k] = (acc[k] ?? 0) + t.principalUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
         return acc;
       }, {} as Record<string, number>),
-      treasuryAccountUSD: Math.round((governmentSpendingWeeklyUSD * TGA_TARGET_WEEKS_OF_SPENDING)),
+      // §5-WIRES A3.5: the treasury's account opens at its operating balance — stashed here,
+      // opened as the government's row before close-seed (initialization.ts). No field.
       // §5-CLOSE: a stored liability at zero — never a residual.
       currencyInCirculationUSD: 0,
       loansToBanksUSD: 0,
       foreignOfficialClaimsUSD: 0,
       standingFacilityLentUSD: 0,
-      waysAndMeansUSD: 0,
       lastRemittanceUSD: 0,
       // PUB2b: no order outstanding at birth — the first week's redemptions set the first one.
       plannedPurchasesByTenor: {},
@@ -687,6 +687,7 @@ function buildRegion(regionId: RegionId): Region {
     ageDistribution: stationaryAgeDistribution(getRegionBirthRateAnnual(regionId)),
     lifeCycleDistribution: seedLifeCycle,
   };
+  stashOpeningCash(region.centralBankSheet!, Math.round(governmentSpendingWeeklyUSD * TGA_TARGET_WEEKS_OF_SPENDING));
 
   region.categoryDemand = createInitialCategoryDemand(gdpGrowth, estimatedHouseholdIncomeUSD, lastWeekNominalGdpUSD, totalPopulation, TARGET_FIRMS_PER_REGION);
 

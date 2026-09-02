@@ -7,6 +7,7 @@
  * a quarterly calendar, then generates this week's breaking news.
  */
 
+import { treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
 import { govBucketKeyOf, govBillTrancheId, govBondTrancheId, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, GovDebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
@@ -584,7 +585,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // the TGA is the only thing absorbing the gap. When it falls below its operating balance the
     // bill program issues more. Sized off REALIZED outlays, so it responds to what went out.
     const cashBridgeIssuanceUSD = cashPositionBillIssuanceUSD({
-      treasuryAccountUSD: reg.centralBankSheet?.treasuryAccountUSD ?? 0,
+      treasuryAccountUSD: treasuryAccountOf(ctx.v2, regionId),
       weeklyOutlaysUSD: reg.governmentOutlaysUSD ?? reg.governmentSpendingWeeklyUSD,
     });
     reg.cashBridgeBillIssuanceUSD = Math.round(cashBridgeIssuanceUSD);
@@ -608,12 +609,16 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       });
     }
 
-    // Sovereign debt issued in large, infrequent blocks
-    const currentUnfundedDeficitUSD = (reg.pendingUnfundedDeficitUSD ?? 0) + marketFundedDeficitUSD;
+    // Sovereign debt issued in large, infrequent blocks. §5-WIRES A3.5 (rule N): the treasury
+    // keeps no tally of "unfunded deficit" beside its account. Between blocks it spends its
+    // balance and, when that runs out, the central bank's ways-and-means advance (the negative
+    // side of its one account row); at the block it issues to REPAY the advance outstanding and
+    // to fund the coming quarter's bond share of the deficit at the current run rate. Paper an
+    // auction withdraws is not rolled into a side map: the account simply runs lower and the
+    // next block sees the advance it drew.
     const issuanceCalendarWeek = nextWeek % 13 === 0; // large blocks roughly quarterly, not every week
 
     let quarterlyFundingNeedUSD = 0;
-    let nextPendingUnfundedDeficitUSD = currentUnfundedDeficitUSD;
 
     // Curve-smart tenor allocation: read the actual yield curve shape already computed for this region.
     const curveSteepness = reg.zeroRates.tenor30Y - reg.zeroRates.tenor2Y;
@@ -628,8 +633,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const weightSum = tenorWeights.t2 + tenorWeights.t5 + tenorWeights.t10 + tenorWeights.t30;
 
     if (issuanceCalendarWeek) {
-      quarterlyFundingNeedUSD = currentUnfundedDeficitUSD; // roll up 13 weeks of accumulated need into one real issuance event
-      nextPendingUnfundedDeficitUSD = 0;
+      quarterlyFundingNeedUSD = waysAndMeansOf(ctx.v2, regionId) + 13 * marketFundedDeficitUSD;
 
       if (quarterlyFundingNeedUSD > 1000) {
         ([['t2', 2, 104], ['t5', 5, 260], ['t10', 10, 520], ['t30', 30, 1560]] as const).forEach(([key, tenorYears, tenorWeeks]) => {
@@ -758,7 +762,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       investmentComponentUSD,
       govDebtTranches: [...liveTranches, ...newTranches],
       debtToGdpPctBottomUp,
-      pendingUnfundedDeficitUSD: nextPendingUnfundedDeficitUSD,
       bankingSector: updatedBankingSector,
       institutionalSector: updatedInstitutionalSector,
     };

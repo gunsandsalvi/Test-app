@@ -5,7 +5,7 @@ import { AuditSnapshot } from './snapshot';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, sum } from './types';
-import { cashOf } from '../ledger/accounts';
+import { cashOf, treasuryNetOf } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 
 /** F1 — a firm's balance sheet closes and its statement cash is its ledger balance. */
@@ -43,7 +43,7 @@ function f2(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     if (prev?.[r]) {
       // The account's own balance moves by its payments; the ways-and-means advance (M4) is the
       // central bank funding the part of them the balance could not, repaid by the next money in.
-      const dTga = (cb.treasuryAccountUSD - (cb.waysAndMeansUSD ?? 0)) - (prev[r]!.treasuryAccountUSD - prev[r]!.waysAndMeansUSD);
+      const dTga = treasuryNetOf(ensureV2(state), r) - (prev[r]!.treasuryAccountUSD - prev[r]!.waysAndMeansUSD);
       if (Math.abs(dTga - settled) > 1e6) out.push({ family: 'F', check: 'F2 treasury account moves by its payments', week, usd: dTga - settled, message: `${r}: the account (net of the ways-and-means advance) moved ${B(dTga)} but its payments net to ${B(settled)}; ${B(dTga - settled)} written by something that is not a payment` });
     }
     if (Math.abs(reg.governmentRevenueUSD - taxes) > Math.max(1e6, taxes * 1e-3)) out.push({ family: 'F', check: 'F2 revenue = tax remitted', week, usd: reg.governmentRevenueUSD - taxes, message: `${r}: revenue reported ${B(reg.governmentRevenueUSD)} against ${B(taxes)} of tax actually remitted` });

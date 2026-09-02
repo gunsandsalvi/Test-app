@@ -433,8 +433,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       unresolvedUSD: ctx.lastSettlementReport.unresolvedUSD,
       clearingHouseResidualUSD: ctx.lastSettlementReport.clearingHouseResidualUSD,
       centralBankResidualUSD: ctx.lastSettlementReport.centralBankResidualUSD,
-      accountMismatchUSD: ctx.lastSettlementReport.accountMismatchUSD,
-      accountMismatchWorst: ctx.lastSettlementReport.accountMismatchWorst,
       accountRowsUnmapped: ctx.lastSettlementReport.accountRowsUnmapped,
       treasuryFlowsByRegion: Object.fromEntries(
         Array.from(ctx.lastSettlementReport.treasuryFlowsByRegion.entries())

@@ -110,9 +110,7 @@ export interface GameState {
     centralBankIssuanceByRegion: Record<string, number>;
     bankOwnAccountByRegion: Record<string, number>;
     crossBorderByRegion: Record<string, number>;
-    /** §5-WIRES A — the account store's gate after the week's passes (must be zero). */
-    accountMismatchUSD: number;
-    accountMismatchWorst: string;
+    /** §5-WIRES A — settled rows the store could not map to a party's row (must be zero). */
     accountRowsUnmapped: number;
   };
   /** SEG1 — payments recorded AFTER the week's settlement cutoff (hc-lifecycle's tender

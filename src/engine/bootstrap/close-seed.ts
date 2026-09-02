@@ -1,4 +1,4 @@
-import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount, depositLinesAt } from '../ledger/accounts';
+import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { V2World } from '../../engine2/world';
 /**
  * CLOSE C2 — THE SEED CLOSES (§5-CLOSE). Run once, after every book has been seeded and before
@@ -77,7 +77,7 @@ export function closeSeedMoney(
     // ---- 2. The central bank's book backs reserves and the treasury's account exactly. ----
     const reservesUSD = banks.reduce((a, b) => a + openingCashOf(b.bankBalanceSheet!), 0);
     cb.currencyInCirculationUSD = 0;
-    const targetBookUSD = Math.max(0, reservesUSD + cb.treasuryAccountUSD - centralBankFxReservesUSD(cb));
+    const targetBookUSD = Math.max(0, reservesUSD + treasuryAccountOf(v2, regionId) - centralBankFxReservesUSD(cb));
     const currentBookUSD = sumByTenor(cb.sovereignHoldingsByTenor);
     const weights = new Map<string, number>();
     (reg.govDebtTranches ?? []).forEach((t) => { const k = sovBucketKey(t.tenorAtIssuanceYears); weights.set(k, (weights.get(k) ?? 0) + t.principalUSD); });
@@ -113,6 +113,6 @@ export function closeSeedMoney(
       return { ...t, principalUSD: Math.round(out > 0 ? t.principalUSD * (held / out) : 0) };
     });
     reg.governmentInterestWeeklyUSD = Math.round(weeklyInterestExpenseUSD(reg.govDebtTranches));
-    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb));
+    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb, waysAndMeansOf(v2, regionId)));
   });
 }

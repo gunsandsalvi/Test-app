@@ -16,7 +16,7 @@ import { formatDate, quarterLabel } from '../calendar';
 import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
 import { bankRwaUSD } from '../../domain/bank-pricing';
 import { totalDebtOf } from '../../domain/company';
-import { cashOf, householdDepositsOf, bankReservesOf, stateDepositLines } from '../../engine/ledger/accounts';
+import { cashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { entityCashOf } from '../../engine/ledger/accounts';
 
@@ -232,7 +232,7 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
       { label: 'Payroll', usd: r.governmentPayrollWeeklyUSD },
       { label: 'Transfers', usd: r.governmentTransfersWeeklyUSD },
       { label: 'Interest', usd: r.governmentInterestWeeklyUSD },
-      { label: 'Treasury account', usd: r.centralBankSheet?.treasuryAccountUSD, total: true },
+      { label: 'Treasury account', usd: treasuryAccountOf(ensureV2(world.state), r.id as RegionId), total: true },
       { label: 'Sovereign rating', text: r.sovereignRating },
       { label: 'Fiscal stance', text: r.fiscalStanceScore.toFixed(2) },
     ]} />;

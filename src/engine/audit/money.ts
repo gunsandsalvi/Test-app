@@ -12,7 +12,7 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
-import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines } from '../ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 
 const banksOf = (s: GameState, r?: RegionId) =>
@@ -27,11 +27,13 @@ function m1(state: GameState, week: number): AuditFinding[] {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
     if (!cb) return;
-    const reserves = sum(banksOf(state, r), (b) => bankReservesOf(ensureV2(state), b.ticker));
-    const assets = centralBankAssetsUSD(cb);
-    const residual = reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD - assets;
+    const v2 = ensureV2(state);
+    const reserves = sum(banksOf(state, r), (b) => bankReservesOf(v2, b.ticker));
+    const tga = treasuryAccountOf(v2, r);
+    const assets = centralBankAssetsUSD(cb, waysAndMeansOf(v2, r));
+    const residual = reserves + tga + cb.currencyInCirculationUSD - assets;
     if (Math.abs(residual) > Math.max(1e6, assets * 1e-4)) {
-      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(cb.treasuryAccountUSD)} + currency ${B(cb.currencyInCirculationUSD)} exceed the central bank's assets ${B(assets)} (foreign claims ${B(cb.foreignOfficialClaimsUSD ?? 0)}, window ${B(cb.standingFacilityLentUSD ?? 0)}) by ${B(residual)} — bank money nothing was bought against` });
+      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(tga)} + currency ${B(cb.currencyInCirculationUSD)} exceed the central bank's assets ${B(assets)} (foreign claims ${B(cb.foreignOfficialClaimsUSD ?? 0)}, window ${B(cb.standingFacilityLentUSD ?? 0)}) by ${B(residual)} — bank money nothing was bought against` });
     }
   });
   // C4b: the official-settlement claims are bilateral, so the world's sum is zero or a leak.
@@ -81,10 +83,6 @@ function m4(state: GameState, week: number): AuditFinding[] {
   if (negCorp.length) out.push({ family: 'M', check: 'M4 overdrawn firms', week, usd: sum(negCorp, (c) => cashOf(v2, c)), message: `${negCorp.length} firms overdrawn, ${B(sum(negCorp, (c) => cashOf(v2, c)))} in all (worst ${negCorp.sort((a, b) => cashOf(v2, a) - cashOf(v2, b))[0].ticker} ${M(cashOf(v2, negCorp[0]))})` });
   const negInst = state.institutionalEntities.filter((e) => !e.isDefaulted && entityCashOf(v2, e) < -1e6);
   if (negInst.length) { const worst = [...negInst].sort((a, b) => entityCashOf(v2, a) - entityCashOf(v2, b))[0]; out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => entityCashOf(v2, e)), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => entityCashOf(v2, e)))} (worst ${worst.ticker ?? worst.id} ${worst.entityType} ${M(entityCashOf(v2, worst))})` }); }
-  REGION_IDS.forEach((r) => {
-    const tga = state.regions[r]?.centralBankSheet?.treasuryAccountUSD ?? 0;
-    if (tga < -1e6) out.push({ family: 'M', check: 'M4 overdrawn treasury', week, usd: tga, message: `${r}: the treasury's account stands at ${B(tga)} — an overdraft at the central bank nobody granted` });
-  });
   const negBank = banksOf(state).filter((b) => bankReservesOf(v2, b.ticker) < -1e6);
   if (negBank.length) out.push({ family: 'M', check: 'M4 negative reserves', week, usd: sum(negBank, (b) => bankReservesOf(v2, b.ticker)), message: `${negBank.map((b) => b.ticker).join(' ')} hold negative reserves` });
   REGION_IDS.forEach((r) => {
@@ -94,8 +92,7 @@ function m4(state: GameState, week: number): AuditFinding[] {
     if (negPools.length) out.push({ family: 'M', check: 'M4 overdrawn pools', week, usd: sum(negPools, (p) => poolCashOf(v2, r, p.industry)), message: `${r}: ${negPools.length} pools overdrawn ${B(sum(negPools, (p) => poolCashOf(v2, r, p.industry)))}` });
     const hh = householdDepositsOf(v2, r);
     if (hh < -1e6) out.push({ family: 'M', check: 'M4 overdrawn households', week, usd: hh, message: `${r}: household deposits ${B(hh)}` });
-    const tga = reg.centralBankSheet?.treasuryAccountUSD ?? 0;
-    if (tga < -1e6) out.push({ family: 'M', check: 'M4 overdrawn treasury', week, usd: tga, message: `${r}: treasury account ${B(tga)}` });
+    // A3.5: the treasury cannot overdraw — the negative side of its row IS the advance, granted by rule.
   });
   return out;
 }
@@ -126,7 +123,7 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const cb = reg?.centralBankSheet;
     if (!before || !cb || !reg) return;
     // Money is the bank lines and the treasury's account (§5-WIRES A2: nothing is in transit).
-    const now = sum(banksOf(state, r), (b) => depositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker))) + cb.treasuryAccountUSD;
+    const now = sum(banksOf(state, r), (b) => depositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker))) + treasuryAccountOf(ensureV2(state), r);
     const moneyBefore = before.bankDepositsUSD + before.treasuryAccountUSD;
     // Every creator, by name: the payment ledger's (bank credit written, reserves the central
     // bank issued, what the banks paid out of their own account, money from other regions), the
@@ -138,7 +135,7 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const crossBorder = ls?.crossBorderByRegion?.[r] ?? 0;
     const book = reg.householdBookDepositFlowWeeklyUSD ?? 0;
     const depositInterest = reg.householdDepositInterestWeeklyUSD ?? 0;
-    const advance = (cb.waysAndMeansUSD ?? 0) - before.waysAndMeansUSD;
+    const advance = waysAndMeansOf(ensureV2(state), r) - before.waysAndMeansUSD;
     const explained = credit + issued + ownAccount + crossBorder + book + depositInterest + advance;
     const gap = (now - moneyBefore) - explained;
     if (Math.abs(gap) > Math.max(5e8, moneyBefore * 0.005)) out.push({ family: 'M', check: 'M6 money moves only by its creators', week, usd: gap, message: `${r}: money stock moved ${B(now - moneyBefore)}; credit ${B(credit)} + central bank ${B(issued)} + banks' own account ${B(ownAccount)} + cross-border ${B(crossBorder)} + household books ${B(book)} + deposit interest ${B(depositInterest)} + advance ${B(advance)} = ${B(explained)}; ${B(gap)} unexplained` });
@@ -153,7 +150,6 @@ function m7(state: GameState, week: number): AuditFinding[] {
   const s = state.lastSettlement;
   if (!s) return out;
   if (s.accountRowsUnmapped > 0) out.push({ family: 'M', check: 'M7 every settled row has an account', week, usd: s.accountRowsUnmapped, message: `${s.accountRowsUnmapped} settled rows named a party the account store has no row for` });
-  if (s.accountMismatchUSD > 1e3) out.push({ family: 'M', check: 'M7 accounts = books', week, usd: s.accountMismatchUSD, message: `the account store and the books differ by ${B(s.accountMismatchUSD)} after the week's passes — worst ${s.accountMismatchWorst}` });
   return out;
 }
 

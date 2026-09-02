@@ -3,14 +3,14 @@
  * mutate in place, so "previous week" cannot be a reference — it is the handful of numbers the
  * week-over-week checks need, copied out when the audit runs.
  */
-import { stateDepositLines } from '../ledger/accounts';
+import { stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { GameState, RegionId } from '../../types';
 import { loanBooksOf, depositsOf } from '../../domain/banking';
 import { REGION_IDS } from '../../domain/geography';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { isActiveCompany } from '../../domain/company';
 import { trancheKindOf } from '../../domain/assets';
-import { V2World } from '../../engine2/world';
+import { V2World, ensureV2 } from '../../engine2/world';
 import { inputUnitsHeld } from '../../engine2/lots';
 import { SUBUNITS } from '../../engine2/state';
 
@@ -32,9 +32,9 @@ export function snapshotOf(state: GameState): AuditSnapshot {
     if (!reg || !cb) return;
     const banks = state.companies.filter((c) => c.region === r && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet);
     out[r] = {
-      treasuryAccountUSD: cb.treasuryAccountUSD,
-      waysAndMeansUSD: cb.waysAndMeansUSD ?? 0,
-      centralBankAssetsUSD: centralBankAssetsUSD(cb),
+      treasuryAccountUSD: treasuryAccountOf(ensureV2(state), r),
+      waysAndMeansUSD: waysAndMeansOf(ensureV2(state), r),
+      centralBankAssetsUSD: centralBankAssetsUSD(cb, waysAndMeansOf(ensureV2(state), r)),
       sovereignOutstandingUSD: (reg.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0),
       // §7.373: the SAME read M6 takes at week end — every deposit class, the margin line included.
       bankDepositsUSD: banks.reduce((a, b) => a + depositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker)), 0),

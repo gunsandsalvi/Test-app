@@ -11,6 +11,7 @@
  * exists rather than through a coefficient.
  */
 
+import { waysAndMeansOf } from '../../ledger/accounts';
 import { GameState, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
@@ -46,7 +47,7 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
       pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amountUSD: couponIncomeUSD, reason: 'sovereign coupon to the central bank' });
     }
     // §5-CLOSE M4: the ways-and-means advance costs the policy rate, paid like any interest.
-    const waysAndMeansInterestUSD = ((cb.waysAndMeansUSD ?? 0) * reg.policyRate) / 52;
+    const waysAndMeansInterestUSD = (waysAndMeansOf(ctx.v2, regionId) * reg.policyRate) / 52;
     if (waysAndMeansInterestUSD > 0) {
       pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amountUSD: waysAndMeansInterestUSD, reason: 'ways and means interest' });
     }
@@ -90,6 +91,6 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // the audit's M1 prints the residual until it does. ----
 
     // Statistic, not a driver: the old `centralBankBalanceSheet` scalar's replacement.
-    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb));
+    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb, waysAndMeansOf(ctx.v2, regionId)));
   });
 }

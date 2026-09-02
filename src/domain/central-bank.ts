@@ -38,11 +38,11 @@ export interface CentralBank {
    *  the repo session; each draw creates reserves against pledged collateral). Derived from the
    *  region's repo book by the session that writes it — one writer. */
   standingFacilityLentUSD: number;
-  /** §5-CLOSE M4 — Asset: the WAYS AND MEANS advance. The treasury banks here and cannot
-   *  overdraw; when its payments exceed its account the central bank advances the difference,
-   *  at the policy rate, and the next money into the account repays it. Written by settlement
-   *  with the account itself (one writer for both lines). */
-  waysAndMeansUSD: number;
+  /** §5-WIRES A3.5 — the treasury's account (a liability) and the WAYS AND MEANS advance (an
+   *  asset: the treasury cannot overdraw; when its payments exceed its account the central bank
+   *  advances the difference at the policy rate, and the next money in repays it) are the two
+   *  signs of ONE account row (`treasuryAccountOf`/`waysAndMeansOf`, ledger/accounts.ts). No
+   *  field carries either. */
   /** §5-CLOSE — this week's interest INCOME on the lender-of-last-resort loans (02b) and on the
    *  standing facility's repo contracts (the repo session), remitted with the coupons: the
    *  central bank keeps no retained earnings, so its assets are exactly its liabilities. */
@@ -51,8 +51,6 @@ export interface CentralBank {
   /** §5-CLOSE C5 — last week's reverse-repo interest the window paid the funds (a central-bank
    *  expense, netted in the remittance like the interest on reserves). */
   lastReverseRepoInterestUSD?: number;
-  /** Liability: the government's account. Drains reserves when it fills. */
-  treasuryAccountUSD: number;
   /** Liability: notes in circulation — the slow, non-operational part of the balance sheet. */
   currencyInCirculationUSD: number;
   /** PUB3d: last week's accretion on the bill book — a discount bill's income, which pays no coupon. */
@@ -106,9 +104,9 @@ export function centralBankFxReservesUSD(cb: CentralBank): number {
  * is the mechanism a balance-sheet scalar cannot express, and it is the whole reason a currency
  * peg ever breaks.
  */
-export function centralBankAssetsUSD(cb: CentralBank): number {
+export function centralBankAssetsUSD(cb: CentralBank, waysAndMeansUSD: number): number {
   return centralBankSovereignBookUSD(cb) + centralBankFxReservesUSD(cb) + (cb.loansToBanksUSD ?? 0)
-    + (cb.foreignOfficialClaimsUSD ?? 0) + (cb.standingFacilityLentUSD ?? 0) + (cb.waysAndMeansUSD ?? 0);
+    + (cb.foreignOfficialClaimsUSD ?? 0) + (cb.standingFacilityLentUSD ?? 0) + waysAndMeansUSD;
 }
 
 /**
@@ -118,8 +116,8 @@ export function centralBankAssetsUSD(cb: CentralBank): number {
  * closes the book, because a residual is where money appears from nowhere. The residual is
  * what the audit prints (M1) until every reserve movement has a purchase behind it.
  */
-export function centralBankIdentityResidualUSD(cb: CentralBank, bankReservesUSD: number): number {
-  return bankReservesUSD + cb.treasuryAccountUSD + cb.currencyInCirculationUSD - centralBankAssetsUSD(cb);
+export function centralBankIdentityResidualUSD(cb: CentralBank, bankReservesUSD: number, treasuryAccountUSD: number, waysAndMeansUSD: number): number {
+  return bankReservesUSD + treasuryAccountUSD + cb.currencyInCirculationUSD - centralBankAssetsUSD(cb, waysAndMeansUSD);
 }
 
 /**

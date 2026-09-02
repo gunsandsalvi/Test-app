@@ -266,6 +266,16 @@ export function entityCashOf(v2: V2World, e: Pick<InstitutionalEntity, 'id'>): n
   return balanceOf(v2, { kind: 'INSTITUTION', id: e.id });
 }
 
+// ---- A3.5 — THE TREASURY'S ACCOUNT IS ONE ROW. Its balance at the central bank and the
+// ways-and-means advance are the two signs of the government party's net position: positive is
+// the account, negative the advance drawn. The seed opens it at the operating balance; every
+// pass moves it by the treasury's own payments; nothing else writes it. ----
+export function treasuryNetOf(v2: V2World, region: RegionId): number { return balanceOf(v2, { kind: 'GOVERNMENT', region }); }
+/** The treasury's account at the central bank (a liability of the central bank). */
+export function treasuryAccountOf(v2: V2World, region: RegionId): number { return Math.max(0, treasuryNetOf(v2, region)); }
+/** The ways-and-means advance drawn (an asset of the central bank). */
+export function waysAndMeansOf(v2: V2World, region: RegionId): number { return Math.max(0, -treasuryNetOf(v2, region)); }
+
 /** A company's cash: its account. A bank's cash IS its reserves (A3.1b, §7.379, rule 3): its
  *  goods-market self settles on its reserve row and it has no company row at all. */
 export function cashOf(v2: V2World, c: Pick<Company, 'ticker'> & { isBankEntity?: boolean; bankBalanceSheet?: unknown }): number {
@@ -410,9 +420,8 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
       if (regionBanks.length === 0) { openRow(s, p, AT_NOWHERE, 'SME', poolCashOf(ctx.v2, region, seg.industry)); split.push(1); }
       s.splitOfParty.set(p, Float64Array.from(split));
     });
-    const cb = reg.centralBankSheet;
-    // The treasury's net position at the central bank: its account less the advance drawn.
-    openRow(s, partyId({ kind: 'GOVERNMENT', region }), AT_CENTRAL_BANK, 'TREASURY', cb ? cb.treasuryAccountUSD - (cb.waysAndMeansUSD ?? 0) : 0);
+    // A3.5: the treasury's net position at the central bank — its persistent row.
+    openRow(s, partyId({ kind: 'GOVERNMENT', region }), AT_CENTRAL_BANK, 'TREASURY', ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, { kind: 'GOVERNMENT', region })]);
     openRow(s, partyId({ kind: 'CENTRAL_BANK', region }), AT_NOWHERE, 'VOID', 0);
     openRow(s, partyId({ kind: 'CLEARING_HOUSE', region }), AT_NOWHERE, 'VOID', 0);
   });
@@ -515,11 +524,9 @@ export function settledTallies(s: AccountStore): SettledTallies {
 }
 
 /**
- * THE PROJECTION — the books, written from the store after a pass. Every balance field a party
- * carries is its rows; a bank's reserves are its own row and its deposit lines move by its
- * depositors' rows (by class); the treasury's account is the positive side of its net position
- * and the advance the negative (§5-CLOSE M4's rule, in one place). Equity is not a balance and
- * stays the pass's own (the bank's own-account legs are its income and expense).
+ * THE PROJECTION — the persistent accounts, written from the pass store after a pass: every
+ * party's balance is its rows. No book carries a balance any more (A3.1–A3.5); equity is not a
+ * balance and stays the pass's own (the bank's own-account legs are its income and expense).
  */
 export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
   // A3.3/A3.4: the sector parties' pass rows land on their persistent per-bank rows FIRST — the
@@ -553,35 +560,13 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
     ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)] = balanceOfParty(s, partyId(party));
   });
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
-    const reg = ctx.updatedRegions[region]; if (!reg) return;
-    const cb = reg.centralBankSheet;
-    if (cb) {
-      const net = balanceOfParty(s, partyId({ kind: 'GOVERNMENT', region }));
-      cb.treasuryAccountUSD = Math.max(0, net);
-      cb.waysAndMeansUSD = Math.max(0, -net);
-    }
+    // A3.5: the pass's result is the persistent row; the two signs are reads.
+    const party: PartyRef = { kind: 'GOVERNMENT', region };
+    ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)] = balanceOfParty(s, partyId(party));
   });
 }
-
-export interface AccountMismatch { what: string; bookUSD: number; storeUSD: number }
-
-/**
- * The gate: after the legacy apply, every balance the books carry against the store's rows.
- * Households and pools compare as sector totals (their per-bank rows are the A2 target); a bank's
- * reserves and the treasury's net position compare by name.
- */
-export function compareToBooks(ctx: WeeklyStepContext, s: AccountStore): AccountMismatch[] {
-  const out: AccountMismatch[] = [];
-  const tol = (x: number) => Math.max(1, Math.abs(x) * 1e-9);
-  const check = (what: string, bookUSD: number, storeUSD: number) => { if (Math.abs(bookUSD - storeUSD) > tol(bookUSD)) out.push({ what, bookUSD, storeUSD }); };
-  // A3.1/A3.6: a company's balance and a bank's reserves ARE the store's (no field to disagree).
-  (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
-    const reg = ctx.updatedRegions[region]; if (!reg) return;
-    const cb = reg.centralBankSheet;
-    if (cb) check(`${region} treasury`, cb.treasuryAccountUSD - (cb.waysAndMeansUSD ?? 0), balanceOfParty(s, partyId({ kind: 'GOVERNMENT', region })));
-  });
-  return out;
-}
+// A3.5: `compareToBooks` — the first slice's gate (§7.377) — is gone with the last field it
+// compared: no book carries a balance any more.
 
 /** A row's party, for a report line. */
 export const partyText = (id: number): string => { const p: PartyRef = partyOf(id); return 'ticker' in p ? `${p.kind}:${p.ticker}` : 'id' in p ? `${p.kind}:${p.id}` : 'industry' in p ? `${p.kind}:${p.region}:${p.industry}` : `${p.kind}:${p.region}`; };
