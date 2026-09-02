@@ -380,6 +380,12 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // After stage 11 AND after the close, so every flow of the week has posted before it counts
   // its own liabilities: settling reserves after it reconciled left its sheet not closing.
   run('central-bank', () => runCentralBankStage(state, ctx));
+  // §5-CLOSE — THE THIRD CYCLE. The funding close, the resolution and the central bank's own
+  // week all post payments after the close (the central bank's coupon and remittance, the
+  // lender-of-last-resort draw, the treasury's guarantee); they used to settle NEXT week, which
+  // was the whole of M1's and M6's remaining residual (a one-week lag of ~1B). A week's money is
+  // settled inside the week: nothing recorded after the close waits for the next one.
+  run('settlement-funding', () => runSettlementStage(ctx));
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
   // SCALE: one row per position before the week closes, so next week's sweeps of the register
   // walk positions rather than the fills that built them (stages/holdings-store.ts).
