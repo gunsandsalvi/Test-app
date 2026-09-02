@@ -8,6 +8,7 @@ import { journalPayment, partyId } from './settlement';
 import { defect } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { transferHolding } from '../../ledger/holdings-ledger';
+import { bookPnL } from '../../ledger/bank-book';
 import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
@@ -19,6 +20,7 @@ import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructu
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { bankRwaUSD, BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
 import { heldInShares } from '../../../domain/assets';
+import { dealerDeskParticipantId, dealerDeskTicker } from '../../../domain/dealer-desk';
 
 const FOREIGN_GROWTH_SENSITIVITY = 3.0;
 
@@ -53,7 +55,7 @@ function normalCdf(x: number): number {
 
 /** Annualized relative EBITDA volatility, measured from the company's own revenue history. */
 function annualEbitdaVol(v2: V2World, comp: Company): number {
-  // §4.C II.5 — the history reads the ring (world.ts); same entries, same order.
+  // The history reads the revenue ring: same entries, same order.
   const row = rowOf(v2, comp.id);
   const histLen = revHistLen(v2, row);
   if (histLen < 8) return MIN_ANNUAL_EBITDA_VOL;
@@ -75,7 +77,6 @@ function annualEbitdaVol(v2: V2World, comp: Company): number {
  * fitted curve. The previous model was a logistic on (leverage − coverage) with a tuned cap,
  * midpoint and width: a shape with the right slope and no relationship to how default actually
  * happens in this simulation, so the market priced one risk while companies died of another
- * (§7.19 review item 1 in the plan).
  *
  * This asks the real question instead: how large a relative EBITDA shock, sustained for a year,
  * would put THIS company inside the trigger — and how likely is a shock that size given the
@@ -93,14 +94,10 @@ function annualEbitdaVol(v2: V2World, comp: Company): number {
  * two same-rated names is real information, not curve noise.
  */
 export function computeAnnualDefaultProbability(v2: V2World, comp: Company): number {
-  // §7.291 — A BANK'S DEFAULT DISTANCE COMES OFF ITS OWN SHEET (§7.268's doctrine, one function
-  // over: the RATING was fixed there, and this PD — which PRICES the bank's paper in 07b and
-  // sizes its wholesale spread through the cleared OAS — still read the CORPORATE context.
-  // `comp.cash` is ~0 for a bank (its money is cashReservesUSD) and `comp.ebitda` is the accrual
-  // bridge that swings through zero on solvent banks, so `shockToCash` collapsed, the distance
-  // went to ~0, and a structurally wholesale-funded bank was priced toward default while its
-  // capital was intact — measured: THSY's cleared OAS repriced its 27B wholesale stack from
-  // policy+~130bp to ~74% ANNUAL between w10 and w31, NIM to −25%, the §7.289 UK NIM family.)
+  // A BANK'S DEFAULT DISTANCE COMES OFF ITS OWN SHEET. Read through the corporate context it
+  // collapses: `comp.cash` is ~0 for a bank (its money is cashReservesUSD) and `comp.ebitda` is
+  // an accrual bridge that swings through zero on solvent banks, so the distance goes to ~0 and
+  // a structurally wholesale-funded bank prices toward default with its capital intact.
   //
   // What a bank defaults on is CAPITAL: losses eating the buffer above the regulatory floor.
   // Every input is already measured — its own equity, its own risk-weighted book, and its book's
@@ -119,7 +116,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
     const distance = bufferUSD / (rwaUSD * lossRateAnnual);
     return normalCdf(-distance);
   }
-  // §7.311 — ladder read on rows (fold order = chain order = array order).
+  // Ladder read on rows: fold order is chain order is array order.
   let interestSum = 0;
   {
     const TS = v2.tranches;
@@ -155,7 +152,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
  * buy them and pays the claims in the order they are owed (stages/estate-resolution.ts), and what
  * it actually recovers is recorded on the region. `creditRecoveryRate` below is the rolling mean
  * of those resolutions, so the loss the credit market PRICES is the loss it has SEEN — which
- * closes the one-default-model loop whose hazard side landed in §7.20.
+ * closes the one-default-model loop, whose hazard side lives beside it.
  *
  * The 0.4 survives as the prior: what a lender must assume before this world has resolved enough
  * defaults to have an opinion of its own.
@@ -224,7 +221,7 @@ export function formSupplyRelationships(regionId: RegionId, companies: Company[]
   const regionFirms = companies.filter(c => c.region === regionId && isActiveCompany(c));
   const relationships: SupplyRelationship[] = [];
 
-  // SCALE: WHO MAKES THIS INPUT, ONCE. The line below used to re-derive that for every
+  // WHO MAKES THIS INPUT, ONCE. The line below used to re-derive that for every
   // (customer x product line x input requirement) by FILTERING the whole region and running a
   // `.some()` over each firm's own lines inside the filter — with ~600 firms a region carrying a
   // few lines each and a few inputs each, tens of millions of comparisons a week, and a freshly
@@ -333,7 +330,7 @@ export function attributeItemizedHoldings(
  */
 export function settleCorporateActionOnHolders(
   ctx: { pendingHolderSettlements: Map<string, number> },
-  /** 13b: the INSTRUMENT the rows name — a tranche id for the credit kinds (the register), the
+  /** The INSTRUMENT the rows name — a tranche id for the credit kinds (the register), the
    *  issuer's id for equity, and the issuer's id again for the named desks' credit positions
    *  (the paying agent's desk pass reads issuer keys; a register row never carries one). */
   instrumentId: string,
@@ -348,6 +345,68 @@ export function settleCorporateActionOnHolders(
   // Ratios compose: two actions on one instrument in one week scale the holders once, by the
   // product, which is the same number applying them in sequence would have reached.
   ctx.pendingHolderSettlements.set(key, (ctx.pendingHolderSettlements.get(key) ?? 1) * ratio);
+}
+
+/**
+ * The desk book each register instrument type trades in. A bank's desk is a holder of record
+ * alongside the institutional register, so whatever an issuer pays its holders is owed to the
+ * desks as well.
+ */
+const DESK_BOOK_BY_TYPE: Record<string, string> = {
+  CORP_BOND: 'corporate bond',
+  LEVERAGED_LOAN: 'leveraged loan',
+  COMMERCIAL_PAPER: 'commercial paper',
+  EQUITY: 'equity',
+};
+
+/**
+ * What the banks' desks hold in one book, by issuer and then by desk.
+ *
+ * A desk position names the ISSUER, not the tranche — it holds "this issuer's bonds" — while a
+ * register row names a tranche. The two key spaces are disjoint, so a desk's claim on any one
+ * tranche is its share of everything that issuer has outstanding in the book.
+ */
+function deskHoldingsByIssuer(
+  companies: Company[] | undefined,
+  book: string | undefined
+): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>();
+  if (!book) return out;
+  companies?.forEach((bank) => {
+    const rows = bank.bankBalanceSheet?.dealerDeskInventory?.[book];
+    if (!bank.isBankEntity || !rows) return;
+    const deskId = dealerDeskParticipantId(bank.ticker);
+    rows.forEach((p) => {
+      if (!(p.inventoryUSD > 0)) return;
+      let byDesk = out.get(p.instrumentId);
+      if (!byDesk) { byDesk = new Map(); out.set(p.instrumentId, byDesk); }
+      byDesk.set(deskId, (byDesk.get(deskId) ?? 0) + p.inventoryUSD);
+    });
+  });
+  return out;
+}
+
+/** The payee behind a holder key on the register's accrual ledger: an institution, or a bank's
+ *  securities desk where the key names one. */
+function holderPayee(holderId: string): import('./settlement').PartyRef {
+  const ticker = dealerDeskTicker(holderId);
+  return ticker !== undefined
+    ? { kind: 'BANK_SECURITIES', ticker }
+    : { kind: 'INSTITUTION', id: holderId };
+}
+
+/**
+ * A desk's coupon, premium or dividend is the bank's INCOME, not an asset swap: the cash lands
+ * on its securities account and nothing leaves the book, so equity has to move with it or the
+ * sheet stops closing. The principal legs beside it need no such write — paper out, cash in.
+ */
+function bookDeskIncome(companies: Company[] | undefined, byTicker: Map<string, number>, reason: string): void {
+  if (byTicker.size === 0) return;
+  companies?.forEach((bank) => {
+    const deltaUSD = byTicker.get(bank.ticker);
+    if (!deltaUSD || !bank.bankBalanceSheet) return;
+    bank.bankBalanceSheet = bookPnL(bank.bankBalanceSheet, deltaUSD, reason, bank.ticker);
+  });
 }
 
 /**
@@ -366,17 +425,17 @@ export function applyPendingCorporateActionSettlements(
     updatedInstitutionalEntities: InstitutionalEntity[];
     pendingHolderSettlements: Map<string, number>;
     pendingHolderCashUSD?: Map<string, number>;
-    /** 13b: `kind:oldTrancheId` → the replacement tranche (an accretive call). */
+    /** `kind:oldTrancheId` → the replacement tranche (an accretive call). */
     pendingHolderReplacements?: Map<string, string>;
-    /** §5-CLOSE C5: the issuers, so an equity payment can find the shares the register does NOT
-     *  hold — the public float, whose dividend goes to the household sector by payment. */
+    /** The issuers, so an equity payment can find the shares the register does NOT hold — the
+     *  public float, whose dividend goes to the household sector by payment. */
     updatedCompanies?: Company[];
-    /** SETL3/4: present once the settlement layer is live — the register's payments become real
-     *  payments from the issuer rather than cash appearing on the holder's book. */
+    /** Present once the settlement layer is live — the register's payments become real payments
+     *  from the issuer rather than cash appearing on the holder's book. */
     paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
-    /** §4.0 Tier 1 item 6: the running settlement net, so a placement's budget sees what the
-     *  holder's week has already committed. Present on the real context. */
+    /** The running settlement net, so a placement's budget sees what the holder's week has
+     *  already committed. Present on the real context. */
     pendingNetById?: import('./context').WeeklyStepContext['pendingNetById'];
   }
 ): void {
@@ -385,11 +444,9 @@ export function applyPendingCorporateActionSettlements(
   const hasCash = !!pendingCash && pendingCash.size > 0;
   if (pending.size === 0 && !hasCash) return;
 
-  // SCALE: the pending keys are `${instrumentType}:${instrumentId}` strings; the walk below used
-  // to REBUILD that string for every holding of every entity (two full passes of ~70k rows) just
-  // to probe a map that holds a handful of actions. Split the keys apart once instead and probe
-  // by the fields the row already carries — same lookups, no per-row strings. instrumentType
-  // never contains ':', so splitting at the first colon inverts the key exactly.
+  // The pending keys are `${instrumentType}:${instrumentId}` strings. Split them apart once so
+  // the walk below probes by the fields the row already carries rather than rebuilding the
+  // string per row; instrumentType never contains ':', so the split inverts the key exactly.
   const splitKeys = (m: Map<string, number> | undefined): Map<string, Map<string, number>> => {
     const out = new Map<string, Map<string, number>>();
     m?.forEach((v, key) => {
@@ -404,12 +461,12 @@ export function applyPendingCorporateActionSettlements(
   const pendingByType = splitKeys(pending);
   const pendingCashByType = splitKeys(pendingCash);
 
-  // §7.313 flip — the pending instruments translate to interned pairs ONCE; every row is then
-  // probed by one integer key. An instrument never interned has no rows and drops out here.
+  // The pending instruments translate to interned pairs ONCE; every row is then probed by one
+  // integer key. An instrument never interned has no rows and drops out here.
   const v2 = ctx.v2;
   const H = v2.holdings;
   const refOf = (t: string): number | undefined => v2.internedIdByString.get(t);
-  // 13b: an instrument is a tranche or its issuer; the issuer's ticker is one read either way.
+  // An instrument is a tranche or its issuer; the issuer's ticker is one read either way.
   const issuerTickerOf = (instrumentId: string): string | undefined => ctx.issuerTickerById?.get(issuerIdOf(v2, instrumentId));
   const pairKeyOf = (r: number): number => H.typeRef[r] * 0x400000 + H.instrRef[r];
   const toPairs = (byType: Map<string, Map<string, number>>): Map<number, number> => {
@@ -427,24 +484,23 @@ export function applyPendingCorporateActionSettlements(
   const ratioByPair = toPairs(pendingByType);
   const owedByPair = toPairs(pendingCashByType);
   const equityRef = refOf('EQUITY') ?? -2;
-  // 13b: a replaced tranche — its retired rows become rows of the replacement, with no cash.
+  // A replaced tranche: its retired rows become rows of the replacement, with no cash.
   const replacedNewIdByPair = new Map<number, string>();
   ctx.pendingHolderReplacements?.forEach((newId, key) => {
     const at = key.indexOf(':'); const t = refOf(key.slice(0, at)); const i = refOf(key.slice(at + 1));
     if (t !== undefined && i !== undefined) replacedNewIdByPair.set(t * 0x400000 + i, newId);
   });
 
-  // §5-FINALIZATION step 13 (W2): THE DESKS ARE HOLDERS OF RECORD TOO. A retirement or placement
-  // scales a named desk's position in the issuer's paper by the same ratio as the register's
-  // rows, with the same cash leg (the issuer redeems, or is paid) and the paper wired against the
-  // house. Before this the desks' positions stood until the next auction's paydown caught them
-  // up a week late, and the house was short by exactly the desks' share of each week's
-  // retirements (measured: USA CORP_BOND −0.27B at week 1, every week since W2 was read).
+  // THE DESKS ARE HOLDERS OF RECORD TOO. A retirement or placement scales a named desk's
+  // position in the issuer's paper by the same ratio as the register's rows, with the same cash
+  // leg (the issuer redeems, or is paid) and the paper wired against the house. Otherwise the
+  // desks' positions stand until the next auction's paydown catches them up a week late, and
+  // the clearing house is short by exactly the desks' share of each week's retirements.
   if (ctx.updatedCompanies && ctx.paymentJournal) {
-    const DESK_BOOK_OF: Record<string, string> = { CORP_BOND: 'corporate bond', LEVERAGED_LOAN: 'leveraged loan' };
     const regionByIssuerId = new Map(ctx.updatedCompanies.map((c) => [c.id, c.region as RegionId]));
     pendingByType.forEach((byId, type) => {
-      const book = DESK_BOOK_OF[type]; if (!book) return;
+      const book = type === 'CORP_BOND' || type === 'LEVERAGED_LOAN' ? DESK_BOOK_BY_TYPE[type] : undefined;
+      if (!book) return;
       ctx.updatedCompanies!.forEach((bank) => {
         const sheet = bank.bankBalanceSheet; const rows = sheet?.dealerDeskInventory?.[book];
         if (!bank.isBankEntity || !sheet || !rows || rows.length === 0) return;
@@ -477,12 +533,26 @@ export function applyPendingCorporateActionSettlements(
   // Holders OF RECORD — the books as they stand before this week's actions scale them. A call
   // premium belongs to whoever owned the paper when it was called, so the shares are taken from
   // the pre-action notionals and the scaling happens after.
-  // §7.327 — ONE walk per book, not two: the holders-of-record totals and the touched-entity
-  // pre-scan probed the same ~110k rows in two separate full chain-chases (pairKeyOf and the
-  // map probes twice per row, weekly). Fused: the same entity order and chain order, so
-  // `totalByPair` accumulates the exact floats the separate pass did; the hit flags are the
-  // same predicate the pre-scan tested. When no cash is owed the early-exit scan survives.
+  // ONE walk per book: the holders-of-record totals and the touched-entity scan read the same
+  // rows in the same entity and chain order, so they are fused. When no cash is owed the walk
+  // can stop at the first hit instead.
   const totalByPair = new Map<number, number>();
+  // The desks' books for the types this week's cash actions touch. A credit action names one
+  // tranche while a desk position names the issuer, so the desks' claim on it is their share of
+  // that issuer's whole stack — which needs the issuer's register total beside the tranche's.
+  // An equity desk position names the same instrument the register's rows do and needs no
+  // roll-up.
+  const deskByIssuerByType = new Map<string, Map<string, Map<string, number>>>();
+  const registerByIssuerByTypeRef = new Map<number, Map<string, number>>();
+  if (hasCash) {
+    pendingCashByType.forEach((_byId, type) => {
+      const byIssuer = deskHoldingsByIssuer(ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]);
+      deskByIssuerByType.set(type, byIssuer);
+      const t = refOf(type);
+      if (t !== undefined && t !== equityRef && byIssuer.size > 0) registerByIssuerByTypeRef.set(t, new Map());
+    });
+  }
+  const issuerIdByInstRef: string[] = [];
   const entityHit: boolean[] = new Array(ctx.updatedInstitutionalEntities.length);
   ctx.updatedInstitutionalEntities.forEach((entity, ei) => {
     let anyHit = false;
@@ -491,6 +561,16 @@ export function applyPendingCorporateActionSettlements(
         const k = pairKeyOf(r);
         const owed = owedByPair.has(k);
         if (owed) totalByPair.set(k, (totalByPair.get(k) ?? 0) + H.qtyUSD[r]);
+        const byIssuer = registerByIssuerByTypeRef.get(H.typeRef[r]);
+        if (byIssuer) {
+          const inst = H.instrRef[r];
+          let issuerId = issuerIdByInstRef[inst];
+          if (issuerId === undefined) {
+            issuerId = issuerIdOf(v2, v2.internedStrings[inst]);
+            issuerIdByInstRef[inst] = issuerId;
+          }
+          byIssuer.set(issuerId, (byIssuer.get(issuerId) ?? 0) + H.qtyUSD[r]);
+        }
         if (!anyHit && (owed || ratioByPair.has(k))) anyHit = true;
       }
     } else {
@@ -500,35 +580,69 @@ export function applyPendingCorporateActionSettlements(
     }
     entityHit[ei] = anyHit;
   });
-  // §5-CLOSE C5 — THE PUBLIC FLOAT IS A HOLDER. The register holds the institutions' shares; the
-  // rest of a listed issuer's stock is the float, owned by the household sector (that is what
-  // `householdDirectEquityUSD` measures). A dividend is owed per share, so the register's holders
-  // get their share of it and the float gets the rest, as a payment to the issuer's region's
-  // households — where before the register's holders were paid the WHOLE dividend on a part of
-  // the stock and households were credited a yield times a mark from nobody.
+  // EVERY HOLDER OF RECORD OF A CASH ACTION, AND ONLY THEM. Three kinds hold the paper an
+  // issuer is paying on: the institutional register, the banks' desks, and — for equity — the
+  // public float, the stock no book names, owned by the household sector. The denominator is
+  // all three, so each is paid its own share; before this the desks were left out of both the
+  // split and the payment, and their share was handed to the other holders.
   const denomByPair = new Map<number, number>();
+  const deskIncomeByTicker = new Map<string, number>();
   if (hasCash && ctx.updatedCompanies) {
     const companyById = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
-    owedByPair.forEach((owedUSD, k) => {
-      if (Math.floor(k / 0x400000) !== equityRef) return;
-      const issuerId = v2.internedStrings[k % 0x400000];
-      const issuer = companyById.get(issuerId);
-      const registerUSD = totalByPair.get(k) ?? 0;
-      const issuedUSD = Math.max(0, issuer ? marketCapOf(issuer) : 0);
-      const denomUSD = Math.max(registerUSD, issuedUSD);
-      if (!(denomUSD > 0)) return;
-      denomByPair.set(k, denomUSD);
-      const floatUSD = denomUSD - registerUSD;
-      const issuerTicker = issuerTickerOf(issuerId);
-      if (floatUSD > 0 && issuer && issuerTicker && ctx.paymentJournal) {
-        journalPayment(ctx.paymentJournal, {
-          payer: { kind: 'COMPANY', ticker: issuerTicker },
-          payee: { kind: 'HOUSEHOLD', region: issuer.region },
-          amountUSD: owedUSD * (floatUSD / denomUSD),
-          reason: 'dividend to the public float',
-        });
-      }
+    pendingCashByType.forEach((byId, type) => {
+      const t = refOf(type);
+      if (t === undefined) return;
+      const deskByIssuer = deskByIssuerByType.get(type);
+      const registerByIssuer = registerByIssuerByTypeRef.get(t);
+      byId.forEach((owedUSD, instrumentId) => {
+        const i = refOf(instrumentId);
+        if (i === undefined) return;
+        const k = t * 0x400000 + i;
+        const registerUSD = totalByPair.get(k) ?? 0;
+        const issuerId = t === equityRef ? instrumentId : issuerIdOf(v2, instrumentId);
+        const issuer = companyById.get(issuerId);
+        const issuerTicker = issuerTickerOf(issuerId);
+        const byDesk = deskByIssuer?.get(issuerId);
+        // An equity desk holds the named instrument itself. A credit desk holds the issuer's
+        // stack, and holds it in the register's own proportions — except where the register
+        // holds none of this paper, and then the desks hold all of it.
+        let deskUSD = 0;
+        byDesk?.forEach((usd) => { deskUSD += usd; });
+        if (deskUSD > 0 && t !== equityRef) {
+          const issuerRegisterUSD = registerByIssuer?.get(issuerId) ?? 0;
+          if (registerUSD > 0 && issuerRegisterUSD > 0) deskUSD *= registerUSD / issuerRegisterUSD;
+        }
+        const issuedUSD = t === equityRef && issuer ? Math.max(0, marketCapOf(issuer)) : 0;
+        const denomUSD = Math.max(registerUSD + deskUSD, issuedUSD);
+        if (!(denomUSD > 0)) return;
+        denomByPair.set(k, denomUSD);
+        if (!issuerTicker || !ctx.paymentJournal) return;
+        const payer = { kind: 'COMPANY' as const, ticker: issuerTicker };
+        if (deskUSD > 0) {
+          let deskBookUSD = 0;
+          byDesk?.forEach((usd) => { deskBookUSD += usd; });
+          byDesk?.forEach((usd, deskId) => {
+            const amountUSD = owedUSD * (deskUSD / denomUSD) * (usd / deskBookUSD);
+            if (!(amountUSD > 0)) return;
+            journalPayment(ctx.paymentJournal!, {
+              payer, payee: holderPayee(deskId), amountUSD, reason: 'security payment to holder of record',
+            });
+            const deskTicker = dealerDeskTicker(deskId);
+            if (deskTicker !== undefined) deskIncomeByTicker.set(deskTicker, (deskIncomeByTicker.get(deskTicker) ?? 0) + amountUSD);
+          });
+        }
+        const floatUSD = denomUSD - registerUSD - deskUSD;
+        if (floatUSD > 0 && issuer) {
+          journalPayment(ctx.paymentJournal, {
+            payer,
+            payee: { kind: 'HOUSEHOLD', region: issuer.region },
+            amountUSD: owedUSD * (floatUSD / denomUSD),
+            reason: 'dividend to the public float',
+          });
+        }
+      });
     });
+    bookDeskIncome(ctx.updatedCompanies, deskIncomeByTicker, 'security payment on desk inventory');
   }
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity, ei) => {
@@ -538,10 +652,9 @@ export function applyPendingCorporateActionSettlements(
     // running settlement net, so two placements in one week must see each other here.
     let committedPlacementUSD = 0;
     const kept: number[] = [];
-    // §5-WIRES W2: the action per instrument — what every row of it sheds (or gains) at its own
-    // funded ratio, summed — becomes ONE retirement or placement wire against the issuer. Per row
-    // it was applied N times to N rows of one instrument (the ledger scales every row of the
-    // instrument), which minted a placement N-fold.
+    // The action per instrument — what every row of it sheds (or gains) at its own funded
+    // ratio, summed — becomes ONE retirement or placement wire against the issuer. Per row it
+    // would mint a placement N-fold, because the ledger scales every row of the instrument.
     const actions = new Map<string, { type: ItemizedHolding['instrumentType']; id: string; region: RegionId; retiredUSD: number; retiredSh: number; placedUSD: number; placedSh: number; anyShares: boolean }>();
     for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
       const k = pairKeyOf(r);
@@ -549,13 +662,13 @@ export function applyPendingCorporateActionSettlements(
         const owedUSD = owedByPair.get(k);
         const totalUSD = totalByPair.get(k) ?? 0;
         if (owedUSD !== undefined && totalUSD > 0) {
-          // SETL3/4: the holder's share of what the issuer owes. Paid AS A PAYMENT from the
-          // issuer, so the money has a payer and a payee (rule 14) instead of appearing on the
-          // holder's book while the issuer's ledger says it left.
+          // The holder's share of what the issuer owes, paid AS A PAYMENT from the issuer, so
+          // the money has a payer and a payee instead of appearing on the holder's book while
+          // the issuer's ledger says it left.
           const shareUSD = owedUSD * (H.qtyUSD[r] / (denomByPair.get(k) ?? totalUSD));
           const issuerTicker = issuerTickerOf(v2.internedStrings[H.instrRef[r]]);
-          // §5-CLOSE C4: a holder paid by an issuer nobody can name is money from nobody — a
-          // defect at the site that recorded the action, never a credit.
+          // A holder paid by an issuer nobody can name is money from nobody: a defect at the
+          // site that recorded the action, never a credit.
           if (!ctx.paymentJournal || !issuerTicker) {
             defect(`security payment of ${(shareUSD / 1e6).toFixed(3)}M to ${entity.id} from an issuer with no ticker (${v2.internedStrings[H.instrRef[r]]})`);
           }
@@ -578,11 +691,11 @@ export function applyPendingCorporateActionSettlements(
       // their claim shrinks by exactly what they were paid. Derived from the composed ratio so
       // it stays exact when two actions hit one instrument in a week; debt redeems at PAR, so
       // the notional change IS the cash — the call premium rides `pendingHolderCashUSD` above,
-      // and equity is excluded (a share is bought at a negotiated price, §7.43).
+      // and equity is excluded, because a share is bought at a negotiated price.
       let principalCashUSD = H.typeRef[r] === equityRef ? 0 : H.qtyUSD[r] * (1 - ratio);
-      // 13b: a replaced tranche's retired slice is re-keyed onto the replacement below, not redeemed.
+      // A replaced tranche's retired slice is re-keyed onto the replacement below, not redeemed.
       if (replacedNewIdByPair.has(k)) principalCashUSD = 0;
-      // §4.0 Tier 1 item 6 — A PLACEMENT IS TAKEN UP ONLY AS FAR AS THE CASH REACHES. A holder
+      // A PLACEMENT IS TAKEN UP ONLY AS FAR AS THE CASH REACHES. A holder
       // short of cash declines the unaffordable slice — its holding grows by only the share it
       // funded, and the issuer's proceeds shrink by the same amount on the same instruction.
       let effectiveRatio = ratio;
@@ -618,12 +731,12 @@ export function applyPendingCorporateActionSettlements(
             reason: 'placement paid by holder of record',
           });
       } else if (principalCashUSD !== 0) {
-        // §5-CLOSE C4: principal moving with no named issuer is money from (or to) nobody.
+        // Principal moving with no named issuer is money from (or to) nobody.
         defect(`principal of ${(principalCashUSD / 1e6).toFixed(3)}M moved for ${entity.id} on an instrument with no issuer ticker`);
       }
-      // §5-WIRES W2: the action is a wire against the issuer — retired below one, placed above
+      // The action is a wire against the issuer — retired below one, placed above
       // — applied by the ledger after this read of the rows (it scales shares with notional,
-      // §5-CLOSE O2, and unlinks what empties).
+      // and unlinks what empties).
       {
         const id = v2.internedStrings[H.instrRef[r]];
         const type = v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
@@ -639,7 +752,7 @@ export function applyPendingCorporateActionSettlements(
       kept.push(r);
     }
     if (!touched) return entity;
-    // 13b: the replacement's rows — what the called tranche's rows shed, placed on the same
+    // The replacement's rows — what the called tranche's rows shed, placed on the same
     // holders under the new id (its issuer's wire put it at the house, `replacement issue`).
     [...actions.values()].forEach((a) => {
       const t = refOf(a.type), i = refOf(a.id);
@@ -652,13 +765,13 @@ export function applyPendingCorporateActionSettlements(
       b.placedUSD += a.retiredUSD;
     });
     actions.forEach((a) => {
-      // §5-WIRES W3: the register side settles through the region's CLEARING HOUSE — the paying
+      // The register side settles through the region's CLEARING HOUSE — the paying
       // agent. The issuer's own wire is the LADDER's (house → issuer at retirement, issuer → house
       // at placement, the tranche ledger), so the two sides of one action meet at the house and
       // the issuer's wires count once. Equity (no ladder) settles the same way for symmetry.
       const house = { kind: 'CLEARING_HOUSE' as const, region: a.region };
       const holder = { kind: 'INSTITUTION' as const, id: entity.id };
-      // §5-FINALIZATION step 13 (W2): equity has no ladder, so its issuer's side of the action is
+      // Equity has no ladder, so its issuer's side of the action is
       // wired HERE — a buyback returns the shares from the house to the issuer, a placement
       // creates them from the issuer to the house — and the house nets to zero on equity too.
       const equityIssuerTicker = heldInShares(a.type) ? issuerTickerOf(a.id) : undefined;
@@ -687,7 +800,7 @@ export function applyPendingCorporateActionSettlements(
  */
 export function payHoldersCash(
   ctx: { pendingHolderCashUSD: Map<string, number> },
-  /** 13b: the instrument the rows name — a tranche id for the credit kinds, the issuer for equity. */
+  /** The instrument the rows name — a tranche id for the credit kinds, the issuer for equity. */
   instrumentId: string,
   instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'EQUITY',
   amountUSD: number
@@ -698,7 +811,7 @@ export function payHoldersCash(
 }
 
 /**
- * CAL — INTEREST ACCRUES TO WHOEVER OWNS THE PAPER THAT WEEK, AND IS PAID ON THE COUPON DATE.
+ * INTEREST ACCRUES TO WHOEVER OWNS THE PAPER THAT WEEK, AND IS PAID ON THE COUPON DATE.
  *
  * This is the piece that makes a lumpy coupon safe on a register that trades. Interest is earned
  * continuously and paid discretely, and between the two dates it is a RECEIVABLE — so a holder
@@ -713,7 +826,7 @@ export function payHoldersCash(
  */
 export function accrueHoldersInterest(
   ctx: { pendingHolderAccrualUSD: Map<string, number> },
-  /** 13b: the TRANCHE the rows name — a tranche's coupon reaches its own holders exactly. */
+  /** The TRANCHE the rows name, so a tranche's coupon reaches its own holders exactly. */
   instrumentId: string,
   // GOV_BOND is deliberately absent: a bank holds government paper on its own balance sheet and
   // is not on this register at all, so the sovereign accrual is keyed by PARTY instead and lives
@@ -726,22 +839,20 @@ export function accrueHoldersInterest(
   ctx.pendingHolderAccrualUSD.set(key, (ctx.pendingHolderAccrualUSD.get(key) ?? 0) + weeklyAccrualUSD);
 }
 
-/** CAL — the coupon date: what each holder accrued on this paper becomes cash, and the balance
+/** The coupon date: what each holder accrued on this paper becomes cash, and the balance
  *  clears. The issuer pays exactly the sum of what it accrued, so the two sides cannot drift. */
 export function payHoldersAccruedInterest(
   ctx: { pendingHolderAccrualPayout: Set<string> },
-  /** 13b: the tranche whose coupon falls due. */
+  /** The tranche whose coupon falls due. */
   instrumentId: string,
   instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER'
 ): void {
   ctx.pendingHolderAccrualPayout.add(`${instrumentType}:${instrumentId}`);
 }
 
-// SCALE: the ledger is NESTED — instrument, then holder — not keyed by a composite string.
-// Flat, it cost a `${instrument}|${holder}` build per matched row (~105,000 a week) to write, and
-// the coupon-date pass then walked ALL 105,000 entries and string-sliced each one to find the few
-// whose instrument was actually due. Nested, the write is two map lookups and no string, and the
-// payout visits only the instruments paying this week and their own holders.
+// The ledger is NESTED — instrument, then holder — not keyed by a composite string: the write
+// is two map lookups and no string, and the payout visits only the instruments paying this week
+// and their own holders.
 
 /**
  * Run the week's accruals and coupon-date payouts over the register.
@@ -750,9 +861,9 @@ export function payHoldersAccruedInterest(
  * holds; the PAYOUT walks the accrued balances themselves, because a holder that has sold out no
  * longer appears in the holdings and is still owed what it earned.
  */
-/** COUPON_TRACE=1 — the week's register interest: what accrued, what fell due and was paid, and
- *  what is still owed, by instrument type. The instrument for STEP 1: CP interest used to accrue
- *  every week and never pay, so `owed` grew without bound and `paid` was zero for ever. */
+/** COUPON_TRACE=1 — the week's register interest by instrument type: what accrued, what fell
+ *  due and was paid, what is still owed, and how much of each belongs to the banks' desks
+ *  rather than the institutional register. */
 const COUPON_TRACE = process.env.COUPON_TRACE === '1';
 
 export function applyHolderInterestAccruals(
@@ -762,6 +873,8 @@ export function applyHolderInterestAccruals(
     pendingHolderAccrualUSD: Map<string, number>;
     pendingHolderAccrualPayout: Set<string>;
     holderAccruedInterestUSD: Map<string, Map<string, number>>;
+    /** The banks, so the desks holding an issuer's paper accrue their share of its coupon. */
+    updatedCompanies?: Company[];
     paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
     nextWeek?: number;
@@ -769,6 +882,8 @@ export function applyHolderInterestAccruals(
 ): void {
   const traceAccruedUSD = new Map<string, number>();
   const tracePaidUSD = new Map<string, number>();
+  const traceDeskAccruedUSD = new Map<string, number>();
+  const traceDeskPaidUSD = new Map<string, number>();
   const traceAdd = (m: Map<string, number>, type: string, usd: number): void => {
     m.set(type, (m.get(type) ?? 0) + usd);
   };
@@ -777,18 +892,9 @@ export function applyHolderInterestAccruals(
   }
   const { pendingHolderAccrualUSD: accruals, pendingHolderAccrualPayout: payouts } = ctx;
   if (accruals.size > 0) {
-    // SCALE: ONE pass over the register, not two. This walked every entity's every holding to
-    // total the float, then walked all of them AGAIN to divide by it — building the same
-    // `type:id` key string twice per holding, ~70k rows each way. The matching rows are collected
-    // on the first pass and the second walks only those, which is the same arithmetic in the same
-    // order on the same values.
-    // SCALE: the accrual keys are `${instrumentType}:${instrumentId}`, and this REBUILT that
-    // string for every holding of every entity — ~110,000 rows a week — to probe a map holding a
-    // few thousand issuers. Split the keys by type once (the same trick
-    // `applyPendingCorporateActionSettlements` already uses below) and the row is probed by the
-    // fields it already carries: a row of a type that accrues nothing costs one map lookup that
-    // misses, and no string at all. `instrumentType` never contains ':', so the split inverts the
-    // key exactly.
+    // The accrual keys are `${instrumentType}:${instrumentId}`. Splitting them by type once lets
+    // the row loops below probe by the fields a row already carries, with no per-row string;
+    // `instrumentType` never contains ':', so the split inverts the key exactly.
     const accrualsByType = new Map<string, Map<string, number>>();
     accruals.forEach((v, key) => {
       const at = key.indexOf(':');
@@ -797,25 +903,18 @@ export function applyHolderInterestAccruals(
       if (!inner) { inner = new Map(); accrualsByType.set(type, inner); }
       inner.set(key.slice(at + 1), v);
     });
-    // SCALE: only the types that actually accrue are walked, through the CSR index — a flat pair
-    // of Int32Arrays grouped by type, so an EQUITY or GOV_BOND row is not visited at all rather
-    // than visited and rejected. Within a type the index preserves register order, so the float
-    // totals accumulate in exactly the order the nested walk produced.
-    // SCALE phase 2: reads the COLUMNS. The quantity comes out of a Float64Array and the
-    // instrument out of an Int32Array, so a row of an accruing type costs two typed-array loads
-    // and no object is touched at all. Within a type the table preserves register order, so the
-    // float totals accumulate exactly as the original nested walk produced them.
-    // SCALE — TWO COLUMN PASSES, NO ROW OBJECTS. The first version of this collected every
-    // matching row into a `{entityId, key, qtyUSD}` object with its own key string — ~40k
-    // allocations per call, twice a week, all garbage by the next line. The rows live in typed
-    // columns; walking them twice costs typed-array loads and allocates nothing, and everything
-    // per-INSTRUMENT (the weekly amount, the holder map, the one key string) is resolved once
-    // into dense arrays keyed by the intern id. Both passes run in register order within each
-    // type and the types in the same map order, so every float accumulates exactly as before.
+    // Only the types that actually accrue are walked, and they are walked as columns: the
+    // register is grouped by type, so a row costs two typed-array loads and touches no object.
+    // Within a type the table preserves register order, so every float accumulates in the same
+    // order — and to the same value — whichever pass reads it.
+    const deskHoldings = new Map<string, Map<string, Map<string, number>>>();
+    accrualsByType.forEach((_byId, type) => {
+      deskHoldings.set(type, deskHoldingsByIssuer(ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
+    });
     const holdings = getHoldingsTable(ctx as never);
     const entities = ctx.updatedInstitutionalEntities;
-    // §7.327 — the holder id per row was an object deref (entities[entCol[row]].id); resolved
-    // once here, the row loop reads a dense string array.
+    // Resolved once, so the row loop reads a dense string array rather than dereferencing an
+    // entity object per row.
     const entityIdByRow: string[] = entities.map((e) => e.id);
     const byTypeRows = holdings.byType;
     const qtyCol = holdings.qtyUSD;
@@ -841,6 +940,34 @@ export function applyHolderInterestAccruals(
         if (accruingRow[iid] === undefined) continue;
         totalByInst[iid] = (totalByInst[iid] ?? 0) + qtyCol[row];
       }
+      // THE DESKS ARE HOLDERS OF RECORD TOO. Interest was split over the register alone, so the
+      // paper a desk holds accrued nothing and its share of every coupon was paid to the other
+      // holders. A desk's position names the issuer, so it holds that issuer's stack in the
+      // register's own proportions: the register keeps `registerShare` of each tranche's week
+      // and the desks take the rest, split by what each one holds. Every live tranche accrues
+      // every week, so the accruing instruments ARE the issuer's interest-bearing stack.
+      const deskByIssuer = deskHoldings.get(type);
+      const issuerOfInst: string[] = [];
+      const registerShare: number[] = [];
+      const deskTotalOfInst: number[] = [];
+      if (deskByIssuer && deskByIssuer.size > 0) {
+        const registerByIssuer = new Map<string, number>();
+        accruingRow.forEach((instrumentText, iid) => {
+          const issuerId = issuerIdOf(ctx.v2, instrumentText);
+          issuerOfInst[iid] = issuerId;
+          registerByIssuer.set(issuerId, (registerByIssuer.get(issuerId) ?? 0) + (totalByInst[iid] ?? 0));
+        });
+        accruingRow.forEach((_instrumentText, iid) => {
+          const byDesk = deskByIssuer.get(issuerOfInst[iid]);
+          if (!byDesk) return;
+          let deskUSD = 0;
+          byDesk.forEach((usd) => { deskUSD += usd; });
+          const registerUSD = registerByIssuer.get(issuerOfInst[iid]) ?? 0;
+          if (!(deskUSD + registerUSD > 0)) return;
+          deskTotalOfInst[iid] = deskUSD;
+          registerShare[iid] = registerUSD / (registerUSD + deskUSD);
+        });
+      }
       // Pass 2 — the same rows in the same order; each holder's share of the weekly amount.
       const byHolderByInst: (Map<string, number> | undefined)[] = [];
       for (let i = lo; i < hi; i++) {
@@ -851,7 +978,7 @@ export function applyHolderInterestAccruals(
         const weeklyUSD = accruingWeekly[iid];
         const totalUSD = totalByInst[iid] ?? 0;
         if (weeklyUSD === undefined || !(totalUSD > 0)) continue;
-        const shareUSD = weeklyUSD * (qtyCol[row] / totalUSD);
+        const shareUSD = weeklyUSD * (qtyCol[row] / totalUSD) * (registerShare[iid] ?? 1);
         if (!(shareUSD > 0)) continue;
         let byHolder = byHolderByInst[iid];
         if (byHolder === undefined) {
@@ -863,6 +990,26 @@ export function applyHolderInterestAccruals(
         const entityId = entityIdByRow[entCol[row]];
         byHolder.set(entityId, (byHolder.get(entityId) ?? 0) + shareUSD);
       }
+      // Pass 3 — the desks' side of the same split, on the accrual ledger the register uses, so
+      // the coupon date pays them out of the same balance. An issuer whose paper the register
+      // does not hold at all is reached here and nowhere else: its whole coupon is the desks'.
+      if (deskByIssuer && deskByIssuer.size > 0) {
+        accruingRow.forEach((instrumentText, iid) => {
+          const deskUSD = deskTotalOfInst[iid];
+          if (!(deskUSD > 0)) return;
+          const deskCutUSD = accruingWeekly[iid] * (1 - registerShare[iid]);
+          if (!(deskCutUSD > 0)) return;
+          const key = `${type}:${instrumentText}`;
+          let byHolder = ctx.holderAccruedInterestUSD.get(key);
+          if (!byHolder) { byHolder = new Map(); ctx.holderAccruedInterestUSD.set(key, byHolder); }
+          deskByIssuer.get(issuerOfInst[iid])?.forEach((usd, deskId) => {
+            const shareUSD = deskCutUSD * (usd / deskUSD);
+            if (!(shareUSD > 0)) return;
+            byHolder.set(deskId, (byHolder.get(deskId) ?? 0) + shareUSD);
+            if (COUPON_TRACE) traceAdd(traceDeskAccruedUSD, type, shareUSD);
+          });
+        });
+      }
     });
   }
   // THE ACCRUAL IS CONSUMED HERE, NOT AT THE BOTTOM. It used to be cleared only on the payout
@@ -872,28 +1019,35 @@ export function applyHolderInterestAccruals(
   accruals.clear();
 
   if (payouts.size === 0) {
-    if (COUPON_TRACE) reportCouponTrace(ctx, traceAccruedUSD, tracePaidUSD);
+    if (COUPON_TRACE) reportCouponTrace(ctx, traceAccruedUSD, tracePaidUSD, traceDeskAccruedUSD, traceDeskPaidUSD);
     return;
   }
   // Only the instruments whose coupon falls due this week, and only their own holders.
+  const deskCouponByTicker = new Map<string, number>();
   payouts.forEach((instrumentKey) => {
     const byHolder = ctx.holderAccruedInterestUSD.get(instrumentKey);
     if (!byHolder) return;
     const issuerId = instrumentKey.slice(instrumentKey.indexOf(':') + 1);
-    const ticker = ctx.issuerTickerById?.get(issuerIdOf(ctx.v2, issuerId)); // 13b: a tranche key names its issuer through the store
+    const ticker = ctx.issuerTickerById?.get(issuerIdOf(ctx.v2, issuerId)); // a tranche key names its issuer through the store
     if (!ticker || !ctx.paymentJournal) {
-      // §5-CLOSE C4: a coupon due from an issuer nobody can name is a defect at the site that
-      // accrued it, not a receivable that quietly survives.
+      // A coupon due from an issuer nobody can name is a defect at the site that accrued it,
+      // not a receivable that quietly survives.
       const owedUSD = Array.from(byHolder.values()).reduce((a, v) => a + Math.max(0, v), 0);
       return defect(`coupon of ${(owedUSD / 1e6).toFixed(3)}M due on ${instrumentKey} from an issuer with no ticker`);
     }
     const payer = { kind: 'COMPANY', ticker } as import('./settlement').PartyRef;
     byHolder.forEach((accruedUSD, holderId) => {
       if (!(accruedUSD > 0)) return;
-      if (COUPON_TRACE) traceAdd(tracePaidUSD, instrumentKey.slice(0, instrumentKey.indexOf(':')), accruedUSD);
+      const deskTicker = dealerDeskTicker(holderId);
+      if (deskTicker !== undefined) deskCouponByTicker.set(deskTicker, (deskCouponByTicker.get(deskTicker) ?? 0) + accruedUSD);
+      if (COUPON_TRACE) {
+        const type = instrumentKey.slice(0, instrumentKey.indexOf(':'));
+        traceAdd(tracePaidUSD, type, accruedUSD);
+        if (deskTicker !== undefined) traceAdd(traceDeskPaidUSD, type, accruedUSD);
+      }
       journalPayment(ctx.paymentJournal!, {
         payer,
-        payee: { kind: 'INSTITUTION', id: holderId },
+        payee: holderPayee(holderId),
         amountUSD: accruedUSD,
         reason: 'coupon payment',
       });
@@ -901,31 +1055,42 @@ export function applyHolderInterestAccruals(
     ctx.holderAccruedInterestUSD.delete(instrumentKey);
   });
   payouts.clear();
-  if (COUPON_TRACE) reportCouponTrace(ctx, traceAccruedUSD, tracePaidUSD);
+  bookDeskIncome(ctx.updatedCompanies, deskCouponByTicker, 'coupon on desk inventory');
+  if (COUPON_TRACE) reportCouponTrace(ctx, traceAccruedUSD, tracePaidUSD, traceDeskAccruedUSD, traceDeskPaidUSD);
 }
 
 /** The COUPON_TRACE line: accrued / paid / still owed this week, by instrument type. */
 function reportCouponTrace(
   ctx: { holderAccruedInterestUSD: Map<string, Map<string, number>>; nextWeek?: number },
   accrued: Map<string, number>,
-  paid: Map<string, number>
+  paid: Map<string, number>,
+  deskAccrued: Map<string, number>,
+  deskPaid: Map<string, number>
 ): void {
   const owed = new Map<string, number>();
+  const deskOwed = new Map<string, number>();
   ctx.holderAccruedInterestUSD.forEach((byHolder, key) => {
     const type = key.slice(0, key.indexOf(':'));
     let usd = 0;
-    byHolder.forEach((v) => { if (v > 0) usd += v; });
+    let deskUSD = 0;
+    byHolder.forEach((v, holderId) => {
+      if (!(v > 0)) return;
+      usd += v;
+      if (dealerDeskTicker(holderId) !== undefined) deskUSD += v;
+    });
     owed.set(type, (owed.get(type) ?? 0) + usd);
+    deskOwed.set(type, (deskOwed.get(type) ?? 0) + deskUSD);
   });
   const types = [...new Set([...accrued.keys(), ...paid.keys(), ...owed.keys()])].sort();
   const b = (usd: number): string => `${(usd / 1e9).toFixed(3)}B`;
   const cells = types.map((t) =>
-    `${t} accrued ${b(accrued.get(t) ?? 0)} paid ${b(paid.get(t) ?? 0)} owed ${b(owed.get(t) ?? 0)}`);
+    `${t} accrued ${b(accrued.get(t) ?? 0)} paid ${b(paid.get(t) ?? 0)} owed ${b(owed.get(t) ?? 0)}`
+    + ` [desk ${b(deskAccrued.get(t) ?? 0)}/${b(deskPaid.get(t) ?? 0)}/${b(deskOwed.get(t) ?? 0)}]`);
   console.log(`  [coupon] w${ctx.nextWeek ?? 0} :: ${cells.join(' | ')}`);
 }
 
 /**
- * The sovereign ladder's bucket vocabulary — bills below 2Y (WS5), bonds at the four standard
+ * The sovereign ladder's bucket vocabulary — bills below 2Y, bonds at the four standard
  * points. ONE function owns the mapping from a tranche's tenor to its bucket key: three separate
  * nearest-of-[2,5,10,30] reducers existed before bills did, and any one of them left unconverted
  * would have silently folded a 13-week bill into the two-year bucket.
@@ -952,7 +1117,6 @@ export function sovBucketKey(tenorAtIssuanceYears: number): string {
 
 /**
  * The working-capital stock a company's own statements imply, as a share of revenue — the ONE
- * definition (WS5's CP sizing and WS7's treasury sweep both read it; it was a duplicated 0.08
- * literal before WS7 hoisted it here).
+ * definition: the CP sizing and the treasury sweep both read it.
  */
 export const WORKING_CAPITAL_SHARE_OF_REVENUE = 0.08;
