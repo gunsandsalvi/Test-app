@@ -31,6 +31,9 @@ import { REQUIRED_RETURN_ON_CAPITAL } from './asset-allocation';
 import { settleCorporateActionOnHolders, payHoldersCash } from './shared-helpers';
 import { pay, pendingSettlementUSD } from './settlement';
 import { smePoolSubUnits } from '../../../domain/industry-registry';
+import { STANDARD_CORP_TENOR_YEARS } from '../../../engine2/stage08-back';
+import { facilityMarginBpsFor } from './bank-lending';
+import { issueTranche } from '../../ledger/tranche-ledger';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -687,6 +690,48 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
  * in a pool, carved into a named private firm, public only by choosing to list. With
  * `generateIPOCompany` deleted, nothing conjures a company out of a category's demand growth.
  */
+/**
+ * §5-WIRES W6 (B) — A FIRM IS BORN BY WIRES. The generator sketches a newborn with a debt base
+ * nobody lent it; here that debt becomes what a private newborn's debt is — a FACILITY from its
+ * home bank, priced off its own default probability at the bank's hurdle — issued by wire, booked
+ * on the bank as a loan, and its proceeds paid to the firm. The pool's carve-out (written by the
+ * caller) is the founders' contribution; the loan is the rest of the opening balance. Nothing
+ * appears on a ladder from nowhere.
+ */
+function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWeek: number): void {
+  const seeded = c.debtTranches ?? [];
+  const debtUSD = seeded.reduce((a, t) => a + t.principalUSD, 0);
+  c.debtTranches = [];
+  if (!(debtUSD > 1) || !c.homeBankTicker) { c.totalDebt = 0; return; }
+  const bank = ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker);
+  const marginBps = facilityMarginBpsFor(ctx.v2, c, reg, bank);
+  const tranche: DebtTranche = {
+    id: `${c.id}-FACILITY-BIRTH-${nextWeek}`,
+    principalUSD: Math.round(debtUSD),
+    rateType: 'FLOATING',
+    floatingMarginBps: marginBps,
+    originationWeek: nextWeek,
+    maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
+    seniority: 'SENIOR',
+    isBankFacility: true,
+    facilityBankTicker: c.homeBankTicker,
+  };
+  issueTranche(ctx.v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'firm birth: facility lent by the home bank');
+  ctx.creditEventsThisWeek.push({
+    bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,
+    principalUSD: tranche.principalUSD, marginBps,
+    originationWeek: nextWeek, termWeeks: STANDARD_CORP_TENOR_YEARS * 52, retire: false,
+  });
+  pay(ctx, {
+    payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
+    payee: { kind: 'COMPANY', ticker: c.ticker },
+    amountUSD: tranche.principalUSD,
+    reason: 'firm birth: facility proceeds',
+  });
+  c.totalDebt = tranche.principalUSD;
+  c.debtTranches = [tranche];
+}
+
 export function runFirmBirthsForRegion(
   regionId: RegionId,
   reg: Region,
@@ -768,7 +813,10 @@ export function runFirmBirthsForRegion(
     // (this stage runs after the week's cutoff, so it lands next cycle — the firm is born with
     // its opening balance in transit, and the economy's total cash never moved).
     newborn.forEach((c) => {
-      const openingCashUSD = Math.min(Math.max(0, c.cash), Math.max(0, seg.cashUSD ?? 0));
+      // §5-WIRES W6: the home bank's facility (fundNewbornDebt, below) funds the opening balance
+      // first; the pool carves out the founders' remainder.
+      const loanUSD = (c.debtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0);
+      const openingCashUSD = Math.min(Math.max(0, c.cash - loanUSD), Math.max(0, seg.cashUSD ?? 0));
       c.cash = 0;
       if (openingCashUSD > 0) {
         pay(ctx, {
@@ -820,6 +868,7 @@ export function runFirmBirthsForRegion(
     // mid-week was invisible to every coupon and corporate-action payment that week — the money
     // then flowed payer-less into the unbacked ledger. Register the newborn where it is born.
     ctx.issuerTickerById?.set(c.id, c.ticker);
+    fundNewbornDebt(c, reg, ctx, nextWeek);
   });
   return born;
 }

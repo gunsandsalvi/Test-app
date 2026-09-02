@@ -77,6 +77,27 @@ export function retireTranche(v2: V2World, issuer: TrancheIssuer, r: number, fac
   return n;
 }
 
+/**
+ * Face of one KIND comes off the issuer's ladder pro rata across its rows of that kind — an
+ * estate's claims are per holder and kind, not per tranche. Rows emptied are unlinked. Returns
+ * the face actually retired (an issuer holding less than asked retires what it has).
+ */
+export function retireLadderFace(v2: V2World, issuer: TrancheIssuer, kind: AssetKind, faceUSD: number, reason: string): number {
+  if (!(faceUSD > 0)) return 0;
+  const S = v2.tranches;
+  const rows = ladderRowsOf(v2, issuer.id).filter((r) => kindOfRow(v2, r) === kind && S.principalUSD[r] > 0.01);
+  const totalUSD = rows.reduce((a, r) => a + S.principalUSD[r], 0);
+  if (!(totalUSD > 0)) return 0;
+  const take = Math.min(faceUSD, totalUSD);
+  let retired = 0;
+  rows.forEach((r) => {
+    const slice = Math.min(S.principalUSD[r], take * (S.principalUSD[r] / totalUSD));
+    if (slice > 0.01) { retireTranche(v2, issuer, r, slice, reason); retired += slice; }
+  });
+  commitLadder(v2, issuer, ladderRowsOf(v2, issuer.id).filter((r) => S.principalUSD[r] > 0.01));
+  return retired;
+}
+
 /** Re-link the firm's chain to `rows`. A row dropped with face still on it is a defect. */
 export function commitLadder(v2: V2World, issuer: TrancheIssuer, rows: number[]): void {
   const S = v2.tranches;

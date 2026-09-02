@@ -292,8 +292,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       if (born.length > 0) {
         ctx.updatedCompanies.push(...born);
       drainSeedRings({ v2: ensureV2(state), companies: born });
-        const v2b = ensureV2(state);
-        for (const b of born) seedLadder(v2b, b.id, b.debtTranches);
+        // §5-WIRES W6: a newborn's ladder is issued by wire at its birth (pe-lifecycle); nothing
+        // to seed.
       }
     });
     // §5-MNC: a firm that has lost a foreign merit order for the measured year builds there —
@@ -302,8 +302,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     if (fdiBorn.length > 0) {
       ctx.updatedCompanies.push(...fdiBorn);
       drainSeedRings({ v2: ensureV2(state), companies: fdiBorn });
+      // §5-WIRES W6: a subsidiary is born with no debt (FDI is equity); its ladder is empty.
       const v2f = ensureV2(state);
-      for (const b of fdiBorn) seedLadder(v2f, b.id, b.debtTranches);
+      for (const b of fdiBorn) seedLadder(v2f, b.id, []);
     }
     // A take-private's tender is a corporate action recorded on the same per-week maps stage 08
     // uses — and stage 08 has already drained them by the time this stage runs, so settling here

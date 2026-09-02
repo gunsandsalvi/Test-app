@@ -16,8 +16,11 @@
 
 import { assertNever } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
-import { retireHolding, closeEmptyPositions } from '../../ledger/holdings-ledger';
+import { closeEmptyPositions } from '../../ledger/holdings-ledger';
 import { moveOutputUnits, scrapOutputUnitsTo } from '../../ledger/goods-ledger';
+import { retireLadderFace, rebuildLadder } from '../../ledger/tranche-ledger';
+import { transferHolding } from '../../ledger/holdings-ledger';
+import { isTrancheKind } from '../../../domain/assets';
 import { internString } from '../../../engine2/world';
 import { GameState, RegionId, Company, InstitutionalEntity, ItemizedHolding } from '../../../types';
 import {
@@ -212,6 +215,9 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     if (estateAssetsUSD(estate.assets) <= 1 && (availableUSD - paidUSD <= 1 || claimsRemainUSD <= 1)) {
       estate.closedWeek = week;
       writeOffResidual(ctx, index, estate);
+      // §5-WIRES W6: a closed estate leaves no ladder — whatever face no claim covered is
+      // extinguished by wire, so a dead firm's debt cannot stand on a book nobody holds.
+      if (comp) rebuildLadder(ctx.v2, { id: comp.id, ticker: comp.ticker, region: comp.region }, [], 'estate closed: ladder extinguished');
       const realised = realisedDebtRecoveryRate(estate);
       if (realised !== undefined) {
         const history = [...(reg.realisedRecoveryRates ?? []), Number(realised.toFixed(4))];
@@ -363,9 +369,17 @@ function reduceHolding(
         leftUSD -= takeUSD;
         if (takeUSD > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeUSD });
       }
-      const ticker = index.companyById.get(companyId)?.ticker ?? companyId;
-      takes.forEach((t) => retireHolding(index.v2, { kind: 'INSTITUTION', id }, { kind: 'COMPANY', ticker },
-        { instrumentType: t.type, instrumentId: companyId, issuerRegion: t.region, valueUSD: t.usd }, isLoss ? 'estate: claim written off' : 'estate: claim recovered'));
+      // §5-WIRES W6: the holder's paper goes to the region's clearing house (the register side);
+      // the dead issuer's ladder retires the same face against the house (the ladder side), so the
+      // two halves of one claim meet there and the issuer's wires count once (as every action does).
+      const dead = index.companyById.get(companyId);
+      takes.forEach((t) => {
+        transferHolding(index.v2, { kind: 'INSTITUTION', id }, { kind: 'CLEARING_HOUSE', region: t.region },
+          { instrumentType: t.type, instrumentId: companyId, issuerRegion: t.region, valueUSD: t.usd }, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
+        if (dead && isTrancheKind(t.type)) {
+          retireLadderFace(index.v2, { id: dead.id, ticker: dead.ticker, region: dead.region }, t.type as 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER', t.usd, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
+        }
+      });
       index.touchedEntityIds.add(id);
     }
     e.totalAssetsUSD = Math.max(0, e.totalAssetsUSD - (isLoss ? amountUSD : 0));
@@ -396,6 +410,11 @@ function reduceHolding(
     // cash arriving against an asset this ledger no longer carries. Both branches then balance
     // by construction, whatever the rows hold.
     const extinguishedUSD = amountUSD - leftUSD;
+    // §5-WIRES W6: the facility comes off the dead issuer's ladder by the same face, bank → issuer.
+    const deadFirm = index.companyById.get(companyId);
+    if (deadFirm && extinguishedUSD > 0) {
+      retireLadderFace(index.v2, { id: deadFirm.id, ticker: deadFirm.ticker, region: deadFirm.region }, 'BANK_FACILITY', extinguishedUSD, isLoss ? 'estate: facility written off' : 'estate: facility recovered');
+    }
     company.bankBalanceSheet = {
       ...bookPnL(sheet, isLoss ? -extinguishedUSD : leftUSD,
         isLoss ? 'estate loan write-off' : 'estate recovery income', ticker),

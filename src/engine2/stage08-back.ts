@@ -67,7 +67,7 @@ const round3 = (v: number) => Math.round(v * 1000) / 1000;
 const round4 = (v: number) => Math.round(v * 10000) / 10000;
 
 
-const STANDARD_CORP_TENOR_YEARS = 5;
+export const STANDARD_CORP_TENOR_YEARS = 5;
 
 /** IND4 — a firm's payout discipline is its INDUSTRY's, from the registry. */
 const DEFAULT_MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
