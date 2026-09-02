@@ -12,11 +12,11 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `81b6efc` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
+- HEAD `437f556` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
   earlier one; the session that owns it may push nowhere else.)
-- **Next step: §3 step 4**, then 5, 6, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 5**, then 6, 7, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `81b6efc` —
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `437f556` —
   **95 violations in 26 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
   (24 vs 26 families is cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
@@ -185,10 +185,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-4. **The goods mint.** `goods-ledger.ts:92-99` sells units that never existed and records
-   `mintedUnits` so W4 can name it. The auction must not be able to sell what does not exist:
-   ration the sale at the stock. Delete the `Math.max(0, held)` and the `Math.max(0, unitPriceUSD)`
-   at `:125` with it.
 5. **The estate that never closes.** `estate-resolution.ts:530` sets `assets.cashUSD` once and
    nothing decrements it, so the close test at `:230` can never pass and holders keep dead paper for
    ever. Re-read cash weekly. Same step: claims open at the holder row's marked value (`:497-520`)
@@ -2337,3 +2333,17 @@ loan's full size, and now delivers what it holds. Both guards measure their resi
 the quantities the walk touched, because a row-by-row subtraction's leftover is float noise.
 Measured (SHOCKS=0 WEEKS=16): **95 violations → 95**, money clean, unowned 0.00B, and sixteen
 weeks now run with all four invariants asserted.
+
+**4. The goods mint.** (`437f556`) `settleOutputInventory` wrote a seller's finished stock as
+`max(0, held)` and booked the shortfall as `mintedUnits`: the wires said the goods had left, the
+stock said they were never there, and the difference was created so the identity would still
+close. A stock cannot be negative and no sale may make it one — the sale that oversold is now the
+defect, named at the write site, with float noise on a sum of thousands of lots treated as zero.
+`deliverGoods`'s `priceUSD: Math.max(0, unitPriceUSD)` turned a negative price into a free
+delivery and defeated `wirePush`'s own guard; it defects. With the mint impossible `mintedUnits`
+can never be non-zero, so the field, the **W4b check that read it** and its term in the goods
+identity are deleted from the ledger, the wire journal, the state type and the audit; W4's real
+identity check stands. **The rationing the plan asked for already existed** — contracts settle at
+`min(owed, available)` and the open market is offered only what they left, which is why W4b never
+fired; the clamp was latent, not absent. Measured (SHOCKS=0 WEEKS=16): **95 violations in 26
+families → 95 in 26**, money clean, unowned 0.00B, every week count unmoved.
