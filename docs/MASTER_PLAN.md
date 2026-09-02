@@ -360,7 +360,7 @@ AU resumes when the WIRES campaign (row 11) is done or the user says so. Push ev
 auto-deploys Pages, and `android/**` changes auto-publish the APK — see §2.4).
 
 **HANDOVER STATE (2026-09-02, end of the WIRES session — for a fresh session; the record is §7.379):**
-HEAD is `702d26a` on `claude/master-plan-review-u0y2q6`, pushed to that branch AND `main`, tree
+HEAD is the plan-review commit after `702d26a` (the last engine commit) on `claude/master-plan-review-u0y2q6`, pushed to that branch AND `main`, tree
 clean. **What is built** (§5-WIRES, §7.367–378): W1 money wires, W2 securities, W3 tranches, W4
 goods, W6 births/deaths (W5 void), D complete for its three named quantities, N's dated wire with
 corporate tax as its carrier, A's account store as the authority of the settlement pass with the
