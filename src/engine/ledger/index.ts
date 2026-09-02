@@ -18,6 +18,8 @@ export { partyId, partyOf, partyKey, partyFromKey } from './party';
 export type { PartyModule } from './parties';
 export { PARTY_REGISTRY, partyModule, holdsDeposit, isBankingSystem, isModelledParty } from './parties';
 export { creditHolderBalance } from './balance';
+export type { WireInstruction, WireJournal, AssetKind } from './wire';
+export { wire, wirePush, newWireJournal, setActiveWireJournal, activeWireJournal, internAsset, assetText, assetKindOfId, summarizeWires, ASSET_KINDS } from './wire';
 
 /**
  * Record a conserved payment: payer down, payee up, one row in the week's journal. This IS

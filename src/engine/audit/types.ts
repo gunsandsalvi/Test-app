@@ -8,7 +8,7 @@
 import { GameState } from '../../types';
 
 export interface AuditFinding {
-  family: 'M' | 'O' | 'P' | 'X' | 'F' | 'N';
+  family: 'M' | 'O' | 'P' | 'X' | 'F' | 'N' | 'W';
   check: string;
   week: number;
   message: string;

@@ -125,6 +125,10 @@ export interface GameState {
    *
    * SCALE: columns, not objects — see stages/settlement.ts's PaymentJournal. */
   pendingPaymentJournal?: import('../engine/simulation/stages/settlement').PaymentJournal;
+  /** §5-WIRES — the next wire number (every asset move is numbered; the counter never resets). */
+  nextWireId?: number;
+  /** §5-WIRES — last week's wires, summarised: count and value by asset kind. */
+  lastWires?: { count: number; byKind: Record<string, number>; valueUSDByKind: Record<string, number>; /** money wires recorded after the last pass — they settle next week (N: dated wires) */ moneyPendingUSD: number };
   regions: Record<RegionId, Region>;
   fxPairs: FxPair[];
   companies: Company[];

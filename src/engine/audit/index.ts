@@ -12,6 +12,7 @@ import { auditPrices } from './prices';
 import { auditAccounts } from './accounts';
 import { auditNames } from './names';
 import { AuditSnapshot, snapshotOf } from './snapshot';
+import { auditWires } from './wires';
 
 export type { AuditFinding } from './types';
 
@@ -28,11 +29,12 @@ export function auditWeek(state: GameState, week: number): AuditFinding[] {
   run('prices', () => auditPrices(state, week));
   run('accounts', () => auditAccounts(prev, state, week));
   run('names', () => auditNames(state, week));
+  run('wires', () => auditWires(prev, state, week));
   lastSnapshot = snapshotOf(state);
   return out;
 }
 
-const FAMILY_WORDS: Record<string, string> = { M: 'money', O: 'ownership', P: 'prices', X: 'cross-market', F: 'accounts', N: 'names' };
+const FAMILY_WORDS: Record<string, string> = { M: 'money', O: 'ownership', P: 'prices', X: 'cross-market', F: 'accounts', N: 'names', W: 'wires' };
 
 /** The scoreboard: per check, the weeks it failed, the worst size, the last message. */
 export function auditSummary(findings: AuditFinding[], weeks: number): string[] {

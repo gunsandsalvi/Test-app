@@ -18,10 +18,10 @@ export interface RegionSnapshot {
   householdInTransitUSD: number;
   bankLoansUSD: number;
 }
-export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>>;
+export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number };
 
 export function snapshotOf(state: GameState): AuditSnapshot {
-  const out: AuditSnapshot = {};
+  const out: AuditSnapshot = { moneyPendingUSD: state.lastWires?.moneyPendingUSD ?? 0 };
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;

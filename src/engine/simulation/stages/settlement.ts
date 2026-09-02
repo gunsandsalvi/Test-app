@@ -36,6 +36,8 @@ import { WeeklyStepContext } from './context';
  *  the two parties that bank at the central bank (the government and the central bank itself). */
 export type { PartyRef } from '../../ledger/party';
 import { PartyRef, partyId, partyOf } from '../../ledger/party';
+import { activeWireJournal, wirePush, MONEY_ASSET_ID, ASSET_KINDS } from '../../ledger/wire';
+const MONEY_KIND_ID = ASSET_KINDS.indexOf('MONEY');
 import { PaymentCategory, categoryOfReason } from '../../ledger/payment-category';
 import { assertNever } from '../../../domain/defect';
 
@@ -81,6 +83,13 @@ export function newPaymentJournal(): PaymentJournal {
 /** SCALE (§7.305 step 2) — one journal row, typed-array columns with doubling growth: the
  *  ~200k-and-growing number[] pushes a week were the settlement file's own measured mass. */
 export function journalPush(j: PaymentJournal, payerId: number, payeeId: number, amountUSD: number, reasonId: number): void {
+  // §5-WIRES W1: a party "paying itself" moves nothing between parties — the SME tier buying
+  // its own output, a firm's line consuming its own — so it is no wire and no row: an honest
+  // no-op, not a defect (the wire ledger rejects a self-wire from a direct caller).
+  if (payerId === payeeId) return;
+  // §5-WIRES W1: a money row IS a wire. The wire is written first, numbered; the payment journal
+  // is settlement's projection of the week's money wires.
+  wirePush(activeWireJournal(), payerId, payeeId, MONEY_KIND_ID, MONEY_ASSET_ID, amountUSD, 1, reasonId, activeWireJournal().week);
   if (j.n >= j.payerId.length) {
     const cap = j.payerId.length * 2;
     const gi = (old: Int32Array) => { const a = new Int32Array(cap); a.set(old); return a; };

@@ -10,6 +10,7 @@
  * instead of being an accident of variable scope.
  */
 
+import { newWireJournal } from '../../ledger/wire';
 import { newPaymentJournal } from './settlement';
 import { ensureV2 } from '../../../engine2/world';
 import {
@@ -151,6 +152,9 @@ export interface WeeklyStepContext {
   holdingsTable?: import('../../columns/holdings-table').HoldingsTable;
   /** SCALE: the week's payments as four parallel columns (stages/settlement.ts). */
   paymentJournal: import('./settlement').PaymentJournal;
+  /** §5-WIRES — the week's wire journal: every asset move, numbered. Installed as the active
+   *  journal by core.ts before the first stage; read back into the state at the end. */
+  wireJournal: import('../../ledger/wire').WireJournal;
   /** SETL6 — the running net of those instructions per party: what each has committed to pay or
    * is due to receive before the settlement pass runs. Read through
    * `pendingSettlementUSD` (stages/settlement.ts); maintained by `pay`. */
@@ -355,6 +359,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     paymentJournal: (state as { pendingPaymentJournal?: import('./settlement').PaymentJournal })
       .pendingPaymentJournal ?? newPaymentJournal(),
     pendingNetById: [],
+    wireJournal: newWireJournal((state as { nextWireId?: number }).nextWireId ?? 1, state.currentWeek + 1),
     pendingTouchedIds: [],
     creditEventsThisWeek: [],
     issuerTickerById: new Map(state.companies.map((c) => [c.id, c.ticker])),

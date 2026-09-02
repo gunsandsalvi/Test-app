@@ -15,6 +15,7 @@ import { createInitialContext } from './stages/context';
 import { StageDependencyTrace, stageTraceEnabled } from './stage-deps';
 import { BankIdentityTrace, bankIdentityTraceEnabled } from './bank-identity-trace';
 import { CentralBankIdentityTrace, centralBankIdentityTraceEnabled } from './central-bank-identity-trace';
+import { setActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
 import { runRegionMacroStage } from './stages/02-region-macro';
@@ -138,6 +139,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   const trace = stageTraceEnabled() ? new StageDependencyTrace() : undefined;
   const idTrace = bankIdentityTraceEnabled() ? new BankIdentityTrace() : undefined;
   idTrace?.begin(state, baseCtx);
+  // §5-WIRES: the week's wire journal is active from the first stage to the last write-back.
+  setActiveWireJournal(baseCtx.wireJournal);
   const cbTrace = centralBankIdentityTraceEnabled() ? new CentralBankIdentityTrace() : undefined;
   cbTrace?.begin(state, baseCtx);
   const timings: StageTiming[] = [];
@@ -458,5 +461,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // SEG1: payments recorded after this week's settlement cutoff settle next cycle instead of
     // dying with the context (they used to be silently dropped — tender proceeds never landed).
     pendingPaymentJournal: ctx.paymentJournal,
+    nextWireId: ctx.wireJournal.base + ctx.wireJournal.n,
+    lastWires: summarizeWires(ctx.wireJournal, (() => { let s = 0; for (let i = 0; i < ctx.paymentJournal.n; i++) s += ctx.paymentJournal.amountUSD[i]; return s; })()),
   }, timings, stageTrace: trace };
 }
