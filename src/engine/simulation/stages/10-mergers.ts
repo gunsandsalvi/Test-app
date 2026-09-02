@@ -321,7 +321,10 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     const mergeableAcquirerTranches = acquirerLadder.filter(t => !heldTrancheIds.has(t.id));
 
     protectedTargetTranches.forEach(t => {
-      const transferredTranche = { ...t, id: `${t.id}-acq-${ctx.nextWeek}` };
+      // §5-CLOSE N2: the tranche is the ACQUIRER'S now and its id says so (the position that
+      // protected it is re-pointed below, so nothing is orphaned); the old id stays inside for
+      // the lineage.
+      const transferredTranche = { ...t, id: `${acquirer.ticker}-ACQ${ctx.nextWeek}-${t.id}` };
       protectedAcquirerTranches.push(transferredTranche);
       ctx.workingPositions = ctx.workingPositions.map(p => {
         if (p.symbol === target.ticker && p.trancheId === t.id) {
