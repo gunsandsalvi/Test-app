@@ -43,7 +43,8 @@ function p1(state: GameState, week: number): AuditFinding[] {
 function p2(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   let wide = 0, n = 0;
-  state.companies.forEach((c) => { if (!isActiveCompany(c) || !(c.cdsSpreadBps > 0) || !(c.oasSpreadBps > 0)) return; n++; if (Math.abs(c.cdsSpreadBps - c.oasSpreadBps) > Math.max(150, c.oasSpreadBps * 0.75)) wide++; });
+  // Only names whose protection book CLEARED this week: a stale print is a quote, not a price.
+  state.companies.forEach((c) => { if (!isActiveCompany(c) || !(c.cdsSpreadBps > 0) || !(c.oasSpreadBps > 0) || c.cdsClearedWeek !== state.currentWeek) return; n++; if (Math.abs(c.cdsSpreadBps - c.oasSpreadBps) > Math.max(150, c.oasSpreadBps * 0.75)) wide++; });
   if (wide > n * 0.1) out.push({ family: 'P', check: 'P2 CDS basis bounded', week, usd: wide, message: `${wide} of ${n} names carry a CDS more than 150bp or 75% away from the bond` });
   const closed = (state.estates ?? []).filter((e) => e.closedWeek !== undefined);
   if (closed.length >= 5) {

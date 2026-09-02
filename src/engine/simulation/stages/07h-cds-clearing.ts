@@ -199,6 +199,9 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
       // THE PRICE. `comp.cdsSpreadBps` was `oas + a random draw`, clamped to [10, 5000]; it is
       // what this book cleared at, with no bound on either end (rule 15).
       issuer.cdsSpreadBps = Number(clearedBps.toFixed(1));
+      // §5-CLOSE P2: the week this print was struck — a name with no protection book this week
+      // carries last print, which is a quote, not a price, and the basis test reads only prices.
+      issuer.cdsClearedWeek = ctx.nextWeek;
       // ...and the BASIS, the second cross-market agreement test this model can run.
       issuer.cdsBasisBps = Number((clearedBps - issuer.oasSpreadBps).toFixed(1));
 

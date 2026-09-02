@@ -502,6 +502,8 @@ export interface Company {
    * and it is now what the protection book actually cleared at (07h).
    */
   cdsSpreadBps: number;
+  /** §5-CLOSE P2 — the week the protection book last cleared this name (undefined: never). */
+  cdsClearedWeek?: number;
   /**
    * CRD/DER2 — the CDS BASIS: the cleared protection spread less this issuer's cleared cash OAS.
    * An OUTCOME, and the second cross-market agreement test this model can run after DER1's swap
