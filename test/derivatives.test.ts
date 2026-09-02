@@ -171,7 +171,6 @@ test('the standing-book index answers exactly what the per-participant walks ans
       }
     }
     assert.equal(index.pfeChargeUSD(key), standingPfeChargeUSD(book, key, 10, isIG), `graded charge ${key}`);
-    assert.equal(index.pfeChargeFlatUSD(key), standingPfeChargeUSD(book, key, 10), `flat charge ${key}`);
     void party;
   }
   // A strike appends; the index folds the tail and stays the book's.

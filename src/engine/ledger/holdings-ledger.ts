@@ -65,25 +65,42 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   });
 }
 
-/** Take from the holder's row(s) of this instrument; a row emptied is unlinked. */
+/** A row still worth keeping on the chain: over a dollar, or carrying shares. */
+const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
+  H.qtyUSD[r] > 1 || (!Number.isNaN(H.shares[r]) && H.shares[r] > 1e-6);
+
+/**
+ * Take from the holder's row(s) of this instrument; a row emptied is unlinked. One walk of the
+ * chain: the debit lands on its rows and the walk notes whether any row (this one or a residue
+ * elsewhere on the book) has to leave. Only then is the chain relinked — the relink rebuilds
+ * the whole chain and the corporate-action pass debits every holder per instrument, so
+ * relinking on every hit was four walks and an allocation per action (§7.383).
+ */
 function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const H = mutableHoldings(v2);
   const tRef = internString(v2, spec.instrumentType), iRef = internString(v2, spec.instrumentId);
   let leftUSD = spec.valueUSD; let leftShares = spec.shares ?? Number.NaN;
-  const kept: number[] = []; let touched = false;
+  let hit = false; let drops = false;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] === tRef && H.instrRef[r] === iRef && (leftUSD > 1e-9 || leftShares > 1e-12)) {
-      touched = true;
+      hit = true;
       const takeUSD = Math.min(leftUSD, H.qtyUSD[r]);
       H.qtyUSD[r] -= takeUSD; leftUSD -= takeUSD;
       if (!Number.isNaN(leftShares) && !Number.isNaN(H.shares[r])) {
         const takeSh = Math.min(leftShares, H.shares[r]); H.shares[r] -= takeSh; leftShares -= takeSh;
       }
     }
-    if (H.qtyUSD[r] > 1 || (!Number.isNaN(H.shares[r]) && H.shares[r] > 1e-6)) kept.push(r);
-    else touched = true;
+    if (!keepsRow(H, r)) drops = true;
   }
-  if (touched) relinkBook(v2, holderId, kept);
+  if (drops) {
+    const kept: number[] = [];
+    for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) if (keepsRow(H, r)) kept.push(r);
+    relinkBook(v2, holderId, kept);
+  } else if (hit) {
+    // What a relink of an unchanged chain did besides relinking: the book is synced and dirty.
+    H.synced.add(holderId);
+    markBookDirty(v2, holderId);
+  }
 }
 
 function wireHolding(from: PartyRef, to: PartyRef, spec: HoldingSpec, reason: string): number {
