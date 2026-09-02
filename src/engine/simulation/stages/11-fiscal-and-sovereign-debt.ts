@@ -22,7 +22,7 @@ import {
 import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
-import { pay } from './settlement';
+import { pay, dueToPayeeUSD, partyId, internReason, CORPORATE_TAX_REASON, settlementWeek } from './settlement';
 import { retireHolding } from '../../ledger/holdings-ledger';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
@@ -506,7 +506,12 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       });
     }
 
-    const corporateTaxWeeklyUSD = ctx.taxCollectedByRegion[regionId] ?? 0;
+    // §5-WIRES N: the week's corporate tax receipt is the dated rows falling due to this treasury —
+    // the ones the mid-week pass already settled (the report's treasury flows, this week's) plus
+    // the ones still in the journal for the close (measured §7.376: counting the journal alone
+    // missed the carried rows the mid-week pass had settled, and F2 printed at the quarter).
+    const corporateTaxWeeklyUSD = (ctx.lastSettlementReport?.treasuryFlowsByRegion.get(regionId)?.get(CORPORATE_TAX_REASON) ?? 0)
+      + dueToPayeeUSD(ctx.paymentJournal, partyId({ kind: 'GOVERNMENT', region: regionId }), internReason(CORPORATE_TAX_REASON), settlementWeek());
     reg.taxCollectedCorporateUSD = Math.round(corporateTaxWeeklyUSD);
     // FISCAL_TRACE=1 — the week's ACCRUAL by base (the smooth rate, not the lumpy remittance).
     if (process.env.FISCAL_TRACE === '1') {

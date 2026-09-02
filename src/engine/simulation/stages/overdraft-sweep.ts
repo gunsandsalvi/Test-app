@@ -10,7 +10,7 @@
  */
 import { WeeklyStepContext } from './context';
 import { RegionId } from '../../../types';
-import { pay, partyId, PartyRef } from './settlement';
+import { pay, partyId, PartyRef, settlementWeek, rowDue } from './settlement';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { smePoolId, facilityMarginBpsFor } from './bank-lending';
 import { PrimeBrokerageLine } from '../../../domain/prime-brokerage';
@@ -28,7 +28,9 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
   // negative after the first sweep (JTLN −7.8B, UYIR −8.8B).
   const journal = ctx.paymentJournal;
   const netById = new Map<number, number>();
+  const week = settlementWeek();
   for (let n = 0; n < journal.n; n++) {
+    if (!rowDue(journal, n, week)) continue; // §5-WIRES N: a dated row is not this close's money
     netById.set(journal.payerId[n], (netById.get(journal.payerId[n]) ?? 0) - journal.amountUSD[n]);
     netById.set(journal.payeeId[n], (netById.get(journal.payeeId[n]) ?? 0) + journal.amountUSD[n]);
   }

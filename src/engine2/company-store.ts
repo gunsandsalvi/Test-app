@@ -39,7 +39,7 @@ const F64_FIELDS = [
   'bankRiskFactor', 'defaultedWeek', 'institutionalMarketShare', 'beta', 'seniorBondYield',
   'oasSpreadBps', 'cdsSpreadBps', 'cdsBasisBps', 'shortInterestShares',
   'inputSupplyConstraintFactor', 'recentFulfillmentEMA', 'deliveryReliability',
-  'recurringRevenueBaseUSD', '_targetProductionUSD', 'accruedTaxLiabilityUSD', 'bankResolvedWeek',
+  'recurringRevenueBaseUSD', '_targetProductionUSD', 'bankResolvedWeek',
   'taxLossCarryforwardUSD', 'taxBasisPpeUSD', 'deferredTaxLiabilityUSD', 'lastWeekSalesUSD',
   'offeredWageIndex', 'unfilledVacancyShare', 'lastWeekPurchasesUSD', 'expectedEbitdaUSD',
 ] as const;

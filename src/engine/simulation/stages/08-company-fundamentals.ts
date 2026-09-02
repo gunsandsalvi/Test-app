@@ -250,7 +250,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     offerings: PrimaryOffering[];
     news: NewsItem[];
     taxAccrued: Record<string, number>;
-    taxCollected: Record<string, number>;
     journal: PaymentJournal;
     // §7.317 — the holder-register channels, shard-isolated like the tax maps so the kernel
     // touches no shared mutable: accruals and cash merge by per-key ADDITION, the settlement
@@ -272,7 +271,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     offerings: ctx.primaryOfferingsWorking,
     news: refinanceNews,
     taxAccrued: ctx.taxAccruedByRegion,
-    taxCollected: ctx.taxCollectedByRegion,
     journal: ctx.paymentJournal,
     holderAccruals: ctx.pendingHolderAccrualUSD,
     holderCash: ctx.pendingHolderCashUSD,
@@ -287,7 +285,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     ctx.primaryOfferingsWorking = a.offerings;
     refinanceNews = a.news;
     ctx.taxAccruedByRegion = a.taxAccrued;
-    ctx.taxCollectedByRegion = a.taxCollected;
     ctx.paymentJournal = a.journal;
     ctx.pendingHolderAccrualUSD = a.holderAccruals;
     ctx.pendingHolderCashUSD = a.holderCash;
@@ -299,7 +296,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const held = snapshotAccums();
     installAccums({
       creditEvents: [], defaulted: [], ratings: [], earnings: [], offerings: [], news: [],
-      taxAccrued: {}, taxCollected: {}, journal: newPaymentJournal(),
+      taxAccrued: {}, journal: newPaymentJournal(),
       holderAccruals: new Map(), holderCash: new Map(),
       holderPayout: new Set(), holderSettlements: new Map(),
     });
@@ -318,17 +315,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     for (const r of Object.keys(mine.taxAccrued)) {
       ctx.taxAccruedByRegion[r] = (ctx.taxAccruedByRegion[r] ?? 0) + mine.taxAccrued[r];
     }
-    for (const r of Object.keys(mine.taxCollected)) {
-      ctx.taxCollectedByRegion[r] = (ctx.taxCollectedByRegion[r] ?? 0) + mine.taxCollected[r];
-    }
     const j = ctx.paymentJournal;
     for (let k = 0; k < mine.journal.n; k++) {
       // §5-WIRES W1: the shard's rows were wired when it journaled them — fold the ROWS.
       journalAppendRow(j, mine.journal.payerId[k], mine.journal.payeeId[k],
-        mine.journal.amountUSD[k], mine.journal.reasonId[k]);
+        mine.journal.amountUSD[k], mine.journal.reasonId[k], mine.journal.settleWeek[k]);
       // §7.321 barrier mode: the running net, applied here in the merged (= original) leg
       // order; in normal shard mode emission already applied it and this replay must not.
-      if (deferMergeAppliesNet) applyPendingLeg(ctx, mine.journal.payerId[k], mine.journal.payeeId[k], mine.journal.amountUSD[k]);
+      if (deferMergeAppliesNet) applyPendingLeg(ctx, mine.journal.payerId[k], mine.journal.payeeId[k], mine.journal.amountUSD[k], mine.journal.settleWeek[k]);
     }
     mine.holderAccruals.forEach((v, k) => {
       ctx.pendingHolderAccrualUSD.set(k, (ctx.pendingHolderAccrualUSD.get(k) ?? 0) + v);
@@ -399,7 +393,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const sweepDelta = new Float64Array(n);
     const taxCapture = {
       accrueUSD: new Float64Array(n).fill(NaN),
-      collectUSD: new Float64Array(n).fill(NaN),
     };
     backDeps.taxCapture = taxCapture;
     // §7.325 W2 — the A POOL: workers run core-A for every active non-profile firm while the
@@ -446,7 +439,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           for (let i = sh.lo; i < sh.hi; i++) {
             shardByRow[i] = sh;
             if (!Number.isNaN(sh.taxAccrue[i])) taxCapture.accrueUSD[i] = sh.taxAccrue[i];
-            if (!Number.isNaN(sh.taxCollect[i])) taxCapture.collectUSD[i] = sh.taxCollect[i];
             const cross = sh.crossings[i];
             if (cross) {
               // The full A crossing, rebuilt: fresh poster continuing the worker's exact cash
@@ -500,8 +492,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const replayShardA = (sh: BackAShardOut, i: number): void => {
       const st = (m: Int32Array) => (i > sh.lo ? m[i - 1] : 0);
       for (let k = st(sh.journalMark); k < sh.journalMark[i]; k++) {
-        journalPush(ctx.paymentJournal, sh.journalPayer[k], sh.journalPayee[k], sh.journalAmount[k], sh.journalReason[k]);
-        applyPendingLeg(ctx, sh.journalPayer[k], sh.journalPayee[k], sh.journalAmount[k]);
+        journalPush(ctx.paymentJournal, sh.journalPayer[k], sh.journalPayee[k], sh.journalAmount[k], sh.journalReason[k], sh.journalSettle[k]);
+        applyPendingLeg(ctx, sh.journalPayer[k], sh.journalPayee[k], sh.journalAmount[k], sh.journalSettle[k]);
       }
       for (let k = st(sh.holderAccMark); k < sh.holderAccMark[i]; k++) {
         const [key, v] = sh.holderAcc[k];
@@ -528,8 +520,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         for (let k = s(marks.news); k < marks.news[i]; k++) refinanceNews.push(acc.news[k]);
         const J = acc.journal;
         for (let k = s(marks.journalN); k < marks.journalN[i]; k++) {
-          journalAppendRow(ctx.paymentJournal, J.payerId[k], J.payeeId[k], J.amountUSD[k], J.reasonId[k]);
-          applyPendingLeg(ctx, J.payerId[k], J.payeeId[k], J.amountUSD[k]);
+          journalAppendRow(ctx.paymentJournal, J.payerId[k], J.payeeId[k], J.amountUSD[k], J.reasonId[k], J.settleWeek[k]);
+          applyPendingLeg(ctx, J.payerId[k], J.payeeId[k], J.amountUSD[k], J.settleWeek[k]);
         }
         for (let k = s(marks.hAcc); k < marks.hAcc[i]; k++) {
           const [key, v] = sl.hAcc[k];
@@ -548,9 +540,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const regKey = backLanes.region[i];
       if (!Number.isNaN(taxCapture.accrueUSD[i])) {
         ctx.taxAccruedByRegion[regKey] = (ctx.taxAccruedByRegion[regKey] ?? 0) + taxCapture.accrueUSD[i];
-      }
-      if (!Number.isNaN(taxCapture.collectUSD[i])) {
-        ctx.taxCollectedByRegion[regKey] = (ctx.taxCollectedByRegion[regKey] ?? 0) + taxCapture.collectUSD[i];
       }
     }
     // §7.321 — the region books' netInflow REBUILT on the exact per-firm deltas in the

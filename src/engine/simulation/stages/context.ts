@@ -107,7 +107,6 @@ export interface WeeklyStepContext {
    *  write after consumption throws now; a post-08 stage writes the LIVE sheet. */
   bankSheetChannelClosed?: boolean;
   /** PUB1b: corporate tax remitted this week, by region — collected into the TGA in stage 11. */
-  taxCollectedByRegion: Record<string, number>;
   /** §5-CLOSE F2: employer payroll tax remitted this week by every employer (firms in 08, pools in
    *  03), as payments to the treasury — what stage 11 reports as payroll revenue. */
   payrollTaxByRegion: Record<string, number>;
@@ -333,7 +332,6 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     currentWeekMod13: ((nextWeek - 1) % 13) + 1,
 
     companyUpdates: {},
-    taxCollectedByRegion: {},
     payrollTaxByRegion: {},
     taxAccruedByRegion: {},
     // The containment gate for the private tier (HC Wave 1): every existing stage consumes

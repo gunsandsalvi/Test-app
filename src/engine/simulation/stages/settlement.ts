@@ -47,6 +47,11 @@ export interface PaymentInstruction {
   amountUSD: number;
   /** The named real flow — carried into the ledgers so a dollar is traceable to why it moved. */
   reason: string;
+  /** §5-WIRES N — the week the money moves; this week when omitted. An obligation falling due
+   *  later is a DATED wire in the journal, not a balance on a side map: settlement holds the row
+   *  until its week, it counts against nobody's spendable balance until then, and what a party
+   *  owes is the sum of its undue rows. */
+  settleWeek?: number;
 }
 
 /**
@@ -67,6 +72,8 @@ export interface PaymentJournal {
   payeeId: Int32Array;
   amountUSD: Float64Array;
   reasonId: Int32Array;
+  /** §5-WIRES N: the week the row settles; a row dated past the pass's week is carried. */
+  settleWeek: Int32Array;
 }
 
 export function newPaymentJournal(): PaymentJournal {
@@ -77,20 +84,43 @@ export function newPaymentJournal(): PaymentJournal {
     payeeId: new Int32Array(cap),
     amountUSD: new Float64Array(cap),
     reasonId: new Int32Array(cap),
+    settleWeek: new Int32Array(cap),
   };
 }
 
+/** §5-WIRES N — CORPORATE TAX IS A DATED WIRE. The walk's weekly accrual is a row to the treasury
+ *  dated at the quarter; what a firm has accrued and not paid is the sum of its undue rows, and
+ *  what the treasury collects in a week is the sum of the rows that fall due. */
+export const CORPORATE_TAX_REASON = 'cash taxes (accrued, due at the quarter)';
+/** Σ of a payer's rows under one reason dated PAST `week` — what it owes and has not paid. */
+export function undueOwedByPayerUSD(j: PaymentJournal, payerId: number, reasonId: number, week: number): number {
+  let s = 0;
+  for (let n = 0; n < j.n; n++) if (j.payerId[n] === payerId && j.reasonId[n] === reasonId && j.settleWeek[n] > week) s += j.amountUSD[n];
+  return s;
+}
+/** Σ of the rows to one payee under one reason due AT OR BEFORE `week` — what falls due this pass. */
+export function dueToPayeeUSD(j: PaymentJournal, payeeId: number, reasonId: number, week: number): number {
+  let s = 0;
+  for (let n = 0; n < j.n; n++) if (j.payeeId[n] === payeeId && j.reasonId[n] === reasonId && j.settleWeek[n] <= week) s += j.amountUSD[n];
+  return s;
+}
+
+/** §5-WIRES N: the week this step is settling — the wire journal's, the one clock. */
+export const settlementWeek = (): number => activeWireJournal().week;
+/** A row is due at a pass when its week is this week or earlier. */
+export const rowDue = (j: PaymentJournal, n: number, week: number): boolean => j.settleWeek[n] <= week;
+
 /** SCALE (§7.305 step 2) — one journal row, typed-array columns with doubling growth: the
  *  ~200k-and-growing number[] pushes a week were the settlement file's own measured mass. */
-export function journalPush(j: PaymentJournal, payerId: number, payeeId: number, amountUSD: number, reasonId: number): void {
+export function journalPush(j: PaymentJournal, payerId: number, payeeId: number, amountUSD: number, reasonId: number, settleWeek: number = activeWireJournal().week): void {
   // §5-WIRES W1: a party "paying itself" moves nothing between parties — the SME tier buying
   // its own output, a firm's line consuming its own — so it is no wire and no row: an honest
   // no-op, not a defect (the wire ledger rejects a self-wire from a direct caller).
   if (payerId === payeeId) return;
   // §5-WIRES W1: a money row IS a wire. The wire is written first, numbered; the payment journal
-  // is settlement's projection of the week's money wires.
-  wirePush(activeWireJournal(), payerId, payeeId, MONEY_KIND_ID, MONEY_ASSET_ID, amountUSD, 1, reasonId, activeWireJournal().week);
-  journalAppendRow(j, payerId, payeeId, amountUSD, reasonId);
+  // is settlement's projection of the week's money wires. §5-WIRES N: both carry the row's week.
+  wirePush(activeWireJournal(), payerId, payeeId, MONEY_KIND_ID, MONEY_ASSET_ID, amountUSD, 1, reasonId, settleWeek);
+  journalAppendRow(j, payerId, payeeId, amountUSD, reasonId, settleWeek);
 }
 
 /**
@@ -101,7 +131,7 @@ export function journalPush(j: PaymentJournal, payerId: number, payeeId: number,
  * §7.367's re-measure). A worker thread's rows come back through `journalPush` — its own wire
  * journal is scratch and dies with the job.
  */
-export function journalAppendRow(j: PaymentJournal, payerId: number, payeeId: number, amountUSD: number, reasonId: number): void {
+export function journalAppendRow(j: PaymentJournal, payerId: number, payeeId: number, amountUSD: number, reasonId: number, settleWeek: number): void {
   if (j.n >= j.payerId.length) {
     const cap = j.payerId.length * 2;
     const gi = (old: Int32Array) => { const a = new Int32Array(cap); a.set(old); return a; };
@@ -110,11 +140,13 @@ export function journalAppendRow(j: PaymentJournal, payerId: number, payeeId: nu
     j.payeeId = gi(j.payeeId);
     j.amountUSD = gf(j.amountUSD);
     j.reasonId = gi(j.reasonId);
+    j.settleWeek = gi(j.settleWeek);
   }
   j.payerId[j.n] = payerId;
   j.payeeId[j.n] = payeeId;
   j.amountUSD[j.n] = amountUSD;
   j.reasonId[j.n] = reasonId;
+  j.settleWeek[j.n] = settleWeek;
   j.n++;
 }
 
@@ -182,7 +214,11 @@ export function pay(ctx: WeeklyStepContext, instruction: PaymentInstruction): vo
   if (!guardPayableAmount(instruction)) return;
   const payer = partyId(instruction.payer);
   const payee = partyId(instruction.payee);
-  journalPush(ctx.paymentJournal, payer, payee, instruction.amountUSD, internReason(instruction.reason));
+  const week = settlementWeek();
+  const settleWeek = instruction.settleWeek ?? week;
+  journalPush(ctx.paymentJournal, payer, payee, instruction.amountUSD, internReason(instruction.reason), settleWeek);
+  // §5-WIRES N: a dated row is nobody's committed money until its week.
+  if (settleWeek > week) return;
   addPending(ctx, payer, -instruction.amountUSD);
   addPending(ctx, payee, instruction.amountUSD);
 }
@@ -195,13 +231,15 @@ export function pay(ctx: WeeklyStepContext, instruction: PaymentInstruction): vo
  */
 export function payByIds(
   ctx: WeeklyStepContext, payerId: number, payeeId: number, amountUSD: number, reasonId: number,
+  settleWeek: number = settlementWeek(),
 ): void {
   if (!(amountUSD > 1e-9 && isFinite(amountUSD))) {
     if (amountUSD >= -1e-9 && amountUSD <= 1e-9) return; // exact zero or dust: an honest no-op
     throw new Error(`ENGINE DEFECT: payByIds reason#${reasonId} carries amountUSD=${amountUSD} — `
       + 'a NaN or negative amount is a sign/arithmetic error at the caller, not a payment');
   }
-  journalPush(ctx.paymentJournal, payerId, payeeId, amountUSD, reasonId);
+  journalPush(ctx.paymentJournal, payerId, payeeId, amountUSD, reasonId, settleWeek);
+  if (settleWeek > settlementWeek()) return; // §5-WIRES N: dated — not committed until its week
   addPending(ctx, payerId, -amountUSD);
   addPending(ctx, payeeId, amountUSD);
 }
@@ -219,7 +257,8 @@ function addPending(ctx: WeeklyStepContext, id: number, deltaUSD: number): void 
 }
 
 /** §7.321 barrier merge: one journal leg's effect on the running net, applied in merged order. */
-export function applyPendingLeg(ctx: WeeklyStepContext, payerId: number, payeeId: number, amountUSD: number): void {
+export function applyPendingLeg(ctx: WeeklyStepContext, payerId: number, payeeId: number, amountUSD: number, settleWeek: number = settlementWeek()): void {
+  if (settleWeek > settlementWeek()) return; // §5-WIRES N: a dated leg commits nothing yet
   const net = ctx.pendingNetById;
   if (net[payerId] === undefined) { net[payerId] = -amountUSD; ctx.pendingTouchedIds.push(payerId); }
   else net[payerId] += -amountUSD;
@@ -468,7 +507,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const sheetByTicker = traceUnresolved
     ? new Map(ctx.updatedCompanies.filter((c) => c.isBankEntity).map((c) => [c.ticker, !!c.bankBalanceSheet]))
     : undefined;
+  const week = settlementWeek();
   for (let n = 0; n < nInstructions; n++) {
+    if (!rowDue(journal, n, week)) continue; // §5-WIRES N: dated past this pass — carried below
     const amountUSD = journal.amountUSD[n];
     const payerIdx = journal.payerId[n];
     const payeeIdx = journal.payeeId[n];
@@ -748,7 +789,14 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
 
   report.centralBankResidualUSD = centralBankResidualUSD(report);
   ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;
-  ctx.paymentJournal = newPaymentJournal();
+  // §5-WIRES N: the rows dated past this pass are CARRIED — the same journal, the same wires,
+  // settled by the pass of their own week. Nothing else survives the pass.
+  const carried = newPaymentJournal();
+  for (let n = 0; n < nInstructions; n++) {
+    if (rowDue(journal, n, week)) continue;
+    journalAppendRow(carried, journal.payerId[n], journal.payeeId[n], journal.amountUSD[n], journal.reasonId[n], journal.settleWeek[n]);
+  }
+  ctx.paymentJournal = carried;
   clearPendingNet(ctx);
   return report;
 }

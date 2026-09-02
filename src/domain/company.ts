@@ -581,7 +581,7 @@ export interface Company {
   // company so the UI can show real weekly production/purchasing activity, not just the target.
   /** PUB1b — tax accrued but not yet remitted. Real firms accrue weekly and pay quarterly, and
    * that lumpiness is most of what makes a treasury account swing. */
-  accruedTaxLiabilityUSD?: number;
+  // §5-WIRES N: the accrued, unpaid tax is the firm's undue dated rows to the treasury (`undueOwedByPayerUSD`), not a field.
   /** §7.302 — the week this bank was RESOLVED (equity ≤ 0 → purchase-and-assumption by the
    *  region's largest survivor; wholesale haircut by the hole; the shell defaults into the
    *  estate for its register claims). Set once; a resolved bank never trades again. */

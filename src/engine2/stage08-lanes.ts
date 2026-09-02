@@ -85,7 +85,6 @@ export interface BackLanes {
   lastOpportunisticOfferingWeek: Float64Array; // NaN = undefined
   employeeCount: Float64Array;
   employeeCountUpdate: Float64Array;       // NaN = no update / no field (the ?? fallback)
-  accruedTaxLiabilityUSD: Float64Array;    // NaN = undefined
   bankCapitalRatio: Float64Array;          // NaN = no bank sheet
   customerConcentration: Float64Array;     // NaN = undefined
   supplierConcentration: Float64Array;     // NaN = undefined
@@ -152,7 +151,7 @@ export function buildBackLanes(
     earningsWeekModulo: N.earningsWeekModulo, eps: N.eps, cdsSpreadBps: N.cdsSpreadBps, beta: N.beta,
     baselineAnnualRevenueUSD: N.baselineAnnualRevenue, lastOpportunisticOfferingWeek: N.lastOpportunisticOfferingWeek,
     employeeCount: N.employeeCount, employeeCountUpdate: f(),
-    accruedTaxLiabilityUSD: N.accruedTaxLiabilityUSD, bankCapitalRatio: f(),
+    bankCapitalRatio: f(),
     customerConcentration: N.customerConcentration, supplierConcentration: N.supplierConcentration,
     hasVehicle: new Uint8Array(n), boundaryTraceKey: new Array(n),
     occupationMixDrift: new Array(n), maxPayoutRatio: f(),

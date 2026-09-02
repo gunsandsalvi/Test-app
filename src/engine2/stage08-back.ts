@@ -37,7 +37,7 @@ import { PrimaryOffering } from '../domain/primary-market';
 import { EMPLOYER_PAYROLL_TAX_RATE } from '../engine/bootstrap/national-accounts';
 import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/profiles';
 import { measureBeta, regionIndexOf } from '../engine/macro/indices';
-import { pay, payByIds, internReason, PartyRef } from '../engine/simulation/stages/settlement';
+import { pay, payByIds, internReason, PartyRef, settlementWeek, CORPORATE_TAX_REASON } from '../engine/simulation/stages/settlement';
 import { defect } from '../domain/defect';
 import { partyId } from '../engine/ledger/party';
 import { planCapitalProgramme, capacityRetirement } from '../domain/company-week/capital-programme';
@@ -119,7 +119,7 @@ export interface BackKernelDeps {
   /** §7.325 barrier/worker capture: the cash walk's two exact tax amounts by row (NaN = no
    *  write), so the firm-major replay adds the SAME floats the serial walk added — a delta
    *  recovered by subtracting map values would be a different float (§7.324's lesson). */
-  taxCapture?: { accrueUSD: Float64Array; collectUSD: Float64Array };
+  taxCapture?: { accrueUSD: Float64Array };
 }
 
 /** The back half of one company's week — same statements the stage's kernel ran, same order. */
@@ -372,8 +372,18 @@ function makeCashPoster(ticker: string, region: Company['region'], cashUSD: numb
     // SCALE §7.303 — the walk's own party ids, interned once per company: every settled leg
     // used to re-probe two string maps (partyId x2) per post, ~40k+ legs a week.
     const selfPartyId = partyId({ kind: 'COMPANY', ticker });
-    const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true) => {
+    const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true, settleWeek?: number) => {
       if (!isFinite(amountUSD) || amountUSD === 0) return;
+      // §5-WIRES N: a leg dated past this week is an OBLIGATION — journaled now, numbered now,
+      // moving no cash until its week (settlement moves the deposit then). The walk's running
+      // cash is what the firm can spend this week, and a dated row is not that.
+      if (settleWeek !== undefined && settleWeek > settlementWeek()) {
+        const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted dated '${label}' for ${ticker} with no counterparty`);
+        const reasonId = internReason(label);
+        if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, reasonId, settleWeek);
+        else payByIds(ctx, selfPartyId, otherId, -amountUSD, reasonId, settleWeek);
+        return;
+      }
       // SCALE §7.303 — the drill-down rows are display retention with NO consumer anywhere in
       // the tree (grepped: written, never read). ~40 objects x 2,492 firms x 52 weeks of pure
       // GC food; kept only under CASH_LEDGER=1 for debugging.
@@ -444,15 +454,14 @@ function runCashWalk(args: {
   loanCouponDue: boolean;
   cpCouponDue: boolean;
   taxPaidAnnualRateUSD: number;
-  accruedTaxUSD: number;
   currentWeekMod13: number;
   weeklyDebtFundedPortion: number;
   bankCredit: PartyRef | undefined;
-  post: (label: string, amountUSD: number, counterparty?: PartyRef, settle?: boolean) => void;
-  /** §7.325 — this firm's row and the capture columns for the walk's two tax writes. */
+  post: (label: string, amountUSD: number, counterparty?: PartyRef, settle?: boolean, settleWeek?: number) => void;
+  /** §7.325 — this firm's row and the capture column for the walk's tax accrual. */
   row: number;
-  taxCapture?: { accrueUSD: Float64Array; collectUSD: Float64Array };
-}): { accruedTaxUSD: number } {
+  taxCapture?: { accrueUSD: Float64Array };
+}): void {
   const { ctx, companyId, ticker, region, isBanksSector, homeBankTicker,
     carrierFreightRevenueUSD, channelMarginRevenueUSD, declaredDividendYield, marketCapUSD,
     maxPayoutRatio, hasVehicle, boundaryTraceKey,
@@ -463,7 +472,6 @@ function runCashWalk(args: {
     marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
     bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
     currentWeekMod13, weeklyDebtFundedPortion, bankCredit, post, row, taxCapture } = args;
-  let { accruedTaxUSD } = args;
     // ---- S5: the weekly cash walk is an explicit ledger ----
     // One posting helper is the single write path to cash; every entry is a named real flow.
     // The previous walk triple-counted the operating side: an EBITDA/52 accrual PLUS stage 05's
@@ -649,15 +657,15 @@ function runCashWalk(args: {
       // old gate surviving in the cash walk: carryforwards and the accelerated schedule now
       // reach the dollars the treasury actually receives, which is the whole point of them.
       const weeklyAccrualUSD = taxPaidAnnualRateUSD / 52;
-      accruedTaxUSD += weeklyAccrualUSD;
       ctx.taxAccruedByRegion[region] = (ctx.taxAccruedByRegion[region] ?? 0) + weeklyAccrualUSD;
       if (taxCapture) taxCapture.accrueUSD[row] = weeklyAccrualUSD;
-      // currentWeekMod13 runs 1..13, never 0 — the quarter ends on 13.
-      if (currentWeekMod13 === 13 && accruedTaxUSD > 0) {
-        post('cash taxes (quarterly remittance)', -accruedTaxUSD, { kind: 'GOVERNMENT', region: region as Company['region'] });
-        ctx.taxCollectedByRegion[region] = (ctx.taxCollectedByRegion[region] ?? 0) + accruedTaxUSD;
-        if (taxCapture) taxCapture.collectUSD[row] = accruedTaxUSD;
-        accruedTaxUSD = 0;
+      // §5-WIRES N: the week's accrual is a wire to the treasury DATED at the quarter's end
+      // (currentWeekMod13 runs 1..13; the quarter ends on 13, when the row is due at once). The
+      // liability the firm carries is the sum of its undue rows; the treasury's receipt is the
+      // sum of the rows that fall due — neither is a field, neither is a side map.
+      if (weeklyAccrualUSD > 0) {
+        post(CORPORATE_TAX_REASON, -weeklyAccrualUSD, { kind: 'GOVERNMENT', region: region as Company['region'] }, true,
+          settlementWeek() + (13 - currentWeekMod13));
       }
       // Dividends actually leave (they were declared and never deducted — the plan's leak #2).
       // Sized by the board's REAL constraint — earnings — not by yield x market cap: the equity
@@ -689,7 +697,6 @@ function runCashWalk(args: {
       payHoldersCash(ctx, companyId, 'EQUITY', dividendWeeklyUSD);
       post('maintenance funding draw (new tranche proceeds)', weeklyDebtFundedPortion, bankCredit);
     }
-  return { accruedTaxUSD };
 }
 
 /** §7.325 W1 — core-A's comp writes, returned as data by the capital core and applied here.
@@ -872,7 +879,6 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     const carryingCostUSD = F.carryingCostUSD[row];
     const newOutputInventoryBySubUnit = F.outputInv[row];
 
-    let accruedTaxUSD = Number.isNaN(L8.accruedTaxLiabilityUSD[row]) ? 0 : L8.accruedTaxLiabilityUSD[row];
     const newExecutionQuality = F.newExecutionQuality[row];
 
     // BP1c (rule 17): a stage does not switch on a kind — it keys the kind once and calls the
@@ -965,7 +971,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     const __k1 = S08K_PROF ? performance.now() : 0;
     if (S08K_PROF) s08k.capital += __k1 - __k0;
     const { post, cash, cashLedger } = makeCashPoster(L8.ticker[row], L8.region[row], L8.cashUSD[row], ctx, retainCashLedger);
-    const __cw = runCashWalk({
+    runCashWalk({
       ctx,
       companyId: L8.companyId[row],
       ticker: d.backLanes.ticker[row],
@@ -992,10 +998,9 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       newRevenue, newEbitda, carryingCostUSD, weeklyInterest, facilityInterestWeeklyUSD,
       marketBondAccrualUSD, marketLoanAccrualUSD, commercialPaperAccrualUSD,
       bondCouponDue, loanCouponDue, cpCouponDue, taxPaidAnnualRateUSD,
-      accruedTaxUSD, currentWeekMod13, weeklyDebtFundedPortion, bankCredit, post,
+      currentWeekMod13, weeklyDebtFundedPortion, bankCredit, post,
       row, taxCapture: d.taxCapture,
     });
-    accruedTaxUSD = __cw.accruedTaxUSD;
     const newTotalDebt = L8.totalDebtUSD[row];
 
     const newBaselineDividendYield = round4(L8.baselineDividendYield[row] * 0.998 + L8.dividendYield[row] * 0.002);
@@ -1056,7 +1061,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // line, and default only when both are gone. The full sweep decision at the bottom still
     // runs — by then cash is at or below the buffer, so it cannot double-redeem.
   if (S08K_PROF) s08k.cash += performance.now() - __k1;
-  return { accruedTaxUSD, annualInterest, bankCredit, cap, capexCommissionedThisWeekUSD, carryingCostUSD, cash, cashLedger, costDriversUSD, effectiveDebtRate, facilityInterestWeeklyUSD, maintenanceFundingTranches, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCoverage, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLeverage, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, post, recordCredit, sec, stillUnderConstruction, targetProductionUSD, taxPaidAnnualRateUSD, updatedProductLines, weeklyDepreciation, weeklyInterest, weeklyPayrollUSD };
+  return { annualInterest, bankCredit, cap, capexCommissionedThisWeekUSD, carryingCostUSD, cash, cashLedger, costDriversUSD, effectiveDebtRate, facilityInterestWeeklyUSD, maintenanceFundingTranches, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCoverage, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLeverage, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, post, recordCredit, sec, stillUnderConstruction, targetProductionUSD, taxPaidAnnualRateUSD, updatedProductLines, weeklyDepreciation, weeklyInterest, weeklyPayrollUSD };
 }
 
 /** §7.321 the BARRIER: the liquidity redemption against the regional book, first-come in row
@@ -1097,7 +1102,6 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
   // §5-WIRES W3: every principal move in this kernel is a wire through the tranche ledger; the
   // kernel reads the sealed store and asks the ledger to move face for this issuer.
   const issuer = { id: L8.companyId[row], ticker: L8.ticker[row], region: L8.region[row] };
-  const accruedTaxUSD = a.accruedTaxUSD;
   const annualInterest = a.annualInterest;
   const bankCredit = a.bankCredit;
   const cap = a.cap;
@@ -1872,7 +1876,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
     }
     const core = pre ?? runBackCore(comp, row, d);
-    const { accruedTaxUSD, annualInterest, bondCallPremiumUSD, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, cap, capexCommissionedThisWeekUSD, cashLedger, costDriversUSD, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, preActionFixedUSD, preActionFloatingUSD, rowList, sec, settlement, stillUnderConstruction, targetProductionUSD, updatedProductLines, weeklyDepreciation, weeklyPayrollUSD, post, cash } = core;
+    const { annualInterest, bondCallPremiumUSD, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, cap, capexCommissionedThisWeekUSD, cashLedger, costDriversUSD, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, preActionFixedUSD, preActionFloatingUSD, rowList, sec, settlement, stillUnderConstruction, targetProductionUSD, updatedProductLines, weeklyDepreciation, weeklyPayrollUSD, post, cash } = core;
     const L8 = d.backLanes;
     const reg = updatedRegions[L8.region[row]];
     const weekUpdate = companyUpdates[L8.ticker[row]];
@@ -2195,7 +2199,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.previousEmployeeCount = L8.employeeCount[row];
 
-    comp.accruedTaxLiabilityUSD = Math.round(accruedTaxUSD);
 
       // HH6: the wage this firm offers and the hiring difficulty behind it are the labor
       // market stage's decisions — carried through explicitly, like employeeCount above,

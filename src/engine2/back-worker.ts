@@ -52,6 +52,8 @@ export interface BackAShardOut {
   journalPayee: Int32Array;
   journalAmount: Float64Array;
   journalReason: Int32Array;
+  /** §5-WIRES N: the row's settle week. */
+  journalSettle: Int32Array;
   journalMark: Int32Array;
   holderAcc: [string, number][];
   holderAccMark: Int32Array;
@@ -62,7 +64,6 @@ export interface BackAShardOut {
   credits: CreditEvent[];
   creditMark: Int32Array;
   taxAccrue: Float64Array;
-  taxCollect: Float64Array;
   crossings: (ShippedBackCoreA | null)[];
 }
 
@@ -99,14 +100,12 @@ port.on('message', (job: BackAJob) => {
     pendingHolderAccrualPayout: holderPay,
     creditEventsThisWeek: credits,
     taxAccruedByRegion: {},
-    taxCollectedByRegion: {},
     channelShareByRegion: job.channelShareByRegion,
     carrierFreightRevenue: {},
     channelMarginRevenue: {},
   } as unknown as WeeklyStepContext;
   const taxCapture = {
     accrueUSD: new Float64Array(n).fill(NaN),
-    collectUSD: new Float64Array(n).fill(NaN),
   };
   const F = {
     ...job.f,
@@ -170,12 +169,13 @@ port.on('message', (job: BackAJob) => {
     journalPayee: journal.payeeId.slice(0, journal.n),
     journalAmount: journal.amountUSD.slice(0, journal.n),
     journalReason: journal.reasonId.slice(0, journal.n),
+    journalSettle: journal.settleWeek.slice(0, journal.n),
     journalMark,
     holderAcc: [...holderAcc], holderAccMark,
     holderCash: [...holderCash], holderCashMark,
     holderPay: [...holderPay], holderPayMark,
     credits, creditMark,
-    taxAccrue: taxCapture.accrueUSD, taxCollect: taxCapture.collectUSD,
+    taxAccrue: taxCapture.accrueUSD,
     crossings,
   };
   port.postMessage(out);

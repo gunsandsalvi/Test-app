@@ -39,7 +39,7 @@ const NUMERIC_FIELDS = [
   'stockPrice', 'sharesOutstanding', 'employeeCount', 'previousEmployeeCount',
   'baselineEmployeeCount', 'grossPPEUSD', 'accumulatedDepreciationUSD', 'maintenanceCapex',
   'growthCapex', 'capex', 'previousCapex', 'offeredWageIndex', 'unfilledVacancyShare',
-  'inputSupplyConstraintFactor', 'executionQuality', 'oasSpreadBps', 'accruedTaxLiabilityUSD',
+  'inputSupplyConstraintFactor', 'executionQuality', 'oasSpreadBps',
   'revenueVolatility', 'forwardPE', 'baselineRecoveryRate', 'baselineDividendYield',
 ] as const;
 type NumericField = typeof NUMERIC_FIELDS[number];

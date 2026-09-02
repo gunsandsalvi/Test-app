@@ -6,6 +6,7 @@
  */
 
 import { Company, InstitutionalEntity, Region } from '../../types';
+import { undueOwedByPayerUSD, partyId, internReason, CORPORATE_TAX_REASON } from '../../engine/simulation/stages/settlement';
 import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksUSD } from '../../domain/banking';
 import { FunctionModule } from '../fn';
 import { Card, Hint, KV, Tabs, T, mono } from '../ui';
@@ -162,7 +163,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
   } else {
     body = (
       <Card style={{ padding: '2px 0' }}>
-        <KV k="tax accrued, unpaid" v={money(c.accruedTaxLiabilityUSD)} />
+        <KV k="tax accrued, unpaid" hint="the dated wires to the treasury" v={money(world.state.pendingPaymentJournal ? undueOwedByPayerUSD(world.state.pendingPaymentJournal, partyId({ kind: 'COMPANY', ticker: c.ticker }), internReason(CORPORATE_TAX_REASON), world.state.currentWeek) : 0)} />
         <KV k="loss carryforward" v={money(c.taxLossCarryforwardUSD)} />
         <KV k="tax basis of plant" hint="double-declining" v={money(c.taxBasisPpeUSD)} />
         <KV k="deferred tax liability" v={money(c.deferredTaxLiabilityUSD)} />
