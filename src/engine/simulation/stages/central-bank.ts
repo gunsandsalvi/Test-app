@@ -13,6 +13,7 @@
 
 import { GameState, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
+import { pay } from './settlement';
 import {
   centralBankAssetsUSD, remittanceUSD,
 } from '../../../domain/central-bank';
@@ -29,7 +30,6 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     const banks = ctx.updatedCompanies.filter(
       (c) => c.region === regionId && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet
     );
-    const reservesBefore = banks.reduce((a, c) => a + c.bankBalanceSheet!.cashReservesUSD, 0);
 
     // ---- 1. The CB earns its own coupons and pays interest on reserves; the difference is
     // remitted to the treasury. Negative when policy exceeds the portfolio yield — a central bank
@@ -37,43 +37,34 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     const couponByBucket = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
     const couponIncomeUSD = Object.entries(cb.sovereignHoldingsByTenor || {})
       .reduce((a, [k, v]) => a + ((Number(v) || 0) * (couponByBucket[k] ?? 0)) / 52, 0);
-    const remitUSD = remittanceUSD(couponIncomeUSD, reservesBefore, reg.policyRate);
+    const interestOnReservesPaidUSD = banks.reduce((a, c) => a + (c.bankBalanceSheet!.reservesInterestWeeklyUSD ?? 0), 0);
+    // §5-CLOSE C5: the treasury PAYS the central bank its coupon — the calendar names every other
+    // holder and this is the one holder whose date does not matter (it can never be short of
+    // cash), so it is paid on the accrual, weekly. Without this leg the remittance below handed
+    // the treasury coupon income it had never paid out: money from nobody, one coupon a week.
+    if (couponIncomeUSD > 0) {
+      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amountUSD: couponIncomeUSD, reason: 'sovereign coupon to the central bank' });
+    }
+    // The bill book's accretion is the central bank's income too (a discount bill pays no coupon;
+    // its return is the pull to par, which the treasury pays at maturity), and it is remitted
+    // with the coupons: a central bank keeps no retained earnings in this model, so its assets
+    // are exactly its liabilities.
+    const remitUSD = remittanceUSD(couponIncomeUSD + (cb.lastBillAccretionUSD ?? 0), interestOnReservesPaidUSD + (cb.lastReverseRepoInterestUSD ?? 0));
 
-    // ---- 2. The treasury's week. Revenue in, spending out, remittance in. Taxes and procurement
-    // are still boundary flows (PUB1b), so they move the TGA without a reserve leg and the gap is
-    // recorded below. The COUPON is no longer among them: CAL puts it on the calendar, so it
-    // leaves as a real payment to a named holder and its reserve leg comes with it. ----
-    // Financing is part of the treasury's week: a deficit is funded by issuance, and maturing
-    // paper is repaid. Without these legs the TGA is debited by every deficit and credited by
-    // nothing, and it simply runs down (measured: −40.3B by week 60).
-    // PUB1e: debited by what actually left — interest, transfers, and the procurement the goods
-    // market really supplied — not by the spending BUDGET. Falls back to the budget only before
-    // stage 11 has run once.
-    const outlaysUSD = reg.governmentOutlaysUSD ?? reg.governmentSpendingWeeklyUSD;
-    // SEG2g/CASH: the government legs that now settle as real payments (corporate and SME tax
-    // remittances in, payroll and procurement out) have ALREADY moved the TGA this week, at
-    // settlement, with their reserve legs. They are also inside `governmentRevenueUSD` and
-    // `outlaysUSD` — the treasury's flow statement — so posting the statement unadjusted
-    // credited and debited those legs a second time (found wiring the SME tax leg: the
-    // settlement migration and this statement were double-counting every migrated flow).
-    // The statement remains the treasury's week; what settlement executed is subtracted from it.
-    const settledTgaUSD = ctx.lastSettlementReport?.tgaDeltaByRegion.get(regionId) ?? 0;
-    // CAL: `outlaysUSD` carries the treasury's SMOOTH interest accrual — its expense for the week,
-    // which is the right number for the flow statement and the deficit. Its ACCOUNT, though, moves
-    // when the coupons are actually paid, and the difference between the two is precisely the
-    // change in what it owes but has not yet paid. Adding the change back leaves the TGA debited
-    // by the cash that left: the dates the calendar settled, plus the holders this model does not
-    // name, who are still paid smoothly. Rule 9, on the issuer's side of the same balance.
-    const payableDeltaUSD = (reg.sovereignCouponPayableUSD ?? 0)
-      - ((state.regions?.[regionId] as { sovereignCouponPayableUSD?: number } | undefined)
-        ?.sovereignCouponPayableUSD ?? 0);
-    const tgaFlowUSD = reg.governmentRevenueUSD - outlaysUSD + remitUSD + payableDeltaUSD
-      // CASH: redemptions leave the TGA through the settlement layer now — one payment per named
-      // holder, plus a boundary line for the ones this model does not name (stage 11). Taking
-      // them here too would debit the account twice for one repayment.
-      + (reg.lastIssuanceProceedsUSD ?? 0)
-      - settledTgaUSD;
-    cb.treasuryAccountUSD = Math.round((cb.treasuryAccountUSD + tgaFlowUSD));
+    // ---- 2. §5-CLOSE C5: THE TREASURY'S ACCOUNT MOVES BY PAYMENTS AND NOTHING ELSE. Every tax
+    // is remitted by its payer, every outlay is paid to its payee, every coupon and redemption
+    // goes to a holder, the auction pays for what it places — all through settlement, which
+    // credits and debits the account with the reserve leg. The statement that used to be posted
+    // here (revenue by formula, outlays by accrual, the settled legs subtracted back out) was
+    // the last writer of the account that was not a payment, and its unpaid slices — a tax base
+    // nobody paid, interest to holders that do not exist — were exactly M1's quarterly spikes.
+    // The remittance is a payment too: the central bank's net income to the treasury (or, in a
+    // loss week, the treasury's top-up of the central bank). ----
+    if (remitUSD > 0) {
+      pay(ctx, { payer: { kind: 'CENTRAL_BANK', region: regionId }, payee: { kind: 'GOVERNMENT', region: regionId }, amountUSD: remitUSD, reason: 'central bank remittance' });
+    } else if (remitUSD < 0) {
+      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amountUSD: -remitUSD, reason: 'treasury covers the central bank\'s loss' });
+    }
     cb.lastRemittanceUSD = Math.round(remitUSD);
 
     // ---- 3. The reserve leg is the settlement pass's, and posting it here as well is the trap

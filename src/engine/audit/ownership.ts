@@ -141,7 +141,7 @@ function o5(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
-export function auditOwnership(_prev: GameState | undefined, state: GameState, week: number): AuditFinding[] {
+export function auditOwnership(state: GameState, week: number): AuditFinding[] {
   return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week)];
 }
 export type { RegionId };

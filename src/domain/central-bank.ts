@@ -34,6 +34,13 @@ export interface CentralBank {
    *  sign). Written by settlement from the instructions themselves; sums to zero across the
    *  world by construction, which the audit asserts. */
   foreignOfficialClaimsUSD: number;
+  /** §5-CLOSE C5 — Asset: what the standing repo facility has LENT the banks (the CB's seat in
+   *  the repo session; each draw creates reserves against pledged collateral). Derived from the
+   *  region's repo book by the session that writes it — one writer. */
+  standingFacilityLentUSD: number;
+  /** §5-CLOSE C5 — last week's reverse-repo interest the window paid the funds (a central-bank
+   *  expense, netted in the remittance like the interest on reserves). */
+  lastReverseRepoInterestUSD?: number;
   /** Liability: the government's account. Drains reserves when it fills. */
   treasuryAccountUSD: number;
   /** Liability: notes in circulation — the slow, non-operational part of the balance sheet. */
@@ -91,7 +98,7 @@ export function centralBankFxReservesUSD(cb: CentralBank): number {
  */
 export function centralBankAssetsUSD(cb: CentralBank): number {
   return centralBankSovereignBookUSD(cb) + centralBankFxReservesUSD(cb) + (cb.loansToBanksUSD ?? 0)
-    + (cb.foreignOfficialClaimsUSD ?? 0);
+    + (cb.foreignOfficialClaimsUSD ?? 0) + (cb.standingFacilityLentUSD ?? 0);
 }
 
 /**
@@ -113,10 +120,11 @@ export function centralBankIdentityResidualUSD(cb: CentralBank, bankReservesUSD:
  */
 export function remittanceUSD(
   couponIncomeWeeklyUSD: number,
-  bankReservesUSD: number,
-  policyRate: number
+  /** §5-CLOSE C4/C5: the interest on reserves the central bank actually PAID this week (the
+   *  banks' `reservesInterestWeeklyUSD`, posted by 02b), not a rate on a stock. */
+  interestOnReservesPaidUSD: number
 ): number {
-  return couponIncomeWeeklyUSD - (bankReservesUSD * policyRate) / 52;
+  return couponIncomeWeeklyUSD - interestOnReservesPaidUSD;
 }
 
 /**

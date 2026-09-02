@@ -454,7 +454,7 @@ function buildRegion(regionId: RegionId): Region {
     weeklyDebtServiceUSD: 0,
     // Zero here to match the zero debt service: both sides of the budget loop arrive together
     // at the HH3 seed migration, which re-derives the cohorts with the real books.
-    annualCapitalReceiptsUSD: { depositInterestUSD: 0, dividendsUSD: 0, residualUSD: 0 },
+    annualCapitalReceiptsUSD: { depositInterestUSD: 0, dividendsUSD: 0 },
     wealthDistribution: seedWealthDistribution,
   });
   // The tier income lines open as the DERIVED sums they will be every week from here on —
@@ -615,6 +615,7 @@ function buildRegion(regionId: RegionId): Region {
       currencyInCirculationUSD: 0,
       loansToBanksUSD: 0,
       foreignOfficialClaimsUSD: 0,
+      standingFacilityLentUSD: 0,
       lastRemittanceUSD: 0,
       // PUB2b: no order outstanding at birth — the first week's redemptions set the first one.
       plannedPurchasesByTenor: {},
@@ -654,7 +655,6 @@ function buildRegion(regionId: RegionId): Region {
       etfShares: [],
       etfHoldingsUSD: 0,
       privateBusinessEquityUSD: 0,
-      unmodeledFinancialAssetsUSD: equityHoldingsUSD,
       mortgageDebtUSD,
       creditCardDebtUSD,
       otherConsumerLoanDebtUSD,

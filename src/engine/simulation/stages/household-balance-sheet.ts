@@ -54,12 +54,16 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       if (!reg) return;
       let receiptsUSD = reg.householdDepositInterestWeeklyUSD ?? 0;
       let taxPaidUSD = 0;
+      let dividendsUSD = 0;
       householdFlows.get(regionId)?.forEach((amountUSD, reason) => {
-        if (amountUSD > 0) { receiptsUSD += amountUSD; return; }
+        if (amountUSD > 0) { receiptsUSD += amountUSD; if (reason === 'dividend to the public float') dividendsUSD += amountUSD; return; }
         if (reason.includes('tax')) taxPaidUSD += -amountUSD;
       });
       reg.lastWeekHouseholdReceiptsUSD = Math.round(receiptsUSD);
       reg.lastWeekHouseholdTaxPaidUSD = Math.round(taxPaidUSD);
+      // §5-CLOSE C5: the dividends the public float was paid — a slice of the receipts above,
+      // split out so the cohorts can put it where the equity exposure is.
+      reg.lastWeekHouseholdDividendsUSD = Math.round(dividendsUSD);
     });
   }
 
@@ -138,16 +142,10 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     );
     const privateBusinessEquityUSD = householdPrivateBusinessEquityUSD(region, ctx.updatedCompanies, evMultiple);
 
-    // ---- 5. The placeholder is paid DOWN by whatever the model has learned to see. ----
-    // Never up: households did not get richer because a claim finally acquired a holder. It is set
-    // once, at the opening gap, and thereafter only shrinks — which is how a placeholder behaves,
-    // and what makes it this project's own scoreboard.
+    // ---- 5. §5-CLOSE C5: household financial wealth is the claims that EXIST — fund shares,
+    // the public float, private business equity, claims on institutions. The placeholder that
+    // used to fill the gap to "1.5x income" (assets nobody issued, earning nothing) is deleted.
     const realClaimsUSD = etfHoldingsUSD + directEquityUSD + privateBusinessEquityUSD + institutionalClaimsUSD;
-    const openingUnmodeledUSD = hs.unmodeledFinancialAssetsUSD ?? hs.equityHoldingsUSD ?? 0;
-    const unmodeledFinancialAssetsUSD = Math.max(0, Math.min(
-      openingUnmodeledUSD,
-      Math.max(0, (hs.equityHoldingsUSD ?? 0) - realClaimsUSD)
-    ));
 
     // ---- 6. HH2: the house. Households carried the mortgage and not the asset it secures. ----
     // Built from physical units — owning households at this week's median price — rather than
@@ -168,7 +166,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // debit died with it (§7.46 L7). Only the SHARE register settles here.
     const depositsUSD = hs.depositsUSD ?? 0;
     const mmfSharesUSD = Math.max(0, hs.mmfSharesUSD ?? 0);
-    const equityHoldingsUSD = realClaimsUSD + unmodeledFinancialAssetsUSD;
+    const equityHoldingsUSD = realClaimsUSD;
 
     // ---- 7. HH4c: the tier balance sheets are DERIVED SPLITS of the same marked components —
     // tier net worth is a sum over real lines, not a drifted stock. The split weights are
@@ -265,7 +263,6 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
           + (etfHoldingsUSD + directEquityUSD) * riskyShareOf(t, i)
           + privateBusinessEquityUSD * riskyShareOf(t, i)
           + institutionalClaimsUSD * cautiousShareOf(t, i)
-          + unmodeledFinancialAssetsUSD * depositShareOf(t, i)
           + housingStockUSD * incomeShareOf(t, i);
         const tierDebtUSD = mortgageUSD * incomeShareOf(t, i)
           + consumerDebtUSD * borrowShareOf(t, i);
@@ -302,7 +299,6 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       privateBusinessEquityUSD,
       institutionalClaims,
       institutionalClaimsUSD,
-      unmodeledFinancialAssetsUSD,
       equityHoldingsUSD,
       // The house is an ASSET at full value and the mortgage a liability, as in any set of
       // national accounts. Omitting the asset while carrying the debt understated net worth by

@@ -128,6 +128,6 @@ function x2(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
-export function auditPrices(_prev: GameState | undefined, state: GameState, week: number): AuditFinding[] {
+export function auditPrices(state: GameState, week: number): AuditFinding[] {
   return [...p1(state, week), ...p2(state, week), ...p3(state, week), ...p4(state, week), ...x1(state, week), ...x2(state, week)];
 }

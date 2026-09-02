@@ -16,7 +16,7 @@ import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-acco
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { attributeItemizedHoldings, sovBucketKey } from './shared-helpers';
 import {
-  weeklyInterestExpenseUSD, sovereignCouponByBucket, decomposeGovernmentSpending, governmentOutlaysUSD,
+  weeklyInterestExpenseUSD, decomposeGovernmentSpending, governmentOutlaysUSD,
   isDiscountBill, discountBillProceedsUSD, weeklyBillDiscountAccrualUSD,
 } from '../../../domain/government';
 import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
@@ -367,18 +367,32 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // PUB2b: the central bank is a holder too, and used to be the one holder that never got
       // repaid — its book sat frozen at its seeded level while the tranches behind it matured,
       // so it held a claim on debt that no longer existed and its share of the stock drifted
-      // 15.0% -> 11.4% over a year. There is no reserve leg: the treasury pays out of the TGA,
-      // which is the CB's own liability, so a CB asset and a CB liability fall together.
+      // 15.0% -> 11.4% over a year.
+      // §5-CLOSE C5: and it is PAID, like every other holder — GOVERNMENT → CENTRAL_BANK, so the
+      // treasury's account falls with the central bank's book. The comment that stood here said
+      // "a CB asset and a CB liability fall together" while the code wrote only the asset: every
+      // week the central bank's matured paper vanished from its book, the treasury kept the
+      // money, and the reinvestment bought new paper with reserves created against nothing —
+      // the creator M1 measured once the treasury's statement stopped masking it (§7.354).
       const cbSheet = reg.centralBankSheet;
       if (cbSheet) {
         const remaining: Record<string, number> = {};
+        let cbRedeemedUSD = 0;
         Object.entries(cbSheet.sovereignHoldingsByTenor || {}).forEach(([key, held]) => {
           const heldUSD = Number(held) || 0;
           const redeemedUSD = heldUSD * (redeemedFractionByBucket.get(key) ?? 0);
-          if (redeemedUSD > 0) cbRedeemedByBucket.set(key, redeemedUSD);
+          if (redeemedUSD > 0) { cbRedeemedByBucket.set(key, redeemedUSD); cbRedeemedUSD += redeemedUSD; }
           remaining[key] = heldUSD - redeemedUSD;
         });
         cbSheet.sovereignHoldingsByTenor = remaining;
+        if (cbRedeemedUSD > 0) {
+          pay(ctx, {
+            payer: { kind: 'GOVERNMENT', region: regionId },
+            payee: { kind: 'CENTRAL_BANK', region: regionId },
+            amountUSD: cbRedeemedUSD,
+            reason: 'sovereign redemption to the central bank',
+          });
+        }
       }
 
       // XB1: a holder of THIS region's paper, wherever it is domiciled. The `entity.region !==
@@ -510,17 +524,12 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     reg.taxCollectedHouseholdUSD = Math.round(householdTaxWeeklyUSD);
     reg.taxCollectedPayrollUSD = Math.round(payrollTaxWeeklyUSD);
     reg.taxCollectedConsumptionUSD = Math.round(consumptionTaxWeeklyUSD);
-    // The gap is sized against the SMOOTH expectation (corporate ACCRUAL, not the quarterly
-    // remittance), so revenue keeps the real lumpiness instead of the residual absorbing it —
-    // which is what makes a tax date swing the treasury's account at all.
-    const smoothRealUSD = (ctx.taxAccruedByRegion[regionId] ?? 0)
-      + smeAccrualWeeklyUSD + householdAccrualWeeklyUSD + consumptionAccrualWeeklyUSD + payrollAccrualWeeklyUSD;
-    reg.unmodeledTaxRevenueUSD = Math.round(Math.max(0, reg.governmentRevenueUSD - smoothRealUSD));
-    // Revenue IS what arrived: real collections on their own calendars, plus whatever base the
-    // model still cannot tax.
+    // §5-CLOSE C5: revenue IS what arrived — the collections on their own calendars, and nothing
+    // else. The residual that used to top this up to `GDP x rate` ("the bases the model cannot
+    // tax") credited the account from nobody, and it was a quarter of the take.
     reg.governmentRevenueUSD = Math.round((
       corporateTaxWeeklyUSD + smeTaxWeeklyUSD + householdTaxWeeklyUSD
-      + payrollTaxWeeklyUSD + consumptionTaxWeeklyUSD + reg.unmodeledTaxRevenueUSD
+      + payrollTaxWeeklyUSD + consumptionTaxWeeklyUSD
     ));
 
     // PUB1: the government's real interest bill. The treasury's ACCOUNT is the TGA, a liability
@@ -529,29 +538,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     reg.governmentInterestWeeklyUSD = Math.round(interestWeeklyUSD);
     // Reported, never debited — the bill's cost is already in the redemption leg (PUB3d).
     reg.governmentBillDiscountAccrualUSD = Math.round(weeklyBillDiscountAccrualUSD(reg.govDebtTranches));
-    // What the bill pays to holders that exist. The rest is the named boundary above.
-    {
-      const cb = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
-      const held = ctx.updatedCompanies
-        .filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet)
-        .reduce((a, c) => a + Object.entries(c.bankBalanceSheet!.sovereignBondHoldingsByTenor || {})
-          .reduce((x, [k, v]) => x + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0), 0)
-        + ctx.updatedInstitutionalEntities
-          .filter(e => !e.isDefaulted)
-          .reduce((a, e) => {
-            // §7.313 flip: row walk on the register's authority.
-            const Hg = ctx.v2.holdings;
-            const gRef = internString(ctx.v2, 'GOV_BOND');
-            const rRef = internString(ctx.v2, regionId);
-            let x = 0;
-            for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = Hg.next[r]) {
-              if (Hg.typeRef[r] !== gRef || Hg.regionRef[r] !== rRef) continue;
-              x += (Hg.qtyUSD[r] * (cb[govBucketKeyOf(ctx.v2.internedStrings[Hg.instrRef[r]], regionId) ?? ''] ?? 0)) / 52;
-            }
-            return a + x;
-          }, 0);
-      reg.governmentInterestToUnmodeledHoldersUSD = Math.round(Math.max(0, interestWeeklyUSD - held));
-    }
+    // §5-CLOSE C5: there are no holders this model does not name. Every tranche is held (the
+    // seed closes, §7.350; the auction places or re-offers), and a coupon reaches a holder of
+    // record on its date or it is not paid — nothing is "paid smoothly" to nobody.
 
     // ---- PUB1e: what actually left the account. Interest and transfers are contractual and are
     // paid in full; procurement is what the goods market really supplied. A government that

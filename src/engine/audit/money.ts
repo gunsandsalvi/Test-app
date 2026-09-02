@@ -6,10 +6,11 @@
  */
 
 import { GameState, RegionId, Company } from '../../types';
+import { AuditSnapshot } from './snapshot';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
-import { AuditFinding, B, M, pct, sum } from './types';
+import { AuditFinding, B, M, sum } from './types';
 
 type Sheet = NonNullable<Company['bankBalanceSheet']>;
 const banksOf = (s: GameState, r?: RegionId) =>
@@ -30,7 +31,7 @@ function m1(state: GameState, week: number): AuditFinding[] {
     const assets = centralBankAssetsUSD(cb);
     const residual = reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD + inTransit - assets;
     if (Math.abs(residual) > Math.max(1e6, assets * 1e-4)) {
-      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(cb.treasuryAccountUSD)} + currency ${B(cb.currencyInCirculationUSD)} + in transit ${B(inTransit)} exceed the central bank's assets ${B(assets)} (foreign claims ${B(cb.foreignOfficialClaimsUSD ?? 0)}) by ${B(residual)} — bank money nothing was bought against` });
+      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(cb.treasuryAccountUSD)} + currency ${B(cb.currencyInCirculationUSD)} + in transit ${B(inTransit)} exceed the central bank's assets ${B(assets)} (foreign claims ${B(cb.foreignOfficialClaimsUSD ?? 0)}, window ${B(cb.standingFacilityLentUSD ?? 0)}) by ${B(residual)} — bank money nothing was bought against` });
     }
   });
   // C4b: the official-settlement claims are bilateral, so the world's sum is zero or a leak.
@@ -49,12 +50,6 @@ function m2(state: GameState, week: number): AuditFinding[] {
     if (Math.abs(cb.currencyInCirculationUSD) > 1e6) out.push({ family: 'M', check: 'M2 currency plug', week, usd: cb.currencyInCirculationUSD, message: `${r}: currency in circulation ${B(cb.currencyInCirculationUSD)} is a residual nobody issued` });
     const cbLoans = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.centralBankLoanUSD ?? 0);
     if (Math.abs(cbLoans - (cb.loansToBanksUSD ?? 0)) > 1e6) out.push({ family: 'M', check: 'M2 central bank loans = banks\' borrowing', week, usd: cbLoans - (cb.loansToBanksUSD ?? 0), message: `${r}: banks owe the central bank ${B(cbLoans)}, its book says ${B(cb.loansToBanksUSD ?? 0)}` });
-    const rx = reg as unknown as { unmodeledTaxRevenueUSD?: number; governmentInterestToUnmodeledHoldersUSD?: number };
-    if ((rx.unmodeledTaxRevenueUSD ?? 0) > 1e6) out.push({ family: 'M', check: 'M2 tax from nobody', week, usd: rx.unmodeledTaxRevenueUSD, message: `${r}: ${B(rx.unmodeledTaxRevenueUSD!)}/wk of revenue credited to the treasury that no payer paid` });
-    if ((rx.governmentInterestToUnmodeledHoldersUSD ?? 0) > 1e6) out.push({ family: 'M', check: 'M2 interest to nobody', week, usd: rx.governmentInterestToUnmodeledHoldersUSD, message: `${r}: ${B(rx.governmentInterestToUnmodeledHoldersUSD!)}/wk of coupon paid to holders that do not exist` });
-    const hs = reg.householdState as unknown as { unmodeledFinancialAssetsUSD?: number; unmodeledCapitalReceiptShareOfIncome?: number };
-    if ((hs.unmodeledFinancialAssetsUSD ?? 0) > 1e6) out.push({ family: 'M', check: 'M2 household assets with no issuer', week, usd: hs.unmodeledFinancialAssetsUSD, message: `${r}: households hold ${B(hs.unmodeledFinancialAssetsUSD!)} nobody issued` });
-    if ((hs.unmodeledCapitalReceiptShareOfIncome ?? 0) > 1e-6) out.push({ family: 'M', check: 'M2 income from nobody', week, usd: (hs.unmodeledCapitalReceiptShareOfIncome ?? 0) * (reg.estimatedHouseholdIncomeUSD ?? 0) / 52, message: `${r}: ${pct(hs.unmodeledCapitalReceiptShareOfIncome!)} of household income arrives with no payer` });
   });
   const s = state.lastSettlement;
   if (s) {
@@ -115,6 +110,10 @@ function m4(state: GameState, week: number): AuditFinding[] {
   if (negCorp.length) out.push({ family: 'M', check: 'M4 overdrawn firms', week, usd: sum(negCorp, (c) => c.cash), message: `${negCorp.length} firms overdrawn, ${B(sum(negCorp, (c) => c.cash))} in all (worst ${negCorp.sort((a, b) => a.cash - b.cash)[0].ticker} ${M(negCorp[0].cash)})` });
   const negInst = state.institutionalEntities.filter((e) => !e.isDefaulted && (e.cashUSD ?? 0) < -1e6);
   if (negInst.length) { const worst = [...negInst].sort((a, b) => (a.cashUSD ?? 0) - (b.cashUSD ?? 0))[0]; out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => e.cashUSD ?? 0), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => e.cashUSD ?? 0))} (worst ${worst.ticker ?? worst.id} ${worst.entityType} ${M(worst.cashUSD ?? 0)})` }); }
+  REGION_IDS.forEach((r) => {
+    const tga = state.regions[r]?.centralBankSheet?.treasuryAccountUSD ?? 0;
+    if (tga < -1e6) out.push({ family: 'M', check: 'M4 overdrawn treasury', week, usd: tga, message: `${r}: the treasury's account stands at ${B(tga)} — an overdraft at the central bank nobody granted` });
+  });
   const negBank = banksOf(state).filter((b) => b.bankBalanceSheet!.cashReservesUSD < -1e6);
   if (negBank.length) out.push({ family: 'M', check: 'M4 negative reserves', week, usd: sum(negBank, (b) => b.bankBalanceSheet!.cashReservesUSD), message: `${negBank.map((b) => b.ticker).join(' ')} hold negative reserves` });
   REGION_IDS.forEach((r) => {
@@ -146,26 +145,25 @@ function m5(state: GameState, week: number): AuditFinding[] {
 }
 
 /** M6 — the money stock moves only by credit and the central bank: Δ(deposits + TGA) week on week against the settlement's own record. */
-function m6(prev: GameState | undefined, state: GameState, week: number): AuditFinding[] {
+function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   if (!prev) return out;
-  const s = state.lastSettlement as unknown as { centralBankIssuanceUSD?: number } | undefined;
   REGION_IDS.forEach((r) => {
-    const now = sum(banksOf(state, r), (b) => depositsOf(b.bankBalanceSheet!)) + (state.regions[r]?.centralBankSheet?.treasuryAccountUSD ?? 0);
-    const before = sum(banksOf(prev, r), (b) => depositsOf(b.bankBalanceSheet!)) + (prev.regions[r]?.centralBankSheet?.treasuryAccountUSD ?? 0);
+    const before = prev[r];
+    const cb = state.regions[r]?.centralBankSheet;
+    if (!before || !cb) return;
+    const now = sum(banksOf(state, r), (b) => depositsOf(b.bankBalanceSheet!)) + cb.treasuryAccountUSD;
     const loansNow = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.businessLoanBookUSD + b.bankBalanceSheet!.consumerLoanBookUSD);
-    const loansBefore = sum(banksOf(prev, r), (b) => b.bankBalanceSheet!.businessLoanBookUSD + b.bankBalanceSheet!.consumerLoanBookUSD);
-    const cbNow = centralBankAssetsUSD(state.regions[r].centralBankSheet!);
-    const cbBefore = centralBankAssetsUSD(prev.regions[r].centralBankSheet!);
+    const cbNow = centralBankAssetsUSD(cb);
+    const moneyBefore = before.bankDepositsUSD + before.treasuryAccountUSD;
     // Money grows with net lending and central-bank purchases; everything else nets to zero.
-    const explained = (loansNow - loansBefore) + (cbNow - cbBefore);
-    const gap = (now - before) - explained;
-    void s;
-    if (Math.abs(gap) > Math.max(5e8, before * 0.01)) out.push({ family: 'M', check: 'M6 money moves only by credit and the central bank', week, usd: gap, message: `${r}: money stock moved ${B(now - before)}; net lending ${B(loansNow - loansBefore)} + central bank ${B(cbNow - cbBefore)} explain ${B(explained)}; ${B(gap)} unexplained` });
+    const explained = (loansNow - before.bankLoansUSD) + (cbNow - before.centralBankAssetsUSD);
+    const gap = (now - moneyBefore) - explained;
+    if (Math.abs(gap) > Math.max(5e8, moneyBefore * 0.01)) out.push({ family: 'M', check: 'M6 money moves only by credit and the central bank', week, usd: gap, message: `${r}: money stock moved ${B(now - moneyBefore)}; net lending ${B(loansNow - before.bankLoansUSD)} + central bank ${B(cbNow - before.centralBankAssetsUSD)} explain ${B(explained)}; ${B(gap)} unexplained` });
   });
   return out;
 }
 
-export function auditMoney(prev: GameState | undefined, state: GameState, week: number): AuditFinding[] {
+export function auditMoney(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
   return [...m1(state, week), ...m2(state, week), ...m3(state, week), ...m4(state, week), ...m5(state, week), ...m6(prev, state, week)];
 }

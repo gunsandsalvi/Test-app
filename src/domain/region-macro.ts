@@ -268,17 +268,6 @@ export interface HouseholdState {
   /** Marked total of the above. */
   institutionalClaimsUSD: number;
   /**
-   * The part of household financial wealth the model's asset universe cannot yet back.
-   *
-   * Real households hold roughly 1.5x income in financial assets and the seed says so; the assets
-   * that exist here add to about a third of that, because the universe is 6x short of the money
-   * pointed at it (§7.18's want/have). Marking households down to what exists would import that
-   * shortfall straight into consumption and the wealth effect — fixing a local inconsistency by
-   * making the macro worse. So the gap is NAMED instead of hidden: it earns nothing, moves with
-   * nothing, and shrinks as a share of wealth as the universe grows. §6 owns it.
-   */
-  unmodeledFinancialAssetsUSD: number;
-  /**
    * HH3 — DERIVED SUMS of the itemized household loan pools on the region's named banks
    * (BankingSector.householdLoans), written by the bank-diversification stage each week. The
    * banks own the books; these lines are the household sector's view of the same loans, never
@@ -310,17 +299,10 @@ export interface HouseholdState {
    * posts the total next week and clears it. The invariant `hs − pending == Σ bank lines`
    * keeps the discipline honest. */
   pendingBankSettlementUSD?: number;
-  /** HH4b — this week's annual capital receipts recycling into the consumption budget:
-   * deposit interest + direct-equity dividends + the named residual share x income. */
+  /** HH4b/§5-CLOSE C5 — this week's annual capital receipts recycling into the consumption
+   * budget: deposit interest the banks paid plus the dividends the public float was paid. Both
+   * are payments; there is no residual. */
   capitalReceiptsAnnualUSD?: number;
-  /** HH4b — the seed-derived share of income covering receipts the model cannot yet attribute
-   * (bank retained earnings and institutional dividend passthrough reaching households through
-   * unbuilt channels). Derived ONCE at the HH3 seed migration as (debt service − real
-   * receipts) / income, so the seed budget nets to zero; §6 owns watching it decay. */
-  unmodeledCapitalReceiptShareOfIncome?: number;
-  /** HH — the same residual as a carried LEVEL (annual USD). Once income is the measured sum of
-   *  payments, a residual expressed as a SHARE of income makes income depend on itself. */
-  unmodeledCapitalReceiptResidualAnnualUSD?: number;
   /** Last week's mortgage book, so demand signals can read a real change (set with the sums). */
   priorMortgageDebtUSD?: number;
   /** HH3 — last week's real flows off the itemized books, written by the lending pass:
@@ -872,13 +854,14 @@ export interface Region {
   cashBridgeBillIssuanceUSD?: number;
   /** PUB2 — the central bank's real balance sheet (`centralBank` above is just its name). The
    * treasury's account lives on it as a liability, which is what makes TGA flows move reserves. */
+  /** §5-CLOSE C5 — last week's dividends paid to the public float (the household sector), a
+   *  slice of `lastWeekHouseholdReceiptsUSD`, split out for the cohorts' allocation. */
+  lastWeekHouseholdDividendsUSD?: number;
   centralBankSheet?: CentralBank;
   /**
-   * PUB1b — tax actually collected this week from real payers: corporate (quarterly, off accrued
-   * liability), SME pools, and households. `governmentRevenueUSD` is these plus
-   * `unmodeledTaxRevenueUSD`, which covers the bases this model has no instrument for —
-   * consumption and payroll taxes, roughly half of a real government's take. Named rather than
-   * closed by shrinking the state, which would model a different economy.
+   * PUB1b/§5-CLOSE C5 — tax actually collected this week from real payers: corporate (quarterly,
+   * off accrued liability), SME pools, households, payroll and consumption. `governmentRevenueUSD`
+   * is exactly their sum — the treasury's revenue is what its payers remitted.
    */
   taxCollectedCorporateUSD?: number;
   taxCollectedPayrollUSD?: number;
@@ -887,7 +870,6 @@ export interface Region {
   employerPayrollTaxWeeklyUSD?: number;
   taxCollectedSmeUSD?: number;
   taxCollectedHouseholdUSD?: number;
-  unmodeledTaxRevenueUSD?: number;
   /** PUB1c — tax accrued but not yet remitted, per stream and per calendar. */
   accruedSmeTaxUSD?: number;
   accruedHouseholdTaxUSD?: number;
@@ -900,13 +882,6 @@ export interface Region {
    *  the treasury auction leaves behind. It is not a payment; nobody was owed it. */
   lastUnsoldMaturedUSD?: number;
   lastRedemptionPaidUSD?: number;
-  /**
-   * PUB1 — the slice of the interest bill paid to holders that do not exist yet: the central
-   * bank (15% of the stock, and in reality remitted straight back — PUB2) and foreign holders
-   * (24%, which really does leave — XB). The government debits the full bill because the burden
-   * is real; this line is what has no recipient. Watch it fall as PUB2 and XB land.
-   */
-  governmentInterestToUnmodeledHoldersUSD?: number;
   /** CAL — sovereign interest ACCRUED to named holders and not yet paid: the treasury's payable,
    *  the same balance its holders carry as a receivable. Written only by sovereign-calendar.ts. */
   sovereignCouponPayableUSD?: number;

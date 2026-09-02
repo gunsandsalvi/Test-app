@@ -1016,11 +1016,9 @@ interface HarnessModule {
 
 /** HH close-out battery (§7.60), as a module on the shared run. */
 const hhModule: HarnessModule = (() => {
-  const series: Record<string, number[]> = { u: [], v: [], wage: [], tight: [], unmodeled: [], netWorth: [], consumption: [], infl: [] };
-  let seedUnmodeledUSD = 0;
+  const series: Record<string, number[]> = { u: [], v: [], wage: [], tight: [], netWorth: [], consumption: [], infl: [] };
   return {
     name: 'HH battery',
-    init(s0) { seedUnmodeledUSD = s0.regions.USA.householdState.unmodeledFinancialAssetsUSD ?? 0; },
     week(_prev, s) {
       const reg = s.regions.USA; const hs = reg.householdState;
       const pools: any = reg.occupationPools;
@@ -1028,25 +1026,12 @@ const hhModule: HarnessModule = (() => {
       series.v.push(reg.vacancyRate ?? 0);
       series.tight.push(reg.laborMarketTightness ?? 0);
       series.wage.push((Object.values(pools) as any[]).reduce((a: number, p: any) => a + p.wageGrowthAnnual, 0) / 5);
-      series.unmodeled.push(hs.unmodeledFinancialAssetsUSD ?? 0);
       series.netWorth.push(hs.netWorthUSD ?? 0);
       series.infl.push(reg.inflation);
       series.consumption.push((hs.cohorts ?? []).reduce((a, c) => a + c.consumptionBudgetUSD, 0));
     },
     report(s, weeks) {
       const out: string[] = [];
-      out.push('--- scoreboard: unmodeled financial assets (must fall, never rise) ---');
-      out.push(`  seed: ${B(seedUnmodeledUSD)}`);
-      [1, 10, 40, Math.floor(weeks / 2), weeks].forEach(w => {
-        const idx = w - 1;
-        if (idx >= 0 && idx < series.unmodeled.length) out.push(`  w${String(w).padStart(3)}: ${B(series.unmodeled[idx])}`);
-      });
-      let rose = 0;
-      for (let i = 1; i < series.unmodeled.length; i++) if (series.unmodeled[i] > series.unmodeled[i - 1] + 1) rose++;
-      out.push(`  weeks it ROSE: ${rose} (must be 0 — a placeholder only shrinks)`);
-      const hsU = s.regions.USA.householdState;
-      out.push(`  final share of household financial assets: ${pct((hsU.unmodeledFinancialAssetsUSD ?? 0) / Math.max(1, hsU.equityHoldingsUSD ?? 1))}`);
-      out.push(`  residual capital-receipt share of income: ${pct(hsU.unmodeledCapitalReceiptShareOfIncome ?? 0)}`);
       out.push('--- claims reconcile (both directions) ---');
       REGIONS.forEach(r => {
         const reg = s.regions[r]; const hs = reg.householdState;
@@ -1232,7 +1217,7 @@ function couponReceipts(s: GameState, region: RegionId) {
   const central = Object.entries(reg.centralBankSheet?.sovereignHoldingsByTenor || {})
     .reduce((a: number, [k, v]: any) => a + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0);
   const paid = weeklyInterestExpenseUSD(reg.govDebtTranches);
-  return { paid, banks, insts, central, unmodeled: reg.governmentInterestToUnmodeledHoldersUSD ?? 0 };
+  return { paid, banks, insts, central };
 }
 
 const pubModule: HarnessModule = (() => {
@@ -1259,7 +1244,6 @@ const pubModule: HarnessModule = (() => {
       series.reinvest.push(cb?.reinvestmentShare ?? 1);
       series.remit.push(cb?.lastRemittanceUSD ?? 0);
       series.policy.push(reg.policyRate);
-      series.unmodeledTax.push(reg.unmodeledTaxRevenueUSD ?? 0);
       series.revenue.push(reg.governmentRevenueUSD);
       series.outlays.push(reg.governmentOutlaysUSD ?? 0);
       series.cmb.push(reg.cashBridgeBillIssuanceUSD ?? 0);
@@ -1278,12 +1262,11 @@ const pubModule: HarnessModule = (() => {
       REGIONS.forEach(r => {
         const c = couponReceipts(s, r);
         const attributed = c.banks + c.insts + c.central;
-        out.push(`  ${r}: paid ${B(c.paid)}/wk = banks ${B(c.banks)} + institutions ${B(c.insts)} + CB ${B(c.central)} = ${B(attributed)} (${pct(attributed / Math.max(1, c.paid))}), unmodeled (foreign) ${B(c.unmodeled)} [residual ${B(c.paid - attributed - c.unmodeled)}]`);
+        out.push(`  ${r}: paid ${B(c.paid)}/wk = banks ${B(c.banks)} + institutions ${B(c.insts)} + CB ${B(c.central)} = ${B(attributed)} (${pct(attributed / Math.max(1, c.paid))}) [residual ${B(c.paid - attributed)}]`);
       });
       out.push('--- the named gaps (each must fall, none may be assumed away) ---');
       const at = (a: number[], w: number) => (w >= 1 && w <= a.length ? B(a[w - 1]) : 'n/a');
       const marks = [13, 52, weeks].filter((w, i, arr) => w <= weeks && arr.indexOf(w) === i);
-      out.push(`  unmodeledTaxRevenueUSD:   w1 ${at(series.unmodeledTax, 1)} -> w${weeks} ${at(series.unmodeledTax, weeks)}`);
       out.push(`  unspentProcurementBudget: ${marks.map(w => `w${w} ${at(series.unspentProc, w)}/wk`).join('  ')}`);
       const fill = series.procSpent.map((v, i) => v / Math.max(1, v + series.unspentProc[i]));
       out.push(`  procurement fill ratio:   mean ${pct(fill.reduce((a, x) => a + x, 0) / fill.length)}, range ${pct(Math.min(...fill))}-${pct(Math.max(...fill))}`);
@@ -2396,7 +2379,7 @@ function runHarness() {
     checkGuards(state, w);
     // §5-CLOSE — the audit runs on every week; its findings are violations too.
     {
-      const found = auditWeek(preState, state, w);
+      const found = auditWeek(state, w);
       auditFindings.push(...found);
       found.forEach((f) => violations.push({ week: w, message: `[audit ${f.check}] ${f.message}` }));
     }

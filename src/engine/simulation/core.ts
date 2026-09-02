@@ -420,6 +420,10 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       unresolvedUSD: ctx.lastSettlementReport.unresolvedUSD,
       clearingHouseResidualUSD: ctx.lastSettlementReport.clearingHouseResidualUSD,
       centralBankResidualUSD: ctx.lastSettlementReport.centralBankResidualUSD,
+      treasuryFlowsByRegion: Object.fromEntries(
+        Array.from(ctx.lastSettlementReport.treasuryFlowsByRegion.entries())
+          .map(([r, m]) => [r, Object.fromEntries(m.entries())])
+      ),
     },
     // SEG1: payments recorded after this week's settlement cutoff settle next cycle instead of
     // dying with the context (they used to be silently dropped — tender proceeds never landed).

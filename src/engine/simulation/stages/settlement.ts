@@ -286,6 +286,9 @@ export interface SettlementReport {
    *  stages/household-balance-sheet.ts): what they were actually paid, not a labor-share
    *  identity. Free, like the pools' P&L — every household flow is already a payment. */
   householdFlowsByRegion: Map<string, Map<string, number>>;
+  /** §5-CLOSE C5 — the treasury's week, from the payments themselves: per region, by reason.
+   *  The treasury's account moves by nothing else. */
+  treasuryFlowsByRegion: Map<string, Map<string, number>>;
   /** SEG-D — every pool flow this week, keyed `<region>:<industry>` then by the payment's own
    *  reason, signed from the pool's side. This is the pool's INCOME STATEMENT, and it is free:
    *  every pool flow is already a payment passing through here, so a new kind of pool flow shows
@@ -361,6 +364,7 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
     smeDepositDeltaByBank: mergeMap(a.smeDepositDeltaByBank, b.smeDepositDeltaByBank),
     smePoolFlowsByPool: mergeNested(a.smePoolFlowsByPool, b.smePoolFlowsByPool),
     householdFlowsByRegion: mergeNested(a.householdFlowsByRegion, b.householdFlowsByRegion),
+    treasuryFlowsByRegion: mergeNested(a.treasuryFlowsByRegion, b.treasuryFlowsByRegion),
     creditCreatedByBank: mergeMap(a.creditCreatedByBank, b.creditCreatedByBank),
     bankEquityDeltaByBank: mergeMap(a.bankEquityDeltaByBank, b.bankEquityDeltaByBank),
     householdDeferredUSD: a.householdDeferredUSD + b.householdDeferredUSD,
@@ -387,6 +391,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     smeDepositDeltaByBank: new Map(),
     smePoolFlowsByPool: new Map(),
     householdFlowsByRegion: new Map(),
+    treasuryFlowsByRegion: new Map(),
     creditCreatedByBank: new Map(),
     bankEquityDeltaByBank: new Map(),
     householdDeferredUSD: 0,
@@ -463,8 +468,12 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     const payerKind = payerRef.kind;
     const payeeKind = payeeRef.kind;
     if (payerKind === 'SEGMENT' || payeeKind === 'SEGMENT'
-      || payerKind === 'HOUSEHOLD' || payeeKind === 'HOUSEHOLD') {
+      || payerKind === 'HOUSEHOLD' || payeeKind === 'HOUSEHOLD'
+      || payerKind === 'GOVERNMENT' || payeeKind === 'GOVERNMENT') {
       const reason = reasonText(journal.reasonId[n]);
+      // §5-CLOSE C5: the treasury's flow statement is its payments.
+      if (payerRef.kind === 'GOVERNMENT') addToNested(report.treasuryFlowsByRegion, payerRef.region, reason, -amountUSD);
+      if (payeeRef.kind === 'GOVERNMENT') addToNested(report.treasuryFlowsByRegion, payeeRef.region, reason, amountUSD);
       // SEG-D: the pools' income statement, built from the payments themselves.
       if (payerRef.kind === 'SEGMENT') addToPool(report, payerRef.region, payerRef.industry, reason, -amountUSD);
       if (payeeRef.kind === 'SEGMENT') addToPool(report, payeeRef.region, payeeRef.industry, reason, amountUSD);

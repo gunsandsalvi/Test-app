@@ -11,17 +11,24 @@ import { auditOwnership } from './ownership';
 import { auditPrices } from './prices';
 import { auditAccounts } from './accounts';
 import { auditNames } from './names';
+import { AuditSnapshot, snapshotOf } from './snapshot';
 
 export type { AuditFinding } from './types';
 
-export function auditWeek(prev: GameState | undefined, state: GameState, week: number): AuditFinding[] {
+let lastSnapshot: AuditSnapshot | undefined;
+
+/** Run every family on this week's state. Week-over-week checks read the audit's OWN snapshot of
+ *  last week (the caller's state is mutated in place, so no reference to it can be "before"). */
+export function auditWeek(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
+  const prev = lastSnapshot;
   const run = (name: string, f: () => AuditFinding[]) => { try { out.push(...f()); } catch (e) { out.push({ family: 'F', check: `${name} threw`, week, message: String(e) }); } };
   run('money', () => auditMoney(prev, state, week));
-  run('ownership', () => auditOwnership(prev, state, week));
-  run('prices', () => auditPrices(prev, state, week));
+  run('ownership', () => auditOwnership(state, week));
+  run('prices', () => auditPrices(state, week));
   run('accounts', () => auditAccounts(prev, state, week));
-  run('names', () => auditNames(prev, state, week));
+  run('names', () => auditNames(state, week));
+  lastSnapshot = snapshotOf(state);
   return out;
 }
 

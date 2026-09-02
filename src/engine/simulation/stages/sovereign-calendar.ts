@@ -33,8 +33,8 @@
  *     trip on a date moves a number out of one side of the central bank's sheet and back into it
  *     — no participant's behaviour depends on the timing, because the one holder in this model
  *     that can never be short of cash is the issuer of the cash.
- *   - **The holders this model does not name.** They are paid smoothly, as the boundary line
- *     `governmentInterestToUnmodeledHoldersUSD` already says they are.
+ *   - There are no holders this model does not name (§5-CLOSE): every tranche is held, and a
+ *     coupon reaches a holder of record on its date or is not paid.
  */
 
 import { govBucketKeyOf } from '../../../domain/sovereign-id';

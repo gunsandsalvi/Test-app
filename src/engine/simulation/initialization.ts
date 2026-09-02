@@ -700,20 +700,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // capital ratio and deposits re-derive as the balancing funding — §7.4's discipline: the
       // seed opens in the exact shape the weekly lending pass maintains.
       migrateHouseholdDebtAtSeed(regionId, reg, regionBanksForLending);
-      // HH4b: the seed residual of the budget recycle — the slice of debt service whose return
-      // path to household income is not yet built (bank retained earnings, institutional
-      // dividend passthrough). Derived once so the seed consumption budget nets to exactly the
-      // pre-HH4b one: real receipts at seed are deposit interest (direct equity is marked from
-      // zero by the first weekly pass), and the residual covers the rest of debt service.
-      {
-        const hs = reg.householdState;
-        const annualDsUSD = (hs.weeklyDebtServiceUSD ?? 0) * 52;
-        const seedDepositInterestUSD = (hs.depositsUSD ?? 0) * (reg.policyRate * 0.6);
-        hs.unmodeledCapitalReceiptShareOfIncome = reg.estimatedHouseholdIncomeUSD > 0
-          ? Number((Math.max(0, annualDsUSD - seedDepositInterestUSD) / reg.estimatedHouseholdIncomeUSD).toFixed(6))
-          : 0;
-        hs.capitalReceiptsAnnualUSD = Math.round(annualDsUSD);
-      }
       reg.bankingSector = {
         ...reg.bankingSector,
         businessLoanBookUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.businessLoanBookUSD, 0),

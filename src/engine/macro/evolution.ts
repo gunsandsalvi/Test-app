@@ -157,7 +157,6 @@ export function evolveRegionMacro(
     etfShares: [],
     etfHoldingsUSD: 0,
     privateBusinessEquityUSD: 0,
-    unmodeledFinancialAssetsUSD: region.estimatedHouseholdIncomeUSD * 1.5,
     mortgageDebtUSD: region.estimatedHouseholdIncomeUSD * 0.8,
     creditCardDebtUSD: region.estimatedHouseholdIncomeUSD * 0.05,
     otherConsumerLoanDebtUSD: region.estimatedHouseholdIncomeUSD * 0.1,
@@ -560,12 +559,11 @@ export function evolveRegionMacro(
     // was a second derivation of a flow the banks already compute and post — rule 3, and it
     // disagreed with them by whatever the deposit competition was doing.
     depositInterestUSD: (region.householdDepositInterestWeeklyUSD ?? 0) * 52,
-    dividendsUSD: (prevHS.directEquityUSD ?? 0) * (microFeedback.avgListedDividendYieldAnnual ?? 0),
-    // HH: a LEVEL carried forward, not a share of the income it is an input to — the share form
-    // made income depend on itself the moment income became the measured sum. It shrinks only
-    // when one of HH4b's unbuilt receipt channels becomes a real payment (§6 watches it down).
-    residualUSD: prevHS.unmodeledCapitalReceiptResidualAnnualUSD
-      ?? (prevHS.unmodeledCapitalReceiptShareOfIncome ?? 0) * region.estimatedHouseholdIncomeUSD,
+    // §5-CLOSE C5: the dividends the public float was PAID last week (the register's paying
+    // agent pays the float's share to the household sector of the issuer's region), read off
+    // the household flow ledger — not a yield times a mark. The residual "return path" of debt
+    // service (a share of income from nobody, 14.7% of it) is deleted: income is what arrived.
+    dividendsUSD: (region.lastWeekHouseholdDividendsUSD ?? 0) * 52,
   };
   // HH — INCOME IS THE SUM OF PAYMENTS. It used to be
   // `computeHouseholdDisposableIncomeUSD(totalWageIncomeUSD, transfers)`: wages as
@@ -587,9 +585,9 @@ export function evolveRegionMacro(
   const measuredWeeklyReceiptsUSD = region.lastWeekHouseholdReceiptsUSD;
   const newEstimatedHouseholdIncomeUSD = measuredWeeklyReceiptsUSD !== undefined
     ? Math.round(Math.max(0,
+      // The dividends are inside the measured receipts already (a payment to the household
+      // sector like any other); they are split out above only for the cohorts' allocation.
       (measuredWeeklyReceiptsUSD - (region.lastWeekHouseholdTaxPaidUSD ?? 0)) * 52
-      + annualCapitalReceiptsUSD.dividendsUSD
-      + annualCapitalReceiptsUSD.residualUSD
     ))
     : Math.round(computeHouseholdDisposableIncomeUSD({
       wageIncomeUSD: totalWageIncomeUSD,
@@ -1224,14 +1222,12 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       // every holder together owned by week 6 and growing (§7.126).
       mmfSharesUSD: prevHS.mmfSharesUSD ?? 0,
       privateBusinessEquityUSD: prevHS.privateBusinessEquityUSD ?? 0,
-      unmodeledFinancialAssetsUSD: prevHS.unmodeledFinancialAssetsUSD ?? newEquityHoldingsUSD,
       // HH4: this week's cohort decomposition — the cross-section the aggregates above sum from.
       cohorts: cohortResult.cohorts,
       // COH2: the life-cycle half of the saving flow, which the pension stage collects as the
       // contribution. Measured here so the flat `PENSION_CONTRIBUTION_RATE` has nothing to do.
       lifeCycleSavingAnnualUSD: Math.round(cohortResult.lifeCycleSavingAnnualUSD),
-      capitalReceiptsAnnualUSD: Math.round((annualCapitalReceiptsUSD.depositInterestUSD + annualCapitalReceiptsUSD.dividendsUSD + annualCapitalReceiptsUSD.residualUSD)),
-      unmodeledCapitalReceiptShareOfIncome: prevHS.unmodeledCapitalReceiptShareOfIncome,
+      capitalReceiptsAnnualUSD: Math.round((annualCapitalReceiptsUSD.depositInterestUSD + annualCapitalReceiptsUSD.dividendsUSD)),
       // HH3: derived sums of the banks' itemized pools, carried through and overwritten by the
       // bank-diversification stage after its lending passes run.
       mortgageDebtUSD: newMortgageDebtUSD,

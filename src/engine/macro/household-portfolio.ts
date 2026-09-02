@@ -16,8 +16,7 @@
  *   - **Private business equity.** Households own the unlisted economy. HC gave every private firm
  *     an `ownership.founderPct`; valued at the same cleared multiple the sponsors mark at, this is
  *     the largest real component and it was entirely invisible before.
- *   - **The unmodeled remainder**, which is not a claim at all but an honest label for the assets
- *     the universe does not yet contain. See `unmodeledFinancialAssetsUSD`.
+ *   §5-CLOSE C5: there is no "unmodeled remainder" — household wealth is the claims that exist.
  */
 
 import { bookHeadOf } from '../../engine2/holdings';

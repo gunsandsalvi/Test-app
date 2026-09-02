@@ -297,18 +297,13 @@ export interface CohortBuildInputs {
   /**
    * HH4b — the capital receipts that recycle debt service back into the budget, ANNUAL USD,
    * in three components because their INCIDENCE differs and the incidence is the point:
-   * deposit interest lands roughly where wealth is (every tier holds deposits), dividends land
-   * where the equity exposure is (the top), and the residual — the recycle the model cannot yet
-   * attribute (bank retained earnings, institutional dividend passthrough; derived once at seed
-   * so the seed budget nets to exactly the pre-HH4b one, §6-recorded to decay) — lands where
-   * institutional CLAIMS sit, which is the pension-and-insurance middle, not the direct-equity
-   * top. Allocating it all by equity exposure was measured to hand 46% of it to the top 1% and
-   * inflate luxury demand a quarter above its seed weight.
+   * deposit interest lands roughly where wealth is (every tier holds deposits) and dividends land
+   * where the equity exposure is (the top). §5-CLOSE C5: there is no residual — both are the
+   * payments households received.
    */
   annualCapitalReceiptsUSD: {
     depositInterestUSD: number;
     dividendsUSD: number;
-    residualUSD: number;
   };
   /** Prior wealth distribution, for the capital-income allocation weights (one-week lag, like
    * every mark this stage reads). */
@@ -441,9 +436,8 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   // ---- 5. Savings cross-section, λ-normalized to the aggregate behavioural rate; debt service
   // allocated; consumption the residual. ----
   const annualDebtServiceUSD = Math.max(0, weeklyDebtServiceUSD) * 52;
-  // RULE 19 — both splits are MEASURED now (see `tierShareOfMeasured`).
+  // RULE 19 — the split is MEASURED (see `tierShareOfMeasured`).
   const debtShareByTier = tierShareOfMeasured(wealthDistribution, 'debtUSD');
-  const claimShareByTier = tierShareOfMeasured(wealthDistribution, 'institutionalClaimsUSD');
 
   // HH: the cohorts DISTRIBUTE household income; they do not re-derive it. The cross-section —
   // who earns what, relative to whom — is built above from real employment, real occupation
@@ -571,8 +565,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     const exp = wealthDistribution[t]?.equityExposureShare ?? 0.25;
     tierReceiptsUSD[t] =
       Math.max(0, inputs.annualCapitalReceiptsUSD.depositInterestUSD) * (nw / netWorthNorm)
-      + Math.max(0, inputs.annualCapitalReceiptsUSD.dividendsUSD) * ((nw * exp) / exposureNorm)
-      + Math.max(0, inputs.annualCapitalReceiptsUSD.residualUSD) * claimShareByTier[t];
+      + Math.max(0, inputs.annualCapitalReceiptsUSD.dividendsUSD) * ((nw * exp) / exposureNorm);
   });
   const cohorts: HouseholdCohort[] = preliminary.map(({ c, grossUSD, taxUSD, dispUSD }, i) => {
     const tierEarners = earnersByTier[c.tier] || 1;

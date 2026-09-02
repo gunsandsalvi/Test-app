@@ -359,6 +359,9 @@ export function applyPendingCorporateActionSettlements(
     updatedInstitutionalEntities: InstitutionalEntity[];
     pendingHolderSettlements: Map<string, number>;
     pendingHolderCashUSD?: Map<string, number>;
+    /** §5-CLOSE C5: the issuers, so an equity payment can find the shares the register does NOT
+     *  hold — the public float, whose dividend goes to the household sector by payment. */
+    updatedCompanies?: Company[];
     /** SETL3/4: present once the settlement layer is live — the register's payments become real
      *  payments from the issuer rather than cash appearing on the holder's book. */
     paymentJournal?: import('./settlement').PaymentJournal;
@@ -440,6 +443,36 @@ export function applyPendingCorporateActionSettlements(
     }
     entityHit[ei] = anyHit;
   });
+  // §5-CLOSE C5 — THE PUBLIC FLOAT IS A HOLDER. The register holds the institutions' shares; the
+  // rest of a listed issuer's stock is the float, owned by the household sector (that is what
+  // `householdDirectEquityUSD` measures). A dividend is owed per share, so the register's holders
+  // get their share of it and the float gets the rest, as a payment to the issuer's region's
+  // households — where before the register's holders were paid the WHOLE dividend on a part of
+  // the stock and households were credited a yield times a mark from nobody.
+  const denomByPair = new Map<number, number>();
+  if (hasCash && ctx.updatedCompanies) {
+    const companyById = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
+    owedByPair.forEach((owedUSD, k) => {
+      if (Math.floor(k / 0x400000) !== equityRef) return;
+      const issuerId = v2.internedStrings[k % 0x400000];
+      const issuer = companyById.get(issuerId);
+      const registerUSD = totalByPair.get(k) ?? 0;
+      const issuedUSD = Math.max(0, issuer?.marketCap ?? 0);
+      const denomUSD = Math.max(registerUSD, issuedUSD);
+      if (!(denomUSD > 0)) return;
+      denomByPair.set(k, denomUSD);
+      const floatUSD = denomUSD - registerUSD;
+      const issuerTicker = ctx.issuerTickerById?.get(issuerId);
+      if (floatUSD > 0 && issuer && issuerTicker && ctx.paymentJournal) {
+        journalPayment(ctx.paymentJournal, {
+          payer: { kind: 'COMPANY', ticker: issuerTicker },
+          payee: { kind: 'HOUSEHOLD', region: issuer.region },
+          amountUSD: owedUSD * (floatUSD / denomUSD),
+          reason: 'dividend to the public float',
+        });
+      }
+    });
+  }
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity, ei) => {
     if (!entityHit[ei]) return entity;
@@ -457,7 +490,7 @@ export function applyPendingCorporateActionSettlements(
           // SETL3/4: the holder's share of what the issuer owes. Paid AS A PAYMENT from the
           // issuer, so the money has a payer and a payee (rule 14) instead of appearing on the
           // holder's book while the issuer's ledger says it left.
-          const shareUSD = owedUSD * (H.qtyUSD[r] / totalUSD);
+          const shareUSD = owedUSD * (H.qtyUSD[r] / (denomByPair.get(k) ?? totalUSD));
           const issuerTicker = ctx.issuerTickerById?.get(v2.internedStrings[H.instrRef[r]]);
           // §5-CLOSE C4: a holder paid by an issuer nobody can name is money from nobody — a
           // defect at the site that recorded the action, never a credit.

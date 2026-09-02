@@ -104,6 +104,8 @@ export interface GameState {
     clearingHouseResidualUSD: number;
     /** SETL6 — reserves + treasury account, net of what the central bank issued. Must be zero. */
     centralBankResidualUSD: number;
+    /** §5-CLOSE C5 — the treasury's week by reason, per region: what the account moved by. */
+    treasuryFlowsByRegion: Record<string, Record<string, number>>;
   };
   /** SEG1 — payments recorded AFTER the week's settlement cutoff (hc-lifecycle's tender
    * settlements, birth carves). A real net-settlement system rolls after-cutoff payments into

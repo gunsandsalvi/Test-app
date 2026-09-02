@@ -318,6 +318,8 @@ export function runRegionalRepoSession(
   const finish = (book: RepoContract[], onRateAnnual: number, termRateAnnual: number | undefined,
                   clearedVolumeUSD: number): RepoSessionResult => {
     reg.repoBook = book;
+    // §5-CLOSE C5: the window's lending is the central bank's ASSET, derived from the same book.
+    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentUSD = Math.round(repoLentUSD(book, { kind: 'CENTRAL_BANK' }));
     reg.repoTermRateAnnual = termRateAnnual === undefined ? undefined : Number(termRateAnnual.toFixed(6));
     // REPO1: every scalar the sheets carried is now DERIVED from the book — the G2 pattern.
     banks.forEach((bank) => {
@@ -598,6 +600,8 @@ function creditRrpOnUnlentSleeves(
   lentByEntity: Map<string, number>,
   rrpBps: number
 ): void {
+  const cb = ctx.updatedRegions[regionId]?.centralBankSheet;
+  if (cb) cb.lastReverseRepoInterestUSD = 0;
   if (rrpBps <= 0 || sleeveByEntity.size === 0) return;
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.region !== regionId) return;
@@ -606,6 +610,7 @@ function creditRrpOnUnlentSleeves(
     const interestUSD = (parkedUSD * (rrpBps / 10000)) / 52;
     if (!(interestUSD > 0)) return;
     // The window pays it, and now says so: the non-bank mirror of the IOR banks earn.
+    if (cb) cb.lastReverseRepoInterestUSD = (cb.lastReverseRepoInterestUSD ?? 0) + interestUSD;
     pay(ctx, {
       payer: { kind: 'CENTRAL_BANK', region: regionId },
       payee: { kind: 'INSTITUTION', id: e.id },
@@ -690,5 +695,6 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       });
     });
     reg.repoBook = book.filter((c) => c.principalUSD > 1);
+    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentUSD = Math.round(repoLentUSD(reg.repoBook, { kind: 'CENTRAL_BANK' }));
   });
 }

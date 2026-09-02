@@ -1,6 +1,7 @@
 /** F — STOCKS AGAINST FLOWS. The accounting closes: what a statement says moved is what the ledger moved. */
 
 import { GameState } from '../../types';
+import { AuditSnapshot } from './snapshot';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, sum } from './types';
@@ -24,21 +25,23 @@ function f1(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
-/** F2 — the treasury's account moves by exactly what it took in, paid out and borrowed. */
-function f2(prev: GameState | undefined, state: GameState, week: number): AuditFinding[] {
+/** F2 — the treasury's account moves by exactly its payments (§5-CLOSE C5: nothing else writes it),
+ *  and its reported revenue is exactly the tax its payers remitted. */
+function f2(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  if (!prev) return out;
+  const flows = state.lastSettlement?.treasuryFlowsByRegion ?? {};
   REGION_IDS.forEach((r) => {
-    const reg = state.regions[r], before = prev.regions[r];
-    const cb = reg?.centralBankSheet, cbBefore = before?.centralBankSheet;
-    if (!cb || !cbBefore) return;
-    const dTga = cb.treasuryAccountUSD - cbBefore.treasuryAccountUSD;
-    const debtNow = sum(reg.govDebtTranches ?? [], (t) => t.principalUSD), debtBefore = sum(before.govDebtTranches ?? [], (t) => t.principalUSD);
-    const rx = reg as unknown as { governmentOutlaysUSD?: number; governmentSpendingWeeklyUSD: number };
-    const outlays = rx.governmentOutlaysUSD ?? rx.governmentSpendingWeeklyUSD;
-    const expected = reg.governmentRevenueUSD - outlays + (debtNow - debtBefore) + cb.lastRemittanceUSD;
-    const gap = dTga - expected;
-    if (Math.abs(gap) > Math.max(5e8, Math.abs(expected) * 0.25)) out.push({ family: 'F', check: 'F2 treasury account = revenue − outlays + borrowing + remittance', week, usd: gap, message: `${r}: the account moved ${B(dTga)}; revenue ${B(reg.governmentRevenueUSD)} − outlays ${B(outlays)} + net issuance ${B(debtNow - debtBefore)} + remittance ${B(cb.lastRemittanceUSD)} = ${B(expected)}; ${B(gap)} unexplained` });
+    const reg = state.regions[r];
+    const cb = reg?.centralBankSheet;
+    if (!cb) return;
+    const byReason = flows[r] ?? {};
+    const settled = sum(Object.values(byReason), (v) => v);
+    const taxes = sum(Object.entries(byReason).filter(([k, v]) => v > 0 && /tax/i.test(k)), ([, v]) => v);
+    if (prev?.[r]) {
+      const dTga = cb.treasuryAccountUSD - prev[r]!.treasuryAccountUSD;
+      if (Math.abs(dTga - settled) > 1e6) out.push({ family: 'F', check: 'F2 treasury account moves by its payments', week, usd: dTga - settled, message: `${r}: the account moved ${B(dTga)} but its payments net to ${B(settled)}; ${B(dTga - settled)} written by something that is not a payment` });
+    }
+    if (Math.abs(reg.governmentRevenueUSD - taxes) > Math.max(1e6, taxes * 1e-3)) out.push({ family: 'F', check: 'F2 revenue = tax remitted', week, usd: reg.governmentRevenueUSD - taxes, message: `${r}: revenue reported ${B(reg.governmentRevenueUSD)} against ${B(taxes)} of tax actually remitted` });
   });
   return out;
 }
@@ -52,6 +55,6 @@ function f3(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
-export function auditAccounts(prev: GameState | undefined, state: GameState, week: number): AuditFinding[] {
+export function auditAccounts(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
   return [...f1(state, week), ...f2(prev, state, week), ...f3(state, week)];
 }
