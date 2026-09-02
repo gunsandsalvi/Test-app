@@ -128,8 +128,8 @@ FRACTION='(^|[^A-Za-z0-9_.])[0-9]*\.[0-9]+([^0-9A-Za-z_]|$)'
 FRACTIONS=$(grep -rnE "$FRACTION" src/engine src/engine2 src/domain --include=*.ts 2>/dev/null \
   | grep -vE '^src/domain/stated\.ts:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' | grep -vE 'toFixed\(' || true)
 FRACTION_COUNT=$(printf '%s' "$FRACTIONS" | grep -c . || true)
-# §7.401 struck the budget at the count measured with the first eight declarations in the registry.
-FRACTION_BUDGET=1381
+# §7.401 struck the budget at 1381 with the first eight declarations; §7.404 lowered it to 1377 (the audit's one tolerance declared).
+FRACTION_BUDGET=1377
 if [ "$FRACTION_COUNT" -gt "$FRACTION_BUDGET" ]; then
   echo "ERROR: $FRACTION_COUNT fractional literals in the engine (budget $FRACTION_BUDGET) — a stated number with no owner."
   echo "Declare it in src/domain/stated.ts (owner, reason, the measurement that replaces it) and import the constant."

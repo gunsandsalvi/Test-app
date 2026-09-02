@@ -93,6 +93,16 @@ export const SEED_INSURER_INSTITUTIONAL_SHARE = stated({
   replacedBy: 'premiums written against the real exposures (§5-INS): the insurer\'s book is what it insures',
 });
 
+// --- The audit (engine/audit/*) — one RESOLUTION tolerance for "these two books agree" ---
+/** The relative gap at which two books that should be equal are read as disagreeing: the
+ *  sovereign and corporate held-versus-issued checks, the market-cap identity, an index's weights. */
+export const AUDIT_BOOKS_TOLERANCE = stated({
+  id: 'audit.booksTolerance', value: 0.02, kind: 'RESOLUTION',
+  owner: 'engine/audit/ownership.ts',
+  reason: 'the books carry rounding and one-week timing; the test is invariance to the tolerance, not its value',
+  replacedBy: 'none (a resolution choice; the checks must be invariant to it)',
+});
+
 // --- The brains (domain/preferences.ts, §5-BRAINS / §5-DIST-P) — the two PREFERENCE ranges ---
 /** Patience as a horizon in weeks, log-uniform on [a month, a year]. */
 export const PREFERENCE_PATIENCE_WEEKS_MIN = stated({

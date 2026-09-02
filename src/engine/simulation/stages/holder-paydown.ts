@@ -25,6 +25,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { DealerDeskInventory } from '../../../domain/dealer-desk';
 import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 import { cashOf } from '../../ledger/accounts';
+import { transferHolding, HoldingKind } from '../../ledger/holdings-ledger';
 
 export function reconcileHolderPrincipal(args: {
   ctx: WeeklyStepContext;
@@ -39,10 +40,12 @@ export function reconcileHolderPrincipal(args: {
   banks: Company[];
   /** The desk book name ('leveraged loan', 'corporate bond', ...). */
   deskBook: string;
+  /** §5-FINALIZATION step 13 (W2): the register kind of that book — the desk's paydown is a wire. */
+  instrumentType: HoldingKind;
   /** The payment reason, so the flow is attributable per book. */
   reason: string;
 }): void {
-  const { ctx, outstandingByIssuerId, issuerById, holdingsByEntity, banks, deskBook, reason } = args;
+  const { ctx, outstandingByIssuerId, issuerById, holdingsByEntity, banks, deskBook, instrumentType, reason } = args;
 
   // Pass 1 — each issuer's holder total, institutions plus positive desk positions.
   const heldByIssuer = new Map<string, number>();
@@ -126,6 +129,10 @@ export function reconcileHolderPrincipal(args: {
           // The desk's principal comes back as reserves against the position it loses — an
           // asset swap on the securities account, exactly like a sale (rule 14).
           pay(ctx, { payer, payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker }, amountUSD: paidUSD, reason });
+          // Step 13 (W2): the paper paid down leaves the desk by wire, to the house (the ladder's
+          // own retirement wire met it there; the register's share is wired at its write-back).
+          transferHolding(ctx.v2, { kind: 'BANK_SECURITIES', ticker: bank.ticker }, { kind: 'CLEARING_HOUSE', region: args.regionId },
+            { instrumentType, instrumentId: p.instrumentId, issuerRegion: args.regionId, valueUSD: paidUSD }, `${reason}: desk paper paid down`);
         }
       }
       touched = true;

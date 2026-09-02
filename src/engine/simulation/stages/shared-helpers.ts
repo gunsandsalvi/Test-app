@@ -421,6 +421,46 @@ export function applyPendingCorporateActionSettlements(
   const owedByPair = toPairs(pendingCashByType);
   const equityRef = refOf('EQUITY') ?? -2;
 
+  // §5-FINALIZATION step 13 (W2): THE DESKS ARE HOLDERS OF RECORD TOO. A retirement or placement
+  // scales a named desk's position in the issuer's paper by the same ratio as the register's
+  // rows, with the same cash leg (the issuer redeems, or is paid) and the paper wired against the
+  // house. Before this the desks' positions stood until the next auction's paydown caught them
+  // up a week late, and the house was short by exactly the desks' share of each week's
+  // retirements (measured: USA CORP_BOND −0.27B at week 1, every week since W2 was read).
+  if (ctx.updatedCompanies && ctx.paymentJournal) {
+    const DESK_BOOK_OF: Record<string, string> = { CORP_BOND: 'corporate bond', LEVERAGED_LOAN: 'leveraged loan' };
+    const regionByIssuerId = new Map(ctx.updatedCompanies.map((c) => [c.id, c.region as RegionId]));
+    pendingByType.forEach((byId, type) => {
+      const book = DESK_BOOK_OF[type]; if (!book) return;
+      ctx.updatedCompanies!.forEach((bank) => {
+        const sheet = bank.bankBalanceSheet; const rows = sheet?.dealerDeskInventory?.[book];
+        if (!bank.isBankEntity || !sheet || !rows || rows.length === 0) return;
+        let touched = false;
+        const newRows = rows.map((p) => {
+          const ratio = byId.get(p.instrumentId);
+          if (ratio === undefined || !(p.inventoryUSD > 0) || Math.abs(ratio - 1) < 1e-9) return p;
+          const issuerTicker = ctx.issuerTickerById?.get(p.instrumentId);
+          const issuerRegion = regionByIssuerId.get(p.instrumentId);
+          if (!issuerTicker || !issuerRegion) return p;
+          const deltaUSD = p.inventoryUSD * (ratio - 1);
+          const house = { kind: 'CLEARING_HOUSE' as const, region: issuerRegion };
+          const desk = { kind: 'BANK_SECURITIES' as const, ticker: bank.ticker };
+          const spec = { instrumentType: type as ItemizedHolding['instrumentType'], instrumentId: p.instrumentId, issuerRegion, valueUSD: Math.abs(deltaUSD) };
+          if (deltaUSD < 0) {
+            journalPayment(ctx.paymentJournal!, { payer: { kind: 'COMPANY', ticker: issuerTicker }, payee: desk, amountUSD: -deltaUSD, reason: 'principal redeemed to holder of record' });
+            transferHolding(ctx.v2, desk, house, spec, 'corporate action: desk paper retired pro rata');
+          } else {
+            journalPayment(ctx.paymentJournal!, { payer: desk, payee: { kind: 'COMPANY', ticker: issuerTicker }, amountUSD: deltaUSD, reason: 'placement paid by holder of record' });
+            transferHolding(ctx.v2, house, desk, spec, 'corporate action: desk paper placed pro rata');
+          }
+          touched = true;
+          return { ...p, inventoryUSD: p.inventoryUSD * ratio, units: p.units !== undefined ? p.units * ratio : undefined };
+        });
+        if (touched) bank.bankBalanceSheet = { ...sheet, dealerDeskInventory: { ...sheet.dealerDeskInventory, [book]: newRows } };
+      });
+    });
+  }
+
   // Holders OF RECORD — the books as they stand before this week's actions scale them. A call
   // premium belongs to whoever owned the paper when it was called, so the shares are taken from
   // the pre-action notionals and the scaling happens after.

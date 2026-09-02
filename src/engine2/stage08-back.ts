@@ -1307,8 +1307,15 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // engine allocated the new float and settled the cash legs. Count its size as pre-existing
     // here, or the pro-rata action settlement below hands holders the same paper twice.
     const settlement = primarySettlementByIssuerId.get(L8.companyId[row]);
-    const primaryFixedAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FIXED' ? settlement.marketTakeUSD : 0;
-    const primaryFloatingAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FLOATING' ? settlement.marketTakeUSD : 0;
+    // §5-FINALIZATION step 13: the pre-action face counts the WHOLE placed deal (under firm
+    // commitment the lead's desk holds the residual — real paper, on the ladder below), not the
+    // book's take. Counting the take scaled every register holder UP by the residual through the
+    // pro-rata action, paid to the issuer as a placement — paper minted onto the register that
+    // the lead already held (measured: USA desks 34B → 93B over the ladders in two weeks).
+    const primaryPlacedUSD = settlement && !settlement.withdrawn
+      ? Math.max(0, Math.min(settlement.offering.sizeUSD, settlement.issuedUSD ?? settlement.offering.sizeUSD)) : 0;
+    const primaryFixedAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FIXED' ? primaryPlacedUSD : 0;
+    const primaryFloatingAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FLOATING' ? primaryPlacedUSD : 0;
     // SCALE — the two filtered reduces as one walk; each accumulator sums its subset in array
     // order and the adjustment adds last, so every float is the one the filters produced.
     let preFixedSumUSD = 0, preFloatingSumUSD = 0;
@@ -1502,7 +1509,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // partially-placed deal raises less, which is real.
       // WS8: what came into EXISTENCE, not what the book bought. Under firm commitment the lead
       // holds the residual, so the tranche is the whole deal — see `issuedUSD`.
-      const placedUSD = Math.max(0, Math.min(o.sizeUSD, settlement.issuedUSD ?? o.sizeUSD));
+      const placedUSD = primaryPlacedUSD;
       const newTranche: DebtTranche = o.rateType === 'FIXED'
         ? {
             id: `${L8.companyId[row]}-${o.purpose}-${nextWeek}`,

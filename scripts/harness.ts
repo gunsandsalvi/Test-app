@@ -369,6 +369,19 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     }
   }
 
+  // OWN_TRACE=1 — the COVERAGE, both sides: what the register and every named desk hold of each
+  // kind against the ladders' face (the battery below reports only the "over" side).
+  if (process.env.OWN_TRACE === '1') {
+    const deskUSD: Record<string, { corp: number; loan: number; cp: number }> = {};
+    regionIds.forEach((r) => { deskUSD[r] = { corp: 0, loan: 0, cp: 0 }; });
+    state.companies.forEach((c) => {
+      const inv = c.bankBalanceSheet?.dealerDeskInventory; if (!inv || !deskUSD[c.region]) return;
+      (inv['corporate bond'] ?? []).forEach((p) => { deskUSD[c.region].corp += p.inventoryUSD; });
+      (inv['leveraged loan'] ?? []).forEach((p) => { deskUSD[c.region].loan += p.inventoryUSD; });
+    });
+    // `held` already folds the desks in through the region's desk view; the named desks are shown inside it.
+    console.log(`  [own-trace] w${week}: ` + regionIds.map((r) => `${r} corp ${(held[r].corp / 1e9).toFixed(2)} (desks ${(deskUSD[r].corp / 1e9).toFixed(2)}) of ${(outstanding[r].corp / 1e9).toFixed(2)}B | loan ${(held[r].loan / 1e9).toFixed(2)} (desks ${(deskUSD[r].loan / 1e9).toFixed(2)}) of ${(outstanding[r].loan / 1e9).toFixed(2)}B | cp ${(held[r].cp / 1e9).toFixed(2)} of ${(outstanding[r].cp / 1e9).toFixed(2)}B`).join(' || '));
+  }
   regionIds.forEach((r) => {
     const cases: [string, number, number][] = [
       ['corporate bonds', held[r].corp, outstanding[r].corp],

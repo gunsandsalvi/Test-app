@@ -255,7 +255,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       issuerById: new Map(regionCompanies.map((c) => [c.id, c])),
       holdingsByEntity: currentHoldingByCompanyByEntity,
       banks: regionBanksEarly,
-      deskBook: BOOK,
+      deskBook: BOOK, instrumentType: 'CORP_BOND',
       reason: 'bond principal paydown to holders',
     });
     // OWN7, first half: the float is what this book's holders hold, and the INSTITUTIONS' half of

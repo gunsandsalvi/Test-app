@@ -47,7 +47,7 @@ import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, l
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementUSD, institutionSpendableUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, PrimaryTake } from './book-settlement';
-import { clearedBookDelta } from '../../ledger/holdings-ledger';
+import { clearedBookDelta, transferHolding } from '../../ledger/holdings-ledger';
 import { wireCentralBankFills } from './central-bank-demand';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
@@ -734,6 +734,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
               amountUSD: repaidUSD,
               reason: 'commercial paper redeemed',
             });
+            // Step 13 (W2): the matured paper leaves the desk by wire, to the house (the ladder's
+            // retirement wire meets it there).
+            transferHolding(ctx.v2, { kind: 'BANK_SECURITIES', ticker }, { kind: 'CLEARING_HOUSE', region: regionId },
+              { instrumentType: 'COMMERCIAL_PAPER', instrumentId: iss.comp.id, issuerRegion: regionId, valueUSD: repaidUSD }, 'commercial paper redeemed: desk paper matured');
           }
         });
         heldByIssuerByEntity.forEach((byIssuer, entityId) => {
