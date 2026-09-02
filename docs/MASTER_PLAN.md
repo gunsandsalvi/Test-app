@@ -12,11 +12,11 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `8edb476` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
+- HEAD `9268624` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
   earlier one; the session that owns it may push nowhere else.)
-- **Next step: §3 step 2**, then 3, 4, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 3**, then 4, 5, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `COUPON_TRACE=1 SHOCKS=0 WEEKS=16` at `8edb476` —
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `9268624` —
   **95 violations in 24 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
@@ -26,11 +26,12 @@ There is deliberately no section 7 in this file, so the citation can never be mi
 - Gates at HEAD: `tsc` 0, ESLint 347/354, hygiene pass, 125 tests.
 
 **Where this list came from (2026-09-02): a line-by-line audit of ~230 files / ~55k lines**, which
-found ~380 defects. Every material one is a step in §3 at its file:line, and **the sweep in full is
+found ~380 defects. Every material one is a step in §3 at its file:line (or, once done, in §9),
+and **the sweep in full is
 in §8, by area, so nobody re-derives it** — including the long tail of minor, dead-code and
 already-fine findings that did not earn a step. §8 is a record, not a work list, and it was NOT
 re-verified: treat an unconfirmed finding there as a lead with a file:line. The headline that set the order: money and ownership do NOT close (interest accrued and
-never paid — step 1(a), now fixed; a residual wired twice; three ledger paths dropping value
+never paid, a residual wired twice — both now closed, §9; three ledger paths dropping value
 silently; an estate that can never close), price is NOT universal (credit trades at par, commodity
 spot is a drift formula), and the instrument that measures all this is itself broken (the wires
 family never prints, the per-bank identity check has never fired).
@@ -183,10 +184,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-2. **The residual delivered twice.** `primary-settlement.ts:147-150` and `:155-159` move the
-   identical spec to the identical lead desk; neither writes a register row (`holdings-ledger.ts:44`
-   resolves only INSTITUTION), so both are pure wires off the clearing house. This is the named
-   suspect for the standing W2 dust (12 of last run's 82 violations). Delete the second block.
 3. **The silent truncations.** `holdings-ledger.ts:79-103` (`debitRow`) takes what the rows hold and
    drops the remainder with no defect after the full quantity was wired; `holdings-store.ts:155-176`
    (`addShares`) drops an undeliverable remainder; `engine2/holdings.ts:313` (`pruneEmptyRows`)
@@ -2311,3 +2308,15 @@ over ten weeks in the first gate run, which is what named the missing write. Mea
 unowned 0.00B; at w16 the desks accrue 0.078B of the week's 0.597B corporate-bond interest,
 0.205B of 0.902B on loans, 0.015B of 0.023B on CP, and are owed 1.579B / 0.564B / 0.102B.
 COUPON_TRACE now carries the desks' slice of accrued/paid/owed per type.
+
+**2. The residual delivered twice.** (`9268624`) `primary-settlement.ts` moved the lead's
+underwriting residual to its desk twice — a kind-dispatched movement (new shares issued onto the
+lead for equity, a transfer off the clearing house for credit) followed by an unconditional
+second transfer off the house with the identical spec. Both emit a wire, so the house was debited
+twice for one delivery and the equity path attributed one movement to two senders. The second
+block is gone. Measured (SHOCKS=0 WEEKS=16): **95 violations in 24 families → 95 in 24**, money
+clean, unowned 0.00B. **The plan named this as the suspect behind the standing W2 dust and it is
+not** — the whole effect is JPN CORP_BOND moving from −0.00B to 0.00B in weeks 15–16, under
+0.005B. Most primaries are taken in full so the residual is small, and what the duplicate did
+wire, `debitRow` silently truncated on the second pass. W2's dust has another owner; do not
+re-derive this one.
