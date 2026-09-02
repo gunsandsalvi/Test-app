@@ -1,5 +1,5 @@
 /**
- * The week's holdings, held once (SCALE — columnar state, milestone C1).
+ * The week's holdings, held once.
  *
  * Five clearing books used to do the same physical work five times over: sweep every
  * institutional entity's entire `itemizedHoldings` array (all asset classes, all regions) once
@@ -36,6 +36,7 @@ import { WeeklyStepContext } from './context';
 import { clearedBookDelta } from '../../ledger/holdings-ledger';
 import { mutableHoldings } from '../../../engine2/holdings';
 import { RegionId } from '../../../domain/geography';
+import { defect } from '../../../domain/defect';
 
 /** The instrument types the clearing books price — the only groups the store indexes. */
 const BOOK_TYPES: ItemizedHolding['instrumentType'][] = [
@@ -46,7 +47,7 @@ interface EntitySlot {
   entity: InstitutionalEntity;
   /** Week-start rows, plus any delivered outside an auction (see `addShares`). */
   rows: ItemizedHolding[];
-  /** §7.313 flip — each row's backing row in the persistent store, parallel to `rows`;
+  /** each row's backing row in the persistent store, parallel to `rows`;
    *  -1 = created mid-window (a real row is allocated for it at the write-back). */
   rowIds: number[];
   /** 0 = unclaimed; otherwise the epoch (region-pass) that claimed the row. */
@@ -71,10 +72,24 @@ export class HoldingsStore {
     entities.forEach((source) => {
       const entity: InstitutionalEntity = { ...source };
       const rows = entity.itemizedHoldings || [];
-      // §7.313 flip — the objects are last close's materialized view and the chain holds the
-      // same book in the same order, so pairing index-for-row is one linear walk.
+      // The objects are last close's materialized view and the chain holds the same book in the
+      // same order, so pairing index-for-row is one linear walk — and the pairing is only safe
+      // while the two agree. `finalize` KEEPS rowIds[i] for an unclaimed i and FREES it for a
+      // claimed one, so a one-row desync keeps and frees the wrong register rows and rewrites
+      // ownership in silence. Checked here, where it is still cheap to name.
       const rowIds: number[] = [];
       for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) rowIds.push(r);
+      if (rowIds.length !== rows.length) {
+        defect(`${entity.id} has ${rows.length} book objects against ${rowIds.length} register rows`
+          + ' — the store pairs them by position and cannot tell which row is which');
+      }
+      for (let i = 0; i < rows.length; i++) {
+        const iRef = v2.internedIdByString.get(rows[i].instrumentId);
+        if (iRef !== undefined && H.instrRef[rowIds[i]] !== iRef) {
+          defect(`${entity.id}[${i}] pairs ${rows[i].instrumentId} with register row`
+            + ` ${v2.internedStrings[H.instrRef[rowIds[i]]]} — the book and the chain have diverged`);
+        }
+      }
       const byType = new Map<string, number[]>();
       rows.forEach((h, i) => {
         if (!BOOK_TYPES.includes(h.instrumentType)) return;
@@ -157,6 +172,16 @@ export class HoldingsStore {
     const slot = this.slots.get(entityId);
     if (!slot || !(Math.abs(shares) > 0)) return;
     const indices = slot.byType.get(type);
+    // ONE definition of what is left over, and it measures FLOAT NOISE, not a quantity. The
+    // caller's delivery is itself a sum of row quantities differenced against another sum, and
+    // the residue of such a chain scales with the largest magnitude in it — so the scale is the
+    // delivery or the biggest row it touches, whichever is larger, at a relative size far above
+    // double precision and far below any share count the model trades.
+    // The scale is the whole position the walk draws from, because that is the sum the
+    // caller's own view of it was accumulated over.
+    let positionShares = 0;
+    const isDust = (x: number): boolean =>
+      Math.abs(x) <= 1e-9 * Math.max(1, Math.abs(shares), positionShares);
     let remaining = shares;
     if (indices) {
       for (const i of indices) {
@@ -164,13 +189,14 @@ export class HoldingsStore {
         const row = slot.rows[i];
         if (row.instrumentId !== instrumentId) continue;
         const held = row.quantityShares ?? 0;
+        positionShares += Math.abs(held);
         // A position can be split across rows, so a withdrawal draws from each in turn and never
         // takes a row negative; a deposit lands whole on the first one.
         const take = remaining < 0 ? -Math.min(held, -remaining) : remaining;
         const next = held + take;
         row.quantityShares = next;
         row.quantityOrNotionalUSD = next * pricePerShare;
-        // §7.313 flip — the persistent row is the authority; the delivery lands on it too.
+        // The persistent row is the authority; the delivery lands on it too.
         const rid = slot.rowIds[i];
         if (rid >= 0) {
           const H = mutableHoldings(this.v2);
@@ -179,10 +205,16 @@ export class HoldingsStore {
           markBookDirty(this.v2, entityId);
         }
         remaining -= take;
-        if (Math.abs(remaining) <= 1e-9) return;
+        if (isDust(remaining)) return;
       }
     }
-    if (remaining < 0) return; // nothing left here to deliver from
+    if (remaining < 0 && !isDust(remaining)) {
+      // The receiving leg is a separate call, so dropping what could not be delivered lands
+      // shares on one book that never left the other.
+      defect(`${entityId} cannot deliver ${-shares} shares of ${instrumentId}: it holds`
+        + ` ${positionShares} unclaimed and is ${-remaining} short — the receiving leg is already written`);
+    }
+    if (remaining < 0) return;
     shares = remaining;
     const row: ItemizedHolding = {
       instrumentId,
@@ -209,7 +241,7 @@ export class HoldingsStore {
   }
 
   /**
-   * §7.313 flip — the write-back RELINKS the persistent chains instead of recomposing objects:
+   * The write-back RELINKS the persistent chains instead of recomposing objects:
    * [every unclaimed row, original order] ++ [appended fills, append order], exactly the
    * composition the recompose produced, but only NEW rows (fills, mid-window deliveries) pay an
    * intern; the standing register is a pointer relink. `entity.itemizedHoldings` is refreshed at
@@ -217,7 +249,7 @@ export class HoldingsStore {
    */
   finalize(): void {
     const v2 = this.v2;
-    // §5-FINALIZATION step 13 (W2): the week's MARK per share instrument is what this epoch's
+    // The week's MARK per share instrument is what this epoch's
     // books wrote on any appended row (shares × the cleared print) — one price for every wire
     // of that instrument, the seller's included, so the house nets in value as it does in shares.
     const markById = new Map<string, number>();
@@ -233,7 +265,7 @@ export class HoldingsStore {
         && !slot.rowIds.includes(-1)
         && slot.claimed.every((c) => c === 0);
       if (untouched) return;
-      // §5-WIRES W2: THE FILLS ARE WIRES. What the auctions claimed off this book against what
+      // THE FILLS ARE WIRES. What the auctions claimed off this book against what
       // they appended is the holder's net trade per instrument, wired against the clearing
       // house of the instrument's region — bought or sold, one number each.
       {
@@ -256,7 +288,7 @@ export class HoldingsStore {
         keys.forEach((key) => {
           const [type, region] = key.split('|');
           const b = before.get(key) ?? new Map(), a = after.get(key) ?? new Map();
-          // §5-FINALIZATION step 13 (W2): a share book's wire is priced at THIS week's mark (the
+          // A share book's wire is priced at THIS week's mark (the
           // appended row's), never at the value delta — the delta carries the revaluation of the
           // shares the holder kept, which is a mark, not a move (measured: USA EQUITY −66.7B at
           // the house in one week from exactly that).
@@ -276,7 +308,7 @@ export class HoldingsStore {
       }
       // Fate of every row is already known, so the chain is rebuilt directly: allocations first
       // (they may reuse earlier frees, never this entity's — its frees come after), then the
-      // claimed rows to the free list, then one link pass. No Set anywhere (§7.315).
+      // claimed rows to the free list, then one link pass. No Set anywhere.
       const ids: number[] = [];
       for (let i = 0; i < slot.rows.length; i++) {
         if (slot.claimed[i]) continue;
@@ -305,7 +337,7 @@ export function finalizeHoldingsStore(ctx: WeeklyStepContext): void {
 }
 
 /**
- * SCALE — ONE ROW PER POSITION.
+ * ONE ROW PER POSITION.
  *
  * A fill appends a row; it does not merge into the position the holder already has. So the
  * register fragments: measured at week 15, **122,164 rows carrying 103,633 distinct
@@ -320,19 +352,19 @@ export function finalizeHoldingsStore(ctx: WeeklyStepContext): void {
  * are done, and folding before them left 9,734 duplicates standing at week 15 out of the 18,531
  * there were. Folding at the close means every sweep of the NEXT week walks one row per position.
  */
-/** §7.327 — consolidate's persistent dup-scan marks, per world (batteries clone states). */
+/** consolidate's persistent dup-scan marks, per world (batteries clone states). */
 const CONSOLIDATE_SEEN = new WeakMap<object, { epoch: number; byKey: Map<number, number> }>();
 
 export function consolidateRegister(ctx: WeeklyStepContext): void {
-  // §7.313 flip — dup-scan and merge on the rows: a (type, instrument) pair is one integer
+  // Dup-scan and merge on the rows: a (type, instrument) pair is one integer
   // key, the surviving row is the FIRST (the register keeps its order), dollars and shares add
   // in row order — the same accumulation the object merge produced.
   const v2 = ctx.v2;
   const H = v2.holdings;
   const pairKey = (r: number): number => H.typeRef[r] * 0x400000 + H.instrRef[r];
-  // §7.327 — the dup-scan's `seen` Set was allocated per BOOK (~3k a week) and hashed every
+  // The dup-scan's `seen` Set was allocated per BOOK (~3k a week) and hashed every
   // row into it; one persistent epoch-stamped map does the same test with zero allocation
-  // (§7.315's mark pattern, at (type, instrument)-key grain — a new epoch per book).
+  // an epoch stamp at (type, instrument)-key grain instead — a new epoch per book.
   let seenEpoch = CONSOLIDATE_SEEN.get(v2);
   if (!seenEpoch) { seenEpoch = { epoch: 0, byKey: new Map<number, number>() }; CONSOLIDATE_SEEN.set(v2, seenEpoch); }
   const seenByKey = seenEpoch.byKey;

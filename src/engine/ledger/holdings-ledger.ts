@@ -1,5 +1,5 @@
 /**
- * §5-WIRES W2 — THE SECURITIES LEDGER. The one place a register row moves, and every move a
+ * THE SECURITIES LEDGER. The one place a register row moves, and every move a
  * numbered wire between two parties. A stage that wants a holding to change says WHO gives it
  * to WHOM, how much, at what price and why — exactly what it says for money — and gets a wire
  * number back. Direct writes to the store do not compile (`ReadonlyHoldingStore`).
@@ -24,6 +24,7 @@ import { PartyRef } from './party';
 import { wire, AssetKind, ASSET_KINDS } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { RegionId } from '../../domain/geography';
+import { defect } from '../../domain/defect';
 
 export type HoldingKind = ItemizedHolding['instrumentType'];
 
@@ -74,7 +75,13 @@ const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
  * chain: the debit lands on its rows and the walk notes whether any row (this one or a residue
  * elsewhere on the book) has to leave. Only then is the chain relinked — the relink rebuilds
  * the whole chain and the corporate-action pass debits every holder per instrument, so
- * relinking on every hit was four walks and an allocation per action (§7.383).
+ * relinking on every hit would be four walks and an allocation per action.
+ *
+ * A DEBIT LARGER THAN THE POSITION IS A DEFECT, NOT A SHORTFALL TO SWALLOW. The wire for the
+ * FULL quantity is already written by the time this runs, so a remainder left after the walk is
+ * paper minted on the receiving side that never left the payer's book — the gap then shows up
+ * in the house's net and in the ownership family with no name on it. `retireTranche` defects on
+ * exactly this case; so does this.
  */
 function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const H = mutableHoldings(v2);
@@ -91,6 +98,12 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
       }
     }
     if (!keepsRow(H, r)) drops = true;
+  }
+  // What is left after the walk is either float noise from the row-by-row subtraction — which
+  // scales with the quantity moved — or paper the holder never had.
+  if (leftUSD > 1e-9 * Math.max(1, spec.valueUSD) || leftShares > 1e-9 * Math.max(1, spec.shares ?? 0)) {
+    defect(`${holderId} was debited ${spec.instrumentType} ${spec.instrumentId} beyond its position`
+      + ` — ${(leftUSD / 1e6).toFixed(6)}M and ${Number.isNaN(leftShares) ? 0 : leftShares} shares undelivered`);
   }
   if (drops) {
     const kept: number[] = [];
@@ -208,7 +221,7 @@ export function markHolding(v2: V2World, holderId: string, row: number, valueUSD
   markBookDirty(v2, holderId);
 }
 
-/** A written-down book's sub-$1 residues are closed — no wire: nothing of value moved. */
+/** The rows a written-down book has left holding nothing are closed — no wire: nothing moved. */
 export function closeEmptyPositions(v2: V2World, holderId: string): void { pruneEmptyRows(v2, holderId); }
 
 /** The book's rows, keyed by instrument, for a delta read (before/after a clearing). */

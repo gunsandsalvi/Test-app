@@ -1,15 +1,14 @@
 /**
- * ENGINE V2 — THE INSTITUTIONAL REGISTER AS PERSISTENT ROWS (the §7.307 holdings flip, staged
- * per §7.311/§7.313's proven method).
+ * THE INSTITUTIONAL REGISTER AS PERSISTENT ROWS.
  *
  * Stage 1: a SYNCED MIRROR — `entity.itemizedHoldings` stays authoritative and every writer
  * mirrors the books it touched (`syncBookRows`); `HOLDINGS_SYNC_CHECK=1` compares canonical
  * projections at each week end and throws on the first mismatch, so a missed writer is found
- * empirically (§7.221), exactly how the tranche mirror's check found the birth path and the
+ * empirically, exactly how the tranche mirror's check found the birth path and the
  * clone-aliasing bug. Readers then flip file by file, writers go row-native last, and the
  * arrays become a week-end materialized view.
  *
- * ~75 holders, ~110k rows (§7.232: the register triples to steady state) — the same plain-data
+ * ~75 holders, ~110k rows at steady state — the same plain-data
  * rules as the lot/contract/tranche stores: typed arrays, interned strings, per-entity chains
  * in book order, `structuredClone`-safe.
  */
@@ -32,7 +31,7 @@ export interface HoldingStore {
   tail: Int32Array;
   /** Entities whose book has ever been synced — the week-start catch-up spots newcomers. */
   synced: Set<string>;
-  /** Scratch per-row mark for relink's keep test — an epoch stamp, never a Set (§7.315). */
+  /** Scratch per-row mark for relink's keep test — an epoch stamp, never a Set. */
   mark: Int32Array;
   markEpoch: number;
   /** Books a writer touched since the last materialization — the week-end view rebuilds only
@@ -41,7 +40,7 @@ export interface HoldingStore {
 }
 
 /**
- * §5-WIRES W2 — THE STORE IS SEALED. Everything outside `src/engine/ledger/` sees the register
+ * THE STORE IS SEALED. Everything outside `src/engine/ledger/` sees the register
  * through this view: every column is read-only, so a stage that writes a holding column does
  * not compile. The ledger (`ledger/holdings-ledger.ts`) is the one place a row moves, and every
  * move it makes is a numbered wire. The functions below are the ledger's implementation and are
@@ -118,8 +117,7 @@ export function syncBookRows(v2: V2World, entityId: string, book: ItemizedHoldin
   const slot = slotFor(H, entRow);
   for (let r = H.head[slot]; r >= 0; ) {
     const nxt = H.next[r];
-    H.next[r] = H.freeHead;
-    H.freeHead = r;
+    freeRow(H, r);
     r = nxt;
   }
   H.head[slot] = -1;
@@ -179,7 +177,7 @@ export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): 
 
 /**
  * Re-chain the entity's book to exactly `rows`, in order; every current row NOT in the list is
- * freed. The §7.313 write-back pattern: a writer edits a local row list, then relinks once.
+ * freed: a writer edits a local row list, then relinks once.
  */
 export function relinkBook(v2: V2World, entityId: string, rows: number[]): void {
   const H = mutableHoldings(v2);
@@ -192,7 +190,7 @@ export function relinkBook(v2: V2World, entityId: string, rows: number[]): void 
     for (let i = 0; i < rows.length; i++) H.mark[rows[i]] = epoch;
     for (let r = H.head[slot]; r >= 0; ) {
       const nxt = H.next[r];
-      if (H.mark[r] !== epoch) { H.next[r] = H.freeHead; H.freeHead = r; }
+      if (H.mark[r] !== epoch) freeRow(H, r);
       r = nxt;
     }
     for (let i = 0; i < rows.length; i++) H.next[rows[i]] = i + 1 < rows.length ? rows[i + 1] : -1;
@@ -201,8 +199,7 @@ export function relinkBook(v2: V2World, entityId: string, rows: number[]): void 
   } else {
     for (let r = H.head[slot]; r >= 0; ) {
       const nxt = H.next[r];
-      H.next[r] = H.freeHead;
-      H.freeHead = r;
+      freeRow(H, r);
       r = nxt;
     }
     H.head[slot] = -1;
@@ -226,7 +223,19 @@ export function newBookRow(v2: V2World, h: ItemizedHolding): number {
 
 /** Return one row to the free list. The caller owns the invariant that nothing links to it. */
 export function freeBookRow(v2: V2World, r: number): void {
-  const H = mutableHoldings(v2);
+  freeRow(mutableHoldings(v2), r);
+}
+
+/**
+ * A freed row carries nothing. Left with its quantity, shares and instrument intact, a dead row
+ * reads as a live position to any scan of `0..used` — the tranche store's own free path clears
+ * its row for the same reason.
+ */
+function freeRow(H: HoldingStore, r: number): void {
+  H.qtyUSD[r] = 0;
+  H.shares[r] = Number.NaN;
+  H.instrRef[r] = -1;
+  H.typeRef[r] = -1;
   H.next[r] = H.freeHead;
   H.freeHead = r;
 }
@@ -254,8 +263,8 @@ export function markBookDirty(v2: V2World, entityId: string): void {
   mutableHoldings(v2).dirty.add(entityId);
 }
 
-/** The entity's book as objects — the WEEK-END VIEW once rows are the authority (§7.313's
- *  pattern: one linear pass at the close replaces every per-writer sync). */
+/** The entity's book as objects — the WEEK-END VIEW once rows are the authority: one linear
+ *  pass at the close replaces every per-writer sync. */
 export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[] {
   const H = mutableHoldings(v2);
   const out: ItemizedHolding[] = [];
@@ -310,9 +319,16 @@ export function assertBooksInSync(v2: V2World, entities: { id: string; entityTyp
 
 /** Week end: every book has been materialized; the dirty set starts empty. Ledger-internal. */
 export function clearDirtyBooks(v2: V2World): void { mutableHoldings(v2).dirty.clear(); }
-/** Unlink the rows that hold nothing. Ledger-internal (the ledger's debit relinks itself). */
+/**
+ * Unlink the rows that hold nothing — NOTHING, in either unit. Ledger-internal (the ledger's
+ * debit relinks itself). Tested on dollars alone this destroyed shares: an equity row whose mark
+ * had fallen under a dollar, or any row read mid-week before its re-mark, was unlinked with its
+ * share count intact and the holder's position ceased to exist.
+ */
 export function pruneEmptyRows(v2: V2World, entityId: string): void {
   const H = mutableHoldings(v2); const kept: number[] = [];
-  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) if (H.qtyUSD[r] > 1) kept.push(r);
+  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) {
+    if (H.qtyUSD[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0)) kept.push(r);
+  }
   relinkBook(v2, entityId, kept);
 }

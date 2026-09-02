@@ -132,7 +132,10 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       if (loan.recalledWeek !== undefined) {
         const have = deliverable(loan.borrower.id, loan.instrumentId);
         if (have >= loan.shares - 0.0001) {
-          deliver(loan.borrower.id, loan.lender.id, loan.instrumentId, loan.shares, comp.stockPrice);
+          // It delivers what it HOLDS. The test above accepts a borrower a whisker short so a
+          // loan does not hang on a fraction of a share, but handing over the loan's full size
+          // out of a position that does not cover it moves shares that are not there.
+          deliver(loan.borrower.id, loan.lender.id, loan.instrumentId, Math.min(loan.shares, have), comp.stockPrice);
           if (loan.collateralUSD > 0) {
             pay(ctx, {
               payer: { kind: 'INSTITUTION', id: loan.lender.id },
@@ -157,7 +160,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     // not — so a position BELOW what it was when the loan was struck is the lender selling out
     // from under it, and that much has to come back. Oldest loan first, split where the sale only
     // reaches part of one.
-    // SCALE: both of these read the whole live book for ONE (lender, name) pair, and both were
+    // Both of these read the whole live book for ONE (lender, name) pair, and both were
     // called once per loan — two O(loans^2) scans a week. The book is summarised in a single pass
     // instead: shares still out on loan, and the largest position any of that pair's loans was
     // struck against. Same numbers, same order of accumulation, one walk.
@@ -287,7 +290,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       return;
     }
 
-    // §5-CLOSE: the book's measured median weekly move stands in for a name with no history.
+    // The book's measured median weekly move stands in for a name with no history.
     const volById = new Map(borrowNames.map((c) => [c.id, realizedAnnualVol(ringFill(v2sl.priceRing, rowOf(v2sl, c.id), priceScratchSl), 26)]));
     const bookWeeklyMove = (medianOf(Array.from(volById.values()).filter((v): v is number => v !== undefined)) ?? 0) / Math.sqrt(52);
     const gapByCompanyId = new Map(borrowNames.map((c) => [c.id, loanOneWeekGap({

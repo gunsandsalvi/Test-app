@@ -285,8 +285,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   /** What each investor wants to move in each fund, and the fund's net — computed before any
    *  execution, because the AP capacity split depends on the whole week's demand at once. */
   const flowPlanByFund = new Map<string, {
-    navPerShare: number; wantDelta: Map<string, number>; grossCreateUSD: number; grossRedeemUSD: number;
-    householdUSD: number;
+    navPerShare: number; carryPricePerShare: number; wantDelta: Map<string, number>;
+    grossCreateUSD: number; grossRedeemUSD: number; householdUSD: number;
   }>();
   // One pass over the investors' books instead of a `.find` per investor PER FUND — the same
   // first-match-wins row each per-fund scan used to stop at (per-item scans in per-item loops:
@@ -371,7 +371,12 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     if (householdUSD > 0) grossCreateUSD += householdUSD;
     else if (householdUSD < 0) grossRedeemUSD += -householdUSD;
     flowPlanByFund.set(fund.id, {
-      navPerShare, wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD, householdUSD,
+      navPerShare,
+      // What the register's rows are CARRYING these shares at right now — last week's close,
+      // which is the traded price where the fund has one and net asset value where it does not.
+      // Read here, before this week's clearing overwrites `marketPricePerShare`.
+      carryPricePerShare: (fund.etf!.marketPricePerShare ?? 0) > 0 ? fund.etf!.marketPricePerShare! : navPerShare,
+      wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD, householdUSD,
     });
     netFlowByFund.set(fund.id, grossCreateUSD - grossRedeemUSD);
   });
@@ -726,11 +731,15 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       if (!shareDeltas) return;
       shareDeltas.forEach((shares, fundId) => {
         const fund = funds.find((f) => f.id === fundId)!;
-        const navPerShare = (navByFundId.get(fundId) ?? 0) > 0 && fund.etf!.sharesOutstanding > 0
-          ? (navByFundId.get(fundId) ?? 0) / fund.etf!.sharesOutstanding
-          : ETF_INCEPTION_NAV_PER_SHARE;
-        // §5-WIRES W2: shares created are ISSUED by the fund to the holder, shares redeemed are
-        // RETIRED by the holder to the fund — the ledger writes the rows.
+        // PAPER LEAVES A BOOK AT WHAT THE BOOK CARRIES IT AT. The cash leg transacted at net
+        // asset value — that is what a creation or redemption is worth — but the rows being
+        // debited are marked at last week's close, and the difference between the two is the
+        // holder's gain or loss, not a quantity to invent. Valued at the post-flow NAV instead
+        // (the share count has already been bumped), the paper leg asked a row for more than it
+        // held and the wire recorded a movement the register could not make.
+        const navPerShare = flowPlanByFund.get(fundId)?.carryPricePerShare ?? ETF_INCEPTION_NAV_PER_SHARE;
+        // Shares created are ISSUED by the fund to the holder, shares redeemed are RETIRED by
+        // the holder to the fund — the ledger writes the rows.
         const fundParty = { kind: 'INSTITUTION' as const, id: fundId };
         const holderParty = { kind: 'INSTITUTION' as const, id: entity.id };
         const spec = { instrumentType: 'ETF_SHARE' as const, instrumentId: fundId, issuerRegion: fund.region, valueUSD: Math.abs(shares) * navPerShare, shares: Math.abs(shares) };
