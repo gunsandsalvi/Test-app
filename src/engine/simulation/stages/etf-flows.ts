@@ -46,11 +46,12 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 
 /** An entity's money for one asset class, from its own mandate weights. */
-function classAppetiteUSD(entity: InstitutionalEntity, def: IndexDefinition): number {
-  return Math.max(0, entity.totalAssetsUSD) * mandatePctOf(entity.assetAllocationTarget, def.assetClass);
+function classAppetiteUSD(ctx: WeeklyStepContext, entity: InstitutionalEntity, def: IndexDefinition): number {
+  return Math.max(0, institutionTotalAssetsUSD(ctx, entity)) * mandatePctOf(entity.assetAllocationTarget, def.assetClass);
 }
 
 /**
@@ -58,12 +59,12 @@ function classAppetiteUSD(entity: InstitutionalEntity, def: IndexDefinition): nu
  * names itself. Coverage is its own assets against the number of names in the tier; below full
  * coverage the shortfall is indexed.
  */
-function indexedShare(entity: InstitutionalEntity, nameCount: number): number {
+function indexedShare(ctx: WeeklyStepContext, entity: InstitutionalEntity, nameCount: number): number {
   if (nameCount <= 0) return 0;
   // A fund that picks names does not buy the basket that averages them away.
   // §7.241: the fact lives on the kind's registry row, not in a stage condition.
   if (institutionProfile(entity.entityType).picksOwnNames) return 0;
-  const aumBillions = Math.max(0, entity.totalAssetsUSD) / 1e9;
+  const aumBillions = Math.max(0, institutionTotalAssetsUSD(ctx, entity)) / 1e9;
   const namesCovered = NAMES_COVERED_AT_ONE_BILLION_AUM * Math.pow(aumBillions, RESEARCH_COVERAGE_SCALING_EXPONENT);
   return Math.max(0, 1 - Math.min(1, namesCovered / nameCount));
 }
@@ -138,7 +139,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const allCapFund = equityFunds.find((f) => defById.get(f.etf!.indexId)!.tier === 'ALL_CAP');
     const tierIndexedShares = tierFunds.map((f) => ({
       fund: f,
-      share: indexedShare(investor, indexById.get(f.etf!.indexId)?.constituents.length ?? 0),
+      share: indexedShare(ctx, investor, indexById.get(f.etf!.indexId)?.constituents.length ?? 0),
     }));
 
     // An investor indexes the WHOLE MARKET to the extent it indexes every tier, and tops up the
@@ -148,7 +149,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // routing purely to all-cap would have lost the real fact that a house able to research two
     // dozen large caps still cannot staff a hundred and fifty small ones.
     const equityAppetiteUSD = allCapFund
-      ? classAppetiteUSD(investor, defById.get(allCapFund.etf!.indexId)!)
+      ? classAppetiteUSD(ctx, investor, defById.get(allCapFund.etf!.indexId)!)
       : 0;
     const coreShare = tierIndexedShares.length > 0
       ? Math.min(...tierIndexedShares.map((x) => x.share))
@@ -163,7 +164,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       const def = defById.get(fund.etf!.indexId)!;
       const tierValueUSD = indexById.get(def.id)?.totalValueUSD ?? 0;
       const tierShareOfMarket = allCapValueUSD > 0 ? tierValueUSD / allCapValueUSD : 0;
-      const wantUSD = classAppetiteUSD(investor, def) * tierShareOfMarket * tiltShare;
+      const wantUSD = classAppetiteUSD(ctx, investor, def) * tierShareOfMarket * tiltShare;
       if (wantUSD > 0) desiredByFund.get(fund.id)!.set(investor.id, wantUSD);
     });
 
@@ -172,8 +173,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       .filter((f) => defById.get(f.etf!.indexId)!.assetClass !== 'EQUITY')
       .forEach((fund) => {
         const def = defById.get(fund.etf!.indexId)!;
-        const share = indexedShare(investor, indexById.get(def.id)?.constituents.length ?? 0);
-        const wantUSD = classAppetiteUSD(investor, def) * share;
+        const share = indexedShare(ctx, investor, indexById.get(def.id)?.constituents.length ?? 0);
+        const wantUSD = classAppetiteUSD(ctx, investor, def) * share;
         if (wantUSD > 0) desiredByFund.get(fund.id)!.set(investor.id, wantUSD);
       });
   });

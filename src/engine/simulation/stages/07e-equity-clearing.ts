@@ -48,6 +48,7 @@ import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { positionKey } from './securities-lending';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
@@ -371,7 +372,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       // puts on equities. Unlike credit, there is no leverage allowance here — nobody in this
       // model runs a levered equity book.
       const budgetUSD = entity.assetAllocationTarget.equityPct * institutionSpendableUSD(ctx, entity);
-      const entityPoolUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.equityPct
+      const entityPoolUSD = institutionTotalAssetsUSD(ctx, entity) * entity.assetAllocationTarget.equityPct
         * mandateWeightForIssuer(entity.entityType, entity.region, regionId, mcapByRegion);
       // Same discipline as the credit books: this week's money goes where shares are actually
       // changing hands — a live offering, or the gap between the target holding and the current
@@ -389,7 +390,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       if (lentList) for (const [ci, shares] of lentList) { lentArr[ci] = shares; lentTouched.push(ci); }
       const buyInList = buyInByEntity.get(entity.id);
       if (buyInList) for (const [ci, shares] of buyInList) { buyInArr[ci] = shares; buyInTouched.push(ci); }
-      const holderRequiredReturn = entityRequiredReturn(entity);
+      const holderRequiredReturn = entityRequiredReturn(entity, institutionTotalAssetsUSD(ctx, entity));
       let totalCashDemandWeightUSD = 0;
       for (let ci = 0; ci < nC; ci++) {
         const structuralUSD = entityPoolUSD * (floatValueArr[ci] / totalFloatValueUSD);

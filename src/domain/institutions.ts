@@ -98,7 +98,8 @@ export interface InstitutionalEntity {
    *  Its purchasing capacity above its own cash, and the replacement for a leverage ALLOWANCE
    *  that no one granted and no one could withdraw. Written by the prime-brokerage stage. */
   primeBrokerageAvailableUSD?: number;
-  totalAssetsUSD: number;
+  // §5-WIRES D: total assets are a READ — `institutionTotalAssetsUSD` (domain) over the book's
+  // rows, cash, receivables and the sponsor's portfolio mark; never a stored mark.
   equityCapitalUSD: number;
   /**
    * HH1 — what this institution owes its ultimate BENEFICIARIES: policyholder reserves, pension
@@ -194,4 +195,24 @@ export interface InstitutionalEntity {
   isDefaulted: boolean;
   historicalPrices: number[];
   revenueHistory?: number[];
+}
+
+/**
+ * §5-WIRES D — AN INSTITUTION'S TOTAL ASSETS ARE A READ, never a stored mark: its cash, what it is
+ * owed this week (the unsettled legs of its trades and receipts), its overnight cash lent, its
+ * stock-loan book, and its securities — the register's rows — or, for a sponsor, its portfolio
+ * companies at the public comparable. The stored `totalAssetsUSD` this replaces was a week-end
+ * mark of exactly this sum, read a week stale by every sizing pass (§7.374).
+ */
+export function institutionTotalAssetsUSD(
+  e: { cashUSD?: number; repoLentUSD?: number; stockLoanNetUSD?: number; entityType: InstitutionalEntityType; peFund?: unknown },
+  bookUSD: number, pendingUSD: number, portfolioUSD: number
+): number {
+  return (e.cashUSD ?? 0) + pendingUSD + (e.repoLentUSD ?? 0) + (e.stockLoanNetUSD ?? 0)
+    + (e.entityType === 'PRIVATE_EQUITY' && e.peFund ? portfolioUSD : bookUSD);
+}
+
+/** The seed's read, before the register exists: cash plus the entity's own itemized rows. */
+export function seedInstitutionTotalAssetsUSD(e: { cashUSD?: number; itemizedHoldings: { quantityOrNotionalUSD?: number }[] }): number {
+  return (e.cashUSD ?? 0) + e.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
 }

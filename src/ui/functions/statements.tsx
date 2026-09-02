@@ -190,7 +190,6 @@ function InstitutionStatements({ world, e }: { world: World; e: InstitutionalEnt
       { label: 'Total assets', usd: assets, total: true },
       { label: 'Owed to beneficiaries', usd: e.beneficiaryLiabilityUSD ?? 0 },
       { label: 'Equity capital', usd: e.equityCapitalUSD, total: true },
-      { label: 'Reported total assets', usd: e.totalAssetsUSD },
     ]} />
   );
 }

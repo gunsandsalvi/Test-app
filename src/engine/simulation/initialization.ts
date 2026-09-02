@@ -105,6 +105,7 @@ import {
   computeHouseholdDisposableIncomeUSD,
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
+import { seedInstitutionTotalAssetsUSD } from '../../domain/institutions';
 
 /**
  * Build a world. The same seed always builds the same world and, stepped the same number of
@@ -920,7 +921,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // HF1: a hedge fund's strategy decides which markets it is actually in.
         hedgeFundStrategy: comp.hedgeFundStrategy,
         financialStatementProfile: comp.financialStatementProfile,
-        totalAssetsUSD,
         beneficiaryLiabilityUSD,
         // Real opening cash: the entity's own policy cash weight against its own book. Every
         // clearing fill from here on settles against this balance.
@@ -960,13 +960,13 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       if (isManager && !((comp.managementFeeRate ?? 0) > 0)) return;
       // A manager's revenue is a fee on the book it runs; an insurer's is the premium its own
       // capital lets it write. Both read the entity, because both ARE the entity.
-      if (isManager) comp.aumUSD = entity.totalAssetsUSD;
+      if (isManager) comp.aumUSD = seedInstitutionTotalAssetsUSD(entity);
       const revenueUSD = isManager
         ? Math.max(10, comp.aumUSD! * comp.managementFeeRate!)
         : Math.max(10, Math.max(0, entity.equityCapitalUSD) * PREMIUM_TO_SURPLUS_RATIO);
       if (isInsurer) {
         comp.insurancePremiumsWrittenUSD = revenueUSD;
-        comp.technicalReservesUSD = Math.max(0, entity.totalAssetsUSD - entity.equityCapitalUSD);
+        comp.technicalReservesUSD = Math.max(0, seedInstitutionTotalAssetsUSD(entity) - entity.equityCapitalUSD);
       }
       const ebitdaUSD = revenueUSD * (isManager ? 0.35 : 0.15);
       comp.annualRevenue = revenueUSD;
@@ -1371,7 +1371,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     if (sponsorable.length === 0) return;
     const lps = institutionalEntities.filter(e => e.region === regionId &&
       (e.entityType === 'INSURER' || e.entityType === 'PENSION_FUND' || e.entityType === 'ASSET_MANAGER'));
-    const lpWeightSum = lps.reduce((a, e) => a + e.totalAssetsUSD, 0) || 1;
+    const lpWeights = new Map(lps.map((e) => [e.id, seedInstitutionTotalAssetsUSD(e)]));
+    const lpWeightSum = lps.reduce((a, e) => a + lpWeights.get(e.id)!, 0) || 1;
     // The seed marks the sponsored stakes at the same multiple the running mark uses — what the
     // region's LISTED comps are worth per dollar of EBITDA — so week 0's NAV is not a different
     // valuation from week 1's. A bare `8 *` here and in the weekly mark was one company valued
@@ -1390,7 +1391,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       ticker: `MMF1`,
       region: regionId,
       entityType: 'MONEY_MARKET_FUND',
-      totalAssetsUSD: 0,
       equityCapitalUSD: 0,
       sharesOutstanding: 1,
       stockPrice: 0,
@@ -1430,7 +1430,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           ticker: `${def.id.replace(/_/g, '').slice(0, 5)}X`,
           region: regionId,
           entityType: 'ETF',
-          totalAssetsUSD: 0,
           equityCapitalUSD: 0,
           sharesOutstanding: 0,
           stockPrice: 0,
@@ -1471,7 +1470,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         ticker: `PEF${fundIdx + 1}`,
         region: regionId,
         entityType: 'PRIVATE_EQUITY',
-        totalAssetsUSD: investedUSD,
         equityCapitalUSD: investedUSD,
         sharesOutstanding: 1,
         stockPrice: 0,
@@ -1484,16 +1482,15 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           portfolioCompanyIds: portfolio.map(f => f.id),
           lpCommitments: lps.map(e => ({
             lpEntityId: e.id,
-            committedUSD: Math.round(committedUSD * (e.totalAssetsUSD / lpWeightSum)),
-            drawnUSD: Math.round(investedUSD * (e.totalAssetsUSD / lpWeightSum)),
+            committedUSD: Math.round(committedUSD * (lpWeights.get(e.id)! / lpWeightSum)),
+            drawnUSD: Math.round(investedUSD * (lpWeights.get(e.id)! / lpWeightSum)),
           })),
         },
       });
       lps.forEach(e => {
-        const interestUSD = Math.round(investedUSD * (e.totalAssetsUSD / lpWeightSum));
+        const interestUSD = Math.round(investedUSD * (lpWeights.get(e.id)! / lpWeightSum));
         if (interestUSD > 1) {
           e.itemizedHoldings.push({ instrumentId: fundId, instrumentType: 'PE_FUND_INTEREST', issuerRegion: regionId, quantityOrNotionalUSD: interestUSD });
-          e.totalAssetsUSD += interestUSD;
         }
       });
     }
@@ -1531,14 +1528,13 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const tradable = outstanding;
         const weights = regionEntities.map(e => {
           const pct = kind === 'CORP_BOND' ? e.assetAllocationTarget.corpBondPct : e.assetAllocationTarget.loanPct;
-          return e.totalAssetsUSD * pct * sleeve(e.entityType, ig);
+          return seedInstitutionTotalAssetsUSD(e) * pct * sleeve(e.entityType, ig);
         });
         const wSum = weights.reduce((a, b) => a + b, 0) || 1;
         regionEntities.forEach((e, i) => {
           const qty = tradable * (weights[i] / wSum);
           if (qty > 1) {
             e.itemizedHoldings.push({ instrumentId: f.id, instrumentType: kind, issuerRegion: regionId, quantityOrNotionalUSD: Math.round(qty) });
-            e.totalAssetsUSD += Math.round(qty);
           }
         });
       });

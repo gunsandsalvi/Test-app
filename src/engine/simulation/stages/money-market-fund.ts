@@ -37,6 +37,7 @@ import { computeSovereignBookAnnualYield, ON_RRP_SPREAD_BPS } from '../../macro/
 import { CASH_SLEEVE_OVERNIGHT_SHARE } from './repo-clearing';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { REGION_IDS } from '../../../domain/geography';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 /** The fund's annual expense ratio — a structural primitive like the deposit beta; G6/BP make
  * fees competitive between funds. */
@@ -285,7 +286,7 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.entityType !== 'ASSET_MANAGER') return;
     const cur = managersByRegion.get(e.region) ?? { total: 0 };
-    cur.total += Math.max(0, e.totalAssetsUSD);
+    cur.total += Math.max(0, institutionTotalAssetsUSD(ctx, e));
     managersByRegion.set(e.region, cur);
   });
   ctx.updatedInstitutionalEntities.forEach((e) => {
@@ -299,7 +300,7 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: payerId },
       payee: { kind: 'INSTITUTION', id: e.id },
-      amountUSD: feeUSD * (Math.max(0, e.totalAssetsUSD) / pool),
+      amountUSD: feeUSD * (Math.max(0, institutionTotalAssetsUSD(ctx, e)) / pool),
       reason: 'money fund management fee',
     });
   });

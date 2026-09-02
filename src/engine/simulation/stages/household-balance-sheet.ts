@@ -38,6 +38,7 @@ import {
 } from '../../macro/household-portfolio';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { REGION_IDS } from '../../../domain/geography';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 // Whose beneficiaries are households is the kind registry's `beneficiariesAreHouseholds` row
 // (domain/institution-profiles.ts) — a new kind states it or fails to build.
@@ -81,11 +82,11 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // deficit against what it owes, which is the number that actually means something, and the
     // one that retires `INSTITUTIONAL_OPENING_BOOK_SHARE`.
     const liabilityUSD = Math.max(0, entity.beneficiaryLiabilityUSD
-      ?? (entity.totalAssetsUSD - Math.max(0, entity.equityCapitalUSD)));
+      ?? (institutionTotalAssetsUSD(ctx, entity) - Math.max(0, entity.equityCapitalUSD)));
     return {
       ...entity,
       beneficiaryLiabilityUSD: liabilityUSD,
-      equityCapitalUSD: entity.totalAssetsUSD - liabilityUSD,
+      equityCapitalUSD: institutionTotalAssetsUSD(ctx, entity) - liabilityUSD,
     };
   });
 

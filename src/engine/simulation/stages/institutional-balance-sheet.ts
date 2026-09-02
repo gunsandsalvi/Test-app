@@ -33,7 +33,10 @@
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { bookHeadOf } from '../../../engine2/holdings';
-import { RegionId, InstitutionalEntity } from '../../../types';
+import { RegionId, InstitutionalEntity, Company, GameState } from '../../../types';
+import { institutionTotalAssetsUSD as totalAssetsRead } from '../../../domain/institutions';
+import { V2World, ensureV2 } from '../../../engine2/world';
+import { isActiveCompany } from '../../../domain/company';
 import { mandatePctOf } from '../../../domain/institutions';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
@@ -65,7 +68,7 @@ import { ladderTotalUSD } from '../../../engine2/tranches';
  * receivable as spendable would let the entity buy securities with money it had already lent.
  * It is part of the BOOK (markInstitutionalBooks), never of the budget.
  */
-export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, unsettledUSD = 0): number {
+export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, totalAssetsUSD: number, unsettledUSD = 0): number {
   // HF1: what its prime broker will actually lend it this week, less what it has already drawn.
   // Negative when the line has been CUT below the draw — which makes the fund a net seller in
   // this week's auctions, at whatever they clear, which is what a margin call is.
@@ -80,7 +83,7 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, unsett
   // clearing residual swinging 72B → 23B → 32B → 18B week to week, and once institutional
   // balances became real bank liabilities (SETL5) that swing went straight into bank reserves
   // (§7.91). Below the sleeve an entity is a net seller, which is what a fund short of cash is.
-  const sleeveTargetUSD = Math.max(0, entity.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, entity.totalAssetsUSD);
+  const sleeveTargetUSD = Math.max(0, entity.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, totalAssetsUSD);
   // SETL6: plus what this week's already-agreed trades will settle — negative once the fund has
   // committed, so the five books cannot each spend the same balance. The clearing legs are
   // payment instructions now (stages/book-settlement.ts) and the cash moves at the settlement
@@ -97,6 +100,8 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, unsett
  */
 export function stagePurchaseBudgetUSD(
   entity: InstitutionalEntity,
+  /** §5-WIRES D: the entity's live total assets (`institutionTotalAssetsUSD`), the sleeve's base. */
+  totalAssetsUSD: number,
   assetClass: 'CORP_BOND' | 'GOV_BOND' | 'LEVERAGED_LOAN',
   unsettledUSD = 0
 ): number {
@@ -104,7 +109,7 @@ export function stagePurchaseBudgetUSD(
   const investedPcts = t.corpBondPct + t.govBondPct + t.loanPct;
   if (investedPcts <= 0) return 0;
   const classPct = mandatePctOf(t, assetClass);
-  return availablePurchaseCapacityUSD(entity, unsettledUSD) * (classPct / investedPcts);
+  return availablePurchaseCapacityUSD(entity, totalAssetsUSD, unsettledUSD) * (classPct / investedPcts);
 }
 
 /**
@@ -148,52 +153,59 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
 }
 
 /**
- * Mark every entity's total assets to its real book: cash plus holdings. Runs after the last
- * clearing stage, so next week's structural shares are sized by this week's actual close.
- * (Holdings are carried at notional — bonds near par; real equity marks arrive with WS4's
- * share registry.)
+ * §5-WIRES D — THE READ. An entity's total assets, live: cash, receivables, overnight cash lent,
+ * the stock-loan book and the register's rows (a sponsor's portfolio at the public comparable).
+ * While the clearing store is live the rows are the week's opening register and the books' cash
+ * legs are in the receivable, so the receivable is left out until the write-back — the opening
+ * book, not a half-settled one. Replaces `markInstitutionalBooks`, the week-end mark that every
+ * sizing pass read a week stale.
  */
-export function markInstitutionalBooks(ctx: WeeklyStepContext): void {
-  const privateById = new Map(ctx.prevActivePrivateFirms.map((c) => [c.id, c]));
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
-    // HC4: a PE fund's assets are its portfolio companies, marked from their REAL earnings and
-    // real debt (an EV multiple on EBITDA less the ladder, at the fund's stake) — the same two
-    // numbers the credit market prices, so a portfolio company's deterioration hits its
-    // sponsor's NAV the week it happens.
-    if (entity.entityType === 'PRIVATE_EQUITY' && entity.peFund) {
-      // The multiple is the one the PUBLIC market cleared this week for comparable listed
-      // earnings, not a constant: a bare `8 *` sat here and in the deal arithmetic, so a
-      // sponsor's NAV could not fall when equities did and a portfolio was bought on one
-      // valuation and marked on another. One number, cleared, in one place.
-      const evMultiple = publicComparableEvMultiple(entity.region, ctx.prevActiveFirms);
-      const portfolioUSD = entity.peFund.portfolioCompanyIds.reduce((a, id) => {
-        const c = privateById.get(id);
-        if (!c || c.isDefaulted) return a;
-        const stakePct = c.ownership?.peSponsorPct ?? 0;
-        return a + Math.max(0, evMultiple * c.ebitda - ladderTotalUSD(ctx.v2, c.id)) * stakePct;
-      }, 0);
-      return { ...entity, totalAssetsUSD: Math.round((entity.cashUSD ?? 0)
-        + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })
-        + (entity.repoLentUSD ?? 0) + (entity.stockLoanNetUSD ?? 0) + portfolioUSD) };
-    }
-    // §7.307 holdings flip: row walk (this runs right after the write-back, mirror current).
-    let holdingsUSD = 0;
-    {
-      const H = ctx.v2.holdings;
-      for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r];
-    }
-    // SETL6: this stage runs before the settlement pass, so the week's cleared trades are still
-    // unsettled — the securities are on the book and the cash has not moved. The receivable (or
-    // payable) is the other leg, and leaving it out would mark every buyer up and every seller
-    // down by the size of its own week's trading.
-    const unsettledUSD = pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id });
-    // Cash lent overnight (WS6) is still the entity's money — a secured claim maturing next
-    // session, not a security; leaving it out would mark the book down by the position's size
-    // every week and back up the week after.
-    // HF: and its stock-loan book, which is the shares it is owed (or owes) against the cash
-    // collateral standing behind them — zero the week a loan is struck, and the short's running
-    // profit or loss every week after.
-    return { ...entity, totalAssetsUSD: (entity.cashUSD ?? 0) + unsettledUSD + (entity.repoLentUSD ?? 0)
-      + (entity.stockLoanNetUSD ?? 0) + holdingsUSD };
-  });
+export function institutionBookUSD(v2: V2World, entityId: string): number {
+  let holdingsUSD = 0;
+  const H = v2.holdings;
+  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r];
+  return holdingsUSD;
+}
+
+const evMultipleMemo = new WeakMap<object, Map<RegionId, number>>();
+function comparableMultiple(memoKey: object, region: RegionId, listed: Company[]): number {
+  let m = evMultipleMemo.get(memoKey);
+  if (!m) { m = new Map(); evMultipleMemo.set(memoKey, m); }
+  let v = m.get(region);
+  if (v === undefined) { v = publicComparableEvMultiple(region, listed); m.set(region, v); }
+  return v;
+}
+
+/** HC4: a sponsor's assets are its portfolio companies at the public comparable, at its stake. */
+function sponsorPortfolioUSD(entity: InstitutionalEntity, evMultiple: number, privateById: Map<string, Company>, v2: V2World): number {
+  if (!entity.peFund) return 0;
+  return entity.peFund.portfolioCompanyIds.reduce((a, id) => {
+    const c = privateById.get(id);
+    if (!c || c.isDefaulted) return a;
+    return a + Math.max(0, evMultiple * c.ebitda - ladderTotalUSD(v2, c.id)) * (c.ownership?.peSponsorPct ?? 0);
+  }, 0);
+}
+
+export function institutionTotalAssetsUSD(ctx: WeeklyStepContext, entity: InstitutionalEntity): number {
+  const pendingUSD = ctx.holdingsStore ? 0 : pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id });
+  const portfolioUSD = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
+    ? sponsorPortfolioUSD(entity, comparableMultiple(ctx, entity.region, ctx.prevActiveFirms), privateFirmIndex(ctx), ctx.v2)
+    : 0;
+  return totalAssetsRead(entity, institutionBookUSD(ctx.v2, entity.id), pendingUSD, portfolioUSD);
+}
+const privateIndexMemo = new WeakMap<object, Map<string, Company>>();
+function privateFirmIndex(ctx: WeeklyStepContext): Map<string, Company> {
+  let m = privateIndexMemo.get(ctx);
+  if (!m) { m = new Map(ctx.prevActivePrivateFirms.map((c) => [c.id, c])); privateIndexMemo.set(ctx, m); }
+  return m;
+}
+
+/** The same read off a closed state (the UI, the harness): nothing is pending between weeks. */
+export function institutionTotalAssetsFromState(state: GameState, entity: InstitutionalEntity): number {
+  const v2 = ensureV2(state);
+  const portfolioUSD = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
+    ? sponsorPortfolioUSD(entity, comparableMultiple(state, entity.region, state.companies.filter((c) => isActiveCompany(c))),
+        new Map(state.companies.filter((c) => !c.isBankEntity).map((c) => [c.id, c])), v2)
+    : 0;
+  return totalAssetsRead(entity, institutionBookUSD(v2, entity.id), 0, portfolioUSD);
 }

@@ -57,6 +57,7 @@ import {
   CP_SINGLE_ISSUER_LIMIT, CP_SHARE_OF_TERM_SLEEVE, CP_FULL_SIZE_YIELD_RANGE_BPS,
   cpCreditPolicyShare, cpReservationYieldBps,
 } from '../../../domain/commercial-paper';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
@@ -207,7 +208,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       regionEntities.forEach((entity) => {
         const holdings = new Map<string, number>();
         const demand = new Map<string, ParticipantDemand>();
-        const sleeveUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.cashPct * CASH_SLEEVE_BILL_SHARE;
+        const sleeveUSD = institutionTotalAssetsUSD(ctx, entity) * entity.assetAllocationTarget.cashPct * CASH_SLEEVE_BILL_SHARE;
         // SCALE C1: read-only scan of the store's GOV_BOND rows — nothing is claimed here.
         // Which rows this auction actually rewrites is decided at apply time, where the
         // auctioned-bucket predicate lives (a bucket whose last tranche matured is NOT
@@ -792,7 +793,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // SIZE, never a veto (domain/commercial-paper.ts).
       const cpParticipants: ClearingParticipant[] = [];
       cpEntities.forEach((entity) => {
-        const sleeveUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.cashPct * CP_SHARE_OF_TERM_SLEEVE;
+        const sleeveUSD = institutionTotalAssetsUSD(ctx, entity) * entity.assetAllocationTarget.cashPct * CP_SHARE_OF_TERM_SLEEVE;
         const holdings = heldByIssuerByEntity.get(entity.id) ?? new Map<string, number>();
         if (!(sleeveUSD > 0) && holdings.size === 0) return;
         const cashUSD = institutionSpendableUSD(ctx, entity) * CP_SHARE_OF_TERM_SLEEVE;

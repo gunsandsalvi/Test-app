@@ -32,6 +32,7 @@ import { bankRequiredReturnAnnual } from './bank-lending';
 import { leverageHeadroomUSD } from '../../macro/banking';
 import { REGION_IDS } from '../../../domain/geography';
 import { buildDerivativeMarketView, derivativesBookOf, deskStandingPfeChargeUSD, settleDerivativeClass, strikeDerivatives } from './derivative-lifecycle';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 const cdsInstrumentId = (regionId: RegionId, issuerId: string) => `${regionId}-CDS-${issuerId}`;
 
@@ -156,7 +157,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
         && institutionProfile(e.entityType).sellsCdsProtection
     );
     creditFunds.forEach((entity) => {
-      const requiredReturn = entityRequiredReturn(entity);
+      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsUSD(ctx, entity));
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       const capacityUSD = Math.max(0, entity.equityCapitalUSD);
       if (!(capacityUSD > 0)) return;

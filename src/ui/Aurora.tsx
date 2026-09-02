@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GameState } from '../types';
+import { GameState, InstitutionalEntity } from '../types';
 import { createInitialGameState } from '../engine/simulation';
 import { advanceWeeklyStep } from '../engine/simulation/core';
 import { setClearingWorkersWeb, webWorkersAvailable } from '../engine/simulation/stages/clearing-worker-pool-web';
@@ -27,6 +27,7 @@ import { formatDate } from './calendar';
 import { storiesFor, Story } from './functions/news';
 import { isActiveCompany } from '../domain/company';
 import { marketCapOf } from '../domain/company';
+import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
 
 interface Frame { ref: ObjectRef; fn: string; args: Record<string, string> }
 interface Panel { id: number; stack: Frame[] }
@@ -352,7 +353,8 @@ function Home({ world, nav, recents, onRecent, stepMs }: { world: World; nav: Na
   const regions = Object.keys(world.state.regions);
   const banks = world.state.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c)).sort((a, b) => (b.bankBalanceSheet?.depositsUSD ?? 0) - (a.bankBalanceSheet?.depositsUSD ?? 0));
   const biggest = [...world.state.companies].filter((c) => isActiveCompany(c) && !c.isBankEntity && c.listingStatus !== 'PRIVATE').sort((a, b) => marketCapOf(b) - marketCapOf(a)).slice(0, 6);
-  const funds = [...world.state.institutionalEntities].filter((e) => !e.isDefaulted).sort((a, b) => b.totalAssetsUSD - a.totalAssetsUSD).slice(0, 6);
+  const assetsOf = (e: InstitutionalEntity) => institutionTotalAssetsFromState(world.state, e);
+  const funds = [...world.state.institutionalEntities].filter((e) => !e.isDefaulted).sort((a, b) => assetsOf(b) - assetsOf(a)).slice(0, 6);
   const live = world.state.companies.filter((c) => isActiveCompany(c)).length;
   const kinds: { type: ObjectType; text: string }[] = OBJECT_TYPES
     .filter((t) => OBJECTS[t].searchable && !['company', 'institution', 'region'].includes(t))

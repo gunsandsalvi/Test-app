@@ -151,10 +151,10 @@ fi
 # debt is the ladder (`totalDebtOf` / `ladderTotalUSD`); a field by either name on a company is a
 # stored sum of stored fields — the row store's derived columns and the kernel lanes are the only
 # places the names remain.
-DERIVED_STRAY=$(grep -rnE "\.(marketCap|totalDebt)\b" src --include=*.ts --include=*.tsx 2>/dev/null \
-  | grep -vE '^src/engine2/(company-store|stage08-lanes|front-core|state)\.ts:|^src/engine/simulation/stages/native-kernels\.ts:|^src/domain/company\.ts:' || true)
+DERIVED_STRAY=$(grep -rnE "\.(marketCap|totalDebt|totalAssetsUSD)\b" src --include=*.ts --include=*.tsx 2>/dev/null \
+  | grep -vE '^src/engine2/(company-store|stage08-lanes|front-core|state)\.ts:|^src/engine/simulation/stages/native-kernels\.ts:|^src/domain/company\.ts:|^src/domain/institutions\.ts:|^src/engine/simulation/stages/institutional-balance-sheet\.ts:' || true)
 if [ -n "$DERIVED_STRAY" ]; then
-  echo "ERROR: a stored derived quantity — read it (marketCapOf / totalDebtOf / ladderTotalUSD):"
+  echo "ERROR: a stored derived quantity — read it (marketCapOf / totalDebtOf / ladderTotalUSD / institutionTotalAssetsUSD):"
   echo "$DERIVED_STRAY"
   exit 1
 fi

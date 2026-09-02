@@ -34,7 +34,7 @@ import { runSettlementStage } from './stages/settlement';
 import { runBankResolutionStage } from './stages/bank-resolution';
 import { runBankFundingCloseStage } from './stages/bank-funding-close';
 import { runSmePoolStage } from './stages/sme-pools';
-import { accrueInstitutionalIncome, markInstitutionalBooks } from './stages/institutional-balance-sheet';
+import { accrueInstitutionalIncome } from './stages/institutional-balance-sheet';
 import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
 import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clearing';
 import { runShortDebtClearingStage } from './stages/07f-short-debt-clearing';
@@ -265,7 +265,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // called and the loan it secured shrinks with it.
   run('repo-collateral-reconcile', () => reconcileRepoPledges(ctx));
   run('holdings-writeback', () => finalizeHoldingsStore(ctx));
-  run('institutional-marking', () => markInstitutionalBooks(ctx));
   run('08-company-fundamentals', () => runCompanyFundamentalsStage(state, ctx));
   // §7.250 — stage 08 has consumed the bank-sheet channel; any later write to it throws.
   ctx.bankSheetChannelClosed = true;

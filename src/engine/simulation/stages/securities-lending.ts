@@ -33,6 +33,7 @@ import { FULL_SIZE_PRICE_DISCOUNT } from './07e-equity-clearing';
 import { medianOf } from '../../../domain/volatility';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 const sblInstrumentId = (regionId: RegionId, companyId: string) => `${regionId}-SBL-${companyId}`;
 export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
@@ -228,9 +229,9 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     shortFunds.forEach((fund) => {
       const mandate = mandateWeightForIssuer(fund.entityType, fund.region, regionId, mcapByRegion);
       if (!(mandate > 0)) return;
-      const poolUSD = fund.totalAssetsUSD * fund.assetAllocationTarget.equityPct * mandate;
+      const poolUSD = institutionTotalAssetsUSD(ctx, fund) * fund.assetAllocationTarget.equityPct * mandate;
       if (!(poolUSD > 0)) return;
-      const requiredReturn = entityRequiredReturn(fund);
+      const requiredReturn = entityRequiredReturn(fund, institutionTotalAssetsUSD(ctx, fund));
       // A short is collateralised at the market value on the day it is struck, so a fund cannot
       // put on more of one than it can fund — its own cash, what this week's settlement already
       // owes it, and whatever its prime broker still has open to it.
@@ -325,7 +326,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     const participants: ClearingParticipant[] = [];
     ctx.updatedInstitutionalEntities.forEach((entity) => {
       if (entity.isDefaulted) return;
-      const requiredReturn = entityRequiredReturn(entity);
+      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsUSD(ctx, entity));
       const alreadyLent = lentAlreadyByEntity.get(entity.id) ?? new Map<string, number>();
       const current = new Map<string, number>();
       const demandByInstrumentId = new Map<string, ParticipantDemand>();

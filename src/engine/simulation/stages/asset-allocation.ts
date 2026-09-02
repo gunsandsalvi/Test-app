@@ -178,12 +178,13 @@ export function fullSizeSpreadRangeBpsOf(holder: { management?: Preferences } | 
  * liability cost, so none is derivable from one — there is nothing here to measure, and pretending
  * otherwise would be a formula wearing a derivation's clothes.
  */
-export function entityRequiredReturn(entity: InstitutionalEntity): number {
+export function entityRequiredReturn(entity: InstitutionalEntity, totalAssetsUSD: number): number {
   // §5-BRAINS — the stated hurdle is the median board's; this board's own risk aversion weights
   // it. §7.347 — a liability-driven kind derives its own from its liabilities (the profile's
-  // behaviour field); the derivation carries no preference.
+  // behaviour field); the derivation carries no preference. §5-WIRES D: the assets it is funded
+  // against are the caller's live read (`institutionTotalAssetsUSD`), not a stored mark.
   const stated = REQUIRED_RETURN_ON_CAPITAL[entity.entityType] * riskAversionOf(entity.management);
-  return institutionProfile(entity.entityType).liabilityHurdle?.(entity, stated) ?? stated;
+  return institutionProfile(entity.entityType).liabilityHurdle?.(entity, stated, totalAssetsUSD) ?? stated;
 }
 
 const INVESTMENT_GRADE: CreditRating[] = ['AAA', 'AA', 'A', 'BBB'];

@@ -21,6 +21,7 @@ import { pay, pendingSettlementUSD } from './settlement';
 import { leverageHeadroomUSD } from '../../macro/banking';
 import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 /**
  * The haircut a broker takes on each kind of collateral: the most that market's own clearing
@@ -126,7 +127,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       const haircutRate = Math.min(1, baseHaircut * (1 + concentration));
 
       // What the fund's OWN capital supports at that haircut, and what the broker can carry.
-      const fundEquityUSD = Math.max(0, fund.totalAssetsUSD - drawnUSD);
+      const fundEquityUSD = Math.max(0, institutionTotalAssetsUSD(ctx, fund) - drawnUSD);
       const brokerRoomUSD = Math.max(0, leverageHeadroomUSD(sheet)) + lentByBroker(priorBook, brokerTicker);
       const lineUSD = Math.min(maxDrawnUSD(fundEquityUSD, haircutRate), brokerRoomUSD);
 
@@ -145,7 +146,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       // above it repays — so a fund that spent its cash on securities last week draws to fund
       // them, and one sitting on cash does not borrow at all. The line is a constraint on that,
       // never a driver of it, which is what a credit line is.
-      const sleeveTargetUSD = Math.max(0, fund.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, fund.totalAssetsUSD);
+      const sleeveTargetUSD = Math.max(0, fund.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, institutionTotalAssetsUSD(ctx, fund));
       const cashGapUSD = sleeveTargetUSD - Math.max(0, fund.cashUSD ?? 0);
       const targetDrawnUSD = Math.max(0, Math.min(lineUSD, drawnUSD + cashGapUSD));
       const deltaUSD = targetDrawnUSD - drawnUSD;

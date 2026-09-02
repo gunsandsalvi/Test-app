@@ -382,7 +382,6 @@ function reduceHolding(
       });
       index.touchedEntityIds.add(id);
     }
-    e.totalAssetsUSD = Math.max(0, e.totalAssetsUSD - (isLoss ? amountUSD : 0));
     e.equityCapitalUSD = Math.max(0, (e.equityCapitalUSD ?? 0) - (isLoss ? amountUSD : 0));
     return;
   }

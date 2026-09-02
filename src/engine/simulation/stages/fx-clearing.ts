@@ -47,6 +47,7 @@ import { deskNotionalCapacityUSD } from '../../../domain/derivatives/registry';
 import { deskStandingPfeChargeUSD } from './derivative-lifecycle';
 import { leverageHeadroomUSD } from '../../macro/banking';
 import { REGION_IDS } from '../../../domain/geography';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 const REGIONS = REGION_IDS;
 
@@ -212,7 +213,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       // HF3: the size is the margin identity on this fund's OWN capital at this pair's own
       // haircut, and the moves are the pair's own observed volatility — no risk budget, no
       // required-move constant, no range constant. A quiet pair is tight and a volatile one wide.
-      const capUSD = speculatorMaxPositionUSD(Math.max(0, e.totalAssetsUSD), sigma);
+      const capUSD = speculatorMaxPositionUSD(Math.max(0, institutionTotalAssetsUSD(ctx, e)), sigma);
       if (capUSD <= 0) return;
       const demand = new Map<string, ParticipantDemand>();
       demand.set(instrument.id, {

@@ -11,6 +11,7 @@ import { loanBooksOf } from '../domain/banking';
 import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/world';
 import { bookHeadOf } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
+import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
 
 export type { ObjectRef, ObjectType, ObjectLabel, Series } from './types';
 export { refKey, sameRef } from './types';
@@ -109,7 +110,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     });
   });
   state.institutionalEntities.forEach((e) => {
-    put(`institution:${e.id}:assets`, e.totalAssetsUSD);
+    put(`institution:${e.id}:assets`, institutionTotalAssetsFromState(state, e));
     put(`institution:${e.id}:cash`, e.cashUSD);
     put(`institution:${e.id}:price`, e.stockPrice);
     put(`institution:${e.id}:equity`, e.equityCapitalUSD);

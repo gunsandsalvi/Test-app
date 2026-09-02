@@ -57,6 +57,7 @@ import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
 import { REGION_IDS } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
 const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
 // Senior-secured first-lien loans trade at a real, structural discount to the same issuer's
@@ -256,7 +257,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const rawEntityTargets = new Map<string, number>(
       regionEntities.map((e) => [
         e.id,
-        e.totalAssetsUSD * e.assetAllocationTarget.loanPct
+        institutionTotalAssetsUSD(ctx, e) * e.assetAllocationTarget.loanPct
           * mandateWeightForIssuer(e.entityType, e.region, regionId, loanStockByRegion),
       ])
     );
@@ -306,7 +307,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       });
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
       const entityShare = entityShareOfSector / sectorTotal;
-      const requiredReturn = entityRequiredReturn(entity);
+      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsUSD(ctx, entity));
       // HF1: the distressed bid is a DISTRESSED fund's, not every hedge fund's. Pricing off
       // discounted expected recovery instead of expected loss, and running the conviction size
       // that goes with it, is one strategy — the credit long-short book beside it is an ordinary
@@ -323,7 +324,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // issuer's index weight rather than its own size. Measured on an LBO financing: the book
       // could HOLD it (53.7M of capacity against a 40.1M post-issue float) but could only FUND
       // 14.0M, so the solve ran past the sponsor's walk-away and every deal was pulled.
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'LEVERAGED_LOAN', institutionUnsettledLessCollateralUSD(ctx, entity.id));
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, institutionTotalAssetsUSD(ctx, entity), 'LEVERAGED_LOAN', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);

@@ -74,6 +74,7 @@ import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
 import { REGION_IDS } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
 const MAX_VALUE_TILT = 0.4;
@@ -274,7 +275,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const rawEntityTargets = new Map<string, number>(
       regionEntities.map((e) => [
         e.id,
-        e.totalAssetsUSD * e.assetAllocationTarget.corpBondPct
+        institutionTotalAssetsUSD(ctx, e) * e.assetAllocationTarget.corpBondPct
           * mandateWeightForIssuer(e.entityType, e.region, regionId, corpStockByRegion),
       ])
     );
@@ -338,7 +339,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // Per-entity invariants of the per-name loops below.
       const entityShare = entityShareOfSector / sectorTotal;
       const entitySubIGFactor = subInvestmentGradeSizeFactor(entity.entityType);
-      const requiredReturn = entityRequiredReturn(entity);
+      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsUSD(ctx, entity));
       // HF1: the distressed bid is a DISTRESSED fund's, not every hedge fund's. Pricing off
       // discounted expected recovery instead of expected loss, and running the conviction size
       // that goes with it, is one strategy — the credit long-short book beside it is an ordinary
@@ -354,7 +355,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // money. Apportioning it across the whole STOCK instead gave a new issue a slice the size
       // of its issuer's index weight rather than of the deal, which starved the primary market by
       // construction (see the same fix and its measurement in 07d).
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'CORP_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, institutionTotalAssetsUSD(ctx, entity), 'CORP_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);

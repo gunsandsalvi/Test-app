@@ -13,6 +13,7 @@ import { refOfIdentifier, labelOf } from '../objects';
 import { instrumentName } from '../objects/book';
 import { isActiveCompany } from '../../domain/company';
 import { marketCapOf, totalDebtOf } from '../../domain/company';
+import { institutionTotalAssetsFromState } from '../../engine/simulation/stages/institutional-balance-sheet';
 
 /** A sovereign instrument id's tenor, read aloud: `…-t10` → "10y", `…-b13` → "13w bill". */
 function tenorWord(id: string): string {
@@ -68,7 +69,7 @@ function InstitutionHoldings({ world, id, nav }: { world: World; id: string; nav
   const rows = bookOf(world, id);
   const [sort, setSort] = useState('usd');
   const total = rows.reduce((a, r) => a + r.usd, 0);
-  const nav_ = e.totalAssetsUSD;
+  const nav_ = institutionTotalAssetsFromState(world.state, e);
   const sorted = [...rows].sort((a, b) => (sort === 'name' ? a.instrumentId.localeCompare(b.instrumentId) : sort === 'type' ? a.instrumentType.localeCompare(b.instrumentType) : b.usd - a.usd));
   return (<>
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>

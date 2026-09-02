@@ -31,6 +31,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from './bank-lending';
 import { COVENANT_INTEREST_COVERAGE } from './corporate-financing';
 import { buildDerivativeMarketView, derivativesBookOf, settleDerivativeClass, strikeDerivatives } from './derivative-lifecycle';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 /** Swaps are struck for their tenor and run to it — there is no secondary market here yet. */
 const swapInstrumentId = (regionId: RegionId, key: SwapTenorKey) => `${regionId}-IRS-${key}`;
@@ -158,7 +159,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
         .filter((h) => carriesRateDuration(h.instrumentType))
         .reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
       const alreadyReceivingUSD = standingCoverUSD(book, 'IRS', 'b', `INSTITUTION:${entity.id}`, week);
-      const durationGapUSD = Math.max(0, entity.totalAssetsUSD - bondBookUSD - alreadyReceivingUSD);
+      const durationGapUSD = Math.max(0, institutionTotalAssetsUSD(ctx, entity) - bondBookUSD - alreadyReceivingUSD);
       if (durationGapUSD <= 0) return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
       SWAP_TENORS.forEach((k) => {
         if (!(floatByTenor.get(k)! > 0)) return;

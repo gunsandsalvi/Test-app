@@ -65,6 +65,7 @@ import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from '
 import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { REGION_IDS } from '../../../domain/geography';
+import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 type ZeroRateField = 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y';
 const TENOR_BUCKETS: { key: string; years: number; zeroRateField: ZeroRateField }[] = [
@@ -353,7 +354,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const rawEntityTargets = new Map<string, number>(
       biddingEntities.map((e) => [
         e.id,
-        e.totalAssetsUSD * e.assetAllocationTarget.govBondPct
+        institutionTotalAssetsUSD(ctx, e) * e.assetAllocationTarget.govBondPct
           * mandateWeightForIssuer(e.entityType, e.region, regionId, sovStockByRegion),
       ])
     );
@@ -392,7 +393,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // The entity's real money for this auction (S11), apportioned across tenor buckets by
       // their share of the market. Banks below carry no such cap: their real constraint is the
       // reserve position S2 already built, not a cash budget.
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'GOV_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, institutionTotalAssetsUSD(ctx, entity), 'GOV_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);
         const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;

@@ -8,6 +8,7 @@ import { formatSpan } from '../calendar';
 import { institutionOf, bookOf, tapeSeries, contractsOf } from '../world';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, taped, words } from './common';
 import { hedgeFundStrategyProfile } from '../../domain/institution-profiles';
+import { institutionTotalAssetsFromState } from '../../engine/simulation/stages/institutional-balance-sheet';
 
 export const institution = defineObject<InstitutionalEntity>({
   type: 'institution',
@@ -17,7 +18,7 @@ export const institution = defineObject<InstitutionalEntity>({
   list: (world) => world.state.institutionalEntities.map((e) => ({ id: e.id, obj: e })),
   label: (_w, id, e) => ({ ticker: e.ticker ?? id, name: e.name, kind: words(e.entityType) + (e.hedgeFundStrategy ? ` · ${words(e.hedgeFundStrategy)}` : ''), region: e.region }),
   keywords: (_w, _id, e) => [words(e.entityType), e.region.toLowerCase(), ...(e.hedgeFundStrategy ? [words(e.hedgeFundStrategy)] : [])],
-  headline: (_w, _id, e) => ({ value: money(e.totalAssetsUSD), sub: 'assets', neg: (e.cashUSD ?? 0) < 0 }),
+  headline: (w, _id, e) => ({ value: money(institutionTotalAssetsFromState(w.state, e)), sub: 'assets', neg: (e.cashUSD ?? 0) < 0 }),
   series: (world, id) => [
     taped(world, `institution:${id}:assets`, 'assets', 'USD', (v) => money(v)),
     taped(world, `institution:${id}:cash`, 'cash', 'USD', (v) => money(v)),
@@ -38,9 +39,9 @@ export const institution = defineObject<InstitutionalEntity>({
     columns: [
       { key: 'name', label: 'name', render: (r, _w, nav) => <Link to={{ type: 'institution', id: r.id }} nav={nav}>{r.obj.ticker ?? r.id}</Link>, value: (r) => r.obj.ticker ?? r.id },
       { key: 'kind', label: 'kind', width: 1.3, render: (r) => words(r.obj.entityType), value: (r) => r.obj.entityType },
-      { key: 'assets', label: 'assets', render: (r) => money(r.obj.totalAssetsUSD), value: (r) => r.obj.totalAssetsUSD },
-      { key: 'cash', label: 'cash', render: (r) => (r.obj.totalAssetsUSD > 0 ? pctLevel((r.obj.cashUSD ?? 0) / r.obj.totalAssetsUSD, 0) : '—'), value: (r) => (r.obj.totalAssetsUSD > 0 ? (r.obj.cashUSD ?? 0) / r.obj.totalAssetsUSD : 0) },
-      { key: 'equity', label: 'equity', render: (r) => (r.obj.totalAssetsUSD > 0 ? pctLevel(r.obj.equityCapitalUSD / r.obj.totalAssetsUSD, 0) : '—'), value: (r) => (r.obj.totalAssetsUSD > 0 ? r.obj.equityCapitalUSD / r.obj.totalAssetsUSD : 0) },
+      { key: 'assets', label: 'assets', render: (r, w) => money(institutionTotalAssetsFromState(w.state, r.obj)), value: (r, w) => institutionTotalAssetsFromState(w.state, r.obj) },
+      { key: 'cash', label: 'cash', render: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? pctLevel((r.obj.cashUSD ?? 0) / t, 0) : '—'; }, value: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? (r.obj.cashUSD ?? 0) / t : 0; } },
+      { key: 'equity', label: 'equity', render: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? pctLevel(r.obj.equityCapitalUSD / t, 0) : '—'; }, value: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? r.obj.equityCapitalUSD / t : 0; } },
       { key: 'region', label: 'reg', width: 0.6, render: (r, _w, nav) => <Link to={{ type: 'region', id: r.obj.region }} nav={nav}>{r.obj.region}</Link>, value: (r) => r.obj.region },
     ],
   },
@@ -55,6 +56,7 @@ export const institution = defineObject<InstitutionalEntity>({
     const contracts = contractsOf(world, { kind: 'INSTITUTION', key: e.id });
     const strategy = hedgeFundStrategyProfile(e);
     const t = e.assetAllocationTarget;
+    const totalAssetsUSD = institutionTotalAssetsFromState(world.state, e);
     return (
       <>
         <ObjectHeader
@@ -66,9 +68,9 @@ export const institution = defineObject<InstitutionalEntity>({
           flag={e.isDefaulted ? 'in default' : undefined}
         />
         <StatGrid>
-          <Stat label="assets" value={money(e.totalAssetsUSD)} sub={<ChangeSub series={assets} />} />
-          <Stat label="cash" value={money(e.cashUSD)} sub={e.cashUSD !== undefined && e.totalAssetsUSD > 0 ? `${pctLevel(e.cashUSD / e.totalAssetsUSD, 0)} of assets` : ''} neg={(e.cashUSD ?? 0) < 0} />
-          <Stat label="equity" value={money(e.equityCapitalUSD)} sub={e.totalAssetsUSD > 0 ? `${pctLevel(e.equityCapitalUSD / e.totalAssetsUSD, 0)} of assets` : ''} />
+          <Stat label="assets" value={money(totalAssetsUSD)} sub={<ChangeSub series={assets} />} />
+          <Stat label="cash" value={money(e.cashUSD)} sub={e.cashUSD !== undefined && totalAssetsUSD > 0 ? `${pctLevel(e.cashUSD / totalAssetsUSD, 0)} of assets` : ''} neg={(e.cashUSD ?? 0) < 0} />
+          <Stat label="equity" value={money(e.equityCapitalUSD)} sub={totalAssetsUSD > 0 ? `${pctLevel(e.equityCapitalUSD / totalAssetsUSD, 0)} of assets` : ''} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="holdings" hint={`${book.length} positions`} v={money(holdingsUSD)} onTap={() => nav.go('holdings')} />
