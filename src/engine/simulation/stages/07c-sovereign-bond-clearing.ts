@@ -45,7 +45,8 @@
 
 import { govBucketId, govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
-import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
+import { SOV_BILL_MAX_TENOR_YEARS, sovBucketKey } from './shared-helpers';
+import { withdrawUnplacedIssuance } from '../../../domain/government';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
@@ -619,5 +620,20 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // PUB: the treasury is paid for the paper this week's auction actually placed.
       primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }))
     );
+
+    // §5-CLOSE O1: what this auction did not place is withdrawn from the ladder — paper nobody
+    // holds is not debt — and the need rolls forward to the next issuance.
+    let withdrawnUSD = 0;
+    instruments.forEach((inst) => {
+      const o = result.primaryOutcomeById.get(inst.id);
+      const placedUSD = o && !o.withdrawn ? Math.max(0, o.marketTakeUSD) : 0;
+      const unplacedUSD = Math.max(0, (inst.primaryOfferingUSD ?? 0) - placedUSD);
+      const key = govBucketKeyOf(inst.id, regionId);
+      if (!key || unplacedUSD <= 1) return;
+      const r = withdrawUnplacedIssuance(reg.govDebtTranches, sovBucketKey, key, unplacedUSD);
+      reg.govDebtTranches = r.tranches;
+      withdrawnUSD += r.withdrawnUSD;
+    });
+    if (withdrawnUSD > 0) reg.pendingUnfundedDeficitUSD = (reg.pendingUnfundedDeficitUSD ?? 0) + withdrawnUSD;
   });
 }

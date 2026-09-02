@@ -20,7 +20,10 @@ function o1(state: GameState, week: number): AuditFinding[] {
       if (t.isCommercialPaper) o.cp += t.principalUSD; else if (t.rateType === 'FIXED') o.corp += t.principalUSD; else o.loan += t.principalUSD;
     });
   });
-  REGION_IDS.forEach((r) => { outstanding[r].sov = sum(state.regions[r]?.govDebtTranches ?? [], (t) => t.principalUSD); });
+  // §5-CLOSE O1: paper issued THIS week is in the auction (07c/07f place it next week, and what
+  // they cannot place is withdrawn from the ladder); it is offered, not yet anyone's, and not
+  // yet owed to nobody either. Everything older must have a holder.
+  REGION_IDS.forEach((r) => { outstanding[r].sov = sum((state.regions[r]?.govDebtTranches ?? []).filter((t) => t.originationWeek < state.currentWeek), (t) => t.principalUSD); });
   const add = (h: { instrumentType: string; issuerRegion: string; quantityOrNotionalUSD?: number }) => {
     const b = held[h.issuerRegion]; if (!b) return; const v = h.quantityOrNotionalUSD ?? 0;
     if (h.instrumentType === 'CORP_BOND') b.corp += v; else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v; else if (h.instrumentType === 'GOV_BOND') b.sov += v; else if (h.instrumentType === 'COMMERCIAL_PAPER') b.cp += v;

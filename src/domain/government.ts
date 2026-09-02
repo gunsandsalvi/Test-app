@@ -273,3 +273,31 @@ export function sovereignCouponDueShare(bucketKey: string, week: number): number
   const anchor = Math.abs(hash) % periodWeeks;
   return (week - anchor) % periodWeeks === 0 ? 1 / PAYMENTS_PER_YEAR : 0;
 }
+
+/**
+ * §5-CLOSE O1 — PAPER NOBODY BOUGHT IS NOT DEBT. A tranche joins the ladder at its full size and
+ * the auction places what the week's demand takes; what it cannot place used to stay on the ladder
+ * as principal owed to nobody (measured: JPN 9% of the stock, "paper with no owner"). After the
+ * auction the unplaced amount is WITHDRAWN from the youngest tranches of the bucket, and the
+ * treasury's need rolls forward to the next issuance — the deficit is not funded until someone
+ * funds it. Returns the ladder and what was withdrawn.
+ */
+export function withdrawUnplacedIssuance(
+  tranches: import('./region-macro').GovDebtTranche[],
+  bucketKeyOf: (tenorAtIssuanceYears: number) => string,
+  bucketKey: string,
+  unplacedUSD: number
+): { tranches: import('./region-macro').GovDebtTranche[]; withdrawnUSD: number } {
+  if (!(unplacedUSD > 1)) return { tranches, withdrawnUSD: 0 };
+  let left = unplacedUSD;
+  const out = tranches.map((t) => ({ ...t }));
+  const inBucket = out.filter((t) => bucketKeyOf(t.tenorAtIssuanceYears) === bucketKey)
+    .sort((a, b) => b.originationWeek - a.originationWeek);
+  for (const t of inBucket) {
+    if (left <= 1) break;
+    const take = Math.min(t.principalUSD, left);
+    t.principalUSD -= take;
+    left -= take;
+  }
+  return { tranches: out.filter((t) => t.principalUSD > 1), withdrawnUSD: unplacedUSD - left };
+}
