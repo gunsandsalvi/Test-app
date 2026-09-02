@@ -284,12 +284,13 @@ function buildTemplate(
 const SECTOR_FIRM_COUNT: Partial<Record<Sector, number>> = {
   Tech: 10,
   Energy: 10,
-  Financials: 8, // + 2 specialty (INSURER, ASSET_MANAGER) added separately
+  Financials: 8, // + the specialty roles (insurers, asset managers, a pension fund, hedge funds) added separately
   Industrials: 10,
   Consumer: 10,
 };
 
 const BANKS_PER_REGION = 4;
+const INSURERS_PER_REGION = 3;
 const COMMODITY_PRODUCERS_PER_CATEGORY = 2; // per generic commodity id, per region
 
 export function generateFirmSeeds(
@@ -312,10 +313,19 @@ export function generateFirmSeeds(
   // sector's assets, but they are the marginal buyer at the wides — the bid that exists when
   // mandate-constrained insurers and pension funds have none — so their weight matters far more
   // to where distressed paper clears than their size suggests.
-  seeds.push(buildTemplate(region, 'Financials', 0.5, existingTickers, existingNames, {
-    institutionalRole: 'INSURER',
-    institutionalMarketShare: 0.42,
-  }));
+  // INS (user, 2026-09-02): THREE insurers, not one. A single insurer per region carried the
+  // whole sector's 0.42 slice — too big to fail and with no competitor to lose a policy to, so
+  // nothing about its price or its capital was ever tested. They split the SAME slice on the
+  // firm-size curve every other cohort is generated from (the asset managers' and the hedge
+  // funds' precedent): a split, not an addition — the region's institutional pool is unchanged.
+  const insurerShareSum = Array.from({ length: INSURERS_PER_REGION },
+    (_, i) => Math.pow(FIRM_CONCENTRATION_DECAY, i)).reduce((a, b) => a + b, 0);
+  for (let i = 0; i < INSURERS_PER_REGION; i++) {
+    seeds.push(buildTemplate(region, 'Financials', 0.5 + i * 0.25, existingTickers, existingNames, {
+      institutionalRole: 'INSURER',
+      institutionalMarketShare: 0.42 * (Math.pow(FIRM_CONCENTRATION_DECAY, i) / insurerShareSum),
+    }));
+  }
   // THREE asset managers, not one. A single manager per region could not sponsor a fund complex
   // without being a monoline, and real index sponsorship is a handful of competing houses each
   // running a MIX across equity and credit. The 0.33 sector slice is split between them by size,
