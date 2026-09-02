@@ -12,11 +12,11 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `4bda75c` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
+- HEAD `b1111d7` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
   earlier one; the session that owns it may push nowhere else.)
-- **Next step: §3 step 6**, then 7, 8, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 7**, then 8, 9, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `4bda75c` —
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `b1111d7` —
   **92 violations in 25 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
@@ -185,11 +185,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-6. **Bank resolution transfers the whole sheet.** `bank-resolution.ts:92` nets the shell's own bond
-   ladder against the CENTRAL BANK's loan; `bank-transfer.ts:79,82` transfers the remainder and
-   zeroes `target.centralBankLoanUSD` while `centralBankSheet.loansToBanksUSD` keeps the asset.
-   Bail the ladder in on its own rows and move the whole CB loan. `wholesaleHaircutUSD ≡ 0` (`:97`)
-   makes the documented bail-in dead code — make it real or delete the branch.
 7. **The treasury's own books.** `government-entity.ts:65-68` returns coupon + bill-discount accrual
    while `government.ts:74-84` states in terms that this is the double count — bills are ~21% of the
    stack, stage 11 uses coupon only, and the inflated figure is what `evolution.ts:197-201` tests
@@ -2361,3 +2356,16 @@ WEEKS=16): **95 violations in 26 families → 92 in 25**; O3 (rows naming an ins
 not exist) and the goods-wedge X2 line are gone, money clean, unowned 0.00B, open estates 41 →
 37 with the horizons now finite. The workout's 0.9-capped sale price and its pro-rata-to-cash
 allocation are untouched — step 20's.
+
+**6. Bank resolution transfers the whole sheet.** (`b1111d7`) `planBankResolution` netted the
+failed bank's own BOND LADDER against the CENTRAL BANK's loan and transferred only the
+remainder, while `assumeBankBooks` then zeroed the shell's balance outright — the un-assumed
+part was erased with no counterparty while `loansToBanksUSD` still carried the asset, and two
+different liabilities were treated as one line. The whole central-bank loan now moves with the
+books, and the ladder is bailed in where it lives: on the shell's own rows, its holders taking
+their loss through the estate like any other issuer's bondholders. `wholesaleHaircutUSD` was
+identically zero, so the loss order it documented was dead code and its equity line bypassed
+`bookPnL`; with the central bank whole by construction there is no wholesale lender to haircut,
+so the field, the line and the news sentence quoting it are gone. Measured (SHOCKS=0 WEEKS=16):
+**92 in 25, unchanged — no bank is resolved in the reference run**, so this one is verified by
+the pure-function tests (rewritten to the new shape) and by reading, not by the run.
