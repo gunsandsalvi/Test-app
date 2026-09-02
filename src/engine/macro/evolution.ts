@@ -1221,6 +1221,12 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       // kept the cumulative total. Measured: the fund's shares outstanding ran 2.5% above what
       // every holder together owned by week 6 and growing (§7.126).
       mmfSharesUSD: prevHS.mmfSharesUSD ?? 0,
+      // §5-CLOSE C5b: the households' money IN TRANSIT to their banks (settled last week, the
+      // bank leg posts at 02b this week). Not named here, it was dropped every week: the payer's
+      // reserves had left and no bank ever received them — money destroyed when households were
+      // net receivers after the bank pass, created when they were net payers (±5–8B a week,
+      // the whole of M1's periodic residual after C5).
+      pendingBankSettlementUSD: prevHS.pendingBankSettlementUSD ?? 0,
       privateBusinessEquityUSD: prevHS.privateBusinessEquityUSD ?? 0,
       // HH4: this week's cohort decomposition — the cross-section the aggregates above sum from.
       cohorts: cohortResult.cohorts,

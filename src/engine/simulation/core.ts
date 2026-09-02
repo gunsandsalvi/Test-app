@@ -13,6 +13,7 @@ import { reconcileRepoPledges } from './stages/repo-clearing';
 import { createInitialContext } from './stages/context';
 import { StageDependencyTrace, stageTraceEnabled } from './stage-deps';
 import { BankIdentityTrace, bankIdentityTraceEnabled } from './bank-identity-trace';
+import { CentralBankIdentityTrace, centralBankIdentityTraceEnabled } from './central-bank-identity-trace';
 import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
 import { runRegionMacroStage } from './stages/02-region-macro';
@@ -136,6 +137,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   const trace = stageTraceEnabled() ? new StageDependencyTrace() : undefined;
   const idTrace = bankIdentityTraceEnabled() ? new BankIdentityTrace() : undefined;
   idTrace?.begin(state, baseCtx);
+  const cbTrace = centralBankIdentityTraceEnabled() ? new CentralBankIdentityTrace() : undefined;
+  cbTrace?.begin(state, baseCtx);
   const timings: StageTiming[] = [];
   const profile = options?.profile === true;
   const run = <T>(stage: string, fn: () => T): T => {
@@ -172,6 +175,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         scan('state.companies', state.companies as never);
       }
       idTrace?.afterStage(stage, state, baseCtx);
+      cbTrace?.afterStage(stage, state, baseCtx);
       // MINT_STAGE_TRACE=<companyId> — read-only: prints the stage after which the named
       // issuer's CORP_BOND holder total moved (the §7.289 mint-drift dig's instrument).
       const mintFocus = process.env.MINT_STAGE_TRACE;
@@ -402,6 +406,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   if (process.env.TRANCHE_SYNC_CHECK === '1') assertLaddersInSync(ensureV2(state), nextState.companies);
   if (process.env.HOLDINGS_SYNC_CHECK === '1') assertBooksInSync(ensureV2(state), nextState.institutionalEntities ?? []);
   idTrace?.report(baseCtx.nextWeek);
+  cbTrace?.report(baseCtx.nextWeek);
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
     derivativesBook: ctx.derivativesBook ?? state.derivativesBook,
