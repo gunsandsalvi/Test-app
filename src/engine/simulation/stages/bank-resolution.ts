@@ -190,7 +190,6 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     bank.bankResolvedWeek = week;
     bank.creditRating = 'D';
     bank.stockPrice = 0;
-    bank.marketCap = 0;
     ctx.defaultedTickers.push(bank.ticker);
     if (plan.estateUSD > 0) {
       pay(ctx, { payer: { kind: 'BANK', ticker: acquirer.ticker }, payee: { kind: 'COMPANY', ticker: bank.ticker },

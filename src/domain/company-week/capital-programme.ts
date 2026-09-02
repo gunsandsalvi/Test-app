@@ -38,6 +38,9 @@ export interface CapitalProgrammeInputs {
   baselineGrowthCapexToRevenueRatio: number;
   /** Whether it can borrow to cover upkeep at all. */
   isInvestmentGrade: boolean;
+  /** §5-WIRES W3/D: a bridge is a HOUSE BANK's credit — a firm with no house bank (a bank is its
+   *  own banker) has no bridge to draw, whatever its rating. Omitted = it has one. */
+  hasHouseBank?: boolean;
   /** What the firm's own markets are doing: how fast they grow, and how short they are. */
   addressableGrowthAnnual: number;
   categoryShortfall: number;
@@ -91,8 +94,15 @@ export function maintenanceFundingCapacityUSD(i: CapitalProgrammeInputs): number
   const weeklyOperatingCashFlow = i.weeklyEbitdaUSD - i.weeklyInterestUSD;
   const activePpeUSD = i.grossPPEUSD * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
   const weeklyDesired = maintenanceTargetUSD(activePpeUSD, i.usefulLifeYears) / 52;
-  const borrowing = i.isInvestmentGrade ? weeklyDesired * 0.5 : 0;
+  const borrowing = bridgeCapacityUSD(i, weeklyDesired);
   return Math.max(0, weeklyOperatingCashFlow) + Math.max(0, i.cashUSD) * 0.05 + borrowing;
+}
+
+/** The weekly bridge a firm can draw against its upkeep: half the desired spend, investment grade
+ *  only, and only from a house bank it actually has (measured §7.372: a BANK, banking nowhere,
+ *  drew a maintenance facility from nobody — paper with no holder, interest paid to no one). */
+export function bridgeCapacityUSD(i: CapitalProgrammeInputs, weeklyDesiredMaintenanceUSD: number): number {
+  return i.isInvestmentGrade && i.hasHouseBank !== false ? weeklyDesiredMaintenanceUSD * 0.5 : 0;
 }
 
 export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramme {
@@ -107,7 +117,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   const targetMaintenanceCapexUSD = maintenanceTargetUSD(activePpeUSD, i.usefulLifeYears);
   const weeklyDesiredMaintenance = targetMaintenanceCapexUSD / 52;
   const weeklyOperatingCashFlow = i.weeklyEbitdaUSD - i.weeklyInterestUSD;
-  const borrowingCapacity = i.isInvestmentGrade ? weeklyDesiredMaintenance * 0.5 : 0;
+  const borrowingCapacity = bridgeCapacityUSD(i, weeklyDesiredMaintenance);
   const availableFunding = maintenanceFundingCapacityUSD(i);
 
   const weeklyFunded = Math.min(weeklyDesiredMaintenance, availableFunding);

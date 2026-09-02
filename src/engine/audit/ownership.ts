@@ -4,6 +4,7 @@ import { GameState, RegionId } from '../../types';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, sum } from './types';
+import { marketCapOf } from '../../domain/company';
 
 /** O1 — two-sided: what the books hold of each debt class equals what is outstanding, in both directions. */
 function o1(state: GameState, week: number): AuditFinding[] {
@@ -62,7 +63,7 @@ function o2(state: GameState, week: number): AuditFinding[] {
     if (!isActiveCompany(c)) return;
     const hs = heldShares.get(c.id) ?? 0;
     if (c.sharesOutstanding > 0 && hs > c.sharesOutstanding * 1.02) { over++; overUSD += (hs - c.sharesOutstanding) * c.stockPrice; }
-    if (c.stockPrice > 0 && c.sharesOutstanding > 0) { const cap = c.stockPrice * c.sharesOutstanding; if (Math.abs(cap - c.marketCap) > cap * 0.02) { capN++; capGap += Math.abs(cap - c.marketCap); } }
+    if (c.stockPrice > 0 && c.sharesOutstanding > 0) { const cap = c.stockPrice * c.sharesOutstanding; if (Math.abs(cap - marketCapOf(c)) > cap * 0.02) { capN++; capGap += Math.abs(cap - marketCapOf(c)); } }
   });
   if (over) out.push({ family: 'O', check: 'O2 shares held ≤ issued', week, usd: overUSD, message: `${over} firms have more shares on the register than they issued (${B(overUSD)} of phantom stock)` });
   if (capN) out.push({ family: 'O', check: 'O2 market cap = price × shares', week, usd: capGap, message: `${capN} firms' market cap differs from price × shares by ${B(capGap)} in all` });

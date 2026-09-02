@@ -23,6 +23,7 @@ import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 import { issueHolding, transferHolding } from '../../ledger/holdings-ledger';
 import { heldInShares } from '../../../domain/assets';
+import { marketCapOf } from '../../../domain/company';
 
 /**
  * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
@@ -111,7 +112,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     const tickers = new Set(ctx.updatedCompanies.map((c) => c.ticker));
     let ticker = `${parent.ticker}SP`;
     for (let n = 2; tickers.has(ticker); n++) ticker = `${parent.ticker}SP${n}`;
-    const spinMcapUSD = Math.max(1, parent.marketCap * share);
+    const spinMcapUSD = Math.max(1, marketCapOf(parent) * share);
     // One spin-co share per parent share — the classic ratio, so a holder's fraction of the
     // parent IS its fraction of the spin-co and the mint below is one multiplication.
     const spinShares = parent.sharesOutstanding;
@@ -131,9 +132,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     spin.employeeCount = employees;
     spin.sharesOutstanding = spinShares;
     spin.stockPrice = Number(spinPrice.toFixed(4));
-    spin.marketCap = spinMcapUSD;
     spin.cash = 0;
-    spin.totalDebt = 0;
     spin.debtTranches = [];
     spin.grossPPEUSD = (parent.grossPPEUSD ?? 0) * share;
     spin.accumulatedDepreciationUSD = (parent.accumulatedDepreciationUSD ?? 0) * share;
@@ -183,7 +182,6 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     parent.accumulatedDepreciationUSD = (parent.accumulatedDepreciationUSD ?? 0) * (1 - share);
     if (parent.baselineNetPpeUSD !== undefined) parent.baselineNetPpeUSD = parent.baselineNetPpeUSD * (1 - share);
     parent.stockPrice = Number((parent.stockPrice * (1 - share)).toFixed(4));
-    parent.marketCap = parent.stockPrice * parent.sharesOutstanding;
     parent.antitrustWeeksAboveThreshold = 0;
 
     // Opening cash is CARVED from the parent through settlement, like a firm birth's — the
@@ -224,10 +222,10 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // divestiture that should follow it is recorded there as unbuilt.
   if (isAntitrustBlocked(acquirer)) return;
 
-  const purchasePrice = target.marketCap * 1.15;
+  const purchasePrice = marketCapOf(target) * 1.15;
   const cashPaid = purchasePrice * 0.5;
   const stockPaid = purchasePrice * 0.5;
-  const targetMarketCapUSD = Math.max(1, target.marketCap);
+  const targetMarketCapUSD = Math.max(1, marketCapOf(target));
 
   // §7.241: the consideration is PAYMENTS now. The old form debited the acquirer directly and
   // the money arrived on NO book — target shareholders' register rows were neither re-keyed nor
@@ -340,10 +338,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
 
     const newLadder = [...protectedAcquirerTranches, ...consolidatedTranches];
     rebuildLadder(v2m, { id: acquirer.id, ticker: acquirer.ticker, region: acquirer.region }, newLadder, 'merger: ladders consolidated');
-    acquirer.totalDebt = newLadder.reduce((s, t) => s + t.principalUSD, 0);
   }
   rebuildLadder(v2m, { id: target.id, ticker: target.ticker, region: target.region }, [], 'merger: target ladder assumed');
-  target.totalDebt = 0;
 
   // HH4d (a hole the deposit-unification invariant exposed): an acquired BANK brings its whole
   // balance sheet — deposits, wholesale funding, the itemized business and household books, the
@@ -428,7 +424,6 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   target.stockPrice = 0;
   target.employeeCount = 0;
   target.annualRevenue = 0;
-  target.marketCap = 0;
   target.capex = 0;
   target.maintenanceCapex = 0;
   target.growthCapex = 0;

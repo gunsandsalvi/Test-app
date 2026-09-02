@@ -174,7 +174,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         facilityBankTicker: c.homeBankTicker,
       };
       issueTranche(ensureV2(state), { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
-      c.totalDebt = (c.totalDebt ?? 0) + drawUSD;
       ctx.creditEventsThisWeek.push({
         bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,
         principalUSD: drawUSD, marginBps,

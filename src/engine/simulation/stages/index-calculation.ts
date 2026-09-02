@@ -22,6 +22,7 @@ import { WeeklyStepContext } from './context';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { isInvestmentGrade } from './asset-allocation';
 import { calculateNelsonSiegelZeroRate, NelsonSiegelParams } from '../../nelsonSiegel';
+import { marketCapOf } from '../../../domain/company';
 import {
   INDEX_DEFINITIONS, IndexDefinition, IndexConstituent, MarketIndex,
   LARGE_CAP_CUMULATIVE_SHARE, INDEX_REBALANCE_WEEKS, INDEX_BASE_LEVEL,
@@ -78,7 +79,7 @@ function indexValueUSD(v2: V2World, def: IndexDefinition, comp: Company, curveOf
 
   if (def.assetClass === 'EQUITY') {
     if (!isPubliclyListed(comp) || !(comp.sharesOutstanding > 0) || !(comp.stockPrice > 0)) return 0;
-    return comp.marketCap;
+    return marketCapOf(comp);
   }
 
   if (def.assetClass === 'LEVERAGED_LOAN') return floatingMarketValueUSD(v2, comp);

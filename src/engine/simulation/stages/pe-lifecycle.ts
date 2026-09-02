@@ -34,6 +34,8 @@ import { smePoolSubUnits } from '../../../domain/industry-registry';
 import { STANDARD_CORP_TENOR_YEARS } from '../../../engine2/stage08-back';
 import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche } from '../../ledger/tranche-ledger';
+import { marketCapOf, totalDebtOf } from '../../../domain/company';
+import { ladderTotalUSD } from '../../../engine2/tranches';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -66,8 +68,8 @@ export function publicComparableEvMultiple(
   const inRegion: number[] = [];
   const everywhere: number[] = [];
   listedCompanies.forEach((c) => {
-    if (!isActiveCompany(c) || c.listingStatus === 'PRIVATE' || !(c.ebitda > 0) || !(c.marketCap > 0)) return;
-    const m = (c.marketCap + c.totalDebt) / c.ebitda;
+    if (!isActiveCompany(c) || c.listingStatus === 'PRIVATE' || !(c.ebitda > 0) || !(marketCapOf(c) > 0)) return;
+    const m = (marketCapOf(c) + totalDebtOf(c)) / c.ebitda;
     everywhere.push(m);
     if (c.region === regionId) inRegion.push(m);
   });
@@ -221,7 +223,7 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: n
 const ebitdaOf = (c: Company) => Math.max(0, c.ebitda);
 const enterpriseValueUSD = (c: Company, evMultiple: number) => evMultiple * ebitdaOf(c);
 const equityValueUSD = (c: Company, evMultiple: number) =>
-  Math.max(0, enterpriseValueUSD(c, evMultiple) - c.totalDebt);
+  Math.max(0, enterpriseValueUSD(c, evMultiple) - totalDebtOf(c));
 
 /**
  * One region's weekly lifecycle pass. Runs after stage 08 (fundamentals are this week's) and
@@ -294,11 +296,11 @@ export function runPeLifecycleForRegion(
     if (loanMarketDmBps < RECAP_DM_THRESHOLD_BPS) {
       const recapTarget = portfolio.find((c) => {
         if (pendingIssuers.has(c.id)) return false;
-        const lev = c.totalDebt / Math.max(1, ebitdaOf(c));
+        const lev = ladderTotalUSD(ctx.v2, c.id) / Math.max(1, ebitdaOf(c));
         return ebitdaOf(c) > 0 && lev < LBO_MAX_LEVERAGE - 1 && nextWeek - (c.lastRecapWeek ?? -999) > 104;
       });
       if (recapTarget) {
-        const headroomUSD = (LBO_MAX_LEVERAGE - recapTarget.totalDebt / Math.max(1, ebitdaOf(recapTarget))) * ebitdaOf(recapTarget);
+        const headroomUSD = (LBO_MAX_LEVERAGE - ladderTotalUSD(ctx.v2, recapTarget.id) / Math.max(1, ebitdaOf(recapTarget))) * ebitdaOf(recapTarget);
         const recapUSD = Math.max(0, headroomUSD * 0.5);
         if (recapUSD > 1e6) {
           ctx.primaryOfferingsWorking.push({
@@ -337,7 +339,7 @@ export function runPeLifecycleForRegion(
       // purchase predates the simulation) is treated as having bought at the standing mark.
       const entryMultiple = listCandidate.ownership?.entryEvMultiple ?? markEvMultiple;
       if (peerEvMultiple > entryMultiple * IPO_PREMIUM_OVER_ENTRY) {
-        const impliedEquityUSD = Math.max(0, peerEvMultiple * ebitdaOf(listCandidate) - listCandidate.totalDebt);
+        const impliedEquityUSD = Math.max(0, peerEvMultiple * ebitdaOf(listCandidate) - ladderTotalUSD(ctx.v2, listCandidate.id));
         // The registry the listing creates, and the price talk that follows from it. The share
         // count comes from the peers' own average price rather than a chosen number, so a listing
         // arrives at the denomination its market actually trades in.
@@ -439,10 +441,10 @@ export function runPeLifecycleForRegion(
         c.region === regionId && c.listingStatus === 'PRIVATE' && isActiveCompany(c)
         && !owned.has(c.id) && !c.ownership?.peSponsorId && !pendingIssuers.has(c.id)
         && ebitdaOf(c) > 0
-        && c.totalDebt / Math.max(1, ebitdaOf(c)) < LBO_MAX_LEVERAGE - 2
+        && ladderTotalUSD(ctx.v2, c.id) / Math.max(1, ebitdaOf(c)) < LBO_MAX_LEVERAGE - 2
         && equityValueUSD(c, markEvMultiple) > 0
         && equityValueUSD(c, markEvMultiple)
-             - Math.min(equityValueUSD(c, markEvMultiple), Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(c) - c.totalDebt))
+             - Math.min(equityValueUSD(c, markEvMultiple), Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(c) - ladderTotalUSD(ctx.v2, c.id)))
              < availablePowderUSD
       );
       if (target) {
@@ -450,7 +452,7 @@ export function runPeLifecycleForRegion(
         // As far as the covenant goes; the loan market decides whether it funds it.
         const debtUSD = Math.min(
           priceUSD,
-          Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(target) - target.totalDebt)
+          Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(target) - ladderTotalUSD(ctx.v2, target.id))
         );
         const equityUSD = priceUSD - debtUSD;
         if (equityUSD > 0 && equityUSD <= availablePowderUSD && debtUSD > 1e6) {
@@ -498,7 +500,7 @@ export function runPeLifecycleForRegion(
         if (c.isBankEntity || c.isInstitutionalEntity) return false;
         if (owned.has(c.id) || c.ownership?.peSponsorId || pendingIssuers.has(c.id)) return false;
         if (!(ebitdaOf(c) > 0) || !(c.sharesOutstanding > 0) || !(c.stockPrice > 0)) return false;
-        return c.totalDebt / Math.max(1, ebitdaOf(c)) < LBO_MAX_LEVERAGE - 2;
+        return ladderTotalUSD(ctx.v2, c.id) / Math.max(1, ebitdaOf(c)) < LBO_MAX_LEVERAGE - 2;
       });
       if (listedTarget) {
         // What the most patient liquid-market holder thinks a share is worth — the price at which
@@ -511,13 +513,13 @@ export function runPeLifecycleForRegion(
         const takeoutValueUSD = takeoutPricePerShare * listedTarget.sharesOutstanding;
         const debtUSD = Math.min(
           takeoutValueUSD,
-          Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(listedTarget) - listedTarget.totalDebt)
+          Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(listedTarget) - ladderTotalUSD(ctx.v2, listedTarget.id))
         );
         const equityUSD = takeoutValueUSD - debtUSD;
         // The sponsor's underwriting test: cash the business throws off after servicing the whole
         // post-deal stack, against the cheque it has to write. Its hurdle is higher than any
         // liquid holder's, which is why it needs the leverage to get there.
-        const allInDebtUSD = listedTarget.totalDebt + debtUSD;
+        const allInDebtUSD = ladderTotalUSD(ctx.v2, listedTarget.id) + debtUSD;
         const debtCostAnnual = reg.policyRate + listedTarget.oasSpreadBps / 10000;
         const leveredCashFlowUSD = ebitdaOf(listedTarget) - allInDebtUSD * debtCostAnnual;
         const clearsHurdle =
@@ -594,7 +596,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       });
       comp.ownership = {
         founderPct: 0.05, peSponsorId: deal.sponsorId, peSponsorPct: 0.95, acquiredWeek: nextWeek,
-        entryEvMultiple: comp.ebitda > 0 ? (comp.totalDebt + equityUSD) / comp.ebitda : 0,
+        entryEvMultiple: comp.ebitda > 0 ? (ladderTotalUSD(ctx.v2, comp.id) + equityUSD) / comp.ebitda : 0,
       };
       return;
     }
@@ -628,11 +630,10 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       });
       comp.listingStatus = 'PRIVATE';
       comp.stockPrice = 0;
-      comp.marketCap = 0;
       comp.sharesOutstanding = 0;
       comp.ownership = {
         founderPct: 0, peSponsorId: deal.sponsorId, peSponsorPct: 1, acquiredWeek: nextWeek,
-        entryEvMultiple: comp.ebitda > 0 ? (comp.totalDebt + takeoutValueUSD) / comp.ebitda : 0,
+        entryEvMultiple: comp.ebitda > 0 ? (ladderTotalUSD(ctx.v2, comp.id) + takeoutValueUSD) / comp.ebitda : 0,
       };
       if (process.env.CASH_LEDGER === '1') {
         comp.lastCashLedger = [
@@ -664,13 +665,11 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       // A pulled listing leaves the company private: the price talk 07e printed against its
       // debut instrument is not a price for a company nobody can buy.
       comp.stockPrice = 0;
-      comp.marketCap = 0;
       return;
     }
     comp.listingStatus = 'PUBLIC';
     comp.sharesOutstanding = shares;
     comp.stockPrice = Number(settlement.clearedStat.toFixed(2));
-    comp.marketCap = Math.round((shares * comp.stockPrice));
     // §7.241: the direct `comp.cash += proceeds` that stood here was a DOUBLE CREDIT — primary
     // settlement already pays the issuer for the whole deal by instruction (the CCP for the
     // book's take, the lead for the residual). One payment, one arrival.
@@ -702,7 +701,7 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
   const seeded = c.debtTranches ?? [];
   const debtUSD = seeded.reduce((a, t) => a + t.principalUSD, 0);
   c.debtTranches = [];
-  if (!(debtUSD > 1) || !c.homeBankTicker) { c.totalDebt = 0; return; }
+  if (!(debtUSD > 1) || !c.homeBankTicker) return;
   const bank = ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker);
   const marginBps = facilityMarginBpsFor(ctx.v2, c, reg, bank);
   const tranche: DebtTranche = {
@@ -728,7 +727,6 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
     amountUSD: tranche.principalUSD,
     reason: 'firm birth: facility proceeds',
   });
-  c.totalDebt = tranche.principalUSD;
   c.debtTranches = [tranche];
 }
 

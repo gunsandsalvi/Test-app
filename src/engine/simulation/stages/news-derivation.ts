@@ -20,6 +20,8 @@ import { partyId, partyOf, PartyRef } from '../../ledger/party';
 import { reasonText } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
 import { REGION_IDS } from '../../../domain/geography';
+import { marketCapOf } from '../../../domain/company';
+import { ladderTotalUSD } from '../../../engine2/tranches';
 
 type Ref = NonNullable<NewsItem['refs']>[number];
 
@@ -109,10 +111,10 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: 'default',
       category: 'CREDIT',
       title: `${c.name} defaults`,
-      description: `${ticker} (${c.sector}, ${c.region}) ran out of cash: ${M(c.cash)} on hand against coverage of ${c.interestCoverage.toFixed(2)}×, ${M(c.annualRevenue)} of revenue and ${M(c.totalDebt)} of debt; ${N(c.employeeCount)} people worked there${c.homeBankTicker ? `, banked at ${c.homeBankTicker}` : ''}.`,
+      description: `${ticker} (${c.sector}, ${c.region}) ran out of cash: ${M(c.cash)} on hand against coverage of ${c.interestCoverage.toFixed(2)}×, ${M(c.annualRevenue)} of revenue and ${M(ladderTotalUSD(ctx.v2, c.id))} of debt; ${N(c.employeeCount)} people worked there${c.homeBankTicker ? `, banked at ${c.homeBankTicker}` : ''}.`,
       cause: why.text ? `This week it paid ${why.text}.` : undefined,
       refs: [...refs, ...why.refs],
-      materialityUSD: Math.max(c.totalDebt, c.annualRevenue),
+      materialityUSD: Math.max(ladderTotalUSD(ctx.v2, c.id), c.annualRevenue),
       impactRegion: c.region, impactSector: c.sector, affectedTicker: ticker,
       urgent: c.annualRevenue > 1e9,
     });
@@ -143,7 +145,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       title: `${c.name} ${up ? 'upgraded' : 'downgraded'} to ${rc.to}${crossesIg ? (up ? ', back to investment grade' : ', out of investment grade') : ''}`,
       description: `${rc.ticker} moves ${rc.from} → ${rc.to}; its bonds clear ${Math.round(c.oasSpreadBps)}bp over the curve and its protection ${Math.round(c.cdsSpreadBps)}bp. Leverage ${c.leverage.toFixed(1)}×, coverage ${c.interestCoverage.toFixed(1)}×, cash ${M(c.cash)}, revenue ${M(c.annualRevenue)}.`,
       refs: [company(c), region(c.region)],
-      materialityUSD: c.totalDebt,
+      materialityUSD: ladderTotalUSD(ctx.v2, c.id),
       impactRegion: c.region, impactSector: c.sector, affectedTicker: rc.ticker,
       urgent: crossesIg && !up,
     });
@@ -173,9 +175,9 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: 'merger',
       category: 'CREDIT',
       title: `${a.name} acquires ${t.name}`,
-      description: `${m.acquirerTicker} takes ${m.targetTicker} (${t.sector}, ${t.region}; ${M(t.annualRevenue)} of revenue, ${N(t.employeeCount)} people) into a group with ${M(a.annualRevenue)} of revenue and ${M(a.totalDebt)} of debt.`,
+      description: `${m.acquirerTicker} takes ${m.targetTicker} (${t.sector}, ${t.region}; ${M(t.annualRevenue)} of revenue, ${N(t.employeeCount)} people) into a group with ${M(a.annualRevenue)} of revenue and ${M(ladderTotalUSD(ctx.v2, a.id))} of debt.`,
       refs: [company(a), company(t), region(a.region)],
-      materialityUSD: t.marketCap > 0 ? t.marketCap : t.annualRevenue,
+      materialityUSD: marketCapOf(t) > 0 ? marketCapOf(t) : t.annualRevenue,
       impactRegion: a.region, impactSector: a.sector, affectedTicker: m.acquirerTicker,
     });
   });

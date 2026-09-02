@@ -32,6 +32,7 @@ import { realizedAnnualVol } from '../../../domain/volatility';
 import { FULL_SIZE_PRICE_DISCOUNT } from './07e-equity-clearing';
 import { medianOf } from '../../../domain/volatility';
 import { REGION_IDS } from '../../../domain/geography';
+import { marketCapOf } from '../../../domain/company';
 
 const sblInstrumentId = (regionId: RegionId, companyId: string) => `${regionId}-SBL-${companyId}`;
 export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
@@ -211,7 +212,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     const mcapByRegion: Record<string, number> = {};
     (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
       mcapByRegion[r] = ctx.prevActiveFirms
-        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, c.marketCap ?? 0), 0);
+        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapOf(c) ?? 0), 0);
     });
     const floatValueById = new Map(listed.map((c) => [c.id, c.sharesOutstanding * c.stockPrice]));
     const totalFloatValueUSD = listed.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;

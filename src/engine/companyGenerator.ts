@@ -13,6 +13,7 @@ import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from './equi
 import { UNIVERSE_SCALE, PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
 import { random } from './rng';
+import { marketCapOf, totalDebtOf } from '../domain/company';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
@@ -149,8 +150,8 @@ export function buildQuarterlyFundamentalSnapshot(
   maintenanceCapex: number = 0,
   growthCapex: number = 0,
   oasSpreadBps: number = 150,
-  dividendYield: number = 0.02,
   marketCap: number = 1_000_000_000,
+  dividendYield: number = 0.02,
   prevSnapshot?: FundamentalSnapshot,
   debtIssuance: number = 0,
   debtRepayment: number = 0,
@@ -596,7 +597,6 @@ export function generateInitialCompanies(
         eps,
         sharesOutstanding: tmpl.shares,
         cash: tmpl.cashBase,
-        totalDebt: tmpl.debtBase,
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
         debtTranches,
         capex,
@@ -645,7 +645,6 @@ export function generateInitialCompanies(
         
         stockPrice,
         forwardPE: eps > 0 ? Number((stockPrice / eps).toFixed(2)) : sectorConfig.basePE,
-        marketCap: Math.round((stockPrice * tmpl.shares)),
         dividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         baselineDividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         bankMarketShare: tmpl.bankMarketShare,
@@ -773,14 +772,12 @@ export function generateInitialCompanies(
         name: newName,
         annualRevenue: parent.annualRevenue * revenueScale,
         baselineAnnualRevenue: parent.baselineAnnualRevenue * revenueScale,
-        totalDebt: parent.totalDebt * revenueScale,
         cash: parent.cash * revenueScale,
         // §5-CLOSE O2: a clone's cap is price × ITS shares — the share count scales with the
         // firm, the price is the parent's. Scaling the cap alone left every clone with a cap
         // that was not price × shares (up to 7×), and the seed then wrote shares onto the
         // register against that cap: 242 firms over-held at week 0, 94B of stock nobody issued.
         sharesOutstanding: parent.sharesOutstanding * revenueScale,
-        marketCap: parent.marketCap * revenueScale,
         grossPPEUSD: parent.grossPPEUSD * revenueScale,
         accumulatedDepreciationUSD: parent.accumulatedDepreciationUSD * revenueScale,
         employeeCount: newEmployeeCount,
@@ -829,9 +826,9 @@ export function generateInitialCompanies(
         kept.forEach((c) => {
           c.annualRevenue *= lift;
           c.baselineAnnualRevenue *= lift;
-          c.totalDebt *= lift;
+          (c.debtTranches ?? []).forEach((t: DebtTranche) => { t.principalUSD *= lift; });
           c.cash *= lift;
-          c.marketCap *= lift;
+          c.sharesOutstanding *= lift; // §5-WIRES D: the cap is price × shares; the lift is more of the firm at the market's price, so the SHARES lift (the register was seeded that way already)
           c.grossPPEUSD = (c.grossPPEUSD ?? 0) * lift;
           c.accumulatedDepreciationUSD = (c.accumulatedDepreciationUSD ?? 0) * lift;
         });
@@ -935,9 +932,9 @@ export function normalizeProducingSectorRevenue(
     cohort.forEach((c) => {
       c.annualRevenue *= lift;
       c.baselineAnnualRevenue *= lift;
-      c.totalDebt *= lift;
+      (c.debtTranches ?? []).forEach((t: DebtTranche) => { t.principalUSD *= lift; });
       c.cash *= lift;
-      c.marketCap *= lift;
+      c.sharesOutstanding *= lift; // §5-WIRES D: the cap is price × shares; the lift is more of the firm at the market's price, so the SHARES lift (the register was seeded that way already)
       c.grossPPEUSD = (c.grossPPEUSD ?? 0) * lift;
       c.accumulatedDepreciationUSD = (c.accumulatedDepreciationUSD ?? 0) * lift;
     });
@@ -1245,7 +1242,6 @@ export function generatePrivateCompanies(
       sharesOutstanding: 0, stockPrice: 0, marketCap: 0,
       historicalPrices: [], forwardPE: 0,
       cash: Math.round(ebitda * 0.6),
-      totalDebt: debtBase,
       currentLiabilities: Math.round(debtBase * 0.2 + revBase * 0.06),
       debtTranches,
       capex, maintenanceCapex, growthCapex: capex - maintenanceCapex,

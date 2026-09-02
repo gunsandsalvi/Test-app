@@ -45,6 +45,7 @@ import { ringFill, rowOf } from '../../../engine2/world';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { REGION_IDS } from '../../../domain/geography';
+import { marketCapOf } from '../../../domain/company';
 
 
 /** An entity's money for one asset class, from its own mandate weights. */
@@ -194,9 +195,9 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     if (!hs) return;
 
     const listed = ctx.updatedCompanies.filter(
-      (c) => c.region === region && isActiveCompany(c) && isPubliclyListed(c) && c.marketCap > 0
+      (c) => c.region === region && isActiveCompany(c) && isPubliclyListed(c) && marketCapOf(c) > 0
     );
-    const capUSD = listed.reduce((a2, c) => a2 + c.marketCap, 0);
+    const capUSD = listed.reduce((a2, c) => a2 + marketCapOf(c), 0);
     const earningsUSD = listed.reduce((a2, c) => a2 + c.netIncome, 0);
     const earningsYield = capUSD > 0 ? earningsUSD / capUSD : 0;
     // What household cash earns as an alternative: the region's money fund's own cleared net

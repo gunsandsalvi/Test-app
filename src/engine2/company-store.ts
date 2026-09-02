@@ -16,6 +16,8 @@
  */
 import { GameState, Company } from '../types';
 import { V2World, ensureV2 } from './world';
+import { marketCapOf } from '../domain/company';
+import { ladderTotalUSD } from './tranches';
 
 const F64_FIELDS = [
   // capital / production
@@ -67,6 +69,21 @@ export interface CompanyStore {
   str: Record<CompanyStrField, (string | undefined)[]>;
   /** Bumped by every refresh; readers may memo against it. */
   epoch: number;
+  /** §5-WIRES D: the world the derived columns (market cap, total debt) are read from. */
+  v2?: V2World;
+}
+
+/**
+ * §5-WIRES D — THE DERIVED COLUMNS. Two lanes the kernels read that are not fields on the object
+ * but READS of other state: market cap (price × shares) and total debt (the ladder's live face).
+ * Every fill of the store — the refresh, the per-row sync, the field mesh, the checker — routes
+ * these names here, so no writer can put a stored copy of a derivation into a lane.
+ */
+export const DERIVED_F64_FIELDS = ['marketCap', 'totalDebt'] as const;
+export type DerivedF64Field = typeof DERIVED_F64_FIELDS[number];
+function derivedColumn(S: CompanyStore, f: DerivedF64Field, c: Company): number {
+  if (f === 'marketCap') return marketCapOf(c);
+  return S.v2 ? ladderTotalUSD(S.v2, c.id) : NaN;
 }
 
 // Browsers hide the SharedArrayBuffer global without cross-origin isolation (e.g. plain static
@@ -116,6 +133,7 @@ export function refreshCompanyStore(state: GameState): CompanyStore {
     storeByState.set(key, S);
   }
   S.n = n;
+  S.v2 = key;
   const num = S.num, flag = S.flag, str = S.str;
   for (let i = 0; i < n; i++) {
     const c = companies[i] as unknown as Record<string, unknown>;
@@ -123,6 +141,8 @@ export function refreshCompanyStore(state: GameState): CompanyStore {
       const v = c[f];
       num[f][i] = v === undefined ? NaN : (v as number);
     }
+    // §5-WIRES D: the two derived columns are READS — price × shares, the ladder's live face.
+    for (const f of DERIVED_F64_FIELDS) num[f][i] = derivedColumn(S, f, companies[i]);
     for (const f of BOOL_FIELDS) {
       const v = c[f];
       flag[f][i] = v === undefined ? 2 : (v ? 1 : 0);
@@ -140,6 +160,7 @@ export function syncCompanyRow(S: CompanyStore, comp: Company, row: number): voi
     const v = c[f];
     S.num[f][row] = v === undefined ? NaN : (v as number);
   }
+  for (const f of DERIVED_F64_FIELDS) S.num[f][row] = derivedColumn(S, f, comp);
   for (const f of BOOL_FIELDS) {
     const v = c[f];
     S.flag[f][row] = v === undefined ? 2 : (v ? 1 : 0);
@@ -159,7 +180,9 @@ export function checkCompanyStore(state: GameState, where: string): void {
   for (let i = 0; i < Math.min(S.n, companies.length); i++) {
     const c = companies[i] as unknown as Record<string, unknown>;
     for (const f of F64_FIELDS) {
-      const o = c[f] as number | undefined;
+      const o = (DERIVED_F64_FIELDS as readonly string[]).includes(f)
+        ? derivedColumn(S, f as DerivedF64Field, companies[i])
+        : c[f] as number | undefined;
       const l = S.num[f][i];
       const same = o === undefined ? Number.isNaN(l) : (o === l || (Number.isNaN(o) && Number.isNaN(l)));
       if (!same) throw new Error(`COMPANY_SYNC_CHECK ${where}: row ${i} (${companies[i].ticker}) field ${f}: object ${o} vs lane ${l}`);
@@ -182,7 +205,13 @@ export function syncCompanyField(state: GameState, field: CompanyF64Field | Comp
   if (!S) return;
   const companies = state.companies;
   const m = Math.min(S.n, companies.length);
-  if ((F64_FIELDS as readonly string[]).includes(field)) {
+  if ((DERIVED_F64_FIELDS as readonly string[]).includes(field)) {
+    // §5-WIRES D: a derived column is RE-DERIVED, never read off the object (the field is gone).
+    // Reading it as a field wrote NaN into the lane after the books moved the ladder and the
+    // price, and the front kernel's Tobin's Q and debt rate went NaN with it (§7.372).
+    const lane = S.num[field as CompanyF64Field];
+    for (let i = 0; i < m; i++) lane[i] = derivedColumn(S, field as DerivedF64Field, companies[i]);
+  } else if ((F64_FIELDS as readonly string[]).includes(field)) {
     const lane = S.num[field as CompanyF64Field];
     for (let i = 0; i < m; i++) {
       const v = (companies[i] as unknown as Record<string, unknown>)[field] as number | undefined;

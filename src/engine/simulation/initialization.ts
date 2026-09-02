@@ -97,6 +97,7 @@ import { setSimulationSeed, getRngState, setRngState, DEFAULT_SIMULATION_SEED } 
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
 import { decomposeGovernmentSpending, governmentObligationsWeeklyUSD } from '../../domain/government';
+import { marketCapOf, totalDebtOf } from '../../domain/company';
 import {
   computeExpenditureGdpUSD,
   GOV_PROCUREMENT_SHARE_OF_SPENDING,
@@ -419,7 +420,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // The carves. Debt: serviceable ladders only (see HC1's finding on the segment debt
         // primitive). Revenue, employment and capex: exactly what the named tier now carries.
         const namedRevenueUSD = segFirms.reduce((a, f) => a + f.annualRevenue, 0);
-        seg.debtUSD = Math.round(Math.max(0, seg.debtUSD - segFirms.reduce((a, f) => a + f.totalDebt, 0)));
+        seg.debtUSD = Math.round(Math.max(0, seg.debtUSD - segFirms.reduce((a, f) => a + totalDebtOf(f), 0)));
         seg.employment = Math.max(1000, Math.round(seg.employment - segFirms.reduce((a, f) => a + f.employeeCount, 0)));
         seg.annualRevenueUSD = Math.max(1, Math.round(seg.annualRevenueUSD - namedRevenueUSD));
         seg.capexUSD = Math.round(Math.max(0, seg.capexUSD - segFirms.reduce((a, f) => a + f.capex, 0)));
@@ -477,7 +478,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // P3 / P4: Populate initial dollar holdings for institutional sectors from shares
     const regionCompanies = companies.filter(c => c.region === regionId);
 
-    const totalMarketCap = regionCompanies.reduce((s, c) => s + c.marketCap, 0);
+    const totalMarketCap = regionCompanies.reduce((s, c) => s + marketCapOf(c), 0);
     // FRM: the ratio is measured now, and it is seeded from the stack macro/initialization built
     // — so this reads the same number rather than the walked field it used to.
     const totalSovDebt = reg.debtToGdpPctBottomUp * reg.derivedNominalGdpUSD;
@@ -494,7 +495,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       id: c.id,
       type: 'EQUITY',
       region: regionId,
-      outstandingUSD: c.marketCap
+      outstandingUSD: marketCapOf(c)
     }));
 
     // Keyed by company id (aggregated across that issuer's own tranches), not per-tranche —
@@ -1377,7 +1378,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // valuation from week 1's. A bare `8 *` here and in the weekly mark was one company valued
     // two ways, and it made every seeded holding's entry basis a number nothing had cleared.
     const seedEvMultiple = publicComparableEvMultiple(regionId, companies);
-    const stakeValue = (f: Company) => Math.max(0, seedEvMultiple * f.ebitda - f.totalDebt) * 0.75;
+    const stakeValue = (f: Company) => Math.max(0, seedEvMultiple * f.ebitda - totalDebtOf(f)) * 0.75;
 
     // WS7: one money market fund per region. Born EMPTY — no fabricated share stock (§7.4's
     // seed-shape rule read the other way: the honest seed for a market the flows create is

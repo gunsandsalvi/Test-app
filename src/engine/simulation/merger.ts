@@ -3,6 +3,7 @@ import { SupplyRelationship } from '../../domain/market-microstructure';
 import { isActiveCompany } from '../../domain/company';
 import { formatCurrency } from '../formatters';
 import { random } from '../rng';
+import { marketCapOf, totalDebtOf } from '../../domain/company';
 
 export interface MergerCandidate {
   acquirerTicker: string;
@@ -39,7 +40,7 @@ export function checkForMerger(
 
   for (const acquirer of activeCompanies) {
     if (!isActiveCompany(acquirer) || !igRatings.includes(acquirer.creditRating)) continue;
-    if (acquirer.cash < 2 * Math.max(1, acquirer.totalDebt) && acquirer.totalDebt > 0) continue;
+    if (acquirer.cash < 2 * Math.max(1, totalDebtOf(acquirer)) && totalDebtOf(acquirer) > 0) continue;
     // (§7.240's `cash < 500` guard — dollars against books in billions, dead-open since the
     // dollar rescale — deleted rather than rescaled: the debt-cover gate above is the real test.)
 
@@ -60,10 +61,10 @@ export function checkForMerger(
       const candidates = activeCompanies.filter((t) =>
         t.ticker !== acquirer.ticker && isActiveCompany(t) && t.region === acquirer.region
         && (t.productLines ?? []).some((l) => l.subUnitId === rel.category)
-        && acquirer.marketCap >= 3 * Math.max(1, t.marketCap));
+        && marketCapOf(acquirer) >= 3 * Math.max(1, marketCapOf(t)));
       const target = candidates.sort((a, b) => (b.deliveryReliability ?? 1) - (a.deliveryReliability ?? 1))[0];
       if (target && random() < 0.20) {
-        const valStr = formatCurrency(target.marketCap * 1.15, { compact: true, precision: 1 });
+        const valStr = formatCurrency(marketCapOf(target) * 1.15, { compact: true, precision: 1 });
         return {
           acquirerTicker: acquirer.ticker,
           targetTicker: target.ticker,
@@ -77,15 +78,15 @@ export function checkForMerger(
     for (const target of activeCompanies) {
       if (target.ticker === acquirer.ticker || !isActiveCompany(target)) continue;
       if (target.sector !== acquirer.sector || target.region !== acquirer.region) continue;
-      if (acquirer.marketCap < 3 * Math.max(1, target.marketCap)) continue;
+      if (marketCapOf(acquirer) < 3 * Math.max(1, marketCapOf(target))) continue;
 
       const isDistressed = distressedRatings.includes(target.creditRating) || target.leverage > 4.5 || target.interestCoverage < 1.2;
-      const isUndervalued = target.marketCap < (target.annualRevenue * 0.4);
+      const isUndervalued = marketCapOf(target) < (target.annualRevenue * 0.4);
       if (!isDistressed && !isUndervalued) continue;
 
       // Probabilistic execution trigger: 20% when an eligible match is found
       if (random() < 0.20) {
-        const valStr = formatCurrency(target.marketCap * 1.15, { compact: true, precision: 1 });
+        const valStr = formatCurrency(marketCapOf(target) * 1.15, { compact: true, precision: 1 });
         return {
           acquirerTicker: acquirer.ticker,
           targetTicker: target.ticker,

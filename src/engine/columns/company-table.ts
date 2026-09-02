@@ -35,7 +35,7 @@ const REGION_CODE = new Map<string, number>(COMPANY_REGIONS.map((r, i) => [r, i]
 
 /** The columns, in one place so the sync and the kernels cannot disagree about the set. */
 const NUMERIC_FIELDS = [
-  'annualRevenue', 'baselineAnnualRevenue', 'ebitda', 'cash', 'totalDebt', 'marketCap',
+  'annualRevenue', 'baselineAnnualRevenue', 'ebitda', 'cash',
   'stockPrice', 'sharesOutstanding', 'employeeCount', 'previousEmployeeCount',
   'baselineEmployeeCount', 'grossPPEUSD', 'accumulatedDepreciationUSD', 'maintenanceCapex',
   'growthCapex', 'capex', 'previousCapex', 'offeredWageIndex', 'unfilledVacancyShare',

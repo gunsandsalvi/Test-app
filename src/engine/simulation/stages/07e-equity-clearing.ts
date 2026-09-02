@@ -47,6 +47,7 @@ import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } fro
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { positionKey } from './securities-lending';
 import { REGION_IDS } from '../../../domain/geography';
+import { marketCapOf } from '../../../domain/company';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
@@ -99,7 +100,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const mcapByRegion: Record<string, number> = {};
     (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
       mcapByRegion[r] = ctx.prevActiveFirms
-        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, c.marketCap ?? 0), 0);
+        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapOf(c) ?? 0), 0);
     });
     const regionEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.entityType !== 'ETF'
@@ -497,7 +498,6 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       if (!(newPrice > 0)) continue;
       const comp = regionCompanies[ii];
       comp.stockPrice = Number(newPrice.toFixed(2));
-      comp.marketCap = comp.stockPrice * comp.sharesOutstanding;
     }
 
     // Apply each entity's real new share register, with its cash leg.
@@ -508,6 +508,22 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     bookEntities.forEach((entity) => {
       const epi = piById.get(entity.id);
       const equityHoldings: ItemizedHolding[] = [];
+      if (epi === undefined) {
+        // A holder this session did not admit (an index fund with nothing investable) neither
+        // sold nor paid: its register passes through at the cleared marks. Charging it as a
+        // seller of everything and dropping its rows was −2.1B "with no owner" at the first D
+        // run (§7.372) — money paid for shares that had simply vanished.
+        currentSharesByEntity.get(entity.id)!.forEach((shares, companyId) => {
+          const comp = companyById.get(companyId);
+          if (!comp || shares <= 0.0001) return;
+          equityHoldings.push({
+            instrumentId: comp.id, instrumentType: 'EQUITY', issuerRegion: regionId,
+            quantityShares: shares, quantityOrNotionalUSD: shares * comp.stockPrice,
+          });
+        });
+        store.append(entity.id, equityHoldings);
+        return;
+      }
       for (let ii = 0; ii < nI; ii++) {
         const shares = holdAt(epi, ii);
         if (shares === 0) continue;
@@ -639,6 +655,12 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       primaryAssetOf('EQUITY', regionId)
     );
     const entityIds = new Set(bookEntities.map((e) => e.id));
+    if (process.env.LEFTOVER_TRACE === '1') {
+      const legs = [...netCashByEntityId.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 8)
+        .map(([id, v]) => `${id.slice(0, 18)} ${(v / 1e6).toFixed(1)}M`).join(' | ');
+      const prim = [...result.primaryOutcomeById.entries()].map(([id, o]) => `${id.slice(0, 14)} take ${(o.marketTakeUSD / 1e6).toFixed(2)}Msh@${o.clearedStat.toFixed(2)}${o.withdrawn ? ' WITHDRAWN' : ''}`).join(' | ');
+      console.log(`  [equity-legs] ${regionId} dealerNet ${(dealerNetUSD / 1e6).toFixed(1)}M fee ${(bookFeeUSD / 1e6).toFixed(1)}M | ${legs} | primary: ${prim || 'none'}`);
+    }
     settleClearedBook(
       ctx, regionId, BOOK,
       netCashByEntityId,

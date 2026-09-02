@@ -12,6 +12,7 @@ import { World, companyOf, institutionOf, regionOf, holdersOf, bookOf, sovereign
 import { refOfIdentifier, labelOf } from '../objects';
 import { instrumentName } from '../objects/book';
 import { isActiveCompany } from '../../domain/company';
+import { marketCapOf, totalDebtOf } from '../../domain/company';
 
 /** A sovereign instrument id's tenor, read aloud: `…-t10` → "10y", `…-b13` → "13w bill". */
 function tenorWord(id: string): string {
@@ -39,7 +40,7 @@ function CompanyHolders({ world, id, nav, tab }: { world: World; id: string; nav
     ? rows.filter((r) => r.instrumentType === 'EQUITY').map((r) => ({ holderId: r.holderId, kind: 'equity', usd: r.usd, shares: r.shares }))
     : [...rows.filter((r) => r.instrumentType !== 'EQUITY').map((r) => ({ holderId: r.holderId, kind: typeWord(r.instrumentType), usd: r.usd, shares: NaN })), ...facilities.map((f) => ({ holderId: f.holderId, kind: 'facility', usd: f.usd, shares: NaN }))];
   const total = list.reduce((a, r) => a + r.usd, 0);
-  const denom = active === 'equity' ? c.marketCap : c.totalDebt;
+  const denom = active === 'equity' ? marketCapOf(c) : totalDebtOf(c);
   const sorted = [...list].sort((a, b) => (sort === 'holder' ? a.holderId.localeCompare(b.holderId) : b.usd - a.usd));
   return (<>
     <Tabs items={kinds} active={active} onPick={(t) => nav.go('holders', { tab: t })} />

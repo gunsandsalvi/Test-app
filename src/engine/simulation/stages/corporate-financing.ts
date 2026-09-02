@@ -30,6 +30,7 @@
 
 import { riskAversionOf } from '../../../domain/preferences';
 import { Company, CreditRating } from '../../../types';
+import { marketCapOf } from '../../../domain/company';
 
 /**
  * The undrawn headroom on a firm's committed line: the extra debt its own earnings can service at
@@ -159,7 +160,7 @@ export function decideCorporateFinancing(params: {
     // to work: the covenant bounds the STOCK, the deployment pipeline bounds the FLOW.
     const headroomUSD = (covenantCeiling - currentLeverage) * ebitdaAnnual;
     const weeklyDeploymentCapUSD =
-      (Math.max(comp.growthCapex ?? 0, comp.marketCap * 0.02) / 52) * DEPLOYMENT_MULTIPLE;
+      (Math.max(comp.growthCapex ?? 0, marketCapOf(comp) * 0.02) / 52) * DEPLOYMENT_MULTIPLE;
     return {
       netDebtChangeUSD: Math.min(headroomUSD * WEEKLY_ISSUANCE_TAKEUP_RATE / ra, weeklyDeploymentCapUSD),
       reason: 'ISSUE_CHEAP_DEBT',

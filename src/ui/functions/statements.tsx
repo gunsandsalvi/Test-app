@@ -12,6 +12,7 @@ import { statementUSD, pct, pctLevel, ratio, changePct, money } from '../format'
 import { formatDate, quarterLabel } from '../calendar';
 import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
 import { bankRwaUSD } from '../../domain/bank-pricing';
+import { totalDebtOf } from '../../domain/company';
 
 interface Line { label: string; usd?: number; prior?: number; total?: boolean; text?: string }
 
@@ -135,7 +136,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
         { label: 'Cash', usd: c.cash },
         { label: 'Gross plant', usd: c.grossPPEUSD },
         { label: 'Accumulated depreciation', usd: -(c.accumulatedDepreciationUSD ?? 0) },
-        { label: 'Total debt', usd: c.totalDebt, total: true },
+        { label: 'Total debt', usd: totalDebtOf(c), total: true },
       ]} />
     );
   } else if (active === 'cash flow') {

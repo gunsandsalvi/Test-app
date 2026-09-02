@@ -13,6 +13,7 @@ import { evolveRegionMacro } from '../../macro/evolution';
 import { computeOccupationDemand } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
+import { marketCapOf } from '../../../domain/company';
 
 export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): void {
   const globalInflationShock = (random() - 0.5) * 0.0008;
@@ -62,11 +63,11 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
 
     // HH4b: what the region's listed equity actually pays — market-cap-weighted, real state.
     const regionListed = state.companies.filter(
-      (c) => c.region === regionId && !c.isDefaulted && (c.marketCap ?? 0) > 0
+      (c) => c.region === regionId && !c.isDefaulted && (marketCapOf(c) ?? 0) > 0
     );
-    const regionMcap = regionListed.reduce((a, c) => a + c.marketCap, 0);
+    const regionMcap = regionListed.reduce((a, c) => a + marketCapOf(c), 0);
     const regionAvgDividendYield = regionMcap > 0
-      ? regionListed.reduce((a, c) => a + (c.dividendYield ?? 0) * c.marketCap, 0) / regionMcap
+      ? regionListed.reduce((a, c) => a + (c.dividendYield ?? 0) * marketCapOf(c), 0) / regionMcap
       : 0;
 
     const { updatedRegion, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(

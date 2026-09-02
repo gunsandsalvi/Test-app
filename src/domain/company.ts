@@ -326,7 +326,7 @@ export interface Company {
   eps: number;
   sharesOutstanding: number;
   cash: number;
-  totalDebt: number;
+  // §5-WIRES D: total debt is a READ of the ladder (`totalDebtOf`, `ladderTotalUSD`), not a field.
   currentLiabilities: number;
   debtTranches: DebtTranche[];
   capex: number;
@@ -444,7 +444,7 @@ export interface Company {
   // §4.C II.5 — historicalPrices lives on v2.priceRing (world.ts).
   // §4.C II.5 — revenueHistory lives on v2.revRing (world.ts); the object field is gone.
   forwardPE: number;
-  marketCap: number;
+  // §5-WIRES D: market cap is a READ, price × shares (`marketCapOf`), not a field.
   dividendYield: number;
   baselineDividendYield: number;
   bankMarketShare?: number;
@@ -799,3 +799,17 @@ export const RECEIPTS_MEASUREMENT_WEIGHT = 0.08;
 export function managedEntityIdsOf(comp: { id: string; managesEntityIds?: string[] }): string[] {
   return comp.managesEntityIds ?? [comp.id];
 }
+
+/**
+ * §5-WIRES D — DERIVED QUANTITIES ARE FUNCTIONS, NEVER FIELDS. A stored sum of stored fields can
+ * disagree with its parts (O2's "market cap = price × shares" line existed because it did);
+ * the read cannot. Market cap is what the market says a firm's shares are worth: its price times
+ * its shares — zero for a firm nobody can buy (no price) or with no shares.
+ */
+export const marketCapOf = (c: { stockPrice: number; sharesOutstanding: number }): number =>
+  (c.stockPrice > 0 && c.sharesOutstanding > 0 ? c.stockPrice * c.sharesOutstanding : 0);
+
+/** Total debt is the ladder's face — the week-end VIEW (`debtTranches`); inside a week the engine
+ *  reads the live rows (`ladderTotalUSD` in engine2/tranches.ts). */
+export const totalDebtOf = (c: { debtTranches?: DebtTranche[] }): number =>
+  (c.debtTranches ?? []).reduce((s, t) => s + t.principalUSD, 0);

@@ -21,6 +21,7 @@ import { calculateCompositeIndices } from '../../macro/indices';
 import { WeeklyStepContext } from './context';
 import { realizedAnnualVol } from '../../../domain/volatility';
 import { regionIndexOf } from '../../macro/indices';
+import { ladderTotalUSD } from '../../../engine2/tranches';
 
 const priceScratch12: number[] = [];
 
@@ -130,7 +131,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           }
 
           const remainingTenorYears = Math.max(0.01, (TS.maturityWeek[trRow] - nextWeek) / 52);
-          const totalCorpBondPrincipalOutstanding = updatedCompanies.filter(c => c.region === pos.region).reduce((s, c) => s + c.totalDebt, 0);
+          const totalCorpBondPrincipalOutstanding = updatedCompanies.filter(c => c.region === pos.region).reduce((s, c) => s + ladderTotalUSD(ctx.v2, c.id), 0);
           // S6: the position marks off the CLEARED stat, full stop. The deleted block here
           // re-adjusted the already-cleared OAS by an ownership-derived premium — a second
           // price-setter duplicating (and disagreeing with) the real auction in 07b.

@@ -4,6 +4,7 @@ import { Company, RegionId, Region, Commodity, CompositeBenchmarkIndices, IndexM
 import { generate52WeekHistory } from './utils';
 import { getRegionPopulation, getRegionProductivityPerCapitaUSD, POPULATION_UNIT, PRODUCTIVITY_UNIT_USD } from '../bootstrap/population';
 import { RATING_OAS_SPREADS } from '../pricing';
+import { marketCapOf, totalDebtOf } from '../../domain/company';
 
 // Index base level = a shared reference unit scaled by each region's generated economic size
 // (population x productivity, relative to the same reference primitives), not a quoted real
@@ -63,11 +64,11 @@ const COMMODITY_INDEX_SHORT_NAME = 'Commodities';
 
 const getCapWeightedAvgPrice = (firms: Company[], baseIndex: number) => {
     if (firms.length === 0) return baseIndex;
-    const totalCap = firms.reduce((sum, f) => sum + f.marketCap, 0);
+    const totalCap = firms.reduce((sum, f) => sum + marketCapOf(f), 0);
     const avgChange = firms.reduce((sum, f) => {
       const prevP = prevPriceOf(f);
       const chg = prevP > 0 ? (f.stockPrice - prevP) / prevP : 0;
-      return sum + chg * (f.marketCap / Math.max(1, totalCap));
+      return sum + chg * (marketCapOf(f) / Math.max(1, totalCap));
     }, 0);
     // IDX: no bound. An index is the cap-weighted move of its own constituents, whatever that
     // is — a STATISTIC, not a price and not a level. The +/-15%/wk clamp that stood here only
@@ -127,8 +128,8 @@ const getCapWeightedAvgPrice = (firms: Company[], baseIndex: number) => {
   const getDebtWeightedOas = (firms: Company[], ratings: CreditRating[], fallback: number) => {
     const subset = firms.filter(c => ratings.includes(c.creditRating) && isActiveCompany(c));
     if (subset.length === 0) return fallback;
-    const totalDebt = subset.reduce((sum, c) => sum + c.totalDebt, 0);
-    return Math.round(subset.reduce((sum, c) => sum + c.oasSpreadBps * (c.totalDebt / Math.max(1, totalDebt)), 0));
+    const totalDebt = subset.reduce((sum, c) => sum + totalDebtOf(c), 0);
+    return Math.round(subset.reduce((sum, c) => sum + c.oasSpreadBps * (totalDebtOf(c) / Math.max(1, totalDebt)), 0));
   };
 
   const usIgOas = getDebtWeightedOas(usFirms, igRatings, IG_OAS_FALLBACK);

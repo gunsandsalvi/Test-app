@@ -40,6 +40,7 @@ import { WeeklyStepContext } from './context';
 import { pendingSettlementUSD } from './settlement';
 import { sovereignCouponByBucket } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
+import { ladderTotalUSD } from '../../../engine2/tranches';
 
 /**
  * Balance-sheet leverage each type genuinely runs, as a fraction of total assets. A hedge fund
@@ -169,7 +170,7 @@ export function markInstitutionalBooks(ctx: WeeklyStepContext): void {
         const c = privateById.get(id);
         if (!c || c.isDefaulted) return a;
         const stakePct = c.ownership?.peSponsorPct ?? 0;
-        return a + Math.max(0, evMultiple * c.ebitda - c.totalDebt) * stakePct;
+        return a + Math.max(0, evMultiple * c.ebitda - ladderTotalUSD(ctx.v2, c.id)) * stakePct;
       }, 0);
       return { ...entity, totalAssetsUSD: Math.round((entity.cashUSD ?? 0)
         + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })

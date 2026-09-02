@@ -25,6 +25,7 @@ import { Company, RegionId } from '../../types';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { HouseholdState } from '../../domain/region-macro';
 import { isActiveCompany, isPubliclyListed } from '../../domain/company';
+import { marketCapOf, totalDebtOf } from '../../domain/company';
 
 /**
  * Founder stakes in this region's private tier, at the multiple the public market clears for
@@ -41,7 +42,7 @@ export function householdPrivateBusinessEquityUSD(
     if (c.region !== regionId || !isActiveCompany(c) || isPubliclyListed(c)) return sum;
     const founderPct = c.ownership?.founderPct ?? 1;
     if (!(founderPct > 0)) return sum;
-    const equityUSD = Math.max(0, evMultiple * c.ebitda - c.totalDebt);
+    const equityUSD = Math.max(0, evMultiple * c.ebitda - totalDebtOf(c));
     return sum + equityUSD * founderPct;
   }, 0);
 }
@@ -84,7 +85,7 @@ export function householdDirectEquityUSD(
   });
   return companies.reduce((sum, c) => {
     if (c.region !== regionId || !isActiveCompany(c) || !isPubliclyListed(c)) return sum;
-    return sum + Math.max(0, Math.max(0, c.marketCap) - (institutionallyHeldUSD.get(c.id) ?? 0));
+    return sum + Math.max(0, Math.max(0, marketCapOf(c)) - (institutionallyHeldUSD.get(c.id) ?? 0));
   }, 0);
 }
 

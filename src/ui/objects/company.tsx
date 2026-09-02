@@ -9,6 +9,7 @@ import { companyOf, companyPriceHistory, companyOasHistory, companyRatingHistory
 import { materializeLadder } from '../../engine2/tranches';
 import { isActiveCompany } from '../../domain/company';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, ringed, taped } from './common';
+import { marketCapOf, totalDebtOf } from '../../domain/company';
 
 const RATING_CODES = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC', 'D'];
 
@@ -36,12 +37,12 @@ export function companyColumns(bank: boolean): PeerColumn<Company>[] {
       { key: 'loans', label: 'loans', render: (r) => money(r.obj.bankBalanceSheet ? r.obj.bankBalanceSheet.businessLoanBookUSD + r.obj.bankBalanceSheet.consumerLoanBookUSD : undefined), value: (r) => (r.obj.bankBalanceSheet ? r.obj.bankBalanceSheet.businessLoanBookUSD + r.obj.bankBalanceSheet.consumerLoanBookUSD : 0) },
       { key: 'share', label: 'share', render: (r) => pctLevel(r.obj.bankMarketShare, 0), value: (r) => r.obj.bankMarketShare ?? 0 },
       { key: 'window', label: 'window', render: (r) => money(r.obj.bankBalanceSheet?.srfBorrowingUSD), value: (r) => r.obj.bankBalanceSheet?.srfBorrowingUSD ?? 0 },
-      { key: 'mcap', label: 'mkt cap', render: (r) => money(r.obj.marketCap, 1), value: (r) => r.obj.marketCap },
+      { key: 'mcap', label: 'mkt cap', render: (r) => money(marketCapOf(r.obj), 1), value: (r) => marketCapOf(r.obj) },
     ];
   }
   return [
     name,
-    { key: 'mcap', label: 'mkt cap', render: (r) => (r.obj.marketCap > 0 ? money(r.obj.marketCap, 1) : '—'), value: (r) => r.obj.marketCap },
+    { key: 'mcap', label: 'mkt cap', render: (r) => (marketCapOf(r.obj) > 0 ? money(marketCapOf(r.obj), 1) : '—'), value: (r) => marketCapOf(r.obj) },
     { key: 'revenue', label: 'revenue', render: (r) => money(r.obj.annualRevenue, 1), value: (r) => r.obj.annualRevenue },
     { key: 'margin', label: 'margin', render: (r) => (r.obj.annualRevenue > 0 ? pctLevel(r.obj.ebitda / r.obj.annualRevenue, 0) : '—'), value: (r) => (r.obj.annualRevenue > 0 ? r.obj.ebitda / r.obj.annualRevenue : -9) },
     { key: 'pe', label: 'p/e', render: (r) => (r.obj.forwardPE > 0 ? num(r.obj.forwardPE, 1) : '—'), value: (r) => r.obj.forwardPE ?? 0 },
@@ -112,8 +113,8 @@ export const company = defineObject<Company>({
     const nextMaturity = ladder.length ? Math.min(...ladder.map((t) => t.maturityWeek)) : undefined;
     const equityHolders = holdersOf(world, c.id).filter((h) => h.instrumentType === 'EQUITY');
     const heldUSD = equityHolders.reduce((a, h) => a + h.usd, 0);
-    const floatShare = c.marketCap > 0 ? heldUSD / c.marketCap : undefined;
-    const netDebt = (c.totalDebt ?? 0) - (c.cash ?? 0);
+    const floatShare = marketCapOf(c) > 0 ? heldUSD / marketCapOf(c) : undefined;
+    const netDebt = (totalDebtOf(c) ?? 0) - (c.cash ?? 0);
     const sheet = c.bankBalanceSheet;
     const lines = bankLinesTo(world, c.id);
     const contracts = contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker });
@@ -138,7 +139,7 @@ export const company = defineObject<Company>({
         ) : (
           <StatGrid>
             <Stat label="price" value={c.stockPrice > 0 ? num(c.stockPrice) : 'private'} sub={c.stockPrice > 0 ? <ChangeSub series={prices} /> : `${count(c.employeeCount)} people`} />
-            <Stat label="market cap" value={c.marketCap > 0 ? money(c.marketCap) : '—'} sub={floatShare !== undefined ? `${pctLevel(floatShare, 0)} held by funds` : 'unlisted'} />
+            <Stat label="market cap" value={marketCapOf(c) > 0 ? money(marketCapOf(c)) : '—'} sub={floatShare !== undefined ? `${pctLevel(floatShare, 0)} held by funds` : 'unlisted'} />
             <Stat label="rating" value={c.creditRating} sub={`oas ${bps(c.oasSpreadBps)}bp · cds ${bps(c.cdsSpreadBps)}bp`} neg={c.creditRating === 'CCC' || c.creditRating === 'D'} />
           </StatGrid>
         )}

@@ -322,3 +322,11 @@ export function materializeLadder(v2: V2World, companyId: string): DebtTranche[]
 
 /** The wire that created a ladder row (-1: seeded or born without one). */
 export const trancheWireOf = (v2: V2World, r: number): number => v2.tranches.wireRef[r];
+
+/** §5-WIRES D: the ladder's face on the live rows — total debt as a read. */
+export function ladderTotalUSD(v2: V2World, companyId: string): number {
+  const S = v2.tranches;
+  let total = 0;
+  for (const r of ladderRowsOf(v2, companyId)) total += S.principalUSD[r];
+  return total;
+}

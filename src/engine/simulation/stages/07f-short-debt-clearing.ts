@@ -930,13 +930,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             urgent: true,
           } as NewsItem);
         }
-        const TSn = v2Mirror.tranches;
-        let cpNowUSD = 0;
-        for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
-          if (TSn.flags[r] & TR_CP) cpNowUSD += TSn.principalUSD[r];
-        }
-        iss.comp.totalDebt = Math.max(0,
-          iss.comp.totalDebt - (iss.survivingUSD + iss.maturedUSD) + cpNowUSD + revolverUSD);
+        // §5-WIRES D: total debt is a read of the ladder — the roll above already moved the rows.
       });
 
       // The desks' own CP inventory, on the banks that took it.

@@ -162,6 +162,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 // The workout prior lives in domain/bank-pricing.ts (one owner); re-exported for its readers.
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
+import { marketCapOf } from '../../../domain/company';
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
 export const RECOVERY_PRIOR_WEIGHT = 8;
@@ -458,7 +459,7 @@ export function applyPendingCorporateActionSettlements(
       const issuerId = v2.internedStrings[k % 0x400000];
       const issuer = companyById.get(issuerId);
       const registerUSD = totalByPair.get(k) ?? 0;
-      const issuedUSD = Math.max(0, issuer?.marketCap ?? 0);
+      const issuedUSD = Math.max(0, issuer ? marketCapOf(issuer) : 0);
       const denomUSD = Math.max(registerUSD, issuedUSD);
       if (!(denomUSD > 0)) return;
       denomByPair.set(k, denomUSD);

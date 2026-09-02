@@ -257,6 +257,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
       ? ((Number.isNaN(L.growthCapexUSD[row]) ? (L.capexUSD[row] * 0.4) : L.growthCapexUSD[row]) / Math.max(1, L.annualRevenueUSD[row]))
       : L.baselineGrowthCapexToRevenueRatio[row],
     isInvestmentGrade: L.investmentGrade[row] === 1,
+    hasHouseBank: homeBankTicker !== undefined,
     addressableGrowthAnnual,
     categoryShortfall,
     capacityCatchupShareAnnual: CAPACITY_CATCHUP_SHARE_ANNUAL,
@@ -2010,9 +2011,10 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // to be reading the same book; comparing to a multiple the market no longer uses would be
       // two valuations of one company again.
       const boardFairValuePerShare = companyFairValuePerShare(
-        { ...comp, netIncome: newNetIncome, cash: cash.usd, totalDebt: newTotalDebt },
+        { ...comp, netIncome: newNetIncome, cash: cash.usd },
         reg.zeroRates?.tenor10Y ?? reg.policyRate,
-        REPRESENTATIVE_HOLDER_REQUIRED_RETURN
+        REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
+        newTotalDebt
       );
       const isCheap = newStockPrice < estimatedBookValuePerShare || newStockPrice < boardFairValuePerShare * 0.95;
       const buybackShare = isCheap ? 0.60 : 0.25;
@@ -2274,7 +2276,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.productLines = updatedProductLines;
 
-    comp.totalDebt = rowList.reduce((s, r) => s + TS.principalUSD[r], 0);
 
     comp.dividendYield = round4(newDividendYield);
 
@@ -2343,7 +2344,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     v2.priceRing = ringPush(v2.priceRing, rowOf(v2, L8.companyId[row]), newStockPrice);
 
-    comp.marketCap = newMarketCap;
 
     comp.oasSpreadBps = newOasBps;
 

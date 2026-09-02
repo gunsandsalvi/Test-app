@@ -26,6 +26,7 @@ import { Nav, T, mono, Hint, Card } from './ui';
 import { formatDate } from './calendar';
 import { storiesFor, Story } from './functions/news';
 import { isActiveCompany } from '../domain/company';
+import { marketCapOf } from '../domain/company';
 
 interface Frame { ref: ObjectRef; fn: string; args: Record<string, string> }
 interface Panel { id: number; stack: Frame[] }
@@ -350,7 +351,7 @@ function ObjectChip({ world, refv, nav, text, dense }: { world: World; refv: Obj
 function Home({ world, nav, recents, onRecent, stepMs }: { world: World; nav: Nav; recents: string[]; onRecent: (r: string) => void; stepMs?: number }) {
   const regions = Object.keys(world.state.regions);
   const banks = world.state.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c)).sort((a, b) => (b.bankBalanceSheet?.depositsUSD ?? 0) - (a.bankBalanceSheet?.depositsUSD ?? 0));
-  const biggest = [...world.state.companies].filter((c) => isActiveCompany(c) && !c.isBankEntity && c.listingStatus !== 'PRIVATE').sort((a, b) => b.marketCap - a.marketCap).slice(0, 6);
+  const biggest = [...world.state.companies].filter((c) => isActiveCompany(c) && !c.isBankEntity && c.listingStatus !== 'PRIVATE').sort((a, b) => marketCapOf(b) - marketCapOf(a)).slice(0, 6);
   const funds = [...world.state.institutionalEntities].filter((e) => !e.isDefaulted).sort((a, b) => b.totalAssetsUSD - a.totalAssetsUSD).slice(0, 6);
   const live = world.state.companies.filter((c) => isActiveCompany(c)).length;
   const kinds: { type: ObjectType; text: string }[] = OBJECT_TYPES

@@ -54,7 +54,6 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       facilityBankTicker: c.homeBankTicker,
     };
     issueTranche(v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
-    c.totalDebt = (c.totalDebt ?? 0) + drawUSD;
     ctx.creditEventsThisWeek.push({
       bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,
       principalUSD: drawUSD, marginBps,

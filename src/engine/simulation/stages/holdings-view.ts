@@ -29,6 +29,7 @@ import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../domain/assets';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { REGION_IDS } from '../../../domain/geography';
+import { marketCapOf } from '../../../domain/company';
 
 export interface RegionalHoldingsView {
   /** Every real institutional entity's holdings in this region, flattened. */
@@ -287,7 +288,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     const a = acc(c.region);
     if (!a) return;
     if (isActiveCompany(c)) {
-      if (isPubliclyListed(c)) a.equity.outstandingUSD += Math.max(0, c.marketCap ?? 0);
+      if (isPubliclyListed(c)) a.equity.outstandingUSD += Math.max(0, marketCapOf(c) ?? 0);
     }
     {
       // §7.311 — ladder read on rows (fold order = chain order = array order).
