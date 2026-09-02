@@ -611,9 +611,8 @@ function buildRegion(regionId: RegionId): Region {
         return acc;
       }, {} as Record<string, number>),
       treasuryAccountUSD: Math.round((governmentSpendingWeeklyUSD * TGA_TARGET_WEEKS_OF_SPENDING)),
-      // Closes the balance sheet at birth; the weekly stage re-derives it (§7.4).
+      // §5-CLOSE: a stored liability at zero — never a residual.
       currencyInCirculationUSD: 0,
-      unbackedBankCashUSD: 0,
       lastRemittanceUSD: 0,
       // PUB2b: no order outstanding at birth — the first week's redemptions set the first one.
       plannedPurchasesByTenor: {},

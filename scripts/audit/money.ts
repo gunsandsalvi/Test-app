@@ -39,7 +39,6 @@ function m2(state: GameState, week: number): AuditFinding[] {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
     if (!cb) return;
-    if (Math.abs(cb.unbackedBankCashUSD) > 1e6) out.push({ family: 'M', check: 'M2 unbacked bank cash', week, usd: cb.unbackedBankCashUSD, message: `${r}: unbackedBankCashUSD ${B(cb.unbackedBankCashUSD)}` });
     if (Math.abs(cb.currencyInCirculationUSD) > 1e6) out.push({ family: 'M', check: 'M2 currency plug', week, usd: cb.currencyInCirculationUSD, message: `${r}: currency in circulation ${B(cb.currencyInCirculationUSD)} is a residual nobody issued` });
     const wholesale = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.wholesaleFundingUSD ?? 0);
     if (wholesale > 1e6) out.push({ family: 'M', check: 'M2 wholesale to nobody', week, usd: wholesale, message: `${r}: ${B(wholesale)} of wholesale funding owed to a lender that does not exist` });

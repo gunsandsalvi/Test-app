@@ -46,13 +46,6 @@ export interface CentralBank {
   /** The order those fills were struck against, kept so the two can be compared after stage 11
    * has already written next week's. */
   lastOrderPlacedUSD: number;
-  /**
-   * Bank cash the central bank's assets do not back. In reality reserves EXIST because the CB
-   * bought something; here a bank's `cashReservesUSD` also grows from deposits and lending, so
-   * the two are not the same quantity and the identity does not close on its own. Named rather
-   * than forced: it shrinks as PUB2b's QE grows the asset side.
-   */
-  unbackedBankCashUSD: number;
 }
 
 /** Share of the sovereign stock the central bank holds at seed. */
@@ -90,18 +83,14 @@ export function centralBankAssetsUSD(cb: CentralBank): number {
 }
 
 /**
- * The identity every week: assets = reserves + TGA + currency. Reserves are the banks' own cash,
- * which is a DERIVED input here rather than a stored liability — one representation of one
- * balance. Currency is the residual that closes it, which is what makes the CB special: it can
- * always issue the liability that balances its own book.
+ * THE IDENTITY (§5-CLOSE): assets = reserves + treasury account + currency, every week, to the
+ * dollar. Reserves are the banks' own cash (a derived input, one representation); currency is a
+ * STORED liability that moves only when the central bank issues it — never a residual that
+ * closes the book, because a residual is where money appears from nowhere. The residual is
+ * what the audit prints (M1) until every reserve movement has a purchase behind it.
  */
-export function centralBankCurrencyResidualUSD(cb: CentralBank, bankReservesUSD: number): number {
-  return Math.max(0, centralBankAssetsUSD(cb) - bankReservesUSD - cb.treasuryAccountUSD);
-}
-
-/** The part of bank cash the asset side cannot back — see `unbackedBankCashUSD`. */
-export function unbackedBankCashUSD(cb: CentralBank, bankReservesUSD: number): number {
-  return Math.max(0, bankReservesUSD + cb.treasuryAccountUSD - centralBankAssetsUSD(cb));
+export function centralBankIdentityResidualUSD(cb: CentralBank, bankReservesUSD: number): number {
+  return bankReservesUSD + cb.treasuryAccountUSD + cb.currencyInCirculationUSD - centralBankAssetsUSD(cb);
 }
 
 /**

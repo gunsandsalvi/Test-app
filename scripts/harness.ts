@@ -620,13 +620,9 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     const fxBook: Record<string, number> = (cb as any).fxReservesByRegion ?? {};
     const fxReserves = Object.keys(fxBook).reduce((a, k) => a + (Number(fxBook[k]) || 0), 0);
     const assets = sovereignBook + fxReserves;
-    const residual = assets - (reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD) + cb.unbackedBankCashUSD;
-    if (assets > 0 && Math.abs(residual) / assets > 1e-3) {
-      violations.push({
-        week,
-        message: `${region} central bank balance sheet does not close: ${(residual / 1e9).toFixed(2)}B against ${(assets / 1e9).toFixed(1)}B of assets`,
-      });
-    }
+    // §5-CLOSE: the identity itself is the audit's M1 (scripts/audit/money.ts), asserted to the
+    // dollar with no unbacked term; what stays here are the central bank's own operating rules.
+    void assets; void reserves;
     if (cb.treasuryAccountUSD < 0) {
       violations.push({
         week,
@@ -1314,7 +1310,6 @@ const pubModule: HarnessModule = (() => {
       series.reinvest.push(cb?.reinvestmentShare ?? 1);
       series.remit.push(cb?.lastRemittanceUSD ?? 0);
       series.policy.push(reg.policyRate);
-      series.unbacked.push(cb?.unbackedBankCashUSD ?? 0);
       series.unmodeledTax.push(reg.unmodeledTaxRevenueUSD ?? 0);
       series.revenue.push(reg.governmentRevenueUSD);
       series.outlays.push(reg.governmentOutlaysUSD ?? 0);
@@ -1340,7 +1335,6 @@ const pubModule: HarnessModule = (() => {
       const at = (a: number[], w: number) => (w >= 1 && w <= a.length ? B(a[w - 1]) : 'n/a');
       const marks = [13, 52, weeks].filter((w, i, arr) => w <= weeks && arr.indexOf(w) === i);
       out.push(`  unmodeledTaxRevenueUSD:   w1 ${at(series.unmodeledTax, 1)} -> w${weeks} ${at(series.unmodeledTax, weeks)}`);
-      out.push(`  unbackedBankCashUSD:      ${marks.map(w => `w${w} ${at(series.unbacked, w)}`).join('  ')}`);
       out.push(`  unspentProcurementBudget: ${marks.map(w => `w${w} ${at(series.unspentProc, w)}/wk`).join('  ')}`);
       const fill = series.procSpent.map((v, i) => v / Math.max(1, v + series.unspentProc[i]));
       out.push(`  procurement fill ratio:   mean ${pct(fill.reduce((a, x) => a + x, 0) / fill.length)}, range ${pct(Math.min(...fill))}-${pct(Math.max(...fill))}`);

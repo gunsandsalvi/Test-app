@@ -14,8 +14,7 @@
 import { GameState, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import {
-  centralBankAssetsUSD, centralBankCurrencyResidualUSD, remittanceUSD,
-  unbackedBankCashUSD as unbackedBankCash,
+  centralBankAssetsUSD, remittanceUSD,
 } from '../../../domain/central-bank';
 import { sovereignCouponByBucket } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
@@ -84,13 +83,9 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // treasury's account did — which is what a reserve drain means. ----
     cb.lastReserveDrainUSD = Math.round((-(reg.sovereignCouponPaidUSD ?? 0)));
 
-    // ---- 4. Currency closes the balance sheet. The CB is the one book allowed to issue the
-    // liability that balances it — no capital constraint, never defaults. ----
-    const reservesAfter = ctx.updatedCompanies
-      .filter((c) => c.region === regionId && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
-      .reduce((a, c) => a + c.bankBalanceSheet!.cashReservesUSD, 0);
-    cb.currencyInCirculationUSD = Math.round(centralBankCurrencyResidualUSD(cb, reservesAfter));
-    cb.unbackedBankCashUSD = Math.round(unbackedBankCash(cb, reservesAfter));
+    // ---- 4. §5-CLOSE: nothing closes the balance sheet here. Currency is a stored liability
+    // the central bank issues on purpose; the identity holds when every reserve was bought, and
+    // the audit's M1 prints the residual until it does. ----
 
     // Statistic, not a driver: the old `centralBankBalanceSheet` scalar's replacement.
     reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb));

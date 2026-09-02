@@ -61,7 +61,8 @@ const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42 };
 
 import { isActiveCompany, managedEntityIdsOf } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
-import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashUSD, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../domain/central-bank';
+import { closeSeedMoney } from '../bootstrap/close-seed';
+import { centralBankAssetsUSD, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../domain/central-bank';
 import { reconcileEmploymentView } from './stages/labor-market';
 import { weeklyWageBillUSD } from '../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
@@ -726,12 +727,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // cash is its reserve liability exist. Currency is the residual; the weekly stage
       // re-derives it by the same arithmetic.
       const cbSheet = reg.centralBankSheet;
-      if (cbSheet) {
-        const reservesUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0);
-        cbSheet.currencyInCirculationUSD = Math.round(centralBankCurrencyResidualUSD(cbSheet, reservesUSD));
-        cbSheet.unbackedBankCashUSD = Math.round(unbackedBankCashUSD(cbSheet, reservesUSD));
-        reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cbSheet));
-      }
+      if (cbSheet) reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cbSheet));
 
       // Every company banks somewhere: its cash IS a deposit at its house bank (the same
       // relationship lead WS8 mandates for its offerings, so one firm has one bank).
@@ -1585,6 +1581,11 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       cashReservesUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0),
     };
   });
+
+  // §5-CLOSE C2: the seed closes — depositors fund the banks (wholesale is nobody's and is
+  // zero), the central bank's book backs reserves and the treasury's account to the dollar, and
+  // every sovereign bond has a holder. Runs after every book exists and before the projection.
+  closeSeedMoney(regions, companies, institutionalEntities);
 
   // S7: project the real seeded books onto the sector aggregates before the first week runs, so
   // week 0's displayed numbers are the same derivation every later week uses. The aggregates
