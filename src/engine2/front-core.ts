@@ -558,7 +558,11 @@ export function runFrontCore(
     let due3 = 0;
     const policy = S.policyRate[ri];
     for (let t = S.trStart[row]; t < S.trStart[row + 1]; t++) {
-      if (S.trMatWeek[t] === week) continue;
+      // STEP 1: the maturity week is NOT skipped. A bond's last coupon falls due AT maturity and
+      // commercial paper's interest falls due ONLY there (`trancheWeekAccrual` makes CP due when
+      // `maturityWeek === week`), so skipping this week charged the issuer nothing for the final
+      // period and — through the same skip in the back pass — paid its holders nothing, for ever
+      // on CP. The tranche was outstanding for this week; it owes this week.
       // 13b: ONE formula for a tranche's week (the register's per-tranche accrual in the back
       // pass reads the same rows through the same function).
       const a = trancheWeekAccrual(S.trPrincipal[t], S.trIsFloating[t] === 1, S.trAnnualRate[t], policy,

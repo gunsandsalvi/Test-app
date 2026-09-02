@@ -1,11 +1,10 @@
 # THE MASTER PLAN — one file, one project: a closed circuit
 
 **Read §1 before touching anything.** §2 is the map, §3 IS THE WORK (one ordered project; take the
-first unfinished step), §4 the gates, §5 the lessons that must not be re-learned, §6 the watchlist.
-
-There is no second rules file and no second defect list. Anything worth keeping goes here.
-The full 468-record history and the superseded plan are in git at `79c239b:docs/MASTER_PLAN.md`;
-§5 keeps every lesson the code still cites, at its original number, so `§7.N` in a comment resolves.
+first unfinished step), §4 the gates, §5 the lessons, §6 the watchlist. There is no second rules
+file and no second defect list. The full 468-record history and the superseded plan are in git at
+`79c239b:docs/MASTER_PLAN.md`; §5 keeps every lesson the code still cites at its original number,
+so a `§7.N` citation in a comment still resolves.
 
 **Where the model stands (2026-09-02, after the line-by-line audit of ~230 files / ~55k lines).**
 Gates green: `tsc` 0, ESLint 347/354, hygiene pass, 125 tests; last 13-week run 82 violations in 20
@@ -47,9 +46,9 @@ Standing user directives. Not suggestions.
 8. **Reflect the real-world mechanism.** When in doubt the answer is how it actually works, with
    real named counterparties. Ask before large scope decisions.
 9. **Periodicity is part of the number**, and so are the price level and the unit of meaning. Every
-   rate, growth figure, flow and index carries a period; confirm it at the source and name it in the
-   identifier (`…WeeklyUSD`, `…Annual`, `…YoY`). A field named USD is not a share. **A displayed
-   change where no history exists is a lie — show the level.**
+   rate, flow and index carries a period; confirm it at the source and name it in the identifier
+   (`…WeeklyUSD`, `…Annual`, `…YoY`). A field named USD is not a share. **A displayed change where
+   no history exists is a lie — show the level.**
 10. **The simulation is a partial world — do not chase every moved number.** Attribute a moved
     baseline BRIEFLY (one cheap A/B at most), record it with its owner, move on.
 11. **Brevity, and clean up as you go.** A comment earns its place by saying what the code cannot:
@@ -78,13 +77,13 @@ Standing user directives. Not suggestions.
 18. **Model updates come first; a misbehaving NUMBER is not a work item.** The priority is the
     missing MECHANISM. The other half: when a number is so far out it BLOCKS mechanism work, closing
     it IS mechanism work — find which missing mechanism the number is the accumulated cost of.
-19. **THE FEWEST PRIMITIVES THAT GENERATE THE WORLD** (rules 1, 4 and 13 are corollaries). A number
-    is a legitimate primitive ONLY if no mechanism in the model can produce it: **TECHNOLOGY** (what
-    a process physically takes), **PREFERENCE** (time and risk), **POLICY** (what an institution
-    chooses). Everything else is an OUTCOME and a stated value for it is a defect with a scheduled
-    death. RESOLUTION parameters (strata count, grid size) are numerical choices, tested by
-    INVARIANCE; SHAPE parameters (a Pareto alpha, a tier share, an MPC ladder) are claims about THE
-    ANSWER. The count of stated shapes measures how much mechanism is missing; keep it falling.
+19. **THE FEWEST PRIMITIVES THAT GENERATE THE WORLD** (rules 1, 4, 13 are corollaries). A number is
+    a legitimate primitive ONLY if no mechanism can produce it: **TECHNOLOGY** (what a process
+    physically takes), **PREFERENCE** (time and risk), **POLICY** (what an institution chooses).
+    Everything else is an OUTCOME and a stated value for it is a defect with a scheduled death.
+    RESOLUTION parameters (strata count, grid size) are numerical choices tested by INVARIANCE;
+    SHAPE parameters (a Pareto alpha, a tier share, an MPC ladder) are claims about THE ANSWER. The
+    count of stated shapes measures how much mechanism is missing; keep it falling.
 20. **NEVER ROLL BACK.** When a change makes a print worse, the answer is never to restore the old
     number. A derivation that replaced an invented constant does not become wrong because the world
     it now describes is uglier — the ugliness was there and the constant was covering it. **A bad
@@ -124,8 +123,8 @@ reason in a comment; `stage-deps.ts` annotates deliberate backward edges. Groups
   per-company week: front seam + kernel A worker-able / kernel B main-thread, `src/engine2/`),
   settlement, sme-pools, hc-lifecycle, insurance, index-calculation, etf-flows, household sheet,
   estate-resolution, concentration, 10-mergers, management-review, fx-clearing, bill-accretion,
-  sovereign-calendar, 11-fiscal, overdraft-sweep, settlement-close, bank-funding-close,
-  bank-resolution, central-bank, settlement-funding, 12-portfolio, news, 13-turn-summary. Three
+  sovereign-calendar, 11-fiscal, overdraft-sweep, settlement-close, bank-funding-close, bank-
+  resolution, central-bank, settlement-funding, 12-portfolio, news, 13-turn-summary. Three
   settlement cycles: a week's money settles inside the week.
 
 **`stages/financial-clearing-engine.ts`** — the generic cap-free double auction: real demand
@@ -146,10 +145,9 @@ worker pools.
 `derivatives/` is one contract + one profile per class behind a dispatch table; `company-week/` the
 seven pure rule objects; `preferences.ts` the two preference primitives on every deciding entity;
 `stated.ts` the registry of numbers with a scheduled death; `institution-profiles.ts`, `units.ts`.
-
 **Audit** `src/engine/audit/` — M money, O ownership, P prices, X cross-market, F accounts, N names,
-W wires; run every week by the harness. **UI** `src/ui/` is AURORA (phone shell, object modules,
-function modules); reads `GameState` only. **One harness** `scripts/harness.ts`.
+W wires, run every week by the harness. **UI** `src/ui/` is AURORA (phone shell, object and function
+modules), reads `GameState` only. **One harness** `scripts/harness.ts`.
 
 ## 3. THE PROJECT — THE CLOSED CIRCUIT
 
@@ -160,15 +158,21 @@ commit with its §5 record and the §4 gates. Later parts depend on earlier ones
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-1. **The interest that is never paid.** `front-core.ts:527` makes CP due only in its maturity week;
-   `stage08-back.ts:1143` skips the tranche in exactly that week; `:1157` is the only call site of
-   `payHoldersAccruedInterest`. So **CP interest accrues to holders for ever and is never paid**
-   (measured off the week-13 dump: 2,052 tranches, 44.19B face, 1.845B/yr ≈ 35.5M/week, ~0.46B over
-   13 weeks) and **every bond and loan loses its final coupon**. `07f:764` redeems CP at principal
-   only. Fix: accrue and test `due` before the skip. Same step: `shared-helpers.ts:753-880` splits
-   interest over the institutional register only — the banks' dealer desks hold the same paper,
-   accrue nothing, and their share is paid to the other holders (the principal path got its desk
-   pass at `:437`; interest and `pendingHolderCashUSD` never did).
+1. **The interest that is never paid — (a) DONE, (b) OPEN.** `trancheWeekAccrual` makes CP due only
+   in its maturity week; the register's accrual loop skipped exactly that week; `payHoldersAccruedInterest`
+   has ONE call site, inside it. So **CP interest accrued to holders from issue and was never once
+   paid**, and every bond/loan whose term is a whole number of periods lost its final coupon.
+   (a) The skip is gone from both sides (`front-core.ts:561` the issuer's expense,
+   `stage08-back.ts:1144` the holders' accrual) and, because 07f retires matured CP *before* stage
+   08 runs, the coupon is marked due where the paper is redeemed (`07f:782`). **Measured**
+   (COUPON_TRACE=1, 16 weeks — a 13-week run CANNOT show this: CP is issued in-run at +13 weeks, so
+   the first maturity is w16): CP paid 0.000B for ever → **0.157B at w16**, owed 0.286B → 0.141B
+   instead of growing without bound; loans pay 7.807B at w13; money family clean, unowned 0.00B.
+   One week's accrual on maturing CP is missed on BOTH sides equally (the row is gone before stage
+   08) — symmetric, and it closes when step 13 makes CP a discount instrument like the bills beside it.
+   (b) OPEN: `shared-helpers.ts:753-880` splits interest over the institutional register only — the
+   dealer desks hold the same paper, accrue nothing, and their share is paid to the other holders.
+   The principal path got its desk pass at `:437`; interest and `pendingHolderCashUSD` never did.
 2. **The residual delivered twice.** `primary-settlement.ts:147-150` and `:155-159` move the
    identical spec to the identical lead desk; neither writes a register row (`holdings-ledger.ts:44`
    resolves only INSTITUTION), so both are pure wires off the clearing house. This is the named
@@ -426,10 +430,10 @@ commit with its §5 record and the §4 gates. Later parts depend on earlier ones
 | `WEEKS=13 SHOCKS=0 VERBOSE=1 NODE_OPTIONS=--max-semi-space-size=64 npx tsx scripts/harness.ts` | ~5 min | **THE ONE RUN per commit** (rule 25) |
 | `WEEKS=60 SHOCKS=1` (`npm run verify`) | ~25 min+ | **END OF PROJECT ONLY** (rule 12; step 33) |
 
-`NODE_OPTIONS=--max-semi-space-size=64` is worth 7.5%. `UNIVERSE_SCALE<1` is iteration speed only —
-the rule-19 invariance test FAILS on the current world. A 10-week probe samples ONE season; price
-behaviour is judged on whole years. Dump/diff: `STATE_DUMP=<file> STATE_DUMP_WEEK=<n>`, then
-`DIFF_STATE=a.json,b.json npx tsx scripts/harness.ts`.
+`--max-semi-space-size=64` is worth 7.5%; past ~14 weeks add `--max-old-space-size=10240` (16 weeks
+OOMs without it). `UNIVERSE_SCALE<1` is iteration speed only — the rule-19 invariance test FAILS on
+the current world. A 10-week probe samples ONE season; price behaviour is judged on whole years.
+Dump/diff: `STATE_DUMP=<f> STATE_DUMP_WEEK=<n>`, then `DIFF_STATE=a.json,b.json npx tsx scripts/harness.ts`.
 
 **Instruments, env-gated** (adding one the next run carries free beats a run of its own): `FP`,
 `STAGE_TRACE`, `BANK_IDENTITY_TRACE`, `COMPANY_STORE_AUDIT`, `TRANCHE_SYNC_CHECK`,
@@ -437,7 +441,6 @@ behaviour is judged on whole years. Dump/diff: `STATE_DUMP=<file> STATE_DUMP_WEE
 `PNL_TRACE`, `DEFAULT_TRACE`, `LABOR_CAUSES`, `SEED_BURN_IN`.
 
 ## 5. LESSONS — DO NOT RE-LEARN
-
 Numbers are the original record's and never change; the full text is in git at `79c239b`.
 
 **Method.** §7.4 the seed must open in the shape the engine produces (cited 91×). §7.222 permute the
@@ -489,11 +492,9 @@ primitives on every deciding entity; every threshold they parameterise becomes a
 move into registries; lookups stay (rule 17).
 
 ## 6. WATCHLIST — measure, do not fix
-
 | Metric | Why |
 |---|---|
 | The money family (M1–M7) and "the money that is not anyone's" | Clean every run since §7.364; the scoreboard is the watch. A line here is a defect at its site. |
 | The 1e-8 week-1 drift (§7.370) | Three firms differ at the eighth digit at week 1; 13% price gap by week 13. Bisect by file, ONE dump per step. Watch it to zero; never widen a tolerance for it. |
 | The state-growth drift (§7.335, §7.380) | Weekly cost +45% over weeks 5→80 on two independent device runs, all stages inflating proportionally. First suspect: the contract book's row growth. |
-| TGA over a quarter; occupational mismatch | Watch the LEVEL not the shape; mismatch is composition outrunning retraining. |
-| Top-down vs bottom-up household income; the private tier that sells nothing; loan-book Spearman noise | `estimatedHouseholdIncomeUSD` is still the anchor; ~300 seeded private firms per region carry `productLines: []`; Spearman 0.26–0.76 at 23–32 names — re-measure as the universe grows. |
+| TGA over a quarter; occupational mismatch; top-down vs bottom-up household income; the private tier that sells nothing; loan-book Spearman noise | Watch the TGA's LEVEL not its shape; mismatch is composition outrunning retraining; `estimatedHouseholdIncomeUSD` is still the anchor; ~300 seeded private firms per region carry `productLines: []`; Spearman 0.26–0.76 at 23–32 names — re-measure as the universe grows. |

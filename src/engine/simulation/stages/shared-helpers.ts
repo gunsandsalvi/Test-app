@@ -750,6 +750,11 @@ export function payHoldersAccruedInterest(
  * holds; the PAYOUT walks the accrued balances themselves, because a holder that has sold out no
  * longer appears in the holdings and is still owed what it earned.
  */
+/** COUPON_TRACE=1 — the week's register interest: what accrued, what fell due and was paid, and
+ *  what is still owed, by instrument type. The instrument for STEP 1: CP interest used to accrue
+ *  every week and never pay, so `owed` grew without bound and `paid` was zero for ever. */
+const COUPON_TRACE = process.env.COUPON_TRACE === '1';
+
 export function applyHolderInterestAccruals(
   ctx: {
     v2: V2World;
@@ -759,8 +764,17 @@ export function applyHolderInterestAccruals(
     holderAccruedInterestUSD: Map<string, Map<string, number>>;
     paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
+    nextWeek?: number;
   }
 ): void {
+  const traceAccruedUSD = new Map<string, number>();
+  const tracePaidUSD = new Map<string, number>();
+  const traceAdd = (m: Map<string, number>, type: string, usd: number): void => {
+    m.set(type, (m.get(type) ?? 0) + usd);
+  };
+  if (COUPON_TRACE) {
+    ctx.pendingHolderAccrualUSD.forEach((usd, key) => traceAdd(traceAccruedUSD, key.slice(0, key.indexOf(':')), usd));
+  }
   const { pendingHolderAccrualUSD: accruals, pendingHolderAccrualPayout: payouts } = ctx;
   if (accruals.size > 0) {
     // SCALE: ONE pass over the register, not two. This walked every entity's every holding to
@@ -857,7 +871,10 @@ export function applyHolderInterestAccruals(
   // week's interest TWICE, and the second call paid for the full register walk to do it.
   accruals.clear();
 
-  if (payouts.size === 0) return;
+  if (payouts.size === 0) {
+    if (COUPON_TRACE) reportCouponTrace(ctx, traceAccruedUSD, tracePaidUSD);
+    return;
+  }
   // Only the instruments whose coupon falls due this week, and only their own holders.
   payouts.forEach((instrumentKey) => {
     const byHolder = ctx.holderAccruedInterestUSD.get(instrumentKey);
@@ -873,6 +890,7 @@ export function applyHolderInterestAccruals(
     const payer = { kind: 'COMPANY', ticker } as import('./settlement').PartyRef;
     byHolder.forEach((accruedUSD, holderId) => {
       if (!(accruedUSD > 0)) return;
+      if (COUPON_TRACE) traceAdd(tracePaidUSD, instrumentKey.slice(0, instrumentKey.indexOf(':')), accruedUSD);
       journalPayment(ctx.paymentJournal!, {
         payer,
         payee: { kind: 'INSTITUTION', id: holderId },
@@ -883,6 +901,27 @@ export function applyHolderInterestAccruals(
     ctx.holderAccruedInterestUSD.delete(instrumentKey);
   });
   payouts.clear();
+  if (COUPON_TRACE) reportCouponTrace(ctx, traceAccruedUSD, tracePaidUSD);
+}
+
+/** The COUPON_TRACE line: accrued / paid / still owed this week, by instrument type. */
+function reportCouponTrace(
+  ctx: { holderAccruedInterestUSD: Map<string, Map<string, number>>; nextWeek?: number },
+  accrued: Map<string, number>,
+  paid: Map<string, number>
+): void {
+  const owed = new Map<string, number>();
+  ctx.holderAccruedInterestUSD.forEach((byHolder, key) => {
+    const type = key.slice(0, key.indexOf(':'));
+    let usd = 0;
+    byHolder.forEach((v) => { if (v > 0) usd += v; });
+    owed.set(type, (owed.get(type) ?? 0) + usd);
+  });
+  const types = [...new Set([...accrued.keys(), ...paid.keys(), ...owed.keys()])].sort();
+  const b = (usd: number): string => `${(usd / 1e9).toFixed(3)}B`;
+  const cells = types.map((t) =>
+    `${t} accrued ${b(accrued.get(t) ?? 0)} paid ${b(paid.get(t) ?? 0)} owed ${b(owed.get(t) ?? 0)}`);
+  console.log(`  [coupon] w${ctx.nextWeek ?? 0} :: ${cells.join(' | ')}`);
 }
 
 /**

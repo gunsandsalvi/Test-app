@@ -1141,7 +1141,12 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // per issuer (`trancheWeekAccrual`; the seam's lanes were filled from these rows in this order).
     // The issuer-level totals stay the P&L's; these are the rows'.
     for (const tr of rowList) {
-      if (TS.maturityWeek[tr] === nextWeek) continue;
+      // STEP 1: the maturity week accrues and PAYS. `trancheWeekAccrual` makes CP due only when
+      // `maturityWeek === week`, so skipping this week meant `acc.due` was never true for CP and
+      // `payHoldersAccruedInterest` — whose only call site is below — never fired: CP interest
+      // accrued to holders every week and was never paid (44.19B of face accruing 1.845B a year
+      // at the week-13 reference), and every bond and loan whose term is a whole number of
+      // periods lost its final coupon. The front pass books the issuer's side of this same week.
       const fl = TS.flags[tr];
       if (fl & TR_FACILITY) continue;
       const floating = (fl & TR_FLOATING) !== 0;

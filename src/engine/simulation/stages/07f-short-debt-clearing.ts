@@ -38,7 +38,7 @@ import { REGION_IDS } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
-import { computeAnnualDefaultProbability, creditRecoveryRate, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
+import { computeAnnualDefaultProbability, creditRecoveryRate, payHoldersAccruedInterest, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetUSD } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -779,6 +779,14 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const kept: number[] = [];
           for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
             if ((TSr.flags[r] & TR_CP) && TSr.maturityWeek[r] <= ctx.nextWeek) {
+              // STEP 1: THE PAPER'S INTEREST FALLS DUE WHERE THE PAPER IS REDEEMED. Commercial
+              // paper is retired HERE, before stage 08 runs, so the register's accrual loop never
+              // saw a CP tranche in its own maturity week — and `trancheWeekAccrual` makes CP due
+              // ONLY then. The result was that CP interest accrued to holders every week from
+              // issue and was never once paid. Marking the payout here settles it in the same
+              // week: `applyHolderInterestAccruals` (stage 08) pays every holder of record
+              // exactly what it accrued, from the issuer, and clears the balance.
+              payHoldersAccruedInterest(ctx, v2Mirror.internedStrings[TSr.idRef[r]], 'COMMERCIAL_PAPER');
               if (TSr.principalUSD[r] > 0.01) retireTranche(v2Mirror, cpIssuer, r, TSr.principalUSD[r], 'commercial paper matured');
             } else kept.push(r);
           }
