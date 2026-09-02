@@ -24,6 +24,7 @@
  * reads comp.leveragedLoan.discountMarginBps/pricePar as already-real, already-cleared values.
  */
 
+import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_FACILITY } from '../../../engine2/tranches';
@@ -32,7 +33,6 @@ import {
   computeReservationSpreadBps,
   fullSizeSpreadRangeBpsOf,
   maxOverweightMultipleOf,
-  DISTRESSED_CONVICTION_MULTIPLE,
   computeDistressedReservationSpreadBps,
   spreadRiskCapitalChargeRate,
   entityRequiredReturn,
@@ -312,10 +312,10 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // discounted expected recovery instead of expected loss, and running the conviction size
       // that goes with it, is one strategy — the credit long-short book beside it is an ordinary
       // relative-value buyer and prices like one.
-      const isHedgeFund = entity.entityType === 'HEDGE_FUND' && entity.hedgeFundStrategy === 'DISTRESSED';
       const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
         ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate);
-      const overweightMultiple = isHedgeFund ? DISTRESSED_CONVICTION_MULTIPLE : maxOverweightMultipleOf(entity);
+      const strategy = hedgeFundStrategyProfile(entity);
+      const overweightMultiple = strategy?.convictionMultiple ?? maxOverweightMultipleOf(entity);
       // The entity's real money for this auction (S11), directed at the names where paper is
       // actually changing hands: a live offering, or the gap between what this holder targets and
       // what it already owns. A name it is already at target in, with nothing on offer, needs
@@ -349,7 +349,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         // The loan's recovery is derived from the same senior-lien discount that scales its
         // expected loss, and the collateral that raises recovery also lowers the capital its
         // spread risk consumes — one lien, both consequences (terms hoisted above).
-        const reservationBps = isHedgeFund
+        const reservationBps = strategy?.pricesOffRecovery
           ? t.distressedReservationBps
           : computeReservationSpreadBps({
               entityType: entity.entityType,

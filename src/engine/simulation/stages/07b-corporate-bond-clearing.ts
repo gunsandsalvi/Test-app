@@ -39,6 +39,7 @@
  * itself.
  */
 
+import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { ringPush, rowOf, ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP } from '../../../engine2/tranches';
@@ -52,7 +53,6 @@ import {
   subInvestmentGradeSizeFactor,
   spreadRiskCapitalChargeRate,
   maxOverweightMultipleOf,
-  DISTRESSED_CONVICTION_MULTIPLE,
   computeDistressedReservationSpreadBps,
   entityRequiredReturn,
 } from './asset-allocation';
@@ -344,10 +344,10 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // discounted expected recovery instead of expected loss, and running the conviction size
       // that goes with it, is one strategy — the credit long-short book beside it is an ordinary
       // relative-value buyer and prices like one.
-      const isHedgeFund = entity.entityType === 'HEDGE_FUND' && entity.hedgeFundStrategy === 'DISTRESSED';
       const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
         ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate);
-      const overweightMultiple = isHedgeFund ? DISTRESSED_CONVICTION_MULTIPLE : maxOverweightMultipleOf(entity);
+      const strategy = hedgeFundStrategyProfile(entity);
+      const overweightMultiple = strategy?.convictionMultiple ?? maxOverweightMultipleOf(entity);
       // The entity's real budget for this auction (S11): available cash plus its type's genuine
       // leverage capacity, sliced to this asset class by its own targets, then directed at the
       // names where paper is actually changing hands — a live offering, or the gap between what
@@ -384,7 +384,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         // (see subInvestmentGradeSizeFactor for what modelling it as one did to HY clearing).
         // Two pricing regimes, one issuer hazard: regulated holders price spread vs expected
         // loss + capital cost; the distressed fund prices vs discounted expected recovery.
-        const reservationBps = isHedgeFund
+        const reservationBps = strategy?.pricesOffRecovery
           ? t.distressedReservationBps
           : computeReservationSpreadBps({
               entityType: entity.entityType,

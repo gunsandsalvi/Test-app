@@ -299,9 +299,10 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
 
   let newGrowthCapex = programme.growthCapexUSD;
   let newRndExpense = Number.isNaN(L.rndExpenseUSD[row]) ? 0 : L.rndExpenseUSD[row];
-  if (L.hasTechLine[row] === 1) {
-    newRndExpense = newGrowthCapex * 0.4;
-    newGrowthCapex = newGrowthCapex * 0.6;
+  const rndShare = L.rndShareOfGrowthCapex[row];
+  if (rndShare > 0) {
+    newRndExpense = newGrowthCapex * rndShare;
+    newGrowthCapex = newGrowthCapex * (1 - rndShare);
   }
 
   const priorGrowth = L.growthCapexUSD[row];

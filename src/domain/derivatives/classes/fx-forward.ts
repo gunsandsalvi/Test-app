@@ -10,6 +10,8 @@
  * the currency being sold forward. termKey: ''.
  */
 
+import { institutionProfile, hedgeFundStrategyProfile } from '../../institution-profiles';
+import type { InstitutionalEntityType, HedgeFundStrategy } from '../../institutions';
 import { RegionId } from '../../geography';
 import { DerivativeClassProfile } from '../profile';
 
@@ -27,9 +29,12 @@ export const HEDGE_RATIO_FIXED_INCOME = 1.0;
 export const HEDGE_RATIO_EQUITY_LIABILITY_DRIVEN = 1.0;
 export const HEDGE_RATIO_EQUITY_RETURN_SEEKING = 0.35;
 
-export function equityHedgeRatioFor(entityType: string, hedgeFundStrategy?: string): number {
-  if (entityType === 'INSURER' || entityType === 'PENSION_FUND') return HEDGE_RATIO_EQUITY_LIABILITY_DRIVEN;
-  if (hedgeFundStrategy === 'GLOBAL_MACRO') return 0;
+export function equityHedgeRatioFor(entityType: InstitutionalEntityType, hedgeFundStrategy?: HedgeFundStrategy): number {
+  // §7.347 — both facts are the registries': a liability-driven kind hedges fully; a strategy
+  // that does not hedge its foreign equity hedges none of it.
+  if (institutionProfile(entityType).liabilityDriven) return HEDGE_RATIO_EQUITY_LIABILITY_DRIVEN;
+  const strategy = hedgeFundStrategyProfile({ entityType, hedgeFundStrategy });
+  if (strategy && !strategy.hedgesForeignEquity) return 0;
   return HEDGE_RATIO_EQUITY_RETURN_SEEKING;
 }
 

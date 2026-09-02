@@ -180,27 +180,10 @@ export function fullSizeSpreadRangeBpsOf(holder: { management?: Preferences } | 
  */
 export function entityRequiredReturn(entity: InstitutionalEntity): number {
   // §5-BRAINS — the stated hurdle is the median board's; this board's own risk aversion weights
-  // it. The measured branches below (an insurer's float, a pension's need) are liability costs
-  // and carry no preference.
-  const fallback = REQUIRED_RETURN_ON_CAPITAL[entity.entityType] * riskAversionOf(entity.management);
-  const liabilityUSD = entity.beneficiaryLiabilityUSD ?? 0;
-  if (!(liabilityUSD > 0)) return fallback;
-
-  if (entity.entityType === 'INSURER') {
-    if (entity.lastAnnualUnderwritingResultUSD === undefined) return fallback;
-    const costOfFloatAnnual = -entity.lastAnnualUnderwritingResultUSD / liabilityUSD;
-    return Math.max(0.02, Math.min(0.30, fallback + costOfFloatAnnual));
-  }
-
-  if (entity.entityType === 'PENSION_FUND') {
-    const benefitOutflowAnnual = entity.lastAnnualBenefitOutflowUSD ?? 0;
-    if (!(benefitOutflowAnnual > 0)) return fallback;
-    const fundedRatio = entity.totalAssetsUSD / liabilityUSD;
-    const need = (benefitOutflowAnnual / Math.max(1, entity.totalAssetsUSD)) / Math.max(0.2, fundedRatio);
-    return Math.max(0.02, Math.min(0.30, need));
-  }
-
-  return fallback;
+  // it. §7.347 — a liability-driven kind derives its own from its liabilities (the profile's
+  // behaviour field); the derivation carries no preference.
+  const stated = REQUIRED_RETURN_ON_CAPITAL[entity.entityType] * riskAversionOf(entity.management);
+  return institutionProfile(entity.entityType).liabilityHurdle?.(entity, stated) ?? stated;
 }
 
 const INVESTMENT_GRADE: CreditRating[] = ['AAA', 'AA', 'A', 'BBB'];
@@ -280,10 +263,5 @@ export function computeDistressedReservationSpreadBps(params: {
   return (-Math.log(Math.max(1e-6, maxPricePerPar)) / d) * 10000;
 }
 
-/**
- * How much more of a name a distressed fund will take than its size alone implies. When paper is
- * cheap enough to clear a 22% hurdle these are concentrated, high-conviction positions — that
- * concentration is the strategy, and it is what lets a comparatively small pool of capital set
- * the price at the wides.
- */
-export const DISTRESSED_CONVICTION_MULTIPLE = 4.0;
+// (the distressed book's conviction multiple is its strategy's registry fact —
+// domain/institution-profiles.ts, §7.347)

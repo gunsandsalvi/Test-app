@@ -15,6 +15,7 @@
  * settlement pass.
  */
 
+import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { riskAversionOf } from '../../../domain/preferences';
 import { GameState, Company } from '../../../types';
 import {
@@ -182,7 +183,7 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
       // bound — above it they would rather own the physical, which is the same statement the
       // arbitrage makes from the other side.
       const macroFunds = ctx.updatedInstitutionalEntities.filter(
-        (e) => !e.isDefaulted && e.entityType === 'HEDGE_FUND' && e.hedgeFundStrategy === 'GLOBAL_MACRO'
+        (e) => !e.isDefaulted && (hedgeFundStrategyProfile(e)?.tradesCommodityFutures ?? false)
       );
       macroFunds.forEach((fund) => {
         const capacityUSD = Math.max(0, fund.equityCapitalUSD) / FUTURES_TENOR_MONTHS.length;

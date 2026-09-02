@@ -67,7 +67,7 @@ import { weeklyWageBillUSD } from '../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
 import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
 import { mandateAllocator } from '../../domain/primary-market';
-import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, HedgeFundStrategy, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
+import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
@@ -87,6 +87,7 @@ import { laneDistanceNm } from '../../domain/geography';
 import { InTransitShipment } from './stages/goods-arrival';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { burnInMode, burnIn } from './burn-in';
+import { allocationTargetFor } from '../../domain/institution-profiles';
 import { ensureManagements } from './stages/management-review';
 import { advanceWeeklyStep } from './core';
 import { refreshRegionalHoldingsView, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './stages/holdings-view';
@@ -459,48 +460,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
 
   const institutionalEntities: InstitutionalEntity[] = [];
 
-  // corpBondPct + loanPct together are each type's total real corporate-credit appetite (same
-  // totals as before this split: INSURER 0.35, ASSET_MANAGER 0.20, PENSION_FUND 0.30) — real
-  // insurers/pension funds rarely hold broadly syndicated loans directly, while real loan
-  // funds/CLOs are predominantly an asset-manager product.
-  const allocationTargets: Record<InstitutionalEntityType, AssetAllocationTarget> = {
-    INSURER: { govBondPct: 0.50, corpBondPct: 0.32, loanPct: 0.03, equityPct: 0.10, cashPct: 0.05 },
-    ASSET_MANAGER: { govBondPct: 0.10, corpBondPct: 0.12, loanPct: 0.08, equityPct: 0.65, cashPct: 0.05 },
-    PENSION_FUND: { govBondPct: 0.25, corpBondPct: 0.25, loanPct: 0.05, equityPct: 0.40, cashPct: 0.05 },
-    // A credit hedge fund is the opposite balance sheet to an insurer: almost no sovereigns (it
-    // is not there to match liabilities), the sector's heaviest corporate-credit and loan
-    // weights, and a large cash sleeve that is real dry powder — the reason it can still bid
-    // when everyone else is at their mandate limit.
-    HEDGE_FUND: { govBondPct: 0.05, corpBondPct: 0.40, loanPct: 0.22, equityPct: 0.18, cashPct: 0.15 },
-    // A money fund's whole book IS the cash sleeve: bills and overnight money through the same
-    // machinery every entity's sleeve already uses (07f's bill share, WS6's repo/RRP split).
-    // Zero term weights keep it out of the bond/loan/equity auctions entirely.
-    MONEY_MARKET_FUND: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
-    // An index fund's allocation IS its index; it holds one asset class and no cash sleeve
-    // beyond what settlement needs. The weights here are never read for an ETF — its target is
-    // the benchmark's own membership — and exist so the type map stays total.
-    ETF: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
-    // A PE fund holds companies and dry powder, not securities: zero weights keep it out of the
-    // bond/loan/sovereign auctions entirely (no demand schedule, no budget). Its real assets are
-    // its portfolio stakes, marked in peFund below.
-    PRIVATE_EQUITY: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
-  };
-
-  // HF1: each hedge-fund STRATEGY has its own book, because that is what the strategy is. Only
-  // the four weights differ; every one of them is a mandate primitive of exactly the kind the
-  // other entity types already state (rule 19's PREFERENCE category).
-  const HEDGE_FUND_TARGETS: Record<HedgeFundStrategy, AssetAllocationTarget> = {
-    // Rates and FX: a large liquid book against which to run directional risk, and the biggest
-    // cash sleeve of the four, because its positions are margin and its dry powder is the point.
-    GLOBAL_MACRO: { govBondPct: 0.45, corpBondPct: 0.05, loanPct: 0, equityPct: 0.20, cashPct: 0.30 },
-    LONG_SHORT_EQUITY: { govBondPct: 0.02, corpBondPct: 0.03, loanPct: 0, equityPct: 0.80, cashPct: 0.15 },
-    LONG_SHORT_CREDIT: { govBondPct: 0.03, corpBondPct: 0.52, loanPct: 0.30, equityPct: 0, cashPct: 0.15 },
-    // The distressed book is the one that must be able to bid when everyone else is at their
-    // limit, which is what its unusually large sleeve is for.
-    DISTRESSED: { govBondPct: 0, corpBondPct: 0.40, loanPct: 0.35, equityPct: 0, cashPct: 0.25 },
-  };
-  const targetFor = (role: InstitutionalEntityType, strategy?: HedgeFundStrategy) =>
-    (role === 'HEDGE_FUND' && strategy ? HEDGE_FUND_TARGETS[strategy] : allocationTargets[role]);
+  // §7.347 — every kind's (and every hedge-fund strategy's) policy allocation is a registry fact
+  // (domain/institution-profiles.ts); the seed reads it like every stage does.
+  const targetFor = allocationTargetFor;
 
   Object.keys(regions).forEach(r => {
     const regionId = r as RegionId;
@@ -1425,7 +1387,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       stockPrice: 0,
       itemizedHoldings: [],
       cashUSD: 0,
-      assetAllocationTarget: allocationTargets.MONEY_MARKET_FUND,
+      assetAllocationTarget: allocationTargetFor('MONEY_MARKET_FUND'),
       isDefaulted: false,
       historicalPrices: [],
       mmfSharesOutstandingUSD: 0,
@@ -1465,7 +1427,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           stockPrice: 0,
           itemizedHoldings: [],
           cashUSD: 0,
-          assetAllocationTarget: allocationTargets.ETF,
+          assetAllocationTarget: allocationTargetFor('ETF'),
           isDefaulted: false,
           historicalPrices: [],
           etf: {

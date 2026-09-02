@@ -29,6 +29,7 @@
  * enforces the identity; desks do, out of their own capital, and being finite they can fail to.
  */
 
+import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { RegionId, GameState } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { bookHeadOf } from '../../../engine2/holdings';
@@ -207,7 +208,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     ctx.updatedInstitutionalEntities.forEach((e: any) => {
       // HF1: the elastic side of an FX market is a GLOBAL MACRO book. Every hedge fund used to
       // be in here, which meant an equity long-short fund was taking a view on the yen.
-      if (e.entityType !== 'HEDGE_FUND' || e.hedgeFundStrategy !== 'GLOBAL_MACRO') return;
+      if (!(hedgeFundStrategyProfile(e)?.runsFxDirectional ?? false)) return;
       // HF3: the size is the margin identity on this fund's OWN capital at this pair's own
       // haircut, and the moves are the pair's own observed volatility — no risk budget, no
       // required-move constant, no range constant. A quiet pair is tight and a volatile one wide.

@@ -172,7 +172,9 @@ export interface IndustrySpec {
    * NOT here, deliberately: `cyclicalityBeta`, which §5-IND4 originally listed. Beta is a
    * MEASUREMENT now (§7.134) — stating one per industry would restore exactly what IDX deleted.
    */
-  financingProfile: { fixedRateTilt: number; maxPayoutRatio: number };
+  /** §7.347 — `rndShareOfGrowthCapex`: the share of growth investment this industry books as
+   *  R&D rather than plant (the tech industries; absent = none). */
+  financingProfile: { fixedRateTilt: number; maxPayoutRatio: number; rndShareOfGrowthCapex?: number };
   subUnits: SubUnitSpec[];
 }
 
@@ -404,7 +406,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   TechHardwareSemis: {
     sector: 'Tech',
     smeShareOfActivity: 0.12,
-    financingProfile: { fixedRateTilt: 0.9, maxPayoutRatio: 0.3 },
+    financingProfile: { fixedRateTilt: 0.9, maxPayoutRatio: 0.3, rndShareOfGrowthCapex: 0.4 },
     subUnits: [
       {
         unitId: 'semiconductors',
@@ -434,7 +436,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   SoftwareDigitalServices: {
     sector: 'Tech',
     smeShareOfActivity: 0.35,
-    financingProfile: { fixedRateTilt: 0.8, maxPayoutRatio: 0.2 },
+    financingProfile: { fixedRateTilt: 0.8, maxPayoutRatio: 0.2, rndShareOfGrowthCapex: 0.4 },
     subUnits: [
       {
         unitId: 'enterprise_software',
@@ -1239,7 +1241,7 @@ export function industryOfSubUnit(unitId: string): Industry | undefined {
 
 
 /** IND4 — the one accessor for an industry's funding and payout posture (rule 17). */
-export function financingProfileOf(industry: Industry): { fixedRateTilt: number; maxPayoutRatio: number } {
+export function financingProfileOf(industry: Industry): IndustrySpec['financingProfile'] {
   return INDUSTRY_REGISTRY[industry].financingProfile;
 }
 

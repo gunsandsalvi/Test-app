@@ -14,6 +14,7 @@
  * of them gets to.
  */
 
+import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { GameState, RegionId, Company } from '../../../types';
 import { ensureV2, ringFill, rowOf } from '../../../engine2/world';
 import {
@@ -221,7 +222,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
 
     const shortFunds = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === regionId && !e.isDefaulted
-        && e.entityType === 'HEDGE_FUND' && e.hedgeFundStrategy === 'LONG_SHORT_EQUITY'
+        && (hedgeFundStrategyProfile(e)?.shortsEquity ?? false)
     );
     const borrowDemandByCompany = new Map<string, { fundId: string; shares: number }[]>();
     shortFunds.forEach((fund) => {

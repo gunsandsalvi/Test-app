@@ -13,6 +13,7 @@
  * maintenance-bridge id; a worker core drops them — traces and object building stay main-side.
  */
 
+import { profileKeyOf } from '../engine/simulation/stages/profiles/types';
 import { Company } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
@@ -65,7 +66,7 @@ export interface BackLanes {
   avgCompetitiveness: Float64Array;
   // --- flags ---
   isBanksSector: Uint8Array;
-  hasTechLine: Uint8Array;
+  rndShareOfGrowthCapex: Float64Array;
   investmentGrade: Uint8Array;
   // --- §7.317 step 1.6a: the debt/tail blocks' scalar reads ---
   sharesOutstanding: Float64Array;
@@ -140,7 +141,7 @@ export function buildBackLanes(
     wuTradeReceivableCollectedUSD: f(), wuTradePayableBookedUSD: f(),
     wuTradePayableSettledUSD: f(), wuCapexPurchasesUSD: f(),
     addressableGrowthAnnual: f(), categoryShortfall: f(), avgCompetitiveness: f(),
-    isBanksSector: new Uint8Array(n), hasTechLine: new Uint8Array(n), investmentGrade: new Uint8Array(n),
+    isBanksSector: new Uint8Array(n), rndShareOfGrowthCapex: f(), investmentGrade: new Uint8Array(n),
     sharesOutstanding: N.sharesOutstanding, stockPrice: N.stockPrice, baselineDividendYield: N.baselineDividendYield, dividendYield: N.dividendYield,
     earningsWeekModulo: N.earningsWeekModulo, eps: N.eps, cdsSpreadBps: N.cdsSpreadBps, beta: N.beta,
     baselineAnnualRevenueUSD: N.baselineAnnualRevenue, lastOpportunisticOfferingWeek: N.lastOpportunisticOfferingWeek,
@@ -194,8 +195,10 @@ export function buildBackLanes(
     let compet = 0;
     for (const l of lines) compet += l.competitiveness;
     L.avgCompetitiveness[i] = compet / Math.max(1, lines.length);
-    L.isBanksSector[i] = c.sector === 'Banks' ? 1 : 0;
-    L.hasTechLine[i] = lines.some(l => l.industry === 'TechHardwareSemis' || l.industry === 'SoftwareDigitalServices') ? 1 : 0;
+    // §7.347 — both facts come from the registries: the statement profile names a bank, the
+    // industry's financing profile says what share of growth investment is R&D.
+    L.isBanksSector[i] = profileKeyOf(c) === 'BANK' ? 1 : 0;
+    L.rndShareOfGrowthCapex[i] = lines.reduce((a, l) => Math.max(a, financingProfileOf(l.industry).rndShareOfGrowthCapex ?? 0), 0);
     L.investmentGrade[i] = isInvestmentGrade(c.creditRating) ? 1 : 0;
     L.employeeCountUpdate[i] = wu?.employeeCount ?? NaN_;
     L.bankCapitalRatio[i] = c.bankBalanceSheet?.bankCapitalRatio ?? NaN_;
