@@ -78,8 +78,15 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
 
     // ---- Re-strike every line against what the book is worth NOW. ----
     const nextBook: PrimeBrokerageLine[] = [];
+    // §5-CLOSE M5: EVERY fund with a line is re-struck, not only the hedge funds. The close sweep
+    // (M4) lends to a fund of any kind that spent money it did not have; the morning pass used
+    // to rebuild the book from the hedge funds alone, so every other fund's line VANISHED the
+    // next morning — the broker's asset fell by the draw (M5: eleven sheets not closing), and
+    // the fund kept the money for nothing (a creator). A line is a line: it is re-struck, repaid
+    // from cash above the sleeve, and priced, whoever the borrower is.
+    const withLine = new Set(priorBook.map((l) => l.fundId));
     const funds = ctx.updatedInstitutionalEntities.filter(
-      (e) => e.region === regionId && e.entityType === 'HEDGE_FUND' && !e.isDefaulted
+      (e) => e.region === regionId && !e.isDefaulted && (e.entityType === 'HEDGE_FUND' || withLine.has(e.id))
     );
     funds.forEach((fund) => {
       const brokerTicker = fund.homeBankTicker;
