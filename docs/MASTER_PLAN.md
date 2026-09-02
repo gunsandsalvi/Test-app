@@ -12,13 +12,13 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `437f556` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
+- HEAD `4bda75c` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
   earlier one; the session that owns it may push nowhere else.)
-- **Next step: §3 step 5**, then 6, 7, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 6**, then 7, 8, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `437f556` —
-  **95 violations in 26 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
-  (24 vs 26 families is cosmetic: the P1 seniority line names example issuers and they move.)
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `4bda75c` —
+  **92 violations in 25 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
+  (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
 - **Recording a step:** delete the step from §3 and write its record in §9 — what changed, why,
@@ -32,8 +32,8 @@ and **the sweep in full is
 in §8, by area, so nobody re-derives it** — including the long tail of minor, dead-code and
 already-fine findings that did not earn a step. §8 is a record, not a work list, and it was NOT
 re-verified: treat an unconfirmed finding there as a lead with a file:line. The headline that set the order: money and ownership do NOT close (interest accrued and
-never paid, a residual wired twice, three ledger paths dropping value silently — all closed,
-§9; an estate that can never close), price is NOT universal (credit trades at par, commodity
+never paid, a residual wired twice, three ledger paths dropping value silently, an estate that can never
+close — all closed, §9), price is NOT universal (credit trades at par, commodity
 spot is a drift formula), and the instrument that measures all this is itself broken (the wires
 family never prints, the per-bank identity check has never fired).
 
@@ -185,11 +185,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-5. **The estate that never closes.** `estate-resolution.ts:530` sets `assets.cashUSD` once and
-   nothing decrements it, so the close test at `:230` can never pass and holders keep dead paper for
-   ever. Re-read cash weekly. Same step: claims open at the holder row's marked value (`:497-520`)
-   while bank facility claims use ladder principal — **one basis, FACE**; and `:213` prices the
-   asset sale by formula with a 0.9 cap instead of clearing it (see step 20).
 6. **Bank resolution transfers the whole sheet.** `bank-resolution.ts:92` nets the shell's own bond
    ladder against the CENTRAL BANK's loan; `bank-transfer.ts:79,82` transfers the remainder and
    zeroes `target.centralBankLoanUSD` while `centralBankSheet.loansToBanksUSD` keeps the asset.
@@ -435,8 +430,9 @@ Dump/diff: `STATE_DUMP=<f> STATE_DUMP_WEEK=<n>`, then `DIFF_STATE=a.json,b.json 
 **Instruments, env-gated** (adding one the next run carries free beats a run of its own): `FP`,
 `STAGE_TRACE`, `BANK_IDENTITY_TRACE`, `COMPANY_STORE_AUDIT`, `TRANCHE_SYNC_CHECK`,
 `HOLDINGS_SYNC_CHECK`, `OWN_TRACE`, `W2_TRACE`, `SPLIT_TRACE`, `WIRE_TRACE`, `DESK_TRACE`,
-`PNL_TRACE`, `DEFAULT_TRACE`, `LABOR_CAUSES`, `SEED_BURN_IN`, `COUPON_TRACE` (step 1: accrued /
-paid / owed per week by instrument type — the register's interest, visible without its own run).
+`PNL_TRACE`, `DEFAULT_TRACE`, `LABOR_CAUSES`, `SEED_BURN_IN`, `COUPON_TRACE` (accrued / paid / owed per week
+by instrument type, and the desks' slice of each). The burn-in probe carries `open estates` in
+every run — it only falls when a workout finishes.
 
 ## 5. LESSONS — DO NOT RE-LEARN
 Numbers are the original record's and never change; the full text is in git at `79c239b`.
@@ -463,7 +459,9 @@ three cycles, because a day has more than one. §7.377/§7.384 a balance is an A
 its P&L write; only the principal legs beside it are asset swaps that need none. §9.3 a guard on
 a ledger walk measures FLOAT NOISE, so its tolerance is relative to the quantities the walk
 touched — a fixed number of dollars is either a real threshold or useless. §9.3 again: two of
-the four truncations were covering live minting callers, and the guard is what named them.
+the four truncations were covering live minting callers, and the guard is what named them. §9.5 a
+run-off that sells a fixed SHARE of what is left never terminates — a disposal is a programme
+with a last week, and an instrument that counts what is still open is what shows the difference.
 §7.372/§7.373/§7.374 market cap, total debt, the loan books and total assets are READS.
 
 **Stores and performance.** §7.311/§7.313 the rows are the ladder's authority; the object arrays are
@@ -2347,3 +2345,19 @@ identity check stands. **The rationing the plan asked for already existed** — 
 `min(owed, available)` and the open market is offered only what they left, which is why W4b never
 fired; the clamp was latent, not absent. Measured (SHOCKS=0 WEEKS=16): **95 violations in 26
 families → 95 in 26**, money clean, unowned 0.00B, every week count unmoved.
+
+**5. The estate that never closes.** (`4bda75c`) Three things kept the close test false.
+(i) `openEstate` wrote `assets.cashUSD` once and nothing decremented it while the other three
+assets were re-read weekly, so any estate opened with cash could never close — cash is now the
+account, re-read after the waterfall. (ii) The disposal sold a fixed SHARE of what was left each
+week, so the tail halved for ever; both schedules now run from the week the estate opened and
+the last week of each takes the remainder in one lot. (iii) `writeOffResidual` walks CLAIMS, and
+a claim opens only above a dollar, so a smaller row survived the close and then named an
+extinguished instrument; every row of the dead issuer now goes. Claims are on ONE BASIS, FACE,
+and what the register claims of each tranche is checked against the ladder's own face for it.
+**The burn-in probe gained `open estates`** and paid for itself at once: 41 open at week 16
+against 6 defaults in the last week alone is what named (ii) and (iii). Measured (SHOCKS=0
+WEEKS=16): **95 violations in 26 families → 92 in 25**; O3 (rows naming an instrument that does
+not exist) and the goods-wedge X2 line are gone, money clean, unowned 0.00B, open estates 41 →
+37 with the horizons now finite. The workout's 0.9-capped sale price and its pro-rata-to-cash
+allocation are untouched — step 20's.
