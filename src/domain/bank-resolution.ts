@@ -53,7 +53,7 @@ export function bankSheetAssetsUSD(sheet: BankingSector): number {
  *  Wholesale money and equity are the two the plan decides. */
 export function bankAssumedLiabilitiesUSD(sheet: BankingSector): number {
   return sheet.depositsUSD + (sheet.corporateDepositsUSD ?? 0) + (sheet.institutionalDepositsUSD ?? 0)
-    + (sheet.unmodeledDepositsUSD ?? 0) + (sheet.smeDepositsUSD ?? 0)
+    + (sheet.smeDepositsUSD ?? 0) + (sheet.clientMarginUSD ?? 0)
     + (sheet.repoBorrowedUSD ?? 0) + (sheet.srfBorrowingUSD ?? 0);
 }
 
@@ -61,9 +61,10 @@ export interface BankResolutionPlan {
   /** The shell's own traded ladder, left behind as receivership claims (bailed in). It is
    *  inside the wholesale line, so it comes OUT of what the assuming bank takes over. */
   ladderStaysUSD: number;
-  /** Wholesale money the assuming bank takes on, after the ladder and the haircut. */
+  /** The central bank's loan the assuming bank takes on, after the ladder. */
   wholesaleAssumedUSD: number;
-  /** What the unmodeled wholesale lenders lose. */
+  /** §5-CLOSE: the central bank is never haircut (a loss with no equity behind it would be money
+   *  from nowhere); the treasury's guarantee covers the shortfall instead. Always zero. */
   wholesaleHaircutUSD: number;
   /** Assets minus everything assumed, before any loss is allocated: what the books are worth
    *  to whoever takes them, at book. */
@@ -87,14 +88,14 @@ export interface BankResolutionPlan {
 export function planBankResolution(
   sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number,
 ): BankResolutionPlan {
-  const wholesaleUSD = Math.max(0, sheet.wholesaleFundingUSD ?? 0);
+  const wholesaleUSD = Math.max(0, sheet.centralBankLoanUSD ?? 0);
   const ladderStaysUSD = Math.min(wholesaleUSD, Math.max(0, ownLadderPrincipalUSD));
   const transferableUSD = wholesaleUSD - ladderStaysUSD;
   const netBookUSD = bankSheetAssetsUSD(sheet) - bankAssumedLiabilitiesUSD(sheet) - transferableUSD;
   const capitalUSD = Math.max(0, acquirerCapitalUSD);
   const estateUSD = Math.max(0, netBookUSD - capitalUSD);
   const shortfallUSD = Math.max(0, capitalUSD - netBookUSD);
-  const wholesaleHaircutUSD = Math.min(transferableUSD, shortfallUSD);
+  const wholesaleHaircutUSD = 0;
   return {
     ladderStaysUSD,
     wholesaleAssumedUSD: transferableUSD - wholesaleHaircutUSD,

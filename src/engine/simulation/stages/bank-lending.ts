@@ -913,32 +913,34 @@ export function runBankHouseholdLending(
  * payment instruction (BANK_SECURITIES → the unmodeled wholesale lender), so the reserves move
  * where money moves and the boundary meter sees the flow under its own reason.
  */
-export function unrenewedWholesaleUSD(sheet: BankingSector): number {
+export function repayCentralBankLoanUSD(sheet: BankingSector): number {
   const bufferUSD = stressedOutflowUSD(sheet) * LIQUIDITY_COVERAGE_RATIO;
   const excessCashUSD = Math.max(0, sheet.cashReservesUSD - bufferUSD);
-  const repayUSD = Math.min(Math.max(0, sheet.wholesaleFundingUSD ?? 0), excessCashUSD);
+  const repayUSD = Math.min(Math.max(0, sheet.centralBankLoanUSD ?? 0), excessCashUSD);
   if (repayUSD < 1e6) return 0;
-  sheet.wholesaleFundingUSD = (sheet.wholesaleFundingUSD ?? 0) - repayUSD;
+  sheet.centralBankLoanUSD = (sheet.centralBankLoanUSD ?? 0) - repayUSD;
   return repayUSD;
 }
 
 /**
- * §7.340 — the ROLL'S OTHER HALF: a bank whose week closes short of its operating buffer after
- * the repo session (its collateral ran out, or it had none) raises wholesale money at its own
- * cleared spread, from the same lenders the roll repays. Before this the line only ever fell,
- * and a bank that could not fund itself secured simply ran its reserve account NEGATIVE — an
- * overdraft at the central bank that nothing lends and the harness did not watch (measured:
- * three USA/JPN banks −0.4 to −1.1B at week 13, SAXW −0.7B at week 3).
+ * §5-CLOSE — THE LENDER OF LAST RESORT. A bank whose week closes short of its operating buffer
+ * after every real flow has settled borrows the shortfall from the central bank, unsecured, at
+ * the window rate plus a penalty (`CENTRAL_BANK_LOAN_PENALTY_BPS`). This replaces the boundary's
+ * "wholesale lender": the creditor is named, the interest is a payment to it, and the money it
+ * creates is reserves the central bank's own asset backs — the identity closes by construction.
+ * Repaid from excess cash above the buffer (`repayCentralBankLoanUSD`, in 02b).
  *
  * Writes the liability up and returns the amount; the CALLER settles the cash leg as a payment
- * instruction (the unmodeled wholesale lender → BANK_SECURITIES).
+ * (CENTRAL_BANK → BANK_SECURITIES) and books the central bank's asset.
  */
-export function raiseWholesaleUSD(sheet: BankingSector, settledCashUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
+export function raiseCentralBankLoanUSD(sheet: BankingSector, settledCashUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
   const shortfallUSD = sheet.depositsUSD * bufferRatio - settledCashUSD;
   if (shortfallUSD < 1e6) return 0;
-  sheet.wholesaleFundingUSD = (sheet.wholesaleFundingUSD ?? 0) + shortfallUSD;
+  sheet.centralBankLoanUSD = (sheet.centralBankLoanUSD ?? 0) + shortfallUSD;
   return shortfallUSD;
 }
+/** The penalty over the standing-facility rate an unsecured central-bank loan carries. */
+export const CENTRAL_BANK_LOAN_PENALTY_BPS = 100;
 
 export function applyBankFundingSplit(
   sheet: BankingSector,
@@ -967,12 +969,8 @@ export function applyBankFundingSplit(
     bankTotalAssetsUSD(sheet) + pendingCashUSD - sheet.bankEquityUSD
       - (sheet.repoBorrowedUSD ?? 0) - (sheet.srfBorrowingUSD ?? 0)
   ));
+  // §5-CLOSE: household money funds what the real corporate, institutional and segment
+  // balances do not; nothing is written to a lender that does not exist. The seed's own close
+  // (`close-seed.ts`) re-derives this line once every book exists.
   sheet.depositsUSD = Math.min(fundingNeedUSD, Math.max(0, householdDepositsUSD));
-  const afterHouseholdUSD = Math.max(0, fundingNeedUSD - sheet.depositsUSD);
-  const realDepositsUSD = Math.max(0, sheet.corporateDepositsUSD ?? 0)
-    + Math.max(0, sheet.institutionalDepositsUSD ?? 0)
-    + Math.max(0, sheet.unmodeledDepositsUSD ?? 0)
-    + Math.max(0, sheet.smeDepositsUSD ?? 0);
-  const otherDepositsUSD = Math.min(afterHouseholdUSD, realDepositsUSD);
-  sheet.wholesaleFundingUSD = Math.max(0, afterHouseholdUSD - otherDepositsUSD);
 }

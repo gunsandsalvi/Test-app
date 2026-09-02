@@ -14,7 +14,7 @@ import { AuditFinding, B, M, pct, sum } from './types';
 type Sheet = NonNullable<Company['bankBalanceSheet']>;
 const banksOf = (s: GameState, r?: RegionId) =>
   s.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c) && (!r || c.region === r));
-const depositsOf = (bs: Sheet) => bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + (bs.institutionalDepositsUSD ?? 0) + (bs.smeDepositsUSD ?? 0) + (bs.unmodeledDepositsUSD ?? 0);
+const depositsOf = (bs: Sheet) => bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + (bs.institutionalDepositsUSD ?? 0) + (bs.smeDepositsUSD ?? 0) + (bs.clientMarginUSD ?? 0);
 
 /** M1 — the central bank's balance sheet closes EXACTLY: assets = reserves + treasury account + currency, no unbacked line. */
 function m1(state: GameState, week: number): AuditFinding[] {
@@ -40,8 +40,8 @@ function m2(state: GameState, week: number): AuditFinding[] {
     const cb = reg?.centralBankSheet;
     if (!cb) return;
     if (Math.abs(cb.currencyInCirculationUSD) > 1e6) out.push({ family: 'M', check: 'M2 currency plug', week, usd: cb.currencyInCirculationUSD, message: `${r}: currency in circulation ${B(cb.currencyInCirculationUSD)} is a residual nobody issued` });
-    const wholesale = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.wholesaleFundingUSD ?? 0);
-    if (wholesale > 1e6) out.push({ family: 'M', check: 'M2 wholesale to nobody', week, usd: wholesale, message: `${r}: ${B(wholesale)} of wholesale funding owed to a lender that does not exist` });
+    const cbLoans = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.centralBankLoanUSD ?? 0);
+    if (Math.abs(cbLoans - (cb.loansToBanksUSD ?? 0)) > 1e6) out.push({ family: 'M', check: 'M2 central bank loans = banks\' borrowing', week, usd: cbLoans - (cb.loansToBanksUSD ?? 0), message: `${r}: banks owe the central bank ${B(cbLoans)}, its book says ${B(cb.loansToBanksUSD ?? 0)}` });
     const rx = reg as unknown as { unmodeledTaxRevenueUSD?: number; governmentInterestToUnmodeledHoldersUSD?: number };
     if ((rx.unmodeledTaxRevenueUSD ?? 0) > 1e6) out.push({ family: 'M', check: 'M2 tax from nobody', week, usd: rx.unmodeledTaxRevenueUSD, message: `${r}: ${B(rx.unmodeledTaxRevenueUSD!)}/wk of revenue credited to the treasury that no payer paid` });
     if ((rx.governmentInterestToUnmodeledHoldersUSD ?? 0) > 1e6) out.push({ family: 'M', check: 'M2 interest to nobody', week, usd: rx.governmentInterestToUnmodeledHoldersUSD, message: `${r}: ${B(rx.governmentInterestToUnmodeledHoldersUSD!)}/wk of coupon paid to holders that do not exist` });
@@ -51,9 +51,6 @@ function m2(state: GameState, week: number): AuditFinding[] {
   });
   const s = state.lastSettlement;
   if (s) {
-    Object.entries(s.unmodeledByReason ?? {}).forEach(([reason, v]) => {
-      if (Math.abs(v) > 1e5) out.push({ family: 'M', check: 'M2 boundary flow', week, usd: v, message: `"${reason}" crossed the boundary: ${B(v)}` });
-    });
     if (Math.abs(s.unresolvedUSD) > 1e5) out.push({ family: 'M', check: 'M2 unresolved money', week, usd: s.unresolvedUSD, message: `${B(s.unresolvedUSD)} found no account at settlement` });
     if (Math.abs(s.clearingHouseResidualUSD) > 1e5) out.push({ family: 'M', check: 'M2 clearing house residual', week, usd: s.clearingHouseResidualUSD, message: `the CCP was left holding ${B(s.clearingHouseResidualUSD)}` });
   }
@@ -134,7 +131,7 @@ function m5(state: GameState, week: number): AuditFinding[] {
     const sov = sum(Object.values(bs.sovereignBondHoldingsByTenor ?? {}), (v) => Number(v) || 0);
     const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryUSD));
     const assets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + sov + bs.cashReservesUSD + (bs.repoLentUSD ?? 0) + (bs.sovereignAccruedCouponUSD ?? 0) + desks + (bs.primeBrokerageLoansUSD ?? 0);
-    const liabilities = depositsOf(bs) + (bs.wholesaleFundingUSD ?? 0) + (bs.repoBorrowedUSD ?? 0) + (bs.srfBorrowingUSD ?? 0);
+    const liabilities = depositsOf(bs) + (bs.centralBankLoanUSD ?? 0) + (bs.repoBorrowedUSD ?? 0) + (bs.srfBorrowingUSD ?? 0);
     const residual = assets - liabilities - bs.bankEquityUSD;
     if (Math.abs(residual) > Math.max(1e7, assets * 2e-3)) out.push({ family: 'M', check: 'M5 bank sheet closes', week, usd: residual, message: `${b.region}:${b.ticker} assets ${B(assets)} − liabilities ${B(liabilities)} − equity ${B(bs.bankEquityUSD)} = ${B(residual)}` });
   });

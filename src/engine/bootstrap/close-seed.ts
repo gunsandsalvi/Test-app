@@ -42,9 +42,8 @@ export function closeSeedMoney(
     let householdDepositsUSD = 0;
     banks.forEach((b) => {
       const s: BankingSector = b.bankBalanceSheet!;
-      s.wholesaleFundingUSD = 0;
       const otherDepositsUSD = Math.max(0, s.corporateDepositsUSD ?? 0) + Math.max(0, s.institutionalDepositsUSD ?? 0)
-        + Math.max(0, s.smeDepositsUSD ?? 0) + Math.max(0, s.unmodeledDepositsUSD ?? 0);
+        + Math.max(0, s.smeDepositsUSD ?? 0) + Math.max(0, s.clientMarginUSD ?? 0) + Math.max(0, s.centralBankLoanUSD ?? 0);
       const needUSD = bankTotalAssetsUSD(s) - s.bankEquityUSD - (s.repoBorrowedUSD ?? 0) - (s.srfBorrowingUSD ?? 0) - otherDepositsUSD;
       if (needUSD >= 0) {
         s.depositsUSD = Math.round(needUSD);
@@ -62,7 +61,6 @@ export function closeSeedMoney(
     reg.bankingSector = {
       ...reg.bankingSector,
       depositsUSD: Math.round(banks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0)),
-      wholesaleFundingUSD: 0,
       cashReservesUSD: Math.round(banks.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0)),
     };
 

@@ -35,10 +35,11 @@ import {
 import { runRegionalRepoSession } from './repo-clearing';
 import { maturingAt, repoInterestToMaturityUSD } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
-import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, unrenewedWholesaleUSD } from './bank-lending';
+import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, repayCentralBankLoanUSD, CENTRAL_BANK_LOAN_PENALTY_BPS } from './bank-lending';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay } from './settlement';
 import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
+import { SRF_SPREAD_BPS } from '../../macro/banking';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
@@ -68,7 +69,8 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     repoEncumberedCollateralUSD: bs.repoEncumberedCollateralUSD * share,
     businessLoans: [],
     householdLoans: (bs.householdLoans || []).map((pl) => ({ ...pl, principalUSD: pl.principalUSD * share })),
-    wholesaleFundingUSD: (bs.wholesaleFundingUSD ?? 0) * share,
+    centralBankLoanUSD: (bs.centralBankLoanUSD ?? 0) * share,
+    clientMarginUSD: (bs.clientMarginUSD ?? 0) * share,
     corporateDepositsUSD: bs.corporateDepositsUSD * share,
   };
 }
@@ -95,8 +97,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         const sh = b.bankBalanceSheet;
         if (!sh) return 0;
         return Math.max(0, sh.depositsUSD) + Math.max(0, sh.corporateDepositsUSD ?? 0)
-          + Math.max(0, sh.institutionalDepositsUSD ?? 0) + Math.max(0, sh.smeDepositsUSD ?? 0)
-          + Math.max(0, sh.unmodeledDepositsUSD ?? 0);
+          + Math.max(0, sh.institutionalDepositsUSD ?? 0) + Math.max(0, sh.smeDepositsUSD ?? 0);
       };
       const regionDepositsUSD = banks.reduce((a, b) => a + depositsOf(b), 0);
       if (regionDepositsUSD > 0) {
@@ -469,17 +470,27 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     });
 
     newSheets.forEach(({ bank, sheet }) => {
-      // §7.254 — the roll: wholesale money a bank no longer needs is not renewed. The liability
-      // leaves the sheet here (bank-lending owns the write) and the cash leaves at settlement,
-      // to the unmodeled wholesale lender under its own boundary reason. After the repo session,
-      // so overnight lending was decided on the cash the bank actually had this morning.
-      const repaidUSD = unrenewedWholesaleUSD(sheet);
+      // §5-CLOSE — the central bank's loan is repaid from cash above the buffer (the liability
+      // leaves here, bank-lending owns the write; the cash leaves at settlement, extinguishing
+      // the reserves it created), and its interest is a payment to the named creditor.
+      const cbSheet = reg.centralBankSheet;
+      const repaidUSD = repayCentralBankLoanUSD(sheet);
       if (repaidUSD > 0) {
+        if (cbSheet) cbSheet.loansToBanksUSD = Math.max(0, (cbSheet.loansToBanksUSD ?? 0) - repaidUSD);
         pay(ctx, {
           payer: { kind: 'BANK_SECURITIES', ticker: bank.ticker },
-          payee: { kind: 'UNMODELED', region: regionId },
+          payee: { kind: 'CENTRAL_BANK', region: regionId },
           amountUSD: repaidUSD,
-          reason: 'wholesale funding repaid',
+          reason: 'central bank loan repaid',
+        });
+      }
+      const cbLoanInterestUSD = ((sheet.centralBankLoanUSD ?? 0) * (reg.policyRate + (SRF_SPREAD_BPS + CENTRAL_BANK_LOAN_PENALTY_BPS) / 10000)) / 52;
+      if (cbLoanInterestUSD > 0) {
+        pay(ctx, {
+          payer: { kind: 'BANK', ticker: bank.ticker },
+          payee: { kind: 'CENTRAL_BANK', region: regionId },
+          amountUSD: cbLoanInterestUSD,
+          reason: 'central bank loan interest',
         });
       }
       updateBankSheet(ctx, bank.ticker, sheet);
@@ -565,11 +576,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // view would be a second ledger). Corporate deposits sum like everything else.
       businessLoans: [],
       householdLoans: [],
-      wholesaleFundingUSD: sumField((s) => s.wholesaleFundingUSD ?? 0),
+      centralBankLoanUSD: sumField((s) => s.centralBankLoanUSD ?? 0),
+      clientMarginUSD: sumField((s) => s.clientMarginUSD ?? 0),
       corporateDepositsUSD: sumField((s) => s.corporateDepositsUSD ?? 0),
       institutionalDepositsUSD: sumField((s) => s.institutionalDepositsUSD ?? 0),
       smeDepositsUSD: sumField((s) => s.smeDepositsUSD ?? 0),
-      unmodeledDepositsUSD: sumField((s) => s.unmodeledDepositsUSD ?? 0),
       sovereignAccruedCouponUSD: sumField((s) => s.sovereignAccruedCouponUSD ?? 0),
       primeBrokerageLoansUSD: sumField((s) => s.primeBrokerageLoansUSD ?? 0),
       householdDepositInterestWeeklyUSD: sumField((s) => s.householdDepositInterestWeeklyUSD ?? 0),

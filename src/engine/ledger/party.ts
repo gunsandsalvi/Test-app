@@ -35,10 +35,7 @@ export type PartyRef =
   | { kind: 'SEGMENT'; region: RegionId; industry: string }
   | { kind: 'HOUSEHOLD'; region: RegionId }
   | { kind: 'GOVERNMENT'; region: RegionId }
-  | { kind: 'CENTRAL_BANK'; region: RegionId }
-  /** The named boundary: a counterparty this model does not have yet. Watched down, never
-   *  netted away (§6's discipline for unmodeled lines). */
-  | { kind: 'UNMODELED'; region: RegionId };
+  | { kind: 'CENTRAL_BANK'; region: RegionId };
 
 /**
  * SCALE — A PARTY IS AN `int32`.
@@ -54,7 +51,7 @@ export type PartyRef =
  */
 const PARTY_KINDS = [
   'COMPANY', 'BANK', 'BANK_CREDIT', 'BANK_SECURITIES', 'CLEARING_HOUSE',
-  'INSTITUTION', 'SEGMENT', 'HOUSEHOLD', 'GOVERNMENT', 'CENTRAL_BANK', 'UNMODELED',
+  'INSTITUTION', 'SEGMENT', 'HOUSEHOLD', 'GOVERNMENT', 'CENTRAL_BANK',
 ] as const;
 // Compile-loud completeness (§7.241): a new PartyRef kind fails to build until this list names
 // it. Before this check, a missing kind was interned at index 0 — COMPANY — so its payments were
@@ -117,7 +114,7 @@ export function partyFromKey(key: string): PartyRef | undefined {
       return at < 0 ? undefined
         : { kind: 'SEGMENT', region: rest.slice(0, at) as any, industry: rest.slice(at + 1) as any };
     }
-    case 'GOVERNMENT': case 'CENTRAL_BANK': case 'HOUSEHOLD': case 'CLEARING_HOUSE': case 'UNMODELED':
+    case 'GOVERNMENT': case 'CENTRAL_BANK': case 'HOUSEHOLD': case 'CLEARING_HOUSE':
       return { kind, region: rest } as PartyRef;
     default:
       return undefined;

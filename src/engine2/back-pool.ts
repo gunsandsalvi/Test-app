@@ -107,7 +107,6 @@ function preInternBackA(L: BackLanes): void {
   for (const label of A_REASON_LABELS) internReason(label);
   for (let i = 0; i < L.n; i++) {
     partyId({ kind: 'COMPANY', ticker: L.ticker[i] });
-    partyId({ kind: 'UNMODELED', region: L.region[i] });
     partyId({ kind: 'HOUSEHOLD', region: L.region[i] });
     partyId({ kind: 'GOVERNMENT', region: L.region[i] });
     const bank = L.homeBankTicker[i];

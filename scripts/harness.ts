@@ -217,57 +217,6 @@ const clone = (s: GameState): GameState => structuredClone(s);
  * are the residual and are not itemised anywhere, so `held` is legitimately below `outstanding`
  * — only exceeding it is a defect.
  */
-/**
- * CASH — THE UNMODELED BOUNDARY BREAKS NOW.
- *
- * `{ kind: 'UNMODELED' }` is a settlement party that absorbs whatever is paid to it and pays
- * whatever is asked of it. That is exactly what a leak looks like from the inside, and for as
- * long as nothing checked it, a stage could route a flow to nobody and every invariant would
- * still pass. Twenty-five reasons were crossing it when this check was written.
- *
- * Every reason below is a FRONTIER, not a routing gap: a real counterparty this model does not
- * name yet, with the project that will name it. Anything NOT on this list is a defect — a flow
- * whose counterparty exists and was not used — and it fails the harness on the week it appears.
- * Do not add a line here to make a run pass. Route the flow.
- */
-// §7.286 — THE LIST IS EMPTY. Every frontier closed: the accrual pair stopped moving cash
-// (operating firms) or settles against the vehicle entity (institutional shells); the estate
-// pair runs through the debtor's own account with named peer buyers and real invoice
-// collections; the paydown pair pays issuer → holder directly; freight on an unserved lane
-// pays the origin's transport pool; carrying cost has its distribution sellers. What remains
-// below is kept ONLY as documentation of the one declared residual crossing (the seed's
-// wholesale unwind, whose matching holder asset the seed never created — closing it is a seed
-// re-anchor, gated with SEED_BURN_IN). Anything else that touches the boundary now fails the
-// week it appears.
-const BOUNDARY_FRONTIERS: Record<string, string> = {
-  // G2's seed unwind: wholesale money a bank no longer needs is not renewed, and the lender is
-  // genuinely unmodeled because the SEED created the funding stock with no holder asset behind
-  // it. Shrinks to nothing as the stock unwinds (gone by ~w15); its true close is seeding the
-  // matching claim, a re-anchor gated with SEED_BURN_IN (§7.232).
-  'wholesale funding repaid': 'the seed wholesale stock, unwinding to a lender the seed never named',
-  // §7.340: the roll's other half — a bank short of its buffer at the close raises wholesale
-  // money from the same lender. The named successor is the interbank unsecured market (surplus
-  // banks lend to short ones at policy plus the borrower's spread; an asset line on the lender).
-  'wholesale funding raised': 'the funding close — wholesale money raised at the close by a bank short of its buffer',
-};
-/** Below this, a week's line is rounding rather than a flow. */
-const BOUNDARY_DE_MINIMIS_USD = 1e6;
-
-function checkBoundaryFlows(state: GameState, week: number): Violation[] {
-  const byReason = ((state as any).lastSettlement?.unmodeledByReason ?? {}) as Record<string, number>;
-  const out: Violation[] = [];
-  Object.entries(byReason).forEach(([reason, v]) => {
-    const usd = Number(v) || 0;
-    if (Math.abs(usd) < BOUNDARY_DE_MINIMIS_USD) return;
-    if (BOUNDARY_FRONTIERS[reason]) return;
-    out.push({
-      week,
-      message: `"${reason}" settled ${(usd / 1e9).toFixed(2)}B against the UNMODELED boundary — a counterparty this model can name, and did not`,
-    });
-  });
-  return out;
-}
-
 function checkHoldingsLedgerConservation(state: GameState, week: number): Violation[] {
   const out: Violation[] = [];
   const regionIds = REGION_IDS;
@@ -1486,17 +1435,6 @@ const xbModule: HarnessModule = (() => {
       if (byClass) {
         out.push(`    by holder class: corporate ${B(byClass.corporate)}, institutional ${B(byClass.institutional)}, SME ${B(byClass.sme)}`);
       }
-      // CASH: every dollar that reached the boundary this week, by reason. A boundary that
-      // absorbs silently is indistinguishable from a leak, which is the whole objection to it.
-      // Anything here that is NOT a declared frontier has already failed checkBoundaryFlows;
-      // what prints is the frontier itself, and it is a list to shorten.
-      const byReason = ((s as any).lastSettlement?.unmodeledByReason ?? {}) as Record<string, number>;
-      const reasons = Object.entries(byReason).filter(([, v]) => Math.abs(Number(v)) > 1e6)
-        .sort((a, b) => Math.abs(Number(b[1])) - Math.abs(Number(a[1])));
-      if (reasons.length > 0) {
-        out.push(`  UNMODELED boundary, by reason: ${reasons.map(([r, v]) =>
-          `${r} ${B(Number(v))}${BOUNDARY_FRONTIERS[r] ? '' : ' [UNDECLARED]'}`).join('; ')}`);
-      }
       const overdraftUSD = Number((s as any).lastCashOverdraftUSD ?? 0);
       if (overdraftUSD > 0) {
         out.push(`    of which clamped OVERDRAFTS (a holder spending money it does not have): ${B(overdraftUSD)}`);
@@ -2226,7 +2164,7 @@ const spiralModule: HarnessModule = {
               + ` eq ${(bs.bankEquityUSD / 1e9).toFixed(2)}B rwa ${(rwa / 1e9).toFixed(2)}B`
               + ` ratio ${(rwa > 0 ? bs.bankEquityUSD / rwa : 0).toFixed(4)}`
               + ` | biz ${(bs.businessLoanBookUSD / 1e9).toFixed(2)}B hh ${(bs.consumerLoanBookUSD / 1e9).toFixed(2)}B`
-              + ` cash ${(bs.cashReservesUSD / 1e9).toFixed(2)}B whol ${(bs.wholesaleFundingUSD / 1e9).toFixed(2)}B`
+              + ` cash ${(bs.cashReservesUSD / 1e9).toFixed(2)}B cbloan ${((bs.centralBankLoanUSD ?? 0) / 1e9).toFixed(2)}B`
               + ` desk ${(deskUSD / 1e9).toFixed(2)}B`
               + ` oas ${(c.oasSpreadBps ?? 0).toFixed(0)}bps rating ${c.creditRating}`);
           });
@@ -2453,7 +2391,6 @@ function runHarness() {
     checkLaborMarketIdentity(state, w);
     checkCentralBankIdentity(state, w);
     violations.push(...checkHoldingsLedgerConservation(state, w));
-    violations.push(...checkBoundaryFlows(state, w));
     checkBeneficiaryClaimsHaveHolders(state, w);
     checkSettlementClosed(state, w);
     checkGuards(state, w);
@@ -2480,7 +2417,7 @@ function runHarness() {
         // books (stages/settlement.ts), so the line has real reserves behind it and excluding it
         // would leave the ASSET unmatched — the mirror of the error this comment used to record.
         // HH4d: wholesale funding is a real liability line split out of the deposit label.
-        bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + ((bs as any).institutionalDepositsUSD ?? 0) + ((bs as any).unmodeledDepositsUSD ?? 0) + ((bs as any).smeDepositsUSD ?? 0) + (bs.wholesaleFundingUSD ?? 0) + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
+        bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + ((bs as any).institutionalDepositsUSD ?? 0) + ((bs as any).clientMarginUSD ?? 0) + ((bs as any).smeDepositsUSD ?? 0) + ((bs as any).centralBankLoanUSD ?? 0) + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
         - bs.businessLoanBookUSD - bs.consumerLoanBookUSD - sovUSD - bs.cashReservesUSD
         - ((bs as any).repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0)
         // CAL: a sovereign coupon earned and not yet paid is this bank's asset against the
@@ -2500,8 +2437,8 @@ function runHarness() {
         const gb = (v: number | undefined) => ((v ?? 0) / 1e9).toFixed(1);
         console.log(`  [bank-identity] w${w} ${c.ticker} resid ${(residualUSD / 1e9).toFixed(2)}B: hhDep ${gb(bs.depositsUSD)}B`
           + ` corp ${gb(bs.corporateDepositsUSD)}B inst ${gb(bsx.institutionalDepositsUSD)}B`
-          + ` sme ${gb(bsx.smeDepositsUSD)}B unmod ${gb(bsx.unmodeledDepositsUSD)}B`
-          + ` whol ${gb(bs.wholesaleFundingUSD)}B eq ${gb(bs.bankEquityUSD)}B`
+          + ` sme ${gb(bsx.smeDepositsUSD)}B margin ${gb(bsx.clientMarginUSD)}B`
+          + ` cbloan ${gb(bsx.centralBankLoanUSD)}B eq ${gb(bs.bankEquityUSD)}B`
           + ` srf ${gb(bs.srfBorrowingUSD)}B repoB ${gb(bsx.repoBorrowedUSD)}B`
           + ` || bizL ${gb(bs.businessLoanBookUSD)}B consL ${gb(bs.consumerLoanBookUSD)}B`
           + ` sov ${gb(sovUSD)}B cash ${gb(bs.cashReservesUSD)}B`

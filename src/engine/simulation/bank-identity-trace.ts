@@ -33,8 +33,8 @@ export function bankIdentityTraceEnabled(): boolean {
 
 /** Liability/equity fields carry +1 into the residual, asset fields −1. */
 const FIELD_SIGNS: Record<string, 1 | -1> = {
-  depositsUSD: 1, corporateDepositsUSD: 1, institutionalDepositsUSD: 1, unmodeledDepositsUSD: 1,
-  smeDepositsUSD: 1, wholesaleFundingUSD: 1, bankEquityUSD: 1, srfBorrowingUSD: 1, repoBorrowedUSD: 1,
+  depositsUSD: 1, corporateDepositsUSD: 1, institutionalDepositsUSD: 1, clientMarginUSD: 1,
+  smeDepositsUSD: 1, centralBankLoanUSD: 1, bankEquityUSD: 1, srfBorrowingUSD: 1, repoBorrowedUSD: 1,
   businessLoanBookUSD: -1, consumerLoanBookUSD: -1, sovHoldingsUSD: -1, cashReservesUSD: -1,
   repoLentUSD: -1, onRrpLendingUSD: -1, sovereignAccruedCouponUSD: -1, deskInventoryAbsUSD: -1,
   primeBrokerageLoansUSD: -1,
@@ -44,8 +44,8 @@ export function fieldsOf(bs: BankingSector): Record<string, number> {
   return {
     depositsUSD: bs.depositsUSD, corporateDepositsUSD: bs.corporateDepositsUSD ?? 0,
     institutionalDepositsUSD: bs.institutionalDepositsUSD ?? 0,
-    unmodeledDepositsUSD: bs.unmodeledDepositsUSD ?? 0, smeDepositsUSD: bs.smeDepositsUSD ?? 0,
-    wholesaleFundingUSD: bs.wholesaleFundingUSD ?? 0, bankEquityUSD: bs.bankEquityUSD,
+    clientMarginUSD: bs.clientMarginUSD ?? 0, smeDepositsUSD: bs.smeDepositsUSD ?? 0,
+    centralBankLoanUSD: bs.centralBankLoanUSD ?? 0, bankEquityUSD: bs.bankEquityUSD,
     srfBorrowingUSD: bs.srfBorrowingUSD ?? 0, repoBorrowedUSD: bs.repoBorrowedUSD ?? 0,
     businessLoanBookUSD: bs.businessLoanBookUSD, consumerLoanBookUSD: bs.consumerLoanBookUSD,
     sovHoldingsUSD: Object.values(bs.sovereignBondHoldingsByTenor || {})
@@ -64,7 +64,7 @@ export function residualOf(bs: BankingSector, signedDesk = false): number {
     .reduce((a: number, v) => a + (Number(v) || 0), 0);
   return (
     bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + (bs.institutionalDepositsUSD ?? 0)
-    + (bs.unmodeledDepositsUSD ?? 0) + (bs.smeDepositsUSD ?? 0) + (bs.wholesaleFundingUSD ?? 0)
+    + (bs.clientMarginUSD ?? 0) + (bs.smeDepositsUSD ?? 0) + (bs.centralBankLoanUSD ?? 0)
     + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + (bs.repoBorrowedUSD ?? 0)
     - bs.businessLoanBookUSD - bs.consumerLoanBookUSD - sovUSD - bs.cashReservesUSD
     - (bs.repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0)

@@ -10,17 +10,18 @@ import { BankingSector } from '../../domain/banking';
 import { BankResolutionPlan, mergeDesks, mergeHouseholdPool } from '../../domain/bank-resolution';
 
 /**
- * Every non-cash line moves and the target's copy is zeroed. Wholesale money moves by the amount
- * the caller says survives; equity is the caller's arithmetic (it depends on both sides).
+ * Every non-cash line moves and the target's copy is zeroed. The central bank's loan moves by
+ * the amount the caller says is assumed; equity is the caller's arithmetic (it depends on both
+ * sides).
  */
-export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, wholesaleAssumedUSD: number): void {
+export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, centralBankLoanAssumedUSD: number): void {
   // Deposits, every class.
   acquirer.depositsUSD += target.depositsUSD; target.depositsUSD = 0;
   acquirer.corporateDepositsUSD = (acquirer.corporateDepositsUSD ?? 0) + (target.corporateDepositsUSD ?? 0); target.corporateDepositsUSD = 0;
   acquirer.institutionalDepositsUSD = (acquirer.institutionalDepositsUSD ?? 0) + (target.institutionalDepositsUSD ?? 0); target.institutionalDepositsUSD = 0;
-  acquirer.unmodeledDepositsUSD = (acquirer.unmodeledDepositsUSD ?? 0) + (target.unmodeledDepositsUSD ?? 0); target.unmodeledDepositsUSD = 0;
   acquirer.smeDepositsUSD = (acquirer.smeDepositsUSD ?? 0) + (target.smeDepositsUSD ?? 0); target.smeDepositsUSD = 0;
-  acquirer.wholesaleFundingUSD = (acquirer.wholesaleFundingUSD ?? 0) + wholesaleAssumedUSD; target.wholesaleFundingUSD = 0;
+  acquirer.centralBankLoanUSD = (acquirer.centralBankLoanUSD ?? 0) + centralBankLoanAssumedUSD; target.centralBankLoanUSD = 0;
+  acquirer.clientMarginUSD = (acquirer.clientMarginUSD ?? 0) + (target.clientMarginUSD ?? 0); target.clientMarginUSD = 0;
   // Secured lines and the paper behind them.
   acquirer.srfBorrowingUSD = (acquirer.srfBorrowingUSD ?? 0) + (target.srfBorrowingUSD ?? 0); target.srfBorrowingUSD = 0;
   acquirer.repoBorrowedUSD = (acquirer.repoBorrowedUSD ?? 0) + (target.repoBorrowedUSD ?? 0); target.repoBorrowedUSD = 0;
@@ -65,7 +66,7 @@ export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, 
 
 /** A merger: everything moves, cash and equity included, at the sheet level. */
 export function mergeBankSheets(acquirer: BankingSector, target: BankingSector): void {
-  absorbBankSheet(acquirer, target, target.wholesaleFundingUSD ?? 0);
+  absorbBankSheet(acquirer, target, target.centralBankLoanUSD ?? 0);
   acquirer.cashReservesUSD += target.cashReservesUSD; target.cashReservesUSD = 0;
   acquirer.bankEquityUSD += target.bankEquityUSD; target.bankEquityUSD = 0;
 }
@@ -83,5 +84,5 @@ export function assumeBankBooks(acquirer: BankingSector, target: BankingSector, 
   absorbBankSheet(acquirer, target, plan.wholesaleAssumedUSD);
   acquirer.bankEquityUSD += plan.netBookUSD + plan.wholesaleHaircutUSD - cashUSD;
   target.bankEquityUSD = cashUSD;
-  target.wholesaleFundingUSD = 0;
+  target.centralBankLoanUSD = 0;
 }

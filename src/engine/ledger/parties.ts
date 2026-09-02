@@ -37,9 +37,6 @@ export const PARTY_REGISTRY: Record<PartyRef['kind'], PartyModule> = {
   CENTRAL_BANK:     { holdsDeposit: false, depositLine: 'none',          isBankingSystem: true,  isModelled: true },
   GOVERNMENT:       { holdsDeposit: false, depositLine: 'none',          isBankingSystem: false, isModelled: true },
   CLEARING_HOUSE:   { holdsDeposit: false, depositLine: 'none',          isBankingSystem: false, isModelled: true },
-  /** The declared boundary: a counterparty this model does not have yet. Watched down, never
-   *  netted away — and now it is a ROW rather than a special case buried in a switch. */
-  UNMODELED:        { holdsDeposit: false, depositLine: 'none',          isBankingSystem: false, isModelled: false },
 };
 
 export const partyModule = (p: PartyRef): PartyModule => PARTY_REGISTRY[p.kind];

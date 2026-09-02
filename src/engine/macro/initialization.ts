@@ -613,6 +613,7 @@ function buildRegion(regionId: RegionId): Region {
       treasuryAccountUSD: Math.round((governmentSpendingWeeklyUSD * TGA_TARGET_WEEKS_OF_SPENDING)),
       // §5-CLOSE: a stored liability at zero — never a residual.
       currencyInCirculationUSD: 0,
+      loansToBanksUSD: 0,
       lastRemittanceUSD: 0,
       // PUB2b: no order outstanding at birth — the first week's redemptions set the first one.
       plannedPurchasesByTenor: {},

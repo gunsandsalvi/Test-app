@@ -720,7 +720,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         consumerLoanBookUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.consumerLoanBookUSD, 0),
         bankEquityUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0),
         depositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
-        wholesaleFundingUSD: regionBanksForLending.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0),
       };
 
       // PUB2 (§7.4): close the central bank's balance sheet at birth, now that the banks whose
@@ -785,7 +784,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         ...reg.bankingSector,
         corporateDepositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0),
         depositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
-        wholesaleFundingUSD: regionBanksForLending.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0),
       };
     }
 
@@ -1279,7 +1277,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       ...reg.bankingSector,
       institutionalDepositsUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0),
       depositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
-      wholesaleFundingUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0),
     };
   });
 
@@ -1577,7 +1574,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       corporateDepositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0),
       institutionalDepositsUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0),
       depositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
-      wholesaleFundingUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0),
       cashReservesUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0),
     };
   });

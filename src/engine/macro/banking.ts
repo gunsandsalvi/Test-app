@@ -128,7 +128,7 @@ export const LIQUIDITY_COVERAGE_RATIO = 1.0;
 /** Funding that runs in a stress month, weighted by how fast each kind of it runs. */
 export function stressedOutflowUSD(sheet: BankingSector): number {
   const wholesaleUSD = (sheet.corporateDepositsUSD ?? 0) + (sheet.institutionalDepositsUSD ?? 0)
-    + (sheet.smeDepositsUSD ?? 0) + (sheet.unmodeledDepositsUSD ?? 0) + (sheet.wholesaleFundingUSD ?? 0);
+    + (sheet.smeDepositsUSD ?? 0) + (sheet.clientMarginUSD ?? 0);
   return Math.max(0, sheet.depositsUSD) * RETAIL_DEPOSIT_RUNOFF_RATE
     + Math.max(0, wholesaleUSD) * WHOLESALE_FUNDING_RUNOFF_RATE;
 }
@@ -332,12 +332,11 @@ export function evolveBankingSector(
   depositsUSD += householdDepositFlowUSD;
   cashUSD += householdDepositFlowUSD;
 
-  // HH4d: wholesale funding pays its way — a real spread over policy on a stock split out at
-  // seed (issuance/retirement awaits a bank-liability project).
-  const wholesaleUSD = prevBanking.wholesaleFundingUSD ?? 0;
+  // §5-CLOSE: the central bank's loan (the lender of last resort at the funding close) pays its
+  // interest as a PAYMENT to the central bank, posted by 02b; it is counted here only as the
+  // cost it is in the margin statistic. Nothing below moves cash for it.
+  const wholesaleUSD = prevBanking.centralBankLoanUSD ?? 0;
   const wholesaleInterestUSD = (wholesaleUSD * (policyRate + Math.max(0, ownWholesaleSpreadBps) / 10000)) / 52;
-  cashUSD -= wholesaleInterestUSD;
-  equityUSD -= wholesaleInterestUSD;
 
   // SETL2: corporate balances ARE funding now — company payments settle through bank books, so
   // the line has real reserves behind it (settlement.ts moves them, the seed opens with them).
@@ -533,54 +532,15 @@ export function evolveBankingSector(
     businessLoans: prevBanking.businessLoans || [],
     // HH3: the household pools are owned by the household lending pass; carried untouched.
     householdLoans: prevBanking.householdLoans || [],
-    // Wholesale money is the RESIDUAL, re-derived every week from the identity — the one
-    // funding line a treasurer actually chooses, so it is what moves when the others do. It used
-    // to be frozen at its seed value forever while deposits grew and the asset book shrank, so
-    // the bank went on paying policy-plus-spread on funding it no longer needed (measured: ~200B
-    // of phantom wholesale by week 55, on an 826B balance sheet — a large part of §6's negative
-    // margin). Same identity as the seed's, applied weekly (bank-lending.ts owns it).
-    // Every REAL balance funds the bank; wholesale money is only what is still uncovered. The
-    // institutional and boundary lines were missing here, so a bank paid policy-plus-spread on
-    // funding its own customers had already provided (measured: NIM breaches 33 → 45 the moment
-    // institutional balances arrived — the deposits were on the sheet and the funding line had
-    // not noticed).
-    wholesaleFundingUSD: Math.round((
-      businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD
-      // CAL: the accrued coupon is an asset like any other, and leaving it out moved the whole
-      // receivable into wholesale funding the week after it was first posted.
-      + (prevBanking.sovereignAccruedCouponUSD ?? 0)
-      // G3a: the desks' inventory is an asset this bank owns and finances. REPO1/REPO3: secured
-      // funding that has NOT matured is still a liability, and a term book means there is some
-      // every week — leaving both out of the residual moved the whole of each into wholesale,
-      // and the per-bank identity broke by exactly the surviving repo (measured: 9.70B on one
-      // USA bank, constant from the week its first term contract was struck).
-      + dealerDeskGrossUSD(prevBanking.dealerDeskInventory)
-      // CASH: the maturing legs have NOT moved cash at this point in the week — the repo session
-      // posts them and the settlement pass executes them. So the residual is struck against the
-      // positions as they still stand; netting the maturity out here while the cash was still on
-      // the sheet moved it into wholesale funding permanently, and the identity broke by exactly
-      // the week's maturities once the cash legs became instructions.
-      //
-      // The INTEREST is the exception, and it is the one that survived the first fix: it has
-      // already been taken out of equity above, and its cash leaves at settlement, so the residual
-      // has to see the balance the week will END on. Principal nets out (asset and liability move
-      // together); interest does not, and left in it printed a one-week 15.7M identity break on
-      // whichever bank's repo book matured that week.
-      + (prevBanking.repoLentUSD ?? 0)
-      - maturingRepoBorrowInterestUSD + maturingRepoLendInterestUSD
-      + (prevBanking.primeBrokerageLoansUSD ?? 0)
-      - depositsUSD - corporateDepositsUSD
-      - (prevBanking.institutionalDepositsUSD ?? 0) - (prevBanking.unmodeledDepositsUSD ?? 0)
-      - (prevBanking.smeDepositsUSD ?? 0)
-      - ((prevBanking.repoBorrowedUSD ?? 0) + (prevBanking.srfBorrowingUSD ?? 0))
-      - equityUSD
-    )),
+    // §5-CLOSE: no funding residual is written here. The banks are funded by depositors, the
+    // repo book and the central bank's loan — every one a named creditor.
     corporateDepositsUSD,
     // This return rebuilds the sheet from a FIXED FIELD LIST, so anything not named here is
     // silently dropped — these two vanished every week until the identity caught it (804
     // violations). Same trap stage 08 documents; carried explicitly.
     institutionalDepositsUSD: prevBanking.institutionalDepositsUSD ?? 0,
-    unmodeledDepositsUSD: prevBanking.unmodeledDepositsUSD ?? 0,
+    centralBankLoanUSD: prevBanking.centralBankLoanUSD ?? 0,
+    clientMarginUSD: prevBanking.clientMarginUSD ?? 0,
     smeDepositsUSD: prevBanking.smeDepositsUSD ?? 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.

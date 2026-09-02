@@ -274,15 +274,11 @@ export interface SettlementReport {
   reserveDeltaByBank: Map<string, number>;
   /** Treasury account movement per region. */
   tgaDeltaByRegion: Map<string, number>;
-  /** What flowed to (positive) or from (negative) counterparties that do not exist yet. */
-  unmodeledDeltaByRegion: Map<string, number>;
   /** Per-bank movement of the corporate deposit line — the liability leg that moves with the
    *  reserves below, so asset and liability never drift apart. */
   corporateDepositDeltaByBank: Map<string, number>;
   /** Per-bank movement of the institutional deposit line. */
   institutionalDepositDeltaByBank: Map<string, number>;
-  /** Per-bank movement of the named boundary's balance. */
-  unmodeledDepositDeltaByBank: Map<string, number>;
   /** SEG1 — per-bank movement of the private-sector segment pools' deposit line. */
   smeDepositDeltaByBank: Map<string, number>;
   /** HH — every household flow this week, per region, keyed by the payment's own reason and
@@ -299,10 +295,6 @@ export interface SettlementReport {
   bankEquityDeltaByBank: Map<string, number>;
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
   creditCreatedByBank: Map<string, number>;
-  /** The boundary, decomposed by the flow that hit it. §6 wants this line watched DOWN; you
-   *  cannot watch down a number you cannot attribute, and each entry names a flow still missing
-   *  its counterparty. Signed from the modelled economy's side: negative = paid out to nobody. */
-  unmodeledByReason: Map<string, number>;
   /** Household flows handed to HH4d's T+1 channel — settled by next week's bank pass, not here. */
   householdDeferredUSD: number;
   /** SETL6 — what the cleared books' central counterparty was left holding. Must be zero. */
@@ -359,16 +351,13 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
     depositDeltaByBank: mergeMap(a.depositDeltaByBank, b.depositDeltaByBank),
     reserveDeltaByBank: mergeMap(a.reserveDeltaByBank, b.reserveDeltaByBank),
     tgaDeltaByRegion: mergeMap(a.tgaDeltaByRegion, b.tgaDeltaByRegion),
-    unmodeledDeltaByRegion: mergeMap(a.unmodeledDeltaByRegion, b.unmodeledDeltaByRegion),
     corporateDepositDeltaByBank: mergeMap(a.corporateDepositDeltaByBank, b.corporateDepositDeltaByBank),
     institutionalDepositDeltaByBank: mergeMap(a.institutionalDepositDeltaByBank, b.institutionalDepositDeltaByBank),
-    unmodeledDepositDeltaByBank: mergeMap(a.unmodeledDepositDeltaByBank, b.unmodeledDepositDeltaByBank),
     smeDepositDeltaByBank: mergeMap(a.smeDepositDeltaByBank, b.smeDepositDeltaByBank),
     smePoolFlowsByPool: mergeNested(a.smePoolFlowsByPool, b.smePoolFlowsByPool),
     householdFlowsByRegion: mergeNested(a.householdFlowsByRegion, b.householdFlowsByRegion),
     creditCreatedByBank: mergeMap(a.creditCreatedByBank, b.creditCreatedByBank),
     bankEquityDeltaByBank: mergeMap(a.bankEquityDeltaByBank, b.bankEquityDeltaByBank),
-    unmodeledByReason: mergeMap(a.unmodeledByReason, b.unmodeledByReason),
     householdDeferredUSD: a.householdDeferredUSD + b.householdDeferredUSD,
     clearingHouseResidualUSD: a.clearingHouseResidualUSD + b.clearingHouseResidualUSD,
     centralBankIssuanceUSD: a.centralBankIssuanceUSD + b.centralBankIssuanceUSD,
@@ -387,16 +376,13 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     depositDeltaByBank: new Map(),
     reserveDeltaByBank: new Map(),
     tgaDeltaByRegion: new Map(),
-    unmodeledDeltaByRegion: new Map(),
     corporateDepositDeltaByBank: new Map(),
     institutionalDepositDeltaByBank: new Map(),
-    unmodeledDepositDeltaByBank: new Map(),
     smeDepositDeltaByBank: new Map(),
     smePoolFlowsByPool: new Map(),
     householdFlowsByRegion: new Map(),
     creditCreatedByBank: new Map(),
     bankEquityDeltaByBank: new Map(),
-    unmodeledByReason: new Map(),
     householdDeferredUSD: 0,
     clearingHouseResidualUSD: 0,
     centralBankIssuanceUSD: 0,
@@ -446,13 +432,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     // whose payer or payee is one of the kinds that keeps a per-reason ledger.
     const payerKind = payerRef.kind;
     const payeeKind = payeeRef.kind;
-    if (payerKind === 'UNMODELED' || payeeKind === 'UNMODELED'
-      || payerKind === 'SEGMENT' || payeeKind === 'SEGMENT'
+    if (payerKind === 'SEGMENT' || payeeKind === 'SEGMENT'
       || payerKind === 'HOUSEHOLD' || payeeKind === 'HOUSEHOLD') {
       const reason = reasonText(journal.reasonId[n]);
-      // Attribute the boundary as it is created, by the flow responsible.
-      if (payerRef.kind === 'UNMODELED') addTo(report.unmodeledByReason, reason, amountUSD);
-      if (payeeRef.kind === 'UNMODELED') addTo(report.unmodeledByReason, reason, -amountUSD);
       // SEG-D: the pools' income statement, built from the payments themselves.
       if (payerRef.kind === 'SEGMENT') addToPool(report, payerRef.region, payerRef.industry, reason, -amountUSD);
       if (payeeRef.kind === 'SEGMENT') addToPool(report, payeeRef.region, payeeRef.industry, reason, amountUSD);
@@ -576,26 +558,6 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         addTo(report.tgaDeltaByRegion, party.region, deltaUSD);
         return;
       }
-      case 'UNMODELED': {
-        // The boundary banks too. A counterparty this model has not built yet still holds its
-        // money somewhere, so its balance sits with the region's banks in proportion to their
-        // size — the line is a visible deposit stock to watch down (§6), not a hole in the
-        // central bank's books.
-        addTo(report.unmodeledDeltaByRegion, party.region, deltaUSD);
-        const banks = ctx.updatedCompanies.filter(
-          (c) => c.region === party.region && c.isBankEntity && c.bankBalanceSheet && !c.isDefaulted
-        );
-        const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
-        if (banks.length === 0 || !(totalShare > 0)) { report.unresolvedUSD += deltaUSD; if (process.env.UNRESOLVED_TRACE === '1') {
-            console.log(`  [unresolved] UNMODELED ${party.region} net ${(deltaUSD / 1e6).toFixed(2)}M found no account (no live bank)`);
-          } return; }
-        banks.forEach((b) => {
-          const shareUSD = deltaUSD * ((b.bankMarketShare ?? 0) / totalShare);
-          addTo(report.depositDeltaByBank, b.ticker, shareUSD);
-          addTo(report.unmodeledDepositDeltaByBank, b.ticker, shareUSD);
-        });
-        return;
-      }
       case 'CENTRAL_BANK':
         // The central bank settles by issuing or extinguishing its own liability: it pays with
         // reserves it creates, so nothing is debited here and the reserves simply appear at the
@@ -642,8 +604,6 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         + (report.corporateDepositDeltaByBank.get(ticker) ?? 0),
       institutionalDepositsUSD: (bank.bankBalanceSheet.institutionalDepositsUSD ?? 0)
         + (report.institutionalDepositDeltaByBank.get(ticker) ?? 0),
-      unmodeledDepositsUSD: (bank.bankBalanceSheet.unmodeledDepositsUSD ?? 0)
-        + (report.unmodeledDepositDeltaByBank.get(ticker) ?? 0),
       smeDepositsUSD: (bank.bankBalanceSheet.smeDepositsUSD ?? 0)
         + (report.smeDepositDeltaByBank.get(ticker) ?? 0),
     };

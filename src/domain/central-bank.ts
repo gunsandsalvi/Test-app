@@ -23,6 +23,9 @@ export interface CentralBank {
   region: RegionId;
   /** Assets: the real sovereign book, by tenor bucket. Clears in 07c like any other holder. */
   sovereignHoldingsByTenor: Record<string, number>;
+  /** §5-CLOSE — Asset: the unsecured loans to banks drawn at the funding close (the lender of
+   *  last resort). Equals the sum of the banks' `centralBankLoanUSD`. */
+  loansToBanksUSD: number;
   /** Liability: the government's account. Drains reserves when it fills. */
   treasuryAccountUSD: number;
   /** Liability: notes in circulation — the slow, non-operational part of the balance sheet. */
@@ -79,7 +82,7 @@ export function centralBankFxReservesUSD(cb: CentralBank): number {
  * peg ever breaks.
  */
 export function centralBankAssetsUSD(cb: CentralBank): number {
-  return centralBankSovereignBookUSD(cb) + centralBankFxReservesUSD(cb);
+  return centralBankSovereignBookUSD(cb) + centralBankFxReservesUSD(cb) + (cb.loansToBanksUSD ?? 0);
 }
 
 /**

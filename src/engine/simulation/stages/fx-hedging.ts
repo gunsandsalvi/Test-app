@@ -397,7 +397,7 @@ export function runFxHedgingStage(state: GameState, ctx: WeeklyStepContext): voi
     // week 1, on 11 banks, growing every week.
     const nextSheet = {
       ...sheet,
-      wholesaleFundingUSD: (sheet.wholesaleFundingUSD ?? 0) + desk.marginReceivedUSD,
+      clientMarginUSD: (sheet.clientMarginUSD ?? 0) + desk.marginReceivedUSD,
       fxDealerBook: desk.book,
     };
     // §7.250: the company IS the write; the channel copy in `companyUpdates` was dead post-08.

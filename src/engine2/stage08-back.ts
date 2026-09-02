@@ -38,6 +38,7 @@ import { REVOLVER_MARGIN_BPS } from '../engine/simulation/stages/07f-short-debt-
 import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/profiles';
 import { measureBeta, regionIndexOf } from '../engine/macro/indices';
 import { pay, payByIds, internReason, PartyRef } from '../engine/simulation/stages/settlement';
+import { defect } from '../domain/defect';
 import { partyId } from '../engine/ledger/party';
 import { planCapitalProgramme, capacityRetirement } from '../domain/company-week/capital-programme';
 import { learningUpdate, seedCumulativeUnits } from '../domain/company-week/learning';
@@ -369,7 +370,6 @@ function makeCashPoster(ticker: string, region: Company['region'], cashUSD: numb
     // SCALE §7.303 — the walk's own party ids, interned once per company: every settled leg
     // used to re-probe two string maps (partyId x2) per post, ~40k+ legs a week.
     const selfPartyId = partyId({ kind: 'COMPANY', ticker });
-    const unmodeledPartyId = partyId({ kind: 'UNMODELED', region });
     const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true) => {
       if (!isFinite(amountUSD) || amountUSD === 0) return;
       // SCALE §7.303 — the drill-down rows are display retention with NO consumer anywhere in
@@ -389,7 +389,8 @@ function makeCashPoster(ticker: string, region: Company['region'], cashUSD: numb
       // name — so the payment instructions come from the settlement of that register, and posting
       // one here as well would move the same money twice.
       if (!settle) return;
-      const otherId = counterparty ? partyId(counterparty) : unmodeledPartyId;
+      // §5-CLOSE: a settled leg with no counterparty is a defect at the site that posted it.
+      const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted '${label}' for ${ticker} (${(amountUSD / 1e6).toFixed(3)}M) with no counterparty`);
       const reasonId = internReason(label);
       if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, reasonId);
       else payByIds(ctx, selfPartyId, otherId, -amountUSD, reasonId);
@@ -599,10 +600,10 @@ function runCashWalk(args: {
           paidUSD += amountUSD;
           post('inventory carrying cost', -amountUSD, { kind: 'COMPANY', ticker: holderTicker });
         });
-        // Only a region with no distribution firm at all still reaches the boundary here, and
-        // that is a fact about the region rather than a gap in the model.
-        const unheldUSD = carryingCostUSD - paidUSD;
-        if (unheldUSD > 0.01) post('inventory carrying cost', -unheldUSD);
+        // §5-CLOSE: stock nobody else warehouses is warehoused by the firm itself, at its own
+        // cost already inside its operating expense — no payment leaves, and nothing is paid to
+        // nobody. (The residual is a distributor's own share and rounding.)
+        void paidUSD;
       }
       // SETL4: reported here, paid itemised below — the house bank for its facilities, the
       // register for market paper. One aggregate line on the cash walk, three real payees.

@@ -119,7 +119,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     put(`bank:${c.id}:nim`, s.netInterestMarginPct);
     put(`bank:${c.id}:deposits`, s.depositsUSD + (s.corporateDepositsUSD ?? 0) + (s.institutionalDepositsUSD ?? 0) + (s.smeDepositsUSD ?? 0));
     put(`bank:${c.id}:reserves`, s.cashReservesUSD);
-    put(`bank:${c.id}:wholesale`, s.wholesaleFundingUSD);
+    put(`bank:${c.id}:central bank loan`, s.centralBankLoanUSD ?? 0);
     put(`bank:${c.id}:loans`, s.businessLoanBookUSD + s.consumerLoanBookUSD);
   });
   const boundByBook = new Map<string, number>();

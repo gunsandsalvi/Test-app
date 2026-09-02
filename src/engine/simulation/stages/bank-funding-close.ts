@@ -16,14 +16,13 @@
 
 import { GameState } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
-import { raiseWholesaleUSD } from './bank-lending';
+import { raiseCentralBankLoanUSD } from './bank-lending';
 import { bankCashBufferRatioOf } from '../../macro/banking';
 import { WeeklyStepContext } from './context';
 import { pay, runSettlementStage } from './settlement';
 
-/** The boundary lender pays out of its deposits at the region's banks (settlement spreads the
- *  debit by market share), so one round leaves every bank a little shorter, the borrower
- *  included; the rounds converge geometrically and eight is far past the dollar. */
+/** A round can leave another bank short (the borrower's settlement drains it); the rounds
+ *  converge geometrically and eight is far past the dollar. */
 const MAX_ROUNDS = 8;
 
 export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -33,14 +32,18 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
     ctx.updatedCompanies.forEach((bank) => {
       if (!bank.isBankEntity || !bank.bankBalanceSheet || !isActiveCompany(bank)) return;
       const sheet = bank.bankBalanceSheet;
-      const raisedUSD = raiseWholesaleUSD(sheet, sheet.cashReservesUSD, bankCashBufferRatioOf(bank));
+      const raisedUSD = raiseCentralBankLoanUSD(sheet, sheet.cashReservesUSD, bankCashBufferRatioOf(bank));
       if (raisedUSD <= 0) return;
       raisedAny = true;
+      // §5-CLOSE: the lender of last resort. The central bank pays with reserves it creates and
+      // books the loan as its asset, so the money it made has a purchase behind it.
+      const cb = ctx.updatedRegions[bank.region]?.centralBankSheet;
+      if (cb) cb.loansToBanksUSD = (cb.loansToBanksUSD ?? 0) + raisedUSD;
       pay(ctx, {
-        payer: { kind: 'UNMODELED', region: bank.region },
+        payer: { kind: 'CENTRAL_BANK', region: bank.region },
         payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker },
         amountUSD: raisedUSD,
-        reason: 'wholesale funding raised',
+        reason: 'central bank loan drawn',
       });
       if (process.env.FUNDING_TRACE === '1') {
         console.log(`  [funding-close] w${ctx.nextWeek} r${round} ${bank.region}:${bank.ticker} raised ${(raisedUSD / 1e6).toFixed(0)}M (cash was ${(sheet.cashReservesUSD / 1e6).toFixed(0)}M)`);

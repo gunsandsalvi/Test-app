@@ -682,7 +682,6 @@ export function generateInitialCompanies(
             repoEncumberedCollateralUSD: 0,
             businessLoans: [],
             householdLoans: [],
-            wholesaleFundingUSD: 0,
             corporateDepositsUSD: 0,
           };
         })() : undefined,

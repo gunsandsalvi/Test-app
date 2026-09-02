@@ -49,10 +49,10 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
   let body: React.ReactNode;
   if (active === 'bank sheet' && bank) {
     const sov = Object.values(bank.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-    const deposits = bank.depositsUSD + (bank.corporateDepositsUSD ?? 0) + (bank.institutionalDepositsUSD ?? 0) + (bank.smeDepositsUSD ?? 0) + (bank.unmodeledDepositsUSD ?? 0);
+    const deposits = bank.depositsUSD + (bank.corporateDepositsUSD ?? 0) + (bank.institutionalDepositsUSD ?? 0) + (bank.smeDepositsUSD ?? 0);
     const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);
     const assets = bank.businessLoanBookUSD + bank.consumerLoanBookUSD + sov + bank.cashReservesUSD + (bank.repoLentUSD ?? 0) + (bank.sovereignAccruedCouponUSD ?? 0) + desks + (bank.primeBrokerageLoansUSD ?? 0);
-    const liabilities = deposits + (bank.wholesaleFundingUSD ?? 0) + (bank.repoBorrowedUSD ?? 0) + (bank.srfBorrowingUSD ?? 0);
+    const liabilities = deposits + (bank.clientMarginUSD ?? 0) + (bank.centralBankLoanUSD ?? 0) + (bank.repoBorrowedUSD ?? 0) + (bank.srfBorrowingUSD ?? 0);
     body = (<>
       <Statement units="USD millions · the live sheet" asOf={formatDate(world.state.currentWeek)} lines={[
         { label: 'Business loans', usd: bank.businessLoanBookUSD },
@@ -68,8 +68,8 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
         { label: 'Corporate deposits', usd: bank.corporateDepositsUSD ?? 0 },
         { label: 'Institutional deposits', usd: bank.institutionalDepositsUSD ?? 0 },
         { label: 'Small-business deposits', usd: bank.smeDepositsUSD ?? 0 },
-        { label: 'Unmodeled balances', usd: bank.unmodeledDepositsUSD ?? 0 },
-        { label: 'Wholesale funding', usd: bank.wholesaleFundingUSD ?? 0 },
+        { label: 'Client margin held', usd: bank.clientMarginUSD ?? 0 },
+        { label: 'Central bank loan', usd: bank.centralBankLoanUSD ?? 0 },
         { label: 'Repo borrowed · facility', usd: (bank.repoBorrowedUSD ?? 0) + (bank.srfBorrowingUSD ?? 0) },
         { label: 'Total liabilities', usd: liabilities, total: true },
         { label: 'Equity', usd: bank.bankEquityUSD, total: true },
@@ -237,7 +237,7 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
       { label: 'Household deposits', usd: bs?.depositsUSD, total: true },
       { label: 'Corporate deposits', usd: bs?.corporateDepositsUSD },
       { label: 'Institutional deposits', usd: bs?.institutionalDepositsUSD },
-      { label: 'Wholesale funding', usd: bs?.wholesaleFundingUSD },
+      { label: 'Central bank loans', usd: bs?.centralBankLoanUSD },
       { label: 'Equity', usd: bs?.bankEquityUSD, total: true },
       { label: 'Capital ratio', text: pctLevel(bs?.bankCapitalRatio, 2) },
       { label: 'Net interest margin', text: pctLevel(bs?.netInterestMarginPct, 2) },

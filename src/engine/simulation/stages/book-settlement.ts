@@ -35,6 +35,7 @@
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pay, PartyRef } from './settlement';
+import { defect } from '../../../domain/defect';
 import { ClearingResult } from './financial-clearing-engine';
 
 /** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
@@ -66,32 +67,14 @@ export function settleClearedBook(
 
   netCashByParticipantId.forEach((deltaUSD, participantId) => {
     if (!deltaUSD) return;
-    const named = partyOf(participantId);
-    const party: PartyRef = named ?? { kind: 'UNMODELED', region: regionId };
-    const legReason = named ? reason : `${book} clearing (unrouted participant)`;
+    const party = partyOf(participantId) ?? defect(`${book} clearing: participant '${participantId}' names no party this model can pay`);
+    const legReason = reason;
     if (deltaUSD > 0) pay(ctx, { payer: ccp, payee: party, amountUSD: deltaUSD, reason: legReason });
     else pay(ctx, { payer: party, payee: ccp, amountUSD: -deltaUSD, reason: legReason });
   });
 
-  // The desks' fee income: cash and equity together, because nothing else arrived against it.
-  // Shares are normalised — the clients paid the whole fee, so the whole fee reaches the desks
-  // that earned it however their market shares happen to sum.
-  const totalShare = feeDesks.reduce((a, d) => a + d.share, 0);
-  if (dealer.feeUSD > 0 && totalShare > 0) {
-    feeDesks.forEach((desk) => {
-      pay(ctx, {
-        payer: ccp,
-        payee: { kind: 'BANK', ticker: desk.ticker },
-        amountUSD: dealer.feeUSD * (desk.share / totalShare),
-        reason: `${book} dealer fee`,
-      });
-    });
-  }
-
   // What is left after the fees is what the week's PRIMARY placed, and it belongs to the issuers
-  // who brought the paper. Paid to each by name, pro rata to what its own deal placed — the
-  // `${book} primary distribution` line that used to carry the whole of it to the boundary was
-  // one half of a pair whose other half (stage 08's proceeds line) went to the boundary too.
+  // who brought the paper. Paid to each by name, pro rata to what its own deal placed.
   const tradingUSD = dealer.netCashUSD - dealer.feeUSD;
   const takeTotalUSD = primaryTakes.reduce((a, t) => a + Math.max(0, t.amountUSD), 0);
   const primaryUSD = Math.max(0, Math.min(takeTotalUSD, Math.max(0, tradingUSD)));
@@ -102,16 +85,29 @@ export function settleClearedBook(
     });
   }
 
-  // GUARD, not a mechanism: with OWN7's two-sided rationing a stock book leaves nothing over, so
-  // this is zero. If one ever does again, it prints under its own reason rather than vanishing.
-  const boundary: PartyRef = { kind: 'UNMODELED', region: regionId };
+  // §5-CLOSE: with two-sided rationing a stock book leaves nothing over beyond the rounding of
+  // its legs. Rounding dust has an owner too — the desks that earned the fees absorb it — and a
+  // leftover past rounding is a defect here, never a line paid to nobody.
   const leftoverUSD = tradingUSD - primaryUSD;
+  const roundingToleranceUSD = Math.max(1e4, Math.abs(dealer.netCashUSD) * 1e-6);
   if (process.env.LEFTOVER_TRACE === '1' && Math.abs(leftoverUSD) > 1) {
     console.log(`  [leftover] ${regionId} ${book}: leftover ${(leftoverUSD / 1e6).toFixed(3)}M`
       + ` (dealerNet ${(dealer.netCashUSD / 1e6).toFixed(3)}M fee ${(dealer.feeUSD / 1e6).toFixed(3)}M primary ${(primaryUSD / 1e6).toFixed(3)}M)`);
   }
-  if (leftoverUSD > 0) pay(ctx, { payer: ccp, payee: boundary, amountUSD: leftoverUSD, reason: `${book} dealer inventory` });
-  else if (leftoverUSD < 0) pay(ctx, { payer: boundary, payee: ccp, amountUSD: -leftoverUSD, reason: `${book} dealer inventory` });
+  if (Math.abs(leftoverUSD) > roundingToleranceUSD) defect(`${regionId} ${book} clearing left ${(leftoverUSD / 1e6).toFixed(3)}M with no owner (dealer net ${(dealer.netCashUSD / 1e6).toFixed(3)}M, fee ${(dealer.feeUSD / 1e6).toFixed(3)}M, primary ${(primaryUSD / 1e6).toFixed(3)}M)`);
+
+  // The desks' fee income (plus the rounding dust): cash and equity together, because nothing
+  // else arrived against it. Shares are normalised — the clients paid the whole fee, so the whole
+  // fee reaches the desks that earned it however their market shares happen to sum.
+  const totalShare = feeDesks.reduce((a, d) => a + d.share, 0);
+  const deskTotalUSD = dealer.feeUSD + leftoverUSD;
+  if (deskTotalUSD !== 0 && totalShare > 0) {
+    feeDesks.forEach((desk) => {
+      const amountUSD = deskTotalUSD * (desk.share / totalShare);
+      if (amountUSD > 0) pay(ctx, { payer: ccp, payee: { kind: 'BANK', ticker: desk.ticker }, amountUSD, reason: `${book} dealer fee` });
+      else if (amountUSD < 0) pay(ctx, { payer: { kind: 'BANK', ticker: desk.ticker }, payee: ccp, amountUSD: -amountUSD, reason: `${book} dealer fee` });
+    });
+  }
 }
 
 /** The desks that share a region's clearing fees: its named banks, weighted by market share. */

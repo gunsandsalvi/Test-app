@@ -79,7 +79,7 @@ export const company = defineObject<Company>({
         taped(world, `bank:${id}:deposits`, 'deposits', 'USD', (v) => money(v)),
         taped(world, `bank:${id}:reserves`, 'reserves', 'USD', (v) => money(v)),
         taped(world, `bank:${id}:loans`, 'loans', 'USD', (v) => money(v)),
-        taped(world, `bank:${id}:wholesale`, 'wholesale', 'USD', (v) => money(v)),
+        taped(world, `bank:${id}:central bank loan`, 'central bank loan', 'USD', (v) => money(v)),
       );
     }
     return out;
@@ -144,11 +144,11 @@ export const company = defineObject<Company>({
         )}
         {sheet ? (
           <Card style={{ padding: '2px 0' }}>
-            <KV k="deposits" hint="all classes" v={money(sheet.depositsUSD + (sheet.corporateDepositsUSD ?? 0) + (sheet.institutionalDepositsUSD ?? 0) + (sheet.smeDepositsUSD ?? 0) + (sheet.unmodeledDepositsUSD ?? 0))} />
+            <KV k="deposits" hint="all classes" v={money(sheet.depositsUSD + (sheet.corporateDepositsUSD ?? 0) + (sheet.institutionalDepositsUSD ?? 0) + (sheet.smeDepositsUSD ?? 0))} />
             <KV k="loans" hint="business · household" v={`${money(sheet.businessLoanBookUSD)} · ${money(sheet.consumerLoanBookUSD)}`} />
             <KV k="sovereign book" v={money(sheet.sovereignBondHoldingsUSD)} />
             <KV k="reserves at the central bank" v={money(sheet.cashReservesUSD)} />
-            <KV k="wholesale funding" v={money(sheet.wholesaleFundingUSD)} />
+            <KV k="central bank loan" hint="lender of last resort" v={money(sheet.centralBankLoanUSD ?? 0)} />
             <KV k="at the window" v={money(sheet.srfBorrowingUSD)} />
             <KV k="market share" hint="of the region's deposits" v={pctLevel(c.bankMarketShare)} />
           </Card>

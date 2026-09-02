@@ -35,7 +35,7 @@ import { fieldsOf, residualOf } from '../bank-identity-trace';
 
 const sheetLinesUSD = (s: BankingSector): number =>
   Math.abs(s.depositsUSD) + Math.abs(s.corporateDepositsUSD ?? 0) + Math.abs(s.institutionalDepositsUSD ?? 0)
-  + Math.abs(s.unmodeledDepositsUSD ?? 0) + Math.abs(s.smeDepositsUSD ?? 0) + Math.abs(s.wholesaleFundingUSD ?? 0)
+  + Math.abs(s.clientMarginUSD ?? 0) + Math.abs(s.smeDepositsUSD ?? 0) + Math.abs(s.centralBankLoanUSD ?? 0)
   + Math.abs(s.bankEquityUSD) + Math.abs(s.srfBorrowingUSD ?? 0) + Math.abs(s.repoBorrowedUSD ?? 0)
   + Math.abs(s.businessLoanBookUSD) + Math.abs(s.consumerLoanBookUSD) + Math.abs(s.sovereignBondHoldingsUSD)
   + Math.abs(s.cashReservesUSD) + Math.abs(s.repoLentUSD ?? 0) + Math.abs(s.onRrpLendingUSD ?? 0)

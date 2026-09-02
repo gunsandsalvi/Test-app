@@ -21,6 +21,7 @@
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
 import { partyId } from '../../ledger/party';
+import { defect } from '../../../domain/defect';
 import { categoryPriceTier, householdBudgetReachMultiple, budgetDemandLadder, DEMAND_LADDER_RUNGS } from '../../../domain/industry';
 import { patienceWeeksOf, riskAversionOf, expectationFromHistory, adaptiveExpectation } from '../../../domain/preferences';
 import { TIER_SPEND_MIX } from '../../macro/household-cohorts';
@@ -179,9 +180,8 @@ function partyOfKey(key: string, regionId: RegionId, lookup: GlobalFirmLookup): 
     const [, segRegion, industry] = key.split(':');
     return { kind: 'SEGMENT', region: segRegion as RegionId, industry };
   }
-  // Seed suppliers are real sellers with no cash ledger of their own yet — named to the
-  // boundary until a project gives them one.
-  return { kind: 'UNMODELED', region: regionId };
+  // §5-CLOSE: a seller that cannot be paid is a defect at the site that made the key.
+  return defect(`seller key '${key}' (market region ${regionId}) names no party this model can pay`);
 }
 
 function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, unitPriceUSD: number) {

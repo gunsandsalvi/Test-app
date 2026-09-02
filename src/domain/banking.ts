@@ -170,7 +170,12 @@ export interface BankingSector {
    * built yet (see settlement.ts's UNMODELED). A real liability with real reserves behind it, so
    * the identity closes; its SIZE is the measure of how much of the payment graph is still
    * unnamed, and it is watched down as each flow gets a real counterparty (§6). */
-  unmodeledDepositsUSD?: number;
+  /** §5-CLOSE — the central bank's UNSECURED loan to this bank: the lender of last resort at the
+   *  funding close, drawn when the week ends short of the buffer and repaid from excess cash. A
+   *  named liability with a named creditor; wholesale money "from nobody" is gone. */
+  centralBankLoanUSD?: number;
+  /** §5-CLOSE — FX clients' margin held by this bank's desk: their money, a liability. */
+  clientMarginUSD?: number;
   /** SEG1 — the private-sector segment pools' balances here (this bank's market-share slice of
    * each pool's `cashUSD`). A real liability with reserves behind it, maintained by settlement
    * and reconciled weekly like the corporate and institutional lines. Mostly transaction
@@ -179,14 +184,6 @@ export interface BankingSector {
   /** HH — a reported weekly FLOW (not a stock): interest this bank paid its household
    *  depositors, at its own deposit rate. Part of measured household income. */
   householdDepositInterestWeeklyUSD?: number;
-  /**
-   * HH4d — the funding that is NOT household deposits: bonds, interbank and other wholesale
-   * money, split out at seed so `depositsUSD` can be the real household stock (it used to be
-   * the balancing item of the whole asset side, 790B against households' actual 372B — the §6
-   * two-representations row). A stock that pays a spread over policy and stays at its seed
-   * level until a bank-liability project makes issuance real.
-   */
-  wholesaleFundingUSD: number;
   /** PUB3d/§7.254 — last week's bill accretion on this bank's sovereign book, recorded by the
    *  accretion stage so the NIM income measure can count the return the book actually earned
    *  (non-cash: it is already in equity; never credit cash from it). */
