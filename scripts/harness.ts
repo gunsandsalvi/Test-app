@@ -143,6 +143,7 @@ import { laneKey, laneTransitWeeks } from '../src/domain/carrier';
 import { isCarrier } from '../src/engine/simulation/stages/freight-clearing';
 import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
 import { DERIVATIVE_CLASSES } from '../src/domain/derivatives/registry';
+import { auditWeek, auditSummary, AuditFinding } from './audit';
 
 interface Violation {
   week: number;
@@ -150,6 +151,8 @@ interface Violation {
 }
 
 const violations: Violation[] = [];
+/** §5-CLOSE — the audit's findings, kept apart so the scoreboard can be printed whole. */
+const auditFindings: AuditFinding[] = [];
 let damperBindStreak = new Map<string, number>();
 const damperPersistentBinds = new Set<string>();
 let damperWorstStreak = 0;
@@ -2460,6 +2463,12 @@ function runHarness() {
     checkBeneficiaryClaimsHaveHolders(state, w);
     checkSettlementClosed(state, w);
     checkGuards(state, w);
+    // §5-CLOSE — the audit runs on every week; its findings are violations too.
+    {
+      const found = auditWeek(preState, state, w);
+      auditFindings.push(...found);
+      found.forEach((f) => violations.push({ week: w, message: `[audit ${f.check}] ${f.message}` }));
+    }
     prevStateForBookCheck = state;
 
     // 5b. The bank balance-sheet identity, per named bank, every week. Cash moves only by
@@ -2818,6 +2827,7 @@ function runHarness() {
     console.log(`  [damper-by-book] persistent binds :: ${rows}`);
   }
 
+  auditSummary(auditFindings, WEEKS).forEach((line) => console.log(line));
   // ---- verdict: grouped summary (violations already printed live, week by week) ----
   if (violations.length === 0) {
     console.log(`\nOK - HARNESS PASSED — ${WEEKS} weeks, all assertions satisfied`);
