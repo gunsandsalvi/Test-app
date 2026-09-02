@@ -33,7 +33,7 @@ import { fieldsOf, residualOf } from '../bank-identity-trace';
 import { ladderRowsOf } from '../../../engine2/tranches';
 import { moveFacilityLender } from '../../ledger/tranche-ledger';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../../domain/banking';
-import { resetAccount, moveSectorRowsToBank, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
+import { moveSectorRowsToBank, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
 
 const sheetLinesUSD = (s: BankingSector, cashUSD: number, lines: DepositLines): number =>
   Math.abs(lines.householdUSD) + Math.abs(lines.corporateUSD) + Math.abs(lines.institutionalUSD)
@@ -186,8 +186,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // the assuming bank owed it for the net. ----
     bank.bankBalanceSheet = undefined;
     bank.homeBankTicker = acquirer.ticker;
-    // A3.1's transitional line: the shell's company row (the seed's number, never money) opens its estate at zero.
-    resetAccount(ctx.v2, { kind: 'COMPANY', ticker: bank.ticker }, 0);
+    // A3.1b: the shell has no company account yet; the first pass opens one at zero at its acquirer.
     bank.isDefaulted = true;
     bank.defaultedWeek = week;
     bank.bankResolvedWeek = week;

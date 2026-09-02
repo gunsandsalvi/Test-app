@@ -80,11 +80,7 @@ export function balanceOf(v2: V2World, party: PartyRef): number {
   return r >= 0 ? v2.accounts.balanceUSD[r] : 0;
 }
 
-/**
- * A3.1's transitional write, for the one site that still SETS a balance by fiat: a resolved
- * bank's shell, whose company row was never money (a bank's goods-market self settles on its
- * reserves; the row carries the seed's number). A3's bank slice deletes the row and this.
- */
+/** A balance SET by fiat — the harness's shocks only; no stage writes a balance. */
 export function resetAccount(v2: V2World, party: PartyRef, balanceUSD: number): void {
   v2.accounts.balanceUSD[ensureAccount(v2, party)] = balanceUSD;
 }
@@ -270,10 +266,10 @@ export function entityCashOf(v2: V2World, e: Pick<InstitutionalEntity, 'id'>): n
   return balanceOf(v2, { kind: 'INSTITUTION', id: e.id });
 }
 
-/** A company's cash: its account. (A bank with a sheet still reads its company row here — the
- *  seed's number, never moved, because its goods-market self settles on its reserves; A3's
- *  bank slice makes that read the reserves.) */
-export function cashOf(v2: V2World, c: Pick<Company, 'ticker'>): number {
+/** A company's cash: its account. A bank's cash IS its reserves (A3.1b, §7.379, rule 3): its
+ *  goods-market self settles on its reserve row and it has no company row at all. */
+export function cashOf(v2: V2World, c: Pick<Company, 'ticker'> & { isBankEntity?: boolean; bankBalanceSheet?: unknown }): number {
+  if (c.isBankEntity && c.bankBalanceSheet) return bankReservesOf(v2, c.ticker);
   return balanceOf(v2, { kind: 'COMPANY', ticker: c.ticker });
 }
 

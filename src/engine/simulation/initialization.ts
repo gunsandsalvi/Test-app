@@ -1584,7 +1584,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // §5-WIRES A3.1/A3.6c-ii: the seed opens every firm's and institution's account where it wrote
   // its opening cash — before the close, which reads the banks' corporate and institutional lines
   // off them.
-  companies.forEach((c) => openAccount(seedV2, { kind: 'COMPANY', ticker: c.ticker }, openingCashOf(c)));
+  // A3.1b: a bank has no company account — its money is its reserves (close-seed opens that row).
+  companies.forEach((c) => { if (!(c.isBankEntity && c.bankBalanceSheet)) openAccount(seedV2, { kind: 'COMPANY', ticker: c.ticker }, openingCashOf(c)); });
   institutionalEntities.forEach((e) => openAccount(seedV2, { kind: 'INSTITUTION', id: e.id }, openingCashOf(e)));
 
   // §5-CLOSE C2: the seed closes — depositors fund the banks (wholesale is nobody's and is
