@@ -66,7 +66,7 @@ import {
   revenueGrowthWindow, realEmploymentGrowthAnnual,
   quitRateWeeklyAt, firmQuitMultiplier, smoothedPriceAt, employerWeekPosting, PriceGrowthRow,
 } from '../../../domain/company-week/labor-demand';
-import { cashOf } from '../../ledger/accounts';
+import { cashOf, poolCashOf } from '../../ledger/accounts';
 
 const OCCUPATIONS = OCCUPATION_TYPES;
 
@@ -436,14 +436,15 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // the same integral: the share of the pool's firms in trouble sheds, and the rest does not.
       // A pool whose aggregate cash is comfortable while a third of its firms cannot cover their
       // interest now sheds that third — which the mean could not express.
-      const distressedShare = seg.distressedFirmShare ?? ((seg.cashUSD ?? 0) < 0 ? 1 : 0);
+      const poolCashUSD = poolCashOf(ctx.v2, regionId, seg.industry);
+      const distressedShare = seg.distressedFirmShare ?? (poolCashUSD < 0 ? 1 : 0);
       if (distressedShare > 0) {
         layoffs = Math.max(layoffs, current * distressedShare * DISTRESS_LAYOFF_SPEED);
       }
       // The whole pool running out of money is still the acute case, and it is not the same
       // statement: the strata above are about firms that cannot service DEBT, this is a pool
       // that cannot make PAYROLL.
-      if ((seg.cashUSD ?? 0) < 0) layoffs = Math.max(layoffs, current * DISTRESS_LAYOFF_SPEED);
+      if (poolCashUSD < 0) layoffs = Math.max(layoffs, current * DISTRESS_LAYOFF_SPEED);
       OCCUPATIONS.forEach((occ) => {
         const w = (mix as Partial<Record<OccupationType, number>>)[occ] ?? 0;
         if (w <= 0) return;

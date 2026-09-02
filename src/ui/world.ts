@@ -8,7 +8,7 @@
 
 import { GameState, Company, InstitutionalEntity, Region, RegionId } from '../types';
 import { loanBooksOf } from '../domain/banking';
-import { entityCashOf } from '../engine/ledger/accounts';
+import { entityCashOf, poolCashOf } from '../engine/ledger/accounts';
 import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/world';
 import { bookHeadOf } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
@@ -95,7 +95,7 @@ export function recordTape(tape: Tape, state: GameState): void {
       put(`pool:${r}:${p.industry}:margin`, p.marginPct);
       put(`pool:${r}:${p.industry}:employment`, p.employment);
       put(`pool:${r}:${p.industry}:default rate`, p.defaultRateAnnualPct);
-      put(`pool:${r}:${p.industry}:cash`, p.cashUSD);
+      put(`pool:${r}:${p.industry}:cash`, poolCashOf(ensureV2(state), r, p.industry));
     });
     (reg.householdState?.cohorts ?? []).forEach((c) => {
       const k = `cohort:${r}:${c.occupation}:${c.tier}`;

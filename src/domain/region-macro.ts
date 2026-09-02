@@ -360,7 +360,7 @@ export interface SmePool {
    * at the region's banks pro-rata by market share (a mass of small firms banks everywhere,
    * unlike a corporate with a house bank) as `smeDepositsUSD`, and moved ONLY by the settlement
    * layer — the pool is a party (`SEGMENT` PartyRef) like everyone else. */
-  cashUSD?: number;
+  // §5-WIRES A3.3: the pool's cash is its rows at the region's banks (`poolCashOf`, engine/ledger/accounts.ts).
   /** SEG-C — tax accrued weekly on the pool's earnings and REMITTED quarterly as a real
    * SEGMENT to GOVERNMENT payment (stage 11), replacing the payer-less revenue statistic. */
   accruedTaxUSD?: number;

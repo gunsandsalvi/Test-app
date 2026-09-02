@@ -41,7 +41,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
 import { SRF_SPREAD_BPS } from '../../macro/banking';
-import { cashOf, entityCashOf } from '../../ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf } from '../../ledger/accounts';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
@@ -231,7 +231,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // SEG1: the segment pools' balances, reconciled the same way — each pool's cash sits across
     // the region's banks pro-rata by market share (settlement spreads it identically; this
     // catches share drift and any balance moved outside instructions, with the reserve leg).
-    const segmentCashUSD = (reg.smePools || []).reduce((a, s) => a + Math.max(0, s.cashUSD ?? 0), 0);
+    const segmentCashUSD = (reg.smePools || []).reduce((a, s) => a + Math.max(0, poolCashOf(ctx.v2, regionId, s.industry)), 0);
     const regionBankShareTotal = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
 
     // HH3: the week's real household-credit flows, per bank, for the region roll-up below.

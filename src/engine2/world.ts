@@ -57,11 +57,13 @@ export interface PersistentAccounts {
   keyRef: Int32Array;
   balanceUSD: Float64Array;
   rowByKeyRef: Map<number, number>;
+  /** A3.3 — a sector party's rows, one per bank it banks at: party key id → bank ticker → row. */
+  bankRowsByParty: Map<number, Map<string, number>>;
 }
 
 export function newPersistentAccounts(): PersistentAccounts {
   const cap = 1 << 12;
-  return { n: 0, keyRef: new Int32Array(cap), balanceUSD: new Float64Array(cap), rowByKeyRef: new Map() };
+  return { n: 0, keyRef: new Int32Array(cap), balanceUSD: new Float64Array(cap), rowByKeyRef: new Map(), bankRowsByParty: new Map() };
 }
 
 /** A per-row fixed-capacity ring of f64 slots. `len` is the actual entry count (these rings'

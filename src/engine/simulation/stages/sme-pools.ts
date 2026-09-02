@@ -1,3 +1,4 @@
+import { poolCashOf } from '../../ledger/accounts';
 /**
  * SEG-D — the SME pools' own week: a measured P&L, and development that reads it.
  *
@@ -89,7 +90,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // buffer it needs to keep. This is the last link of the credit-transmission chain with a
       // budget behind it — borrowed money raises the cash, which raises what can be invested,
       // and a pool with no cash cannot invest whatever its revenue says. ----
-      const cashUSD = pool.cashUSD ?? 0;
+      const cashUSD = poolCashOf(ctx.v2, regionId, pool.industry);
       const weeklyWageBillUSD = operatingCostUSD > 0 ? operatingCostUSD : 0;
       const bufferUSD = weeklyWageBillUSD * TARGET_CASH_WEEKS_OF_WAGES;
       const investableUSD = Math.max(0, cashUSD - bufferUSD);

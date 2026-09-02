@@ -37,7 +37,7 @@ import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { marketCapOf, totalDebtOf } from '../../../domain/company';
 import { ladderTotalUSD } from '../../../engine2/tranches';
-import { cashOf, openingCashOf, entityCashOf } from '../../ledger/accounts';
+import { cashOf, openingCashOf, entityCashOf, poolCashOf } from '../../ledger/accounts';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -818,7 +818,7 @@ export function runFirmBirthsForRegion(
       // §5-WIRES W6: the home bank's facility (fundNewbornDebt, below) funds the opening balance
       // first; the pool carves out the founders' remainder.
       const loanUSD = (c.debtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0);
-      const openingCashUSD = Math.min(Math.max(0, openingCashOf(c) - loanUSD), Math.max(0, seg.cashUSD ?? 0));
+      const openingCashUSD = Math.min(Math.max(0, openingCashOf(c) - loanUSD), Math.max(0, poolCashOf(ctx.v2, regionId, seg.industry)));
       if (openingCashUSD > 0) {
         pay(ctx, {
           payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },

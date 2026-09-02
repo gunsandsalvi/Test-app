@@ -18,7 +18,7 @@
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
-import { cashOf, entityCashOf, resetAccount } from '../src/engine/ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, resetAccount } from '../src/engine/ledger/accounts';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -2184,7 +2184,7 @@ const spiralModule: HarnessModule = {
     REGION_IDS_SEED_ORDER.forEach((region) => {
       const r = state.regions[region];
       const smeEmployment = (r.smePools || []).reduce((a, s) => a + (s.employment ?? 0), 0);
-      const poolCashNeg = (r.smePools || []).filter((s) => (s.cashUSD ?? 0) < 0).length;
+      const poolCashNeg = (r.smePools || []).filter((s) => poolCashOf(ensureV2(state), region, s.industry) < 0).length;
       const gov = governmentOf(region, r);
       const { overrunUSD } = gov.overrun();
       console.log(`  [spiral] w${w} ${region}`

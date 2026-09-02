@@ -15,7 +15,7 @@ import { issueTranche } from '../../ledger/tranche-ledger';
 import { smePoolId, facilityMarginBpsFor } from './bank-lending';
 import { PrimeBrokerageLine } from '../../../domain/prime-brokerage';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
-import { cashOf } from '../../ledger/accounts';
+import { cashOf, poolCashOf } from '../../ledger/accounts';
 import { entityCashOf } from '../../ledger/accounts';
 
 /** What a broker charges over its standing line for a balance it did not agree to fund. */
@@ -121,7 +121,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
     const smeDrawByBank = new Map<string, { industry: string; poolId: string; usd: number }[]>();
     (reg.smePools ?? []).forEach((seg) => {
-      const balanceUSD = (seg.cashUSD ?? 0) + pendingUSD({ kind: 'SEGMENT', region: regionId, industry: seg.industry });
+      const balanceUSD = poolCashOf(ctx.v2, regionId, seg.industry) + pendingUSD({ kind: 'SEGMENT', region: regionId, industry: seg.industry });
       if (balanceUSD >= -1 || !(totalShare > 0)) return;
       const drawUSD = -balanceUSD;
       banks.forEach((b) => {

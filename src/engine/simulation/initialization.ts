@@ -73,7 +73,7 @@ import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGOR
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
-import { openAccount, openingCashOf, stashOpeningCash } from '../ledger/accounts';
+import { openAccount, openingCashOf, stashOpeningCash, poolRowAt } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand } from '../../domain/industry-registry';
@@ -340,7 +340,14 @@ export function solveSeedInvestmentFixedPoint(
   return companies;
 }
 
+/** The world the seed is opening — set at the top of `createInitialGameState`, read by the seed's
+ *  helpers below while it runs, carried by the state it returns. */
+let seedV2: import('../../engine2/world').V2World;
+
 export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {
+  // §5-WIRES A3: the persistent world is born with the seed — the accounts the seed opens below
+  // (a firm's, an entity's, a pool's rows at its banks) live on it, and the state carries it.
+  seedV2 = ensureV2({});
   const state = buildSeededGameState(seed);
   // §4.C II.5 — the seed's revenue histories land on the ring now that the world exists.
   drainSeedRevenueHistories(state);
@@ -754,17 +761,23 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const tierCashUSD = namedPrivate.reduce((a, c) => a + Math.max(0, openingCashOf(c)), 0);
         const cashToRevenue = tierRevenueUSD > 0 ? tierCashUSD / tierRevenueUSD : 0.08;
         (reg.smePools || []).forEach(seg => {
-          seg.cashUSD = Math.round(Math.max(0, seg.annualRevenueUSD) * cashToRevenue);
+          stashOpeningCash(seg, Math.round(Math.max(0, seg.annualRevenueUSD) * cashToRevenue));
         });
       }
-      const segmentCashTotalUSD = (reg.smePools || []).reduce((a, s) => a + (s.cashUSD ?? 0), 0);
       const bankShareTotal = regionBanksForLending.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
       regionBanksForLending.forEach(b => {
         const corpUSD = Math.round(corpDepositsByBank.get(b.ticker) ?? 0);
         b.bankBalanceSheet!.corporateDepositsUSD = corpUSD;
-        const smeUSD = bankShareTotal > 0
-          ? Math.round(segmentCashTotalUSD * ((b.bankMarketShare ?? 0) / bankShareTotal))
-          : Math.round(segmentCashTotalUSD / regionBanksForLending.length);
+        // §5-WIRES A3.3: each pool's row at this bank opens at its share of the pool's opening
+        // cash, and the bank's SME line is the sum of those rows — one number, two views.
+        let smeUSD = 0;
+        (reg.smePools || []).forEach((seg) => {
+          const rowUSD = bankShareTotal > 0
+            ? Math.round(openingCashOf(seg) * ((b.bankMarketShare ?? 0) / bankShareTotal))
+            : Math.round(openingCashOf(seg) / regionBanksForLending.length);
+          seedV2.accounts.balanceUSD[poolRowAt(seedV2, { kind: 'SEGMENT', region: regionId, industry: seg.industry }, b.ticker)] = rowUSD;
+          smeUSD += rowUSD;
+        });
         b.bankBalanceSheet!.smeDepositsUSD = smeUSD;
         // SETL2 (§7.4 — the seed must open in the shape the weekly engine maintains): a corporate
         // balance is a real liability now, so the bank holds the real asset behind it. The money
@@ -1646,6 +1659,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     marketIndexes: [],
     regions,
     fxPairs,
+    v2: seedV2,
     companies,
     institutionalEntities,
     commodities,
@@ -1682,7 +1696,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // §5-WIRES A3.1: the seed opens every firm's account where it wrote `cash`. A bank's company
   // row carries the seed's number too, until A3's bank slice makes a bank's cash its reserves.
   {
-    const v2 = ensureV2(state);
+    const v2 = seedV2;
     companies.forEach((c) => openAccount(v2, { kind: 'COMPANY', ticker: c.ticker }, openingCashOf(c)));
     institutionalEntities.forEach((e) => openAccount(v2, { kind: 'INSTITUTION', id: e.id }, openingCashOf(e)));
   }
