@@ -14,6 +14,7 @@
  * each landing with its own re-derived seed.
  */
 
+import { drawPreferences, patienceWeeksOf, riskAversionOf, PATIENCE_MEDIAN_WEEKS } from '../../domain/preferences';
 import {
   OccupationType, WealthTier, WealthTierData, OccupationPool, HouseholdCohort,
   TenureStratum, RETURN_TO_EXPERIENCE_ANNUAL, OCCUPATION_TYPES } from '../../domain/region-macro';
@@ -249,6 +250,8 @@ export function tierWealthMpc(tier: WealthTierData | undefined): number {
 }
 
 export interface CohortBuildInputs {
+  /** §5-BRAINS — which region's cohorts these are: the key each cohort's brain is drawn from. */
+  regionId?: string;
   occupationPools: Record<OccupationType, OccupationPool>;
   baseAnnualWageUSD: Record<OccupationType, number>;
   /** Labor force per occupation (employed + unemployed), the same figure the benefits sum uses. */
@@ -338,7 +341,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   const {
     occupationPools, baseAnnualWageUSD, laborForceByOccupation, firmWagePremiums,
     governmentTransfersWeeklyUSD, liquidAssetsUSD, retiredShareOfPopulation, weeklyDebtServiceUSD,
-    wealthDistribution, measuredDisposableIncomeUSD,
+    wealthDistribution, measuredDisposableIncomeUSD, regionId,
   } = inputs;
 
   // ---- 1. Membership: transpose the tier→occupation mixes into per-occupation tier weights,
@@ -531,7 +534,11 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     // This cohort's slice of its tier's liquid assets, by its slice of its tier's income.
     const shareOfTier = tierIncomeUSD[tier] > 0 ? x.dispUSD / tierIncomeUSD[tier] : 0;
     const liquidUSD = Math.max(0, liquidAssetsUSD) * tierLiquidShare(tier) * shareOfTier;
-    const targetBufferUSD = (x.dispUSD / 52) * BUFFER_TARGET_WEEKS;
+    // §5-BRAINS — this cohort's own two numbers, drawn from its identity (a cohort is rebuilt
+    // weekly, so the draw is re-struck from the same key and is the same brain every week): a
+    // risk-averse cohort wants a bigger buffer, a patient one closes the gap over more years.
+    const brain = drawPreferences(`hh:${regionId ?? '?'}:${x.c.occ}:${tier}`, 0);
+    const targetBufferUSD = (x.dispUSD / 52) * BUFFER_TARGET_WEEKS * riskAversionOf(brain);
     // DEM/DIST — THE LIFE-CYCLE, and it is the last piece of the savings rate.
     //
     // The buffer term alone has no motive that survives a stationary economy: once the stock is
@@ -541,7 +548,8 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     // from the real age structure now that one exists.
     const lifeCycleSavingUSD = x.dispUSD * Math.max(0, Math.min(1, retiredShareOfPopulation));
     cohortLifeCycleSavingUSD.push(lifeCycleSavingUSD);
-    return lifeCycleSavingUSD + (targetBufferUSD - liquidUSD) / WEALTH_SPENDDOWN_YEARS;
+    return lifeCycleSavingUSD + (targetBufferUSD - liquidUSD)
+      / (WEALTH_SPENDDOWN_YEARS * (patienceWeeksOf(brain) / PATIENCE_MEDIAN_WEEKS));
   });
 
   const tierDisposableUSD = {} as Record<WealthTier, number>;

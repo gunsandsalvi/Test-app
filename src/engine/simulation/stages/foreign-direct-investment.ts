@@ -24,6 +24,7 @@
  * triggered the FDI is the mechanism that completes it.
  */
 
+import { riskAversionOf } from '../../../domain/preferences';
 import { Company, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
@@ -133,7 +134,7 @@ export function runForeignDirectInvestment(
       // as a capital call that comes up short (§7.226) and the §7.288 financing cap: FDI spends
       // the cash pile above the treasurer's own operating buffer, never money that isn't there.
       const deployableUSD = Math.max(0,
-        comp.cash - comp.annualRevenue * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE);
+        comp.cash - comp.annualRevenue * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversionOf(comp.management));
       const openingCashUSD = Math.min(Math.max(0, sub.cash), deployableUSD);
       if (!(openingCashUSD > 0)) continue;
       sub.cash = 0; // construction: the opening balance arrives as the instruction below settles.

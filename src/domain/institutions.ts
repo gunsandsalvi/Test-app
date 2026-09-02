@@ -80,6 +80,8 @@ export const mandatePctOf = (t: AssetAllocationTarget, cls: InvestableClass): nu
   t[MANDATE_FIELD[cls]];
 
 export interface InstitutionalEntity {
+  /** §5-BRAINS — this entity's board: the two preference primitives (domain/preferences.ts). */
+  management?: import('./preferences').Preferences;
   financialStatementProfile?: FinancialStatementProfile;
   id: string;
   name: string;

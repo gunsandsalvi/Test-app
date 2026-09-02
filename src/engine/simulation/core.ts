@@ -1,3 +1,4 @@
+import { ensureManagements, runManagementReviewStage } from './stages/management-review';
 import { rollDamperStreaks, setDamperStreaks } from './stages/financial-clearing-engine';
 import { GameState, RegionId } from '../../types';
 import { dealersFromBanks } from '../dealers';
@@ -120,6 +121,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // Holdings flip stage 1 — the same catch-up for the institutional register: the seed and any
     // unhooked creation path (fund births, estate spawns) get their books mirrored here.
     ensureBooksSynced(v2, state.institutionalEntities ?? []);
+    // §5-BRAINS — the same catch-up for managements: any entity that entered the world by any
+    // path without one gets its two primitives drawn here, once, from its own stream.
+    ensureManagements(state.companies, state.institutionalEntities ?? [], state.currentWeek);
   }
   const baseCtx = createInitialContext(state);
   // The adaptive damper's memory for this week's books (financial-clearing-engine.ts).
@@ -328,6 +332,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
   syncCompanyField(state, 'customerConcentration'); syncCompanyField(state, 'supplierConcentration');
   run('10-mergers', () => runMergersStage(state, ctx));
+  // §5-MGMT — the quarterly review: a management that fails its measured record is replaced.
+  run('management-review', () => runManagementReviewStage(state, ctx));
   for (const f of ['accumulatedDepreciationUSD', 'acquiredByTicker', 'annualRevenue', 'capex', 'employeeCount', 'grossPPEUSD', 'growthCapex', 'maintenanceCapex', 'marketCap', 'mergerAcquired', 'sharesOutstanding', 'stockPrice', 'totalDebt'] as const) syncCompanyField(state, f);
   // PUB3d: bills accrete BEFORE the fiscal stage redeems them, so a maturing bill is repaid at
   // the face its holder has accreted to rather than at last week's value.

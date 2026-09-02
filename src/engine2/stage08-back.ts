@@ -10,6 +10,7 @@
  * engine2 columns (tranches first, then lots, then the firm scalars) without touching the stage.
  */
 
+import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
 import { GameState, Company, DebtTranche, NewsItem, SegmentFinancial } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { BackLanes } from './stage08-lanes';
@@ -213,6 +214,12 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
     ? { idleStreakWeeks: 0, mothballedShare: 0, mothballedStreakWeeks: 0, scrappedShare: 0 }
     : capacityRetirement({
       idleRevenueShareThisWeek: L.idleLineRevenueShare[row],
+      // §7.345 — the plant this week's produce-to-sales decision did not need (stage 05 measures
+      // it where the decision runs); sustained for the management's horizon it comes offline —
+      // the exit from an oversupplied market that is not default.
+      demandSlackRevenueShare: L.demandSlackRevenueShare[row],
+      mothballAfterWeeks: L.mgmtPatienceWeeks[row],
+      scrapAfterWeeks: 4 * L.mgmtPatienceWeeks[row],
       priorIdleStreakWeeks: Number.isNaN(L.idleStreakWeeks[row]) ? 0 : L.idleStreakWeeks[row],
       priorMothballedShare: Number.isNaN(L.mothballedPpeShare[row]) ? 0 : L.mothballedPpeShare[row],
       priorMothballedStreakWeeks: Number.isNaN(L.mothballedStreakWeeks[row]) ? 0 : L.mothballedStreakWeeks[row],
@@ -255,6 +262,8 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
     marketCapUSD: L.marketCapUSD[row],
     totalDebtUSD: L.totalDebtUSD[row],
     avgCompetitiveness,
+    patienceWeeks: L.mgmtPatienceWeeks[row],
+    riskAversion: L.mgmtRiskAversion[row],
   });
 
   // CAPEX_TRACE=1 — the §7.272/§7.287 money-bid decomposition (string lanes, main-side).
@@ -948,7 +957,9 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       channelMarginRevenueUSD: L8.channelMarginRevenueUSD[row],
       declaredDividendYield: L8.dividendYield[row] ?? 0,
       marketCapUSD: d.backLanes.marketCapUSD[row],
-      maxPayoutRatio: L8.maxPayoutRatio[row],
+      // §5-BRAINS — an impatient board pays out more of what it earns; the median pays the
+      // industry's discipline exactly.
+      maxPayoutRatio: Math.min(1, L8.maxPayoutRatio[row] * (PATIENCE_MEDIAN_WEEKS / L8.mgmtPatienceWeeks[row])),
       hasVehicle: L8.hasVehicle[row] === 1,
       boundaryTraceKey: L8.boundaryTraceKey[row],
       wuSalesUSD: L8.wuSalesUSD[row],
@@ -1181,6 +1192,13 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       if (L8.wasDefaulted[row] !== 1) {
         ctx.defaultedTickers.push(L8.ticker[row]);
         comp.defaultedWeek = nextWeek;
+        // DEFAULT_TRACE=1 — who died this week and what its books looked like at the moment.
+        if (process.env.DEFAULT_TRACE === '1') {
+          console.log(`  [default] w${nextWeek} ${d.backLanes.region[row]}:${L8.ticker[row]} ${d.backLanes.sector[row]}`
+            + ` cash ${(cash.usd / 1e6).toFixed(1)}M cov ${newCoverage.toFixed(2)} rev ${(newRevenue / 1e6).toFixed(0)}M`
+            + ` ebitda ${(newEbitda / 1e6).toFixed(1)}M debt ${(L8.totalDebtUSD[row] / 1e6).toFixed(0)}M`
+            + ` heads ${L8.employeeCount[row]} born ${comp.bornWeek ?? 'seed'}`);
+        }
         newRevenue = round1(newRevenue * 0.4);
         newEbitda = 0;
         newEbit = 0;
@@ -2100,7 +2118,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // settlement/FX path as every other. (The dividend path cannot serve here: a private sub
     // has no market cap for a declared yield to price, and its holder of record IS the parent.)
     if (comp.parentTicker && !isDefaulted) {
-      const bufferUSD = L8.annualRevenueUSD[row] * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE;
+      const bufferUSD = L8.annualRevenueUSD[row] * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * L8.mgmtRiskAversion[row];
       const excessUSD = Math.max(0, cash.usd - bufferUSD);
       if (excessUSD > 1e6) {
         post('subsidiary excess cash repatriated to the parent', -excessUSD,
@@ -2148,6 +2166,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // because this stage rebuilds the company from a fixed field list and anything not
       // named here is silently dropped (which is exactly what happened first time).
     comp.offeredWageIndex = weekUpdate?.offeredWageIndex ?? comp.offeredWageIndex ?? 1.0;
+    comp.expectedEbitdaUSD = weekUpdate?.expectedEbitdaUSD ?? comp.expectedEbitdaUSD;
+    // §7.345 — last week's sales by line, for next week's production decision (no update = no sales).
+    comp.lastWeekSalesUnitsBySubUnit = weekUpdate?.salesUnitsBySubUnit ?? {};
 
     comp.unfilledVacancyShare = weekUpdate?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0;
 

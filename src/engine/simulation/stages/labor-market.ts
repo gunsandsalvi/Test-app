@@ -48,12 +48,14 @@ import {
   MARKET_WAGE_CATCHUP_SPEED_WEEKLY,
   GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and-wages';
-import { isActiveCompany, fullStaffingCapHeads } from '../../../domain/company';
+import { isActiveCompany, fullStaffingCapHeads, RECEIPTS_MEASUREMENT_WEIGHT } from '../../../domain/company';
 import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
 import { INDUSTRY_REGISTRY, smePoolSubUnits } from '../../../domain/industry-registry';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
+import { NEUTRAL_LABOR_TIGHTNESS } from '../../../domain/region-macro';
+import { patienceWeeksOf, riskAversionOf, adaptiveExpectation } from '../../../domain/preferences';
 import { RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../../bootstrap/population';
 import {
   RENT_SHARE_TO_LABOUR, TenureStratum, TENURE_COHORTS,
@@ -62,7 +64,7 @@ import {
 import {
   ownPriceGrowthAnnual, outputPriceVsBaseline, demandPullFromFill,
   revenueGrowthWindow, realEmploymentGrowthAnnual,
-  quitRateWeeklyAt, firmQuitMultiplier, employerWeekPosting, PriceGrowthRow,
+  quitRateWeeklyAt, firmQuitMultiplier, smoothedPriceAt, employerWeekPosting, PriceGrowthRow,
 } from '../../../domain/company-week/labor-demand';
 
 const OCCUPATIONS = OCCUPATION_TYPES;
@@ -148,14 +150,17 @@ function desiredGrowthAnnualOf(
     if (!ph || ph.length < w.windowWeeks + 1) return;
     rows.push({
       weight: Math.max(0, l.revenueShare ?? 0),
-      p0: ph[ph.length - 1 - w.windowWeeks],
-      p1: ph[ph.length - 1],
+      // §7.345 — the print smoothed with the revenue's own weight, at both ends of the window.
+      p0: smoothedPriceAt(ph, ph.length - 1 - w.windowWeeks, RECEIPTS_MEASUREMENT_WEIGHT),
+      p1: smoothedPriceAt(ph, ph.length - 1, RECEIPTS_MEASUREMENT_WEIGHT),
     });
   });
   return realEmploymentGrowthAnnual(
     w.nominalGrowthAnnual, ownPriceGrowthAnnual(rows, w.windowWeeks, fallbackInflationAnnual),
     ownProductivityGrowthAnnual);
 }
+
+const laborCauseTotals = new Map<string, number>();
 
 export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2L = ensureV2(state);
@@ -217,6 +222,17 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         comp.lastLearningGrowthAnnual ?? LABOR_PRODUCTIVITY_GROWTH_ANNUAL);
       const desiredWeeklyChange = current * (growthAnnual / 52);
 
+      // §5-BRAINS — THIS management's horizon and risk weight (domain/preferences.ts). The
+      // affordability test below runs on the earnings it EXPECTS — an adaptive expectation at
+      // its own horizon — not on one week's print: a one-month management reacts to last month,
+      // a one-year management to the year. That dispersion is what stops every firm in a region
+      // shedding in the same week (§7.344). One owner for the expectation: this stage.
+      const patienceWeeks = patienceWeeksOf(comp.management);
+      const riskAversion = riskAversionOf(comp.management);
+      const expectedEbitdaUSD = adaptiveExpectation(comp.expectedEbitdaUSD, comp.ebitda, patienceWeeks);
+      if (!ctx.companyUpdates[comp.ticker]) ctx.companyUpdates[comp.ticker] = {};
+      ctx.companyUpdates[comp.ticker].expectedEbitdaUSD = expectedEbitdaUSD;
+
       // HH6: a firm's OWN quit rate. Paying below the going rate loses people faster; paying
       // above keeps them, which is what makes a raise do something rather than just cost money.
       // Execution quality retains too — a well-run firm loses fewer of them.
@@ -236,14 +252,16 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // adjustment fell on cash-exhaustion layoffs that arrived too late and cascaded (measured:
       // 30-50% unemployment in all four regions, hidden by the 50% clamp on the print).
       const netPpeUSD = Math.max(0, (comp.grossPPEUSD ?? 0) - (comp.accumulatedDepreciationUSD ?? 0));
-      const costOfCapital = Math.max(0, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (comp.beta ?? 1) * EQUITY_RISK_PREMIUM);
+      // §5-BRAINS — the return THIS management requires of its plant: the premium weighted by its own
+      // risk aversion. A risk-averse board wants more for the same beta and sheds sooner.
+      const costOfCapital = Math.max(0, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (comp.beta ?? 1) * EQUITY_RISK_PREMIUM * riskAversion);
       const capitalChargeUSD = netPpeUSD * costOfCapital;
-      const earningsShortfallUSD = capitalChargeUSD - comp.ebitda;
+      const earningsShortfallUSD = capitalChargeUSD - expectedEbitdaUSD;
       const annualWagePerWorkerUSD = current > 0
         ? (weeklyWageBillUSD(current, occupationMixFor(comp.sector), baseAnnualWageUSD, reg.occupationPools,
           comp.offeredWageIndex ?? 1.0) * 52) / current
         : 0;
-      const affordableCutHeads = (earningsShortfallUSD > 0 && annualWagePerWorkerUSD > 0)
+      const earningsShortfallHeads = (earningsShortfallUSD > 0 && annualWagePerWorkerUSD > 0)
         ? earningsShortfallUSD / annualWagePerWorkerUSD
         : 0;
 
@@ -317,9 +335,29 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const outputNeedHeads = baselineRevPerHeadUSD > 0
         ? Math.min((realRevenueUSD * demandPull) / baselineRevPerHeadUSD, productiveHeadsCap)
         : current;
-      const earningsHeadroomUSD = comp.ebitda - capitalChargeUSD;
-      const affordableHireHeads = (earningsHeadroomUSD > 0 && annualWagePerWorkerUSD > 0)
-        ? earningsHeadroomUSD / annualWagePerWorkerUSD
+      // §7.345 — A CUT THAT LOWERS EARNINGS CANNOT CLOSE AN EARNINGS SHORTFALL. The affordability
+      // rule fired a head for every wage of shortfall, and outranked the level target — so a
+      // firm below its cost of capital with its markets SHORT shed workers who each produced
+      // more than they cost, earned less next week, and shed again: the u-ratchet was this rule
+      // feeding itself (the burn-in's first trace, §7.345: shedding from week 1, output and
+      // fill after it, prices last). What a shortfall can honestly cut is the staff output does
+      // not need — heads beyond the level target; those cost a wage and produce nothing. The
+      // productive core is a capital-allocation question (capex, mothball, exit), not payroll's,
+      // and a firm out of cash still sheds on the acute rule below regardless.
+      const affordableCutHeads = Math.min(earningsShortfallHeads, Math.max(0, current - outputNeedHeads));
+      // §7.345 — A HIRE PAYS FOR ITSELF OR IT DOES NOT HAPPEN; THE PLANT'S RETURN IS NOT THE
+      // TEST. Gating hiring on earnings above the capital charge (§7.110's symmetry) meant
+      // that at a 10% ten-year yield almost no firm could hire at all — the burn-in's cause
+      // trace read ZERO vacancies in every region at 25% unemployment, which is not a labour
+      // market anybody works in (rule 1). The marginal hire's own test is value added per head
+      // against the wage per head, both measured on the firm's books, and a firm out of cash
+      // hires nobody. What it may hire toward is still the level target, and the matching
+      // friction still paces it.
+      const valueAddedPerHeadUSD = current > 0
+        ? (comp.annualRevenue - Math.max(0, (comp.realInputConsumptionCostWeeklyUSD ?? 0) * 52)) / current
+        : 0;
+      const affordableHireHeads = (comp.cash >= 0 && valueAddedPerHeadUSD > annualWagePerWorkerUSD)
+        ? Math.max(0, outputNeedHeads - current)
         : 0;
 
       // The posting rule — precedence and bounds — is domain/company-week/labor-demand.ts's
@@ -333,8 +371,21 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         affordableHireHeads,
         affordableCutHeads,
         cashIsNegative: comp.cash < 0,
+        layoffSpeedMultiple: LAYOFF_SPEED_MULTIPLE * riskAversion,
+        hiringSpeedMultiple: HIRING_ADJUSTMENT_SPEED_MULTIPLE / riskAversion,
       });
 
+      // LABOR_CAUSES=1 — which rule the week's layoffs came from, per region (the §7.345 trace).
+      if (process.env.LABOR_CAUSES === '1' && layoffs > 0) {
+        const cutSpeed = LAYOFF_SPEED_MULTIPLE * riskAversion;
+        const distress = comp.cash < 0 ? current * DISTRESS_LAYOFF_SPEED : 0;
+        const afford = affordableCutHeads * cutSpeed;
+        const cause = layoffs <= distress + 1e-9 ? 'distress' : layoffs <= afford + 1e-9 ? 'affordability' : 'growth';
+        const key = `${regionId}:${cause}`;
+        laborCauseTotals.set(key, (laborCauseTotals.get(key) ?? 0) + layoffs);
+        laborCauseTotals.set(`${regionId}:quits`, (laborCauseTotals.get(`${regionId}:quits`) ?? 0) + quits);
+        laborCauseTotals.set(`${regionId}:vacancies`, (laborCauseTotals.get(`${regionId}:vacancies`) ?? 0) + vacancies);
+      }
       const mix = occupationMixFor(comp.sector);
       OCCUPATIONS.forEach((occ) => {
         const w = mix[occ] ?? 0;
@@ -655,7 +706,17 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // through their own decisions) and the cost of living the workforce bargains to recover.
       // A market with no cost-of-living channel lets real wages fall one-for-one with inflation
       // forever, which is not a labor market anybody works in.
-      const colaWeekly = (reg.inflation ?? 0) * COST_OF_LIVING_PASS_THROUGH / 52;
+      // §7.345 — COST-OF-LIVING RECOVERY IS BARGAINING, AND BARGAINING NEEDS AN OUTSIDE OPTION.
+      // The burn-in (the first run of the engine to its own fixed point) found the doom loop
+      // the u-ratchet always was: a firm sheds, output falls, the print rises, the going rate
+      // recovered 60% of that rise REGARDLESS of a third of the workforce out of work, margins
+      // went to zero, and the next firm shed. A worker recovers the cost of living only where
+      // it can credibly leave — the same concave job-finding rate the quit rate already rides
+      // on (§7.210: ONE representation of how easily a job is found), which is 1 at neutral
+      // tightness and falls to zero with it. No new number: the matching function's own.
+      const bargainingPower = Math.min(1, Math.pow(
+        Math.max(0, reg.laborMarketTightness ?? 1) / NEUTRAL_LABOR_TIGHTNESS, MATCHING_ELASTICITY));
+      const colaWeekly = (reg.inflation ?? 0) * COST_OF_LIVING_PASS_THROUGH * bargainingPower / 52;
       const catchup = (avgOffer - 1) * MARKET_WAGE_CATCHUP_SPEED_WEEKLY + colaWeekly;
       marketCatchupByOcc[occ] = catchup;
       const prev = pools[occ]?.wageIndex ?? 1.0;
@@ -688,6 +749,11 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     // pools holding phantom employment until the next labor session. ----
     reconcileEmploymentView(reg, employers, carriedVacanciesByOcc, hiresByOcc, separationsByOcc, nextTenureStrataByOcc);
   });
+  if (process.env.LABOR_CAUSES === '1') {
+    const line = [...laborCauseTotals.entries()].sort().map(([k, v]) => `${k} ${(v / 1e3).toFixed(0)}k`).join(' | ');
+    console.log(`  [labor-causes] w${ctx.nextWeek} ${line}`);
+    laborCauseTotals.clear();
+  }
 }
 
 /**

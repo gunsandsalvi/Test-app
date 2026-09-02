@@ -3,6 +3,7 @@
  *  financial. Product lines, debt tranches, the three statements, credit, and the real input and
  *  output inventories it holds. No parallel firm type anywhere (§7.33). */
 
+import { riskAversionOf } from './preferences';
 import { RegionId } from './geography';
 import { defect } from './defect';
 import { Industry } from './industry';
@@ -351,6 +352,14 @@ export interface Company {
   baselineGrowthCapexToRevenueRatio: number;
   maintenanceShortfallStreak: number;
   executionQuality: number;
+  /** §5-BRAINS — this firm's management: the two preference primitives (domain/preferences.ts),
+   *  drawn once from the firm's own stream and replaced only by measured failure (§5-MGMT). */
+  management?: import('./preferences').Preferences;
+  /** §5-BRAINS — the earnings this management EXPECTS: an adaptive expectation at its own
+   *  horizon. One owner, the labour stage (the first decision that reads it). */
+  expectedEbitdaUSD?: number;
+  /** §5-MGMT — consecutive quarterly reviews this management has failed. */
+  managementFailedQuarters?: number;
   occupationMixDrift: Partial<Record<string, number>>;
 
   // Quarterly Earnings
@@ -516,6 +525,10 @@ export interface Company {
   // a genuinely separate inventory for each; a single shared scalar here was silently
   // overwritten by whichever line's weekly bidding pass ran last. See getOutputInventoryUSD /
   // getOutputInventoryUnits below for the aggregate reads most call sites actually want.
+  /** §7.345 — units sold last week by line (stage 08 carries it from the week's update) and the
+   *  sales this management EXPECTS by line (owner: stage 05, where production is decided). */
+  lastWeekSalesUnitsBySubUnit?: Record<string, number>;
+  expectedSalesUnitsBySubUnit?: Record<string, number>;
   outputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }>;
   // 1$ is 1$ Phase 2/6: real input inventory, keyed by the input sub-unit category (e.g.
   // upstream_extraction, specialty_metals) a company has actually bought and holds. Each entry is
@@ -663,9 +676,15 @@ export function fullStaffingCapHeads(c: Company): number {
 export const TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE = 0.05;
 export const TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH = 0.6;
 
+/** §5-BRAINS — the buffer THIS treasurer keeps: the operating share, weighted by how much its
+ *  management fears running short. The median management keeps the stated share. */
+export function operatingBufferShareOf(c: { management?: import('./preferences').Preferences }): number {
+  return TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversionOf(c.management);
+}
+
 /** What this firm wants to be holding in short government paper, given the cash it has now. */
-export function corporateTreasuryTargetUSD(cashUSD: number, annualRevenueUSD: number): number {
-  const investableUSD = Math.max(0, cashUSD - annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE);
+export function corporateTreasuryTargetUSD(cashUSD: number, annualRevenueUSD: number, riskAversion = 1): number {
+  const investableUSD = Math.max(0, cashUSD - annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversion);
   return investableUSD * TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH;
 }
 

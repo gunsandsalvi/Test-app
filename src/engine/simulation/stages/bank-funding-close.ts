@@ -17,6 +17,7 @@
 import { GameState } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { raiseWholesaleUSD } from './bank-lending';
+import { bankCashBufferRatioOf } from '../../macro/banking';
 import { WeeklyStepContext } from './context';
 import { pay, runSettlementStage } from './settlement';
 
@@ -32,7 +33,7 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
     ctx.updatedCompanies.forEach((bank) => {
       if (!bank.isBankEntity || !bank.bankBalanceSheet || !isActiveCompany(bank)) return;
       const sheet = bank.bankBalanceSheet;
-      const raisedUSD = raiseWholesaleUSD(sheet, sheet.cashReservesUSD);
+      const raisedUSD = raiseWholesaleUSD(sheet, sheet.cashReservesUSD, bankCashBufferRatioOf(bank));
       if (raisedUSD <= 0) return;
       raisedAny = true;
       pay(ctx, {

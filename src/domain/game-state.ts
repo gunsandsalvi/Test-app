@@ -34,6 +34,9 @@ export interface GameState {
    */
   rngSeed: number;
   rngState: number;
+  /** §7.345 — weeks the engine ran before this world was handed over as the opening one
+   *  (burn-in.ts). The calendar is continuous; a display subtracts this. */
+  burnInWeeks?: number;
   /** WS8 — pending primary offerings: enqueued by issuers in stage 08, priced by the relevant
    * clearing book the following week, then settled or withdrawn and removed. */
   primaryOfferings: import('./primary-market').PrimaryOffering[];

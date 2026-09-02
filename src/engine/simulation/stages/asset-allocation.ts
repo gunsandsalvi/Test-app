@@ -36,6 +36,7 @@
  * what finally anchored the front end of the sovereign curve — generalised here.
  */
 
+import { Preferences, riskAversionOf } from '../../../domain/preferences';
 import { CreditRating, InstitutionalEntityType, InstitutionalEntity } from '../../../types';
 import { institutionProfile } from '../../../domain/institution-profiles';
 
@@ -146,6 +147,16 @@ export const FULL_SIZE_SPREAD_RANGE_BPS = 250;
  */
 export const MAX_OVERWEIGHT_MULTIPLE = 2.2;
 
+/** §5-BRAINS — the two sizes above through THIS holder's own risk weight: a more risk-averse
+ *  holder runs a smaller overweight and needs to be paid more before it takes full size. The
+ *  median holder is the stated number. */
+export function maxOverweightMultipleOf(holder: { management?: Preferences } | undefined): number {
+  return MAX_OVERWEIGHT_MULTIPLE / riskAversionOf(holder?.management);
+}
+export function fullSizeSpreadRangeBpsOf(holder: { management?: Preferences } | undefined): number {
+  return FULL_SIZE_SPREAD_RANGE_BPS * riskAversionOf(holder?.management);
+}
+
 
 /**
  * What THIS entity needs to earn, from what its own liabilities actually cost it.
@@ -168,7 +179,10 @@ export const MAX_OVERWEIGHT_MULTIPLE = 2.2;
  * otherwise would be a formula wearing a derivation's clothes.
  */
 export function entityRequiredReturn(entity: InstitutionalEntity): number {
-  const fallback = REQUIRED_RETURN_ON_CAPITAL[entity.entityType];
+  // §5-BRAINS — the stated hurdle is the median board's; this board's own risk aversion weights
+  // it. The measured branches below (an insurer's float, a pension's need) are liability costs
+  // and carry no preference.
+  const fallback = REQUIRED_RETURN_ON_CAPITAL[entity.entityType] * riskAversionOf(entity.management);
   const liabilityUSD = entity.beneficiaryLiabilityUSD ?? 0;
   if (!(liabilityUSD > 0)) return fallback;
 

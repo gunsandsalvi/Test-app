@@ -30,7 +30,7 @@
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
-import { entityRequiredReturn, MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
+import { entityRequiredReturn, maxOverweightMultipleOf } from './asset-allocation';
 import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, damperStreakOf } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
@@ -421,7 +421,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         // shares, not a view on their price, so it enters as a mandated core with no reservation
         // — which is exactly what makes a squeeze move the print.
         const buyInShares = buyInArr[ci];
-        const structuralCeiling = Math.max(0, structuralShares * MAX_OVERWEIGHT_MULTIPLE - lentShares);
+        const structuralCeiling = Math.max(0, structuralShares * maxOverweightMultipleOf(entity) - lentShares);
         // Budget in SHARES at the current price — a holder cannot buy what it cannot fund.
         setDemand(DS, demandRow, ci,
           fair,

@@ -58,7 +58,7 @@ import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settl
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
-import { MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
+import { maxOverweightMultipleOf } from './asset-allocation';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { encumberedFaceByBucket } from '../../../domain/repo';
@@ -405,7 +405,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           reservationStat: computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS)
             + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
                 ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate)),
-          maxHoldingUSD: entityTarget * bucketShareOfMarket * MAX_OVERWEIGHT_MULTIPLE,
+          maxHoldingUSD: entityTarget * bucketShareOfMarket * maxOverweightMultipleOf(entity),
           fullSizeStatRange: SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS,
           maxNetPurchaseUSD: classBudgetUSD * bucketShareOfMarket,
           // Liability-driven core: an insurer's claim reserves and a pension fund's benefit

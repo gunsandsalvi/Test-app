@@ -17,6 +17,7 @@
  */
 
 import { TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../company';
+import { PATIENCE_MEDIAN_WEEKS } from '../preferences';
 
 export interface CapitalProgrammeInputs {
   /** The plant, as a stock. */
@@ -48,6 +49,9 @@ export interface CapitalProgrammeInputs {
   marketCapUSD: number;
   totalDebtUSD: number;
   avgCompetitiveness: number;
+  /** §5-BRAINS — the management's horizon (weeks) and risk weight; median = the stated rule. */
+  patienceWeeks?: number;
+  riskAversion?: number;
 }
 
 export interface CapitalProgramme {
@@ -92,6 +96,12 @@ export function maintenanceFundingCapacityUSD(i: CapitalProgrammeInputs): number
 }
 
 export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramme {
+  // §5-BRAINS — every threshold below that was a constant is the constant at the MEDIAN brain,
+  // scaled by this management's own two numbers: a patient board sees a larger set of projects
+  // worth reinvesting in and moves its programme more slowly; a risk-averse one keeps a bigger
+  // buffer, feels a dear coupon harder and rations cash sooner.
+  const patience = i.patienceWeeks ?? PATIENCE_MEDIAN_WEEKS;
+  const ra = i.riskAversion ?? 1;
   // §5-DYN: mothballed plant draws no upkeep — that saving is most of why a firm mothballs.
   const activePpeUSD = i.grossPPEUSD * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
   const targetMaintenanceCapexUSD = maintenanceTargetUSD(activePpeUSD, i.usefulLifeYears);
@@ -113,13 +123,14 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
     : Math.max(0, i.priorMaintenanceShortfallStreak - 2);
 
   // GROWTH — discretionary, and disciplined by addressable opportunity rather than ambition.
-  const productiveReinvestmentEnvelope = i.newRevenueUSD * Math.max(0.01, i.addressableGrowthAnnual) * 1.5;
+  const productiveReinvestmentEnvelope = i.newRevenueUSD * Math.max(0.01, i.addressableGrowthAnnual) * 1.5
+    * (patience / PATIENCE_MEDIAN_WEEKS);
   const fcfBeforeGrowthCapex = Math.max(0, weeklyOperatingCashFlow * 52 - maintenanceCapexUSD);
   const excessCashGeneration = Math.max(0, fcfBeforeGrowthCapex - productiveReinvestmentEnvelope);
   const payoutPressure = fcfBeforeGrowthCapex > 0 ? Math.min(1, excessCashGeneration / fcfBeforeGrowthCapex) : 0;
 
-  const rateDrag = Math.max(0, i.effectiveDebtRate - 0.04) * 2.0;
-  const cashHealthFactor = i.cashUSD < 0 ? 0.05 : (i.cashUSD < i.currentLiabilitiesUSD * 0.25 ? 0.4 : 1.0);
+  const rateDrag = Math.max(0, i.effectiveDebtRate - 0.04) * 2.0 * ra;
+  const cashHealthFactor = i.cashUSD < 0 ? 0.05 : (i.cashUSD < i.currentLiabilitiesUSD * 0.25 * ra ? 0.4 : 1.0);
   const safeMarketCap = Math.max(0, isFinite(i.marketCapUSD) ? i.marketCapUSD : 0);
   const safeTotalDebt = Math.max(0, isFinite(i.totalDebtUSD) ? i.totalDebtUSD : 0);
   const safeRev = Math.max(1, isFinite(i.annualRevenueUSD) ? i.annualRevenueUSD : 1);
@@ -148,10 +159,13 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   // does: the firm RAISES the money first (the financing decision and the primary market),
   // the proceeds land as cash, and the next week's cap has grown by exactly what was raised.
   const deployableCashUSD = Math.max(0,
-    i.cashUSD - i.annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE);
+    i.cashUSD - i.annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * ra);
   const growthFundingCapUSD = Math.max(0, fcfBeforeGrowthCapex) + deployableCashUSD;
   const targetGrowthCapex = Math.min(desiredGrowthCapex, growthFundingCapUSD);
-  const growthCapexUSD = Math.max(0, i.priorGrowthCapexUSD * 0.90 + targetGrowthCapex * 0.10);
+  // The stock-adjustment weight is the median's 0.10 at the median horizon (§7.288's convention),
+  // and this board's own 1/horizon relative to it.
+  const w = Math.min(1, 0.10 * (PATIENCE_MEDIAN_WEEKS / patience));
+  const growthCapexUSD = Math.max(0, i.priorGrowthCapexUSD * (1 - w) + targetGrowthCapex * w);
 
   return {
     targetMaintenanceCapexUSD,
@@ -188,6 +202,17 @@ export interface CapacityRetirementInputs {
   priorIdleStreakWeeks: number;
   priorMothballedShare: number;
   priorMothballedStreakWeeks: number;
+  /** §7.345 — THE DEMAND-SLACK EXIT. The avoidable-cost test above is the short-run rule (a
+   *  plant runs while price covers its inputs); a plant its market does not need — the share
+   *  the produce-to-sales decision left unrun — is idle in the plain sense, and idle for the
+   *  management's horizon it comes offline too. Without this the only exit from an oversupplied
+   *  market was default (the burn-in's EUR consumer sector: margins 19% → 1.5% in twelve weeks,
+   *  seven weeks of unsold stock, 140 deaths, and nothing came offline). */
+  demandSlackRevenueShare?: number;
+  /** §5-BRAINS — the clocks are this management's horizon: idle for its horizon → mothball;
+   *  mothballed for four horizons → scrap. The median horizon is the stated quarter/year. */
+  mothballAfterWeeks?: number;
+  scrapAfterWeeks?: number;
 }
 export interface CapacityRetirement {
   idleStreakWeeks: number;
@@ -202,16 +227,16 @@ const STRUCTURAL_YEAR_WEEKS = 52; // §7.138's measured hold — the same year e
 const STOCK_ADJUSTMENT_WEEKLY = 0.10; // §7.288's convention for how fast a stock chases a target.
 
 export function capacityRetirement(i: CapacityRetirementInputs): CapacityRetirement {
-  const idle = Math.max(0, Math.min(1, i.idleRevenueShareThisWeek));
+  const idle = Math.max(0, Math.min(1, Math.max(i.idleRevenueShareThisWeek, i.demandSlackRevenueShare ?? 0)));
   const idleStreakWeeks = idle > 0 ? i.priorIdleStreakWeeks + 1 : 0;
   // The target: after a sustained quarter of idling, the persistently idle share comes offline;
   // the moment the plant covers cost again the target is zero and the same speed brings it back.
-  const targetShare = idleStreakWeeks >= STRUCTURAL_QUARTER_WEEKS ? idle : 0;
+  const targetShare = idleStreakWeeks >= (i.mothballAfterWeeks ?? STRUCTURAL_QUARTER_WEEKS) ? idle : 0;
   let mothballedShare = Math.max(0, Math.min(1,
     i.priorMothballedShare * (1 - STOCK_ADJUSTMENT_WEEKLY) + targetShare * STOCK_ADJUSTMENT_WEEKLY));
   const mothballedStreakWeeks = mothballedShare > 0.01 ? i.priorMothballedStreakWeeks + 1 : 0;
   let scrappedShare = 0;
-  if (mothballedStreakWeeks >= STRUCTURAL_YEAR_WEEKS) {
+  if (mothballedStreakWeeks >= (i.scrapAfterWeeks ?? STRUCTURAL_YEAR_WEEKS)) {
     // A year mothballed is not coming back: the offline share is scrapped and the clock resets.
     scrappedShare = mothballedShare;
     mothballedShare = 0;

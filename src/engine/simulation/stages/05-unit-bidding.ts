@@ -22,6 +22,7 @@
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
 import { partyId } from '../../ledger/party';
 import { categoryPriceTier, householdBudgetReachMultiple, budgetDemandLadder, DEMAND_LADDER_RUNGS } from '../../../domain/industry';
+import { patienceWeeksOf, riskAversionOf, expectationFromHistory, adaptiveExpectation } from '../../../domain/preferences';
 import { TIER_SPEND_MIX } from '../../macro/household-cohorts';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
@@ -788,6 +789,7 @@ function settleContracts(
       supRegPx[i]
     );
     supUp.salesUnits = (supUp.salesUnits ?? 0) + actualT[i];
+    (supUp.salesUnitsBySubUnit ??= {})[subUnitId] = (supUp.salesUnitsBySubUnit[subUnitId] ?? 0) + actualT[i];
     supUp.salesUSD = (supUp.salesUSD ?? 0) + paymentL[i];
     contractSalesUnitsBySupplier.set(supplier, (contractSalesUnitsBySupplier.get(supplier) ?? 0) + actualT[i]);
     supUp._contractOwedUnits = (supUp._contractOwedUnits ?? 0) + T.qtyPerWeek[r];
@@ -1051,7 +1053,35 @@ function buildRegionSupplyPlans(
       up.idleLineRevenueShare = (up.idleLineRevenueShare ?? 0) + Math.max(0, line.revenueShare ?? 0);
     }
     const uncappedProductionUnits = staffedNormalSeasonUnits * seasonalPlantFactor;
-    const targetProductionUnits = coversUnitCost ? uncappedProductionUnits : 0;
+    // §7.345 — PRODUCE TO SALES, NOT TO THE WAREHOUSE. The throttle above only bites once stock
+    // exceeds the warehouse, so a firm in an oversupplied market ran its plant flat out into
+    // seven weeks of unsold goods, paid wages and inputs for all of it, and died of cash (the
+    // burn-in's EUR consumer sector). A plant makes what its management EXPECTS to sell — an
+    // adaptive expectation of last week's units sold at its own horizon (§5-BRAINS) — plus the
+    // stock it wants on hand, closed at 1/horizon a week. The stock it wants is the good's own
+    // production lead of sales (the weeks it cannot respond in; at least one) — a TECHNOLOGY
+    // primitive the registry already carries, no target-inventory constant. No sales record yet
+    // (the seed's first week, a newborn's) means the plant's own volume, as before.
+    const soldLastWeekUnits = comp.lastWeekSalesUnitsBySubUnit?.[subUnitId];
+    let demandLedUnits = Infinity;
+    if (soldLastWeekUnits !== undefined) {
+      const memo = (comp.expectedSalesUnitsBySubUnit ??= {});
+      const expectedSalesUnits = adaptiveExpectation(memo[subUnitId], soldLastWeekUnits, patienceWeeksOf(comp.management));
+      memo[subUnitId] = expectedSalesUnits;
+      const targetStockUnits = Math.max(1, productionLeadWeeksOf(subUnitId)) * expectedSalesUnits;
+      const stockNowUnits = getOutputInventoryUnits(comp, subUnitId);
+      demandLedUnits = Math.max(0,
+        expectedSalesUnits + (targetStockUnits - stockNowUnits) / patienceWeeksOf(comp.management));
+    }
+    const plannedProductionUnits = Math.min(uncappedProductionUnits, demandLedUnits);
+    if (uncappedProductionUnits > 0 && plannedProductionUnits < uncappedProductionUnits) {
+      // The plant this decision did not need, in the line's revenue share — integrated by the
+      // capacity-retirement rule (stage 08) into the mothball stock response, like the idle share.
+      const up = wk.updateOf(comp);
+      up.demandSlackRevenueShare = (up.demandSlackRevenueShare ?? 0)
+        + Math.max(0, line.revenueShare ?? 0) * (1 - plannedProductionUnits / uncappedProductionUnits);
+    }
+    const targetProductionUnits = coversUnitCost ? plannedProductionUnits : 0;
     if (process.env.CAT_TRACE === subUnitId) {
       const t = catTraceSellers;
       t.n++; if (!coversUnitCost) t.idle++;
@@ -1277,6 +1307,14 @@ function buildRegionDemandPlans(
     if (openBidUnits <= 0.001) return;
 
     const cashRatio = comp.cash / Math.max(1, comp.annualRevenue);
+    // §5-BRAINS — the buyer's own horizon sets what it takes the price to BE: a patient buyer
+    // anchors on the average of the last `patience` prints, an impatient one on last week's.
+    // The cap on its ladder is reach × that expectation, so one short week moves a patient
+    // buyer's reservation by a fraction of what it moves an impatient one's (§7.343's ratchet
+    // had every buyer anchored on the same print).
+    const patienceWeeks = patienceWeeksOf(comp.management);
+    const riskAversion = riskAversionOf(comp.management);
+    const expectedPriceUSD = expectationFromHistory(demandState.priceHistory, referencePriceUSD, patienceWeeks);
     // A cash-strapped buyer discounting its OWN bid price used to be the mechanism here —
     // but under pro-rata clearing every in-the-money bid gets the same fill ratio regardless
     // of how far above the clearing price it sits, so a discounted bid is either fully in the
@@ -1285,7 +1323,7 @@ function buildRegionDemandPlans(
     // price -> shut out -> can't get inputs -> less revenue -> less cash. A capital-constrained
     // real buyer instead orders LESS at a normal market price (real capital rationing), so
     // whatever it does order actually clears.
-    const cashConstrainedQtyModifier = cashRatio < 0.02 ? 0.70 : 1.0;
+    const cashConstrainedQtyModifier = cashRatio < 0.02 * riskAversion ? 0.70 : 1.0;
     const units = openBidUnits * cashConstrainedQtyModifier;
     const reach = isCapexSupplierCategory ? 1 : marginReach(comp, demandUSD * 52);
     plans.push({
@@ -1293,8 +1331,8 @@ function buildRegionDemandPlans(
       regionId,
       company: comp,
       demandUnits: units,
-      maxPriceUSD: referencePriceUSD * reach,
-      rungs: budgetRungs(units * referencePriceUSD, units, referencePriceUSD, reach),
+      maxPriceUSD: expectedPriceUSD * reach,
+      rungs: budgetRungs(units * referencePriceUSD, units, expectedPriceUSD, reach),
     });
   });
 
@@ -1805,6 +1843,7 @@ function runSubUnitMarkets(
     }
     if (soldUnits > 0) {
       supUp.salesUnits = (supUp.salesUnits ?? 0) + soldUnits;
+      (supUp.salesUnitsBySubUnit ??= {})[subUnitId] = (supUp.salesUnitsBySubUnit[subUnitId] ?? 0) + soldUnits;
       supUp.salesUSD = (supUp.salesUSD ?? 0) + soldValue;
     }
     supUp._targetProductionUSD = (supUp._targetProductionUSD ?? 0) + plan.targetProductionUSD;
@@ -2232,7 +2271,8 @@ function runSubUnitMarkets(
     // be deflated by the price of what IT sells over the SAME window (rule 9 twice over: the
     // aggregate CPI is a different population AND a 52-week period against a 12-week growth).
     // 13 entries covers the labour stage's 12-week window.
-    demandState.priceHistory = [...(demandState.priceHistory ?? []).slice(-12), demandState.unitPriceUSD];
+    // §5-BRAINS — a year of prints: the longest horizon a buyer's expectation reads over.
+    demandState.priceHistory = [...(demandState.priceHistory ?? []).slice(-51), demandState.unitPriceUSD];
     // IND16: the third price level, and the one a household actually faces. Ex-works is what the
     // producer received, `unitPriceUSD` is what it cost delivered — what a BUSINESS pays for its
     // inputs — and this is what it costs on a shelf, once the channel's cover is paid for. Three

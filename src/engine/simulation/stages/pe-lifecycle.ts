@@ -715,64 +715,75 @@ export function runFirmBirthsForRegion(
   // chased size regardless of profitability; the pool's own measured margin is the other half,
   // and their PRODUCT needs no coefficient (rule 19). This is what makes category margins
   // mean-revert through entry instead of by assertion.
-  const candidate = segs
+  // §7.345 — and it goes to EVERY pool where entering pays this quarter, not the one that pays
+  // most: one firm per quarter per region was no supply response at all (a 0.4%-of-pool entrant
+  // against a 30% shortage). The signal is unchanged — unserved demand × the pool's measured
+  // margin, no coefficient — and every pool it is positive for gets an entrant, each a fraction
+  // of a percent of its pool, in the order the signal ranks them.
+  const candidates = segs
     .map((seg) => ({
       seg,
       ratio: (seg.annualRevenueUSD / Math.max(1, namedBySegment.get(seg.industry) ?? 1))
         * Math.max(0, seg.marginPct ?? 0),
     }))
-    .sort((a, b) => b.ratio - a.ratio)[0];
-  if (!candidate || candidate.seg.annualRevenueUSD <= 0 || !(candidate.ratio > 0)) return [];
+    .filter((x) => x.seg.annualRevenueUSD > 0 && x.ratio > 0)
+    .sort((a, b) => b.ratio - a.ratio);
+  if (candidates.length === 0) return [];
 
-  // Born SMALL — a new firm is a fraction of a percent of its pool, which is what a real
-  // entrant is. Its leverage is what the SME pools actually carry (G2's serviceable ceiling),
-  // so it enters the credit universe at a realistic rung rather than a chosen rating.
-  const seg = candidate.seg;
-  const revenueUSD = seg.annualRevenueUSD * 0.004;
-  if (revenueUSD < 1e6) return [];
-  const employees = Math.max(10, Math.round(seg.employment * (revenueUSD / Math.max(1, seg.annualRevenueUSD))));
   const tickers = new Set(ctx.updatedCompanies.map((c) => c.ticker));
   const names = new Set(ctx.updatedCompanies.map((c) => c.name));
-  // SEG-D: the newborn sells what its pool sells — the pool's own measured mix by sub-unit, or
-  // (before the pool has measured receipts) its industry's sub-units weighted by the region's
-  // real demand for each, so a new firm opens where there is business to win.
-  const measuredMix = seg.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
-  const measuredTotalUSD = Object.values(measuredMix).reduce((a, v) => a + Math.max(0, v), 0);
-  const productMixBySubUnit: Record<string, number> = measuredTotalUSD > 0
-    ? { ...measuredMix }
-    : Object.fromEntries(smePoolSubUnits(seg.industry)
-      .map((su) => [su.unitId, reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0]));
+  const born: Company[] = [];
+  candidates.forEach(({ seg }) => {
+    // Born SMALL — a new firm is a fraction of a percent of its pool, which is what a real
+    // entrant is. Its leverage is what the SME pools actually carry (G2's serviceable ceiling),
+    // so it enters the credit universe at a realistic rung rather than a chosen rating.
+    const revenueUSD = seg.annualRevenueUSD * 0.004;
+    if (revenueUSD < 1e6) return;
+    const employees = Math.max(10, Math.round(seg.employment * (revenueUSD / Math.max(1, seg.annualRevenueUSD))));
+    // SEG-D: the newborn sells what its pool sells — the pool's own measured mix by sub-unit, or
+    // (before the pool has measured receipts) its industry's sub-units weighted by the region's
+    // real demand for each, so a new firm opens where there is business to win.
+    const measuredMix = seg.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
+    const measuredTotalUSD = Object.values(measuredMix).reduce((a, v) => a + Math.max(0, v), 0);
+    const productMixBySubUnit: Record<string, number> = measuredTotalUSD > 0
+      ? { ...measuredMix }
+      : Object.fromEntries(smePoolSubUnits(seg.industry)
+        .map((su) => [su.unitId, reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0]));
 
-  const born = generate(regionId, [{
-    industry: seg.industry,
-    productMixBySubUnit,
-    annualRevenueUSD: revenueUSD,
-    ebitdaMargin: seg.marginPct,
-    leverage: 2.5,
-    sponsorStyle: random() < 0.5,
-    employeeCount: employees,
-  }], reg.policyRate, tickers, names);
-  if (born.length === 0) return [];
+    const newborn = generate(regionId, [{
+      industry: seg.industry,
+      productMixBySubUnit,
+      annualRevenueUSD: revenueUSD,
+      ebitdaMargin: seg.marginPct,
+      leverage: 2.5,
+      sponsorStyle: random() < 0.5,
+      employeeCount: employees,
+    }], reg.policyRate, tickers, names);
+    if (newborn.length === 0) return;
+    newborn.forEach((c) => { tickers.add(c.ticker); names.add(c.name); });
 
-  // Conservation: the pool loses exactly what the firm gains.
-  seg.annualRevenueUSD = Math.max(0, seg.annualRevenueUSD - revenueUSD);
-  seg.employment = Math.max(1, seg.employment - employees);
-  // SEG1: the opening balance too. A born firm's working capital used to be conjured by the
-  // generator; now it is CARVED from the pool's own money, as a payment through settlement
-  // (this stage runs after the week's cutoff, so it lands next cycle — the firm is born with
-  // its opening balance in transit, and the economy's total cash never moved).
-  born.forEach((c) => {
-    const openingCashUSD = Math.min(Math.max(0, c.cash), Math.max(0, seg.cashUSD ?? 0));
-    c.cash = 0;
-    if (openingCashUSD > 0) {
-      pay(ctx, {
-        payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
-        payee: { kind: 'COMPANY', ticker: c.ticker },
-        amountUSD: openingCashUSD,
-        reason: 'firm birth: opening balance carved from pool',
-      });
-    }
+    // Conservation: the pool loses exactly what the firm gains.
+    seg.annualRevenueUSD = Math.max(0, seg.annualRevenueUSD - revenueUSD);
+    seg.employment = Math.max(1, seg.employment - employees);
+    // SEG1: the opening balance too. A born firm's working capital used to be conjured by the
+    // generator; now it is CARVED from the pool's own money, as a payment through settlement
+    // (this stage runs after the week's cutoff, so it lands next cycle — the firm is born with
+    // its opening balance in transit, and the economy's total cash never moved).
+    newborn.forEach((c) => {
+      const openingCashUSD = Math.min(Math.max(0, c.cash), Math.max(0, seg.cashUSD ?? 0));
+      c.cash = 0;
+      if (openingCashUSD > 0) {
+        pay(ctx, {
+          payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
+          payee: { kind: 'COMPANY', ticker: c.ticker },
+          amountUSD: openingCashUSD,
+          reason: 'firm birth: opening balance carved from pool',
+        });
+      }
+      born.push(c);
+    });
   });
+  if (born.length === 0) return [];
   // Every firm banks somewhere. A company born without a house bank held its cash outside the
   // banking system entirely — its balance never reached any bank's funding, so the money existed
   // on the firm and nowhere else (rule 3's "1$ is 1$"). Measured: 12 unbanked firms at seed

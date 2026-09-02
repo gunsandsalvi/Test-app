@@ -29,6 +29,7 @@
  * interest arithmetic picks CP up off the ladder like any other tranche).
  */
 
+import { riskAversionOf } from '../../../domain/preferences';
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, pushLadderRow, relinkLadder, TR_FLOATING, TR_CP } from '../../../engine2/tranches';
@@ -258,7 +259,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           if (!key || !isBillBucketKey(key)) return;
           heldByBucket.set(key, (heldByBucket.get(key) ?? 0) + (h.quantityOrNotionalUSD ?? 0));
         });
-        const targetUSD = corporateTreasuryTargetUSD(comp.cash ?? 0, comp.annualRevenue ?? 0);
+        const targetUSD = corporateTreasuryTargetUSD(comp.cash ?? 0, comp.annualRevenue ?? 0, riskAversionOf(comp.management));
         const heldUSD = Array.from(heldByBucket.values()).reduce((a, v) => a + v, 0);
         if (!(targetUSD > 1) && !(heldUSD > 1)) return;
         const budgetUSD = Math.max(0, (comp.cash ?? 0)

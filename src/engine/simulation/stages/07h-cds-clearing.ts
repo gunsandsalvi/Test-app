@@ -27,7 +27,7 @@ import { WeeklyStepContext } from './context';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { isActiveCompany } from '../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
-import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequiredReturn, FULL_SIZE_SPREAD_RANGE_BPS } from './asset-allocation';
+import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequiredReturn, fullSizeSpreadRangeBpsOf } from './asset-allocation';
 import { bankRequiredReturnAnnual } from './bank-lending';
 import { leverageHeadroomUSD } from '../../macro/banking';
 import { REGION_IDS } from '../../../domain/geography';
@@ -140,7 +140,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
         demandByInstrumentId.set(cdsInstrumentId(regionId, c.id), {
           reservationStat: reservationBps,
           maxHoldingUSD: capacityUSD / Math.max(1, referenceIssuers.length),
-          fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
+          fullSizeStatRange: fullSizeSpreadRangeBpsOf(bank),
         });
       });
       participants.push({
@@ -173,7 +173,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
             creditConditionsIndex,
           }),
           maxHoldingUSD: capacityUSD / Math.max(1, referenceIssuers.length),
-          fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
+          fullSizeStatRange: fullSizeSpreadRangeBpsOf(entity),
         });
       });
       participants.push({ id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId });

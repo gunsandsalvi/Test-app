@@ -14,6 +14,7 @@
  * a subsidy and why it has to be modelled with a counterparty rather than as a yield discount.
  */
 
+import { riskAversionOf } from '../../../domain/preferences';
 import { GameState, RegionId } from '../../../types';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { InstitutionalEntity } from '../../../domain/institutions';
@@ -204,6 +205,7 @@ export function runFxHedgingStage(state: GameState, ctx: WeeklyStepContext): voi
         interestAnnualUSD: (c.interestCoverage > 0 && isFinite(c.interestCoverage))
           ? Math.max(0, c.ebit ?? 0) / c.interestCoverage : 0,
         oneSigma,
+        riskAversion: riskAversionOf(c.management),
       });
       if (!(mustHedgeUSD > 0)) return;
       const gapUSD = mustHedgeUSD - coveredUSD({ kind: 'COMPANY', ticker: c.ticker }, foreign);

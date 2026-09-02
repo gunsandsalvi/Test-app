@@ -33,6 +33,7 @@
  * real reserve-settlement flow for the money that moved between banks.
  */
 
+import { Preferences, riskAversionOf } from '../../../domain/preferences';
 import { Company, Region, RegionId } from '../../../types';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import {
@@ -82,8 +83,10 @@ import {
  * THIS bank's cost of equity: the risk-free rate its own region prints, plus its own measured
  * beta against the equity risk premium. The price of every loan it writes rides on it.
  */
-export function bankRequiredReturnAnnual(bank: { beta?: number }, reg: Region): number {
-  return Math.max(0.01, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (bank.beta ?? 1) * EQUITY_RISK_PREMIUM);
+export function bankRequiredReturnAnnual(bank: { beta?: number; management?: Preferences }, reg: Region): number {
+  // §5-BRAINS — the premium weighted by this bank's own risk aversion: a cautious bank prices
+  // every loan off a higher hurdle. The median bank prices off the stated premium.
+  return Math.max(0.01, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (bank.beta ?? 1) * EQUITY_RISK_PREMIUM * riskAversionOf(bank.management));
 }
 /** Share of the gap to the serviceable ceiling the SME pools seek to borrow each week when
  * credit is free — the pace of a real investment pipeline (MS/BP make segment investment
@@ -930,8 +933,8 @@ export function unrenewedWholesaleUSD(sheet: BankingSector): number {
  * Writes the liability up and returns the amount; the CALLER settles the cash leg as a payment
  * instruction (the unmodeled wholesale lender → BANK_SECURITIES).
  */
-export function raiseWholesaleUSD(sheet: BankingSector, settledCashUSD: number): number {
-  const shortfallUSD = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO - settledCashUSD;
+export function raiseWholesaleUSD(sheet: BankingSector, settledCashUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
+  const shortfallUSD = sheet.depositsUSD * bufferRatio - settledCashUSD;
   if (shortfallUSD < 1e6) return 0;
   sheet.wholesaleFundingUSD = (sheet.wholesaleFundingUSD ?? 0) + shortfallUSD;
   return shortfallUSD;

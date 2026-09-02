@@ -143,11 +143,20 @@ export function budgetDemandLadder(args: {
   // up to its want — the budget is what it spends, the reach is the most it will pay per unit
   // for the first of them. A shortage of S against a want W then clears at budget/S, ONCE, and
   // the cap is measured (reach × going price), so the rung count still moves nothing.
-  const reservationUSD = reachableUSD / maxUnits;
+  // §7.345 — THE HYPERBOLA IS THE REACHABLE BUDGET'S, AND NOTHING TRUNCATES IT. §7.343 kept
+  // §7.209's cap at the whole-want reservation (reach × the going price) on EVERY rung, and for
+  // a buyer whose reach is 1 that is the flat block again: three rungs all at the going price,
+  // so a short market could ration but never reprice. Measured in the burn-in: EUR apparel 40%
+  // → 80% short over twelve weeks at a FLAT price (67 → 64) while the equally short USA market
+  // cleared at 150–172; EUR's sellers starved and 140 of them died. At a price p the buyer
+  // takes reachable/p units up to its want: the rung at the whole want IS the reservation
+  // (reachable / want), and the rungs above it are the same money over fewer units. The rung
+  // count only samples the curve (a resolution choice); the clearing point it produces for a
+  // given supply is the curve's own value there, finer as the count grows.
   const step = maxUnits / rungs;
   const out: { units: number; maxPriceUSD: number }[] = [];
   for (let i = 1; i <= rungs; i++) {
-    out.push({ units: step, maxPriceUSD: Math.min(reservationUSD, weeklyBudgetUSD / (step * i)) });
+    out.push({ units: step, maxPriceUSD: reachableUSD / (step * i) });
   }
   return out;
 }

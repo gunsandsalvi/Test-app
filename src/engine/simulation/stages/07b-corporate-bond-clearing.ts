@@ -47,11 +47,11 @@ import { isActiveCompany } from '../../../domain/company';
 import { computeAnnualDefaultProbability, getRatingBucket, distributeRealTargetByWeight, creditRecoveryRate } from './shared-helpers';
 import {
   computeReservationSpreadBps,
-  FULL_SIZE_SPREAD_RANGE_BPS,
+  fullSizeSpreadRangeBpsOf,
   isInvestmentGrade,
   subInvestmentGradeSizeFactor,
   spreadRiskCapitalChargeRate,
-  MAX_OVERWEIGHT_MULTIPLE,
+  maxOverweightMultipleOf,
   DISTRESSED_CONVICTION_MULTIPLE,
   computeDistressedReservationSpreadBps,
   entityRequiredReturn,
@@ -347,7 +347,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       const isHedgeFund = entity.entityType === 'HEDGE_FUND' && entity.hedgeFundStrategy === 'DISTRESSED';
       const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
         ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate);
-      const overweightMultiple = isHedgeFund ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE;
+      const overweightMultiple = isHedgeFund ? DISTRESSED_CONVICTION_MULTIPLE : maxOverweightMultipleOf(entity);
       // The entity's real budget for this auction (S11): available cash plus its type's genuine
       // leverage capacity, sliced to this asset class by its own targets, then directed at the
       // names where paper is actually changing hands — a live offering, or the gap between what
@@ -398,7 +398,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         // XB2: hedged, so a foreign buyer's requirement carries the CIP cost of the hedge.
         setDemand(DS, demandRow, ti,
           reservationBps + hedgeAdjBps,
-          FULL_SIZE_SPREAD_RANGE_BPS,
+          fullSizeSpreadRangeBpsOf(entity),
           structuralSizeUSD * overweightMultiple,
           classBudgetUSD *
             (totalCashDemandWeightUSD > 0

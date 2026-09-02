@@ -1,32 +1,40 @@
 /**
- * §5-STRUCT step 6 — THE SEED IS A SECOND CODE PATH, AND IT DISAGREES WITH THE ENGINE.
+ * §5-STRUCT step 6 / §7.345 — THE SEED IS A GUESS; THE ENGINE IS THE TRUTH. BURN IT IN.
  *
- * Every §7.4 defect this project has recorded is one bug wearing different clothes. The production
- * pipeline opening at 1.06 weeks of a 6-week lead. The CPI basket struck on the landed price and
- * measured on the shelf price. The register opening at a third of its own steady state. Thirty-six
- * of thirty-seven categories opening below the capacity their own demand needs. Each was found
- * separately, each cost a run to find, and each is the same thing: **the opening world is built by
- * assertion, and the engine then produces something else.**
+ * Every §7.4 defect this project recorded was one bug wearing different clothes: the opening
+ * world is built by ASSERTION and the engine then produces something else. The end state is
+ * that there is no seed — a bootstrap sets what is genuinely exogenous (population, geography,
+ * the registry, the calendar) and everything endogenous is whatever the engine's own mechanisms
+ * settle to. This module is that settling: run the engine forward from the seed until the
+ * quantities that define the world stop moving, and hand THAT state over as the opening one.
  *
- * The end state is that there is no seed. A bootstrap sets what is genuinely EXOGENOUS — population,
- * geography, the industry registry, the calendar — and everything endogenous is whatever the
- * engine's own mechanisms produce. One code path cannot disagree with itself.
+ * WHAT §7.294 TAUGHT. A fixed 12-week burn was measured worse than the seed: it baked the
+ * engine's opening TRANSIENT into week 0 and reset the calendar under a policy meeting cycle
+ * that carried on. Two things follow. (1) A burn-in is not a number of weeks — it runs to a
+ * CONVERGENCE TEST, and a world that does not converge is an engine defect, named by the
+ * quantity that keeps drifting, never a seed patch (that is the self-correction the user asked
+ * for: the seed cannot hold a world the engine will not hold). (2) The calendar is CONTINUOUS:
+ * the burnt weeks stay counted (every structural clock — the quarter, the §7.138 year — is then
+ * already running at the hand-over), and `burnInWeeks` on the state is what a display subtracts.
  *
- * THIS MODULE IS THE MECHANISM, NOT THE SWITCH. Burn-in is off by default and must stay off until
- * the measurement below says the opening world has actually stopped moving, because turning it on
- * changes every number in the project at once. What it gives today is the ability to ASK: run the
- * engine forward from the seed and watch the quantities §7.4 is about; the distance they travel is
- * the exact size of the disagreement, per quantity, instead of one defect at a time.
+ * WHAT CONVERGED MEANS. For `SETTLED_WEEKS` consecutive weeks, every watched quantity moved by
+ * less than its tolerance: unemployment by region, the price level by region, the goods fill
+ * ratio, and the count of active firms. The tolerances are widths of a week's ordinary noise,
+ * not bands on the level — a world can converge to 30% unemployment, and then the record says
+ * so, in numbers, with the drifting quantity named.
  *
- * WHY IT IS SAFE TO ADD NOW. The state after K weeks IS a state the engine produced, so using it as
- * week 0 cannot be less self-consistent than the seed — only differently calibrated. What it costs
- * is the calibration: every §7 number is against the un-burnt seed. That is a re-baseline, and it
- * is the reason this is a switch someone turns deliberately rather than a default.
+ * Off by default (`SEED_BURN_IN` unset): turning it on re-bases every number in §7 at once, so
+ * it is a switch someone turns deliberately after reading the trace.
+ *   SEED_BURN_IN=auto        run to convergence (at most MAX_WEEKS_DEFAULT)
+ *   SEED_BURN_IN=auto:200    run to convergence (at most 200)
+ *   SEED_BURN_IN=52          run exactly 52 weeks (the §7.294 shape, for comparison)
+ *   SEED_BURN_IN_TRACE=1     print the trace every 4 weeks (auto mode prints its summary anyway)
  */
 
 import { GameState } from '../../types';
 import { productionLeadWeeksOf } from '../../domain/industry-registry';
 import { INDUSTRY_SUBUNITS } from '../../domain/industry';
+import { REGION_IDS } from '../../domain/geography';
 
 /** One quantity §7.4 is about: what the seed asserted, and where the engine took it. */
 export interface SteadyStateProbe {
@@ -76,9 +84,24 @@ export function probeSteadyState(s: GameState): Record<string, number> {
   }
   out['goods fill ratio'] = demanded > 0 ? supplied / demanded : 1;
 
+  for (const rid of REGION_IDS) {
+    out[`${rid} CPI level`] = Number(s.regions[rid]?.consumerPriceIndex) || 0;
+    out[`${rid} unemployment`] = Number(s.regions[rid]?.unemploymentRate) || 0;
+  }
   out['USA CPI level'] = Number(s.regions.USA.consumerPriceIndex) || 0;
   out['USA unemployment'] = Number(s.regions.USA.unemploymentRate) || 0;
   out['active firms'] = s.companies.filter((c) => !c.isDefaulted && !(c as { mergerAcquired?: boolean }).mergerAcquired).length;
+  // The week's casualties and the plant taken offline — the two stock responses whose clocks
+  // the trace has to show (§7.345: the w13 cliff).
+  out['defaults this week'] = s.companies.filter((c) => c.defaultedWeek === s.currentWeek).length;
+  let ppe = 0;
+  let mothballed = 0;
+  for (const c of s.companies) {
+    const g = Number(c.grossPPEUSD) || 0;
+    ppe += g;
+    mothballed += g * (Number(c.mothballedPpeShare) || 0);
+  }
+  out['mothballed plant share'] = ppe > 0 ? mothballed / ppe : 0;
   return out;
 }
 
@@ -97,12 +120,130 @@ export function compareToSettled(
   });
 }
 
-/**
- * How many weeks of burn-in to take before a state is handed over as week 0. Zero — OFF — until
- * the measurement above says the world has stopped moving, and until someone accepts the
- * re-baseline that turning it on costs. `SEED_BURN_IN=n` to evaluate it.
- */
+// ---------------------------------------------------------------------------------------------
+// The convergence test.
+// ---------------------------------------------------------------------------------------------
+
+/** Consecutive quiet weeks before the world counts as settled: two months of the UI calendar. */
+export const SETTLED_WEEKS = 8;
+/** The most weeks an `auto` burn-in runs before giving up and naming what still drifts. */
+export const MAX_WEEKS_DEFAULT = 156;
+
+/** A week's ordinary noise in each watched quantity — the width below which it is "not moving".
+ *  Unemployment: a quarter of a point. The price level: half a percent a week (that is still ~30%
+ *  a year, so a converged world can be inflating — the level's DRIFT is then the finding, read
+ *  off the trace, not hidden by the test). Fill: a point. Firms: half a percent of the roster. */
+export const TOLERANCES = {
+  unemploymentPp: 0.0025,
+  priceLevelPct: 0.005,
+  fillRatio: 0.01,
+  activeFirmsShare: 0.005,
+} as const;
+
+export interface BurnInWeek {
+  week: number;
+  probe: Record<string, number>;
+  /** The quantities that moved more than their tolerance this week (empty = a quiet week). */
+  moved: string[];
+}
+
+export interface BurnInResult {
+  state: GameState;
+  weeks: number;
+  converged: boolean;
+  trace: BurnInWeek[];
+  /** The quantities still moving when the burn-in stopped (empty when converged). */
+  drifting: string[];
+}
+
+export type BurnInMode =
+  | { mode: 'off' }
+  | { mode: 'fixed'; weeks: number }
+  | { mode: 'auto'; maxWeeks: number };
+
+/** `SEED_BURN_IN`: unset/0 → off; a number → that many weeks; `auto[:max]` → to convergence. */
+export function burnInMode(): BurnInMode {
+  const raw = (process.env.SEED_BURN_IN ?? '').trim();
+  if (!raw) return { mode: 'off' };
+  if (raw.startsWith('auto')) {
+    const max = Number(raw.split(':')[1]);
+    return { mode: 'auto', maxWeeks: Number.isFinite(max) && max > 0 ? Math.floor(max) : MAX_WEEKS_DEFAULT };
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? { mode: 'fixed', weeks: Math.floor(n) } : { mode: 'off' };
+}
+
+/** Kept for the harness's older reading of the switch: the fixed week count, 0 when off/auto. */
 export function burnInWeeks(): number {
-  const n = Number(process.env.SEED_BURN_IN);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  const m = burnInMode();
+  return m.mode === 'fixed' ? m.weeks : 0;
+}
+
+/** Which watched quantities moved more than their tolerance between two probes. */
+export function movedQuantities(prev: Record<string, number>, next: Record<string, number>): string[] {
+  const moved: string[] = [];
+  for (const rid of REGION_IDS) {
+    const du = Math.abs((next[`${rid} unemployment`] ?? 0) - (prev[`${rid} unemployment`] ?? 0));
+    if (du > TOLERANCES.unemploymentPp) moved.push(`${rid} unemployment`);
+    const p0 = prev[`${rid} CPI level`] ?? 0;
+    const p1 = next[`${rid} CPI level`] ?? 0;
+    if (p0 > 0 && Math.abs(p1 / p0 - 1) > TOLERANCES.priceLevelPct) moved.push(`${rid} CPI level`);
+  }
+  if (Math.abs((next['goods fill ratio'] ?? 0) - (prev['goods fill ratio'] ?? 0)) > TOLERANCES.fillRatio) moved.push('goods fill ratio');
+  const f0 = prev['active firms'] ?? 0;
+  const f1 = next['active firms'] ?? 0;
+  if (f0 > 0 && Math.abs(f1 - f0) / f0 > TOLERANCES.activeFirmsShare) moved.push('active firms');
+  return moved;
+}
+
+function traceLine(w: BurnInWeek): string {
+  const p = w.probe;
+  const u = REGION_IDS.map((r) => (100 * (p[`${r} unemployment`] ?? 0)).toFixed(1)).join('/');
+  const cpi = REGION_IDS.map((r) => (p[`${r} CPI level`] ?? 0).toFixed(1)).join('/');
+  return `  [burn-in] w${String(w.week).padStart(3)} u ${u} | CPI ${cpi} | fill ${(p['goods fill ratio'] ?? 0).toFixed(3)}`
+    + ` | firms ${p['active firms']} (-${p['defaults this week']}) | mothballed ${(100 * (p['mothballed plant share'] ?? 0)).toFixed(1)}%`
+    + ` | moved: ${w.moved.length ? w.moved.join(', ') : '—'}`;
+}
+
+/**
+ * Run the engine forward from `state` until the watched quantities have been quiet for
+ * `SETTLED_WEEKS` weeks (auto) or for exactly `weeks` weeks (fixed). The calendar is NOT reset:
+ * the returned state's `currentWeek` is the seed's plus the weeks burnt, and `burnInWeeks`
+ * records how many, so every structural clock keeps its phase and a display can subtract.
+ */
+export function burnIn(
+  state: GameState,
+  advance: (s: GameState) => GameState,
+  mode: Exclude<BurnInMode, { mode: 'off' }>,
+): BurnInResult {
+  const limit = mode.mode === 'fixed' ? mode.weeks : mode.maxWeeks;
+  const verbose = process.env.SEED_BURN_IN_TRACE === '1' || mode.mode === 'auto';
+  const trace: BurnInWeek[] = [];
+  let prev = probeSteadyState(state);
+  let quiet = 0;
+  let converged = false;
+  let s = state;
+  let w = 0;
+  while (w < limit) {
+    s = advance(s);
+    w++;
+    const probe = probeSteadyState(s);
+    const moved = movedQuantities(prev, probe);
+    const row = { week: w, probe, moved };
+    trace.push(row);
+    prev = probe;
+    quiet = moved.length === 0 ? quiet + 1 : 0;
+    const every = process.env.SEED_BURN_IN_TRACE === '2' ? 1 : 4;
+    if (verbose && (w % every === 0 || moved.length === 0)) console.log(traceLine(row));
+    if (mode.mode === 'auto' && quiet >= SETTLED_WEEKS) { converged = true; break; }
+  }
+  const last = trace[trace.length - 1];
+  const drifting = converged ? [] : (last?.moved ?? []);
+  if (verbose) {
+    console.log(converged
+      ? `  [burn-in] SETTLED after ${w} weeks (${SETTLED_WEEKS} quiet weeks)`
+      : `  [burn-in] NOT SETTLED after ${w} weeks — still moving: ${drifting.join(', ') || 'nothing this week (never quiet for ' + SETTLED_WEEKS + ')'}`);
+  }
+  const out = { ...s, burnInWeeks: (s.burnInWeeks ?? 0) + w };
+  return { state: out, weeks: w, converged, trace, drifting };
 }

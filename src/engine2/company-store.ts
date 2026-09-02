@@ -39,7 +39,7 @@ const F64_FIELDS = [
   'inputSupplyConstraintFactor', 'recentFulfillmentEMA', 'deliveryReliability',
   'recurringRevenueBaseUSD', '_targetProductionUSD', 'accruedTaxLiabilityUSD', 'bankResolvedWeek',
   'taxLossCarryforwardUSD', 'taxBasisPpeUSD', 'deferredTaxLiabilityUSD', 'lastWeekSalesUSD',
-  'offeredWageIndex', 'unfilledVacancyShare', 'lastWeekPurchasesUSD',
+  'offeredWageIndex', 'unfilledVacancyShare', 'lastWeekPurchasesUSD', 'expectedEbitdaUSD',
 ] as const;
 
 const BOOL_FIELDS = [

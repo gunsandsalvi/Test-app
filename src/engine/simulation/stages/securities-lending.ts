@@ -24,7 +24,7 @@ import { WeeklyStepContext } from './context';
 import { pay, institutionSpendableUSD } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
-import { entityRequiredReturn, MAX_OVERWEIGHT_MULTIPLE, FULL_SIZE_SPREAD_RANGE_BPS } from './asset-allocation';
+import { entityRequiredReturn, maxOverweightMultipleOf, fullSizeSpreadRangeBpsOf } from './asset-allocation';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { realizedAnnualVol } from '../../../domain/volatility';
@@ -251,7 +251,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           pricePerShare: c.stockPrice,
           fairValuePerShare: fair,
           structuralShares,
-          maxOverweightMultiple: MAX_OVERWEIGHT_MULTIPLE,
+          maxOverweightMultiple: maxOverweightMultipleOf(fund),
           fullSizeDiscount: FULL_SIZE_PRICE_DISCOUNT,
         });
         // What it is already short stays short; this is the INCREMENT it wants on top.
@@ -340,7 +340,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           }),
           // Its whole inventory is lendable — the shares it can deliver plus what it has out.
           maxHoldingUSD: held + lent,
-          fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
+          fullSizeStatRange: fullSizeSpreadRangeBpsOf(entity),
         });
       });
       if (demandByInstrumentId.size === 0) return;

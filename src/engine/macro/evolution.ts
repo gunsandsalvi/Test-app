@@ -605,6 +605,7 @@ export function evolveRegionMacro(
     laborForceByOccupation[occ] = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ] ?? 0);
   });
   const cohortResult = buildHouseholdCohorts({
+    regionId: region.id,
     occupationPools: newOccupationPools,
     baseAnnualWageUSD,
     laborForceByOccupation,

@@ -15,6 +15,7 @@
  * settlement pass.
  */
 
+import { riskAversionOf } from '../../../domain/preferences';
 import { GameState, Company } from '../../../types';
 import {
   FUTURES_TENOR_MONTHS, PHYSICAL_STORAGE_COST_ANNUAL, costOfCarryPrice, impliedConvenienceYield,
@@ -98,6 +99,7 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
           ebitAnnualUSD: c.ebit,
           interestAnnualUSD: annualInterestOf(c),
           oneSigma,
+          riskAversion: riskAversionOf(c.management),
         });
         const units = hedgeUSD / spot
           - standingCoverUnits(book, 'COMMODITY_FUTURE', 'b', `COMPANY:${c.ticker}`, week, comm.id, termKey);
@@ -153,6 +155,7 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
           ebitAnnualUSD: c.ebit,
           interestAnnualUSD: annualInterestOf(c),
           oneSigma,
+          riskAversion: riskAversionOf(c.management),
         });
         if (!(hedgeUSD > 0)) return;
         // Its own cost of capital, the same one the equity book values it at.

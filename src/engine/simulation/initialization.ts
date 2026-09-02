@@ -86,7 +86,8 @@ import { laneTransitWeeks } from '../../domain/carrier';
 import { laneDistanceNm } from '../../domain/geography';
 import { InTransitShipment } from './stages/goods-arrival';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
-import { burnInWeeks } from './burn-in';
+import { burnInMode, burnIn } from './burn-in';
+import { ensureManagements } from './stages/management-review';
 import { advanceWeeklyStep } from './core';
 import { refreshRegionalHoldingsView, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './stages/holdings-view';
 import { sovBucketKey } from './stages/shared-helpers';
@@ -337,15 +338,16 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   // §4.C II.5 — the seed's revenue histories land on the ring now that the world exists.
   drainSeedRevenueHistories(state);
   drainSeedRings(state);
+  // §5-BRAINS — every deciding entity is born with its two preference primitives.
+  ensureManagements(state.companies, state.institutionalEntities ?? [], 0);
   // §5-STRUCT step 6 — OFF unless asked for. Burn-in hands back a world the ENGINE produced rather
   // than one this function asserted, which is the end state for every §7.4 defect. It changes every
   // number in the project at once, so it is a switch someone turns deliberately after reading the
   // steady-state probe (engine/simulation/burn-in.ts), never a default.
-  const weeks = burnInWeeks();
-  if (weeks <= 0) return state;
-  let burnt = state;
-  for (let w = 0; w < weeks; w++) burnt = advanceWeeklyStep(burnt);
-  return { ...burnt, currentWeek: 0, year: state.year };
+  const mode = burnInMode();
+  if (mode.mode === 'off') return state;
+  // §7.345 — to convergence, calendar continuous (§7.294's reset is what broke the meeting cycle).
+  return burnIn(state, advanceWeeklyStep, mode).state;
 }
 
 function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {

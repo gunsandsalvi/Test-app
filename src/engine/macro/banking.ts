@@ -1,3 +1,4 @@
+import { riskAversionOf } from '../../domain/preferences';
 import { BankingSector, householdBookRwaUSD, CONSUMER_CREDIT_RISK_WEIGHT, WHOLESALE_FUNDING_SPREAD_BPS } from '../../types';
 import { dealerDeskGrossUSD } from '../../domain/dealer-desk';
 
@@ -65,6 +66,11 @@ export function savingsToDepositsShare(hs?: { liquidSavingShare?: number }): num
  * Below it the bank funds itself (repo, then the SRF); this is a behavioural policy choice,
  * not a regulatory formula. */
 export const MIN_CASH_BUFFER_RATIO = 0.02;
+/** §5-BRAINS — the buffer THIS bank keeps: the policy share above, weighted by its own
+ *  management's risk aversion. The median bank keeps the stated share. */
+export function bankCashBufferRatioOf(bank: { management?: import('../../domain/preferences').Preferences }): number {
+  return MIN_CASH_BUFFER_RATIO * riskAversionOf(bank.management);
+}
 /**
  * The Basel leverage-ratio floor: equity against UNWEIGHTED total assets. A posted regulatory
  * minimum (rule 1's administered-number standing), and the one constraint that sees a

@@ -28,6 +28,7 @@
  * closes to them precisely when they most want it open.
  */
 
+import { riskAversionOf } from '../../../domain/preferences';
 import { Company, CreditRating } from '../../../types';
 
 /**
@@ -122,6 +123,9 @@ export function decideCorporateFinancing(params: {
   rating: CreditRating;
 }): FinancingDecision {
   const { comp, costOfDebtAnnual, effectiveTaxRate, ebitdaAnnual, totalDebtUSD, cashUSD, rating } = params;
+  // §5-BRAINS — the CFO's own risk weight: a risk-averse one needs a wider spread to act,
+  // levers up more slowly and pays down faster. The median is the stated rule.
+  const ra = riskAversionOf(comp.management);
   if (MARKET_ACCESS_DENIED.includes(rating) || !(ebitdaAnnual > 0)) {
     return { netDebtChangeUSD: 0, reason: 'NONE', walkAwayCostAnnual: 0 };
   }
@@ -150,23 +154,23 @@ export function decideCorporateFinancing(params: {
   const currentLeverage = totalDebtUSD / ebitdaAnnual;
   const covenantCeiling = COVENANT_LEVERAGE_CEILING[rating] ?? 4.0;
 
-  if (spreadOverCost > ACTION_THRESHOLD && currentLeverage < covenantCeiling) {
+  if (spreadOverCost > ACTION_THRESHOLD * ra && currentLeverage < covenantCeiling) {
     // Cheap debt, room under the covenant — and a real limit on how fast the money can be put
     // to work: the covenant bounds the STOCK, the deployment pipeline bounds the FLOW.
     const headroomUSD = (covenantCeiling - currentLeverage) * ebitdaAnnual;
     const weeklyDeploymentCapUSD =
       (Math.max(comp.growthCapex ?? 0, comp.marketCap * 0.02) / 52) * DEPLOYMENT_MULTIPLE;
     return {
-      netDebtChangeUSD: Math.min(headroomUSD * WEEKLY_ISSUANCE_TAKEUP_RATE, weeklyDeploymentCapUSD),
+      netDebtChangeUSD: Math.min(headroomUSD * WEEKLY_ISSUANCE_TAKEUP_RATE / ra, weeklyDeploymentCapUSD),
       reason: 'ISSUE_CHEAP_DEBT',
       walkAwayCostAnnual,
     };
   }
 
-  if (spreadOverCost < -ACTION_THRESHOLD && cashUSD > 0 && totalDebtUSD > 0) {
+  if (spreadOverCost < -ACTION_THRESHOLD * ra && cashUSD > 0 && totalDebtUSD > 0) {
     // Debt costs more than the money can earn: pay it down out of surplus cash.
     return {
-      netDebtChangeUSD: -Math.min(cashUSD * WEEKLY_DELEVERAGING_RATE, totalDebtUSD * WEEKLY_DELEVERAGING_RATE),
+      netDebtChangeUSD: -Math.min(cashUSD * WEEKLY_DELEVERAGING_RATE * ra, totalDebtUSD * WEEKLY_DELEVERAGING_RATE * ra),
       reason: 'DELEVER_EXPENSIVE_DEBT',
       walkAwayCostAnnual,
     };
@@ -191,9 +195,11 @@ export function exposureToHedgeUSD(params: {
   interestAnnualUSD: number;
   /** The exposure's own standard deviation over the hedge horizon, as a fraction. */
   oneSigma: number;
+  /** §5-BRAINS — how many sigmas THIS management insures against: its risk aversion. */
+  riskAversion?: number;
 }): number {
   if (!(params.exposureUSD > 0) || !(params.oneSigma > 0)) return 0;
   const spareEbitUSD = Math.max(0,
     params.ebitAnnualUSD - COVENANT_INTEREST_COVERAGE * Math.max(0, params.interestAnnualUSD));
-  return Math.max(0, params.exposureUSD - spareEbitUSD / params.oneSigma);
+  return Math.max(0, params.exposureUSD - spareEbitUSD / (params.oneSigma * (params.riskAversion ?? 1)));
 }

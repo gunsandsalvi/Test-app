@@ -75,6 +75,28 @@ export function demandPullFromFill(rows: FillRow[]): number {
   return fillWeight > 0 ? (fillSum > 0 ? fillWeight / fillSum : Infinity) : 1;
 }
 
+/**
+ * §7.345 — THE DEFLATOR CARRIES THE SAME LAG AS WHAT IT DEFLATES (rule 9). The revenue a growth
+ * signal reads is an EMA of receipts (`RECEIPTS_MEASUREMENT_WEIGHT`); the price it was deflated
+ * by was the instant print. A one-month repricing (the seed's coverage gap clearing at
+ * budget/supply) therefore read as a real collapse for the whole window — and the layoffs it
+ * caused were real (the burn-in's cause trace: growth layoffs, zero vacancies, week 13 on).
+ * This is the print smoothed the same way, read at any point of the history: the EMA's weights
+ * over the prints that exist, normalised so a short history is a plain mean.
+ */
+export function smoothedPriceAt(history: readonly number[], index: number, weight: number): number {
+  let sum = 0;
+  let wsum = 0;
+  let w = weight;
+  for (let k = index; k >= 0; k--) {
+    const v = history[k];
+    if (v > 0) { sum += w * v; wsum += w; }
+    w *= (1 - weight);
+    if (w < 1e-6) break;
+  }
+  return wsum > 0 ? sum / wsum : 0;
+}
+
 /** The revenue window a growth signal is measured over: up to 12 weeks of the firm's own history.
  *  Null when there is no usable history — no signal, not a zero signal. */
 export function revenueGrowthWindow(
@@ -137,6 +159,10 @@ export interface EmployerPostingInputs {
   affordableCutHeads: number;
   /** The acute rule: a firm genuinely out of cash sheds regardless of friction. */
   cashIsNegative: boolean;
+  /** §5-BRAINS — this management's own speeds: the stated multiples at the median brain,
+   *  a risk-averse one cutting faster and hiring slower. Absent = the median. */
+  layoffSpeedMultiple?: number;
+  hiringSpeedMultiple?: number;
 }
 
 /**
@@ -147,22 +173,24 @@ export interface EmployerPostingInputs {
  * produced (§7.247); the affordability cut and cash distress outrank everything.
  */
 export function employerWeekPosting(i: EmployerPostingInputs): { vacancies: number; layoffs: number } {
+  const hireSpeed = i.hiringSpeedMultiple ?? HIRING_ADJUSTMENT_SPEED_MULTIPLE;
+  const cutSpeed = i.layoffSpeedMultiple ?? LAYOFF_SPEED_MULTIPLE;
   let vacancies = 0;
   let layoffs = 0;
   if (i.desiredWeeklyChangeHeads >= 0) {
     const hireableHeads = Math.min(
       i.desiredWeeklyChangeHeads, Math.max(0, i.productiveHeadsCap - i.currentHeads));
-    vacancies = hireableHeads * HIRING_ADJUSTMENT_SPEED_MULTIPLE + i.quitsHeads;
+    vacancies = hireableHeads * hireSpeed + i.quitsHeads;
   } else {
-    layoffs = Math.max(0, -i.desiredWeeklyChangeHeads * LAYOFF_SPEED_MULTIPLE - i.quitsHeads);
+    layoffs = Math.max(0, -i.desiredWeeklyChangeHeads * cutSpeed - i.quitsHeads);
   }
   const understaffedHeads = Math.max(0, i.outputNeedHeads - i.currentHeads);
   if (i.affordableHireHeads > 0 && understaffedHeads > 0) {
     layoffs = 0;
     vacancies = Math.max(vacancies,
-      Math.min(understaffedHeads, i.affordableHireHeads) * HIRING_ADJUSTMENT_SPEED_MULTIPLE + i.quitsHeads);
+      Math.min(understaffedHeads, i.affordableHireHeads) * hireSpeed + i.quitsHeads);
   }
-  if (i.affordableCutHeads > 0) layoffs = Math.max(layoffs, i.affordableCutHeads * LAYOFF_SPEED_MULTIPLE);
+  if (i.affordableCutHeads > 0) layoffs = Math.max(layoffs, i.affordableCutHeads * cutSpeed);
   if (i.cashIsNegative) layoffs = Math.max(layoffs, i.currentHeads * DISTRESS_LAYOFF_SPEED);
   return { vacancies, layoffs };
 }

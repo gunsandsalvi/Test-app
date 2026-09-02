@@ -30,6 +30,14 @@ export interface CompanyWeekUpdate {
   previousEmployeeCount?: number;
   offeredWageIndex?: number;
   unfilledVacancyShare?: number;
+  /** §5-BRAINS — the labour stage's adaptive earnings expectation for this firm. */
+  expectedEbitdaUSD?: number;
+  /** §7.345 — units sold this week by product line (contracts + auction), the record next
+   *  week's production decision reads. */
+  salesUnitsBySubUnit?: Record<string, number>;
+  /** §7.345 — revenue share of the plant this week's production did not need (produce-to-sales
+   *  below capacity), integrated by the capacity-retirement rule like `idleLineRevenueShare`. */
+  demandSlackRevenueShare?: number;
   /** IND — what stage 05's auction actually cleared for this firm, both sides. */
   salesUSD?: number;
   purchasesUSD?: number;

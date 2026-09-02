@@ -20,6 +20,7 @@ import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation'
 import { isPubliclyListed, managedEntityIdsOf } from '../domain/company';
 import { industryOfSubUnit, financingProfileOf } from '../domain/industry-registry';
 import { CompanyStore } from './company-store';
+import { patienceWeeksOf, riskAversionOf } from '../domain/preferences';
 
 export interface BackLanes {
   n: number;
@@ -50,6 +51,7 @@ export interface BackLanes {
   producedUnitsThisWeek: Float64Array;
   plantCapacityUnitsThisWeek: Float64Array;
   idleLineRevenueShare: Float64Array;
+  demandSlackRevenueShare: Float64Array;
   wuSalesUSD: Float64Array;
   wuPurchasesUSD: Float64Array;
   wuTradeReceivableBookedUSD: Float64Array;
@@ -87,6 +89,10 @@ export interface BackLanes {
   // --- §7.325 W1: core-A's last object/ctx reads, resolved at the seam ---
   occupationMixDrift: Company['occupationMixDrift'][]; // object refs, read-only in A
   maxPayoutRatio: Float64Array;            // IND4 industry payout discipline, resolved
+  // §5-BRAINS — the management's two primitives, resolved at the seam (median when undrawn).
+  mgmtPatienceWeeks: Float64Array;
+  mgmtRiskAversion: Float64Array;
+  expectedEbitdaUSD: Float64Array;         // NaN = no expectation yet
   carrierFreightRevenueUSD: Float64Array;  // ctx maps, read-frozen during the loop (§7.318)
   channelMarginRevenueUSD: Float64Array;
   wasDefaulted: Uint8Array;
@@ -129,7 +135,7 @@ export function buildBackLanes(
     rndExpenseUSD: N.rndExpense, oasSpreadBps: N.oasSpreadBps,
     idleStreakWeeks: N.idleStreakWeeks, mothballedPpeShare: N.mothballedPpeShare, mothballedStreakWeeks: N.mothballedStreakWeeks,
     usefulLifeYears: f(),
-    producedUnitsThisWeek: f(), plantCapacityUnitsThisWeek: f(), idleLineRevenueShare: f(),
+    producedUnitsThisWeek: f(), plantCapacityUnitsThisWeek: f(), idleLineRevenueShare: f(), demandSlackRevenueShare: f(),
     wuSalesUSD: f(), wuPurchasesUSD: f(), wuTradeReceivableBookedUSD: f(),
     wuTradeReceivableCollectedUSD: f(), wuTradePayableBookedUSD: f(),
     wuTradePayableSettledUSD: f(), wuCapexPurchasesUSD: f(),
@@ -143,6 +149,7 @@ export function buildBackLanes(
     customerConcentration: N.customerConcentration, supplierConcentration: N.supplierConcentration,
     hasVehicle: new Uint8Array(n), boundaryTraceKey: new Array(n),
     occupationMixDrift: new Array(n), maxPayoutRatio: f(),
+    mgmtPatienceWeeks: f(), mgmtRiskAversion: f(), expectedEbitdaUSD: N.expectedEbitdaUSD,
     carrierFreightRevenueUSD: f(), channelMarginRevenueUSD: f(),
     wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
     creditRating: T.creditRating as string[], name: T.name as string[],
@@ -159,6 +166,7 @@ export function buildBackLanes(
     L.producedUnitsThisWeek[i] = wu?.producedUnitsThisWeek ?? 0;
     L.plantCapacityUnitsThisWeek[i] = wu?.plantCapacityUnitsThisWeek ?? 0;
     L.idleLineRevenueShare[i] = wu?.idleLineRevenueShare ?? 0;
+    L.demandSlackRevenueShare[i] = wu?.demandSlackRevenueShare ?? 0;
     L.wuSalesUSD[i] = wu?.salesUSD ?? 0;
     L.wuPurchasesUSD[i] = wu?.purchasesUSD ?? 0;
     L.wuTradeReceivableBookedUSD[i] = wu?.tradeReceivableBookedUSD ?? 0;
@@ -202,6 +210,8 @@ export function buildBackLanes(
     const primaryLine = lines[0];
     const primaryIndustry = primaryLine ? industryOfSubUnit(primaryLine.subUnitId) : undefined;
     L.maxPayoutRatio[i] = primaryIndustry ? financingProfileOf(primaryIndustry).maxPayoutRatio : 0.6;
+    L.mgmtPatienceWeeks[i] = patienceWeeksOf(c.management);
+    L.mgmtRiskAversion[i] = riskAversionOf(c.management);
     L.carrierFreightRevenueUSD[i] = carrierFreightRevenue[c.ticker] ?? 0;
     L.channelMarginRevenueUSD[i] = channelMarginRevenue[c.ticker] ?? 0;
     L.boundaryTraceKey[i] = `${c.region}:${c.financialStatementProfile ?? c.sector ?? '?'}:${c.ticker}`;

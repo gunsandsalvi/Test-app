@@ -30,8 +30,8 @@ import { ladderRowsOf, TR_FLOATING, TR_FACILITY } from '../../../engine2/tranche
 import { isActiveCompany } from '../../../domain/company';
 import {
   computeReservationSpreadBps,
-  FULL_SIZE_SPREAD_RANGE_BPS,
-  MAX_OVERWEIGHT_MULTIPLE,
+  fullSizeSpreadRangeBpsOf,
+  maxOverweightMultipleOf,
   DISTRESSED_CONVICTION_MULTIPLE,
   computeDistressedReservationSpreadBps,
   spreadRiskCapitalChargeRate,
@@ -315,7 +315,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const isHedgeFund = entity.entityType === 'HEDGE_FUND' && entity.hedgeFundStrategy === 'DISTRESSED';
       const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
         ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate);
-      const overweightMultiple = isHedgeFund ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE;
+      const overweightMultiple = isHedgeFund ? DISTRESSED_CONVICTION_MULTIPLE : maxOverweightMultipleOf(entity);
       // The entity's real money for this auction (S11), directed at the names where paper is
       // actually changing hands: a live offering, or the gap between what this holder targets and
       // what it already owns. A name it is already at target in, with nothing on offer, needs
@@ -362,7 +362,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         // XB2: a cross-border loan is hedged like a bond — the CIP cost is in the requirement.
         setDemand(DS, demandRow, ti,
           reservationBps + hedgeAdjBps,
-          FULL_SIZE_SPREAD_RANGE_BPS,
+          fullSizeSpreadRangeBpsOf(entity),
           structuralSizeUSD * overweightMultiple,
           classBudgetUSD *
             (totalCashDemandWeightUSD > 0

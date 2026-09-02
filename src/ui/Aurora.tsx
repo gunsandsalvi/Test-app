@@ -164,7 +164,7 @@ export default function Aurora() {
           <span style={{ color: T.muted, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>{frame ? frame.fn : 'object function'}</span>
         </div>
         {panels.length > 1 ? <span style={{ ...mono, fontSize: 11, color: T.hint }}>{panelIdx + 1}/{panels.length}</span> : null}
-        <span style={{ ...mono, fontSize: 12, color: T.muted, whiteSpace: 'nowrap' }}>{formatDate(state.currentWeek)}</span>
+        <span style={{ ...mono, fontSize: 12, color: T.muted, whiteSpace: 'nowrap' }}>{formatDate(state.currentWeek - (state.burnInWeeks ?? 0))}</span>
       </div>
 
       {/* body */}
@@ -263,7 +263,7 @@ function Home({ world, nav, recents, onRecent, stepMs }: { world: World; nav: Na
   );
   return (<>
     <div style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: 24, fontWeight: 500 }}>the world, {formatDate(world.state.currentWeek)}</div>
+      <div style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: 24, fontWeight: 500 }}>the world, {formatDate(world.state.currentWeek - (world.state.burnInWeeks ?? 0))}</div>
       <Hint>{world.state.companies.length} companies · {world.state.institutionalEntities.length} institutions · {regions.length} regions{stepMs !== undefined ? ` · last step ${(stepMs / 1000).toFixed(2)} s` : ''}</Hint>
     </div>
     <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.muted, fontWeight: 700, padding: '4px 4px 0' }}>regions</div>

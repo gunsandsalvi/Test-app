@@ -7,13 +7,14 @@
  * auction already knows how to price, and writing the fills back onto the bank that carried them.
  */
 
+import { bankCashBufferRatioOf } from '../../macro/banking';
 import { Company, RegionId } from '../../../types';
 import {
   DealerDeskInventory, DealerDeskPosition, dealerDeskCapacityUSD, dealerDeskParticipantId,
   dealerDeskTicker, regionalDeskView,
 } from '../../../domain/dealer-desk';
 import { LeadBankCandidate } from '../../../domain/primary-market';
-import { leverageHeadroomUSD, MIN_CASH_BUFFER_RATIO, BASEL_MIN_LEVERAGE_RATIO } from '../../macro/banking';
+import { leverageHeadroomUSD, BASEL_MIN_LEVERAGE_RATIO } from '../../macro/banking';
 import { ClearingInstrument, ClearingParticipant, ClearingResult, ParticipantDemand } from './financial-clearing-engine';
 import { BankLoan } from '../../../domain/banking';
 import { WeeklyStepContext, updateBankSheet } from './context';
@@ -77,7 +78,7 @@ export function buildDealerDeskParticipants(args: {
     // with capital ratio to spare can still be unable to bid.
     const settledCashUSD = sheet.cashReservesUSD
       + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
-    const fundableUSD = Math.max(0, settledCashUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO);
+    const fundableUSD = Math.max(0, settledCashUSD - sheet.depositsUSD * bankCashBufferRatioOf(bank));
 
     const currentHoldingsByInstrumentId = new Map<string, number>();
     const demandByIndex: (ParticipantDemand | undefined)[] = new Array(instruments.length);

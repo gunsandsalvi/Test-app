@@ -441,6 +441,7 @@ function buildRegion(regionId: RegionId): Region {
     laborForceByOccupation[occ] = totalLaborForce * occupationLaborForceShare[occ];
   });
   const seedCohorts = buildHouseholdCohorts({
+    regionId,
     occupationPools,
     baseAnnualWageUSD,
     laborForceByOccupation,
