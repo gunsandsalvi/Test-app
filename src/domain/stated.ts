@@ -93,6 +93,21 @@ export const SEED_INSURER_INSTITUTIONAL_SHARE = stated({
   replacedBy: 'premiums written against the real exposures (§5-INS): the insurer\'s book is what it insures',
 });
 
+// --- A tranche that states no rate (engine2/front-core.ts, stage08-back.ts) ---
+/** The coupon a fixed tranche is read at when it states none, and the margin a floating one is. */
+export const TRANCHE_DEFAULT_COUPON = stated({
+  id: 'tranche.defaultCoupon', value: 0.05, kind: 'SHAPE',
+  owner: 'engine2/front-core.ts (the seam) and engine2/stage08-back.ts (the register\'s accrual)',
+  reason: 'a seeded or migrated tranche may carry no coupon; the ladder still pays interest on it',
+  replacedBy: 'every writer stating the tranche\'s own cleared coupon at issue (13d)',
+});
+export const TRANCHE_DEFAULT_MARGIN_BPS = stated({
+  id: 'tranche.defaultMarginBps', value: 200, kind: 'SHAPE',
+  owner: 'engine2/front-core.ts (the seam) and engine2/stage08-back.ts (the register\'s accrual)',
+  reason: 'the same for a floating tranche that states no margin',
+  replacedBy: 'every writer stating the tranche\'s own cleared margin at issue (13d)',
+});
+
 // --- The audit (engine/audit/*) — one RESOLUTION tolerance for "these two books agree" ---
 /** The relative gap at which two books that should be equal are read as disagreeing: the
  *  sovereign and corporate held-versus-issued checks, the market-cap identity, an index's weights. */

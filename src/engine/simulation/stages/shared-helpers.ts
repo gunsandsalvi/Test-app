@@ -333,7 +333,10 @@ export function attributeItemizedHoldings(
  */
 export function settleCorporateActionOnHolders(
   ctx: { pendingHolderSettlements: Map<string, number> },
-  issuerId: string,
+  /** 13b: the INSTRUMENT the rows name — a tranche id for the credit kinds (the register), the
+   *  issuer's id for equity, and the issuer's id again for the named desks' credit positions
+   *  (the paying agent's desk pass reads issuer keys; a register row never carries one). */
+  instrumentId: string,
   instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'EQUITY',
   oldFloatUSD: number,
   newFloatUSD: number
@@ -341,7 +344,7 @@ export function settleCorporateActionOnHolders(
   if (!(oldFloatUSD > 0)) return;
   const ratio = Math.max(0, newFloatUSD) / oldFloatUSD;
   if (Math.abs(ratio - 1) < 1e-9) return;
-  const key = `${instrumentType}:${issuerId}`;
+  const key = `${instrumentType}:${instrumentId}`;
   // Ratios compose: two actions on one instrument in one week scale the holders once, by the
   // product, which is the same number applying them in sequence would have reached.
   ctx.pendingHolderSettlements.set(key, (ctx.pendingHolderSettlements.get(key) ?? 1) * ratio);
@@ -363,6 +366,8 @@ export function applyPendingCorporateActionSettlements(
     updatedInstitutionalEntities: InstitutionalEntity[];
     pendingHolderSettlements: Map<string, number>;
     pendingHolderCashUSD?: Map<string, number>;
+    /** 13b: `kind:oldTrancheId` → the replacement tranche (an accretive call). */
+    pendingHolderReplacements?: Map<string, string>;
     /** §5-CLOSE C5: the issuers, so an equity payment can find the shares the register does NOT
      *  hold — the public float, whose dividend goes to the household sector by payment. */
     updatedCompanies?: Company[];
@@ -422,6 +427,12 @@ export function applyPendingCorporateActionSettlements(
   const ratioByPair = toPairs(pendingByType);
   const owedByPair = toPairs(pendingCashByType);
   const equityRef = refOf('EQUITY') ?? -2;
+  // 13b: a replaced tranche — its retired rows become rows of the replacement, with no cash.
+  const replacedNewIdByPair = new Map<number, string>();
+  ctx.pendingHolderReplacements?.forEach((newId, key) => {
+    const at = key.indexOf(':'); const t = refOf(key.slice(0, at)); const i = refOf(key.slice(at + 1));
+    if (t !== undefined && i !== undefined) replacedNewIdByPair.set(t * 0x400000 + i, newId);
+  });
 
   // §5-FINALIZATION step 13 (W2): THE DESKS ARE HOLDERS OF RECORD TOO. A retirement or placement
   // scales a named desk's position in the issuer's paper by the same ratio as the register's
@@ -569,6 +580,8 @@ export function applyPendingCorporateActionSettlements(
       // the notional change IS the cash — the call premium rides `pendingHolderCashUSD` above,
       // and equity is excluded (a share is bought at a negotiated price, §7.43).
       let principalCashUSD = H.typeRef[r] === equityRef ? 0 : H.qtyUSD[r] * (1 - ratio);
+      // 13b: a replaced tranche's retired slice is re-keyed onto the replacement below, not redeemed.
+      if (replacedNewIdByPair.has(k)) principalCashUSD = 0;
       // §4.0 Tier 1 item 6 — A PLACEMENT IS TAKEN UP ONLY AS FAR AS THE CASH REACHES. A holder
       // short of cash declines the unaffordable slice — its holding grows by only the share it
       // funded, and the issuer's proceeds shrink by the same amount on the same instruction.
@@ -626,6 +639,18 @@ export function applyPendingCorporateActionSettlements(
       kept.push(r);
     }
     if (!touched) return entity;
+    // 13b: the replacement's rows — what the called tranche's rows shed, placed on the same
+    // holders under the new id (its issuer's wire put it at the house, `replacement issue`).
+    [...actions.values()].forEach((a) => {
+      const t = refOf(a.type), i = refOf(a.id);
+      if (t === undefined || i === undefined) return;
+      const newId = replacedNewIdByPair.get(t * 0x400000 + i);
+      if (newId === undefined || !(a.retiredUSD > 0)) return;
+      const key = `${a.type}|${newId}`;
+      let b = actions.get(key);
+      if (!b) { b = { type: a.type, id: newId, region: a.region, retiredUSD: 0, retiredSh: 0, placedUSD: 0, placedSh: 0, anyShares: false }; actions.set(key, b); }
+      b.placedUSD += a.retiredUSD;
+    });
     actions.forEach((a) => {
       // §5-WIRES W3: the register side settles through the region's CLEARING HOUSE — the paying
       // agent. The issuer's own wire is the LADDER's (house → issuer at retirement, issuer → house
@@ -653,6 +678,7 @@ export function applyPendingCorporateActionSettlements(
   });
   pending.clear();
   pendingCash?.clear();
+  ctx.pendingHolderReplacements?.clear();
 }
 
 /**
@@ -661,12 +687,13 @@ export function applyPendingCorporateActionSettlements(
  */
 export function payHoldersCash(
   ctx: { pendingHolderCashUSD: Map<string, number> },
-  issuerId: string,
+  /** 13b: the instrument the rows name — a tranche id for the credit kinds, the issuer for equity. */
+  instrumentId: string,
   instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'EQUITY',
   amountUSD: number
 ): void {
   if (!(amountUSD > 0)) return;
-  const key = `${instrumentType}:${issuerId}`;
+  const key = `${instrumentType}:${instrumentId}`;
   ctx.pendingHolderCashUSD.set(key, (ctx.pendingHolderCashUSD.get(key) ?? 0) + amountUSD);
 }
 
@@ -686,7 +713,8 @@ export function payHoldersCash(
  */
 export function accrueHoldersInterest(
   ctx: { pendingHolderAccrualUSD: Map<string, number> },
-  issuerId: string,
+  /** 13b: the TRANCHE the rows name — a tranche's coupon reaches its own holders exactly. */
+  instrumentId: string,
   // GOV_BOND is deliberately absent: a bank holds government paper on its own balance sheet and
   // is not on this register at all, so the sovereign accrual is keyed by PARTY instead and lives
   // in stages/sovereign-calendar.ts. One ledger per thing, not one register with a hole in it.
@@ -694,7 +722,7 @@ export function accrueHoldersInterest(
   weeklyAccrualUSD: number
 ): void {
   if (!(weeklyAccrualUSD > 0)) return;
-  const key = `${instrumentType}:${issuerId}`;
+  const key = `${instrumentType}:${instrumentId}`;
   ctx.pendingHolderAccrualUSD.set(key, (ctx.pendingHolderAccrualUSD.get(key) ?? 0) + weeklyAccrualUSD);
 }
 
@@ -702,10 +730,11 @@ export function accrueHoldersInterest(
  *  clears. The issuer pays exactly the sum of what it accrued, so the two sides cannot drift. */
 export function payHoldersAccruedInterest(
   ctx: { pendingHolderAccrualPayout: Set<string> },
-  issuerId: string,
+  /** 13b: the tranche whose coupon falls due. */
+  instrumentId: string,
   instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER'
 ): void {
-  ctx.pendingHolderAccrualPayout.add(`${instrumentType}:${issuerId}`);
+  ctx.pendingHolderAccrualPayout.add(`${instrumentType}:${instrumentId}`);
 }
 
 // SCALE: the ledger is NESTED — instrument, then holder — not keyed by a composite string.

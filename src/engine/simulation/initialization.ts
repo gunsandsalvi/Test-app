@@ -70,7 +70,7 @@ import { weeklyWageBillUSD } from '../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
 import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
 import { mandateAllocator } from '../../domain/primary-market';
-import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
+import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, ItemizedHolding, INDUSTRY_SUBUNITS, DebtTranche } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
@@ -522,9 +522,12 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // Candidate lists stay PUBLIC: the macro holdings aggregates were calibrated against the
     // public market, and the private tier's paper is seeded separately in the engines' own
     // shape (the HC2 block below).
+    // §5-FINALIZATION 13b: the candidates are the TRANCHES — a register row names the paper the
+    // ladder's wires name; the per-issuer weight the books clear by is the sum of its tranches.
     const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
-      .map(c => ({ id: c.id, type: 'CORP_BOND' as const, region: regionId, outstandingUSD: (c.debtTranches || []).filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0) }))
+      .flatMap(c => (c.debtTranches || []).filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper && !t.isBankFacility)
+        .map(t => ({ id: t.id, type: 'CORP_BOND' as const, region: regionId, outstandingUSD: t.principalUSD })))
       .filter(c => c.outstandingUSD > 0);
     const totalCorpCandidatesUSD = corpCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
     // OWN6: the opening credit book is the tradable stock itself. Placed here, once the candidate
@@ -534,7 +537,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
 
     const loanCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
-      .map(c => ({ id: c.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingUSD: (c.debtTranches || []).filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((s, t) => s + t.principalUSD, 0) }))
+      .flatMap(c => (c.debtTranches || []).filter(t => t.rateType === 'FLOATING' && !t.isBankFacility && !t.isCommercialPaper)
+        .map(t => ({ id: t.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingUSD: t.principalUSD })))
       .filter(c => c.outstandingUSD > 0);
     const totalLoanCandidatesUSD = loanCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
     const attributeLoanHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
@@ -1523,23 +1527,35 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const IG = ['AAA', 'AA', 'A', 'BBB'];
     const sleeve = (t: InstitutionalEntityType, ig: boolean) =>
       ig ? 1 : t === 'INSURER' ? 0.08 : t === 'PENSION_FUND' ? 0.10 : t === 'ASSET_MANAGER' ? 2.0 : 4.0;
+    // Per kind, looked up (never switched on): the firm's tranches of the kind and the entity's
+    // allocation to it.
+    const KIND_TRANCHES: Record<'CORP_BOND' | 'LEVERAGED_LOAN', (t: DebtTranche) => boolean> = {
+      CORP_BOND: (t) => t.rateType === 'FIXED' && !t.isCommercialPaper && !t.isBankFacility,
+      LEVERAGED_LOAN: (t) => t.rateType === 'FLOATING' && !t.isBankFacility && !t.isCommercialPaper,
+    };
+    const KIND_PCT: Record<'CORP_BOND' | 'LEVERAGED_LOAN', (e: InstitutionalEntity) => number> = {
+      CORP_BOND: (e) => e.assetAllocationTarget.corpBondPct, LEVERAGED_LOAN: (e) => e.assetAllocationTarget.loanPct,
+    };
+    void fixedOf; void floatOf;
     firms.forEach(f => {
       const ig = IG.includes(f.creditRating);
       (['CORP_BOND', 'LEVERAGED_LOAN'] as const).forEach(kind => {
-        const outstanding = kind === 'CORP_BOND' ? fixedOf(f) : floatOf(f);
+        const tranches = (f.debtTranches || []).filter(t => KIND_TRANCHES[kind](t) && t.principalUSD > 0);
+        const outstanding = tranches.reduce((a, t) => a + t.principalUSD, 0);
         if (outstanding <= 0) return;
-        const tradable = outstanding;
-        const weights = regionEntities.map(e => {
-          const pct = kind === 'CORP_BOND' ? e.assetAllocationTarget.corpBondPct : e.assetAllocationTarget.loanPct;
-          return seedInstitutionTotalAssetsUSD(e, openingCashOf(e)) * pct * sleeve(e.entityType, ig);
-        });
+        const weights = regionEntities.map(e => seedInstitutionTotalAssetsUSD(e, openingCashOf(e)) * KIND_PCT[kind](e) * sleeve(e.entityType, ig));
         const wSum = weights.reduce((a, b) => a + b, 0) || 1;
-        regionEntities.forEach((e, i) => {
-          const qty = tradable * (weights[i] / wSum);
-          if (qty > 1) {
-            e.itemizedHoldings.push({ instrumentId: f.id, instrumentType: kind, issuerRegion: regionId, quantityOrNotionalUSD: Math.round(qty) });
-          }
-        });
+        // 13b: the rows name the firm's TRANCHES — each tranche placed across the holders by the
+        // same weights (the issuer's total is unchanged; it is the sum).
+        tranches
+          .forEach(t => {
+            regionEntities.forEach((e, i) => {
+              const qty = t.principalUSD * (weights[i] / wSum);
+              if (qty > 1) {
+                e.itemizedHoldings.push({ instrumentId: t.id, instrumentType: kind, issuerRegion: regionId, quantityOrNotionalUSD: Math.round(qty) });
+              }
+            });
+          });
       });
     });
   });

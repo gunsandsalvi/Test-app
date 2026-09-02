@@ -46,6 +46,7 @@ import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/prof
 import { random, getRngState, setRngState, scopedStreamSeed } from '../engine/rng';
 import { lane64, lane32, laneU32, lane8 } from './shared-lanes';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
+import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/stated';
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
@@ -437,8 +438,8 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
         const floating = (fl & TR_FLOATING) !== 0;
         S.trIsFloating[atTr] = floating ? 1 : 0;
         S.trAnnualRate[atTr] = floating
-          ? (Number.isNaN(TS.floatingMarginBps[tr]) ? 200 : TS.floatingMarginBps[tr]) / 10000
-          : (Number.isNaN(TS.couponRate[tr]) ? 0.05 : TS.couponRate[tr]);
+          ? (Number.isNaN(TS.floatingMarginBps[tr]) ? TRANCHE_DEFAULT_MARGIN_BPS : TS.floatingMarginBps[tr]) / 10000
+          : (Number.isNaN(TS.couponRate[tr]) ? TRANCHE_DEFAULT_COUPON : TS.couponRate[tr]);
         S.trIsFacility[atTr] = fl & TR_FACILITY ? 1 : 0;
         S.trIsCP[atTr] = fl & TR_CP ? 1 : 0;
         S.trMatWeek[atTr] = TS.maturityWeek[tr] | 0;
@@ -513,6 +514,20 @@ export function allocCoreOut(S: FrontSeam): FrontCoreOut {
  * the inline pass ran, on lanes; every ??-default was resolved at the seam, every registry fact
  * is a static table, the RNG opens by stream word. A worker runs exactly this over its shard.
  */
+/** A tranche's interest for one week: the annual amount, the week's accrual, whether its payment
+ *  falls due this week and how much that payment is. The seam's lanes and the store's rows carry
+ *  the same resolved inputs (the seam resolves the defaults from the rows). */
+export function trancheWeekAccrual(
+  principalUSD: number, isFloating: boolean, annualRate: number, policyRate: number,
+  isCP: boolean, maturityWeek: number, periodWeeks: number, anchorWeek: number, week: number
+): { annualUSD: number; weeklyUSD: number; due: boolean; dueUSD: number } {
+  const annualUSD = isFloating ? principalUSD * (policyRate + annualRate) : principalUSD * annualRate;
+  let due: boolean;
+  if (isCP) due = maturityWeek === week;
+  else { const since = week - anchorWeek; due = since > 0 && since % periodWeeks === 0; }
+  return { annualUSD, weeklyUSD: annualUSD / 52, due, dueUSD: due ? (annualUSD * periodWeeks) / 52 : 0 };
+}
+
 export function runFrontCore(
   S: FrontSeam, O: FrontCoreOut, F: FrontPass,
   lots: LotViews, freeInto: LotStore | null, deadSink: number[] | undefined,
@@ -544,21 +559,16 @@ export function runFrontCore(
     const policy = S.policyRate[ri];
     for (let t = S.trStart[row]; t < S.trStart[row + 1]; t++) {
       if (S.trMatWeek[t] === week) continue;
-      const annualUSD = S.trIsFloating[t]
-        ? S.trPrincipal[t] * (policy + S.trAnnualRate[t])
-        : S.trPrincipal[t] * S.trAnnualRate[t];
-      annualInterest += annualUSD;
-      let due: boolean;
-      if (S.trIsCP[t]) due = S.trMatWeek[t] === week;
-      else {
-        const since = week - S.trAnchorWeek[t];
-        due = since > 0 && since % S.trPeriodWeeks[t] === 0;
-      }
-      const dueUSD = due ? (annualUSD * S.trPeriodWeeks[t]) / 52 : 0;
-      if (S.trIsFacility[t]) { facilityInterestWeeklyUSD += dueUSD; continue; }
-      if (S.trIsCP[t]) { commercialPaperAccrualUSD += annualUSD / 52; if (due) due3 |= DUE_CP; }
-      else if (!S.trIsFloating[t]) { marketBondAccrualUSD += annualUSD / 52; if (due) due3 |= DUE_BOND; }
-      else { marketLoanAccrualUSD += annualUSD / 52; if (due) due3 |= DUE_LOAN; }
+      // 13b: ONE formula for a tranche's week (the register's per-tranche accrual in the back
+      // pass reads the same rows through the same function).
+      const a = trancheWeekAccrual(S.trPrincipal[t], S.trIsFloating[t] === 1, S.trAnnualRate[t], policy,
+        S.trIsCP[t] === 1, S.trMatWeek[t], S.trPeriodWeeks[t], S.trAnchorWeek[t], week);
+      annualInterest += a.annualUSD;
+      const due = a.due;
+      if (S.trIsFacility[t]) { facilityInterestWeeklyUSD += a.dueUSD; continue; }
+      if (S.trIsCP[t]) { commercialPaperAccrualUSD += a.weeklyUSD; if (due) due3 |= DUE_CP; }
+      else if (!S.trIsFloating[t]) { marketBondAccrualUSD += a.weeklyUSD; if (due) due3 |= DUE_BOND; }
+      else { marketLoanAccrualUSD += a.weeklyUSD; if (due) due3 |= DUE_LOAN; }
     }
     F.annualInterest[row] = annualInterest;
     F.facilityInterestWeeklyUSD[row] = facilityInterestWeeklyUSD;

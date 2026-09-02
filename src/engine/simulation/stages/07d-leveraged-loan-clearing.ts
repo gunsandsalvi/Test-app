@@ -28,6 +28,8 @@ import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_FACILITY, issuerIdOf } from '../../../engine2/tranches';
+import { splitAcrossTranches, primarySliceOf } from './register-split';
+import { primaryTrancheId } from '../../../domain/primary-market';
 import { isActiveCompany } from '../../../domain/company';
 import {
   computeReservationSpreadBps,
@@ -475,14 +477,33 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // Apply: each entity's real new LEVERAGED_LOAN holdings.
     // SCALE C1: fills append to the store for the single write-back after 07e. SETL6: the cash
     // leg is settled below as payment instructions.
+    // 13b: the rows name TRANCHES (register-split.ts) — the primary's slices share the take.
+    const boughtByInstrument = new Float64Array(result.nInstruments);
+    allParticipants.forEach((p, pi) => {
+      const base = pi * result.nInstruments;
+      for (let ii = 0; ii < result.nInstruments; ii++) {
+        const bought = result.holdingsMatrix[base + ii] - (p.currentHoldingsByInstrumentId.get(regionCompanies[ii].id) ?? 0);
+        if (bought > 0) boughtByInstrument[ii] += bought;
+      }
+    });
     bookEntities.forEach((entity) => {
       const pi = piById.get(entity.id);
       const newLoanHoldings: ItemizedHolding[] = [];
       if (pi !== undefined) {
         const base = pi * result.nInstruments;
+        const prior = currentHoldingByCompanyByEntity.get(entity.id);
         for (let ii = 0; ii < result.nInstruments; ii++) {
           const newHoldingUSD = result.holdingsMatrix[base + ii];
-          if (newHoldingUSD > 1) newLoanHoldings.push({ instrumentId: regionCompanies[ii].id, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD });
+          if (!(newHoldingUSD > 1)) continue;
+          const issuerId = regionCompanies[ii].id;
+          const outcome = result.primaryOutcomeById.get(issuerId);
+          const offering = offeringsByIssuerId.get(issuerId);
+          const primary = outcome && !outcome.withdrawn && offering
+            ? { trancheId: primaryTrancheId(issuerId, offering.purpose, ctx.nextWeek), sliceUSD: primarySliceOf(newHoldingUSD - (prior?.get(issuerId) ?? 0), boughtByInstrument[ii], outcome.marketTakeUSD) }
+            : undefined;
+          splitAcrossTranches(v2, issuerId, 'LEVERAGED_LOAN', newHoldingUSD, primary).forEach((t) => {
+            if (t.usd > 1) newLoanHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: t.usd });
+          });
         }
       }
       store.append(entity.id, newLoanHoldings);

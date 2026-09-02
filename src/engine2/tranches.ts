@@ -52,6 +52,9 @@ export interface TrancheStore {
   /** §5-FINALIZATION 13b: the live row of a tranche id (interned) — an instrument resolves to its
    *  issuer in one read (`issuerIdOf`). Maintained by the row writer and the row freer only. */
   rowByIdRef: Map<number, number>;
+  /** 13b: the ISSUER of every tranche id ever written — permanent, so a register row of a tranche
+   *  retired this week still names its issuer at the paying agent (the row index above is live). */
+  issuerRefByIdRef: Map<number, number>;
 }
 
 /**
@@ -93,6 +96,7 @@ export function newTrancheStore(): TrancheStore {
     freeHead: -1,
     used: 0,
     rowByIdRef: new Map(),
+    issuerRefByIdRef: new Map(),
     head: new Int32Array(0),
     tail: new Int32Array(0),
     synced: new Set<string>(),
@@ -185,6 +189,7 @@ export function syncLadderRows(v2: V2World, companyId: string, ladder: DebtTranc
     const r = allocRow(S);
     writeRow(S, r, v2, ladder[i]);
     S.issuerRef[r] = internString(v2, companyId);
+    S.issuerRefByIdRef.set(S.idRef[r], S.issuerRef[r]);
     S.wireRef[r] = -1;
     S.next[r] = -1;
     if (prev >= 0) S.next[prev] = r; else S.head[slot] = r;
@@ -278,6 +283,7 @@ export function pushLadderRow(v2: V2World, companyId: string, t: DebtTranche, wi
   const r = allocRow(S);
   writeRow(S, r, v2, t);
   S.issuerRef[r] = internString(v2, companyId);
+  S.issuerRefByIdRef.set(S.idRef[r], S.issuerRef[r]);
   S.wireRef[r] = wireNo;
   S.next[r] = -1;
   if (S.tail[slot] >= 0) { S.next[S.tail[slot]] = r; S.tail[slot] = r; }
@@ -391,11 +397,16 @@ export function trancheRowOf(v2: V2World, instrumentId: string): number | undefi
   return ref === undefined ? undefined : v2.tranches.rowByIdRef.get(ref);
 }
 export function issuerIdOf(v2: V2World, instrumentId: string): string {
-  const r = trancheRowOf(v2, instrumentId);
-  if (r === undefined) return instrumentId;
-  const iss = v2.tranches.issuerRef[r];
-  return iss >= 0 ? v2.internedStrings[iss] : instrumentId;
+  const ref = v2.internedIdByString.get(instrumentId);
+  if (ref === undefined) return instrumentId;
+  const iss = v2.tranches.issuerRefByIdRef.get(ref);
+  return iss !== undefined && iss >= 0 ? v2.internedStrings[iss] : instrumentId;
 }
+/** 13b: a tranche id that has been written to the store at some point — live or retired. */
+export const isTrancheId = (v2: V2World, instrumentId: string): boolean => {
+  const ref = v2.internedIdByString.get(instrumentId);
+  return ref !== undefined && v2.tranches.issuerRefByIdRef.has(ref);
+};
 
 /** §5-WIRES D: the ladder's face on the live rows — total debt as a read. */
 export function ladderTotalUSD(v2: V2World, companyId: string): number {

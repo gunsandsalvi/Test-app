@@ -122,6 +122,11 @@ export const hasActiveWireJournal = (): boolean => active !== undefined;
 /** The one write path for a stage that has a `PartyRef` in hand. Returns the wire number. */
 export function wire(instruction: WireInstruction, internReasonId: (reason: string) => number): number {
   const j = activeWireJournal();
+  // WIRE_TRACE=<asset substring>: print every non-money wire naming that asset (a probe's instrument).
+  if (typeof process !== 'undefined' && process.env?.WIRE_TRACE && instruction.kind !== 'MONEY' && instruction.asset.includes(process.env.WIRE_TRACE)) {
+    const who = (p: PartyRef) => { const q = p as { kind: string; ticker?: string; id?: string; region?: string }; return `${q.kind}:${q.ticker ?? q.id ?? q.region ?? ''}`; };
+    console.log(`  [wire] w${j.week} ${instruction.kind} ${instruction.asset} ${who(instruction.from)} -> ${who(instruction.to)} ${(instruction.quantity * instruction.priceUSD / 1e6).toFixed(1)}M :: ${instruction.reason}`);
+  }
   return wirePush(
     j, partyId(instruction.from), partyId(instruction.to), kindIdOf.get(instruction.kind)!,
     internAsset(instruction.asset), instruction.quantity, instruction.priceUSD,
@@ -140,6 +145,8 @@ export interface WireSummary {
    *  wires, keyed `region|kind` — received minus delivered, in USD at the wires' prices. The
    *  house is on both sides of every fill, so a non-zero net is a leg no wire named. */
   houseNetUSDByKey: Record<string, number>;
+  /** W2_TRACE=1 only: the same net per `region|kind|asset` — which paper the house is left holding. */
+  houseNetUSDByAsset?: Record<string, number>;
   /** §5-WIRES W3: what the region's issuers put out net of what came back, keyed `region|kind` —
    *  issued (from a COMPANY) minus retired (to a COMPANY). The ladders' change must equal it. */
   issuerNetUSDByKey: Record<string, number>;
@@ -160,6 +167,8 @@ export interface WireSummary {
 export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssuer?: (ticker: string) => string | undefined, reasonTextOf?: (id: number) => string): WireSummary {
   const byKind: Record<string, number> = {}; const valueUSDByKind: Record<string, number> = {};
   const houseNetUSDByKey: Record<string, number> = {};
+  const w2Trace = typeof process !== 'undefined' && process.env?.W2_TRACE === '1';
+  const houseNetUSDByAsset: Record<string, number> | undefined = w2Trace ? {} : undefined;
   const issuerNetUSDByKey: Record<string, number> = {};
   const trace = typeof process !== 'undefined' && process.env?.LADDER_TRACE === '1';
   const issuerNetUSDByTicker: Record<string, number> | undefined = trace ? {} : undefined;
@@ -197,12 +206,12 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
       if (goodsInByTicker && to.kind === 'COMPANY') { const tk = `${to.ticker}|${asset}|${reasonTextOf?.(j.reasonId[i]) ?? j.reasonId[i]}`; goodsInByTicker[tk] = (goodsInByTicker[tk] ?? 0) + j.quantity[i]; }
       continue;
     }
-    if (to.kind === 'CLEARING_HOUSE') { const key = `${to.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) + valueUSD; }
-    if (from.kind === 'CLEARING_HOUSE') { const key = `${from.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) - valueUSD; }
+    if (to.kind === 'CLEARING_HOUSE') { const key = `${to.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) + valueUSD; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) + valueUSD; } }
+    if (from.kind === 'CLEARING_HOUSE') { const key = `${from.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) - valueUSD; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) - valueUSD; } }
     if (regionOfIssuer) {
       if (from.kind === 'COMPANY') { const rg = regionOfIssuer(from.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) + valueUSD; if (issuerNetUSDByTicker) { const tk = `${from.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) + valueUSD; } } }
       if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueUSD; if (issuerNetUSDByTicker) { const tk = `${to.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueUSD; } } }
     }
   }
-  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey, issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
+  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
 }

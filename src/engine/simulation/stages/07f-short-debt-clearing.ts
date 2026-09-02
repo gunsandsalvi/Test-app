@@ -32,7 +32,8 @@
 import { riskAversionOf } from '../../../domain/preferences';
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
+import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf, trancheRowOf } from '../../../engine2/tranches';
+import { splitAcrossTranches, primarySliceOf } from './register-split';
 import { REGION_IDS } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
@@ -695,15 +696,21 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // was no register of who held the paper.
       const cpEntities = ctx.updatedInstitutionalEntities.filter((e) => !e.isDefaulted);
       const heldByIssuerByEntity = new Map<string, Map<string, number>>();
+      // 13b: a holder's rows name TRANCHES — kept per tranche too, so a matured programme's rows
+      // are repaid exactly (a row that still names its issuer shares the issuer's surviving ratio).
+      const heldByTrancheByEntity = new Map<string, Map<string, number>>();
       cpEntities.forEach((entity) => {
         const byIssuer = new Map<string, number>();
+        const byTranche = new Map<string, number>();
         store.scan(entity.id, 'COMMERCIAL_PAPER', (h) => {
           const issuerId = issuerIdOf(v2Mirror, h.instrumentId); // 13b: a row names a tranche or its issuer
           if (!cpIssuerIds.has(issuerId)) return false;
           byIssuer.set(issuerId, (byIssuer.get(issuerId) ?? 0) + h.quantityOrNotionalUSD);
+          byTranche.set(h.instrumentId, (byTranche.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
           return true;
         });
         heldByIssuerByEntity.set(entity.id, byIssuer);
+        heldByTrancheByEntity.set(entity.id, byTranche);
       });
 
       // A DESK IS A HOLDER, and its paper matures like anyone else's. Scaling only the
@@ -744,7 +751,17 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         heldByIssuerByEntity.forEach((byIssuer, entityId) => {
           const heldUSD = byIssuer.get(iss.comp.id) ?? 0;
           if (!(heldUSD > 0)) return;
-          const repaidUSD = heldUSD * (1 - survivingShare);
+          // 13b: the matured tranches' rows are what is repaid; a row keyed by the issuer itself
+          // (no tranche behind it) shares the issuer's surviving ratio as before.
+          let repaidUSD = 0;
+          const TSm = v2Mirror.tranches;
+          (heldByTrancheByEntity.get(entityId) ?? new Map<string, number>()).forEach((usd, instrumentId) => {
+            if (issuerIdOf(v2Mirror, instrumentId) !== iss.comp.id) return;
+            const tr = trancheRowOf(v2Mirror, instrumentId);
+            if (tr === undefined) repaidUSD += usd * (1 - survivingShare);
+            else if ((TSm.flags[tr] & TR_CP) && TSm.maturityWeek[tr] <= ctx.nextWeek) repaidUSD += usd;
+          });
+          repaidUSD = Math.min(heldUSD, repaidUSD);
           byIssuer.set(iss.comp.id, heldUSD - repaidUSD);
           if (repaidUSD > 0) {
             pay(ctx, {
@@ -882,12 +899,28 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       // ---- 4. APPLY. Holders' books from the fills; the issuer's new paper at the CLEARED rate
       // for exactly what placed; the committed line for the roll it could not place.
+      // 13b: the rows name TRANCHES — the week's placed paper first (its tranche is issued just
+      // below, `${ticker}-CP-${week}`), the rest across the surviving programmes (register-split.ts).
+      const cpBoughtByIssuer = new Map<string, number>();
+      [...cpParticipants, ...cpDeskParticipants].forEach((p) => {
+        const fills = cpResult.newParticipantHoldings.get(p.id); if (!fills) return;
+        fills.forEach((usd, issuerId) => { const b = usd - (p.currentHoldingsByInstrumentId.get(issuerId) ?? 0); if (b > 0) cpBoughtByIssuer.set(issuerId, (cpBoughtByIssuer.get(issuerId) ?? 0) + b); });
+      });
       cpEntities.forEach((entity) => {
         const fills = cpResult.newParticipantHoldings.get(entity.id);
         if (!fills) return;
         const rows: ItemizedHolding[] = [];
-        fills.forEach((usd, instrumentId) => {
-          if (usd > 1) rows.push({ instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalUSD: usd });
+        const prior = heldByIssuerByEntity.get(entity.id);
+        fills.forEach((usd, issuerId) => {
+          if (!(usd > 1)) return;
+          const iss = issuerById.get(issuerId);
+          const outcome = cpResult.primaryOutcomeById.get(issuerId);
+          const primary = iss && outcome && !outcome.withdrawn && outcome.marketTakeUSD > 1
+            ? { trancheId: `${iss.comp.ticker}-CP-${ctx.nextWeek}`, sliceUSD: primarySliceOf(usd - (prior?.get(issuerId) ?? 0), cpBoughtByIssuer.get(issuerId) ?? 0, outcome.marketTakeUSD) }
+            : undefined;
+          splitAcrossTranches(v2Mirror, issuerId, 'COMMERCIAL_PAPER', usd, primary).forEach((t) => {
+            if (t.usd > 1) rows.push({ instrumentId: t.instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalUSD: t.usd });
+          });
         });
         store.append(entity.id, rows);
       });

@@ -7,7 +7,7 @@ import { AuditFinding, B, pct, sum } from './types';
 import { marketCapOf } from '../../domain/company';
 import { ensureV2 } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
-import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf } from '../../engine2/tranches';
+import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf } from '../../engine2/tranches';
 import { bookHeadOf } from '../../engine2/holdings';
 
 /** O1 — two-sided: what the books hold of each debt class equals what is outstanding, in both directions. */
@@ -87,6 +87,8 @@ function o3(state: GameState, week: number): AuditFinding[] {
       const v = h.quantityOrNotionalUSD ?? 0;
       if (h.instrumentType === 'GOV_BOND') return;
       const c = live.get(issuerIdOf(v2o3, h.instrumentId));
+      // 13b: a tranche's row is live only while the tranche is (retired paper on a book is an orphan).
+      if (c && isTrancheId(v2o3, h.instrumentId) && trancheRowOf(v2o3, h.instrumentId) === undefined) { orphan++; orphanUSD += v; return; }
       if (c) { if (c.mergerAcquired) { merged++; mergedUSD += v; } return; }
       if (ent.get(h.instrumentId)) return;
       if (h.instrumentType === 'PE_FUND_INTEREST' || h.instrumentType === 'ETF_SHARE') return;

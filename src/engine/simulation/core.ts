@@ -61,7 +61,7 @@ import { runTradeSettlementStage } from './stages/trade-settlement';
 // Side effect only: registers the (Node-only, env-gated) clearing worker pool with the engine.
 import './stages/clearing-worker-pool';
 import { ensureV2 } from '../../engine2/world';
-import {  assertLaddersInSync, materializeLadder, facilityBookOf } from '../../engine2/tranches';
+import {  assertLaddersInSync, materializeLadder, facilityBookOf, ensureLaddersSynced } from '../../engine2/tranches';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { ensureBooksSynced, assertBooksInSync, materializeBook, clearDirtyBooks } from '../../engine2/holdings';
 import './stages/native-kernels';
@@ -125,6 +125,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // Holdings flip stage 1 — the same catch-up for the institutional register: the seed and any
     // unhooked creation path (fund births, estate spawns) get their books mirrored here.
     ensureBooksSynced(v2, state.institutionalEntities ?? []);
+    // §5-FINALIZATION 13b: the LADDERS too, before any stage — the register's rows name tranches
+    // and every reader resolves an issuer through the store, so week 1's books cannot run on an
+    // empty store (they did: the seam synced it at stage 08, and the week-1 auctions claimed no
+    // row and wrote the fills back under the issuers' ids). A no-op from week 2.
+    ensureLaddersSynced(v2, state.companies);
     // §5-BRAINS — the same catch-up for managements: any entity that entered the world by any
     // path without one gets its two primitives drawn here, once, from its own stream.
     ensureManagements(state.companies, state.institutionalEntities ?? [], state.currentWeek);

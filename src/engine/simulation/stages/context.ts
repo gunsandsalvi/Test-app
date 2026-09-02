@@ -204,6 +204,11 @@ export interface WeeklyStepContext {
    * stage — see applyPendingCorporateActionSettlements.
    */
   pendingHolderSettlements: Map<string, number>;
+  /** §5-FINALIZATION 13b — a tranche REPLACED this week (an accretive call's replacement issue):
+   *  `kind:oldTrancheId` → the new tranche id. The paying agent re-keys the retired rows onto the
+   *  new paper through the house, with no principal cash (the issuer's call and its replacement
+   *  proceeds net on its own walk, as the issuer-level ratio of one always implied). */
+  pendingHolderReplacements: Map<string, string>;
   /**
    * Cash an issuer owes its holders this week for a corporate action, keyed the same way as
    * `pendingHolderSettlements` — today the CALL PREMIUM paid to retire paper early. Settled pro
@@ -363,6 +368,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     updatedCompanies: [...state.companies],
     updatedInstitutionalEntities: [...state.institutionalEntities],
     pendingHolderSettlements: new Map<string, number>(),
+    pendingHolderReplacements: new Map<string, string>(),
     pendingHolderCashUSD: new Map<string, number>(),
     householdEtfPurchasesUSD: new Map<string, { spentUSD: number; navPerShare: number }>(),
     updatedMarketIndexes: [...(state.marketIndexes ?? [])],

@@ -53,6 +53,9 @@ import { ladderRowsOf, materializeTranche, TR_FLOATING, TR_CP, TR_FACILITY } fro
 import { issueTranche, retireTranche, commitLadder } from '../engine/ledger/tranche-ledger';
 import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World } from './world';
 import { totalInputValueUSD } from './lots';
+import { primaryTrancheId } from '../domain/primary-market';
+import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/stated';
+import { trancheWeekAccrual } from './front-core';
 
 /**
  * SCALE / DECLARED RELABEL (the user's drift acceptance, 2026-09-01): decimal rounding by
@@ -644,12 +647,9 @@ function runCashWalk(args: {
       // CAL: accrue to whoever holds it this week; pay it out on the coupon date. The cash that
       // leaves on that date IS the sum of the accruals, so the issuer's ledger and the holders'
       // receivables clear against each other exactly.
-      accrueHoldersInterest(ctx, companyId, 'CORP_BOND', marketBondAccrualUSD);
-      accrueHoldersInterest(ctx, companyId, 'LEVERAGED_LOAN', marketLoanAccrualUSD);
-      accrueHoldersInterest(ctx, companyId, 'COMMERCIAL_PAPER', commercialPaperAccrualUSD);
-      if (bondCouponDue) payHoldersAccruedInterest(ctx, companyId, 'CORP_BOND');
-      if (loanCouponDue) payHoldersAccruedInterest(ctx, companyId, 'LEVERAGED_LOAN');
-      if (cpCouponDue) payHoldersAccruedInterest(ctx, companyId, 'COMMERCIAL_PAPER');
+      // 13b: the register's per-tranche accruals are posted in the main-thread half (the ladder rows).
+      void marketBondAccrualUSD; void marketLoanAccrualUSD; void commercialPaperAccrualUSD;
+      void bondCouponDue; void loanCouponDue; void cpCouponDue;
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
       // now arrives somewhere — the treasury's account — instead of leaving the model.
       // §5-TAXR — the accrual IS the statement's tax line (rule 14: the P&L and the payment are
@@ -1136,6 +1136,26 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     const TS = v2.tranches;
     const __k2 = S08K_PROF ? performance.now() : 0;
     let rowList = ladderRowsOf(v2, L8.companyId[row]);
+    // §5-FINALIZATION 13b: the register is keyed by TRANCHE — each market tranche's week accrues
+    // to its own holders and pays them on its own date, through the formula the front pass summed
+    // per issuer (`trancheWeekAccrual`; the seam's lanes were filled from these rows in this order).
+    // The issuer-level totals stay the P&L's; these are the rows'.
+    for (const tr of rowList) {
+      if (TS.maturityWeek[tr] === nextWeek) continue;
+      const fl = TS.flags[tr];
+      if (fl & TR_FACILITY) continue;
+      const floating = (fl & TR_FLOATING) !== 0;
+      const annualRate = floating
+        ? (Number.isNaN(TS.floatingMarginBps[tr]) ? TRANCHE_DEFAULT_MARGIN_BPS : TS.floatingMarginBps[tr]) / 10000
+        : (Number.isNaN(TS.couponRate[tr]) ? TRANCHE_DEFAULT_COUPON : TS.couponRate[tr]);
+      const perYear = !Number.isNaN(TS.paymentsPerYear[tr]) ? Math.max(1, TS.paymentsPerYear[tr]) : (fl & TR_CP) ? 1 : floating ? 4 : 2;
+      const acc = trancheWeekAccrual(TS.principalUSD[tr], floating, annualRate, reg.policyRate, (fl & TR_CP) !== 0, TS.maturityWeek[tr],
+        Math.max(1, Math.round(52 / perYear)), (Number.isNaN(TS.paymentAnchorWeek[tr]) ? 0 : TS.paymentAnchorWeek[tr]) | 0, nextWeek);
+      const kind = (fl & TR_CP) ? 'COMMERCIAL_PAPER' : floating ? 'LEVERAGED_LOAN' : 'CORP_BOND';
+      const trancheId = v2.internedStrings[TS.idRef[tr]];
+      accrueHoldersInterest(ctx, trancheId, kind, acc.weeklyUSD);
+      if (acc.due) payHoldersAccruedInterest(ctx, trancheId, kind);
+    }
     // Economics views are memoized per row — retirementEconomics and the call arithmetic read
     // no principal, so a view struck before a principal mutation stays valid.
     const econViews = new Map<number, DebtTranche>();
@@ -1319,10 +1339,12 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // SCALE — the two filtered reduces as one walk; each accumulator sums its subset in array
     // order and the adjustment adds last, so every float is the one the filters produced.
     let preFixedSumUSD = 0, preFloatingSumUSD = 0;
+    // 13b: the pre-action face of every market row, by row — the register's per-tranche ratio.
+    const preFaceByRow = new Map<number, number>();
     for (const r of rowList) {
       const fl = TS.flags[r];
-      if (!(fl & TR_FLOATING)) { if (!(fl & TR_CP)) preFixedSumUSD += TS.principalUSD[r]; }
-      else if (!(fl & TR_FACILITY)) preFloatingSumUSD += TS.principalUSD[r];
+      if (!(fl & TR_FLOATING)) { if (!(fl & TR_CP)) { preFixedSumUSD += TS.principalUSD[r]; preFaceByRow.set(r, TS.principalUSD[r]); } }
+      else if (!(fl & TR_FACILITY)) { preFloatingSumUSD += TS.principalUSD[r]; preFaceByRow.set(r, TS.principalUSD[r]); }
     }
     const preActionFixedUSD = preFixedSumUSD + primaryFixedAdjUSD;
     const preActionFloatingUSD = preFloatingSumUSD + primaryFloatingAdjUSD;
@@ -1382,6 +1404,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       if (!(premiumUSD > 0)) return;
       if (!(TS.flags[r] & TR_FLOATING)) bondCallPremiumUSD += premiumUSD;
       else loanCallPremiumUSD += premiumUSD;
+      // 13b: the premium belongs to the holders of record of THIS tranche.
+      payHoldersCash(ctx, v2.internedStrings[TS.idRef[r]], (TS.flags[r] & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND', premiumUSD);
       // SETL4: reported here, PAID by the register below (`payHoldersCash`) — settling it here as
       // well debited the issuer twice, once to the holders and once to nobody.
       post('call premium paid to holders', -premiumUSD, undefined, false);
@@ -1389,6 +1413,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
 
     // Corporate debt lifecycle: call and refinance when genuinely accretive
     const calledRefinanceTranches: DebtTranche[] = [];
+    const replacedTrancheIds: { oldId: string; newId: string }[] = [];
     rowList.forEach(rTr => {
       if ((TS.flags[rTr] & (TR_FLOATING | TR_CP))) return;
       const remainingYears = Math.max(0.5, (TS.maturityWeek[rTr] - state.currentWeek) / 52);
@@ -1436,6 +1461,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         // clear was quietly disappearing, and what remained was a float small enough that ordinary
         // flow moved its spread hundreds of basis points a week.
         if (calledAmountUSD > 0.01) {
+          // 13b: the holders of record of the called tranche receive the replacement's rows.
+          replacedTrancheIds.push({ oldId: v2.internedStrings[TS.idRef[rTr]], newId: `${L8.companyId[row]}-CALL-${state.currentWeek}-${v2.internedStrings[TS.idRef[rTr]]}` });
           calledRefinanceTranches.push({
             id: `${L8.companyId[row]}-CALL-${state.currentWeek}-${v2.internedStrings[TS.idRef[rTr]]}`,
             principalUSD: calledAmountUSD,
@@ -1453,6 +1480,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // Remove any tranche whose principalUSD reaches zero, then add the replacement issues.
     rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
     for (const t of calledRefinanceTranches) rowList.push(issueTranche(v2, issuer, t, 'accretive call: replacement issue'));
+    for (const rp of replacedTrancheIds) ctx.pendingHolderReplacements.set(`CORP_BOND:${rp.oldId}`, rp.newId);
 
     // WS8: the year-early pre-refi and the at-maturity formula roll are both gone — a roll now
     // happens in the MARKET. A tranche one week from maturity is announced as a REFINANCE
@@ -1512,7 +1540,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       const placedUSD = primaryPlacedUSD;
       const newTranche: DebtTranche = o.rateType === 'FIXED'
         ? {
-            id: `${L8.companyId[row]}-${o.purpose}-${nextWeek}`,
+            id: primaryTrancheId(L8.companyId[row], o.purpose, nextWeek),
             principalUSD: placedUSD,
             rateType: 'FIXED',
             // The CLEARED terms — the whole point of the primary market.
@@ -1523,7 +1551,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
             callProtection: callProtectionForIssue({ rateType: 'FIXED', isInvestmentGrade: isInvestmentGrade(newRating) }),
           }
         : {
-            id: `${L8.companyId[row]}-${o.purpose}-${nextWeek}`,
+            id: primaryTrancheId(L8.companyId[row], o.purpose, nextWeek),
             principalUSD: placedUSD,
             rateType: 'FLOATING',
             floatingMarginBps: Math.round(settlement.clearedStat),
@@ -1545,7 +1573,13 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         debtRepaymentThisWeek += retiredUSD;
         post('term-out: maintenance bridges retired', -retiredUSD, bankCredit);
       }
-      if (placedUSD > 1000) rowList.push(issueTranche(v2, issuer, newTranche, `primary ${o.purpose.toLowerCase()} placed`));
+      if (placedUSD > 1000) {
+        const newRow = issueTranche(v2, issuer, newTranche, `primary ${o.purpose.toLowerCase()} placed`);
+        rowList.push(newRow);
+        // 13b: the new tranche's pre-action face is the deal — a same-week prepayment or call of it
+        // scales its holders' rows by post/placed like any other tranche's.
+        preFaceByRow.set(newRow, placedUSD);
+      }
       debtIssuanceThisWeek += placedUSD;
       // WS8/CASH: reported here, PAID elsewhere by name — the clearing house pays the issuer for
       // what the book took, and the lead pays it for the residual and charges it the fee
@@ -1824,7 +1858,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // Reporting is something a LISTED company does. Gating on the modulo alone kept a company
     // that had been taken private reporting quarterly to a market it had left.
   if (S08K_PROF) s08k.debt += performance.now() - __k2;
-  return { bondCallPremiumUSD, buybacksThisWeek, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, newCdsSpreadBps, newLastOpportunisticOfferingWeek, newOasBps, newRating, preActionFixedUSD, preActionFloatingUSD, rowList, settlement, newRevenue, newEbitda, newEbit, newTotalDebt };
+  return { bondCallPremiumUSD, buybacksThisWeek, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, newCdsSpreadBps, newLastOpportunisticOfferingWeek, newOasBps, newRating, preActionFixedUSD, preActionFloatingUSD, preFaceByRow, rowList, settlement, newRevenue, newEbitda, newEbit, newTotalDebt };
 }
 
 export type BackCoreOut = ReturnType<typeof runBackCoreA> & ReturnType<typeof runBackCoreB>;
@@ -1857,7 +1891,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
     }
     const core = pre ?? runBackCore(comp, row, d);
-    const { annualInterest, bondCallPremiumUSD, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, cap, capexCommissionedThisWeekUSD, cashLedger, costDriversUSD, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, preActionFixedUSD, preActionFloatingUSD, rowList, sec, settlement, stillUnderConstruction, targetProductionUSD, updatedProductLines, weeklyDepreciation, weeklyPayrollUSD, post, cash } = core;
+    const { annualInterest, bondCallPremiumUSD, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, cap, capexCommissionedThisWeekUSD, cashLedger, costDriversUSD, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, preActionFixedUSD, preActionFloatingUSD, preFaceByRow, rowList, sec, settlement, stillUnderConstruction, targetProductionUSD, updatedProductLines, weeklyDepreciation, weeklyPayrollUSD, post, cash } = core;
     const L8 = d.backLanes;
     const reg = updatedRegions[L8.region[row]];
     const weekUpdate = companyUpdates[L8.ticker[row]];
@@ -2040,12 +2074,20 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       else if (!(fl & TR_FACILITY)) postActionFloatingUSD += TS.principalUSD[r];
       if (TS.maturityWeek[r] - nextWeek <= 52) shortTermDebtSumUSD += TS.principalUSD[r];
     }
+    // 13b: the REGISTER's rows are keyed by tranche — each market tranche's own pre/post face
+    // (a retirement is that tranche's ratio, 0 when it is gone; the primary's new tranche has no
+    // pre face and its rows come from the book's fills). The named DESKS' positions are keyed by
+    // issuer, so the paying agent's desk pass reads the issuer-level ratio recorded beside them.
+    preFaceByRow.forEach((preUSD, r) => {
+      const fl = TS.flags[r];
+      settleCorporateActionOnHolders(ctx, v2.internedStrings[TS.idRef[r]], (fl & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND', preUSD, TS.principalUSD[r]);
+    });
     settleCorporateActionOnHolders(ctx, L8.companyId[row], 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
     settleCorporateActionOnHolders(ctx, L8.companyId[row], 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
     // The premium the issuer's ledger just posted out reaches the holders of record — the whole
-    // reason call protection changes anything is that the money goes to the lender.
-    payHoldersCash(ctx, L8.companyId[row], 'CORP_BOND', bondCallPremiumUSD);
-    payHoldersCash(ctx, L8.companyId[row], 'LEVERAGED_LOAN', loanCallPremiumUSD);
+    // reason call protection changes anything is that the money goes to the lender. 13b: paid
+    // per tranche at `recordPremium`; the totals are the P&L's.
+    void bondCallPremiumUSD; void loanCallPremiumUSD;
 
     const newShortTermDebtUSD = shortTermDebtSumUSD;
 

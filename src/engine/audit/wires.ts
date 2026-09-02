@@ -7,6 +7,8 @@ import { GameState } from '../../types';
 import { AuditFinding, B } from './types';
 import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey } from './snapshot';
 import { isTrancheKind } from '../../domain/assets';
+import { ensureV2 } from '../../engine2/world';
+import { issuerIdOf } from '../../engine2/tranches';
 
 export function auditWires(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
@@ -25,7 +27,25 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
     const kind = key.split('|')[1];
     return Math.abs(net) > Math.max(1e4, (w.valueUSDByKind[kind] ?? 0) * 1e-6);
   });
-  if (nets.length > 0 && process.env.W2_TRACE === '1') console.log(`  [w2-trace] w${week}: ` + nets.map(([k, n]) => `${k.replace('|', ' ')} ${B(n)}`).join(' | '));
+  if (nets.length > 0 && process.env.W2_TRACE === '1') {
+    console.log(`  [w2-trace] w${week}: ` + nets.map(([k, n]) => `${k.replace('|', ' ')} ${B(n)}`).join(' | '));
+    const byAsset = Object.entries(w.houseNetUSDByAsset ?? {}).filter(([, n]) => Math.abs(n) > 1e5).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+    const v2w = ensureV2(state);
+    nets.forEach(([k]) => {
+      const top = byAsset.filter(([ak]) => ak.startsWith(k + '|')).slice(0, 6).map(([ak, n]) => `${ak.slice(k.length + 1)} ${(n / 1e6).toFixed(1)}M`);
+      if (top.length) console.log(`    [w2-asset] ${k.replace('|', ' ')}: ${top.join(' | ')}`);
+      // By ISSUER: a tranche resolves to its issuer, so a desk's issuer-keyed leg and the
+      // register's tranche-keyed legs of the same paper net here; what remains names the issuer.
+      const byIssuer = new Map<string, number>();
+      Object.entries(w.houseNetUSDByAsset ?? {}).forEach(([ak, n]) => {
+        if (!ak.startsWith(k + '|')) return;
+        const iss = issuerIdOf(v2w, ak.slice(k.length + 1));
+        byIssuer.set(iss, (byIssuer.get(iss) ?? 0) + n);
+      });
+      const topIss = [...byIssuer.entries()].filter(([, n]) => Math.abs(n) > 1e5).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 8);
+      if (topIss.length) console.log(`    [w2-issuer] ${k.replace('|', ' ')}: ${topIss.map(([i, n]) => `${i} ${(n / 1e6).toFixed(1)}M`).join(' | ')}`);
+    });
+  }
   if (nets.length > 0) {
     const worst = nets.reduce((a, b) => (Math.abs(b[1]) > Math.abs(a[1]) ? b : a));
     const usd = nets.reduce((a, [, n]) => a + Math.abs(n), 0);
