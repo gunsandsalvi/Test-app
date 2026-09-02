@@ -21,7 +21,7 @@
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
 import { partyId } from '../../ledger/party';
-import { categoryPriceTier, householdBudgetReachMultiple, householdDemandLadder } from '../../../domain/industry';
+import { categoryPriceTier, householdBudgetReachMultiple, budgetDemandLadder, DEMAND_LADDER_RUNGS } from '../../../domain/industry';
 import { TIER_SPEND_MIX } from '../../macro/household-cohorts';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
@@ -49,7 +49,6 @@ import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { paymentTermWeeks } from '../../../domain/trade-invoice';
 import { computeAnnualDefaultProbability } from './shared-helpers';
 import { getFxToUsd } from './06-fx-and-trade';
-import { GOVERNMENT_BID_PRICE_TOLERANCE } from '../../../domain/government';
 import { realizedAnnualVol } from '../../../domain/volatility';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
@@ -413,6 +412,35 @@ interface DemandPlan {
   isGovernmentAggregate?: boolean;
   demandUnits: number;
   maxPriceUSD: number;
+  /** §7.343 — a BUDGET-ANCHORED demand curve, cut into rungs of falling reservation: the k-th
+   *  slice of the want is worth budget/(k·step), so the quantity a buyer takes falls as the
+   *  price rises and a shortage clears at budget/supply, ONCE. A plan without rungs is one
+   *  inelastic bid at `maxPriceUSD` (the contract plans keep that shape). */
+  rungs?: { units: number; maxPriceUSD: number }[];
+}
+
+/**
+ * §7.343 — WHAT A BUYER CAN PAY, derived from its own books. Before this, a firm bid last
+ * week's price ±5% (a cash-rich one +15%) and the treasury last week's price +50%, for a FIXED
+ * quantity: reservation anchored to the print, not to any budget. In a short market the print
+ * went to the cap every week and the cap moved with it — the compounding half of the inflation
+ * the price-level work (§7.338) left standing (CPI 100 → 150 in 13 weeks: pharma ×2.4,
+ * defence ×2.1, commercial rent ×2.4, all corporate- or treasury-bought). Now every buyer class
+ * is on the one ladder households already used: a budget, a want, and how far above the going
+ * price the budget can stretch. For a firm that is its margin cover — an input that is α of its
+ * revenue can rise by m/α before the firm produces at a loss (m its EBITDA margin), so
+ * reach = 1 + m/α; a capital-goods buyer and the treasury spend a budget and reach no further.
+ */
+function budgetRungs(budgetUSD: number, wantUnits: number, referencePriceUSD: number, reach: number): { units: number; maxPriceUSD: number }[] {
+  return budgetDemandLadder({
+    weeklyBudgetUSD: budgetUSD, referencePriceUSD, budgetReachMultiple: reach,
+    satiationUnits: wantUnits, rungs: DEMAND_LADDER_RUNGS,
+  });
+}
+function marginReach(comp: { annualRevenue: number; ebitda: number }, inputAnnualUSD: number): number {
+  const alpha = comp.annualRevenue > 0 ? inputAnnualUSD / comp.annualRevenue : 0;
+  const margin = comp.annualRevenue > 0 ? Math.max(0, comp.ebitda) / comp.annualRevenue : 0;
+  return alpha > 0 ? 1 + margin / alpha : 1;
 }
 
 /** A settlement key for a participant that is not a Company: the aggregates, by region. */
@@ -1258,14 +1286,15 @@ function buildRegionDemandPlans(
     // real buyer instead orders LESS at a normal market price (real capital rationing), so
     // whatever it does order actually clears.
     const cashConstrainedQtyModifier = cashRatio < 0.02 ? 0.70 : 1.0;
-    const cashRichPricePremium = cashRatio > 0.15 ? 1.15 : 1.0;
-
+    const units = openBidUnits * cashConstrainedQtyModifier;
+    const reach = isCapexSupplierCategory ? 1 : marginReach(comp, demandUSD * 52);
     plans.push({
       key: comp.ticker,
       regionId,
       company: comp,
-      demandUnits: openBidUnits * cashConstrainedQtyModifier,
-      maxPriceUSD: referencePriceUSD * (0.95 + random() * 0.1) * cashRichPricePremium,
+      demandUnits: units,
+      maxPriceUSD: referencePriceUSD * reach,
+      rungs: budgetRungs(units * referencePriceUSD, units, referencePriceUSD, reach),
     });
   });
 
@@ -1282,7 +1311,8 @@ function buildRegionDemandPlans(
         key: privateSegmentOfferId(regionId, segment.industry),
         regionId,
         demandUnits,
-        maxPriceUSD: referencePriceUSD * (0.95 + random() * 0.1),
+        maxPriceUSD: referencePriceUSD,
+        rungs: budgetRungs(demandUnits * referencePriceUSD, demandUnits, referencePriceUSD, 1),
       });
     });
   }
@@ -1304,11 +1334,13 @@ function buildRegionDemandPlans(
       if (!intensity) return;
       const demandUnits = ((pool.annualRevenueUSD / 52) * intensity) / referencePriceUSD;
       if (demandUnits <= 0.001) return;
+      const poolReach = intensity > 0 ? 1 + Math.max(0, pool.marginPct ?? 0) / intensity : 1;
       plans.push({
         key: privateSegmentOfferId(regionId, pool.industry),
         regionId,
         demandUnits,
-        maxPriceUSD: referencePriceUSD * (0.95 + random() * 0.1),
+        maxPriceUSD: referencePriceUSD * poolReach,
+        rungs: budgetRungs(demandUnits * referencePriceUSD, demandUnits, referencePriceUSD, poolReach),
       });
     });
   }
@@ -1327,7 +1359,8 @@ function buildRegionDemandPlans(
         regionId,
         isGovernmentAggregate: true,
         demandUnits: govDemandUnits,
-        maxPriceUSD: referencePriceUSD * (1 + GOVERNMENT_BID_PRICE_TOLERANCE),
+        maxPriceUSD: referencePriceUSD,
+        rungs: budgetRungs(govBudgetWeeklyUSD, govDemandUnits, referencePriceUSD, 1),
       });
     }
   }
@@ -1440,12 +1473,11 @@ function buildRegionDemandPlans(
       // IND16: this book clears at the FACTORY GATE, so every rung is the factory-gate price the
       // household's willingness to pay leaves once the channel has taken its cut.
       slices.forEach((sl) => {
-        householdDemandLadder({
+        budgetDemandLadder({
           weeklyBudgetUSD: sl.budgetUSD,
           referencePriceUSD,
           budgetReachMultiple: sl.reach,
           satiationUnits: sl.wantUnits,
-          rungs: slices.length > 1 ? 1 : undefined,
         }).forEach((rung) => {
           if (rung.units <= 0.001) return;
           plans.push({
@@ -1664,22 +1696,27 @@ function runSubUnitMarkets(
   demandPlans.forEach(plan => {
     if (plan.demandUnits <= 0.001) return;
     const shares = originShare(plan.regionId);
+    // §7.343: a plan with rungs is several bids under one key — the book sums a key's fills, so
+    // the write-back below still sees one purchase per buyer.
+    const rungs = plan.rungs ?? [{ units: plan.demandUnits, maxPriceUSD: plan.maxPriceUSD }];
     Object.keys(shares).forEach(originKey => {
       const origin = originKey as RegionId;
-      const units = plan.demandUnits * shares[origin];
-      if (units <= 0.001) return;
-      // The buyer's ceiling is what it will pay DELIVERED, in its own money. What it can offer at
-      // the far gate is that less the freight, converted into the seller's money — which is the
-      // whole of landed-cost sourcing, expressed as a reservation.
-      const exWorksCeilingBuyerMoney = plan.maxPriceUSD - freightPerUnitBuyerMoney(origin, plan.regionId);
-      if (!(exWorksCeilingBuyerMoney > 0)) return;
-      bidsByOrigin[origin].push({
-        companyId: plan.key,
-        isHouseholdAggregate: plan.isHouseholdAggregate,
-        isGovernmentAggregate: plan.isGovernmentAggregate,
-        regionId: plan.regionId,
-        quantityUnits: units,
-        maxPriceUSD: convertLocal(exWorksCeilingBuyerMoney, plan.regionId, origin, sourcing.fxToUsd),
+      rungs.forEach((rung) => {
+        const units = rung.units * shares[origin];
+        if (units <= 0.001) return;
+        // The buyer's ceiling is what it will pay DELIVERED, in its own money. What it can offer at
+        // the far gate is that less the freight, converted into the seller's money — which is the
+        // whole of landed-cost sourcing, expressed as a reservation.
+        const exWorksCeilingBuyerMoney = rung.maxPriceUSD - freightPerUnitBuyerMoney(origin, plan.regionId);
+        if (!(exWorksCeilingBuyerMoney > 0)) return;
+        bidsByOrigin[origin].push({
+          companyId: plan.key,
+          isHouseholdAggregate: plan.isHouseholdAggregate,
+          isGovernmentAggregate: plan.isGovernmentAggregate,
+          regionId: plan.regionId,
+          quantityUnits: units,
+          maxPriceUSD: convertLocal(exWorksCeilingBuyerMoney, plan.regionId, origin, sourcing.fxToUsd),
+        });
       });
     });
   });

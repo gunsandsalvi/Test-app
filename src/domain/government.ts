@@ -179,23 +179,6 @@ export function governmentOutlaysUSD(parts: {
   return parts.interestUSD + parts.payrollUSD + parts.transfersUSD + parts.procurementSpentUSD;
 }
 
-/**
- * How far above last week's price the government will still buy. PUB1e.
- *
- * Procurement is contracted to a program requirement, so a government is far less price-elastic
- * than a household — whose willingness to pay tops out near 1.9% over (HOUSEHOLD_BID_BASE_PREMIUM
- * by tier). It is not unbounded: a real agency re-tenders rather than pay any price.
- *
- * The REAL constraint is the appropriated dollar budget, which is why this is a tolerance and not
- * a size. A fixed budget meeting a rising price buys fewer units, so inflation erodes real
- * government purchases on its own — the mechanism the old flat +10% cap was crudely standing in
- * for by excluding the government outright from any category that moved more than 10% in a week.
- *
- * Measured: unspent budget falls 0.81B -> 0.36B (w20) as the tolerance goes +10% -> +50%, and
- * stops moving after that. What remains is the goods market's own excess demand rationing every
- * bidder pro-rata, which no willingness to pay can fix.
- */
-export const GOVERNMENT_BID_PRICE_TOLERANCE = 0.50;
 
 /**
  * PUB3b — the budget as a sum of real obligations, so the deficit is an OUTCOME.

@@ -85,6 +85,9 @@ export function householdBudgetReachMultiple(
  * on the QUANTITY axis, so what a given clearing price fills is the curve's own value there.
  */
 export const HOUSEHOLD_DEMAND_LADDER_RUNGS = 6;
+/** §7.343 — the same ladder for a firm's or a treasury's purchases: a budget-anchored demand curve
+ *  is what stops a shortage from compounding the print week after week. */
+export const DEMAND_LADDER_RUNGS = 3;
 
 /**
  * The household's demand for one good as a real SCHEDULE: what it would buy at each of a ladder
@@ -100,7 +103,7 @@ export const HOUSEHOLD_DEMAND_LADDER_RUNGS = 6;
  * clearing price `p` fills exactly the rungs at or above it and the total demanded is the curve's
  * own value at `p`.
  */
-export function householdDemandLadder(args: {
+export function budgetDemandLadder(args: {
   weeklyBudgetUSD: number;
   budgetReachMultiple: number;
   referencePriceUSD: number;
@@ -131,11 +134,20 @@ export function householdDemandLadder(args: {
   // ladder POSTS would be `rungs x the going price`, and in a market whose supply is short the top
   // of the demand curve IS the clearing price. A resolution parameter must not move the answer
   // (rule 19), and that one moved it linearly.
+  // §7.343 — THE CURVE UNDER THE CAP IS THE BUDGET'S OWN HYPERBOLA. The truncation above made
+  // the ladder FLAT: `reachable / (step·i)` never falls below `reachable / maxUnits` inside the
+  // want, so every rung posted the whole-want reservation and demand was one inelastic block at
+  // reach × the going price. In a short market the print went straight to that block (a 25%
+  // staple shortage cleared at 2–3× in one week), and with every buyer class anchored the same
+  // way the level compounded. Read the other way: at a price p the buyer takes budget/p units,
+  // up to its want — the budget is what it spends, the reach is the most it will pay per unit
+  // for the first of them. A shortage of S against a want W then clears at budget/S, ONCE, and
+  // the cap is measured (reach × going price), so the rung count still moves nothing.
   const reservationUSD = reachableUSD / maxUnits;
   const step = maxUnits / rungs;
   const out: { units: number; maxPriceUSD: number }[] = [];
   for (let i = 1; i <= rungs; i++) {
-    out.push({ units: step, maxPriceUSD: Math.min(reservationUSD, reachableUSD / (step * i)) });
+    out.push({ units: step, maxPriceUSD: Math.min(reservationUSD, weeklyBudgetUSD / (step * i)) });
   }
   return out;
 }
