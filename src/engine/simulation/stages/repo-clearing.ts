@@ -233,6 +233,8 @@ export function runRegionalRepoSession(
   const week = ctx.nextWeek;
   const priorRepoRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
   const policyBps = reg.policyRate * 10000;
+  // §5-CLOSE: the window's interest income this week, remitted by the central-bank stage.
+  if (reg.centralBankSheet) reg.centralBankSheet.lastStandingFacilityInterestUSD = 0;
   const rrpBps = Math.max(0, policyBps - ON_RRP_SPREAD_BPS);
   const srfBps = policyBps + SRF_SPREAD_BPS;
   const corridorWidthBps = Math.max(1, srfBps - rrpBps);
@@ -258,6 +260,9 @@ export function runRegionalRepoSession(
   maturedNow.forEach((c) => {
     const dueUSD = c.principalUSD + repoInterestToMaturityUSD(c);
     if (!(dueUSD > 0)) return;
+    if (c.lender.kind === 'CENTRAL_BANK' && reg.centralBankSheet) {
+      reg.centralBankSheet.lastStandingFacilityInterestUSD = (reg.centralBankSheet.lastStandingFacilityInterestUSD ?? 0) + repoInterestToMaturityUSD(c);
+    }
     pay(ctx, {
       payer: { kind: 'BANK_SECURITIES', ticker: c.borrowerTicker },
       payee: repoLenderParty(c.lender, regionId),

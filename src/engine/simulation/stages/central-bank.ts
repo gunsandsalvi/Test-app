@@ -54,7 +54,13 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // its return is the pull to par, which the treasury pays at maturity), and it is remitted
     // with the coupons: a central bank keeps no retained earnings in this model, so its assets
     // are exactly its liabilities.
-    const remitUSD = remittanceUSD(couponIncomeUSD + (cb.lastBillAccretionUSD ?? 0) + waysAndMeansInterestUSD, interestOnReservesPaidUSD + (cb.lastReverseRepoInterestUSD ?? 0));
+    // ...and the interest on its loans to the banks and its standing-facility repo book: income
+    // it received as payments this week, remitted the same week — no retained earnings.
+    const remitUSD = remittanceUSD(
+      couponIncomeUSD + (cb.lastBillAccretionUSD ?? 0) + waysAndMeansInterestUSD
+        + (cb.lastLoanInterestUSD ?? 0) + (cb.lastStandingFacilityInterestUSD ?? 0),
+      interestOnReservesPaidUSD + (cb.lastReverseRepoInterestUSD ?? 0)
+    );
 
     // ---- 2. §5-CLOSE C5: THE TREASURY'S ACCOUNT MOVES BY PAYMENTS AND NOTHING ELSE. Every tax
     // is remitted by its payer, every outlay is paid to its payee, every coupon and redemption

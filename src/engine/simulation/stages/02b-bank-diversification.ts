@@ -485,6 +485,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       entry.sheet = session.sheetByTicker.get(entry.bank.ticker) ?? entry.sheet;
     });
 
+    if (reg.centralBankSheet) reg.centralBankSheet.lastLoanInterestUSD = 0;
     newSheets.forEach(({ bank, sheet }) => {
       // §5-CLOSE — the central bank's loan is repaid from cash above the buffer (the liability
       // leaves here, bank-lending owns the write; the cash leaves at settlement, extinguishing
@@ -529,6 +530,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           amountUSD: cbLoanInterestUSD,
           reason: 'central bank loan interest',
         });
+        if (cbSheet) cbSheet.lastLoanInterestUSD = (cbSheet.lastLoanInterestUSD ?? 0) + cbLoanInterestUSD;
       }
       updateBankSheet(ctx, bank.ticker, sheet);
     });

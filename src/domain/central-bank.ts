@@ -43,6 +43,11 @@ export interface CentralBank {
    *  at the policy rate, and the next money into the account repays it. Written by settlement
    *  with the account itself (one writer for both lines). */
   waysAndMeansUSD: number;
+  /** §5-CLOSE — this week's interest INCOME on the lender-of-last-resort loans (02b) and on the
+   *  standing facility's repo contracts (the repo session), remitted with the coupons: the
+   *  central bank keeps no retained earnings, so its assets are exactly its liabilities. */
+  lastLoanInterestUSD?: number;
+  lastStandingFacilityInterestUSD?: number;
   /** §5-CLOSE C5 — last week's reverse-repo interest the window paid the funds (a central-bank
    *  expense, netted in the remittance like the interest on reserves). */
   lastReverseRepoInterestUSD?: number;
