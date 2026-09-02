@@ -378,7 +378,7 @@ HEAD is the plan-review commit after `702d26a` (the last engine commit) on `clau
 clean. **What is built** (§5-WIRES, §7.367–378): W1 money wires, W2 securities, W3 tranches, W4
 goods, W6 births/deaths (W5 void), D complete for its three named quantities, N's dated wire with
 corporate tax as its carrier, A's account store as the authority of the settlement pass with the
-households' transit gone; INS (three insurers per region, §7.375). **What is next: §5-FINALIZATION, step 1's bank half (A3.1b — a bank's cash read is its reserves, §7.384) then step 2 (A3.2, entities' `cashUSD`)**; the steps in order; it is the only list. Steps 0 (the derivatives half) and 1 landed on 2026-09-02 (§7.382–384). **The user's
+households' transit gone; INS (three insurers per region, §7.375). **What is next: §5-FINALIZATION step 2 (A3.2, entities' `cashUSD`); step 1b (a bank's cash) waits on the user's answer (§5-FINALIZATION step 1)**; the steps in order; it is the only list. Steps 0 (the derivatives half) and 1 landed on 2026-09-02 (§7.382–384). **The user's
 standing instructions:** (1) "really minimize the use of tests" — at most ONE 13-week harness per
 commit and no experiment runs; reason from the code and the cheap gates first; a TWO-WEEK PROBE
 (`WEEKS=2`, ~50 s) before the one run is worth it for a settlement-touching slice (it caught nothing
@@ -1035,9 +1035,19 @@ judge; every step names the line it closes.
 
 **Part I — the ledger becomes the only book (A3–A4).**
 1. **A3.1 companies' `cash` is a read of the persistent account store — DONE (§7.384),
-   byte-identical at 4/13 weeks; a bank's read is still its seed number (A3.1b, next).** F1 did
-   NOT close: the filed statement's cash line is stage 08's mid-week walk, not the settled
-   balance (§7.384) — it closes when the filing reads the account, a step of its own here.
+   byte-identical at 4/13 weeks.** Two remainders, each its own step: **(1b) A BANK'S CASH —
+   A QUESTION FOR THE USER.** `cashOf(bank)` still reads the seed's `cashBase`, a number
+   nothing ever moved (a bank's goods-market self settles on its reserves). §7.379 said the
+   read becomes the reserves; but the corporate rules that read it are not guarded for a bank
+   and would then act on hundreds of billions: the debt block's surplus-cash prepay and
+   deleveraging (stage 08), the goods market's cash ratio (05's rationing threshold), the merger
+   acquirer gate (cash ≥ 2× debt), labour's cash-sign test, FDI is guarded. The two honest
+   answers are RESERVES (the rules then need bank guards, or a bank retiring its own paper from
+   surplus reserves is accepted as its treasury) or ZERO (a bank has no corporate deposit; its
+   week is its profile's). The user decides; until then the seed number stands and is named
+   here as the stated number it is. **(1c) F1** did NOT close: the filed statement's cash line
+   is stage 08's mid-week walk, not the settled balance (§7.384) — it closes when the filing
+   reads the account.
 2. **A3.2 entities' `cashUSD`** (76 reads) the same way.
 3. **A3.3 the pools' `cashUSD`** — the per-bank rows carried, not re-guessed by share each pass
    (a half-backed shortcut of §7.378); the banks' SME lines become Σ rows.
