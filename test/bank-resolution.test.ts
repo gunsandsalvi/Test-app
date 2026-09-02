@@ -8,19 +8,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BankingSector } from '../src/domain/banking';
 import { absorbBankSheet } from '../src/engine/ledger/bank-transfer';
+import { consumerLoanBookOf } from '../src/domain/banking';
 import {
   bankAssumedLiabilitiesUSD, bankSheetAssetsUSD, chooseAssumingBank, isBankUnderPca,
   mergeHouseholdPool, planBankResolution, PCA_CAPITAL_RATIO,
 } from '../src/domain/bank-resolution';
 
+const loan = (principalUSD: number) => ({ id: `l${principalUSD}`, borrowerId: 'b', borrowerKind: 'COMPANY_FACILITY' as const, principalUSD, marginBps: 0, originationWeek: 0, termWeeks: 52, status: 'PERFORMING' as const });
 const sheet = (over: Partial<BankingSector> = {}): BankingSector => ({
-  businessLoanBookUSD: 100, consumerLoanBookUSD: 0, depositsUSD: 80, sovereignBondHoldingsUSD: 20,
+  depositsUSD: 80, sovereignBondHoldingsUSD: 20,
   cashReservesUSD: 10, bankEquityUSD: 5, bankCapitalRatio: 0.05, netInterestMarginPct: 0.02,
   loanLossProvisionRateAnnualPct: 0.01, creditConditionsIndex: 0, centralBankReservesUSD: 10,
   moneySupplyM2USD: 80, itemizedHoldings: [], srfBorrowingUSD: 0, onRrpLendingUSD: 0,
   corpBondDealerInventory: [], sovereignBondHoldingsByTenor: { t10: 20 }, sovBondDealerInventory: [],
   loanDealerInventory: [], repoLentUSD: 0, repoBorrowedUSD: 0, repoEncumberedCollateralUSD: 0,
-  businessLoans: [], householdLoans: [], corporateDepositsUSD: 15, centralBankLoanUSD: 30,
+  businessLoans: [loan(100)], householdLoans: [], corporateDepositsUSD: 15, centralBankLoanUSD: 30,
   ...over,
 });
 
@@ -30,7 +32,7 @@ const identityResidual = (s: BankingSector) =>
 test('PCA: closed below the ratio, open above it, closed at negative capital with no RWA', () => {
   assert.equal(isBankUnderPca(sheet({ bankEquityUSD: 100 * PCA_CAPITAL_RATIO - 1 })), true);
   assert.equal(isBankUnderPca(sheet({ bankEquityUSD: 100 * PCA_CAPITAL_RATIO + 1 })), false);
-  assert.equal(isBankUnderPca(sheet({ businessLoanBookUSD: 0, bankEquityUSD: -1 })), true);
+  assert.equal(isBankUnderPca(sheet({ businessLoans: [], bankEquityUSD: -1 })), true);
 });
 
 test('positive net: the acquirer is capitalised first, the receivership gets what is left', () => {
@@ -72,7 +74,7 @@ test('the ladder never exceeds the central bank loan line it lives inside', () =
 test('the transfer closes both sheets: acquirer takes every line, target keeps only cash and the matching equity', () => {
   const F = sheet({
     householdLoans: [{ kind: 'MORTGAGE', principalUSD: 40, vintages: [{ principalUSD: 40, originationCollateralUSD: 60, originationHomePriceUSD: 300000, rateAnnual: 0.05, wamWeeks: 900, fixedForWeeks: 100, originatedWeek: 0 }], wacAnnual: 0.05 }],
-    consumerLoanBookUSD: 40, depositsUSD: 120, institutionalDepositsUSD: 5, sovereignAccruedCouponUSD: 1,
+    depositsUSD: 120, institutionalDepositsUSD: 5, sovereignAccruedCouponUSD: 1,
     dealerDeskInventory: { 'corporate bond': [{ instrumentId: 'x', inventoryUSD: 4 }] },
     primeBrokerageLoansUSD: 2, repoBorrowedUSD: 6, bankEquityUSD: 1,
   });
@@ -80,7 +82,7 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
   assert.equal(identityResidual(F), 0);
   const A = sheet({
     householdLoans: [{ kind: 'MORTGAGE', principalUSD: 10, vintages: [{ principalUSD: 10, originationCollateralUSD: 15, originationHomePriceUSD: 250000, rateAnnual: 0.04, wamWeeks: 800, fixedForWeeks: 50, originatedWeek: 0 }], wacAnnual: 0.04 }],
-    consumerLoanBookUSD: 10, depositsUSD: 90, bankEquityUSD: 6, dealerDeskInventory: { 'corporate bond': [{ instrumentId: 'x', inventoryUSD: 1 }] },
+    depositsUSD: 90, bankEquityUSD: 6, dealerDeskInventory: { 'corporate bond': [{ instrumentId: 'x', inventoryUSD: 1 }] },
   });
   assert.equal(identityResidual(A), 0);
   const plan = planBankResolution(F, 0, 3);
@@ -100,7 +102,7 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
   const mortgage = A.householdLoans.find((p) => p.kind === 'MORTGAGE')!;
   assert.equal(mortgage.vintages!.length, 2);
   assert.equal(mortgage.principalUSD, 50);
-  assert.equal(A.consumerLoanBookUSD, 50);
+  assert.equal(consumerLoanBookOf(A), 50);
   assert.deepEqual(A.dealerDeskInventory!['corporate bond'].map((r) => r.inventoryUSD), [5]);
 });
 
@@ -118,7 +120,7 @@ test('the assuming bank is the best-capitalised peer above the floor, by equity;
   const cands = [
     { id: 'weak', sheet: sheet({ bankEquityUSD: 1 }) },
     { id: 'big', sheet: sheet({ bankEquityUSD: 12 }) },
-    { id: 'bigger-but-thin', sheet: sheet({ businessLoanBookUSD: 1000, bankEquityUSD: 30 }) },
+    { id: 'bigger-but-thin', sheet: sheet({ businessLoans: [loan(1000)], bankEquityUSD: 30 }) },
   ];
   assert.equal(chooseAssumingBank(cands, 0.08)!.id, 'big');
   assert.equal(chooseAssumingBank([cands[0], cands[2]], 0.08)!.id, 'bigger-but-thin');

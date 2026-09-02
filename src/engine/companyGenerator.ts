@@ -13,7 +13,7 @@ import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from './equi
 import { UNIVERSE_SCALE, PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
 import { random } from './rng';
-import { marketCapOf, totalDebtOf } from '../domain/company';
+import { seedLoanBookUSD } from './macro/initialization';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
@@ -430,7 +430,8 @@ export function generateInitialCompanies(
         const initReg = initialRegions[region];
         if (initReg?.bankingSector) {
           const bs = initReg.bankingSector;
-          const totalAssets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD;
+          // §5-WIRES D: the seed's stated loan books size the opening revenue; nothing stores them.
+          const totalAssets = seedLoanBookUSD(initReg.lastWeekNominalGdpUSD, 'business') + seedLoanBookUSD(initReg.lastWeekNominalGdpUSD, 'consumer') + bs.sovereignBondHoldingsUSD;
           derivedRevBase = bs.netInterestMarginPct * totalAssets * bankShare * 2.2;
         }
       }
@@ -657,8 +658,6 @@ export function generateInitialCompanies(
           const share = tmpl.bankMarketShare ?? 0.25;
           if (!bs) return undefined;
           return {
-            businessLoanBookUSD: bs.businessLoanBookUSD * share,
-            consumerLoanBookUSD: bs.consumerLoanBookUSD * share,
             depositsUSD: bs.depositsUSD * share,
             sovereignBondHoldingsUSD: bs.sovereignBondHoldingsUSD * share,
             cashReservesUSD: bs.cashReservesUSD * share,

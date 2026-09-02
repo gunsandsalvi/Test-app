@@ -16,6 +16,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { loanBooksOf } from '../../../domain/banking';
 import { ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { institutionProfile } from '../../../domain/institution-profiles';
@@ -82,7 +83,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
     // is what it hedges, at the tenor its book actually sits in.
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-      const rwaUSD = sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD;
+      const rwaUSD = loanBooksOf(sheet);
       const absorbableUSD = Math.max(0, sheet.bankEquityUSD - rwaUSD * BANK_WORKING_CAPITAL_RATIO);
       SWAP_TENORS.forEach((k) => {
         const bucketKey = k === 's2' ? 't2' : k === 's5' ? 't5' : 't10';

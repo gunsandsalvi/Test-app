@@ -17,6 +17,7 @@
  * summary. Exit code 1 on any violation.
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
+import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -2157,13 +2158,13 @@ const spiralModule: HarnessModule = {
           .filter((c) => c.region === region && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
           .forEach((c) => {
             const bs = c.bankBalanceSheet!;
-            const rwa = bs.businessLoanBookUSD * 1.0 + householdBookRwaUSD(bs.householdLoans);
+            const rwa = businessLoanBookOf(bs) * 1.0 + householdBookRwaUSD(bs.householdLoans);
             const deskUSD = Object.values(bs.dealerDeskInventory ?? {})
               .reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);
             console.log(`  [cap] w${w} ${region}:${c.ticker}`
               + ` eq ${(bs.bankEquityUSD / 1e9).toFixed(2)}B rwa ${(rwa / 1e9).toFixed(2)}B`
               + ` ratio ${(rwa > 0 ? bs.bankEquityUSD / rwa : 0).toFixed(4)}`
-              + ` | biz ${(bs.businessLoanBookUSD / 1e9).toFixed(2)}B hh ${(bs.consumerLoanBookUSD / 1e9).toFixed(2)}B`
+              + ` | biz ${(businessLoanBookOf(bs) / 1e9).toFixed(2)}B hh ${(consumerLoanBookOf(bs) / 1e9).toFixed(2)}B`
               + ` cash ${(bs.cashReservesUSD / 1e9).toFixed(2)}B cbloan ${((bs.centralBankLoanUSD ?? 0) / 1e9).toFixed(2)}B`
               + ` desk ${(deskUSD / 1e9).toFixed(2)}B`
               + ` oas ${(c.oasSpreadBps ?? 0).toFixed(0)}bps rating ${c.creditRating}`);

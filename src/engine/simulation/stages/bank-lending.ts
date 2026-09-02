@@ -104,6 +104,8 @@ function smePoolAnnualPd(seg: SmePool): number {
 
 export { bankRwaUSD } from '../../../domain/bank-pricing';
 import { bankRwaUSD } from '../../../domain/bank-pricing';
+import { businessLoanBookOf, loanBooksOf } from '../../../domain/banking';
+import { seedLoanBookUSD } from '../../macro/initialization';
 
 /**
  * SEED MIGRATION (§7.4: the cold start opens in the engine's shape). Recalibrates each
@@ -113,6 +115,17 @@ import { bankRwaUSD } from '../../../domain/bank-pricing';
  * DELETED — it never had a lender, never serviced interest, and priced nothing (the §6
  * recalibration row, executed).
  */
+/** §5-WIRES D — the seed's STATED loan book, this bank's share of it (the generator's split by
+ *  market share). Read by the seed's own sizing arithmetic (the opening funding side, the
+ *  consumer book HH3's real pools replace); never stored on a sheet. */
+export function seedLoanBookShareUSD(reg: Region, bank: Company, book: 'business' | 'consumer'): number {
+  return seedLoanBookUSD(reg.lastWeekNominalGdpUSD, book) * (bank.bankMarketShare ?? 0.25);
+}
+function seedConsumerLoanBookUSD(reg: Region, bank: Company): number { return seedLoanBookShareUSD(reg, bank, 'consumer'); }
+function seedConsumerRwaUSD(reg: Region, bank: Company): number {
+  return seedConsumerLoanBookUSD(reg, bank) * CONSUMER_CREDIT_RISK_WEIGHT;
+}
+
 export function migrateSmeDebtAtSeed(
   regionId: RegionId,
   reg: Region,
@@ -125,9 +138,10 @@ export function migrateSmeDebtAtSeed(
 
   const serviceableUSD = totalEbitdaUSD * SME_SERVICEABLE_LEVERAGE;
   const totalEquityUSD = banks.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0);
-  const usedRwaUSD = banks.reduce((a, b) => a + bankRwaUSD(b.bankBalanceSheet!), 0)
-    // the old scalar's corporate-floating content leaves the bank book below; exclude it here
-    - banks.reduce((a, b) => a + b.bankBalanceSheet!.businessLoanBookUSD, 0);
+  // §5-WIRES D: the sheets carry no loan-book scalar; what the seed's stated consumer book
+  // still occupies of each bank's capital (until HH3 replaces it with real pools) is counted
+  // through the same stated number HH3 replaces — the two migrations read one seed.
+  const usedRwaUSD = banks.reduce((a, b) => a + bankRwaUSD(b.bankBalanceSheet!) + seedConsumerRwaUSD(reg, b), 0);
   const carriableUSD = Math.max(0, totalEquityUSD / BANK_WORKING_CAPITAL_RATIO - usedRwaUSD);
   const migratedUSD = Math.min(serviceableUSD, carriableUSD);
 
@@ -152,13 +166,13 @@ export function migrateSmeDebtAtSeed(
       });
     });
     sheet.businessLoans = loans;
-    // The book becomes the sum of its loans — the old scalar's corporate-floating content
-    // (07d's market, the double-count) leaves the bank sheet entirely.
-    sheet.businessLoanBookUSD = loans.reduce((a, l) => a + l.principalUSD, 0);
-    // Funding side re-derived so the sheet still balances (same discipline as the WS6 seed).
+    // The book IS its loans — the old scalar's corporate-floating content (07d's market, the
+    // double-count) leaves the bank sheet entirely. Funding side re-derived so the sheet still
+    // balances (same discipline as the WS6 seed); the consumer side is the seed's stated book
+    // until HH3 seeds the real pools and re-derives this again.
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     sheet.depositsUSD = Math.round((
-      sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
+      businessLoanBookOf(sheet) + seedConsumerLoanBookUSD(reg, bank) + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
     ));
   });
 
@@ -293,10 +307,7 @@ export function runBankWeeklyLending(
     const demandUSD = Math.max(0, (ceilingUSD - totalPoolDebtUSD) * SME_WEEKLY_DEMAND_TAKEUP * appetite * (bankShare || 0.25));
     if (demandUSD <= 0) return;
 
-    const currentRwaUSD = loans.reduce((a, l) => a + l.principalUSD, 0)
-      + ((sheet.householdLoans && sheet.householdLoans.length > 0)
-        ? householdBookRwaUSD(sheet.householdLoans)
-        : sheet.consumerLoanBookUSD * CONSUMER_CREDIT_RISK_WEIGHT);
+    const currentRwaUSD = loans.reduce((a, l) => a + l.principalUSD, 0) + householdBookRwaUSD(sheet.householdLoans);
     const headroomUSD = Math.max(0, equityUSD / BANK_MIN_CAPITAL_RATIO - currentRwaUSD);
     const grantedUSD = Math.min(demandUSD, headroomUSD);
     declinedOriginationUSD += demandUSD - grantedUSD;
@@ -327,7 +338,6 @@ export function runBankWeeklyLending(
     // does with a credit line when it is squeezed.
   });
 
-  const businessLoanBookUSD = Math.round(loans.reduce((a, l) => a + l.principalUSD, 0));
   if (facilityNetOriginationUSD > 1e6) {
     defect(`${bank.ticker}: ${(facilityNetOriginationUSD / 1e6).toFixed(1)}M of facility principal appeared on the ladders with no payment behind it`);
   }
@@ -338,7 +348,6 @@ export function runBankWeeklyLending(
         Math.min(0, facilityNetOriginationUSD), 'facility left the ladders without a payment', bank.ticker
       ),
       businessLoans: loans,
-      businessLoanBookUSD,
       // SEG2e: loans still create deposits, but the pool's new money now lands on ITS OWN line
       // through settlement — the caller pays BANK_CREDIT → SEGMENT with the per-segment map
       // below, so the deposit appears on `smeDepositsUSD` (and the pool's cash) with no reserve
@@ -497,18 +506,19 @@ export function migrateHouseholdDebtAtSeed(
       },
     ] as HouseholdLoanPool[]).filter((pl) => pl.principalUSD > 0);
 
-    const priorRwaUSD = bankRwaUSD(sheet);
+    // §5-WIRES D: the consumer scalar this replaces is the seed's STATED book (never stored on
+    // the sheet); it stands in the prior RWA exactly as the stored copy used to.
+    const replacedRwaUSD = seedConsumerRwaUSD(reg, bank);
+    const priorRwaUSD = bankRwaUSD(sheet) + replacedRwaUSD;
     const priorRatio = priorRwaUSD > 0 ? sheet.bankEquityUSD / priorRwaUSD : BANK_WORKING_CAPITAL_RATIO;
     const newHouseholdRwaUSD = householdBookRwaUSD(pools);
-    const replacedRwaUSD = sheet.consumerLoanBookUSD * CONSUMER_CREDIT_RISK_WEIGHT;
     sheet.householdLoans = pools;
-    sheet.consumerLoanBookUSD = pools.reduce((a, pl) => a + pl.principalUSD, 0);
     // Equity scales with the risk the books add, at the ratio this bank already ran — no new
     // constant, and the opening capital ratio is preserved by construction.
     sheet.bankEquityUSD = Math.round((sheet.bankEquityUSD + Math.max(0, newHouseholdRwaUSD - replacedRwaUSD) * priorRatio));
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     const fundingNeedUSD = Math.round((
-      sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
+      loanBooksOf(sheet) + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
     ));
     applyBankFundingSplit(sheet, Math.round((hs.depositsUSD ?? 0) * share));
     sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet))).toFixed(4));
@@ -873,12 +883,10 @@ export function runBankHouseholdLending(
     pl.principalUSD = Math.max(0, Math.round(pl.principalUSD));
   });
 
-  const consumerLoanBookUSD = Math.round(pools.reduce((a, pl) => a + pl.principalUSD, 0));
   return {
     sheet: {
       ...bookPnL(sheet, -lossWeeklyUSD, 'household loan losses'),
       householdLoans: pools,
-      consumerLoanBookUSD,
       // §5-CLOSE C4: NO RESERVE MOVES HERE. The household sector banks where it borrows, so
       // every one of these is a deposit event at this bank: a loan creates the borrower's
       // deposit (mortgage and card/term alike), the seller's retired loan destroys one, and

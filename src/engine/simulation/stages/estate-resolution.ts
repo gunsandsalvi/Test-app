@@ -419,7 +419,6 @@ function reduceHolding(
       ...bookPnL(sheet, isLoss ? -extinguishedUSD : leftUSD,
         isLoss ? 'estate loan write-off' : 'estate recovery income', ticker),
       businessLoans: loans,
-      businessLoanBookUSD: Math.round(bookUSD),
     };
   }
 }

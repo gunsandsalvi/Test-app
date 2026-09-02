@@ -16,7 +16,7 @@
  * difference between that and zero moves as a named flow.
  */
 
-import { BankingSector, HouseholdLoanPool } from './banking';
+import { BankingSector, HouseholdLoanPool , loanBooksOf } from './banking';
 import { bankRwaUSD, BANK_WORKING_CAPITAL_RATIO } from './bank-pricing';
 import { dealerDeskGrossUSD, DealerDeskInventory } from './dealer-desk';
 
@@ -42,7 +42,7 @@ export function isBankUnderPca(sheet: BankingSector): boolean {
 export function bankSheetAssetsUSD(sheet: BankingSector): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
-  return sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD
+  return loanBooksOf(sheet) + sovUSD + sheet.cashReservesUSD
     + (sheet.repoLentUSD ?? 0) + (sheet.onRrpLendingUSD ?? 0)
     + (sheet.sovereignAccruedCouponUSD ?? 0)
     + dealerDeskGrossUSD(sheet.dealerDeskInventory)

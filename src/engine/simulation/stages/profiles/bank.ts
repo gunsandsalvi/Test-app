@@ -11,6 +11,7 @@
 
 import { ProfileInput, ProfilePnl } from './types';
 import { ensureV2, rowOf, revHistPush } from '../../../../engine2/world';
+import { loanBooksOf } from '../../../../domain/banking';
 
 export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, reg } = input;
@@ -22,9 +23,9 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const sovUSD = own
     ? Object.values(own.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0)
     : reg.bankingSector.sovereignBondHoldingsUSD * share;
-  const totalAssets = own
-    ? own.businessLoanBookUSD + own.consumerLoanBookUSD + sovUSD
-    : (bs.businessLoanBookUSD + bs.consumerLoanBookUSD) * share + sovUSD;
+  // §5-WIRES D: the credit books are the sheet's rows; a bank with no sheet holds no rows.
+  const creditBookUSD = own ? loanBooksOf(own) : 0;
+  const totalAssets = creditBookUSD + sovUSD;
   const weeklyNim = bs.netInterestMarginPct / 52;
   const impliedNimRev = totalAssets * weeklyNim;
   // IND-R4: the bank's OWN measured loss experience. `loanLossProvisionRateAnnualPct` is what
@@ -38,9 +39,6 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // first week and shed their entire workforce to the one-employee floor by week 3 (§7.108).
   // Credit loss belongs to the books that carry credit, at the rate this bank actually
   // experienced. (Removing the `random()` draw relabels the RNG stream — declared.)
-  const creditBookUSD = own
-    ? own.businessLoanBookUSD + own.consumerLoanBookUSD
-    : (bs.businessLoanBookUSD + bs.consumerLoanBookUSD) * share;
   const loanLosses = (creditBookUSD * (bs.loanLossProvisionRateAnnualPct ?? 0)) / 52;
   // Smooth against last week's OWN revenue for noise damping (85/15, same order as other
   // week-to-week smoothing in this file) rather than a 98/2 blend anchored on this

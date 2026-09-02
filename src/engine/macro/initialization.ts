@@ -278,7 +278,7 @@ const DEBT_TO_GDP_PCT = 1.0;
 const FISCAL_DEFICIT_PCT_GDP = 0.05;
 const GOV_EMPLOYMENT_SHARE_OF_POPULATION = 0.055;
 
-const BANK_BALANCE_SHEET_RATIOS = {
+export const BANK_BALANCE_SHEET_RATIOS = {
   businessLoanBookToGdp: 0.040,
   consumerLoanBookToGdp: 0.070,
   depositsToGdp: 0.110,
@@ -465,9 +465,11 @@ function buildRegion(regionId: RegionId): Region {
   });
 
   const netInterestMarginPct = Number(Math.max(NIM_FLOOR, policyRate * NIM_TO_POLICY_RATE_RATIO + 0.005).toFixed(4));
+  // §5-WIRES D: the seed states no loan-book scalar — the books are the rows the seed migrations
+  // build (SME pools from segment EBITDA, household pools from the households' own debt). The
+  // stated loan-to-GDP ratios survive only where the seed SIZES something off them
+  // (`seedLoanBookUSD`: a bank's opening revenue, the consumer scalar the HH3 migration replaced).
   const bankingSector = {
-    businessLoanBookUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.businessLoanBookToGdp)),
-    consumerLoanBookUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.consumerLoanBookToGdp)),
     depositsUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.depositsToGdp)),
     sovereignBondHoldingsUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp)),
     cashReservesUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.cashReservesToGdp)),
@@ -741,6 +743,12 @@ function buildRegion(regionId: RegionId): Region {
  * regions as a parameter rather than rebuilding four regions (and consuming their RNG draws)
  * once per company.
  */
+/** The seed's STATED loan book for one region and book, off its nominal GDP — a stated number
+ *  (R's registry), read only by the seed's own sizing arithmetic, never stored on a sheet. */
+export function seedLoanBookUSD(nominalGdpUSD: number, book: 'business' | 'consumer'): number {
+  return Math.round(nominalGdpUSD * (book === 'business' ? BANK_BALANCE_SHEET_RATIOS.businessLoanBookToGdp : BANK_BALANCE_SHEET_RATIOS.consumerLoanBookToGdp));
+}
+
 export function getInitialRegions(): Record<RegionId, Region> {
   const regionIds = REGION_IDS_SEED_ORDER;
   const regions = {} as Record<RegionId, Region>;

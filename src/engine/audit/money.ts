@@ -5,17 +5,16 @@
  * true, and a size when it is not.
  */
 
-import { GameState, RegionId, Company } from '../../types';
+import { GameState, RegionId } from '../../types';
+import { loanBooksOf, depositsOf } from '../../domain/banking';
 import { AuditSnapshot } from './snapshot';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
 
-type Sheet = NonNullable<Company['bankBalanceSheet']>;
 const banksOf = (s: GameState, r?: RegionId) =>
   s.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c) && (!r || c.region === r));
-const depositsOf = (bs: Sheet) => bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + (bs.institutionalDepositsUSD ?? 0) + (bs.smeDepositsUSD ?? 0) + (bs.clientMarginUSD ?? 0);
 
 /** M1 — the central bank's balance sheet closes EXACTLY: assets = reserves + treasury account + currency
  *  + the households' money in transit to their banks (settled this week, on a bank's book next — the
@@ -136,7 +135,7 @@ function m5(state: GameState, week: number): AuditFinding[] {
     const bs = b.bankBalanceSheet!;
     const sov = sum(Object.values(bs.sovereignBondHoldingsByTenor ?? {}), (v) => Number(v) || 0);
     const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryUSD));
-    const assets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + sov + bs.cashReservesUSD + (bs.repoLentUSD ?? 0) + (bs.sovereignAccruedCouponUSD ?? 0) + desks + (bs.primeBrokerageLoansUSD ?? 0);
+    const assets = loanBooksOf(bs) + sov + bs.cashReservesUSD + (bs.repoLentUSD ?? 0) + (bs.sovereignAccruedCouponUSD ?? 0) + desks + (bs.primeBrokerageLoansUSD ?? 0);
     const liabilities = depositsOf(bs) + (bs.centralBankLoanUSD ?? 0) + (bs.repoBorrowedUSD ?? 0) + (bs.srfBorrowingUSD ?? 0);
     const residual = assets - liabilities - bs.bankEquityUSD;
     if (Math.abs(residual) > Math.max(1e7, assets * 2e-3)) out.push({ family: 'M', check: 'M5 bank sheet closes', week, usd: residual, message: `${b.region}:${b.ticker} assets ${B(assets)} − liabilities ${B(liabilities)} − equity ${B(bs.bankEquityUSD)} = ${B(residual)}` });

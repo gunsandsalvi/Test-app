@@ -61,8 +61,9 @@ export interface AssetOwnershipShares {
 export type BankingSectorView = Readonly<BankingSector>;
 
 export interface BankingSector {
-  businessLoanBookUSD: number;
-  consumerLoanBookUSD: number;
+  // §5-WIRES D: the two loan books are READS of the rows — `businessLoanBookOf` (Σ businessLoans)
+  // and `consumerLoanBookOf` (Σ householdLoans). The regional aggregate carries no rows and so
+  // no loan book of its own: a region's book is `regionLoanBooksUSD` over its named banks.
   depositsUSD: number;
   sovereignBondHoldingsUSD: number;
   cashReservesUSD: number;
@@ -432,6 +433,29 @@ export const MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER = 0.25;
 export const MORTGAGE_MIN_LOSS_SEVERITY = 0.05;
 
 /** The household book's risk-weighted footprint, per-kind. */
+/** Every deposit-class liability on a sheet — the household, corporate, institutional and SME
+ *  lines and the clients' margin held. ONE definition (§7.373): the money audit's snapshot
+ *  omitted the margin line while its week-end read included it, and the whole margin STOCK
+ *  printed as "unexplained" money every week the desks held any. */
+export const depositsOf = (s: BankingSector): number =>
+  s.depositsUSD + (s.corporateDepositsUSD ?? 0) + (s.institutionalDepositsUSD ?? 0) + (s.smeDepositsUSD ?? 0) + (s.clientMarginUSD ?? 0);
+
+/** §5-WIRES D — THE LOAN BOOKS ARE READS. A stored sum of stored rows can disagree with its rows
+ *  (O4's "facilities on ladders = loans on banks" lived on exactly that); the read cannot. */
+export const businessLoanBookOf = (s: { businessLoans?: BankLoan[] }): number =>
+  (s.businessLoans ?? []).reduce((a, l) => a + l.principalUSD, 0);
+export const consumerLoanBookOf = (s: { householdLoans?: HouseholdLoanPool[] }): number =>
+  (s.householdLoans ?? []).reduce((a, p) => a + p.principalUSD, 0);
+/** Both credit books together — the RWA's and the leverage ratio's credit term. */
+export const loanBooksOf = (s: { businessLoans?: BankLoan[]; householdLoans?: HouseholdLoanPool[] }): number =>
+  businessLoanBookOf(s) + consumerLoanBookOf(s);
+/** A region's loan books: the sum over its named banks' rows (the aggregate holds no rows). */
+export function regionLoanBooksUSD(banks: { bankBalanceSheet?: BankingSector }[]): { businessLoanUSD: number; consumerLoanUSD: number } {
+  let businessLoanUSD = 0, consumerLoanUSD = 0;
+  banks.forEach((b) => { if (b.bankBalanceSheet) { businessLoanUSD += businessLoanBookOf(b.bankBalanceSheet); consumerLoanUSD += consumerLoanBookOf(b.bankBalanceSheet); } });
+  return { businessLoanUSD, consumerLoanUSD };
+}
+
 export function householdBookRwaUSD(pools: HouseholdLoanPool[] | undefined): number {
   return (pools ?? []).reduce(
     (a, p) => a + p.principalUSD * (p.kind === 'MORTGAGE' ? MORTGAGE_RISK_WEIGHT : CONSUMER_CREDIT_RISK_WEIGHT),

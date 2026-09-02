@@ -38,6 +38,7 @@ import { maturingAt, repoInterestToMaturityUSD } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
 import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, repayCentralBankLoanUSD, CENTRAL_BANK_LOAN_PENALTY_BPS, facilityMarginBpsFor } from './bank-lending';
 import { WeeklyStepContext, updateBankSheet } from './context';
+import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
 import { SRF_SPREAD_BPS } from '../../macro/banking';
 
@@ -45,8 +46,6 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
   Object.entries(bs.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => { scaledBuckets[k] = v * share; });
   return {
-    businessLoanBookUSD: bs.businessLoanBookUSD * share,
-    consumerLoanBookUSD: bs.consumerLoanBookUSD * share,
     depositsUSD: bs.depositsUSD * share,
     sovereignBondHoldingsUSD: bs.sovereignBondHoldingsUSD * share,
     cashReservesUSD: bs.cashReservesUSD * share,
@@ -299,6 +298,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
       const sheet = evolveBankingSector(
         prevSheet,
+        { businessLoanUSD: businessLoanBookOf(prevSheet), consumerLoanUSD: consumerLoanBookOf(prevSheet) },
         reg.estimatedHouseholdIncomeUSD * share,
         reg.householdState.savingsRate,
         reg.policyRate,
@@ -433,7 +433,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const withDeposits: BankingSector = {
         ...lentSheet,
         loanLossProvisionRateAnnualPct: Number(
-          (lentSheet.businessLoanBookUSD > 0 ? (lending.loanLossWeeklyUSD * 52) / lentSheet.businessLoanBookUSD : 0).toFixed(4)
+          (businessLoanBookOf(lentSheet) > 0 ? (lending.loanLossWeeklyUSD * 52) / businessLoanBookOf(lentSheet) : 0).toFixed(4)
         ),
       };
       ctx.g2DeclinedOriginationUSD[regionId] = (ctx.g2DeclinedOriginationUSD[regionId] ?? 0) + lending.declinedOriginationUSD;
@@ -552,10 +552,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const deskView = (book: string) =>
       Array.from(regionalDeskView(newSheets.map(({ sheet }) => sheet.dealerDeskInventory), book).entries())
         .filter(([, usd]) => Math.abs(usd) > 1);
-    const totalAssets = sumField((s) => s.businessLoanBookUSD + s.consumerLoanBookUSD + s.sovereignBondHoldingsUSD + s.cashReservesUSD);
+    const totalAssets = sumField((s) => loanBooksOf(s) + s.sovereignBondHoldingsUSD + s.cashReservesUSD);
     const weightedAvg = (f: (s: BankingSector) => number) =>
       totalAssets > 0
-        ? newSheets.reduce((s, { sheet }) => s + f(sheet) * (sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sheet.sovereignBondHoldingsUSD + sheet.cashReservesUSD), 0) / totalAssets
+        ? newSheets.reduce((s, { sheet }) => s + f(sheet) * (loanBooksOf(sheet) + sheet.sovereignBondHoldingsUSD + sheet.cashReservesUSD), 0) / totalAssets
         : (newSheets.reduce((s, { sheet }) => s + f(sheet), 0) / Math.max(1, newSheets.length));
 
     // §7.241: `satisfies` over Required<BankingSector> makes this rebuild EXHAUSTIVE — the old
@@ -564,8 +564,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // BankingSector field fails to compile here until it is summed, averaged, or explicitly
     // declared per-bank-only.
     reg.bankingSector = {
-      businessLoanBookUSD: sumField((s) => s.businessLoanBookUSD),
-      consumerLoanBookUSD: sumField((s) => s.consumerLoanBookUSD),
       depositsUSD: sumField((s) => s.depositsUSD),
       sovereignBondHoldingsUSD: sumField((s) => s.sovereignBondHoldingsUSD),
       cashReservesUSD: sumField((s) => s.cashReservesUSD),

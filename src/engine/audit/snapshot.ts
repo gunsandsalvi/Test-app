@@ -4,6 +4,7 @@
  * week-over-week checks need, copied out when the audit runs.
  */
 import { GameState, RegionId } from '../../types';
+import { loanBooksOf, depositsOf } from '../../domain/banking';
 import { REGION_IDS } from '../../domain/geography';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { isActiveCompany } from '../../domain/company';
@@ -36,12 +37,10 @@ export function snapshotOf(state: GameState): AuditSnapshot {
       waysAndMeansUSD: cb.waysAndMeansUSD ?? 0,
       centralBankAssetsUSD: centralBankAssetsUSD(cb),
       sovereignOutstandingUSD: (reg.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0),
-      bankDepositsUSD: banks.reduce((a, b) => {
-        const s = b.bankBalanceSheet!;
-        return a + s.depositsUSD + (s.corporateDepositsUSD ?? 0) + (s.institutionalDepositsUSD ?? 0) + (s.smeDepositsUSD ?? 0);
-      }, 0),
+      // §7.373: the SAME read M6 takes at week end — every deposit class, the margin line included.
+      bankDepositsUSD: banks.reduce((a, b) => a + depositsOf(b.bankBalanceSheet!), 0),
       householdInTransitUSD: (reg.householdState as unknown as { pendingBankSettlementUSD?: number })?.pendingBankSettlementUSD ?? 0,
-      bankLoansUSD: banks.reduce((a, b) => a + b.bankBalanceSheet!.businessLoanBookUSD + b.bankBalanceSheet!.consumerLoanBookUSD, 0),
+      bankLoansUSD: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!), 0),
     };
   });
   return out;

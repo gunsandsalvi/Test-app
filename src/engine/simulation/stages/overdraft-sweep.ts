@@ -151,12 +151,10 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
           marginBps: 350, originationWeek: ctx.nextWeek, termWeeks: 52 * 5, status: 'PERFORMING',
         });
       });
-      const smeUSD = (smeRows ?? []).reduce((a, r) => a + r.usd, 0);
       const sheet = {
         ...c.bankBalanceSheet,
         primeBrokerageLoansUSD: Math.round((c.bankBalanceSheet.primeBrokerageLoansUSD ?? 0) + drawnUSD),
         businessLoans: loans,
-        businessLoanBookUSD: Math.round(c.bankBalanceSheet.businessLoanBookUSD + smeUSD),
       };
       return { ...c, bankBalanceSheet: sheet };
     });

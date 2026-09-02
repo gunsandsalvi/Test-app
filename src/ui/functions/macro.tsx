@@ -5,6 +5,7 @@
  */
 
 import { FunctionModule } from '../fn';
+import { regionLoanBooksUSD } from '../../domain/banking';
 import { Card, KV, Link } from '../ui';
 import { money, pctLevel, num, count, ratio, pct } from '../format';
 import { regionOf, tapeSeries } from '../world';
@@ -21,6 +22,7 @@ export const macro: FunctionModule = {
     const tape = (k: string) => tapeSeries(world, `region:${r.id}:${k}`).values;
     const sub = (k: string) => { const s = tape(k); return s.filter(Number.isFinite).length > WEEKS_PER_MONTH ? <ChangeSub series={s} /> : undefined; };
     const hs = r.householdState; const bs = r.bankingSector; const hm = r.housingMarket;
+    const books = regionLoanBooksUSD(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted));
     const gdp = r.derivedNominalGdpUSD ?? r.estimatedNominalGdpUSD ?? 0;
     return (<>
       <SectionLabel>activity</SectionLabel>
@@ -76,7 +78,7 @@ export const macro: FunctionModule = {
       <Card style={{ padding: '2px 0' }}>
         <KV k="capital ratio" hint={sub('bank capital')} v={pctLevel(bs?.bankCapitalRatio, 2)} />
         <KV k="net interest margin" hint={sub('bank nim')} v={pctLevel(bs?.netInterestMarginPct, 2)} />
-        <KV k="loans" hint="business · household" v={`${money(bs?.businessLoanBookUSD)} · ${money(bs?.consumerLoanBookUSD)}`} />
+        <KV k="loans" hint="business · household" v={`${money(books.businessLoanUSD)} · ${money(books.consumerLoanUSD)}`} />
         <KV k="reserves at the central bank" v={money(bs?.centralBankReservesUSD)} />
         <KV k="at the window" v={money(bs?.srfBorrowingUSD)} />
         <KV k="the banks" v={<Link to={ref} fn="banks" nav={nav}>{count(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted).length)} banks</Link>} />

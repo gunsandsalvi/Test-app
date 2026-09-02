@@ -19,6 +19,7 @@
  */
 
 import { WeeklyStepContext } from './stages/context';
+import { businessLoanBookOf, consumerLoanBookOf } from '../../domain/banking';
 import { GameState } from '../../types';
 import { BankingSector } from '../../domain/banking';
 import { partyOf } from '../ledger/party';
@@ -47,7 +48,7 @@ export function fieldsOf(bs: BankingSector): Record<string, number> {
     clientMarginUSD: bs.clientMarginUSD ?? 0, smeDepositsUSD: bs.smeDepositsUSD ?? 0,
     centralBankLoanUSD: bs.centralBankLoanUSD ?? 0, bankEquityUSD: bs.bankEquityUSD,
     srfBorrowingUSD: bs.srfBorrowingUSD ?? 0, repoBorrowedUSD: bs.repoBorrowedUSD ?? 0,
-    businessLoanBookUSD: bs.businessLoanBookUSD, consumerLoanBookUSD: bs.consumerLoanBookUSD,
+    businessLoanBookUSD: businessLoanBookOf(bs), consumerLoanBookUSD: consumerLoanBookOf(bs),
     sovHoldingsUSD: Object.values(bs.sovereignBondHoldingsByTenor || {})
       .reduce((a: number, v) => a + (Number(v) || 0), 0),
     cashReservesUSD: bs.cashReservesUSD, repoLentUSD: bs.repoLentUSD ?? 0,
@@ -66,7 +67,7 @@ export function residualOf(bs: BankingSector, signedDesk = false): number {
     bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + (bs.institutionalDepositsUSD ?? 0)
     + (bs.clientMarginUSD ?? 0) + (bs.smeDepositsUSD ?? 0) + (bs.centralBankLoanUSD ?? 0)
     + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + (bs.repoBorrowedUSD ?? 0)
-    - bs.businessLoanBookUSD - bs.consumerLoanBookUSD - sovUSD - bs.cashReservesUSD
+    - businessLoanBookOf(bs) - consumerLoanBookOf(bs) - sovUSD - bs.cashReservesUSD
     - (bs.repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0)
     - (bs.sovereignAccruedCouponUSD ?? 0)
     // The harness counts a desk row at Math.abs — a SHORT counted as an asset. trade.ts books

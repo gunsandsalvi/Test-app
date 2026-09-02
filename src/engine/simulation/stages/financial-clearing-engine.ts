@@ -948,8 +948,14 @@ function accumulateShard(
     const filledUSD = shard.fillFilled[f];
     const tradedUSD = shard.fillTraded[f];
     const feeUSD = shard.fillFee[f];
-    if (filledUSD > 1) {
-      const cell = shard.fillPart[f] * nI + shard.fillInst[f];
+    // Dust is a DOLLAR: a position worth a dollar or less is not carried. The unit here is the
+    // book's — dollars on the credit books, SHARES on the equity book — so the test is in money
+    // (units × the cleared price where the stat is a price). Measured at §7.373: `filledUSD > 1`
+    // in units dropped 0.44 shares of a $279,800 name, $124k the holder was paid for by nobody.
+    const fi = shard.fillInst[f];
+    const unitValueUSD = instruments[fi].statKind === 'PRICE_LIKE' ? shard.clearedStat[fi - shard.from] : 1;
+    if (filledUSD * unitValueUSD > 1) {
+      const cell = shard.fillPart[f] * nI + fi;
       result.holdingsMatrix[cell] = filledUSD;
       noteDenseWrite(cell);
     }

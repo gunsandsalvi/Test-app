@@ -1,4 +1,5 @@
 import { riskAversionOf } from '../../domain/preferences';
+import { loanBooksOf } from '../../domain/banking';
 import { BankingSector, householdBookRwaUSD, CONSUMER_CREDIT_RISK_WEIGHT, WHOLESALE_FUNDING_SPREAD_BPS } from '../../types';
 import { dealerDeskGrossUSD } from '../../domain/dealer-desk';
 
@@ -91,7 +92,7 @@ export function bankTotalAssetsUSD(sheet: BankingSector): number {
   // G3a: the desks' inventory is an asset the bank OWNS and finances, and a cash security
   // consumes the leverage ratio one-for-one. Before the desks had owners it consumed nothing,
   // which is precisely what let a book with no capital behind it absorb any imbalance.
-  return sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD
+  return loanBooksOf(sheet) + sovUSD
     + Math.max(0, sheet.cashReservesUSD) + (sheet.repoLentUSD ?? 0)
     // CAL: a coupon earned and not yet paid is an asset the bank holds against the treasury.
     + (sheet.sovereignAccruedCouponUSD ?? 0)
@@ -214,6 +215,9 @@ export function computeSovereignBookAnnualYield(
 
 export function evolveBankingSector(
   prevBanking: BankingSector,
+  /** §5-WIRES D: the region's loan books, read off its named banks' rows by the caller — the
+   *  aggregate this evolves carries no rows and no stored copy of their sum. */
+  loanBooks: { businessLoanUSD: number; consumerLoanUSD: number },
   estimatedHouseholdIncomeUSD: number,
   savingsRate: number,
   policyRate: number,
@@ -283,11 +287,10 @@ export function evolveBankingSector(
   let cashUSD = prevBanking.cashReservesUSD;
   let equityUSD = prevBanking.bankEquityUSD;
   let depositsUSD = prevBanking.depositsUSD;
-  // G2: the business book is ITEMIZED — a sum of real loans that only bank-lending.ts moves.
-  const businessLoanUSD = prevBanking.businessLoanBookUSD;
-  // HH3: the consumer book is ITEMIZED — a sum of real household pools that only the
-  // household lending pass moves.
-  const consumerLoanUSD = prevBanking.consumerLoanBookUSD;
+  // G2/HH3: both credit books are ITEMIZED on the named banks and only the lending passes move
+  // them; §5-WIRES D: this aggregate reads them as the caller's sum over those rows.
+  const businessLoanUSD = loanBooks.businessLoanUSD;
+  const consumerLoanUSD = loanBooks.consumerLoanUSD;
   // The securities book is owned by the clearing stages (07c/07f/11) and passes through here
   // untouched — a stage may only rewrite the instruments it cleared.
   const sovereignUSD = prevBanking.sovereignBondHoldingsUSD;
@@ -516,8 +519,6 @@ export function evolveBankingSector(
     reservesInterestWeeklyUSD: Math.round(reservesInterestUSD),
     corporateDepositInterestWeeklyUSD: Math.round(corporateDepositInterestUSD),
     dividendWeeklyUSD: Math.round(dividendWeeklyUSD),
-    businessLoanBookUSD: Math.round(businessLoanUSD),
-    consumerLoanBookUSD: Math.round(consumerLoanUSD),
     depositsUSD: Math.round(depositsUSD),
     sovereignBondHoldingsUSD: Math.round(sovereignUSD),
     cashReservesUSD: Math.round(cashUSD),

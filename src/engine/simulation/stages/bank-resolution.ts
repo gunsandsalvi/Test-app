@@ -1,5 +1,4 @@
 /**
-import { moveFacilityLender } from '../../ledger/tranche-ledger';
  * §7.339 — BANK RESOLUTION: a bank under prompt corrective action is closed at the week's end
  * and its books go whole to the strongest live peer in its region, the same weekend.
  *
@@ -33,12 +32,13 @@ import { pay, runSettlementStage } from './settlement';
 import { fieldsOf, residualOf } from '../bank-identity-trace';
 import { ladderRowsOf } from '../../../engine2/tranches';
 import { moveFacilityLender } from '../../ledger/tranche-ledger';
+import { businessLoanBookOf, consumerLoanBookOf } from '../../../domain/banking';
 
 const sheetLinesUSD = (s: BankingSector): number =>
   Math.abs(s.depositsUSD) + Math.abs(s.corporateDepositsUSD ?? 0) + Math.abs(s.institutionalDepositsUSD ?? 0)
   + Math.abs(s.clientMarginUSD ?? 0) + Math.abs(s.smeDepositsUSD ?? 0) + Math.abs(s.centralBankLoanUSD ?? 0)
   + Math.abs(s.bankEquityUSD) + Math.abs(s.srfBorrowingUSD ?? 0) + Math.abs(s.repoBorrowedUSD ?? 0)
-  + Math.abs(s.businessLoanBookUSD) + Math.abs(s.consumerLoanBookUSD) + Math.abs(s.sovereignBondHoldingsUSD)
+  + Math.abs(businessLoanBookOf(s)) + Math.abs(consumerLoanBookOf(s)) + Math.abs(s.sovereignBondHoldingsUSD)
   + Math.abs(s.cashReservesUSD) + Math.abs(s.repoLentUSD ?? 0) + Math.abs(s.onRrpLendingUSD ?? 0)
   + Math.abs(s.sovereignAccruedCouponUSD ?? 0) + Math.abs(s.primeBrokerageLoansUSD ?? 0);
 

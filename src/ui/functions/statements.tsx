@@ -6,6 +6,7 @@
  */
 
 import { Company, InstitutionalEntity, Region } from '../../types';
+import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksUSD } from '../../domain/banking';
 import { FunctionModule } from '../fn';
 import { Card, Hint, KV, Tabs, T, mono } from '../ui';
 import { statementUSD, pct, pctLevel, ratio, changePct, money } from '../format';
@@ -52,12 +53,12 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     const sov = Object.values(bank.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     const deposits = bank.depositsUSD + (bank.corporateDepositsUSD ?? 0) + (bank.institutionalDepositsUSD ?? 0) + (bank.smeDepositsUSD ?? 0);
     const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);
-    const assets = bank.businessLoanBookUSD + bank.consumerLoanBookUSD + sov + bank.cashReservesUSD + (bank.repoLentUSD ?? 0) + (bank.sovereignAccruedCouponUSD ?? 0) + desks + (bank.primeBrokerageLoansUSD ?? 0);
+    const assets = loanBooksOf(bank) + sov + bank.cashReservesUSD + (bank.repoLentUSD ?? 0) + (bank.sovereignAccruedCouponUSD ?? 0) + desks + (bank.primeBrokerageLoansUSD ?? 0);
     const liabilities = deposits + (bank.clientMarginUSD ?? 0) + (bank.centralBankLoanUSD ?? 0) + (bank.repoBorrowedUSD ?? 0) + (bank.srfBorrowingUSD ?? 0);
     body = (<>
       <Statement units="USD millions · the live sheet" asOf={formatDate(world.state.currentWeek)} lines={[
-        { label: 'Business loans', usd: bank.businessLoanBookUSD },
-        { label: 'Household loans', usd: bank.consumerLoanBookUSD },
+        { label: 'Business loans', usd: businessLoanBookOf(bank) },
+        { label: 'Household loans', usd: consumerLoanBookOf(bank) },
         { label: 'Sovereign bonds', usd: sov },
         { label: 'Reserves at the central bank', usd: bank.cashReservesUSD },
         { label: 'Repo lent', usd: bank.repoLentUSD ?? 0 },
@@ -230,9 +231,10 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
     ]} />;
   } else if (active === 'banks') {
     const sov = bs?.sovereignBondHoldingsUSD ?? 0;
+    const books = regionLoanBooksUSD(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted));
     body = <Statement units="USD millions · the region's banks, summed" asOf={asOf} lines={[
-      { label: 'Business loans', usd: bs?.businessLoanBookUSD },
-      { label: 'Household loans', usd: bs?.consumerLoanBookUSD },
+      { label: 'Business loans', usd: books.businessLoanUSD },
+      { label: 'Household loans', usd: books.consumerLoanUSD },
       { label: 'Sovereign bonds', usd: sov },
       { label: 'Reserves', usd: bs?.cashReservesUSD },
       { label: 'Household deposits', usd: bs?.depositsUSD, total: true },

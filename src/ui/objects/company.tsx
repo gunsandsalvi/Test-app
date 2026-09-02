@@ -1,6 +1,7 @@
 /** AU · object: company — a firm, a bank (a company with a sheet), or a fund's manager shell. */
 
 import { Company } from '../../types';
+import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf } from '../../domain/banking';
 import { defineObject, PeerColumn } from './registry';
 import { Card, KV, Link, Stat, StatGrid, T } from '../ui';
 import { money, pct, pctLevel, ratio, num, bps, count } from '../format';
@@ -34,7 +35,7 @@ export function companyColumns(bank: boolean): PeerColumn<Company>[] {
       { key: 'cap', label: 'capital', render: (r) => pctLevel(r.obj.bankBalanceSheet?.bankCapitalRatio, 1), value: (r) => r.obj.bankBalanceSheet?.bankCapitalRatio ?? -1 },
       { key: 'nim', label: 'nim', render: (r) => pctLevel(r.obj.bankBalanceSheet?.netInterestMarginPct, 2), value: (r) => r.obj.bankBalanceSheet?.netInterestMarginPct ?? -1 },
       { key: 'deposits', label: 'deposits', render: (r) => { const s = r.obj.bankBalanceSheet; return money(s ? s.depositsUSD + (s.corporateDepositsUSD ?? 0) + (s.institutionalDepositsUSD ?? 0) + (s.smeDepositsUSD ?? 0) : undefined); }, value: (r) => r.obj.bankBalanceSheet?.depositsUSD ?? 0 },
-      { key: 'loans', label: 'loans', render: (r) => money(r.obj.bankBalanceSheet ? r.obj.bankBalanceSheet.businessLoanBookUSD + r.obj.bankBalanceSheet.consumerLoanBookUSD : undefined), value: (r) => (r.obj.bankBalanceSheet ? r.obj.bankBalanceSheet.businessLoanBookUSD + r.obj.bankBalanceSheet.consumerLoanBookUSD : 0) },
+      { key: 'loans', label: 'loans', render: (r) => money(r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet) : undefined), value: (r) => (r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet) : 0) },
       { key: 'share', label: 'share', render: (r) => pctLevel(r.obj.bankMarketShare, 0), value: (r) => r.obj.bankMarketShare ?? 0 },
       { key: 'window', label: 'window', render: (r) => money(r.obj.bankBalanceSheet?.srfBorrowingUSD), value: (r) => r.obj.bankBalanceSheet?.srfBorrowingUSD ?? 0 },
       { key: 'mcap', label: 'mkt cap', render: (r) => money(marketCapOf(r.obj), 1), value: (r) => marketCapOf(r.obj) },
@@ -146,7 +147,7 @@ export const company = defineObject<Company>({
         {sheet ? (
           <Card style={{ padding: '2px 0' }}>
             <KV k="deposits" hint="all classes" v={money(sheet.depositsUSD + (sheet.corporateDepositsUSD ?? 0) + (sheet.institutionalDepositsUSD ?? 0) + (sheet.smeDepositsUSD ?? 0))} />
-            <KV k="loans" hint="business · household" v={`${money(sheet.businessLoanBookUSD)} · ${money(sheet.consumerLoanBookUSD)}`} />
+            <KV k="loans" hint="business · household" v={`${money(businessLoanBookOf(sheet))} · ${money(consumerLoanBookOf(sheet))}`} />
             <KV k="sovereign book" v={money(sheet.sovereignBondHoldingsUSD)} />
             <KV k="reserves at the central bank" v={money(sheet.cashReservesUSD)} />
             <KV k="central bank loan" hint="lender of last resort" v={money(sheet.centralBankLoanUSD ?? 0)} />

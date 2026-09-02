@@ -6,7 +6,8 @@ import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
 import { PREMIUM_TO_SURPLUS_RATIO, INSTITUTIONAL_CAPITAL_RATIO } from '../../domain/institutions';
 import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
-import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, applyBankFundingSplit } from './stages/bank-lending';
+import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, applyBankFundingSplit, seedLoanBookShareUSD } from './stages/bank-lending';
+import { loanBooksOf } from '../../domain/banking';
 import { leverageHeadroomUSD } from '../macro/banking';
 import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
 
@@ -661,8 +662,10 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // ledger maintains from here on. G2 later replaces this stock with real loan-created
         // deposits and real household flows.
         const bs = bank.bankBalanceSheet!;
+        // §5-WIRES D: the seed's STATED loan books (the rows arrive with the migrations below)
+        // stand in the funding side here exactly as the stored scalars did.
         bs.depositsUSD = Math.round((
-          bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD +
+          seedLoanBookShareUSD(reg, bank, 'business') + seedLoanBookShareUSD(reg, bank, 'consumer') + bs.sovereignBondHoldingsUSD +
           bs.cashReservesUSD - bs.bankEquityUSD
         ));
       });
@@ -684,8 +687,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         depositsUSD: sumBank(bs => bs.depositsUSD),
         cashReservesUSD: sumBank(bs => bs.cashReservesUSD),
         bankEquityUSD: sumBank(bs => bs.bankEquityUSD),
-        businessLoanBookUSD: sumBank(bs => bs.businessLoanBookUSD),
-        consumerLoanBookUSD: sumBank(bs => bs.consumerLoanBookUSD),
       };
       // OWN6/OWN7: whatever the central bank and the capital-constrained banks left is the
       // institutions'. Every bond now has a holder, which is what stops the float minting claims
@@ -710,8 +711,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       migrateHouseholdDebtAtSeed(regionId, reg, regionBanksForLending);
       reg.bankingSector = {
         ...reg.bankingSector,
-        businessLoanBookUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.businessLoanBookUSD, 0),
-        consumerLoanBookUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.consumerLoanBookUSD, 0),
         bankEquityUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0),
         depositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
       };
@@ -1068,7 +1067,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const sheet = c.bankBalanceSheet!;
       const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
         .reduce((a, v) => a + (Number(v) || 0), 0);
-      const earningAssetsUSD = sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD;
+      const earningAssetsUSD = loanBooksOf(sheet) + sovUSD;
       const nimRevenueUSD = earningAssetsUSD * reg.bankingSector.netInterestMarginPct;
       if (!(nimRevenueUSD > 0)) return;
       c.annualRevenue = Math.round(nimRevenueUSD);

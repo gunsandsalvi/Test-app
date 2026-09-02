@@ -30,8 +30,7 @@ export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, 
   acquirer.repoEncumberedCollateralUSD = (acquirer.repoEncumberedCollateralUSD ?? 0) + (target.repoEncumberedCollateralUSD ?? 0); target.repoEncumberedCollateralUSD = 0;
   // The credit books.
   acquirer.businessLoans = [...(acquirer.businessLoans || []), ...(target.businessLoans || [])];
-  acquirer.businessLoanBookUSD += target.businessLoanBookUSD;
-  target.businessLoans = []; target.businessLoanBookUSD = 0;
+  target.businessLoans = [];
   const pools = [...(acquirer.householdLoans || [])];
   (target.householdLoans || []).forEach((pl) => {
     const i = pools.findIndex((x) => x.kind === pl.kind);
@@ -39,8 +38,7 @@ export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, 
     else pools[i] = mergeHouseholdPool(pools[i], pl);
   });
   acquirer.householdLoans = pools;
-  acquirer.consumerLoanBookUSD = pools.reduce((a, pl) => a + pl.principalUSD, 0);
-  target.householdLoans = []; target.consumerLoanBookUSD = 0;
+  target.householdLoans = [];
   acquirer.primeBrokerageLoansUSD = (acquirer.primeBrokerageLoansUSD ?? 0) + (target.primeBrokerageLoansUSD ?? 0); target.primeBrokerageLoansUSD = 0;
   // The securities books.
   const tenors = { ...(acquirer.sovereignBondHoldingsByTenor || {}) };

@@ -719,10 +719,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         status: 'PERFORMING',
       });
     }
-    const bookUSD = loans.reduce((a, l) => a + l.principalUSD, 0);
-    bank.bankBalanceSheet = { ...sheet, businessLoans: loans, businessLoanBookUSD: bookUSD };
-    const aggRegion = ctx.updatedRegions[bank.region];
-    if (aggRegion) aggRegion.bankingSector = { ...aggRegion.bankingSector, businessLoanBookUSD: aggRegion.bankingSector.businessLoanBookUSD + (event.retire ? -event.principalUSD : event.principalUSD) };
+    // §5-WIRES D: the book IS the rows; nothing (the bank's sheet, the region's aggregate) stores
+    // their sum, so there is no second copy to patch.
+    bank.bankBalanceSheet = { ...sheet, businessLoans: loans };
   });
   ctx.creditEventsThisWeek = [];
 
