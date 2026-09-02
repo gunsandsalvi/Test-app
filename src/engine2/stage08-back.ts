@@ -1994,6 +1994,11 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       if (sharesToRetire > 0.001) {
         updatedSharesOutstanding = Math.max(1.0, L8.sharesOutstanding[row] - sharesToRetire);
         buybacksThisWeek = sharesToRetire * newStockPrice;
+        // §5-CLOSE O2: the retired shares LEAVE THE REGISTER, pro rata to every holder (the
+        // float included, through the paying agent's denominator) — the issue and the register
+        // move by one ratio. This call was missing: shares outstanding fell every buyback while
+        // the register kept every share, and the difference was stock nobody had issued.
+        settleCorporateActionOnHolders(ctx, L8.companyId[row], 'EQUITY', L8.sharesOutstanding[row], updatedSharesOutstanding);
         // The shares retire through the EQUITY register below; the money reaches the same holders
         // of record, pro rata, instead of the boundary.
         post('share buybacks', -buybacksThisWeek, undefined, false);

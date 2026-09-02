@@ -559,6 +559,10 @@ export function applyPendingCorporateActionSettlements(
       }
       const scaledUSD = H.qtyUSD[r] * effectiveRatio;
       H.qtyUSD[r] = scaledUSD;
+      // §5-CLOSE O2: a holder's SHARE COUNT scales with its notional — a buyback that retires
+      // the issue retires the register's shares pro rata, or the register holds stock that no
+      // longer exists (measured: 186 firms, 20B of phantom stock, growing with every buyback).
+      if (!Number.isNaN(H.shares[r])) H.shares[r] *= effectiveRatio;
       if (scaledUSD > 1) kept.push(r);
     }
     if (!touched) return entity;

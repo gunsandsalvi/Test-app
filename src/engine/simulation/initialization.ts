@@ -558,11 +558,18 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // it is supposed to set (#28).
     const totalEquityCandidatesUSD = equityCandidates.reduce((s2, c) => s2 + c.outstandingUSD, 0) || 1;
     const equityPriceById = new Map(regionCompanies.map(c => [c.id, c.stockPrice]));
+    // §5-CLOSE O2: the institutions can hold AT MOST THE ISSUE. The sector's equity budget is
+    // spread over every listed name in proportion to its cap, so the fraction of each name it
+    // ends up holding is the same everywhere: budget / total cap. Above one, the seed used to
+    // write more shares onto the register than the firms had issued (193 firms, 18B of stock
+    // nobody issued at week 1); now the allocation stops at the issue and the unplaced budget
+    // stays as the entity's CASH — money it holds at its bank and will bid with in 07e.
+    const equityFillRatio = Math.min(1, totalEquityCandidatesUSD / Math.max(1, reg.institutionalSector.equityHoldingsUSD || 0));
     const attributeEquityHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
       equityCandidates
-        .filter(c => shareUSD * (c.outstandingUSD / totalEquityCandidatesUSD) > 1)
+        .filter(c => shareUSD * equityFillRatio * (c.outstandingUSD / totalEquityCandidatesUSD) > 1)
         .map(c => {
-          const nameUSD = shareUSD * (c.outstandingUSD / totalEquityCandidatesUSD);
+          const nameUSD = shareUSD * equityFillRatio * (c.outstandingUSD / totalEquityCandidatesUSD);
           return {
             instrumentId: c.id,
             instrumentType: c.type,
@@ -917,7 +924,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         beneficiaryLiabilityUSD,
         // Real opening cash: the entity's own policy cash weight against its own book. Every
         // clearing fill from here on settles against this balance.
-        cashUSD: totalAssetsUSD * targetFor(role, comp.hedgeFundStrategy).cashPct,
+        // §5-CLOSE O2: plus the equity budget the issue could not absorb (see equityFillRatio).
+        cashUSD: totalAssetsUSD * targetFor(role, comp.hedgeFundStrategy).cashPct + entEquityShareUSD * (1 - equityFillRatio),
         equityCapitalUSD,
         sharesOutstanding: comp.sharesOutstanding,
         stockPrice: comp.stockPrice,
@@ -969,6 +977,28 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       comp.netIncome = comp.ebit * (1 - INSTITUTIONAL_EFFECTIVE_TAX_RATE);
       comp.eps = comp.sharesOutstanding > 0 ? Number((comp.netIncome / comp.sharesOutstanding).toFixed(2)) : 0;
     });
+    // §5-CLOSE O2: THE REGISTER CANNOT EXCEED THE ISSUE. Every entity's equity was allocated
+    // from its own budget in proportion to the caps, and the budgets together can exceed the
+    // stock that exists (measured: 2.6x the issue of the biggest names, 242 firms over-held, 94B
+    // of stock nobody issued at week 0). What the issue cannot absorb stays as the entity's CASH.
+    {
+      const issuedById = new Map(regionCompanies.map((c) => [c.id, c.sharesOutstanding]));
+      const heldById = new Map<string, number>();
+      institutionalEntities.forEach((e) => { if (e.region !== regionId) return; e.itemizedHoldings.forEach((h) => { if (h.instrumentType === 'EQUITY' && h.quantityShares) heldById.set(h.instrumentId, (heldById.get(h.instrumentId) ?? 0) + h.quantityShares); }); });
+      institutionalEntities.forEach((e) => {
+        if (e.region !== regionId) return;
+        let freedUSD = 0;
+        e.itemizedHoldings = e.itemizedHoldings.map((h) => {
+          if (h.instrumentType !== 'EQUITY' || !h.quantityShares) return h;
+          const held = heldById.get(h.instrumentId) ?? 0; const issued = issuedById.get(h.instrumentId) ?? 0;
+          if (!(issued > 0) || held <= issued) return h;
+          const keep = issued / held;
+          freedUSD += h.quantityOrNotionalUSD * (1 - keep);
+          return { ...h, quantityShares: h.quantityShares * keep, quantityOrNotionalUSD: h.quantityOrNotionalUSD * keep };
+        });
+        if (freedUSD > 0) e.cashUSD = (e.cashUSD ?? 0) + freedUSD;
+      });
+    }
 
     // ---- HH5: ONE employment identity at week 0 (§7.4). ----
     // This block used to end in a NOTE that said, in short, "these pools imply 11-14%

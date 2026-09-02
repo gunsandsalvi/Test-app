@@ -775,6 +775,11 @@ export function generateInitialCompanies(
         baselineAnnualRevenue: parent.baselineAnnualRevenue * revenueScale,
         totalDebt: parent.totalDebt * revenueScale,
         cash: parent.cash * revenueScale,
+        // §5-CLOSE O2: a clone's cap is price × ITS shares — the share count scales with the
+        // firm, the price is the parent's. Scaling the cap alone left every clone with a cap
+        // that was not price × shares (up to 7×), and the seed then wrote shares onto the
+        // register against that cap: 242 firms over-held at week 0, 94B of stock nobody issued.
+        sharesOutstanding: parent.sharesOutstanding * revenueScale,
         marketCap: parent.marketCap * revenueScale,
         grossPPEUSD: parent.grossPPEUSD * revenueScale,
         accumulatedDepreciationUSD: parent.accumulatedDepreciationUSD * revenueScale,
