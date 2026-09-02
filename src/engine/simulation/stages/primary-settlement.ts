@@ -1,15 +1,15 @@
 /**
- * WS8 — the settlement half of a primary offering, shared by the clearing adapters
- * (07b bonds, 07d loans, 07e equity).
+ * The settlement half of a primary offering, shared by the clearing adapters (07b bonds,
+ * 07d loans, 07e equity).
  *
- * Money, conserved across named books — FIRM COMMITMENT since G3 gave the desks owners:
+ * Money, conserved across named books, on a FIRM COMMITMENT:
  *   - participants paid for the new paper they took through their ordinary cash legs
  *     (the engine's netCashDelta covers fills against the enlarged float);
  *   - the ISSUER receives the WHOLE deal, minus the fee — that is what a guarantee is (stage 08
  *     posts it through the S5 ledger and creates the tranche at the CLEARED terms);
  *   - the LEAD BANK receives the fee, cash and equity together, and pays real reserves for the
- *     residual it is left holding, which lands in its own desk inventory. The §7.19 gap this
- *     used to carry is closed: the residual has a payer, because the desk is a balance sheet.
+ *     residual it is left holding, which lands in its own desk inventory — the residual has a
+ *     payer, because the desk is a balance sheet.
  *   Sum per settlement: buyers −(take), issuer +(gross − fee), lead +fee −(gross − take) = 0.
  *
  * A WITHDRAWN offering settles nothing: no fee, no residual, no proceeds — the deal never
@@ -39,12 +39,11 @@ export function settlePricedOfferings(
   result: ClearingResult,
   ctx: WeeklyStepContext,
   statToGrossProceedsUSD: (offering: PrimaryOffering, clearedStat: number) => number,
-  /** G3c: what the lead quoted for THIS deal — the book's own spread plus what it can lose on
-   *  the residual. Omitted only where a book has not been given its own quote yet. */
+  /** What the lead quoted for THIS deal — the book's own spread plus what it can lose on the
+   *  residual. Omitted only where a book has not been given its own quote yet. */
   feeBpsOf?: (offering: PrimaryOffering, clearedStat: number) => number,
-  /** G3e: the desk book the lead's firm commitment lands in ('corporate bond', 'equity', ...).
-   *  Omitted leaves the residual unfunded, which is what every book did before the desks
-   *  had owners. */
+  /** The desk book the lead's firm commitment lands in ('corporate bond', 'equity', ...).
+   *  Omitting it leaves the residual unfunded. */
   deskBook?: string
 ): void {
   if (offeringsByIssuerId.size === 0) return;
@@ -62,11 +61,10 @@ export function settlePricedOfferings(
       return;
     }
 
-    // G3e: FIRM COMMITMENT. The lead guaranteed the price, so the issuer is paid on the whole
-    // deal and the lead owns whatever the book did not take, at the cleared level, in its own
-    // desk inventory — which is the business the fee below is the price of. Before the desks
-    // had owners the residual sat on a region with no payer and the issuer was paid only on
-    // the market take, which is best-efforts placement wearing a firm commitment's name.
+    // FIRM COMMITMENT. The lead guaranteed the price, so the issuer is paid on the whole deal
+    // and the lead owns whatever the book did not take, at the cleared level, in its own desk
+    // inventory — which is the business the fee below is the price of. Paying the issuer on the
+    // market take alone would be best-efforts placement wearing a firm commitment's name.
     const takeShare = Math.min(1, outcome.marketTakeUSD / Math.max(1, offering.sizeUSD));
     const fullGrossUSD = statToGrossProceedsUSD(offering, outcome.clearedStat);
     const lead = ctx.updatedCompanies.find((c: Company) => c.ticker === offering.leadBankTicker && c.bankBalanceSheet)
@@ -115,12 +113,10 @@ export function settlePricedOfferings(
       const inventory: DealerDeskInventory = { ...(existingSheet.dealerDeskInventory ?? {}) };
       const rows = [...(inventory[deskBook] ?? [])];
       const at = rows.findIndex((r) => r.instrumentId === issuerId);
-      // §7.259: the position carries its UNITS. An equity book clears in shares, so a residual
-      // stored as dollars alone was read back as a share count by every units-aware consumer
-      // (desk build, fee mark) — inventoryUSD-as-units at a $40 price is a 40x phantom
-      // position. Credit clears in dollars, where units and money are the same number. The
-      // merge also used to DROP the existing row's units field entirely (object rebuilt from
-      // two fields), which corrupted any position it topped up.
+      // The position carries its UNITS. An equity book clears in shares, so a residual stored
+      // as dollars alone is read back as a share count by every units-aware consumer (desk
+      // build, fee mark) — inventoryUSD-as-units at a $40 price is a 40x phantom position.
+      // Credit clears in dollars, where units and money are the same number.
       const residualUnits = instrumentType === 'EQUITY'
         ? residualUSD / Math.max(1e-9, outcome.clearedStat)
         : residualUSD;
@@ -139,24 +135,19 @@ export function settlePricedOfferings(
       }
       inventory[deskBook] = rows;
       updateBankSheet(ctx, lead.ticker, { ...existingSheet, dealerDeskInventory: inventory });
-      // §5-FINALIZATION step 13 (W2): the residual is paper that MOVED — for the credit books
-      // the issuer's tranche went to the clearing house whole (W3) and the book took the placed
-      // part, so the lead takes the rest from the house; for equity the issuer's new shares are
-      // created onto the lead (the CCP leg carried only the take).
+      // The residual is paper that MOVED, and it moves ONCE. For the credit books the issuer
+      // delivered the whole deal to the clearing house when its tranche was issued and the
+      // book's fills took the market's share, so the lead takes the rest from the house; for
+      // equity the issuer's new shares are created onto the lead, because the CCP leg carried
+      // only the take. Wiring it a second time off the house — which this did, unconditionally
+      // and with the same spec — debited the house twice for one delivery, and on the equity
+      // side attributed one movement to two different senders.
       const leadDesk: PartyRef = { kind: 'BANK_SECURITIES', ticker: lead.ticker };
       const spec: HoldingSpec = heldInShares(instrumentType)
         ? { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueUSD: residualUSD, shares: residualUnits }
         : { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueUSD: residualUSD };
       if (heldInShares(instrumentType)) issueHolding(ctx.v2, { kind: 'COMPANY', ticker: issuerCompany!.ticker }, leadDesk, spec, 'underwriting residual taken by the lead');
       else transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: regionId }, leadDesk, spec, 'underwriting residual taken by the lead');
-      // §5-WIRES W2/W3: the paper the lead is left holding comes off the clearing house, by wire —
-      // the issuer delivered the WHOLE deal to the house when its tranche was issued (the tranche
-      // ledger, stage 08), the book's fills took the market's share, the lead takes the rest.
-      if (issuerCompany) {
-        transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: regionId }, { kind: 'BANK_SECURITIES', ticker: lead.ticker },
-          { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueUSD: residualUSD, shares: heldInShares(instrumentType) ? residualUnits : undefined },
-          'underwriting residual delivered to the lead');
-      }
     }
 
     ctx.primarySettlements.set(offering.id, {
