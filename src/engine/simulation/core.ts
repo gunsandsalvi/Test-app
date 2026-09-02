@@ -1,4 +1,5 @@
 import { ensureManagements, runManagementReviewStage } from './stages/management-review';
+import { runNewsDerivationStage } from './stages/news-derivation';
 import { rollDamperStreaks, setDamperStreaks } from './stages/financial-clearing-engine';
 import { GameState, RegionId } from '../../types';
 import { dealersFromBanks } from '../dealers';
@@ -377,6 +378,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // SCALE: one row per position before the week closes, so next week's sweeps of the register
   // walk positions rather than the fills that built them (stages/holdings-store.ts).
   run('register-consolidation', () => consolidateRegister(ctx));
+  // §5-NEWS — the derived stories over what this week recorded, before the feed is assembled.
+  run('news-derivation', () => runNewsDerivationStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
   {
     // §7.311 WRITER FLIP — the rows are the ladder's authority; the object arrays are a view

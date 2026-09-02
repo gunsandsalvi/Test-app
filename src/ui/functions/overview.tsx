@@ -4,7 +4,7 @@ import { Company, InstitutionalEntity, Region } from '../../types';
 import { FunctionModule } from '../fn';
 import { Card, KV, Link, Hint, Muted, Stat, StatGrid, Tile, serif, T } from '../ui';
 import { changePct, money, pct, pctLevel, ratio, num, bps, count } from '../format';
-import { WEEKS_PER_MONTH, WEEKS_PER_YEAR, formatMonth } from '../calendar';
+import { WEEKS_PER_MONTH, WEEKS_PER_YEAR, formatMonth, formatSpan } from '../calendar';
 import { companyOf, institutionOf, regionOf, refOfIdentifier, companyPriceHistory, holdersOf, bookOf, tapeSeries, ObjectRef, World } from '../world';
 import { materializeLadder } from '../../engine2/tranches';
 import { isActiveCompany } from '../../domain/company';
@@ -13,7 +13,7 @@ function ChangeSub({ series }: { series: number[] }) {
   const now = series[series.length - 1];
   const mom = changePct(now, series[series.length - 1 - WEEKS_PER_MONTH]);
   const yoy = changePct(now, series[series.length - 1 - WEEKS_PER_YEAR]);
-  if (mom === undefined) return <>{series.length > 1 ? `${series.length - 1} weeks of history` : 'no history yet'}</>;
+  if (mom === undefined) return <>{series.length > 1 ? `${formatSpan(series.length - 1)} of history` : 'no history yet'}</>;
   return <span style={{ color: mom < 0 ? T.neg : T.accent }}>{pct(mom)} m/m{yoy !== undefined ? ` · ${pct(yoy)} y/y` : ''}</span>;
 }
 
@@ -34,12 +34,13 @@ function CompanyOverview({ world, c, nav, ref }: { world: World; c: Company; nav
         <Muted style={{ fontSize: 13 }}>
           {c.sector} · <Link to={{ type: 'region', id: c.region }} nav={nav}>{c.region}</Link> · {c.listingStatus === 'PRIVATE' ? 'private' : 'public'} · {c.creditRating}
           {bank ? <> · house bank <Link to={bank} nav={nav}>{c.homeBankTicker}</Link></> : null}
+          {c.management ? <> · management: {c.management.patienceWeeks < 9 ? 'short' : c.management.patienceWeeks > 26 ? 'long' : 'quarterly'} horizon, {c.management.riskAversion < 0.8 ? 'risk-taking' : c.management.riskAversion > 1.25 ? 'cautious' : 'even-handed'}</> : null}
           {!isActiveCompany(c) ? <> · <span style={{ color: T.neg }}>{c.isDefaulted ? (c.bankResolvedWeek !== undefined ? 'resolved' : 'in default') : 'acquired'}</span></> : null}
         </Muted>
       </div>
       <StatGrid>
         <Stat label="price" value={num(c.stockPrice)} sub={<ChangeSub series={prices} />} />
-        <Stat label="mkt cap" value={money(c.marketCap)} sub={floatShare !== undefined ? `inst. ${pctLevel(floatShare, 0)}` : 'unlisted'} />
+        <Stat label="market cap" value={money(c.marketCap)} sub={floatShare !== undefined ? `${pctLevel(floatShare, 0)} held by funds` : 'unlisted'} />
         <Stat label="rating" value={c.creditRating} sub={`oas ${bps(c.oasSpreadBps)} · cds ${bps(c.cdsSpreadBps)}`} />
       </StatGrid>
       {sheet ? (
@@ -53,7 +54,7 @@ function CompanyOverview({ world, c, nav, ref }: { world: World; c: Company; nav
         </Card>
       ) : (
         <Card style={{ padding: '2px 0' }}>
-          <KV k="revenue, ttm" v={money(c.annualRevenue)} />
+          <KV k="revenue" hint="trailing year" v={money(c.annualRevenue)} />
           <KV k="ebitda margin" v={c.annualRevenue > 0 ? pctLevel(c.ebitda / c.annualRevenue) : '—'} />
           <KV k="net debt / ebitda" hint={`leverage ${ratio(c.leverage)}`} v={c.ebitda > 0 ? ratio(netDebt / c.ebitda) : '—'} />
           <KV k="interest coverage" v={ratio(c.interestCoverage)} />
@@ -62,11 +63,11 @@ function CompanyOverview({ world, c, nav, ref }: { world: World; c: Company; nav
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
         <Tile name="statements" sub={sheet ? 'bank sheet · P&L' : 'P&L · BS · cash flow'} onTap={() => nav.go('statements')} />
-        <Tile name="chart" sub={`price · ${prices.length > 1 ? `${prices.length} weeks` : 'no history yet'}`} onTap={() => nav.go('chart')} />
-        <Tile name="holders" sub={`${equityHolders.length} inst. · ${floatShare !== undefined ? pctLevel(floatShare, 0) + ' of cap' : '—'}`} onTap={() => nav.go('holders')} />
+        <Tile name="chart" sub={`price · ${prices.length > 1 ? formatSpan(prices.length) : 'no history yet'}`} onTap={() => nav.go('chart')} />
+        <Tile name="holders" sub={`${equityHolders.length} funds · ${floatShare !== undefined ? pctLevel(floatShare, 0) + ' of the cap' : '—'}`} onTap={() => nav.go('holders')} />
         <Tile name="peers" sub={`${c.sector} · ${c.region}`} onTap={() => nav.go('peers')} />
-        <Tile name="ladder" sub={ladder.length ? `${ladder.length} tranches · next ${nextMaturity !== undefined ? formatMonth(nextMaturity) : '—'}` : 'no debt'} onTap={() => nav.go('all', { path: 'debtTranches' })} />
-        <Tile name="lines" sub={`${c.productLines?.length ?? 0} product lines`} onTap={() => nav.go('all', { path: 'productLines' })} />
+        <Tile name="debt" sub={ladder.length ? `${ladder.length} tranches · next due ${nextMaturity !== undefined ? formatMonth(nextMaturity - (world.state.burnInWeeks ?? 0)) : '—'}` : 'no debt'} onTap={() => nav.go('all', { path: 'debtTranches' })} />
+        <Tile name="news" sub="what happened, and why" onTap={() => nav.go('news')} />
       </div>
       <Card style={{ padding: '0 12px', height: 44, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
         <span onClick={() => nav.go('all')} style={{ color: T.accent, fontWeight: 700 }}>all</span>
@@ -111,9 +112,10 @@ function InstitutionOverview({ world, e, nav }: { world: World; e: Institutional
       </Card>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
         <Tile name="holdings" sub={`${book.length} positions`} onTap={() => nav.go('holders')} />
-        <Tile name="chart" sub={`assets · ${assets.length > 1 ? `${assets.length} weeks` : 'no history yet'}`} onTap={() => nav.go('chart')} />
+        <Tile name="chart" sub={`assets · ${assets.length > 1 ? formatSpan(assets.length) : 'no history yet'}`} onTap={() => nav.go('chart')} />
         <Tile name="statements" sub="assets · liabilities" onTap={() => nav.go('statements')} />
         <Tile name="peers" sub={e.entityType.toLowerCase().replace(/_/g, ' ')} onTap={() => nav.go('peers')} />
+        <Tile name="news" sub="what happened, and why" onTap={() => nav.go('news')} />
       </div>
       <Card style={{ padding: '0 12px', height: 44, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
         <span onClick={() => nav.go('all')} style={{ color: T.accent, fontWeight: 700 }}>all</span>
@@ -150,6 +152,7 @@ function RegionOverview({ world, r, nav }: { world: World; r: Region; nav: FnPro
         <KV k="population" v={count(Math.round(r.totalPopulation))} />
       </Card>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+        <Tile name="news" sub="what happened, and why" onTap={() => nav.go('news')} />
         <Tile name="chart" sub="unemployment · cpi · rates" onTap={() => nav.go('chart')} />
         <Tile name="statements" sub="national accounts · treasury" onTap={() => nav.go('statements')} />
         <Tile name="holders" sub="who holds the sovereign" onTap={() => nav.go('holders')} />

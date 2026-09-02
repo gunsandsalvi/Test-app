@@ -17,6 +17,7 @@ import { World, ObjectRef, Tape, newTape, recordTape, worldOf, searchObjects, la
 import { FUNCTIONS, FUNCTION_NAMES, DEFAULT_FUNCTION, functionsFor } from './functions';
 import { Nav, T, mono, Hint, Card } from './ui';
 import { formatDate } from './calendar';
+import { storiesFor, Story } from './functions/news';
 
 interface Frame { ref: ObjectRef; fn: string; args: Record<string, string> }
 interface Panel { id: number; stack: Frame[] }
@@ -161,11 +162,21 @@ export default function Aurora() {
         </span>
         <div style={{ flexGrow: 1, display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0, overflow: 'hidden' }}>
           <span style={{ ...mono, fontSize: 15, fontWeight: 500, whiteSpace: 'nowrap' }}>{label ? label.ticker : 'aurora'}</span>
-          <span style={{ color: T.muted, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>{frame ? frame.fn : 'object function'}</span>
+          <span style={{ color: T.muted, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>{frame ? frame.fn : ''}</span>
         </div>
         {panels.length > 1 ? <span style={{ ...mono, fontSize: 11, color: T.hint }}>{panelIdx + 1}/{panels.length}</span> : null}
         <span style={{ ...mono, fontSize: 12, color: T.muted, whiteSpace: 'nowrap' }}>{formatDate(state.currentWeek - (state.burnInWeeks ?? 0))}</span>
       </div>
+      {/* the function strip: the object is chosen — this is how you look at it */}
+      {frame ? (
+        <div style={{ display: 'flex', alignItems: 'stretch', borderBottom: `1px solid ${T.border}`, background: T.bg, flexShrink: 0, overflowX: 'auto' }}>
+          {functionsFor(frame.ref.type).map((f) => (
+            <span key={f.name} onClick={() => nav.go(f.name)} style={{ display: 'inline-flex', alignItems: 'center', height: 40, padding: '0 12px', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', color: f.name === frame.fn ? T.text : T.muted, borderBottom: `2px solid ${f.name === frame.fn ? T.accent : 'transparent'}`, cursor: 'pointer', flexShrink: 0 }}>{f.name}</span>
+          ))}
+          <span style={{ flexGrow: 1 }} />
+          <span onClick={closePanel} title="close this panel" style={{ display: 'inline-flex', alignItems: 'center', height: 40, padding: '0 12px', fontSize: 13, color: T.hint, cursor: 'pointer', flexShrink: 0 }}>✕</span>
+        </div>
+      ) : null}
 
       {/* body */}
       <div className="aurora-body" style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 12px 16px 12px' }}>
@@ -180,15 +191,7 @@ export default function Aurora() {
         ) : (
           <Card style={{ padding: 14, color: T.muted }}>no function called <b>{frame.fn}</b> — the words are {FUNCTION_NAMES.join(', ')}.</Card>
         )}
-        {frame ? (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '4px 4px 0 4px' }}>
-            {functionsFor(frame.ref.type).map((f) => (
-              <span key={f.name} onClick={() => nav.go(f.name)} style={{ display: 'inline-flex', alignItems: 'center', height: 36, padding: '0 12px', borderRadius: 8, background: f.name === frame.fn ? T.text : T.card, color: f.name === frame.fn ? T.bg : '#c7cdd6', border: `1px solid ${T.border}`, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{f.name}</span>
-            ))}
-            <span onClick={closePanel} style={{ display: 'inline-flex', alignItems: 'center', height: 36, padding: '0 12px', borderRadius: 8, color: T.hint, fontSize: 13, cursor: 'pointer' }}>close panel</span>
-          </div>
-        ) : null}
-        {frame ? <Hint style={{ ...mono, padding: '0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>← {trail}</Hint> : null}
+        {frame && panel.stack.length > 1 ? <Hint style={{ ...mono, padding: '0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>← {trail}</Hint> : null}
       </div>
 
       {/* clock */}
@@ -237,7 +240,7 @@ export default function Aurora() {
             onChange={(e) => { setCommand(e.target.value); setBarOpen(true); }}
             onFocus={() => setBarOpen(true)}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setBarOpen(false); setCommand(''); } }}
-            placeholder="object function"
+            placeholder="type a name, then a function (krln news)"
             autoCapitalize="none" autoCorrect="off" spellCheck={false}
             style={{ flexGrow: 1, background: 'transparent', border: 'none', outline: 'none', color: T.text, ...mono, fontSize: 15 }}
           />
@@ -276,6 +279,11 @@ function Home({ world, nav, recents, onRecent, stepMs }: { world: World; nav: Na
       <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.muted, fontWeight: 700, padding: '4px 4px 0' }}>recent</div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{recents.map((r) => <Chip key={r} text={r} onTap={() => onRecent(r)} />)}</div>
     </>) : null}
-    <Hint style={{ padding: '4px 4px 0' }}>type an object and a function — <span style={mono}>krln overview</span>, <span style={mono}>usa chart 10y</span>, <span style={mono}>voul statements</span>. Long-press any name to open it beside this one; swipe to move between panels. The bench is at <a href="#bench" style={{ color: T.accent }}>#bench</a>.</Hint>
+    {(() => { const top = storiesFor(world, undefined, 8); return top.length > 0 ? (<>
+      <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.muted, fontWeight: 700, padding: '4px 4px 0' }}>what happened</div>
+      <Card style={{ overflow: 'hidden' }}>{top.map((it) => <Story key={it.id} item={it} world={world} nav={nav} compact />)}</Card>
+      <Hint style={{ padding: '0 4px' }}>open a region and tap <span style={mono}>news</span> for the full feed with the reasons.</Hint>
+    </>) : null; })()}
+    <Hint style={{ padding: '4px 4px 0' }}>type an object and a function — <span style={mono}>krln news</span>, <span style={mono}>usa chart 10y</span>, <span style={mono}>voul statements</span>. Once an object is open, the strip under its name lists every way to look at it. Long-press any name to open it beside this one; swipe to move between panels. The bench is at <a href="#bench" style={{ color: T.accent }}>#bench</a>.</Hint>
   </>);
 }

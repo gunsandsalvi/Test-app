@@ -23,6 +23,15 @@ function walk(root: unknown, path: string[]): unknown {
   return cur;
 }
 
+/** A stored key, read aloud: `annualRevenue` → "annual revenue", `cashReservesUSD` → "cash reserves". */
+export function humanKey(k: string): string {
+  if (/^\d+$/.test(k)) return `#${k}`;
+  return k
+    .replace(/USD$/, '').replace(/Pct$/, ' pct').replace(/^_/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .toLowerCase().trim();
+}
+
 function kindOf(v: unknown): string {
   if (v === null || v === undefined) return 'empty';
   if (Array.isArray(v)) return `${v.length} rows`;
@@ -89,8 +98,8 @@ function AllView({ world, refv, args, nav }: { world: import('../world').World; 
           <div style={{ padding: '8px 12px', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.muted, background: '#161c25' }}>nested — each a link</div>
           {nested.map(([k, v]) => (
             <div key={k} onClick={() => nav.go('all', { path: [...path, k].join('.') })} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 40, padding: '0 12px', borderBottom: `1px solid ${T.rule}`, cursor: 'pointer' }}>
-              <Muted style={{ fontSize: 13 }}>{k}</Muted>
-              <span style={{ ...mono, color: T.accent }}>{kindOf(v)} →</span>
+              <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}><Muted style={{ fontSize: 13 }}>{humanKey(k)}</Muted>{humanKey(k) !== k ? <Hint style={mono}>{k}</Hint> : null}</span>
+              <span style={{ ...mono, color: T.accent, flexShrink: 0 }}>{kindOf(v)} →</span>
             </div>
           ))}
         </Card>
@@ -100,7 +109,7 @@ function AllView({ world, refv, args, nav }: { world: import('../world').World; 
           <div style={{ padding: '8px 12px', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.muted, background: '#161c25' }}>fields</div>
           {scalars.map(([k, v]) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 40, padding: '0 12px', borderBottom: `1px solid ${T.rule}`, gap: 10 }}>
-              <Muted style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k}</Muted>
+              <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}><Muted style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{humanKey(k)}</Muted>{humanKey(k) !== k ? <Hint style={{ ...mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k}</Hint> : null}</span>
               <Scalar k={k} v={v} world={world} nav={nav} />
             </div>
           ))}

@@ -16,6 +16,13 @@ export interface NewsItem {
   affectedTicker?: string;
   urgent: boolean;
   tradeShortcut?: TradeableInstrument;
+  /** §5-NEWS — a DERIVED story cites the state it derives from: the objects it names (every
+   *  one a link in the UI), the kind of event, its size (what it ranks by), and the WHY traced
+   *  through the ledger. Items without these are the older generator's. */
+  kind?: string;
+  refs?: { type: 'company' | 'institution' | 'region'; id: string }[];
+  materialityUSD?: number;
+  cause?: string;
 }
 
 export interface DiagnosticsLog {

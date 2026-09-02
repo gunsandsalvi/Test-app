@@ -8,9 +8,10 @@ import { chart } from './chart';
 import { statements } from './statements';
 import { holders, holdings } from './holders';
 import { peers } from './peers';
+import { news } from './news';
 
 export const FUNCTIONS: Record<string, FunctionModule> = Object.fromEntries(
-  [overview, all, chart, statements, holders, holdings, peers].map((f) => [f.name, f])
+  [overview, news, chart, statements, holders, holdings, peers, all].map((f) => [f.name, f])
 );
 
 export const FUNCTION_NAMES = Object.keys(FUNCTIONS);

@@ -34,7 +34,8 @@ export function runNewsAndTurnSummaryStage(state: GameState, ctx: WeeklyStepCont
     marginUtilizationPct: navUSD > 0 ? Math.round((ctx.totalRequiredMarginUSD / navUSD) * 100) : 100,
     isMarginCall: navUSD < ctx.maintenanceMarginUSD,
   };
-  const updatedNewsFeed = [...state.newsFeed, ...ctx.newsItems].slice(-100);
+  // §5-NEWS — a quarter of stories (the derived feed runs ~30–60 a week); the UI reads nothing older.
+  const updatedNewsFeed = [...state.newsFeed, ...ctx.newsItems].slice(-600);
   const updatedDiagnosticsLogs = [...state.diagnosticsLogs, ...ctx.diagnosticLogs].slice(-100);
   const year = state.year + (currentWeekMod13 === 13 && nextWeek % 52 === 0 ? 1 : 0);
 
