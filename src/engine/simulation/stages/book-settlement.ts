@@ -37,6 +37,8 @@ import { WeeklyStepContext } from './context';
 import { pay, PartyRef } from './settlement';
 import { defect } from '../../../domain/defect';
 import { ClearingResult } from './financial-clearing-engine';
+import { transferHolding, HoldingSpec, HoldingKind } from '../../ledger/holdings-ledger';
+import { heldInShares } from '../../../domain/assets';
 
 /** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
 export interface FeeDesk { ticker: string; share: number }
@@ -50,7 +52,13 @@ export interface FeeDesk { ticker: string; share: number }
  * unrouted book is a visible line rather than a silent loss.
  */
 /** What one issuer's deal placed with this book's participants, and who to pay for it. */
-export interface PrimaryTake { party: PartyRef; amountUSD: number }
+export interface PrimaryTake {
+  party: PartyRef;
+  amountUSD: number;
+  /** §5-WIRES W2: the paper the issuer delivers to the clearing house against that money —
+   *  the participants' fills draw it down (holdings-store, `clearedBookDelta`). */
+  asset?: HoldingSpec;
+}
 
 export function settleClearedBook(
   ctx: WeeklyStepContext,
@@ -84,6 +92,12 @@ export function settleClearedBook(
       if (amountUSD > 0) pay(ctx, { payer: ccp, payee: t.party, amountUSD, reason: `${book} primary proceeds` });
     });
   }
+  // §5-WIRES W2: the asset half of the primary — the issuer's paper to the clearing house, the
+  // whole take (the money above is what the CCP could pay; the paper placed is what the book
+  // took). A take with no asset leg is a book whose kind is not wired yet, not a silent move.
+  primaryTakes.forEach((t) => {
+    if (t.asset) transferHolding(ctx.v2, t.party, ccp, t.asset, `${book} primary placement`);
+  });
 
   // §5-CLOSE: with two-sided rationing a stock book leaves nothing over beyond the rounding of
   // its legs. Rounding dust has an owner too — the desks that earned the fees absorb it — and a
@@ -124,14 +138,30 @@ export function feeDesksForRegion(ctx: WeeklyStepContext, regionId: RegionId): F
 export function primaryTakes(
   result: ClearingResult,
   partyOfIssuerId: (issuerId: string) => PartyRef | undefined,
-  valueOf: (marketTakeUSD: number, clearedStat: number) => number = (take) => take
+  valueOf: (marketTakeUSD: number, clearedStat: number) => number = (take) => take,
+  /** §5-WIRES W2: the paper behind the take — see `primaryAssetOf`. */
+  assetOf?: (issuerId: string, marketTake: number, clearedStat: number) => HoldingSpec | undefined
 ): PrimaryTake[] {
   const takes: PrimaryTake[] = [];
   result.primaryOutcomeById.forEach((o, issuerId) => {
     if (o.withdrawn) return;
     const amountUSD = valueOf(o.marketTakeUSD, o.clearedStat);
     const party = partyOfIssuerId(issuerId);
-    if (party && amountUSD > 0) takes.push({ party, amountUSD });
+    if (party && amountUSD > 0) takes.push({ party, amountUSD, asset: assetOf?.(issuerId, o.marketTakeUSD, o.clearedStat) });
   });
   return takes;
+}
+
+/**
+ * The asset leg of a primary take for a book of one kind in one region: par for the credit
+ * books (the engine's take is money), shares at the cleared price for equity (the take is
+ * shares). The instrument id is the issuer's — what the register keys the paper by.
+ */
+export function primaryAssetOf(instrumentType: HoldingKind, region: RegionId) {
+  return (issuerId: string, marketTake: number, clearedStat: number): HoldingSpec | undefined => {
+    if (!(marketTake > 0)) return undefined;
+    return heldInShares(instrumentType)
+      ? { instrumentType, instrumentId: issuerId, issuerRegion: region, valueUSD: marketTake * clearedStat, shares: marketTake }
+      : { instrumentType, instrumentId: issuerId, issuerRegion: region, valueUSD: marketTake };
+  };
 }

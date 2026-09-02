@@ -59,7 +59,7 @@ import {
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { institutionUnsettledLessCollateralUSD, institutionSpendableUSD } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
@@ -555,7 +555,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       primaryTakes(result, (issuerId) => {
         const issuer = companyById.get(issuerId);
         return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
-      })
+      }, undefined, primaryAssetOf('CORP_BOND', regionId))
     );
   });
 }

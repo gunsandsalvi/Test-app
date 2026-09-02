@@ -17,5 +17,17 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
   if (s && Math.abs(moneyUSD - s.grossUSD) > Math.max(1e3, s.grossUSD * 1e-9)) {
     out.push({ family: 'W', check: 'W1 money wires = settlement gross', week, usd: moneyUSD - s.grossUSD, message: `money wires ${B(moneyUSD)} against settlement's gross ${B(s.grossUSD)} — a payment row with no wire, or a wire no pass settled` });
   }
+  // W2: the clearing house is on both sides of every fill — what the issuers and sellers
+  // delivered to it is what the buyers took from it, per region and asset kind. A net is a
+  // holder whose fills no wire names (a leg still written on its own book).
+  const nets = Object.entries(w.houseNetUSDByKey ?? {}).filter(([key, net]) => {
+    const kind = key.split('|')[1];
+    return Math.abs(net) > Math.max(1e4, (w.valueUSDByKind[kind] ?? 0) * 1e-6);
+  });
+  if (nets.length > 0) {
+    const worst = nets.reduce((a, b) => (Math.abs(b[1]) > Math.abs(a[1]) ? b : a));
+    const usd = nets.reduce((a, [, n]) => a + Math.abs(n), 0);
+    out.push({ family: 'W', check: 'W2 the clearing house nets to zero per asset', week, usd, message: `${nets.length} region-kinds leave the clearing house holding paper (${nets.map(([k, n]) => `${k.replace('|', ' ')} ${B(n)}`).slice(0, 4).join(' | ')}${nets.length > 4 ? ' | …' : ''}) — a fill some holder books without a wire; worst ${worst[0].replace('|', ' ')}` });
+  }
   return out;
 }

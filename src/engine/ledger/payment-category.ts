@@ -44,7 +44,7 @@ const RULES: ReadonlyArray<readonly [RegExp, PaymentCategory]> = [
   [/wages|payroll/, 'LABOR'],
 
   // -- Taxes and transfers --
-  [/tax|government transfers/, 'TAX_AND_TRANSFER'],
+  [/tax|government transfers|central bank remittance|covers the central bank's loss/, 'TAX_AND_TRANSFER'],
 
   // -- Insurance and pension --
   [/insurance|pension/, 'INSURANCE_AND_PENSION'],
@@ -53,16 +53,17 @@ const RULES: ReadonlyArray<readonly [RegExp, PaymentCategory]> = [
   [/etf |money fund|swap settlement/, 'SECURITIES'],
 
   // -- Debt service: interest, coupons, principal coming home --
-  [/interest|coupon|redeem|redemption|redeemed|principal (repaid|retired|paydown)|paydown to holders|debt prepayment|deleveraging|facility prepaid|term-out|call premium|funding repaid/, 'DEBT_SERVICE'],
+  [/interest|coupon|redeem|redemption|redeemed|principal (repaid|retired|paydown)|paydown to holders|debt prepayment|deleveraging|facility prepaid|term-out|call premium|funding repaid|loan repaid/, 'DEBT_SERVICE'],
 
   // -- Credit creation: new money being drawn --
-  [/revolver|overdraft|loan origination|trade credit|prime brokerage|repo (drawdown|maturity|collateral)|maintenance funding draw|facility draw|funding raised/, 'CREDIT_CREATION'],
+  [/revolver|overdraft|loan origination|trade credit|prime brokerage|repo (drawdown|maturity|collateral)|maintenance funding draw|facility draw|funding raised|central bank loan drawn/, 'CREDIT_CREATION'],
 
   // -- Corporate actions and equity distributions --
   [/dividend|buyback|merger|estate|resolution:|firm birth|divestiture|sponsor-to-sponsor|dividend recap|capital call|fund distribution|FDI: subsidiary|repatriated/, 'CORPORATE_ACTION'],
 
-  // -- Securities: clearing legs, primary, funds, collateral, derivatives --
-  [/clearing|primary|proceeds|placement|security payment|holder of record|etf |shares created|money fund|dealer inventory|stock loan|collateral|variation margin|initial margin|close-out|derivative settled|futures|CDS|cash slice|tender|ISSUE_CHEAP_DEBT|DELEVER_EXPENSIVE_DEBT|accretive call/, 'SECURITIES'],
+  // -- Securities: clearing legs, primary, funds, collateral, derivatives; §5-WIRES W2 the asset
+  // wires share the reason table (desk fills, the paying agent's pro-rata actions) --
+  [/clearing|primary|proceeds|placement|desk fill|paper (placed|retired) pro rata|security payment|holder of record|etf |shares created|money fund|dealer inventory|stock loan|collateral|variation margin|initial margin|close-out|derivative settled|futures|CDS|cash slice|tender|ISSUE_CHEAP_DEBT|DELEVER_EXPENSIVE_DEBT|accretive call/, 'SECURITIES'],
 
   // -- Goods, services, and the operating boundary --
   [/goods|contract|freight|procurement|invoice|opex|operating receipts|carrying cost|delivery|damages|settled (purchases|sales)/, 'GOODS_AND_SERVICES'],

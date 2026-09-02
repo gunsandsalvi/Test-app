@@ -19,7 +19,8 @@ import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { isActiveCompany } from '../../../domain/company';
 import { SOV_BILL_BUCKETS } from './shared-helpers';
-import { bookHeadOf, markBookDirty } from '../../../engine2/holdings';
+import { bookHeadOf } from '../../../engine2/holdings';
+import { markHolding } from '../../ledger/holdings-ledger';
 import { internString } from '../../../engine2/world';
 
 /** Weekly accretion factor for a bill bucket, off the region's own cleared bill curve. */
@@ -88,10 +89,10 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
         const key = govBucketKeyOf(ctx.v2.internedStrings[H.instrRef[r]], regionId);
         const rate = key ? rateByBucket.get(key) : undefined;
         if (!rate) continue;
-        H.qtyUSD[r] = H.qtyUSD[r] * (1 + rate);
+        markHolding(ctx.v2, e.id, r, H.qtyUSD[r] * (1 + rate));
         touched = true;
       }
-      if (touched) markBookDirty(ctx.v2, e.id);
+      void touched;
     });
 
     // The central bank's bill book accretes too — its income is remitted to the treasury, which

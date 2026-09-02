@@ -6,7 +6,8 @@
 
 import { journalPayment, partyId } from './settlement';
 import { defect } from '../../../domain/defect';
-import { bookHeadOf, relinkBook } from '../../../engine2/holdings';
+import { bookHeadOf } from '../../../engine2/holdings';
+import { retireHolding, issueHolding } from '../../ledger/holdings-ledger';
 import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
@@ -481,6 +482,11 @@ export function applyPendingCorporateActionSettlements(
     // running settlement net, so two placements in one week must see each other here.
     let committedPlacementUSD = 0;
     const kept: number[] = [];
+    // §5-WIRES W2: the action per instrument — what every row of it sheds (or gains) at its own
+    // funded ratio, summed — becomes ONE retirement or placement wire against the issuer. Per row
+    // it was applied N times to N rows of one instrument (the ledger scales every row of the
+    // instrument), which minted a placement N-fold.
+    const actions = new Map<string, { type: ItemizedHolding['instrumentType']; id: string; region: RegionId; retiredUSD: number; retiredSh: number; placedUSD: number; placedSh: number; anyShares: boolean }>();
     for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
       const k = pairKeyOf(r);
       if (hasCash) {
@@ -557,16 +563,35 @@ export function applyPendingCorporateActionSettlements(
         // §5-CLOSE C4: principal moving with no named issuer is money from (or to) nobody.
         defect(`principal of ${(principalCashUSD / 1e6).toFixed(3)}M moved for ${entity.id} on an instrument with no issuer ticker`);
       }
-      const scaledUSD = H.qtyUSD[r] * effectiveRatio;
-      H.qtyUSD[r] = scaledUSD;
-      // §5-CLOSE O2: a holder's SHARE COUNT scales with its notional — a buyback that retires
-      // the issue retires the register's shares pro rata, or the register holds stock that no
-      // longer exists (measured: 186 firms, 20B of phantom stock, growing with every buyback).
-      if (!Number.isNaN(H.shares[r])) H.shares[r] *= effectiveRatio;
-      if (scaledUSD > 1) kept.push(r);
+      // §5-WIRES W2: the action is a wire against the issuer — retired below one, placed above
+      // — applied by the ledger after this read of the rows (it scales shares with notional,
+      // §5-CLOSE O2, and unlinks what empties).
+      {
+        const id = v2.internedStrings[H.instrRef[r]];
+        const type = v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
+        const key = `${type}|${id}`;
+        let a = actions.get(key);
+        if (!a) { a = { type, id, region: v2.internedStrings[H.regionRef[r]] as RegionId, retiredUSD: 0, retiredSh: 0, placedUSD: 0, placedSh: 0, anyShares: false }; actions.set(key, a); }
+        const dUSD = H.qtyUSD[r] * (effectiveRatio - 1);
+        const dSh = Number.isNaN(H.shares[r]) ? Number.NaN : H.shares[r] * (effectiveRatio - 1);
+        if (!Number.isNaN(dSh)) a.anyShares = true;
+        if (dUSD < 0) { a.retiredUSD -= dUSD; if (!Number.isNaN(dSh)) a.retiredSh -= dSh; }
+        else { a.placedUSD += dUSD; if (!Number.isNaN(dSh)) a.placedSh += dSh; }
+      }
+      kept.push(r);
     }
     if (!touched) return entity;
-    relinkBook(v2, entity.id, kept);
+    actions.forEach((a) => {
+      const issuer = { kind: 'COMPANY' as const, ticker: ctx.issuerTickerById?.get(a.id) ?? a.id };
+      const holder = { kind: 'INSTITUTION' as const, id: entity.id };
+      if (a.retiredUSD > 0) {
+        retireHolding(v2, holder, issuer, { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.retiredUSD, shares: a.anyShares ? a.retiredSh : undefined }, 'corporate action: paper retired pro rata');
+      }
+      if (a.placedUSD > 0) {
+        issueHolding(v2, issuer, holder, { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.placedUSD, shares: a.anyShares ? a.placedSh : undefined }, 'corporate action: paper placed pro rata');
+      }
+    });
+    void kept;
     return {
       ...entity,
       cashUSD: entity.cashUSD ?? 0,

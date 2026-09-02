@@ -46,7 +46,7 @@ import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementUSD, PartyRef, institutionSpendableUSD } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, PrimaryTake } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
 import { discountBillProceedsUSD, withdrawUnplacedIssuance } from '../../../domain/government';
@@ -544,13 +544,16 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // paid back at redemption (PUB3d's conservation, both legs at last). The desks' primary
         // slice still pays face, so the treasury is made whole for it here.
         (() => {
-          const takes: { party: PartyRef; amountUSD: number }[] = [];
+          const takes: PrimaryTake[] = [];
+          const billAsset = primaryAssetOf('GOV_BOND', regionId);
           result.primaryOutcomeById.forEach((o, instrumentId) => {
             if (o.withdrawn) return;
             const pf = priceFractionById.get(instrumentId) ?? 1;
             const amountUSD = Math.max(0, o.marketTakeUSD) * pf
               + (deskPrimaryFaceByInstrument.get(instrumentId) ?? 0);
-            if (amountUSD > 0) takes.push({ party: { kind: 'GOVERNMENT', region: regionId }, amountUSD });
+            // §5-WIRES W2: the bill delivered at FACE (the register carries face), the money at
+            // the discount — the difference is the borrowing cost the yield implies.
+            if (amountUSD > 0) takes.push({ party: { kind: 'GOVERNMENT', region: regionId }, amountUSD, asset: billAsset(instrumentId, o.marketTakeUSD, o.clearedStat) });
           });
           return takes;
         })()
@@ -944,7 +947,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         primaryTakes(cpResult, (issuerId) => {
           const iss = issuerById.get(issuerId);
           return iss ? { kind: 'COMPANY', ticker: iss.comp.ticker } : undefined;
-        })
+        }, undefined, primaryAssetOf('COMMERCIAL_PAPER', regionId))
       );
     }
   });

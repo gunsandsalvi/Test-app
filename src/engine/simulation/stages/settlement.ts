@@ -90,6 +90,18 @@ export function journalPush(j: PaymentJournal, payerId: number, payeeId: number,
   // §5-WIRES W1: a money row IS a wire. The wire is written first, numbered; the payment journal
   // is settlement's projection of the week's money wires.
   wirePush(activeWireJournal(), payerId, payeeId, MONEY_KIND_ID, MONEY_ASSET_ID, amountUSD, 1, reasonId, activeWireJournal().week);
+  journalAppendRow(j, payerId, payeeId, amountUSD, reasonId);
+}
+
+/**
+ * §5-WIRES W1 — the ROW ONLY, for a payment whose wire already exists: stage 08's in-process
+ * shards journal through `journalPush` (wire written) into a shard journal that is then folded
+ * into the week's; folding through `journalPush` wrote every shard row's wire TWICE (measured:
+ * 180B a week of money wires with no settlement behind them — the whole of W1's line at
+ * §7.367's re-measure). A worker thread's rows come back through `journalPush` — its own wire
+ * journal is scratch and dies with the job.
+ */
+export function journalAppendRow(j: PaymentJournal, payerId: number, payeeId: number, amountUSD: number, reasonId: number): void {
   if (j.n >= j.payerId.length) {
     const cap = j.payerId.length * 2;
     const gi = (old: Int32Array) => { const a = new Int32Array(cap); a.set(old); return a; };

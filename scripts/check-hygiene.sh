@@ -94,7 +94,7 @@ ASSET_SWITCH_COUNT=$(printf '%s' "$ASSET_SWITCH" | grep -c . || true)
 # THE RATCHET: may fall, never rise. §7.279 lowered 64 → 60 (mandatePctOf Record lookup);
 # §7.283 lowered 60 → 58 (isIssuerEquityRow registry predicate at the corporate-action sites);
 # §7.290 lowered 58 → 56 (hedgedAsFixedIncome / carriesRateDuration registry facts).
-ASSET_SWITCH_BUDGET=56
+ASSET_SWITCH_BUDGET=54
 if [ "$ASSET_SWITCH_COUNT" -gt "$ASSET_SWITCH_BUDGET" ]; then
   echo "ERROR: $ASSET_SWITCH_COUNT literal comparisons against an instrument type (budget $ASSET_SWITCH_BUDGET)."
   echo "$ASSET_SWITCH" | head -20
@@ -111,6 +111,19 @@ if [ -d test ]; then
     echo "Fold them into scripts/harness.ts as a module."
     exit 1
   fi
+fi
+
+# 5. §5-WIRES W2 — THE REGISTER'S MUTATORS ARE THE LEDGER'S. A stage that imports a row mutator
+#    from engine2/holdings.ts bypasses the wire ledger; only the ledger, the store's own write-back
+#    and the engine's materialization may. (The type-level seal makes a column write a compile
+#    error; this catches the function-level path.)
+MUTATORS='(pushBookRow|relinkBook|newBookRow|freeBookRow|setBookChain|syncBookRows|mutableHoldings|pruneEmptyRows|clearDirtyBooks)'
+MUT_STRAY=$(grep -rnE "import \{[^}]*\b${MUTATORS}\b[^}]*\} from '[^']*engine2/holdings'" src --include=*.ts --include=*.tsx 2>/dev/null \
+  | grep -vE '^src/engine/ledger/|^src/engine2/|^src/engine/simulation/stages/holdings-store\.ts:|^src/engine/simulation/core\.ts:' || true)
+if [ -n "$MUT_STRAY" ]; then
+  echo "ERROR: a stage imports a register mutator — every holding moves through engine/ledger/holdings-ledger.ts (a wire):"
+  echo "$MUT_STRAY"
+  exit 1
 fi
 
 echo "Repo hygiene check passed."

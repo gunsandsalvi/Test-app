@@ -24,8 +24,9 @@
  *      than the dealers can carry, which is the case worth being able to see.
  */
 
+import { transferHolding, issueHolding, retireHolding, markHolding } from '../../ledger/holdings-ledger';
 import { institutionProfile } from '../../../domain/institution-profiles';
-import { bookHeadOf, pushBookRow, relinkBook, markBookDirty } from '../../../engine2/holdings';
+import { bookHeadOf } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { pay, institutionSpendableUSD } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
@@ -524,7 +525,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   });
   if (inKindOwedByFund.size > 0) {
     const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
-    const deliveredRowsByInvestor = new Map<string, ItemizedHolding[]>();
+    let delivered = false;
     const fundAssetsUSD = new Map<string, number>();
     // §7.262 — the cash the slice loop has NOT yet promised. The payments below settle at the
     // close, so `fund.cashUSD` never falls between redeemers — while `share` renormalizes
@@ -551,9 +552,11 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         // A redeemer cannot take more of the fund than there is; a fund whose whole book is owed
         // out is a fund being wound up, which is a real outcome rather than a failure to settle.
         const share = Math.min(1, owedUSD / totalUSD);
-        const rows = deliveredRowsByInvestor.get(investorId) ?? [];
-        // §7.313 flip: the basket slice reads the fund's rows; the clones append to the
-        // investor's chain below.
+        const rows: ItemizedHolding[] = [];
+        // §7.313 flip: the basket slice reads the fund's rows; §5-WIRES W2 then moves it by wire,
+        // fund → investor, BEFORE the next redeemer reads the fund — its slice is of what is left
+        // (measured: read-all-then-move handed later redeemers a slice of rows already promised,
+        // and the small-cap ETFs' constituents over-delivered 2–3x by week 4).
         {
           const H = ctx.v2.holdings;
           for (let r = bookHeadOf(ctx.v2, fundId); r >= 0; r = H.next[r]) {
@@ -570,7 +573,11 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
             rows.push(out);
           }
         }
-        deliveredRowsByInvestor.set(investorId, rows);
+        for (const h of rows) {
+          transferHolding(ctx.v2, { kind: 'INSTITUTION', id: fundId }, { kind: 'INSTITUTION', id: investorId },
+            { instrumentType: h.instrumentType, instrumentId: h.instrumentId, issuerRegion: h.issuerRegion, valueUSD: h.quantityOrNotionalUSD, shares: h.quantityShares }, 'etf in-kind redemption: basket delivered');
+        }
+        if (rows.length > 0) delivered = true;
         // The cash slice of the basket travels with it: a pro-rata claim is on everything the
         // fund owns, and leaving the cash behind would hand the last redeemer a fund of pure
         // cash. Sliced from the REMAINING balance (§7.262) — the same base the renormalized
@@ -586,25 +593,10 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
             reason: 'etf in-kind redemption: cash slice',
           });
         }
-        // And the fund's own book shrinks by exactly what left it — in place, on the rows.
-        {
-          const H = ctx.v2.holdings;
-          for (let r = bookHeadOf(ctx.v2, fundId); r >= 0; r = H.next[r]) {
-            const sh = H.shares[r];
-            if (!Number.isNaN(sh)) H.shares[r] = sh * (1 - share);
-            H.qtyUSD[r] = H.qtyUSD[r] * (1 - share);
-          }
-          markBookDirty(ctx.v2, fundId);
-        }
         fundAssetsUSD.set(fundId, totalUSD * (1 - share));
       });
     });
-    deliveredRowsByInvestor.forEach((rows, investorId) => {
-      const investor = entityById.get(investorId);
-      if (!investor || rows.length === 0) return;
-      for (const h of rows) pushBookRow(ctx.v2, investor.id, h);
-      bumpRegister(ctx);
-    });
+    if (delivered) bumpRegister(ctx);
   }
 
   // ---- 4c. THE SHARE BOOK — the row's actual title, and the thing `unmetFlowShare` was standing
@@ -726,47 +718,22 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // position's row is dropped by one relink, a new position appends at the tail (where the old
   // array push put it).
   {
-    const H = ctx.v2.holdings;
-    const etfShareRefD = internString(ctx.v2, 'ETF_SHARE');
     ctx.updatedInstitutionalEntities.forEach((entity) => {
       const shareDeltas = holdingsDeltaByInvestor.get(entity.id);
       if (!shareDeltas) return;
-      const removed = new Set<number>();
       shareDeltas.forEach((shares, fundId) => {
         const fund = funds.find((f) => f.id === fundId)!;
         const navPerShare = (navByFundId.get(fundId) ?? 0) > 0 && fund.etf!.sharesOutstanding > 0
           ? (navByFundId.get(fundId) ?? 0) / fund.etf!.sharesOutstanding
           : ETF_INCEPTION_NAV_PER_SHARE;
-        const iRef = ctx.v2.internedIdByString.get(fundId);
-        let found = -1;
-        if (iRef !== undefined) {
-          for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
-            if (removed.has(r)) continue;
-            if (H.typeRef[r] === etfShareRefD && H.instrRef[r] === iRef) { found = r; break; }
-          }
-        }
-        if (found >= 0) {
-          const sh = H.shares[found];
-          const held = (Number.isNaN(sh) ? 0 : sh) + shares;
-          if (held <= 1e-6) removed.add(found);
-          else { H.shares[found] = held; H.qtyUSD[found] = held * navPerShare; markBookDirty(ctx.v2, entity.id); }
-        } else if (shares > 1e-6) {
-          pushBookRow(ctx.v2, entity.id, {
-            instrumentId: fundId,
-            instrumentType: 'ETF_SHARE',
-            issuerRegion: fund.region,
-            quantityShares: shares,
-            quantityOrNotionalUSD: shares * navPerShare,
-          } as ItemizedHolding);
-        }
+        // §5-WIRES W2: shares created are ISSUED by the fund to the holder, shares redeemed are
+        // RETIRED by the holder to the fund — the ledger writes the rows.
+        const fundParty = { kind: 'INSTITUTION' as const, id: fundId };
+        const holderParty = { kind: 'INSTITUTION' as const, id: entity.id };
+        const spec = { instrumentType: 'ETF_SHARE' as const, instrumentId: fundId, issuerRegion: fund.region, valueUSD: Math.abs(shares) * navPerShare, shares: Math.abs(shares) };
+        if (shares > 1e-6) issueHolding(ctx.v2, fundParty, holderParty, spec, 'etf creation: shares issued');
+        else if (shares < -1e-6) retireHolding(ctx.v2, holderParty, fundParty, spec, 'etf redemption: shares retired');
       });
-      if (removed.size > 0) {
-        const kept: number[] = [];
-        for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
-          if (!removed.has(r)) kept.push(r);
-        }
-        relinkBook(ctx.v2, entity.id, kept);
-      }
     });
   }
 
@@ -789,16 +756,13 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const H = ctx.v2.holdings;
     const etfShareRefM = internString(ctx.v2, 'ETF_SHARE');
     ctx.updatedInstitutionalEntities.forEach((entity) => {
-      let touched = false;
       for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== etfShareRefM) continue;
         const navPerShare = finalNavPerShareByFund.get(ctx.v2.internedStrings[H.instrRef[r]]);
         if (navPerShare === undefined) continue;
         const sh = H.shares[r];
-        H.qtyUSD[r] = (Number.isNaN(sh) ? 0 : sh) * navPerShare;
-        touched = true;
+        markHolding(ctx.v2, entity.id, r, (Number.isNaN(sh) ? 0 : sh) * navPerShare);
       }
-      if (touched) markBookDirty(ctx.v2, entity.id);
     });
   }
 

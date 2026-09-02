@@ -33,6 +33,9 @@ import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, markBook
 import { V2World } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
+import { clearedBookDelta } from '../../ledger/holdings-ledger';
+import { mutableHoldings } from '../../../engine2/holdings';
+import { RegionId } from '../../../domain/geography';
 
 /** The instrument types the clearing books price — the only groups the store indexes. */
 const BOOK_TYPES: ItemizedHolding['instrumentType'][] = [
@@ -170,7 +173,7 @@ export class HoldingsStore {
         // §7.313 flip — the persistent row is the authority; the delivery lands on it too.
         const rid = slot.rowIds[i];
         if (rid >= 0) {
-          const H = this.v2.holdings;
+          const H = mutableHoldings(this.v2);
           H.shares[rid] = next;
           H.qtyUSD[rid] = next * pricePerShare;
           markBookDirty(this.v2, entityId);
@@ -219,6 +222,34 @@ export class HoldingsStore {
         && !slot.rowIds.includes(-1)
         && slot.claimed.every((c) => c === 0);
       if (untouched) return;
+      // §5-WIRES W2: THE FILLS ARE WIRES. What the auctions claimed off this book against what
+      // they appended is the holder's net trade per instrument, wired against the clearing
+      // house of the instrument's region — bought or sold, one number each.
+      {
+        const group = (rows: ItemizedHolding[], pick: (i: number) => boolean) => {
+          const byBook = new Map<string, Map<string, { valueUSD: number; shares?: number }>>();
+          rows.forEach((h, i) => {
+            if (!pick(i)) return;
+            const key = `${h.instrumentType}|${h.issuerRegion}`;
+            let m = byBook.get(key); if (!m) { m = new Map(); byBook.set(key, m); }
+            const cur = m.get(h.instrumentId) ?? { valueUSD: 0, shares: undefined };
+            cur.valueUSD += h.quantityOrNotionalUSD ?? 0;
+            if (h.quantityShares !== undefined) cur.shares = (cur.shares ?? 0) + h.quantityShares;
+            m.set(h.instrumentId, cur);
+          });
+          return byBook;
+        };
+        const before = group(slot.rows, (i) => slot.claimed[i] !== 0);
+        const after = group(slot.appended, () => true);
+        const keys = new Set([...before.keys(), ...after.keys()]);
+        keys.forEach((key) => {
+          const [type, region] = key.split('|');
+          clearedBookDelta(
+            { kind: 'INSTITUTION', id: slot.entity.id }, region as RegionId, type as ItemizedHolding['instrumentType'],
+            before.get(key) ?? new Map(), after.get(key) ?? new Map(), () => undefined, `${type.toLowerCase().replace('_', ' ')} clearing fill`
+          );
+        });
+      }
       // Fate of every row is already known, so the chain is rebuilt directly: allocations first
       // (they may reuse earlier frees, never this entity's — its frees come after), then the
       // claimed rows to the free list, then one link pass. No Set anywhere (§7.315).
@@ -296,15 +327,16 @@ export function consolidateRegister(ctx: WeeklyStepContext): void {
     if (!hasDuplicate) return;
     const firstByKey = new Map<number, number>();
     const kept: number[] = [];
+    const Hm = mutableHoldings(v2);
     for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
       const k = pairKey(r);
       const first = firstByKey.get(k);
       if (first === undefined) { firstByKey.set(k, r); kept.push(r); continue; }
-      H.qtyUSD[first] = H.qtyUSD[first] + H.qtyUSD[r];
+      Hm.qtyUSD[first] = H.qtyUSD[first] + H.qtyUSD[r];
       const sh = H.shares[r];
       if (!Number.isNaN(sh)) {
         const cur = H.shares[first];
-        H.shares[first] = (Number.isNaN(cur) ? 0 : cur) + sh;
+        Hm.shares[first] = (Number.isNaN(cur) ? 0 : cur) + sh;
       }
     }
     relinkBook(v2, entity.id, kept);

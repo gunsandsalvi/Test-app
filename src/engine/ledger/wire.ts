@@ -8,7 +8,7 @@
  * payment journal is settlement's PROJECTION of the week's money wires — `journalPush` writes the
  * wire first, so a money row without a wire cannot exist (W1). Other asset kinds arrive in W2–W5.
  */
-import { PartyRef, partyId } from './party';
+import { PartyRef, partyId, partyOf } from './party';
 
 export type AssetKind =
   | 'MONEY' | 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER'
@@ -125,12 +125,30 @@ export function wire(instruction: WireInstruction, internReasonId: (reason: stri
 }
 
 /** The week's wires, summarised for the state and the audit. */
-export function summarizeWires(j: WireJournal, moneyPendingUSD = 0): { count: number; byKind: Record<string, number>; valueUSDByKind: Record<string, number>; moneyPendingUSD: number } {
+export interface WireSummary {
+  count: number;
+  byKind: Record<string, number>;
+  valueUSDByKind: Record<string, number>;
+  /** Money wires recorded after the last pass — they settle next week (N: dated wires). */
+  moneyPendingUSD: number;
+  /** §5-WIRES W2: what each region's clearing house holds of each asset kind after the week's
+   *  wires, keyed `region|kind` — received minus delivered, in USD at the wires' prices. The
+   *  house is on both sides of every fill, so a non-zero net is a leg no wire named. */
+  houseNetUSDByKey: Record<string, number>;
+}
+
+export function summarizeWires(j: WireJournal, moneyPendingUSD = 0): WireSummary {
   const byKind: Record<string, number> = {}; const valueUSDByKind: Record<string, number> = {};
+  const houseNetUSDByKey: Record<string, number> = {};
   for (let i = 0; i < j.n; i++) {
     const k = ASSET_KINDS[j.kindId[i]];
+    const valueUSD = j.quantity[i] * j.priceUSD[i];
     byKind[k] = (byKind[k] ?? 0) + 1;
-    valueUSDByKind[k] = (valueUSDByKind[k] ?? 0) + j.quantity[i] * j.priceUSD[i];
+    valueUSDByKind[k] = (valueUSDByKind[k] ?? 0) + valueUSD;
+    if (k === 'MONEY') continue;
+    const from = partyOf(j.fromId[i]), to = partyOf(j.toId[i]);
+    if (to.kind === 'CLEARING_HOUSE') { const key = `${to.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) + valueUSD; }
+    if (from.kind === 'CLEARING_HOUSE') { const key = `${from.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) - valueUSD; }
   }
-  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD };
+  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey };
 }

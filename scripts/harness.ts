@@ -1956,6 +1956,23 @@ const FP_WEEKS = Number(process.env.FP_WEEKS) > 0 ? Number(process.env.FP_WEEKS)
 const fpModule: HarnessModule = {
   name: 'FP fingerprint',
   week(_prev, state, w) {
+    // REGISTER_DUMP=<file> (at STATE_DUMP_WEEK): every institution's register, one line per
+    // (entity, type, instrument) with notional and shares — the diff instrument for a ledger
+    // change (§5-WIRES W2: two trees, first row that differs, then the stage).
+    if (process.env.REGISTER_DUMP && w === (Number(process.env.STATE_DUMP_WEEK) || 1)) {
+      const lines: string[] = [];
+      (state.institutionalEntities ?? []).forEach((e) => {
+        const agg = new Map<string, [number, number]>();
+        e.itemizedHoldings.forEach((h) => {
+          const k = `${e.id}\t${h.instrumentType}\t${h.instrumentId}`;
+          const cur = agg.get(k) ?? [0, 0];
+          cur[0] += h.quantityOrNotionalUSD ?? 0; cur[1] += h.quantityShares ?? 0;
+          agg.set(k, cur);
+        });
+        agg.forEach((v, k) => lines.push(`${k}\t${v[0].toFixed(2)}\t${v[1].toFixed(4)}`));
+      });
+      writeFileSync(process.env.REGISTER_DUMP, lines.sort().join('\n'));
+    }
     if (process.env.STATE_DUMP && w === (Number(process.env.STATE_DUMP_WEEK) || 1)) {
       writeFileSync(process.env.STATE_DUMP,
         JSON.stringify(state.companies, (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Number(v.toPrecision(15)) : v)));
@@ -2630,8 +2647,9 @@ function runHarness() {
     // The live line, one per week, plus this week's new violations (capped).
     const newViols = violations.slice(violBefore);
     console.log(weekLine(state, w, newViols.length, violations.length, stepMs));
-    newViols.slice(0, 6).forEach(v => console.log(`     ! ${v.message}`));
-    if (newViols.length > 6) console.log(`     ! ...+${newViols.length - 6} more this week`);
+    // VERBOSE=1 prints every line — the capped view hides the families the scoreboard rolls up.
+    newViols.slice(0, VERBOSE ? newViols.length : 6).forEach(v => console.log(`     ! ${v.message}`));
+    if (!VERBOSE && newViols.length > 6) console.log(`     ! ...+${newViols.length - 6} more this week`);
   }
 
   // 2. Revenue > 20x baseline check. Growth BY ACQUISITION is not organic growth: an acquirer

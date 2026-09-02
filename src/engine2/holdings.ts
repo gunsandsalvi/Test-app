@@ -40,6 +40,23 @@ export interface HoldingStore {
   dirty: Set<string>;
 }
 
+/**
+ * §5-WIRES W2 — THE STORE IS SEALED. Everything outside `src/engine/ledger/` sees the register
+ * through this view: every column is read-only, so a stage that writes a holding column does
+ * not compile. The ledger (`ledger/holdings-ledger.ts`) is the one place a row moves, and every
+ * move it makes is a numbered wire. The functions below are the ledger's implementation and are
+ * importable only from it (`check-hygiene.sh` enforces the import boundary).
+ */
+export type ReadonlyHoldingStore = {
+  readonly [K in keyof HoldingStore]:
+    HoldingStore[K] extends Float64Array ? Readonly<Float64Array>
+    : HoldingStore[K] extends Int32Array ? Readonly<Int32Array>
+    : HoldingStore[K] extends Set<string> ? ReadonlySet<string>
+    : HoldingStore[K];
+};
+/** The ledger's own handle on the store. Nothing else may hold one. */
+export const mutableHoldings = (v2: V2World): HoldingStore => v2.holdings as unknown as HoldingStore;
+
 export function newHoldingStore(): HoldingStore {
   const cap = 1 << 17;
   return {
@@ -94,7 +111,7 @@ function slotFor(H: HoldingStore, entRow: number): number {
 
 /** Mirror one entity's whole book into rows, replacing whatever the chain held. */
 export function syncBookRows(v2: V2World, entityId: string, book: ItemizedHolding[] | undefined): void {
-  const H = v2.holdings;
+  const H = mutableHoldings(v2);
   H.synced.add(entityId);
   H.dirty.add(entityId);
   const entRow = rowOf(v2, entityId);
@@ -127,14 +144,14 @@ export function syncBookRows(v2: V2World, entityId: string, book: ItemizedHoldin
 /** Head row of the entity's mirrored book, -1 when it has none — for direct chain walks
  *  (`for (let r = bookHeadOf(...); r >= 0; r = H.next[r])`) that allocate nothing. */
 export function bookHeadOf(v2: V2World, entityId: string): number {
-  const H = v2.holdings;
+  const H = mutableHoldings(v2);
   const entRow = v2.rowById.get(entityId);
   return entRow === undefined || entRow >= H.head.length ? -1 : H.head[entRow];
 }
 
 /** The entity's book as row indices, in book order. */
 export function bookRowsOf(v2: V2World, entityId: string): number[] {
-  const H = v2.holdings;
+  const H = mutableHoldings(v2);
   const entRow = v2.rowById.get(entityId);
   const rows: number[] = [];
   if (entRow === undefined || entRow >= H.head.length) return rows;
@@ -144,7 +161,7 @@ export function bookRowsOf(v2: V2World, entityId: string): number[] {
 
 /** Append one holding as a row at the tail of the entity's chain; returns the row. */
 export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): number {
-  const H = v2.holdings;
+  const H = mutableHoldings(v2);
   H.synced.add(entityId);
   H.dirty.add(entityId);
   const slot = slotFor(H, rowOf(v2, entityId));
@@ -165,7 +182,7 @@ export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): 
  * freed. The §7.313 write-back pattern: a writer edits a local row list, then relinks once.
  */
 export function relinkBook(v2: V2World, entityId: string, rows: number[]): void {
-  const H = v2.holdings;
+  const H = mutableHoldings(v2);
   H.synced.add(entityId);
   H.dirty.add(entityId);
   const slot = slotFor(H, rowOf(v2, entityId));
@@ -196,7 +213,7 @@ export function relinkBook(v2: V2World, entityId: string, rows: number[]): void 
 /** Allocate and fill a row WITHOUT touching any chain — for writers that assemble a whole
  *  chain themselves and install it with `setBookChain` (the clearing write-back). */
 export function newBookRow(v2: V2World, h: ItemizedHolding): number {
-  const H = v2.holdings;
+  const H = mutableHoldings(v2);
   const r = allocRow(H);
   H.typeRef[r] = internString(v2, h.instrumentType);
   H.instrRef[r] = internString(v2, h.instrumentId);
@@ -209,7 +226,7 @@ export function newBookRow(v2: V2World, h: ItemizedHolding): number {
 
 /** Return one row to the free list. The caller owns the invariant that nothing links to it. */
 export function freeBookRow(v2: V2World, r: number): void {
-  const H = v2.holdings;
+  const H = mutableHoldings(v2);
   H.next[r] = H.freeHead;
   H.freeHead = r;
 }
@@ -217,7 +234,7 @@ export function freeBookRow(v2: V2World, r: number): void {
 /** Install `ids` as the entity's whole chain, in order. Rows dropped from the old chain must
  *  already have been freed by the caller (freeBookRow) — this only links what it is given. */
 export function setBookChain(v2: V2World, entityId: string, ids: number[]): void {
-  const H = v2.holdings;
+  const H = mutableHoldings(v2);
   H.synced.add(entityId);
   H.dirty.add(entityId);
   const slot = slotFor(H, rowOf(v2, entityId));
@@ -234,13 +251,13 @@ export function setBookChain(v2: V2World, entityId: string, ids: number[]): void
 /** Direct column writers (in-place qty/shares scaling) call this so the week-end view knows to
  *  re-materialize the book; a missed call is caught by HOLDINGS_SYNC_CHECK. */
 export function markBookDirty(v2: V2World, entityId: string): void {
-  v2.holdings.dirty.add(entityId);
+  mutableHoldings(v2).dirty.add(entityId);
 }
 
 /** The entity's book as objects — the WEEK-END VIEW once rows are the authority (§7.313's
  *  pattern: one linear pass at the close replaces every per-writer sync). */
 export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[] {
-  const H = v2.holdings;
+  const H = mutableHoldings(v2);
   const out: ItemizedHolding[] = [];
   for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) {
     const sh = H.shares[r];
@@ -268,7 +285,7 @@ function canonical(h: ItemizedHolding): string {
 }
 
 function canonicalRow(v2: V2World, r: number): string {
-  const H = v2.holdings;
+  const H = mutableHoldings(v2);
   const sh = H.shares[r];
   return `${v2.internedStrings[H.typeRef[r]]}|${v2.internedStrings[H.instrRef[r]]}|${v2.internedStrings[H.regionRef[r]]}|${H.qtyUSD[r]}|${Number.isNaN(sh) ? 'x' : sh}`;
 }
@@ -289,4 +306,13 @@ export function assertBooksInSync(v2: V2World, entities: { id: string; entityTyp
       }
     }
   }
+}
+
+/** Week end: every book has been materialized; the dirty set starts empty. Ledger-internal. */
+export function clearDirtyBooks(v2: V2World): void { mutableHoldings(v2).dirty.clear(); }
+/** Unlink the rows that hold nothing. Ledger-internal (the ledger's debit relinks itself). */
+export function pruneEmptyRows(v2: V2World, entityId: string): void {
+  const H = mutableHoldings(v2); const kept: number[] = [];
+  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) if (H.qtyUSD[r] > 1) kept.push(r);
+  relinkBook(v2, entityId, kept);
 }

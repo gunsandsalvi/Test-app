@@ -165,3 +165,10 @@ export const isVehicleClaim = (type: string): boolean =>
  *  literal comparison repeated per site (§7.283). */
 export const isIssuerEquityRow = (h: { instrumentType?: string }): boolean =>
   h.instrumentType === 'EQUITY';
+
+/** §5-WIRES W2 — the UNIT a holding of this kind moves in: a share count at a price (the register's
+ *  `quantityShares`; the wire's quantity is shares, its price the cleared level), or FACE at par
+ *  (the wire's quantity is dollars at 1). The one fact the ledger, the primary and a merger's
+ *  exchange all need, owned here. */
+export const heldInShares = (type: string): boolean =>
+  type === 'EQUITY' || type === 'ETF_SHARE' || type === 'MMF_SHARE' || type === 'PE_FUND_INTEREST';

@@ -55,7 +55,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD, institutionUnsettledLessCollateralUSD } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -615,7 +615,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
       feeDesksForRegion(ctx, regionId),
       // PUB: the treasury is paid for the paper this week's auction actually placed.
-      primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }))
+      primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }), undefined, primaryAssetOf('GOV_BOND', regionId))
     );
 
     // §5-CLOSE O1: what this auction did not place is withdrawn from the ladder — paper nobody

@@ -128,7 +128,7 @@ export interface GameState {
   /** §5-WIRES — the next wire number (every asset move is numbered; the counter never resets). */
   nextWireId?: number;
   /** §5-WIRES — last week's wires, summarised: count and value by asset kind. */
-  lastWires?: { count: number; byKind: Record<string, number>; valueUSDByKind: Record<string, number>; /** money wires recorded after the last pass — they settle next week (N: dated wires) */ moneyPendingUSD: number };
+  lastWires?: { count: number; byKind: Record<string, number>; valueUSDByKind: Record<string, number>; /** money wires recorded after the last pass — they settle next week (N: dated wires) */ moneyPendingUSD: number; /** §5-WIRES W2: the clearing house's net per `region|kind` after the week's wires */ houseNetUSDByKey?: Record<string, number> };
   regions: Record<RegionId, Region>;
   fxPairs: FxPair[];
   companies: Company[];

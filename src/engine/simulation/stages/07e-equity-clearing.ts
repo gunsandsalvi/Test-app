@@ -37,7 +37,7 @@ import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, Clea
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { institutionSpendableUSD } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
@@ -635,7 +635,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const issuer = companyById.get(issuerId);
         return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
       },
-      (takeShares, clearedStat) => takeShares * clearedStat
+      (takeShares, clearedStat) => takeShares * clearedStat,
+      primaryAssetOf('EQUITY', regionId)
     );
     const entityIds = new Set(bookEntities.map((e) => e.id));
     settleClearedBook(

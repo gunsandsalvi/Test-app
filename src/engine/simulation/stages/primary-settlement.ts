@@ -23,6 +23,8 @@ import { DealerDeskInventory } from '../../../domain/dealer-desk';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { ClearingResult } from './financial-clearing-engine';
 import { pay } from './settlement';
+import { transferHolding } from '../../ledger/holdings-ledger';
+import { heldInShares } from '../../../domain/assets';
 
 /**
  * Settle every offering the given book priced this week. `statToProceeds` converts the cleared
@@ -136,6 +138,13 @@ export function settlePricedOfferings(
       }
       inventory[deskBook] = rows;
       updateBankSheet(ctx, lead.ticker, { ...existingSheet, dealerDeskInventory: inventory });
+      // §5-WIRES W2: the paper the lead is left holding is delivered by the issuer, by wire —
+      // the money leg above ('underwriting residual taken by the lead') is its other half.
+      if (issuerCompany) {
+        transferHolding(ctx.v2, { kind: 'COMPANY', ticker: issuerCompany.ticker }, { kind: 'BANK_SECURITIES', ticker: lead.ticker },
+          { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueUSD: residualUSD, shares: heldInShares(instrumentType) ? residualUnits : undefined },
+          'underwriting residual delivered to the lead');
+      }
     }
 
     ctx.primarySettlements.set(offering.id, {

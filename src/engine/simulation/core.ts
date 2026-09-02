@@ -63,7 +63,7 @@ import { runTradeSettlementStage } from './stages/trade-settlement';
 import './stages/clearing-worker-pool';
 import { ensureV2 } from '../../engine2/world';
 import { syncLadderRows, assertLaddersInSync, materializeLadder } from '../../engine2/tranches';
-import { ensureBooksSynced, assertBooksInSync, materializeBook } from '../../engine2/holdings';
+import { ensureBooksSynced, assertBooksInSync, materializeBook, clearDirtyBooks } from '../../engine2/holdings';
 import './stages/native-kernels';
 import { runFreightClearingStage } from './stages/freight-clearing';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
@@ -412,7 +412,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     for (const e of nextState.institutionalEntities ?? []) {
       if (dirtyBooks.has(e.id)) e.itemizedHoldings = materializeBook(v2, e.id);
     }
-    dirtyBooks.clear();
+    clearDirtyBooks(v2);
   }
   if (process.env.TRANCHE_SYNC_CHECK === '1') assertLaddersInSync(ensureV2(state), nextState.companies);
   if (process.env.HOLDINGS_SYNC_CHECK === '1') assertBooksInSync(ensureV2(state), nextState.institutionalEntities ?? []);

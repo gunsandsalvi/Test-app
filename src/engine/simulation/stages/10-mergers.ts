@@ -10,16 +10,18 @@
 import { restateBankSheetStatistics } from '../../../domain/bank-resolution';
 import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
-import { bookHeadOf, pushBookRow, markBookDirty } from '../../../engine2/holdings';
+import { bookHeadOf } from '../../../engine2/holdings';
 import { ensureV2, internString, revHistSeed, rowOf, ringCopyRow } from '../../../engine2/world';
 import { syncLadderRows, materializeLadder } from '../../../engine2/tranches';
 import { pay } from './settlement';
-import { GameState, DebtTranche, RegionId } from '../../../types';
+import { GameState, DebtTranche, RegionId, ItemizedHolding } from '../../../types';
 import { getSimulationDate } from '../../formatters';
 import { isAntitrustBlocked, isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { checkForMerger } from '../merger';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
+import { issueHolding, retireHolding } from '../../ledger/holdings-ledger';
+import { heldInShares } from '../../../domain/assets';
 
 /**
  * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
@@ -162,13 +164,8 @@ function runDivestitures(ctx: WeeklyStepContext): void {
       }
       if (!(heldShares > 0)) return;
       const fraction = Math.min(1, heldShares / parent.sharesOutstanding);
-      pushBookRow(ctx.v2, e.id, {
-        instrumentId: spin.id,
-        instrumentType: 'EQUITY',
-        issuerRegion: spin.region,
-        quantityShares: fraction * spinShares,
-        quantityOrNotionalUSD: fraction * spinMcapUSD,
-      });
+      issueHolding(ctx.v2, { kind: 'COMPANY', ticker: spin.ticker }, { kind: 'INSTITUTION', id: e.id },
+        { instrumentType: 'EQUITY', instrumentId: spin.id, issuerRegion: spin.region, valueUSD: fraction * spinMcapUSD, shares: fraction * spinShares }, 'spin-off: shares distributed');
     });
     bumpRegister(ctx);
 
@@ -387,33 +384,35 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // acquirer's, and the equity rows revalue in place.
   const stockRatio = stockPaid / targetMarketCapUSD;
   {
+    // §5-WIRES W2: the exchange is two wires per holder — the target's paper back to the target
+    // (retired), the acquirer's paper out to the holder (issued) — never a re-key in place.
     const H = ctx.v2.holdings;
     const targetIdRef = ctx.v2.internedIdByString.get(target.id);
     if (targetIdRef !== undefined) {
-      const acquirerIdRef = internString(ctx.v2, acquirer.id);
-      const acquirerRegionRef = internString(ctx.v2, acquirer.region);
       const equityRefR = internString(ctx.v2, 'EQUITY');
       const corpBondRef = internString(ctx.v2, 'CORP_BOND');
       const levLoanRef = internString(ctx.v2, 'LEVERAGED_LOAN');
       ctx.updatedInstitutionalEntities.forEach((e) => {
-        let touched = false;
+        const swaps: { type: ItemizedHolding['instrumentType']; valueUSD: number; shares: number | undefined }[] = [];
         for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
           if (H.instrRef[r] !== targetIdRef) continue;
-          if (H.typeRef[r] === equityRefR) {
-            touched = true;
-            const newValueUSD = H.qtyUSD[r] * stockRatio;
-            H.instrRef[r] = acquirerIdRef;
-            H.regionRef[r] = acquirerRegionRef;
-            H.qtyUSD[r] = newValueUSD;
-            if (acquirer.stockPrice > 0) H.shares[r] = newValueUSD / acquirer.stockPrice;
-            continue;
-          }
-          if (H.typeRef[r] !== corpBondRef && H.typeRef[r] !== levLoanRef) continue;
-          touched = true;
-          H.instrRef[r] = acquirerIdRef;
-          H.regionRef[r] = acquirerRegionRef;
+          const t = H.typeRef[r];
+          if (t !== equityRefR && t !== corpBondRef && t !== levLoanRef) continue;
+          swaps.push({ type: ctx.v2.internedStrings[t] as ItemizedHolding['instrumentType'], valueUSD: H.qtyUSD[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r] });
         }
-        if (touched) { markBookDirty(ctx.v2, e.id); bumpRegister(ctx); }
+        if (swaps.length === 0) return;
+        const holder = { kind: 'INSTITUTION' as const, id: e.id };
+        swaps.forEach((sw) => {
+          retireHolding(ctx.v2, holder, { kind: 'COMPANY', ticker: target.ticker },
+            { instrumentType: sw.type, instrumentId: target.id, issuerRegion: target.region, valueUSD: sw.valueUSD, shares: sw.shares }, 'merger: target paper exchanged');
+          const isEquity = heldInShares(sw.type);
+          const newValueUSD = isEquity ? sw.valueUSD * stockRatio : sw.valueUSD;
+          if (newValueUSD > 1) {
+            issueHolding(ctx.v2, { kind: 'COMPANY', ticker: acquirer.ticker }, holder,
+              { instrumentType: sw.type, instrumentId: acquirer.id, issuerRegion: acquirer.region, valueUSD: newValueUSD, shares: isEquity && acquirer.stockPrice > 0 ? newValueUSD / acquirer.stockPrice : sw.shares }, 'merger: acquirer paper delivered');
+          }
+        });
+        bumpRegister(ctx);
       });
     }
   }

@@ -21,6 +21,14 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { pendingSettlementUSD } from './settlement';
 import { PartyRef } from './settlement';
+import { clearedBookDelta, HoldingKind } from '../../ledger/holdings-ledger';
+import { defect } from '../../../domain/defect';
+
+/** §5-WIRES W2: the register kind each desk book carries — the wire's asset kind. */
+const DESK_BOOK_KIND: Record<string, HoldingKind> = {
+  'corporate bond': 'CORP_BOND', 'sovereign bond': 'GOV_BOND', bill: 'GOV_BOND',
+  'leveraged loan': 'LEVERAGED_LOAN', equity: 'EQUITY', 'commercial paper': 'COMMERCIAL_PAPER',
+};
 
 /** The bank's own working sheet this week — a stage before this one may already have moved it. */
 function sheetOf(ctx: WeeklyStepContext, bank: Company) {
@@ -209,6 +217,26 @@ export function applyDealerDeskFills(args: {
       ? args.cashDeltaOf(deskId)
       : (result.netCashDeltaByParticipantId.get(deskId) ?? 0);
     const feeUSD = Math.max(0, -(cashDeltaUSD + (newUSD - prevMarkedUSD)));
+
+    // §5-WIRES W2: THE DESK'S FILLS ARE WIRES. Its position after the session against the one
+    // before, per cleared name, against the clearing house — bought or sold, one number each.
+    // A unit book (equity) wires shares at the cleared price; a par book wires face at 1.
+    {
+      const kind = DESK_BOOK_KIND[book] ?? defect(`desk book '${book}' names no register kind — its fills cannot be wired`);
+      const inUnits = args.unitPriceOf !== undefined;
+      const toEntry = (units: number, instrumentId: string) =>
+        inUnits ? { valueUSD: units * unitPrice(instrumentId), shares: units } : { valueUSD: units };
+      const before = new Map<string, { valueUSD: number; shares?: number }>();
+      prior.forEach((p, instrumentId) => {
+        if (clearedIds.has(instrumentId)) before.set(instrumentId, toEntry(p.units ?? p.inventoryUSD, instrumentId));
+      });
+      const after = new Map<string, { valueUSD: number; shares?: number }>();
+      positions.forEach((p) => {
+        if (clearedIds.has(p.instrumentId)) after.set(p.instrumentId, toEntry(p.units ?? p.inventoryUSD, p.instrumentId));
+      });
+      clearedBookDelta({ kind: 'BANK_SECURITIES', ticker: bank.ticker }, bank.region, kind, before, after,
+        (id) => unitPrice(id), `${book} desk fill`);
+    }
 
     const inventory: DealerDeskInventory = { ...(sheet.dealerDeskInventory ?? {}) };
     if (positions.length > 0) inventory[book] = positions;

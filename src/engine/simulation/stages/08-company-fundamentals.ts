@@ -17,7 +17,7 @@ import { openCorporateSweepBooks, settleCorporateSweepBooks } from './money-mark
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
 import { leadBankAllocator } from './dealer-desks';
 import { WeeklyStepContext } from './context';
-import { PaymentJournal, newPaymentJournal, journalPush , applyPendingLeg} from './settlement';
+import { PaymentJournal, newPaymentJournal, journalPush, journalAppendRow, applyPendingLeg } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { getRngState, setRngState } from '../../rng';
@@ -323,7 +323,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     }
     const j = ctx.paymentJournal;
     for (let k = 0; k < mine.journal.n; k++) {
-      journalPush(j, mine.journal.payerId[k], mine.journal.payeeId[k],
+      // §5-WIRES W1: the shard's rows were wired when it journaled them — fold the ROWS.
+      journalAppendRow(j, mine.journal.payerId[k], mine.journal.payeeId[k],
         mine.journal.amountUSD[k], mine.journal.reasonId[k]);
       // §7.321 barrier mode: the running net, applied here in the merged (= original) leg
       // order; in normal shard mode emission already applied it and this replay must not.
@@ -527,7 +528,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         for (let k = s(marks.news); k < marks.news[i]; k++) refinanceNews.push(acc.news[k]);
         const J = acc.journal;
         for (let k = s(marks.journalN); k < marks.journalN[i]; k++) {
-          journalPush(ctx.paymentJournal, J.payerId[k], J.payeeId[k], J.amountUSD[k], J.reasonId[k]);
+          journalAppendRow(ctx.paymentJournal, J.payerId[k], J.payeeId[k], J.amountUSD[k], J.reasonId[k]);
           applyPendingLeg(ctx, J.payerId[k], J.payeeId[k], J.amountUSD[k]);
         }
         for (let k = s(marks.hAcc); k < marks.hAcc[i]; k++) {

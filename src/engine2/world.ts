@@ -17,7 +17,7 @@
 import { LotStore, newLotStore } from './lots';
 import { ContractTable, newContractTable } from './contracts';
 import { TrancheStore, newTrancheStore } from './tranches';
-import { HoldingStore, newHoldingStore } from './holdings';
+import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
 
 export interface V2World {
   /** Company id -> table row. Rows are addressing only — order carries no economics. */
@@ -33,7 +33,7 @@ export interface V2World {
   /** §7.307/§7.310 — the debt ladder as rows (rows are the authority since §7.313). */
   tranches: TrancheStore;
   /** §7.307 — the institutional register as rows (stage 1: a synced mirror of itemizedHoldings). */
-  holdings: HoldingStore;
+  holdings: ReadonlyHoldingStore;
   /** §4.C II.5 — revenue history as a 13-slot ring per firm row (the object field is DELETED:
    *  the weekly `[...slice(-12), x]` allocated a fresh array per firm per week, and the §7.320
    *  mid-loop-append trap lived in the aliasing; a ring has neither). Plain arrays, not SAB —

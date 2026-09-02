@@ -8,22 +8,23 @@
  */
 
 import { govBucketKeyOf, govBillTrancheId, govBondTrancheId, isBillBucketKey } from '../../../domain/sovereign-id';
-import { GameState, RegionId, ItemizedHolding, GovDebtTranche } from '../../../types';
+import { GameState, RegionId, GovDebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { generateWeeklyNews } from '../../newsGenerator';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
-import { attributeItemizedHoldings, sovBucketKey } from './shared-helpers';
+import { sovBucketKey } from './shared-helpers';
 import {
   weeklyInterestExpenseUSD, decomposeGovernmentSpending, governmentOutlaysUSD,
-  isDiscountBill, discountBillProceedsUSD, weeklyBillDiscountAccrualUSD,
+  weeklyBillDiscountAccrualUSD,
 } from '../../../domain/government';
 import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay } from './settlement';
-import { bookHeadOf, relinkBook } from '../../../engine2/holdings';
+import { retireHolding } from '../../ledger/holdings-ledger';
+import { bookHeadOf } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { REGION_IDS } from '../../../domain/geography';
 import { encumberedFaceByBucket, repoBorrowedUSD, srfBorrowedUSD } from '../../../domain/repo';
@@ -405,31 +406,24 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       const govBondRefS = internString(ctx.v2, 'GOV_BOND');
       const regionRefS = internString(ctx.v2, regionId);
       ctx.updatedInstitutionalEntities.forEach(entity => {
-        let touched = false;
-        let redeemedCashUSD = 0;
-        const kept: number[] = [];
+        // §5-WIRES W2: each matured slice is RETIRED to the treasury by wire; the ledger debits
+        // the row and unlinks it when empty.
+        const redeem: { id: string; usd: number }[] = [];
         for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = Hsov.next[r]) {
-          if (Hsov.typeRef[r] !== govBondRefS || Hsov.regionRef[r] !== regionRefS) {
-            if (Hsov.qtyUSD[r] > 1) kept.push(r);
-            continue;
-          }
-          const key = govBucketKeyOf(ctx.v2.internedStrings[Hsov.instrRef[r]], regionId);
+          if (Hsov.typeRef[r] !== govBondRefS || Hsov.regionRef[r] !== regionRefS) continue;
+          const id = ctx.v2.internedStrings[Hsov.instrRef[r]];
+          const key = govBucketKeyOf(id, regionId);
           const fraction = (key ? redeemedFractionByBucket.get(key) : 0) ?? 0;
-          if (fraction <= 0) {
-            if (Hsov.qtyUSD[r] > 1) kept.push(r);
-            continue;
-          }
-          touched = true;
-          redeemedCashUSD += Hsov.qtyUSD[r] * fraction;
-          const scaled = Hsov.qtyUSD[r] * (1 - fraction);
-          Hsov.qtyUSD[r] = scaled;
-          if (scaled > 1) kept.push(r);
+          if (fraction <= 0) continue;
+          redeem.push({ id, usd: Hsov.qtyUSD[r] * fraction });
         }
-        // The matching cash leg. The "no itemized cash line to credit yet" era this comment
-        // used to describe ended when S11 gave every entity a real cashUSD — and bills (WS5)
-        // made the gap weekly instead of quarterly, which is how the missing leg finally
-        // showed up as a conservation violation.
-        if (!touched) return;
+        if (redeem.length === 0) return;
+        let redeemedCashUSD = 0;
+        redeem.forEach((x) => {
+          retireHolding(ctx.v2, { kind: 'INSTITUTION', id: entity.id }, { kind: 'GOVERNMENT', region: regionId },
+            { instrumentType: 'GOV_BOND', instrumentId: x.id, issuerRegion: regionId, valueUSD: x.usd }, 'sovereign redemption');
+          redeemedCashUSD += x.usd;
+        });
         if (redeemedCashUSD > 0) {
           redemptionPaidUSD += redeemedCashUSD;
           pay(ctx, {
@@ -439,7 +433,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             reason: 'sovereign redemption',
           });
         }
-        relinkBook(ctx.v2, entity.id, kept);
       });
     }
 

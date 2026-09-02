@@ -21,6 +21,7 @@ import { BackLanes } from './stage08-lanes.ts';
 import { FrontPass } from './stage08-front.ts';
 import { partyId, partyTableSize, PartyRef } from '../engine/ledger/party.ts';
 import { internReason, reasonTableSize, newPaymentJournal } from '../engine/simulation/stages/settlement.ts';
+import { setActiveWireJournal, newWireJournal } from '../engine/ledger/wire.ts';
 import { WeeklyStepContext } from '../engine/simulation/stages/context.ts';
 
 void parentPort;
@@ -83,6 +84,9 @@ port.on('message', (job: BackAJob) => {
 
   const n = job.lanes.n;
   const journal = newPaymentJournal();
+  // §5-WIRES W1: the worker's wire journal is SCRATCH — its rows are replayed on the main thread
+  // through `journalPush`, which writes the one real wire per row.
+  setActiveWireJournal(newWireJournal(0, 0));
   const holderAcc = new Map<string, number>();
   const holderCash = new Map<string, number>();
   const holderPay = new Set<string>();

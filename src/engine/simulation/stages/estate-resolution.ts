@@ -15,7 +15,8 @@
  */
 
 import { assertNever } from '../../../domain/defect';
-import { bookHeadOf, relinkBook } from '../../../engine2/holdings';
+import { bookHeadOf } from '../../../engine2/holdings';
+import { retireHolding, closeEmptyPositions } from '../../ledger/holdings-ledger';
 import { internString } from '../../../engine2/world';
 import { GameState, RegionId, Company, InstitutionalEntity, ItemizedHolding } from '../../../types';
 import {
@@ -223,12 +224,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   index.touchedEntityIds.forEach((id) => {
     const e = index.entityById.get(id);
     if (!e) return;
-    const H = ctx.v2.holdings;
-    const kept: number[] = [];
-    for (let r = bookHeadOf(ctx.v2, id); r >= 0; r = H.next[r]) {
-      if (H.qtyUSD[r] > 1) kept.push(r);
-    }
-    relinkBook(ctx.v2, id, kept);
+    closeEmptyPositions(ctx.v2, id);
     bumpRegister(ctx);
   });
 
@@ -361,13 +357,19 @@ function reduceHolding(
     let leftUSD = amountUSD;
     const rows = index.rowsByEntityInstrument.get(id)?.get(companyId);
     if (rows) {
+      // §5-WIRES W2: the paper goes back to the estate by wire — recovered (cash arrived) or
+      // written off (nothing did); the ledger debits the rows.
       const H = index.v2.holdings;
+      const takes: { type: ItemizedHolding['instrumentType']; region: RegionId; usd: number }[] = [];
       for (let i = 0; i < rows.length && leftUSD > 0; i++) {
         const r = rows[i];
         const takeUSD = Math.min(leftUSD, H.qtyUSD[r]);
         leftUSD -= takeUSD;
-        H.qtyUSD[r] = H.qtyUSD[r] - takeUSD;
+        if (takeUSD > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeUSD });
       }
+      const ticker = index.companyById.get(companyId)?.ticker ?? companyId;
+      takes.forEach((t) => retireHolding(index.v2, { kind: 'INSTITUTION', id }, { kind: 'COMPANY', ticker },
+        { instrumentType: t.type, instrumentId: companyId, issuerRegion: t.region, valueUSD: t.usd }, isLoss ? 'estate: claim written off' : 'estate: claim recovered'));
       index.touchedEntityIds.add(id);
     }
     e.totalAssetsUSD = Math.max(0, e.totalAssetsUSD - (isLoss ? amountUSD : 0));
