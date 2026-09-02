@@ -2,48 +2,51 @@
  * XB2/DER — the FX forward MARKET: the hedge as a real position, struck against the book it
  * covers, with a bank on the other side, at a cross-currency basis that CLEARS. The contract
  * itself — the weekly mark, maturity, close-out — is the FX_FORWARD profile under
- * domain/derivatives/classes/fx-forward.ts, run by the one lifecycle. This stage keeps what is
+ * domain/derivatives/classes/fx-forward.ts, run by the one lifecycle. This market keeps what is
  * the market's: who is exposed and how much of it their mandate or covenant will not let them
  * run, what the desks can still write, and the price.
  *
- * Runs after the clearing books have settled, so it sizes the hedge against what the entity
- * ACTUALLY ended up holding abroad rather than what it intended to buy.
+ * Opens in the POST_SETTLEMENT phase — after the clearing books have settled — so it sizes the
+ * hedge against what the entity ACTUALLY ended up holding abroad rather than what it intended
+ * to buy. The standing book settles BEFORE the market: every live forward marks at this week's
+ * rate and the delta settles as variation margin; what matured or lost a counterparty leaves;
+ * the net each holder settled is what its margin budget below sees.
  *
  * Conservation: a forward is a bilateral contract, so the holder's mark and the bank's are equal
  * and opposite. Nothing is created — the pair nets to zero, which is exactly why a hedge is not
  * a subsidy and why it has to be modelled with a counterparty rather than as a yield discount.
  */
 
-import { riskAversionOf } from '../../../domain/preferences';
-import { GameState, RegionId } from '../../../types';
-import { institutionProfile } from '../../../domain/institution-profiles';
-import { InstitutionalEntity } from '../../../domain/institutions';
-import { hedgedAsFixedIncome } from '../../../domain/assets';
-import { bookHeadOf } from '../../../engine2/holdings';
-import { V2World } from '../../../engine2/world';
-import { WeeklyStepContext } from './context';
-import { pay, pendingSettlementUSD } from './settlement';
-import { isActiveCompany } from '../../../domain/company';
-import { invoiceCurrencyOf } from '../../../domain/invoice-currency';
-import { exposureToHedgeUSD } from './corporate-financing';
-import { TradeInvoice } from '../../../domain/trade-invoice';
+import { riskAversionOf } from '../../../../domain/preferences';
+import { RegionId } from '../../../../types';
+import { institutionProfile } from '../../../../domain/institution-profiles';
+import { InstitutionalEntity } from '../../../../domain/institutions';
+import { hedgedAsFixedIncome } from '../../../../domain/assets';
+import { bookHeadOf } from '../../../../engine2/holdings';
+import { V2World } from '../../../../engine2/world';
+import { pay, pendingSettlementUSD } from '../settlement';
+import { isActiveCompany } from '../../../../domain/company';
+import { invoiceCurrencyOf } from '../../../../domain/invoice-currency';
+import { exposureToHedgeUSD } from '../corporate-financing';
+import { TradeInvoice } from '../../../../domain/trade-invoice';
 import {
   HEDGE_RATIO_FIXED_INCOME, equityHedgeRatioFor, FX_FORWARD_TENOR_WEEKS,
-} from '../../../domain/derivatives/classes/fx-forward';
-import { hedgeToleranceBps } from '../../../domain/derivatives/hedging';
-import { DerivativeContract, DerivativeParty, derivativePartyKey, standingCoverUSD } from '../../../domain/derivatives/contract';
-import { DERIVATIVE_CLASSES, deskNotionalCapacityUSD, standingPfeChargeUSD } from '../../../domain/derivatives/registry';
-import { FxDealerBook, emptyFxDealerBook } from '../../../domain/dealer-derivatives';
-import { leverageHeadroomUSD } from '../../macro/banking';
-import { fxWeeklySigma } from '../../../domain/fx-market';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
-import { REGION_IDS } from '../../../domain/geography';
-import { buildDerivativeMarketView, derivativesBookOf, initialMarginUSD, settleDerivativeClass, strikeDerivatives } from './derivative-lifecycle';
+} from '../../../../domain/derivatives/classes/fx-forward';
+import { hedgeToleranceBps } from '../../../../domain/derivatives/hedging';
+import { DerivativeContract, DerivativeParty, derivativePartyKey } from '../../../../domain/derivatives/contract';
+import { DERIVATIVE_CLASSES, deskNotionalCapacityUSD } from '../../../../domain/derivatives/registry';
+import { FxDealerBook, emptyFxDealerBook } from '../../../../domain/dealer-derivatives';
+import { leverageHeadroomUSD } from '../../../macro/banking';
+import { fxWeeklySigma } from '../../../../domain/fx-market';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
+import { REGION_IDS } from '../../../../domain/geography';
+import { derivativesBookOf, initialMarginUSD, strikeDerivatives } from '../derivative-lifecycle';
+import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
 
 /** What this entity holds in each foreign region, split by how much of it its mandate hedges. */
-// §7.307 holdings flip: row walk on the mirror (this stage runs after the write-back).
+// §7.307 holdings flip: row walk on the mirror (this market runs after the write-back).
 function hedgeableExposureByRegion(v2: V2World, entity: InstitutionalEntity): Map<RegionId, number> {
   const out = new Map<RegionId, number>();
   const H = v2.holdings;
@@ -114,17 +117,12 @@ interface DeskState {
 
 const deskCapacityUSD = (d: DeskState) => deskNotionalCapacityUSD(d.headroomUSD, d.chargedPfeUSD, 'FX_FORWARD');
 
-export function runFxHedgingStage(state: GameState, ctx: WeeklyStepContext): void {
-  const week = ctx.nextWeek;
-
-  // ---- The standing book: every live forward marks at this week's rate and the delta settles
-  // as variation margin; what matured or lost a counterparty leaves. One lifecycle, this
-  // class's turn. The net each holder settled here is what its margin budget below sees. ----
-  const settledNetByParty = settleDerivativeClass(ctx, state, 'FX_FORWARD', buildDerivativeMarketView(ctx));
+function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: DerivativeMarketRun): void {
   const book = derivativesBookOf(ctx, state);
 
   // Every dealer's desk, opened at what its LIVE book leaves it — contracts that matured released
-  // their notional and their margin in the settle above, which is what frees capacity.
+  // their notional and their margin in the settle before this market, which is what frees
+  // capacity.
   const desks = new Map<string, DeskState>();
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
@@ -134,7 +132,7 @@ export function runFxHedgingStage(state: GameState, ctx: WeeklyStepContext): voi
     desks.set(c.ticker, {
       book: emptyFxDealerBook(),
       headroomUSD: leverageHeadroomUSD(sheet),
-      chargedPfeUSD: standingPfeChargeUSD(book, `BANK:${c.ticker}`, week),
+      chargedPfeUSD: standing.pfeChargeUSD(`BANK:${c.ticker}`),
       marginReceivedUSD: 0,
     });
   });
@@ -146,6 +144,14 @@ export function runFxHedgingStage(state: GameState, ctx: WeeklyStepContext): voi
     desk.book.netNotionalByRegion[c.referenceId] = (desk.book.netNotionalByRegion[c.referenceId] ?? 0) + c.notionalUSD;
     desk.book.initialMarginHeldUSD += initialMarginUSD(c);
   }
+  // The dealers a holder in each region can face, in the order the roster lists them.
+  const dealerBanksByRegion = new Map<RegionId, string[]>();
+  ctx.updatedCompanies.forEach((c) => {
+    if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c) || !desks.has(c.ticker)) return;
+    const list = dealerBanksByRegion.get(c.region) ?? [];
+    list.push(c.ticker);
+    dealerBanksByRegion.set(c.region, list);
+  });
 
   // ---- DER — THE CROSS-CURRENCY BASIS IS A CLEARED PRICE.
   //
@@ -166,7 +172,7 @@ export function runFxHedgingStage(state: GameState, ctx: WeeklyStepContext): voi
   });
   const annualSigmaFor = (r: RegionId) => annualSigmaByRegion.get(r) ?? 0.10;
   const coveredUSD = (party: DerivativeParty, issuer: RegionId) =>
-    standingCoverUSD(book, 'FX_FORWARD', 'a', derivativePartyKey(party), week, issuer);
+    standing.coverUSD('FX_FORWARD', 'a', derivativePartyKey(party), issuer);
 
   /** This week's unhedged gap for one holder in one foreign currency. */
   const gapByEntityRegion = new Map<string, Map<RegionId, number>>();
@@ -181,11 +187,11 @@ export function runFxHedgingStage(state: GameState, ctx: WeeklyStepContext): voi
   });
 
   // DER5: the CORPORATES' half of the same book. A firm hedges the invoice exposure its own
-  // coverage covenant has no room for — the identical test 07i's commodity hedgers take, read
-  // against a currency instead of a price — and it will pay up to what that exposure's own
-  // volatility costs it: the universal walk-away with a covenant-derived share in place of a
-  // mandate one. Same auction, same basis: a corporate bidding for a hedge widens it for the
-  // fund managers, which is what a shared dealer balance sheet means.
+  // coverage covenant has no room for — the identical test the futures market's commodity
+  // hedgers take, read against a currency instead of a price — and it will pay up to what that
+  // exposure's own volatility costs it: the universal walk-away with a covenant-derived share in
+  // place of a mandate one. Same auction, same basis: a corporate bidding for a hedge widens it
+  // for the fund managers, which is what a shared dealer balance sheet means.
   const corporateExposure = corporateExposureByRegion(
     [...(state.tradeInvoices ?? []), ...ctx.tradeInvoicesBooked], week);
   const corpGapByTicker = new Map<string, Map<RegionId, number>>();
@@ -320,7 +326,7 @@ export function runFxHedgingStage(state: GameState, ctx: WeeklyStepContext): voi
     const holderKey = derivativePartyKey(holder);
     let budgetUSD = Math.max(0, cashUSD + pendingSettlementUSD(ctx, holder)) + (settledNetByParty.get(holderKey) ?? 0);
     gaps.forEach((gapUSD, issuer) => {
-      const dealer = pickDealerBank(ctx, holderRegion, desks);
+      const dealer = pickDealerBank(dealerBanksByRegion.get(holderRegion), desks);
       if (!dealer) return;
       const desk = desks.get(dealer)!;
       const filledUSD = filledByEntityRegion.get(participantId)?.get(issuer) ?? 0;
@@ -410,15 +416,22 @@ export function runFxHedgingStage(state: GameState, ctx: WeeklyStepContext): voi
  * because a desk that is full stops quoting and the flow goes elsewhere. That is how one desk
  * filling up widens the price for everyone rather than silently absorbing infinite size.
  */
-function pickDealerBank(ctx: WeeklyStepContext, region: RegionId, desks: Map<string, DeskState>): string | null {
+function pickDealerBank(regionDealers: string[] | undefined, desks: Map<string, DeskState>): string | null {
   let best: string | null = null;
   let bestCapacity = 0;
-  ctx.updatedCompanies.forEach((c) => {
-    if (c.region !== region || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
-    const desk = desks.get(c.ticker);
-    if (!desk) return;
+  if (!regionDealers) return best;
+  for (const ticker of regionDealers) {
+    const desk = desks.get(ticker);
+    if (!desk) continue;
     const capacity = deskCapacityUSD(desk);
-    if (capacity > bestCapacity) { bestCapacity = capacity; best = c.ticker; }
-  });
+    if (capacity > bestCapacity) { bestCapacity = capacity; best = ticker; }
+  }
   return best;
 }
+
+export const FX_FORWARD_MARKET: DerivativeMarket = {
+  classId: 'FX_FORWARD',
+  phase: 'POST_SETTLEMENT',
+  settles: 'BEFORE_MARKET',
+  run: runFxForwardMarket,
+};

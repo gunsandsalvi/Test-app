@@ -1,42 +1,41 @@
 /**
  * DER4 — the commodity futures MARKET. The contract itself — the mark, delivery, close-out — is
  * the futures profile under domain/derivatives/classes/commodity-future.ts, run by the one
- * lifecycle at the END of this stage, once the week's prints exist to mark against. This stage
- * keeps what is the market's: who must hedge, who will take the other side, and the curve.
+ * lifecycle AFTER this market, once the week's prints exist to mark against. This market keeps
+ * what is the market's: who must hedge, who will take the other side, and the curve.
  *
  * The float is the production the PRODUCERS need to hedge — measured off their own books against
- * the coverage covenant, exactly as 07g measures which corporates have to pay fixed — and the
- * participants are the longs: the firms whose recipes draw the commodity and have the mirror
- * problem, plus the desks that will carry the physical whenever the paper is dear enough to make
- * carrying it free money. Three tenors, the same three the curve has always quoted.
+ * the coverage covenant, exactly as the swap market measures which corporates have to pay fixed —
+ * and the participants are the longs: the firms whose recipes draw the commodity and have the
+ * mirror problem, plus the desks that will carry the physical whenever the paper is dear enough
+ * to make carrying it free money. Three tenors, the same three the curve has always quoted.
  *
- * Runs after 07-commodities (this week's spot is the number every schedule prices against) and
- * with the other derivative books, so the week's variation margin moves real money before the
- * settlement pass.
+ * Opens in the CLEARING phase after 07-commodities (this week's spot is the number every schedule
+ * prices against) and with the other derivative books, so the week's variation margin moves real
+ * money before the settlement pass.
  */
 
-import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
-import { riskAversionOf } from '../../../domain/preferences';
-import { GameState, Company } from '../../../types';
+import { hedgeFundStrategyProfile } from '../../../../domain/institution-profiles';
+import { riskAversionOf } from '../../../../domain/preferences';
+import { Company } from '../../../../types';
 import {
   FUTURES_TENOR_MONTHS, PHYSICAL_STORAGE_COST_ANNUAL, costOfCarryPrice, impliedConvenienceYield,
   futuresTermKey,
-} from '../../../domain/derivatives/classes/commodity-future';
-import { hedgeConcessionPerUnit } from '../../../domain/derivatives/hedging';
-import { DerivativeContract, DerivativeParty, standingCoverUnits } from '../../../domain/derivatives/contract';
-import { deskNotionalCapacityUSD } from '../../../domain/derivatives/registry';
-import { COMMODITY_CATEGORY_LINKAGE } from '../../../domain/instruments';
-import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
-import { WeeklyStepContext } from './context';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
-import { isActiveCompany } from '../../../domain/company';
-import { exposureToHedgeUSD } from './corporate-financing';
-import { leverageHeadroomUSD } from '../../macro/banking';
-import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
-import { buildDerivativeMarketView, derivativesBookOf, deskStandingPfeChargeUSD, settleDerivativeClass, strikeDerivatives } from './derivative-lifecycle';
+} from '../../../../domain/derivatives/classes/commodity-future';
+import { hedgeConcessionPerUnit } from '../../../../domain/derivatives/hedging';
+import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
+import { deskNotionalCapacityUSD } from '../../../../domain/derivatives/registry';
+import { COMMODITY_CATEGORY_LINKAGE } from '../../../../domain/instruments';
+import { CATEGORY_INPUT_REQUIREMENTS } from '../../../../domain/market-microstructure';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
+import { isActiveCompany } from '../../../../domain/company';
+import { exposureToHedgeUSD } from '../corporate-financing';
+import { leverageHeadroomUSD } from '../../../macro/banking';
+import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
+import { strikeDerivatives } from '../derivative-lifecycle';
+import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
 const contractId = (commodityId: string, tenor: number) => `FUT-${commodityId}-${tenor}M`;
-
 
 /** A firm's annual interest bill, from the coverage ratio its own statements already carry. */
 function annualInterestOf(c: Company): number {
@@ -45,9 +44,7 @@ function annualInterestOf(c: Company): number {
   return Math.max(0, c.ebit) / coverage;
 }
 
-export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContext): void {
-  const book = derivativesBookOf(ctx, state);
-  const week = ctx.nextWeek;
+function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
   const firms = ctx.prevActiveFirms.filter(isActiveCompany);
   const firmById = new Map(firms.map((c) => [c.id, c]));
   // The USA short rate finances a carry position; it is the one this model quotes globally.
@@ -101,7 +98,7 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
           riskAversion: riskAversionOf(c.management),
         });
         const units = hedgeUSD / spot
-          - standingCoverUnits(book, 'COMMODITY_FUTURE', 'b', `COMPANY:${c.ticker}`, week, comm.id, termKey);
+          - standing.coverUnits('COMMODITY_FUTURE', 'b', `COMPANY:${c.ticker}`, comm.id, termKey);
         if (units > 0.0001) sellers.push({ party: { kind: 'COMPANY', ticker: c.ticker }, units });
       });
       const hedgeFloatUnits = sellers.reduce((a, s) => a + s.units, 0);
@@ -121,7 +118,7 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
         banks.forEach((bank) => {
           const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
           const capacityUSD = deskNotionalCapacityUSD(
-            leverageHeadroomUSD(sheet), deskStandingPfeChargeUSD(ctx, state, bank.ticker), 'COMMODITY_FUTURE');
+            leverageHeadroomUSD(sheet), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'COMMODITY_FUTURE');
           const units = capacityUSD / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
           if (units > 0.0001) {
             sellers.push({ party: { kind: 'BANK', ticker: bank.ticker }, units });
@@ -172,7 +169,7 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
         participants.push({
           id: `CONS-${c.ticker}`,
           currentHoldingsByInstrumentId: new Map([[id,
-            standingCoverUnits(book, 'COMMODITY_FUTURE', 'a', `COMPANY:${c.ticker}`, week, comm.id, termKey)]]),
+            standing.coverUnits('COMMODITY_FUTURE', 'a', `COMPANY:${c.ticker}`, comm.id, termKey)]]),
           demandByInstrumentId,
         });
       });
@@ -221,10 +218,13 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
 
       // ---- 4. Strike the week's contracts: each new long draws from each seller in proportion to
       // what that seller brought, the same fungible-supply allocation the CDS book uses. ----
+      // The participant by id (the first of a name, as the linear search it replaces found it).
+      const participantById = new Map<string, ClearingParticipant>();
+      for (const p of participants) if (!participantById.has(p.id)) participantById.set(p.id, p);
       const boughtByParticipant = new Map<string, number>();
       let totalBoughtUnits = 0;
       result.newParticipantHoldings.forEach((byInstrument, participantId) => {
-        const prior = participants.find((p) => p.id === participantId)?.currentHoldingsByInstrumentId.get(id) ?? 0;
+        const prior = participantById.get(participantId)?.currentHoldingsByInstrumentId.get(id) ?? 0;
         const delta = (byInstrument.get(id) ?? 0) - prior;
         if (delta <= 0.0001) return;
         boughtByParticipant.set(participantId, delta);
@@ -263,8 +263,14 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
   });
 
   strikeDerivatives(ctx, state, struck);
-  // ---- 5. THE STANDING BOOK, marked at the week's fresh prints: every open position's move
-  // settles in cash between its two named parties (which is what a future IS), a contract in its
-  // delivery week settles to spot and closes, a dead counterparty closes out at the mark. ----
-  settleDerivativeClass(ctx, state, 'COMMODITY_FUTURE', buildDerivativeMarketView(ctx));
+  // The standing book then marks at the week's fresh prints (the stage settles this class AFTER
+  // the market): every open position's move settles in cash between its two named parties, a
+  // contract in its delivery week settles to spot and closes, a dead counterparty closes out.
 }
+
+export const COMMODITY_FUTURE_MARKET: DerivativeMarket = {
+  classId: 'COMMODITY_FUTURE',
+  phase: 'CLEARING',
+  settles: 'AFTER_MARKET',
+  run: runCommodityFuturesMarket,
+};

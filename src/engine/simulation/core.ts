@@ -5,9 +5,7 @@ import { GameState, RegionId } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
 import { runOverdraftSweep } from './stages/overdraft-sweep';
-import { runSwapClearingStage } from './stages/07g-swap-clearing';
-import { runCdsClearingStage } from './stages/07h-cds-clearing';
-import { runCommodityFuturesStage } from './stages/07i-commodity-futures';
+import { runDerivativesStage } from './stages/derivatives';
 import { runSecuritiesLendingStage } from './stages/securities-lending';
 import { runEstateResolutionStage } from './stages/estate-resolution';
 import { reconcileRepoPledges } from './stages/repo-clearing';
@@ -55,7 +53,6 @@ import { runMergersStage } from './stages/10-mergers';
 import { runFiscalAndSovereignDebtStage } from './stages/11-fiscal-and-sovereign-debt';
 import { runSovereignCalendarStage } from './stages/sovereign-calendar';
 import { runBillAccretionStage } from './stages/bill-accretion';
-import { runFxHedgingStage } from './stages/fx-hedging';
 import { runFxClearingStage, recordForeignHoldingsSnapshot } from './stages/fx-clearing';
 import { runSourcingIntentStage } from './stages/sourcing-intent';
 import { runGoodsArrivalStage } from './stages/goods-arrival';
@@ -254,13 +251,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   syncCompanyField(state, 'shortInterestShares');
   run('07e-equity-clearing', () => runEquityClearingStage(state, ctx));
   syncCompanyField(state, 'stockPrice'); syncCompanyField(state, 'marketCap');
-  // DER1: after the sovereign curve is this week's cleared one, which every schedule reads.
-  run('07g-swap-clearing', () => runSwapClearingStage(state, ctx));
-  // CRD/DER2: after 07b, whose cleared OAS every schedule in the protection book prices against.
-  run('07h-cds-clearing', () => runCdsClearingStage(state, ctx));
+  // DRV — THE ONE DERIVATIVE STAGE, the clearing phase (§7.382): swaps after 07c (the cleared
+  // curve every schedule reads), protection after 07b (the cleared OAS), futures after
+  // 07-commodities (spot) — every class the registry names, in its order, over one standing index.
+  run('derivatives', () => runDerivativesStage(state, ctx, 'CLEARING'));
   syncCompanyField(state, 'cdsSpreadBps'); syncCompanyField(state, 'cdsBasisBps');
-  // DER4: after 07-commodities, whose spot every futures schedule prices against.
-  run('07i-commodity-futures', () => runCommodityFuturesStage(state, ctx));
   // REPO2: the sovereign books have all cleared, so a pledge on paper a bank no longer holds is
   // called and the loan it secured shrinks with it.
   run('repo-collateral-reconcile', () => reconcileRepoPledges(ctx));
@@ -349,8 +344,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // PUB3d: bills accrete BEFORE the fiscal stage redeems them, so a maturing bill is repaid at
   // the face its holder has accreted to rather than at last week's value.
   // A stable-NAV fund pays its yield as new shares and its fee leaves to the manager.
-  // XB2: hedge the cross-border book that the clearing stages actually left behind.
-  run('fx-hedging', () => runFxHedgingStage(state, ctx));
+  // XB2/DRV: the one derivative stage's post-settlement phase — the forwards hedge the
+  // cross-border book that the clearing stages actually left behind.
+  run('derivatives-post-settlement', () => runDerivativesStage(state, ctx, 'POST_SETTLEMENT'));
   // WS9/XB2d: the FX market clears against every participant's real demand — including the
   // hedging flow the desks just generated, which now has a counterparty.
   run('fx-clearing', () => { runFxClearingStage(state, ctx); recordForeignHoldingsSnapshot(ctx); });

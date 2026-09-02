@@ -2,7 +2,7 @@
  * DER1 — the interest-rate swap MARKET: par rates at 2/5/10 years, cleared on the same engine as
  * every other book. The contract itself — legs, close-out, maturity — is the IRS profile under
  * domain/derivatives/classes/irs.ts, run by the one lifecycle (derivative-lifecycle.ts). This
- * stage keeps what is the market's: who must pay fixed, who will receive it, and the print.
+ * market keeps what is the market's: who must pay fixed, who will receive it, and the print.
  *
  * The float this auction prices is the pay-fixed demand: what the hedgers whose exposure their
  * own balance sheets cannot absorb need someone to take. The participants are the receivers —
@@ -11,27 +11,29 @@
  * receiver who can buy a 10-year at 4% will not receive fixed at 3.5%, and that is the whole of
  * why a swap spread exists.
  *
- * Runs after 07c (the sovereign curve is this week's cleared one, which every schedule here reads)
- * and before settlement, so the week's net swap payments move real money between named parties.
+ * Opens in the CLEARING phase after 07c (the sovereign curve is this week's cleared one, which
+ * every schedule here reads) and before settlement, so the week's net swap payments move real
+ * money between named parties. The standing book settles BEFORE the market — the floating leg
+ * pays what the week actually printed.
  */
 
-import { GameState, RegionId } from '../../../types';
-import { loanBooksOf } from '../../../domain/banking';
-import { ensureV2 } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
-import { institutionProfile } from '../../../domain/institution-profiles';
-import { carriesRateDuration } from '../../../domain/assets';
+import { RegionId } from '../../../../types';
+import { loanBooksOf } from '../../../../domain/banking';
+import { ensureV2 } from '../../../../engine2/world';
+import { ladderRowsOf, TR_FLOATING } from '../../../../engine2/tranches';
+import { institutionProfile } from '../../../../domain/institution-profiles';
+import { carriesRateDuration } from '../../../../domain/assets';
 import {
   SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, repricingLossUSD,
-} from '../../../domain/derivatives/classes/irs';
-import { DerivativeContract, DerivativeParty, standingCoverUSD } from '../../../domain/derivatives/contract';
-import { WeeklyStepContext } from './context';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
-import { isActiveCompany } from '../../../domain/company';
-import { BANK_WORKING_CAPITAL_RATIO } from './bank-lending';
-import { COVENANT_INTEREST_COVERAGE } from './corporate-financing';
-import { buildDerivativeMarketView, derivativesBookOf, settleDerivativeClass, strikeDerivatives } from './derivative-lifecycle';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+} from '../../../../domain/derivatives/classes/irs';
+import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from '../financial-clearing-engine';
+import { isActiveCompany } from '../../../../domain/company';
+import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
+import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
+import { strikeDerivatives } from '../derivative-lifecycle';
+import { institutionTotalAssetsUSD } from '../institutional-balance-sheet';
+import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
 /** Swaps are struck for their tenor and run to it — there is no secondary market here yet. */
 const swapInstrumentId = (regionId: RegionId, key: SwapTenorKey) => `${regionId}-IRS-${key}`;
@@ -52,13 +54,8 @@ function twoSigmaYieldMoveBps(reg: { historicalZeroCurves?: { tenor10Y: number }
   return Math.max(YIELD_LIKE_MIN_WEEKLY_MOVE_BPS, 2 * Math.sqrt(variance));
 }
 
-export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
   const v2g = ensureV2(state);
-  // The standing book settles first — the floating leg pays what the week actually printed —
-  // and what matured or lost a counterparty leaves. One lifecycle, this class's turn.
-  settleDerivativeClass(ctx, state, 'IRS', buildDerivativeMarketView(ctx));
-  const book = derivativesBookOf(ctx, state);
-  const week = ctx.nextWeek;
 
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
@@ -94,7 +91,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
         if (lossUSD <= absorbableUSD) return;
         // Hedge the notional whose repricing loss is the excess — the rest it can carry.
         const wantedUSD = ((lossUSD - absorbableUSD) / Math.max(1e-9, lossUSD)) * bookUSD;
-        const alreadyPayingUSD = standingCoverUSD(book, 'IRS', 'a', `BANK:${bank.ticker}`, week, undefined, k);
+        const alreadyPayingUSD = standing.coverUSD('IRS', 'a', `BANK:${bank.ticker}`, undefined, k);
         const hedgeUSD = Math.max(0, wantedUSD - alreadyPayingUSD);
         if (!(hedgeUSD > 0)) return;
         payDemandByTenor.get(k)!.push({ party: { kind: 'BANK', ticker: bank.ticker }, usd: hedgeUSD });
@@ -124,7 +121,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
       if (shockCostUSD <= headroomUSD) return;
       const wantedUSD = Math.min(floatingUSD, ((shockCostUSD - headroomUSD) / Math.max(1e-9, shockCostUSD)) * floatingUSD);
       // Floating corporate debt is short-dated relative to the curve; it hedges at the 5-year.
-      const alreadyPayingUSD = standingCoverUSD(book, 'IRS', 'a', `COMPANY:${comp.ticker}`, week, undefined, 's5');
+      const alreadyPayingUSD = standing.coverUSD('IRS', 'a', `COMPANY:${comp.ticker}`, undefined, 's5');
       const hedgeUSD = Math.max(0, wantedUSD - alreadyPayingUSD);
       if (!(hedgeUSD > 0)) return;
       payDemandByTenor.get('s5')!.push({ party: { kind: 'COMPANY', ticker: comp.ticker }, usd: hedgeUSD });
@@ -158,7 +155,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
       const bondBookUSD = (entity.itemizedHoldings || [])
         .filter((h) => carriesRateDuration(h.instrumentType))
         .reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
-      const alreadyReceivingUSD = standingCoverUSD(book, 'IRS', 'b', `INSTITUTION:${entity.id}`, week);
+      const alreadyReceivingUSD = standing.coverUSD('IRS', 'b', `INSTITUTION:${entity.id}`);
       const durationGapUSD = Math.max(0, institutionTotalAssetsUSD(ctx, entity) - bondBookUSD - alreadyReceivingUSD);
       if (durationGapUSD <= 0) return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
       SWAP_TENORS.forEach((k) => {
@@ -255,3 +252,10 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
     ]));
   });
 }
+
+export const IRS_MARKET: DerivativeMarket = {
+  classId: 'IRS',
+  phase: 'CLEARING',
+  settles: 'BEFORE_MARKET',
+  run: runSwapMarket,
+};

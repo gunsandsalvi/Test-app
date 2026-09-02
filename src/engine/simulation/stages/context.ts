@@ -170,6 +170,12 @@ export interface WeeklyStepContext {
   /** DRV — THE ONE DERIVATIVE BOOK: every bilateral contract of every class, the week's working
    * copy (derivative-lifecycle.ts owns every read and write; market stages strike into it). */
   derivativesBook?: import('../../../domain/derivatives/contract').DerivativeContract[];
+  /** The standing index of that book (derivative-lifecycle.ts `standingBookOf`), valid while
+   * `book` is the live array — the lifecycle replaces the array when a contract leaves. */
+  derivativeStanding?: {
+    book: import('../../../domain/derivatives/contract').DerivativeContract[];
+    index: import('../../../domain/derivatives/standing-book').StandingBook;
+  };
   holdingsStore?: import('./holdings-store').HoldingsStore;
   /** HF — what the securities-lending stage struck this week, read by 07e in the same pass.
    * `lentShares` is exposure a lender still has through a loan receivable, so its holding

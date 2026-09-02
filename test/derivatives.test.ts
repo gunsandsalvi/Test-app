@@ -13,6 +13,7 @@ import { DerivativeMarketView } from '../src/domain/derivatives/profile';
 import { DERIVATIVE_CLASSES, deskNotionalCapacityUSD, standingPfeChargeUSD, DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM }
   from '../src/domain/derivatives/registry';
 import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivatives/hedging';
+import { StandingBook } from '../src/domain/derivatives/standing-book';
 
 const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView => ({
   week: 10,
@@ -135,4 +136,48 @@ test('every registered class states both roles and admissible facts — the comp
     assert.ok(marks !== periodic, `${p.id}: exactly one leg family`);
     if (marks) assert.ok(p.markReasonLive && p.markReasonFinal, `${p.id}: a mark class labels its legs`);
   }
+});
+
+test('the standing-book index answers exactly what the per-participant walks answered, and follows a strike', () => {
+  const me = { kind: 'BANK', ticker: 'ME' } as const;
+  const you = { kind: 'INSTITUTION', id: 'YOU' } as const;
+  const book: DerivativeContract[] = [
+    base({ id: '1', a: me, b: you, notionalUSD: 10, termKey: 's5' }),
+    base({ id: '2', a: me, b: you, notionalUSD: 20, termKey: 's10' }),
+    base({ id: '3', a: you, b: me, notionalUSD: 40, termKey: 's2' }),
+    base({ id: '4', classId: 'CDS', a: me, b: you, notionalUSD: 100, referenceId: 'IG-NAME', termKey: '' }),
+    base({ id: '5', classId: 'CDS', a: you, b: me, notionalUSD: 200, referenceId: 'HY-NAME', termKey: '' }),
+    base({ id: '6', classId: 'COMMODITY_FUTURE', a: you, b: me, notionalUSD: 700, units: 7, referenceId: 'OIL', termKey: '3M' }),
+    base({ id: '7', classId: 'COMMODITY_FUTURE', a: me, b: you, notionalUSD: 300, units: 3, referenceId: 'OIL', termKey: '3M' }),
+    base({ id: 'matured', a: me, b: you, notionalUSD: 999, maturityWeek: 10 }),
+    base({ id: 'self', classId: 'FX_FORWARD', a: me, b: me, notionalUSD: 50, referenceId: 'EUR', termKey: '' }),
+  ];
+  const isIG = (ref: string) => ref === 'IG-NAME';
+  const index = new StandingBook(10, isIG);
+  index.extend(book);
+  const meKey = derivativePartyKey(me);
+  const youKey = derivativePartyKey(you);
+  for (const [party, key] of [[me, meKey], [you, youKey]] as const) {
+    for (const side of ['a', 'b'] as const) {
+      for (const classId of ['IRS', 'CDS', 'COMMODITY_FUTURE', 'FX_FORWARD'] as const) {
+        assert.equal(index.coverUSD(classId, side, key), standingCoverUSD(book, classId, side, key, 10), `${classId} ${side} ${key}`);
+        for (const term of ['s2', 's5', 's10', '3M', '']) {
+          assert.equal(index.coverUSD(classId, side, key, undefined, term), standingCoverUSD(book, classId, side, key, 10, undefined, term));
+        }
+        for (const ref of ['IG-NAME', 'HY-NAME', 'OIL', 'EUR', '']) {
+          assert.equal(index.coverUSD(classId, side, key, ref), standingCoverUSD(book, classId, side, key, 10, ref));
+          assert.equal(index.coverUnits(classId, side, key, ref, '3M'), standingCoverUnits(book, classId, side, key, 10, ref, '3M'));
+        }
+      }
+    }
+    assert.equal(index.pfeChargeUSD(key), standingPfeChargeUSD(book, key, 10, isIG), `graded charge ${key}`);
+    assert.equal(index.pfeChargeFlatUSD(key), standingPfeChargeUSD(book, key, 10), `flat charge ${key}`);
+    void party;
+  }
+  // A strike appends; the index folds the tail and stays the book's.
+  book.push(base({ id: '8', a: me, b: you, notionalUSD: 5, termKey: 's5' }));
+  index.extend(book);
+  assert.equal(index.coverUSD('IRS', 'a', meKey, undefined, 's5'), 15);
+  assert.equal(index.pfeChargeUSD(meKey), standingPfeChargeUSD(book, meKey, 10, isIG));
+  assert.equal(index.indexed, book.length);
 });

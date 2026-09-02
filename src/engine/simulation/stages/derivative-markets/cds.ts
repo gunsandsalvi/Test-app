@@ -1,7 +1,7 @@
 /**
  * CRD/DER2 — the single-name CDS MARKET, cleared on the same engine as every other book. The
  * contract itself — premium, credit event, close-out — is the CDS profile under
- * domain/derivatives/classes/cds.ts, run by the one lifecycle. This stage keeps what is the
+ * domain/derivatives/classes/cds.ts, run by the one lifecycle. This market keeps what is the
  * market's: who needs protection, who will write it, and the print.
  *
  * The float this auction prices is the PROTECTION SOMEBODY NEEDS: the exposure a lender's capital
@@ -12,38 +12,34 @@
  * risk. What comes out is the CDS spread, and what comes out of comparing it to the issuer's
  * cleared cash OAS is the BASIS.
  *
- * Runs after 07b (the cleared OAS every schedule here reads) and before settlement, so the week's
- * premiums move real money between named parties.
+ * Opens in the CLEARING phase after 07b (the cleared OAS every schedule here reads) and before
+ * settlement, so the week's premiums move real money between named parties. The standing book
+ * settles BEFORE the market: this week's premium, any credit event a reference default triggered,
+ * any counterparty that died.
  */
 
-import { GameState, RegionId, Company } from '../../../types';
-import { ensureV2 } from '../../../engine2/world';
-import { institutionProfile } from '../../../domain/institution-profiles';
-import { CDS_TENOR_WEEKS, protectionNeedUSD } from '../../../domain/derivatives/classes/cds';
-import { DerivativeContract, DerivativeParty, standingCoverUSD } from '../../../domain/derivatives/contract';
-import { deskNotionalCapacityUSD } from '../../../domain/derivatives/registry';
-import { BankLoan } from '../../../domain/banking';
-import { WeeklyStepContext } from './context';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
-import { isActiveCompany } from '../../../domain/company';
-import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
-import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequiredReturn, fullSizeSpreadRangeBpsOf } from './asset-allocation';
-import { bankRequiredReturnAnnual } from './bank-lending';
-import { leverageHeadroomUSD } from '../../macro/banking';
-import { REGION_IDS } from '../../../domain/geography';
-import { buildDerivativeMarketView, derivativesBookOf, deskStandingPfeChargeUSD, settleDerivativeClass, strikeDerivatives } from './derivative-lifecycle';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { RegionId, Company } from '../../../../types';
+import { ensureV2 } from '../../../../engine2/world';
+import { institutionProfile } from '../../../../domain/institution-profiles';
+import { CDS_TENOR_WEEKS, protectionNeedUSD } from '../../../../domain/derivatives/classes/cds';
+import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
+import { deskNotionalCapacityUSD } from '../../../../domain/derivatives/registry';
+import { BankLoan } from '../../../../domain/banking';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
+import { isActiveCompany } from '../../../../domain/company';
+import { computeAnnualDefaultProbability, creditRecoveryRate } from '../shared-helpers';
+import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequiredReturn, fullSizeSpreadRangeBpsOf } from '../asset-allocation';
+import { bankRequiredReturnAnnual } from '../bank-lending';
+import { leverageHeadroomUSD } from '../../../macro/banking';
+import { REGION_IDS } from '../../../../domain/geography';
+import { strikeDerivatives } from '../derivative-lifecycle';
+import { institutionTotalAssetsUSD } from '../institutional-balance-sheet';
+import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
 const cdsInstrumentId = (regionId: RegionId, issuerId: string) => `${regionId}-CDS-${issuerId}`;
 
-
-export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
   const v2cds = ensureV2(state);
-  // The standing book settles first: this week's premium, any credit event a reference default
-  // triggered, any counterparty that died. One lifecycle, this class's turn.
-  settleDerivativeClass(ctx, state, 'CDS', buildDerivativeMarketView(ctx));
-  const book = derivativesBookOf(ctx, state);
-  const week = ctx.nextWeek;
   const companyById = new Map<string, Company>(
     [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].map((c) => [c.id, c])
   );
@@ -74,7 +70,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
         const needUSD = protectionNeedUSD({
           exposureUSD,
           bankEquityUSD: sheet.bankEquityUSD,
-          alreadyHedgedUSD: standingCoverUSD(book, 'CDS', 'a', `BANK:${bank.ticker}`, week, issuerId),
+          alreadyHedgedUSD: standing.coverUSD('CDS', 'a', `BANK:${bank.ticker}`, issuerId),
         });
         if (needUSD <= 1) return;
         const list = hedgeDemandByIssuer.get(issuerId) ?? [];
@@ -122,7 +118,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       const capacityUSD = deskNotionalCapacityUSD(
-        leverageHeadroomUSD(sheet), deskStandingPfeChargeUSD(ctx, state, bank.ticker), 'CDS');
+        leverageHeadroomUSD(sheet), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'CDS');
       if (!(capacityUSD > 0)) return;
       referenceIssuers.forEach((c) => {
         const annualPd = pdByIssuerId.get(c.id)!;
@@ -243,3 +239,10 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
     strikeDerivatives(ctx, state, struck);
   });
 }
+
+export const CDS_MARKET: DerivativeMarket = {
+  classId: 'CDS',
+  phase: 'CLEARING',
+  settles: 'BEFORE_MARKET',
+  run: runCdsMarket,
+};

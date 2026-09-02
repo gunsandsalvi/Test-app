@@ -25,6 +25,11 @@ export const DERIVATIVE_CLASSES: Record<DerivativeClassId, DerivativeClassProfil
 export const derivativeProfile = (id: DerivativeClassId): DerivativeClassProfile =>
   DERIVATIVE_CLASSES[id];
 
+/** The registry's order is the order the one derivative stage runs the classes within a phase of
+ *  the week (stages/derivatives.ts): swaps, then protection, then futures, then forwards. A new
+ *  class takes its place here and nowhere else. */
+export const DERIVATIVE_CLASS_IDS = Object.keys(DERIVATIVE_CLASSES) as DerivativeClassId[];
+
 /**
  * ONE BALANCE SHEET, ONE BUDGET. Share of its leverage headroom a desk commits to derivative
  * potential-future-exposure before it stops quoting — across EVERY class it writes, because the

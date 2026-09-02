@@ -1,9 +1,10 @@
 /**
  * DRV — THE ONE DERIVATIVE LIFECYCLE. Every class's contracts live in one book and pass through
- * this module once a week, at the pipeline point where that class's prints are fresh (07g for
- * swaps, 07h for CDS, the end of 07i for futures, fx-hedging for forwards). The market stages
- * keep only what is genuinely theirs — measuring who needs the hedge and clearing it — and
- * strike into the book through `strikeDerivatives`.
+ * this module once a week, at the point where that class's prints are fresh — the one derivative
+ * stage (derivatives.ts) settles each class before or after its market, in the phase its market
+ * declares. The market modules (derivative-markets/) keep only what is genuinely theirs —
+ * measuring who needs the hedge and clearing it — and strike into the book through
+ * `strikeDerivatives`; what they ask of the standing book they ask the index (`standingBookOf`).
  *
  * What runs here for every class, written once (rule 17 — nothing below switches on the class):
  *  1. EVENT termination the profile detects (a credit event, a reference that stopped existing)
@@ -23,7 +24,8 @@ import {
   DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey,
 } from '../../../domain/derivatives/contract';
 import { DerivativeMarketView } from '../../../domain/derivatives/profile';
-import { derivativeProfile, standingPfeChargeUSD } from '../../../domain/derivatives/registry';
+import { derivativeProfile } from '../../../domain/derivatives/registry';
+import { StandingBook } from '../../../domain/derivatives/standing-book';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
 import { creditRecoveryRate } from './shared-helpers';
@@ -39,19 +41,42 @@ export function derivativesBookOf(ctx: WeeklyStepContext, state: GameState): Der
 
 export function strikeDerivatives(ctx: WeeklyStepContext, state: GameState, struck: DerivativeContract[]): void {
   if (struck.length === 0) return;
-  derivativesBookOf(ctx, state).push(...struck);
+  const book = derivativesBookOf(ctx, state);
+  book.push(...struck);
+  // A strike only appends; the standing index folds the tail and stays the book's.
+  if (ctx.derivativeStanding?.book === book) ctx.derivativeStanding.index.extend(book);
+}
+
+/**
+ * THE STANDING BOOK, INDEXED (§7.382): what every market asks of the live book — a party's
+ * cover on one side of one class, a party's PFE charge — answered from ONE walk. The index is
+ * the book array's: a contract leaves only when the lifecycle (or a resolution's re-key)
+ * REPLACES the array, which is when the next call rebuilds; a strike appends and the index
+ * follows. The reference grade it charges CDS at is read when it is built, so a book indexed
+ * after stage 08 charges at this week's ratings, exactly as the per-call map did.
+ */
+export function standingBookOf(ctx: WeeklyStepContext, state: GameState): StandingBook {
+  const book = derivativesBookOf(ctx, state);
+  const memo = ctx.derivativeStanding;
+  if (memo && memo.book === book) { memo.index.extend(book); return memo.index; }
+  const ratingById = new Map<string, CreditRating>();
+  for (const c of ctx.updatedCompanies) ratingById.set(c.id, c.creditRating);
+  for (const c of ctx.prevActivePrivateFirms) if (!ratingById.has(c.id)) ratingById.set(c.id, c.creditRating);
+  const index = new StandingBook(ctx.nextWeek, (referenceId) => isInvestmentGradeRating(ratingById.get(referenceId)));
+  index.extend(book);
+  ctx.derivativeStanding = { book, index };
+  return index;
 }
 
 /** A desk's standing PFE charge against the one budget, off the live book (registry.ts). */
 export function deskStandingPfeChargeUSD(ctx: WeeklyStepContext, state: GameState, ticker: string): number {
-  const ratingById = new Map<string, CreditRating>();
-  for (const c of ctx.updatedCompanies) ratingById.set(c.id, c.creditRating);
-  for (const c of ctx.prevActivePrivateFirms) if (!ratingById.has(c.id)) ratingById.set(c.id, c.creditRating);
-  return standingPfeChargeUSD(derivativesBookOf(ctx, state), `BANK:${ticker}`, ctx.nextWeek,
-    (referenceId) => isInvestmentGradeRating(ratingById.get(referenceId)));
+  return standingBookOf(ctx, state).pfeChargeUSD(`BANK:${ticker}`);
 }
 
 type PartyState = 'ALIVE' | 'DEFAULTED' | 'GONE';
+
+/** The view the lifecycle and the markets share for one phase of the week. */
+export type DerivativeLifecycleView = ReturnType<typeof buildDerivativeMarketView>;
 
 /**
  * The flat view every profile prices off, built once per settle call from the live context.
@@ -130,7 +155,7 @@ export function settleDerivativeClass(
   ctx: WeeklyStepContext,
   state: GameState,
   classId: DerivativeClassId,
-  view: ReturnType<typeof buildDerivativeMarketView>
+  view: DerivativeLifecycleView
 ): Map<string, number> {
   const book = derivativesBookOf(ctx, state);
   const profile = derivativeProfile(classId);
