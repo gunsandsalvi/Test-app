@@ -3,6 +3,8 @@ import { random } from '../rng';
 import { DESK_BOOK_BY_ASSET_TYPE } from '../dealers';
 import { regionalDeskView } from '../../domain/dealer-desk';
 import { bookPnL } from '../ledger/bank-book';
+import { adjustBankReserves } from '../ledger/accounts';
+import { ensureV2 } from '../../engine2/world';
 import { DERIVATIVE_CLASSES } from '../../domain/derivatives/registry';
 import { DerivativeClassId } from '../../domain/derivatives/contract';
 
@@ -85,6 +87,7 @@ export function executeTrade(
           cashReservesUSD: sheet.cashReservesUSD - inventoryDeltaUSD + incomeUSD,
         },
       };
+      adjustBankReserves(ensureV2(state), bank.ticker, -inventoryDeltaUSD + incomeUSD); // A3.6a
 
       // The region's view of that book, kept in step for the readers that want one aggregate.
       const region = updatedRegions[posData.region];

@@ -18,7 +18,7 @@
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
-import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, resetAccount } from '../src/engine/ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, resetAccount, adjustBankReserves } from '../src/engine/ledger/accounts';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -967,7 +967,9 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
   // funding for their bond bids) and every USA institution's real cash (their budgets).
   shocked.companies.forEach(c => {
     if (c.region === 'USA' && c.bankBalanceSheet) {
+      const beforeUSD = c.bankBalanceSheet.cashReservesUSD;
       c.bankBalanceSheet.cashReservesUSD *= 0.01;
+      adjustBankReserves(ensureV2(shocked), c.ticker, c.bankBalanceSheet.cashReservesUSD - beforeUSD); // A3.6a: the drain moves the row
       // WS6 taught the check the same lesson S6 did, one field later: with a repo market, a
       // bank with drained CASH still bids — it funds the purchase secured against its
       // collateral, which is exactly why real sovereign auctions rarely fail. "Buyers with no

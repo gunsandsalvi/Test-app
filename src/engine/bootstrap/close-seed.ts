@@ -1,4 +1,4 @@
-import { sectorRowAt, openingCashOf } from '../ledger/accounts';
+import { sectorRowAt, openingCashOf, openAccount } from '../ledger/accounts';
 import { V2World } from '../../engine2/world';
 /**
  * CLOSE C2 — THE SEED CLOSES (§5-CLOSE). Run once, after every book has been seeded and before
@@ -58,6 +58,8 @@ export function closeSeedMoney(
       }
       householdDepositsUSD += s.depositsUSD;
       v2.accounts.balanceUSD[sectorRowAt(v2, { kind: 'HOUSEHOLD', region: regionId }, b.ticker)] = s.depositsUSD;
+      // A3.6a: the bank's own account opens at the reserves the close strikes.
+      openAccount(v2, { kind: 'BANK', ticker: b.ticker }, s.cashReservesUSD);
     });
     const hs = reg.householdState;
     // The seed's provisional sizing of the sector's deposits (macro/initialization.ts) is what

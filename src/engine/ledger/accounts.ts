@@ -174,6 +174,46 @@ export function moveSectorRowsToBank(v2: V2World, fromTicker: string, toTicker: 
   });
 }
 
+// ---- A3.6a — A BANK'S RESERVES ARE ITS ROW, CARRIED. The bank's own account at the central
+// bank (`BANK:<ticker>`) lives on the world like every other party's: the seed opens it at the
+// number close-seed strikes, the mirror opens the pass row FROM it, the projection writes the
+// pass's result back INTO it and the sheet's `cashReservesUSD` from it. Every direct writer of
+// the line between two passes — 02b's rounding of the evolved sheet, a merger moving a bank
+// whole, the player's trade against a desk, the harness's reserve drain — is the row moving by
+// the same amount (`adjustBankReserves`, `moveBankReserves`), the pattern A3.4's
+// `adjustSectorRow` set; the mirror reports a line that moved without its row. The field's
+// readers flip to `bankReservesOf` and the field dies in A3.6's next slice. ----
+
+/** A bank's reserves: its account. */
+export function bankReservesOf(v2: V2World, bankTicker: string): number {
+  return balanceOf(v2, { kind: 'BANK', ticker: bankTicker });
+}
+
+/** The bank's reserve row; a bank the seed did not open (no central bank in its region, a sheet
+ *  scaled from the aggregate) opens at its line the first time a pass sees it. */
+export function reserveRowOf(v2: V2World, bankTicker: string, openingUSD: number): number {
+  const party: PartyRef = { kind: 'BANK', ticker: bankTicker };
+  const r = accountRowOf(v2, party);
+  return r >= 0 ? r : openAccount(v2, party, openingUSD);
+}
+
+/** A bank's own book moves its reserves line between passes: the row moves by the same amount.
+ *  A bank with no row yet is opened at its line by the next mirror, which already carries the move. */
+export function adjustBankReserves(v2: V2World, bankTicker: string, deltaUSD: number): void {
+  if (deltaUSD === 0) return;
+  const r = accountRowOf(v2, { kind: 'BANK', ticker: bankTicker });
+  if (r >= 0) v2.accounts.balanceUSD[r] += deltaUSD;
+}
+
+/** A bank leaves whole (a merger): its reserves join the acquirer's row. */
+export function moveBankReserves(v2: V2World, fromTicker: string, toTicker: string): void {
+  const from = accountRowOf(v2, { kind: 'BANK', ticker: fromTicker });
+  if (from < 0) return;
+  const to = reserveRowOf(v2, toTicker, 0);
+  v2.accounts.balanceUSD[to] += v2.accounts.balanceUSD[from];
+  v2.accounts.balanceUSD[from] = 0;
+}
+
 /** An institutional entity's cash: its account (A3.2). */
 export function entityCashOf(v2: V2World, e: Pick<InstitutionalEntity, 'id'>): number {
   return balanceOf(v2, { kind: 'INSTITUTION', id: e.id });
@@ -264,7 +304,13 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
   banks.forEach((b) => {
     const bi = bankIndex(s, b.ticker);
     if (s.reserveRowOfBank.length <= bi) { const a = new Int32Array(bi + 16).fill(-1); a.set(s.reserveRowOfBank); s.reserveRowOfBank = a; }
-    const row = openRow(s, partyId({ kind: 'BANK', ticker: b.ticker }), AT_CENTRAL_BANK, 'RESERVES', b.bankBalanceSheet!.cashReservesUSD);
+    // A3.6a: the pass row opens at the persistent row; a line that moved without it is reported.
+    const lineUSD = b.bankBalanceSheet!.cashReservesUSD;
+    const rowUSD = ctx.v2.accounts.balanceUSD[reserveRowOf(ctx.v2, b.ticker, lineUSD)];
+    if (Math.abs(lineUSD - rowUSD) > Math.max(1, Math.abs(lineUSD) * 1e-9)) {
+      console.log(`  [accounts] w${ctx.nextWeek} ${b.region}:${b.ticker} reserves line ${(lineUSD / 1e6).toFixed(3)}M moved without its row ${(rowUSD / 1e6).toFixed(3)}M`);
+    }
+    const row = openRow(s, partyId({ kind: 'BANK', ticker: b.ticker }), AT_CENTRAL_BANK, 'RESERVES', rowUSD);
     s.reserveRowOfBank[bi] = row;
     // The bank's COMPANY party (its goods-market self) settles on its own reserves.
     s.rowsOfParty.set(partyId({ kind: 'COMPANY', ticker: b.ticker }), [row]);
@@ -386,9 +432,11 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
       const d = deltaByBank.get(bi) ?? blank();
       const reserveDeltaUSD = s.balanceUSD[rr] - s.openingUSD[rr];
       const sheet = c.bankBalanceSheet;
+      // A3.6a: the pass's result is the persistent row, and the line is the row.
+      ctx.v2.accounts.balanceUSD[reserveRowOf(ctx.v2, c.ticker, 0)] = s.balanceUSD[rr];
       c.bankBalanceSheet = {
         ...sheet,
-        cashReservesUSD: sheet.cashReservesUSD + reserveDeltaUSD,
+        cashReservesUSD: s.balanceUSD[rr],
         // A3.4: the household line IS the household sector's row at this bank (landed above).
         depositsUSD: householdDepositsAt(ctx.v2, c.ticker),
         corporateDepositsUSD: (sheet.corporateDepositsUSD ?? 0) + d.CORPORATE,

@@ -41,7 +41,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
 import { SRF_SPREAD_BPS } from '../../macro/banking';
-import { cashOf, entityCashOf, poolCashOf, adjustSectorRow } from '../../ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, adjustSectorRow, adjustBankReserves } from '../../ledger/accounts';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
@@ -440,6 +440,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // loans it wrote and retired, the amortization and interest it took, the deposit interest
       // it paid — is the household sector's row at this bank moving by the same amount.
       adjustSectorRow(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, bank.ticker, withDeposits.depositsUSD - prevSheet.depositsUSD);
+      // A3.6a: what the evolution did to the reserves line (its rounding) is the bank's row moving.
+      adjustBankReserves(ctx.v2, bank.ticker, withDeposits.cashReservesUSD - prevSheet.cashReservesUSD);
       return { bank, sheet: withDeposits };
     });
 
