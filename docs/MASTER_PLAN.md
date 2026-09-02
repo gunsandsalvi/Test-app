@@ -6,13 +6,27 @@ file and no second defect list. The full 468-record history and the superseded p
 `79c239b:docs/MASTER_PLAN.md`; §5 keeps every lesson the code still cites at its original number,
 so a `§7.N` citation in a comment still resolves.
 
-**Where the model stands (2026-09-02, after the line-by-line audit of ~230 files / ~55k lines).**
-Gates green: `tsc` 0, ESLint 347/354, hygiene pass, 125 tests; last 13-week run 82 violations in 20
-families. The audit found ~380 defects and every material one is a step below. The headline: money
-and ownership do NOT close (interest accrued and never paid, a residual wired twice, three ledger
-paths dropping value silently, an estate that can never close), price is NOT universal (credit
-trades at par, commodity spot is a drift formula), and the instrument that measures all this is
-itself broken (the wires family never prints, the per-bank identity check has never fired).
+**WHERE THE WORK STANDS — read this first on a handover.**
+- HEAD `5454934` on `claude/master-plan-review-j2z20v`, pushed to `main` too (rule 16). Tree clean.
+- **Next step: §3 step 1(b)**, then 2, 3, … in order. §3 is the only work list.
+- **The reference to judge a change against:** `COUPON_TRACE=1 SHOCKS=0 WEEKS=16` at `5454934` —
+  **99 violations in 24 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
+  (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
+  13-week change against a 13-week run and a 16-week one against this.)
+- **Recording a step:** the step's own §3 entry is its record — mark it DONE in place and put the
+  measured numbers there, so the work list and the history are one thing. A lesson that a FUTURE
+  step could trip over goes in §5 as well; nothing else does.
+- Gates at HEAD: `tsc` 0, ESLint 347/354, hygiene pass, 125 tests.
+
+**Where this list came from (2026-09-02): a line-by-line audit of ~230 files / ~55k lines**, which
+found ~380 defects. Every material one is a step below, at its file:line; the per-area working
+reports were session scratch and are deliberately NOT committed (rule: no second defect list), and
+steps 30–31 give the METHOD and the exemplars rather than a list that would go stale — regenerate
+the exhaustive one with a grep when you get there. The headline that set the order: money and ownership do NOT close (interest accrued and
+never paid — step 1(a), now fixed; a residual wired twice; three ledger paths dropping value
+silently; an estate that can never close), price is NOT universal (credit trades at par, commodity
+spot is a drift formula), and the instrument that measures all this is itself broken (the wires
+family never prints, the per-bank identity check has never fired).
 
 ## 1. RULES OF ENGAGEMENT
 
@@ -147,14 +161,16 @@ seven pure rule objects; `preferences.ts` the two preference primitives on every
 `stated.ts` the registry of numbers with a scheduled death; `institution-profiles.ts`, `units.ts`.
 **Audit** `src/engine/audit/` — M money, O ownership, P prices, X cross-market, F accounts, N names,
 W wires, run every week by the harness. **UI** `src/ui/` is AURORA (phone shell, object and function
-modules), reads `GameState` only. **One harness** `scripts/harness.ts`.
+modules), reads `GameState` only. **One harness** `scripts/harness.ts`. **One test tree:** `test/`
+holds PURE-FUNCTION tests over `domain/` only — no engine run; hygiene enforces the boundary.
 
 ## 3. THE PROJECT — THE CLOSED CIRCUIT
 
 **One list, in order.** A closed circuit means: every dollar and share has a named counterparty at
 every instant; every asset that has a price has a CLEARED one and shows it; nothing is bounded,
 plugged or invented; and the instrument that measures all this is itself true. Each step is ONE
-commit with its §5 record and the §4 gates. Later parts depend on earlier ones — do not reorder.
+commit, gated by §4, and its own entry here is its record (mark it DONE in place with the measured
+numbers). Later parts depend on earlier ones — do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
@@ -438,7 +454,8 @@ Dump/diff: `STATE_DUMP=<f> STATE_DUMP_WEEK=<n>`, then `DIFF_STATE=a.json,b.json 
 **Instruments, env-gated** (adding one the next run carries free beats a run of its own): `FP`,
 `STAGE_TRACE`, `BANK_IDENTITY_TRACE`, `COMPANY_STORE_AUDIT`, `TRANCHE_SYNC_CHECK`,
 `HOLDINGS_SYNC_CHECK`, `OWN_TRACE`, `W2_TRACE`, `SPLIT_TRACE`, `WIRE_TRACE`, `DESK_TRACE`,
-`PNL_TRACE`, `DEFAULT_TRACE`, `LABOR_CAUSES`, `SEED_BURN_IN`.
+`PNL_TRACE`, `DEFAULT_TRACE`, `LABOR_CAUSES`, `SEED_BURN_IN`, `COUPON_TRACE` (step 1: accrued /
+paid / owed per week by instrument type — the register's interest, visible without its own run).
 
 ## 5. LESSONS — DO NOT RE-LEARN
 Numbers are the original record's and never change; the full text is in git at `79c239b`.
