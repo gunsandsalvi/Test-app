@@ -3,7 +3,7 @@
 import { GameState } from '../../types';
 import { AuditFinding } from './types';
 
-export function auditNames(_prev: GameState | undefined, state: GameState, week: number): AuditFinding[] {
+export function auditNames(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const tickers = new Map<string, number>(); const names = new Map<string, number>();
   let badTicker = 0, badId = 0, badName = 0, badTranche = 0; const ex: string[] = [];
@@ -12,7 +12,7 @@ export function auditNames(_prev: GameState | undefined, state: GameState, week:
     names.set(c.name, (names.get(c.name) ?? 0) + 1);
     if (!/^[A-Z]{3,5}$/.test(c.ticker) || c.ticker === 'XXXX') badTicker++;
     if (/ \d+ Corp$/.test(c.name)) badName++;
-    if (!new RegExp(`^${c.region}_(PRV_)?${c.ticker}$`).test(c.id)) { badId++; if (ex.length < 3) ex.push(`${c.ticker} id ${c.id}`); }
+    if (!new RegExp(`^${c.region}_(PRV_|CAR_)?${c.ticker}$`).test(c.id)) { badId++; if (ex.length < 3) ex.push(`${c.ticker} id ${c.id}`); }
     (c.debtTranches ?? []).forEach((t) => { if (!t.id.startsWith(c.ticker + '-') && !t.id.startsWith(c.id + '-') && !t.id.startsWith(c.id + '_')) { badTranche++; if (ex.length < 6) ex.push(`${c.ticker} tranche ${t.id}`); } });
   });
   const dupT = [...tickers.entries()].filter(([, n]) => n > 1).length;

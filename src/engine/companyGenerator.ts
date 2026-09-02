@@ -753,8 +753,22 @@ export function generateInitialCompanies(
         // rebuild then baked the foreign tranches in permanently. The ladder gets its own
         // tranche objects. (Known remainder, recorded: the copied principals are the PARENT's,
         // unscaled — the clone's scaled totalDebt is overwritten by the ladder sum at week 1.)
-        debtTranches: (parent.debtTranches ?? []).map((t) => ({ ...t })),
-        id: parent.id + "-" + random().toString(36).substring(2, 9),
+        // §5-CLOSE C6 — a clone is a FIRM WITH ITS OWN NAME: its id is REGION_TICKER like every
+        // other firm's (it used to be the parent's id plus a hash, so 496 firms carried an id
+        // that named another firm), its tranches carry ITS ticker (they were the parent's ids,
+        // so 792 tranches were named for another firm), and its ladder is scaled with the rest
+        // of its balance sheet (the principals used to be the parent's, unscaled, and the
+        // ladder sum overwrote the clone's scaled debt at week 1).
+        debtTranches: (parent.debtTranches ?? []).map((t) => ({
+          ...t,
+          id: t.id.startsWith(parent.ticker + '-')
+            ? newTicker + t.id.slice(parent.ticker.length)
+            : t.id.startsWith(parent.id + '-') || t.id.startsWith(parent.id + '_')
+              ? `${region}_${newTicker}` + t.id.slice(parent.id.length)
+              : `${newTicker}-${t.id}`,
+          principalUSD: t.principalUSD * revenueScale,
+        })),
+        id: `${region}_${newTicker}`,
         ticker: newTicker,
         name: newName,
         annualRevenue: parent.annualRevenue * revenueScale,
