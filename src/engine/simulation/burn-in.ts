@@ -92,8 +92,11 @@ export function probeSteadyState(s: GameState): Record<string, number> {
   out['USA unemployment'] = Number(s.regions.USA.unemploymentRate) || 0;
   out['active firms'] = s.companies.filter((c) => !c.isDefaulted && !(c as { mergerAcquired?: boolean }).mergerAcquired).length;
   // The week's casualties and the plant taken offline — the two stock responses whose clocks
-  // the trace has to show (§7.345: the w13 cliff).
+  // the trace has to show.
   out['defaults this week'] = s.companies.filter((c) => c.defaultedWeek === s.currentWeek).length;
+  // Estates still working. It only falls when a workout finishes, so a number that only ever
+  // rises means the close condition cannot be met and the dead firms' holders are stuck.
+  out['open estates'] = (s.estates ?? []).filter((e) => e.closedWeek === undefined).length;
   let ppe = 0;
   let mothballed = 0;
   for (const c of s.companies) {

@@ -1,9 +1,9 @@
 /**
- * G5 — the workout. A defaulted issuer's assets are sold and its claims are paid, in the order
+ * The workout. A defaulted issuer's assets are sold and its claims are paid, in the order
  * they are owed, until there is nothing left. The shape of it is documented in domain/estate.ts.
  *
  * This closes the harness's last conservation violation. A defaulted issuer stopped being priced
- * — it leaves `isActiveCompany`, so no book quotes its paper again — while its holders kept the
+ * it leaves `isActiveCompany`, so no book quotes its paper again — while its holders kept the
  * position at its last mark forever. Nothing was ever going to take the paper off, because
  * nothing resolved. Now the estate does: what it recovers is paid to the named holders, and what
  * it does not is written off their books, both legs in the same pass.
@@ -14,7 +14,7 @@
  * goods — and the discount a buyer takes is the return it needs for the time it is tied up.
  */
 
-import { assertNever } from '../../../domain/defect';
+import { assertNever, defect } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
 import { moveOutputUnits, scrapOutputUnitsTo, moveInputUnits, scrapInputUnits, scrapGoods } from '../../ledger/goods-ledger';
@@ -37,23 +37,23 @@ import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { cashOf } from '../../ledger/accounts';
-import { facilitiesOfBorrower, issuerIdOf } from '../../../engine2/tranches';
+import { facilitiesOfBorrower, issuerIdOf, materializeLadder } from '../../../engine2/tranches';
 
 /** How many resolutions the realised recovery rate averages over before it displaces the prior. */
 export const RECOVERY_HISTORY_LENGTH = 24;
 
 const holderRef = (c: EstateClaim): PartyRef =>
   c.holder.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: c.holder.id }
-    // §7.250 — BANK_SECURITIES, not BANK: an estate recovery is cash arriving AGAINST the loan
+    // BANK_SECURITIES, not BANK: an estate recovery is cash arriving AGAINST the loan
     // written off the same pass (reduceHolding below), an asset swap — not income. Paying it as
-    // BANK credited reserves AND equity (§7.240's flagged row), which balanced only while the
+    // BANK credited reserves AND equity, which balanced only while the
     // loan write-off was going to the dead channel; with that write revived, the equity leg
     // broke the per-bank identity by exactly the recovery.
     : c.holder.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: c.holder.ticker }
       : { kind: 'COMPANY', ticker: c.holder.ticker };
 
 /**
- * SCALE — the indices this stage's inner loops used to rebuild from scratch.
+ * The indices this stage's inner loops used to rebuild from scratch.
  *
  * Every helper below was a full walk of the universe, run PER ESTATE and, in `reduceHolding`,
  * PER CLAIM: an open workout re-derived its region's plant absorption from all ~2,500 companies,
@@ -70,7 +70,7 @@ interface EstateIndex {
   entityById: Map<string, InstitutionalEntity>;
   bankByTicker: Map<string, Company>;
   companyById: Map<string, Company>;
-  /** SCALE (retired §7.286: receivables are the real invoice book now; kept doc for history)
+  /** SCALE (retired: receivables are the real invoice book now; kept doc for history)
    *  per ticker but each miss scanned the whole book, so the cost was
    *  O(distinct issuers x invoices) — and both grow with the world. Measured: estate-resolution
    *  ran 4.90x for a 2x universe, the worst super-linear stage in the engine. One pass. */
@@ -106,7 +106,7 @@ function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
     if (e.closedWeek !== undefined) return;
     e.claims.forEach((c) => { if (c.holder.kind === 'INSTITUTION') needed.add(c.holder.id); });
   });
-  // §7.313 flip — the index holds ROW IDS in the persistent store; a claim's write-down is a
+  // The index holds ROW IDS in the persistent store; a claim's write-down is a
   // column write on exactly those rows.
   needed.forEach((id) => {
     const e = index.entityById.get(id);
@@ -114,7 +114,7 @@ function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
     const H = index.v2.holdings;
     const byInstrument = new Map<string, number[]>();
     for (let r = bookHeadOf(index.v2, id); r >= 0; r = H.next[r]) {
-      // 13b: keyed by the ISSUER — a row names a tranche or its issuer; a claim is on the issuer.
+      // Keyed by the ISSUER — a row names a tranche or its issuer; a claim is on the issuer.
       const issuerId = issuerIdOf(index.v2, index.v2.internedStrings[H.instrRef[r]]);
       const rows = byInstrument.get(issuerId);
       if (rows) rows.push(r); else byInstrument.set(issuerId, [r]);
@@ -133,7 +133,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   // ---- Open an estate for every issuer that has just defaulted. ----
   ctx.updatedCompanies.forEach((comp) => {
     if (!comp.isDefaulted || byCompanyId.has(comp.id) || comp.mergerAcquired) return;
-    // §7.302 — a RESOLVED bank's shell goes through the one estate machinery like any dead
+    // A RESOLVED bank's shell goes through the one estate machinery like any dead
     // issuer: its books went to the assuming bank, so its register claims (equity, any traded
     // paper) recover from nothing and write off — which is what resolution means for holders.
     // A LIVE bank still never opens an estate here.
@@ -145,12 +145,12 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
       scrapConsignmentsTo(state, comp.ticker);
       return;
     }
-    // §5-FINALIZATION step 8: the death closes out every derivative the firm stands on, this
+    // The death closes out every derivative the firm stands on, this
     // week, through the estate's account — the survivor's replacement value is a claim on it
     // or a payment into it, like any other.
     closeOutDerivativesOfParty(ctx, state, { kind: 'COMPANY', ticker: comp.ticker });
     if (comp.isBankEntity) closeOutDerivativesOfParty(ctx, state, { kind: 'BANK', ticker: comp.ticker });
-    // §7.286 — THE FILING SEIZES NOTHING ANY MORE. §7.264 paid the debtor's cash into the
+    // THE FILING SEIZES NOTHING ANY MORE. It used to pay the debtor's cash into the
     // UNMODELED boundary at filing and drew the distributions back out of it — two legs of one
     // workout meeting at a party that is nobody. The debtor's account IS the estate's account:
     // the dead firm runs no cash walk (stage 08 skips it), so nothing spends the balance; the
@@ -161,7 +161,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     byCompanyId.set(comp.id, estate);
   });
 
-  // SCALE — the open estates' receivables in ONE pass over the invoice book. This was a full
+  // The open estates' receivables in ONE pass over the invoice book. This was a full
   // filter of the ~170k-invoice book PER OPEN ESTATE — O(invoices × estates) every week, and
   // estates stay open for weeks. Per seller the accumulation runs in the book's own order, so
   // each estate's sum is the float-for-float value the per-estate reduce produced.
@@ -182,29 +182,38 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     if (!reg) return;
     const comp = index.companyById.get(estate.companyId);
 
-    // §7.286 — receivables are the REAL invoice book now, not a schedule beside it. The
+    // Receivables are the REAL invoice book now, not a schedule beside it. The
     // buyers' payments arrive on the dead firm's account through trade-settlement on the
     // invoices' own due dates; here they are only COUNTED (via the one-pass sums above), so
     // the close condition knows when the last one is in.
     estate.assets.receivablesUSD = receivablesBySellerUSD.get(estate.ticker) ?? 0;
-    // §5-FINALIZATION step 8 — the inventory is the REAL rows too: the finished stock and the
+    // The inventory is the REAL rows too: the finished stock and the
     // input lots (consignments the receiver took delivery of land here), read each week.
     estate.assets.inventoryUSD = comp ? Math.max(0, getOutputInventoryUSD(comp)) + totalInputValueUSD(ctx.v2, comp.id) : 0;
+
+    // A WORKOUT IS A DISPOSAL PROGRAMME, NOT A DECAY. Both schedules below run from the week
+    // the estate opened and the last week of each takes whatever is left in one lot. Selling a
+    // fixed SHARE of the remainder every week instead halves the tail for ever: the estate's
+    // assets never reach the close test, its holders keep dead paper and the dead issuer's
+    // ladder is never extinguished. (Measured before this: 41 estates open at week 16, none
+    // closed, against 6 defaults in the last week alone.)
+    const weeksOpen = week - estate.openedWeek;
+    const weeksLeft = (horizonWeeks: number): number => Math.max(1, Math.ceil(horizonWeeks) - weeksOpen);
 
     // Inventory leaves at the company's OWN turnover — the rate its market was taking the goods
     // before it failed — and at the discount a buyer needs for holding it that long.
     const turnoverWeeks = Math.max(1, inventoryTurnoverWeeks(comp, estate.assets.inventoryUSD));
-    const invSoldUSD = Math.min(estate.assets.inventoryUSD, estate.assets.inventoryUSD / turnoverWeeks);
+    const invSoldUSD = estate.assets.inventoryUSD / weeksLeft(turnoverWeeks);
     estate.assets.inventoryUSD -= invSoldUSD;
 
     // Plant goes to peers as cheap capex, at the rate its region actually buys capital goods
     // against the plant already installed there. Slow, and the discount is the largest, because
     // the buyer's money is tied up longest.
     const ppeWeeks = Math.max(1, regionalPpeAbsorptionWeeks(ctx, index, estate.regionId));
-    const ppeSoldUSD = Math.min(estate.assets.ppeUSD, estate.assets.ppeUSD / ppeWeeks);
+    const ppeSoldUSD = estate.assets.ppeUSD / weeksLeft(ppeWeeks);
     estate.assets.ppeUSD -= ppeSoldUSD;
 
-    // §7.286 — "peers as cheap capex" MEANS PEERS NOW: the same-sector firms of the region buy
+    // "peers as cheap capex" MEANS PEERS NOW: the same-sector firms of the region buy
     // the week's slices at the workout's discounts, pay the estate's account by instruction,
     // and take the plant onto their own books (the discount is their bargain — the reason
     // distressed assets clear at all). A week with no peer able to pay scraps that week's
@@ -222,15 +231,21 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
       ? Math.max(0, cashOf(ctx.v2, estateComp) + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: estate.ticker }))
       : 0;
     const paidUSD = availableUSD > 1 ? distribute(ctx, index, estate, availableUSD) : 0;
+    // THE ESTATE'S CASH IS ITS ACCOUNT, RE-READ EVERY WEEK like the other three assets — and
+    // read after the waterfall, so it is what the week actually left behind. Written once at
+    // `openEstate` and never touched again, it kept the close test below permanently false: an
+    // estate opened with any cash at all could never close, its holders kept dead paper for
+    // ever, and the dead issuer's ladder was never extinguished.
+    estate.assets.cashUSD = availableUSD - paidUSD;
 
     // Closed when there is nothing left to sell or collect AND the account is empty (or every
     // claim is satisfied, in which case the waterfall stopped short of the money): the residual
     // claims are written off.
     const claimsRemainUSD = outstandingUSD(estate.claims);
-    if (estateAssetsUSD(estate.assets) <= 1 && (availableUSD - paidUSD <= 1 || claimsRemainUSD <= 1)) {
+    if (estateAssetsUSD(estate.assets) <= 1 && (estate.assets.cashUSD <= 1 || claimsRemainUSD <= 1)) {
       estate.closedWeek = week;
       writeOffResidual(ctx, index, estate);
-      // §5-FINALIZATION step 8: a closed estate takes no more delivery — what is still on its
+      // A closed estate takes no more delivery — what is still on its
       // way is scrapped by wire (the carrier writes it off), and any last lots go with it.
       if (comp) {
         Object.entries(materializeInputInventory(ctx.v2, comp.id)).forEach(([subUnitId, lots]) => {
@@ -238,7 +253,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
         });
         scrapConsignmentsTo(state, comp.ticker);
       }
-      // §5-WIRES W6: a closed estate leaves no ladder — whatever face no claim covered is
+      // A closed estate leaves no ladder — whatever face no claim covered is
       // extinguished by wire, so a dead firm's debt cannot stand on a book nobody holds.
       if (comp) rebuildLadder(ctx.v2, { id: comp.id, ticker: comp.ticker, region: comp.region }, [], 'estate closed: ladder extinguished');
       const realised = realisedDebtRecoveryRate(estate);
@@ -261,7 +276,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   ctx.estates = estates.filter((e) => e.closedWeek === undefined || week - e.closedWeek < 4);
 }
 
-/** Step 8 — what is still on its way to a firm nothing can take delivery for is scrapped by wire:
+/** What is still on its way to a firm nothing can take delivery for is scrapped by wire:
  *  a named carrier held it as stock and writes it off; one the transport pool carried passed
  *  through a sink at dispatch and was never stock (the same rule goods-arrival applies). */
 function scrapConsignmentsTo(state: GameState, buyerTicker: string): void {
@@ -275,7 +290,7 @@ function scrapConsignmentsTo(state: GameState, buyerTicker: string): void {
 }
 
 /**
- * §7.286 — the week's asset slices go to NAMED PEERS: the region's same-sector active firms,
+ * The week's asset slices go to NAMED PEERS: the region's same-sector active firms,
  * pro rata to their own cash, paying the workout's discounted price into the estate's account
  * and taking the assets onto their books (plant at book value — the discount is the bargain;
  * inventory as the dead firm's real sub-unit rows, transferred with their units). A week with
@@ -318,13 +333,13 @@ function sellAssetsToPeers(
       peer.grossPPEUSD = (peer.grossPPEUSD ?? 0) + ppeShareUSD;
     }
     if (comp && invSoldUSD > 0 && preInvUSD > 0) {
-      // §5-WIRES W4: the slice each peer takes moves by wire, off the ORIGINAL rows (the shares
+      // The slice each peer takes moves by wire, off the ORIGINAL rows (the shares
       // are of the week's slice, not of what earlier peers left).
       const frac = Math.min(1, (invSoldUSD * share) / preInvUSD);
       Object.entries(origRows).forEach(([subUnitId, row]) => {
         moveOutputUnits(comp, peer, subUnitId, row.unitsHeld * frac, row.valueUSD * frac, 'estate inventory sold to peers');
       });
-      // §5-FINALIZATION step 8: the input lots the receiver holds go the same way, by wire.
+      // The input lots the receiver holds go the same way, by wire.
       Object.entries(origInputUnits).forEach(([subUnitId, units]) => {
         moveInputUnits(ctx.v2, comp, peer, subUnitId, units * frac, ctx.nextWeek, 'estate input inventory sold to peers');
       });
@@ -363,7 +378,7 @@ function distribute(
       if (shareUSD <= 0) return;
       claim.recoveredUSD += shareUSD;
       estate.distributedUSD += shareUSD;
-      // §7.286: the estate pays FROM THE DEBTOR'S OWN ACCOUNT — the issuer's assets reaching
+      // The estate pays FROM THE DEBTOR'S OWN ACCOUNT — the issuer's assets reaching
       // the people it owed, as one instruction between two named accounts. The caller caps the
       // week's waterfall at what that account actually holds, so this never overdraws it.
       pay(ctx, {
@@ -386,6 +401,30 @@ function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Es
     if (lostUSD <= 0) return;
     reduceHolding(ctx, index, claim, estate.companyId, lostUSD, true);
   });
+  // EVERY ROW OF THE DEAD ISSUER GOES, claim or no claim. A position too small to have opened a
+  // claim at all still names the issuer, and once the ladder is extinguished it names an
+  // instrument that no longer exists — a holding of nothing, on a live book.
+  const H = index.v2.holdings;
+  index.rowsByEntityInstrument.forEach((byInstrument, holderId) => {
+    const rows = byInstrument.get(estate.companyId);
+    if (!rows) return;
+    rows.forEach((r) => {
+      const leftUSD = H.qtyUSD[r];
+      if (!(leftUSD > 0)) return;
+      const type = index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
+      const region = index.v2.internedStrings[H.regionRef[r]] as RegionId;
+      const id = index.v2.internedStrings[H.instrRef[r]];
+      transferHolding(index.v2, { kind: 'INSTITUTION', id: holderId }, { kind: 'CLEARING_HOUSE', region },
+        { instrumentType: type, instrumentId: id, issuerRegion: region, valueUSD: leftUSD },
+        'estate closed: residue written off');
+      const dead = index.companyById.get(estate.companyId);
+      if (dead && isTrancheKind(type)) {
+        retireLadderFace(index.v2, { id: dead.id, ticker: dead.ticker, region: dead.region },
+          type as 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER', leftUSD, 'estate closed: residue written off');
+      }
+      index.touchedEntityIds.add(holderId);
+    });
+  });
 }
 
 /**
@@ -398,7 +437,7 @@ function reduceHolding(
   companyId: string, amountUSD: number, isLoss: boolean
 ): void {
   if (claim.holder.kind === 'INSTITUTION') {
-    // SCALE: the holder is looked up, its rows for THIS issuer are looked up, and only those are
+    // The holder is looked up, its rows for THIS issuer are looked up, and only those are
     // written — in place. This rebuilt the entire institutional-entity array and rescanned the
     // holder's whole book once per claim; with ~11,000 claims open against ~300 institutions,
     // every book was being walked about thirty-seven times a week to change a handful of rows.
@@ -408,7 +447,7 @@ function reduceHolding(
     let leftUSD = amountUSD;
     const rows = index.rowsByEntityInstrument.get(id)?.get(companyId);
     if (rows) {
-      // §5-WIRES W2: the paper goes back to the estate by wire — recovered (cash arrived) or
+      // The paper goes back to the estate by wire — recovered (cash arrived) or
       // written off (nothing did); the ledger debits the rows.
       const H = index.v2.holdings;
       const takes: { type: ItemizedHolding['instrumentType']; region: RegionId; usd: number; id: string }[] = [];
@@ -418,7 +457,7 @@ function reduceHolding(
         leftUSD -= takeUSD;
         if (takeUSD > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeUSD, id: index.v2.internedStrings[H.instrRef[r]] });
       }
-      // §5-WIRES W6: the holder's paper goes to the region's clearing house (the register side);
+      // The holder's paper goes to the region's clearing house (the register side);
       // the dead issuer's ladder retires the same face against the house (the ladder side), so the
       // two halves of one claim meet there and the issuer's wires count once (as every action does).
       const dead = index.companyById.get(companyId);
@@ -438,23 +477,23 @@ function reduceHolding(
     const ticker = claim.holder.ticker;
     const company = index.bankByTicker.get(ticker);
     if (!company) return;
-    // §7.250 — THE LIVE SHEET. This stage runs AFTER stage 08, the only applier of
+    // THE LIVE SHEET. This stage runs AFTER stage 08, the only applier of
     // `companyUpdates.bankBalanceSheet`, so the old channel write here went to NOWHERE: a
     // defaulted borrower's loan was never written off the lender's book and the write-down
-    // never reached its equity — silently, both legs together (§7.103's trap, write side).
+    // never reached its equity — silently, both legs together.
     const sheet: BankingSector = company.bankBalanceSheet!;
-    // §5-FINALIZATION step 10: the bank's claim IS the facility rows on the dead firm's ladder
+    // The bank's claim IS the facility rows on the dead firm's ladder
     // (there is no loan row to write down); what the ladder still carries for this lender bounds
     // what this write can extinguish.
     const onLadderUSD = facilitiesOfBorrower(index.v2, companyId)
       .filter((f) => f.bankTicker === ticker).reduce((a, f) => a + f.principalUSD, 0);
     const leftUSD = Math.max(0, amountUSD - onLadderUSD);
-    // §7.250: equity moves by what the BOOK moved: a LOSS writes equity down by what was actually
+    // Equity moves by what the BOOK moved: a LOSS writes equity down by what was actually
     // extinguished — no more; a RECOVERY is an asset swap for the matched slice (cash in, facility
     // off the ladder) and INCOME for the unmatched slice — cash arriving against an asset the
     // ladder no longer carries. Both branches balance by construction, whatever the rows hold.
     const extinguishedUSD = amountUSD - leftUSD;
-    // §5-WIRES W6: the facility comes off the dead issuer's ladder by the same face, bank → issuer.
+    // The facility comes off the dead issuer's ladder by the same face, bank → issuer.
     const deadFirm = index.companyById.get(companyId);
     if (deadFirm && extinguishedUSD > 0) {
       retireLadderFace(index.v2, { id: deadFirm.id, ticker: deadFirm.ticker, region: deadFirm.region }, 'BANK_FACILITY', extinguishedUSD, isLoss ? 'estate: facility written off' : 'estate: facility recovered');
@@ -467,17 +506,27 @@ function reduceHolding(
 function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   const claims: EstateClaim[] = [];
   const addClaim = (c: EstateClaim) => { if (c.principalUSD > 1) claims.push(c); };
+  // ONE BASIS FOR THE WHOLE WATERFALL, AND IT IS FACE. A bank's facility claim is the face on
+  // the dead firm's ladder; a register holder's claim is the quantity its row carries, which is
+  // face while the wire layer prices credit at par. The two must never drift apart, so what the
+  // register claims of each tranche is checked below against what the ladder says that tranche
+  // is: claims worth more than the debt would be a mint inside the waterfall.
+  const claimedFaceByInstrument = new Map<string, number>();
 
   // Bondholders and loan holders, from the books that actually hold the paper.
-  // §7.307 holdings flip: row walk — a row on another issuer costs one int compare.
+  // Row walk: a row on another issuer costs one int compare.
   const H = ctx.v2.holdings;
   ctx.updatedInstitutionalEntities.forEach((e) => {
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
-      // 13b: a row names a tranche or its issuer; the claim is on the issuer either way.
+      // A row names a tranche or its issuer; the claim is on the issuer either way.
       if (issuerIdOf(ctx.v2, ctx.v2.internedStrings[H.instrRef[r]]) !== comp.id) continue;
       const usd = H.qtyUSD[r];
       const instrumentType = ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
-      // §7.241: exhaustive on purpose. The old else-if chain gave a NEW instrument type NO estate
+      if (instrumentType !== 'EQUITY') {
+        const id = ctx.v2.internedStrings[H.instrRef[r]];
+        claimedFaceByInstrument.set(id, (claimedFaceByInstrument.get(id) ?? 0) + usd);
+      }
+      // Exhaustive on purpose. The old else-if chain gave a NEW instrument type NO estate
       // claim — the holder kept the defaulted paper at its last mark forever, the exact absence
       // G5 was built to abolish. Every member now states its estate treatment; a new one fails
       // to COMPILE until it does.
@@ -518,6 +567,23 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
     addClaim({ holder: { kind: 'BANK', ticker: bank.ticker }, instrumentType: 'BANK_FACILITY', seniority: CLAIM_SENIORITY.SECURED, principalUSD: usd, recoveredUSD: 0 });
   });
   if (claims.length === 0) return undefined;
+  // The ladder's own face for every tranche the register claims against. A row naming the
+  // issuer rather than a tranche has no single ladder row behind it and is checked against the
+  // whole ladder instead.
+  const ladderFaceById = new Map<string, number>();
+  let ladderFaceTotalUSD = 0;
+  materializeLadder(ctx.v2, comp.id).forEach((t) => {
+    ladderFaceById.set(t.id, (ladderFaceById.get(t.id) ?? 0) + t.principalUSD);
+    ladderFaceTotalUSD += t.principalUSD;
+  });
+  claimedFaceByInstrument.forEach((claimedUSD, id) => {
+    const faceUSD = ladderFaceById.get(id) ?? (id === comp.id ? ladderFaceTotalUSD : undefined);
+    if (faceUSD === undefined) return;
+    if (claimedUSD > faceUSD + 1e-6 * Math.max(1, faceUSD)) {
+      defect(`${comp.ticker}'s estate opens claims of ${(claimedUSD / 1e6).toFixed(3)}M on ${id}`
+        + ` against ${(faceUSD / 1e6).toFixed(3)}M of face — the register and the ladder are on two bases`);
+    }
+  });
 
   const grossPpeUSD = comp.grossPPEUSD ?? 0;
   const netPpeUSD = Math.max(0, grossPpeUSD - (comp.accumulatedDepreciationUSD ?? 0));
@@ -529,7 +595,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
     assets: {
       cashUSD: Math.max(0, cashOf(ctx.v2, comp)),
       receivablesUSD: Math.max(0, comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE * 0.6),
-      // Step 8: the finished stock and the input lots — the rows the workout sells and re-reads weekly.
+      // The finished stock and the input lots — the rows the workout sells and re-reads weekly.
       inventoryUSD: Math.max(0, getOutputInventoryUSD(comp)) + totalInputValueUSD(ctx.v2, comp.id),
       ppeUSD: netPpeUSD,
     },
@@ -549,7 +615,7 @@ function inventoryTurnoverWeeks(comp: Company | undefined, inventoryUSD: number)
 function regionalPpeAbsorptionWeeks(
   ctx: WeeklyStepContext, index: EstateIndex, regionId: RegionId
 ): number {
-  // SCALE: a property of the REGION, so it is computed once per region per week however many of
+  // A property of the REGION, so it is computed once per region per week however many of
   // its firms are in workout. Nothing in this stage moves plant or capex, so the memo holds.
   const memo = index.ppeWeeksByRegion.get(regionId);
   if (memo !== undefined) return memo;
