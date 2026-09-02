@@ -364,12 +364,8 @@ HEAD is the plan-review commit after `702d26a` (the last engine commit) on `clau
 clean. **What is built** (§5-WIRES, §7.367–378): W1 money wires, W2 securities, W3 tranches, W4
 goods, W6 births/deaths (W5 void), D complete for its three named quantities, N's dated wire with
 corporate tax as its carrier, A's account store as the authority of the settlement pass with the
-households' transit gone; INS (three insurers per region, §7.375). **What is next, in order:**
-A3.1 — companies' `cash` becomes a read of the persistent store (the design, the survey and the
-expected closure of F1 are in §7.379); then A3.2–3.5 per kind (entities, pools, the household
-sector, the treasury), A3.6 the bank lines once 02b's evolve is account operations, A4 the switch;
-then R (the stated-number registry) and P (per-instrument price clearing; N's coupon accruals land
-with it); N's unfunded deficit becomes the treasury's advance by wire under A3.5. **The user's
+households' transit gone; INS (three insurers per region, §7.375). **What is next: §5-FINALIZATION, step 1** (A3.1 — companies' `cash` becomes a read of the persistent
+store; design and survey in §7.379), then its steps in order; it is the only list. **The user's
 standing instructions:** (1) "really minimize the use of tests" — at most ONE 13-week harness per
 commit and no experiment runs; reason from the code and the cheap gates first; a TWO-WEEK PROBE
 (`WEEKS=2`, ~50 s) before the one run is worth it for a settlement-touching slice (it caught nothing
@@ -391,23 +387,13 @@ HEAD before touching anything. Working branch rule: the session's designated `cl
 https://gunsandsalvi.github.io/Test-app/ (PWA and the apk-latest TWA); on-device measurement
 discipline is §7.335's.
 
-### 4.0 The fix order (post-§7.289)
+### 4.0 The fix order
 
-1. **UK bank NIM (16x, the top family)**: survivors marginal-to-negative (−0.012…0.0096 against
-   the 0.01 floor) — §7.254's machinery (NIM_TRACE) points at it; the sovereign-book accretion
-   missing from the income measure (§7.254's named remainder) is the first suspect, VOUL's seed
-   wholesale the second.
-2. **The leveraged-loan/sovereign mint drift (2.0–2.3% over, 6x)**: §7.259's known remainder —
-   claims on issuers that left the book entirely are not swept by the paydown. Sweep them.
-3. **The damper, worked by named class**: 2,481 persistent binds at 60wk — equity 774 (small-cap
-   tail, owner SCALE), corp bond 617, stock loan 472, CP 413. The 10Y-pinned question rides here.
-4. **USA u at the band edge** (30.1–30.7 in the last four weeks): the capex cap bent the path;
-   what remains is the LAB long-horizon row at the harness boundary, not a spiral.
-5. **Tier-5 measurement debt** (below), collectable from the ref60b log.
-6. **Standing gated decisions** (each on its own recorded gate): SEED_BURN_IN stays OFF until
-   the burn-in SETTLES (§7.345: its own convergence test, 156 weeks, is the gate now); the seed wholesale-claim re-anchor and COH's `equity: 0.42` behind it
-   (§7.283, §7.286); manager/vehicle split step 1 (`managesEntityIds` — design in §7.284).
-7. **Tier-6 — the build table** (prereqs closed; MNC first).
+**There is one list now: §5-FINALIZATION** (item 13). Every open bug, every half-backed shortcut
+and every unbuilt remainder of the CLOSE and WIRES campaigns is a numbered step there, in
+build order, the long-run measurements last. The pre-campaign fix order that stood here (UK bank
+NIM, the mint drift, the damper by class, USA unemployment at the band edge, the gated seed
+decisions) is folded into it as its measurement tail — §7.289–301 hold the detail.
 
 ### What is left to BUILD
 
@@ -425,7 +411,8 @@ discipline is §7.335's.
 | 9 | **NEWS — a news system worth reading** | **SLICE 1 BUILT (§7.346):** `news-derivation` derives every story from what the week recorded, cites the books, traces a death's why through the payment journal, ranks by size; Aurora's `news` function and the home feed. Remainders in §5-NEWS. |
 | 10 | **CLOSE — the closed model** | **CLOSED (§7.349–366): the money family prints no line, the scoreboard is the standing gate, WIRES (row 11) carries the ownership/price families forward.** The campaign's own chain, for the record: C1 the AUDIT built (§7.349, six families in `src/engine/audit/`, the harness runs it weekly and prints the scoreboard). Next, in order: C2 the seed closes (the central bank backs reserves + TGA, wholesale seed = 0, every sovereign bond held, no currency plug, no unbacked field); C3 the UNMODELED party deleted (funding close → interbank/standing facility; seed suppliers → the segment; leftovers → defect); C4 every bank money flow a payment (DONE §7.352: IOR, household interest and principal, corporate deposit interest, dividends, originations; `evolveBankingSector` never touches cash; `creditUnbacked` deleted); C4b the cross-border settlement leg (DONE §7.353: `foreignOfficialClaimsUSD`, one signed line per central bank, summing to zero); C5 the treasury and households (DONE §7.354: the account moves by payments only, revenue = collections, the central bank paid at redemption and on coupons, the remittance a payment, no residual income or placeholder wealth, the float paid its dividend); C6 names (DONE §7.355). C5b DONE §7.356 (M1 closes to 0.9B). M4 DONE §7.357 (no balance negative at the close). O2 DONE §7.358, M6 DONE §7.359 — money that is not anyone's: 3.3B/4 lines from 2,100B/31. O1 + F2 DONE §7.360 (unplaced paper withdrawn; the payroll tax paid — the accounts family is clean but F1). **THE MONEY FAMILY CLOSES (§7.363–364): M1, M2, M4, M5, M6 print no line; money that is not anyone's 2,100B/31 lines → 1.66B on one M3 line in one week.** NO CAPS (user order, §7.365): every weekly move cap deleted, every reader of it measures instead; 13 weeks run; M5 closed again (§7.366, every fund's line re-struck): money that is not anyone's 2.93B on one line with NO caps. Then the PRICES campaign (§5-CLOSE (6)). |
 | 11 | **WIRES — every asset moves by a numbered instruction; everything clears by price** | **THE CAMPAIGN after CLOSE (user, 2026-09-02).** Built, each its own commit and record: W1 money (§7.367) → W2 securities (§7.368; its audit line open on the non-register holders) → W3 tranches (§7.369) → W4 goods (§7.370) → W5 void → W6 births/deaths (§7.371) → D derived reads, complete for market cap/total debt (§7.372), the loan books (§7.373), total assets (§7.374) → N dated wires + corporate tax (§7.376) → A the account store: gated (§7.377), then the authority of the pass with the households' transit gone (§7.378). **Next:** A3 per kind (companies' cash first — §7.379's design), A4 the switch, then R, then P. |
-| 12 | **INS — competition among insurers** | BUILT (§7.375): three insurers per region on the firm-size curve, the sector slice split, not added. Remaining: nothing decided yet beyond the split — pricing competition (a policy moving to the cheaper insurer) is a mechanism the premium pool's pro-rata split does not have; owner: whoever next touches insurance-and-pensions.ts. |
+| 12 | **INS — competition among insurers** | Three insurers per region BUILT (§7.375); the price competition is FINALIZATION step 16. |
+| 13 | **FINALIZATION — one list to the finished model** | **THE LIST (user, 2026-09-02).** §5-FINALIZATION: 26 numbered steps in build order — the ledger becomes the only book (A3–A4), the dead and the merged leave nothing behind, the stated-number registry, per-instrument price clearing, competition and behaviour, then the long-run measurements last. Supersedes §4.0 and §6.1. |
 | 10 | **MGMT — corporate management in depth** | **SLICE 1 BUILT (§7.344): the preference pair on every deciding entity, the thresholds re-expressed through it, turnover on measured failure.** Charter in §5-MGMT / §5-BRAINS; what remains listed there. |
 
 ### The measurement debt (Tier 5 — finer reads still owed)
@@ -1005,16 +992,92 @@ must not regain a line; the W family (W1 every wire has two live parties and a p
 the week's wires reproduce every holding's change) must print no line once its asset kind is wired.
 The hygiene money-field rule is retired only when the type system enforces it.
 
-### INS — competition among insurers *(item 12 — BUILT §7.375)*
+### FINALIZATION — one list to the finished model *(item 13 — user-ordered 2026-09-02; supersedes §4.0, §6.1 and item 12)*
 
-One insurer per region was the sector: too big to fail and with no competitor to lose a policy
-to, so its price and its capital were never tested. The seed now generates three per region on
-the firm-size curve every cohort uses, splitting the same 0.42 slice (bootstrap/firms.ts). The
-premium pool already splits pro rata by capital and pays each insurer by name; what is NOT yet
-built is the mechanism that makes the split a market — a policyholder moving to the insurer
-that prices lower, and an insurer's price answering its own loss experience and capital. Verify
-when built: a region's premium shares move week to week with the insurers' quotes, and an
-insurer under PCA loses book before it loses its licence.
+**The rule of this list:** it is the ONLY list. Each step is one commit with its record, gated by
+the cheap gates and ONE 13-week run (§1.25; a two-week probe before it where settlement is
+touched). Work top to bottom; a step that depends on a long run sits at the end, and nothing above
+it is allowed to wait for one. When a step lands, mark it here with its §7 number; when a new
+defect is found, it becomes a step at its logical place. The scoreboard (§7.378's) is the standing
+judge; every step names the line it closes.
+
+**Part I — the ledger becomes the only book (A3–A4).**
+1. **A3.1 companies' `cash` is a read of the persistent account store** (design and survey in
+   §7.379). Closes F1 (statement cash ≠ ledger cash, 13/13 weeks) by construction.
+2. **A3.2 entities' `cashUSD`** (76 reads) the same way.
+3. **A3.3 the pools' `cashUSD`** — the per-bank rows carried, not re-guessed by share each pass
+   (a half-backed shortcut of §7.378); the banks' SME lines become Σ rows.
+4. **A3.4 the household sector's `depositsUSD`** — split the name from the banks' line first; the
+   household legs land where each household banks once a household register exists (until then
+   the market-share split of §7.378 stays as the stated rule).
+5. **A3.5 the treasury's `treasuryAccountUSD`/`waysAndMeansUSD`** as the two signs of one row; the
+   unfunded deficit (`pendingUnfundedDeficitUSD`) becomes the central bank's advance drawn and
+   repaid by wire — N's remainder closed.
+6. **A3.6 the bank lines** (`cashReservesUSD`, the four deposit classes) once 02b's evolve,
+   bank-lending's funding split, `absorbBankSheet` and the estates are account operations; the
+   delta projection of §7.378 (which preserves any pre-existing gap between a line and its
+   depositors) is retired and the gap measured and closed; the regional aggregate's scalars
+   become Σ rows (D's remainder).
+7. **A4 settlement's nine-way switch deleted**; its tallies become reads of the rows' deltas;
+   the hygiene money-field rule retired (the type system enforces it).
+
+**Part II — the dead and the merged leave nothing behind (B's remainder).**
+8. **Estates close consignments and contracts** — goods in transit to or from a dead firm are
+   delivered or scrapped by wire, its supply contracts terminated. Closes O5 (13/13 weeks,
+   thousands of consignments).
+9. **A merger moves the target's register and ladder by wire and the ids carry the acquirer.**
+   Closes O3 and N2 (the merger's residues).
+10. **The facility tranche and the lender's loan row are ONE ledger** (the loan row is the
+    facility seen from the lender). Closes O4 (12/13 weeks).
+11. **A firm with no house bank** — a bank funds its own upkeep from its own book (§7.372's
+    rule stands); a newborn or a re-keyed firm always has a house bank (the relationship is
+    reassigned at resolution and merger). Closes the "names no lending bank" class.
+
+**Part III — the stated numbers (R).**
+12. **The registry of every stated number** (`domain/stated.ts`: owner, reason, the measurement
+    that would replace it) and the lint rule on numeric literals in the engine; the seed's
+    loan-to-GDP ratios (`seedLoanBookUSD`), the household split by market share, the insurers'
+    0.42 slice and every constant the hygiene budget still allows move into it.
+
+**Part IV — price is the only cleared number (P).**
+13. **Per-instrument price clearing for the corporate books** — the register keyed by tranche in
+    face, valued at price × face, yield and spread reads; the non-register holders' fills wired
+    (the banks' sovereign books, the central bank, the treasuries' bills). Closes W2 (16
+    region-kinds every week) and O1 (the sovereign week).
+14. **Coupon accruals as dated wires** that re-key with the paper (N's last carrier), landing on
+    P's register.
+15. **Seniority and rating order** — with each tranche priced, P1/P3 either close or name a real
+    mispricing; a line left standing gets its own step here.
+
+**Part V — competition and behaviour.**
+16. **INS price competition** — a policy moves to the insurer that prices lower; an insurer's
+    price answers its own losses and capital (§7.375 built the three insurers; this is the
+    market). Verify: premium shares move week to week; an insurer under PCA loses book before
+    its licence.
+17. **A solvent bank at a negative margin** (X1: WORG, OOCO, ORDO) — run off the book, reprice
+    deposits, cut costs: the bank profile's response to its own margin. Measure on the
+    reference first (§1.12).
+18. **The interbank unsecured market** — the last boundary line's named successor (§7.340):
+    surplus banks lend to short ones at policy plus the borrower's spread; the boundary keeps
+    only what no bank will lend.
+19. **The manager/vehicle split's remainder and the institutional opening share** (§7.284,
+    §7.283): the asset manager anchored on households' own fund holdings; `equity: 0.42` retired.
+20. **The security as a discriminated union; behaviour extracted from the stages** (STRUCT's
+    open steps 2 and 4; the extract → fingerprint loop).
+
+**Part VI — the long-run measurements (each needs a run past 13 weeks; nothing above waits).**
+21. **The 1e-8 week-1 drift** (§7.370): a bisection by file with ONE dump per step.
+22. **The level and the burn-in** (§7.345's two named owners: `householdBudgetReachMultiple`'s
+    double count and the unemployment ratchet's growth signal): measure on a 60-week reference,
+    then decide.
+23. **The dampers by class** (equity small-cap tail — SCALE's; corp bond; stock loan; CP) and
+    USA unemployment at the band edge: the 60-week read.
+24. **UK/EUR bank margins and the mint drift** (§7.254, §7.259): the NIM measure with the
+    sovereign-book accretion, the paydown sweep of claims on issuers that left the book.
+25. **The Tier-5 measurement debt** (§4's table) and the consequence rows (rule 18), from the
+    same 60-week reference; SEED_BURN_IN's convergence gate (§7.345); the state-growth drift
+    on device (§7.335); logistics scale (§7.287).
+26. **AU resumes** when this list is done or the user says so (§5 AU).
 
 ### NEWS — a news system worth reading *(item 9 — SLICE 1 BUILT §7.346)*
 
@@ -1113,34 +1176,14 @@ when housing wealth is fully spendable).
 
 ### 6.1 Live defects
 
-| Defect | State and next action |
-|---|---|
-| **SCOREBOARD · F1 statement cash ≠ ledger cash (13/13 weeks, ~46–63 firms, up to 20B)** | The banks' and the managed shells' `cash` field is written by stage 08's cash walk while settlement moves their reserves and their entities' balances — two authors of one number. Owner: A3.1 (§7.379): `cash` becomes a read of the account store and the statement reads the ledger; expected to close by construction. |
-| **SCOREBOARD · X1 a solvent bank at a negative margin (WORG EUR, OOCO/ORDO UK; 3–7 of 13 weeks)** | A bank whose costs outrun its interest income while its capital holds. Real, not a ledger error (§7.372 stopped banks drawing maintenance bridges from a house bank they do not have). A bank-behaviour item: run off the book, reprice deposits, cut costs. Owner: the bank profile / 02b; measure on the reference first (§1.12). |
-| **SCOREBOARD · O4 facilities on ladders ≠ loans on banks (12/13 weeks, −0.04…−0.27B net)** | The mirror between a borrower's facility tranches and its lender's loan rows drifts by small amounts (prepayments, estates, re-keys). Since §7.373 the loan book is its rows, so the line names the ROWS that disagree; owner: whoever next touches bank-lending's reconciliation — make the two one ledger (the loan row IS the facility tranche seen from the lender). |
-| **SCOREBOARD · O5 consignments and contracts with a dead party (13/13 weeks; 3–16k consignments, hundreds of contracts)** | An estate closes a firm's ladder and register (§7.371) but not its consignments in transit or its supply contracts. Owner: B's remainder — the estate delivers or scraps the goods in transit by wire and terminates the contracts; the audit then prints nothing. |
-| **SCOREBOARD · O1 sovereign held > outstanding (1–3 of 13 weeks, ~2% of a region's stock)** | A week in which the books hold more sovereign face than is outstanding — the primary's withdrawn issuance (§7.360) and the register's fills disagree for a week. Owner: P (per-instrument clearing keys the fills by tranche). |
-| **SCOREBOARD · O3/N2 a merger's residues (2 of 13 weeks)** | Rows still on an absorbed firm and a re-keyed tranche carrying the target's ticker in its id (N2's re-key names). Owner: 10-mergers — the absorbed firm's register and ladder move by wire and the id carries the acquirer. |
-| **SCOREBOARD · W2 the clearing house holds paper (13/13 weeks, 16 region-kinds, ≤0.4B)** | The non-register holders' fills are not wired yet — the banks' sovereign investment books, the central bank's fills, the treasuries' bills, the households' equity. Owner: P (the register keyed per tranche) and the household register. |
-| **SCOREBOARD · P1/P2/P3 the price families (P1 13/13: ~1,000 issuers price a senior claim wider than a junior one; P3 rating rank 0.3–0.5)** | The books clear per issuer with one spread per kind; seniority and rating order cannot hold until P clears per tranche on price. Owner: P. |
-| **THE UNEMPLOYMENT RATCHET — now read by the burn-in's cause trace** | §7.301's bend and §7.342's relapse are superseded by a measured mechanism (§7.345): the first two months shed on CASH DISTRESS (firms open without working capital for a level that just doubled — the transient the burn-in exists to absorb), then from w13 the only layoff cause is the GROWTH signal with ZERO vacancies in every region. The level target deflates a budget-anchored nominal revenue by a price that rose ×2.5 (the seed's coverage gap priced once) and reads every firm as overstaffed by half; nothing hires because nothing is understaffed by that reading. Six self-contradicting rules were fixed on the way (§7.345 (1)–(6)); the remainder is this reading and the price drift it feeds on (row below). Owner: LAB, first item of the next campaign; the instrument is `LABOR_CAUSES=1` under `SEED_BURN_IN=auto`. |
-| **THE BOOKS PRINT THEIR DAMPERS** | **THE DAMPER ADAPTS (§7.338):** a name bound k weeks running gets a cap (1+k)× wider, so the print can never be the damper for long; binds carry direction. 13-week: 1,364 → 973, credit tails 209/130/34 → 47/51/2. What remains is the equity half (739, split up/down — the small-cap float, SCALE's) and the stock-loan book (121). The w52+ seam remainder rides here (§7.249–250). |
-| **BEHAVIOUR LIVES IN THE STAGES, NOT THE OBJECTS** | §7.229: 7,736 lines domain/ vs 24,595 stages/. Partly closed (four defect objects §7.230; company kernel §7.238). Next: continue the extract→fingerprint loop stage by stage. Owner: STRUCT step 2. |
-| **A SECURITY IS A DISPLAY STRUCT** | `TradeableInstrument` = tag + 26-optional-field bag; four taxonomies reconciled additively (§7.230) but the discriminated-union migration is open; a new profile still has no small-firm tier (SME pools keyed by industry). Owner: STRUCT step 4. |
-| **EVERY MONEY FIELD IS NAMED USD AND HOLDS LOCAL MONEY** | `PaymentInstruction` carries no currency; §7.255 fixed the named salads (GDP NX, carrier revenue, commodity ratio) but the cross-book instruction legs remain. Next: brand `Money<C>` at the `pay()` seam. Owner: XB/STRUCT Tier 4. |
-| **ONE QUANTITY, MANY AUTHORS — CLOSED (§7.341)** | §7.338 closed the seller PD, book depreciation and the labour force; §7.341 closed the last: the consumer loss curve is ONE curve (a region with no measured tier books takes the ladder's seed shares, not a second formula), and the instalment-vs-revolving loss ratio has one owner (`CONSUMER_TERM_LOSS_SHARE_OF_CARD`, three sites → one). |
-| **THE LEVEL DRIFTS AND THE BURN-IN DOES NOT SETTLE** | §7.338 closed the seed's price rule; §7.343 the buyers' ratchet; §7.345 the flat ladder (a buyer with reach ≈ 1 could ration but never reprice) — the seed's 72% coverage now prices ONCE at budget/supply (CPI ×2.0–2.8 in month one, then firms are PROFITABLE: 5–8% below their cost of capital where the seed put half). What remains, measured to 156 weeks under `SEED_BURN_IN=auto`: the level keeps rising ~40%/yr with fill FALLING (0.85 → 0.49) and u +1pp/month. Two owners named, neither yet touched: (a) `householdBudgetReachMultiple` counts the same reallocatable money once per category — every category's ladder reaches into the same other-category dollars, so prints clear above what cash can pay and fill falls at a rising price; (b) a firm's input budget is a share of its own nominal revenue (stage 03's corporateDemandUSD) — the corporate side has no nominal anchor, so a level shift in outputs is a level shift in inputs is a level shift in outputs. Then the roster's coverage itself (per-sub-unit revenue LEVEL fit, §7.343). The gate: the burn-in settles. |
-| **THE REGISTER OPENS AT A QUARTER OF ITS STEADY STATE** | §7.232: rows 32,278 → ~113k settled (×3.51); one line of step 6's table. The claimed algorithmic win is dead (§7.228: 0.0% duplicates). Owner: seed via SEED_BURN_IN gate. |
-| **A SHOCK TEST STOPPED MOVING ITS PRICE** | Sustained-equity-demand A/B pins at the damper (same signature as the sovereign one). Re-measure with the damper work. |
-| **INSTITUTIONAL OPENING SIZE STILL ASSIGNED** | `INSTITUTIONAL_OPENING_BOOK_SHARE.equity = 0.42` — needs the asset manager anchored on households' own fund holdings; interlocks with the manager/vehicle split; a full seed re-base (SEED_BURN_IN gate, §7.283). Owner: COH. |
-| **A MANAGER AND A VEHICLE IN ONE OBJECT** | HEDGE_FUND/PENSION_FUND are both; neither is modelled. **Design assigned (§7.284, ETF template):** (1) vehicle keeps the InstitutionalEntity (assets, cash, unit-holder liability; HF gets an LP register — DYN-adjacent); (2) manager keeps the Company shell with a NEW `managesEntityIds` link replacing id-equality (first commit, pure structure); (3) the fee becomes the real vehicle→manager payment (§7.285 executed this on the conflated object). Own §1.7 chain. **§7.341:** the structure is complete — `managesEntityIds` + `managedEntityIdsOf` are the only link (the seed's last id-equality lookup is gone); every reader resolves through it. What remains is the SEED giving the vehicle its own id (a declared re-base: entity-scoped RNG re-keys), bundled with the COH `equity: 0.42` re-anchor and the register-at-a-quarter seed under the one SEED_BURN_IN gate. |
-| **FX SWAP LINES DO NOT EXIST** | The routine stress instrument; needs an FX funding market first (its own stated gate, §7.282). |
-| **BANK RESOLUTION — CLOSED (§7.339); one remainder** | The §7.302 WIP was rebuilt from its record (the patch was lost with its scratchpad) and the recorded defects do not recur: the transfer is identity-exact on both sheets (a forced SAXW→IVQH resolution runs 8 weeks harness-green). Remainders: (1) a failed bank's HOUSEHOLD-held equity is not a register claim, so whatever the receivership is paid beyond its institutional claims idles on the shell's account at its acquirer (0 in the least-cost case, which is the usual one). (The negative-reserve banks this build found are closed by §7.340's funding close, and the harness watches for an overdrawn bank now.) |
-| **FX SPREAD — CLOSED (§7.341)** | §7.282 charged the converting firm; §7.341 charges the last payers — a household or a treasury buying abroad pays the same pip to the buyer region's desks ('fx conversion spread', from the HOUSEHOLD/GOVERNMENT party). The financial books' own conversions are the desks' own business (the FX book prices them). |
-| **LOGISTICS IS AN ORDER OF MAGNITUDE TOO SMALL** | 1.0B/wk = 0.05% of world GDP at §7.287 vs real 5–6%; carriers all alive and earning (§7.267) so the gap is domestic tonnage/scale, not deaths. Measurement-gated re-read (Tier 5), owner the freight book with IND16's channel margin. |
-| **UK/EUR BANK WATCHES** | UK NIM marginal (survivors 0.0089–0.0098 vs the 0.01 floor — VOUL's seed wholesale at its cleared spread, §7.259/§7.261: watch, not defect); EUR banks carry wholesale they cannot repay, EUR band pending (§7.254); sovereign-book accretion missing from the NIM measure — pass prior-week accretion. **§7.340:** MIUJ (USA) raised 113B of wholesale in 13 weeks against a structural deposit outflow (~9B/wk) and its NIM fell 0.033 → 0.011 — a bank that funds a shrinking deposit base at its own spread instead of shrinking its book. Measure on the reference; the response (run off the book) is a bank-behaviour item, not a funding one. |
-| **THE LAST BOUNDARY LINE — now rolls both ways (§7.340)** | 'wholesale funding repaid' AND 'wholesale funding raised' — the wholesale line is a real roll at the boundary now (repaid from excess cash in 02b; raised at the funding close by a bank short of its buffer). The lender is still unnamed. **Named successor:** the interbank unsecured market — surplus banks (cash above the LCR buffer) lend to short ones at policy plus the borrower's cleared spread, overnight, as a lent-asset line on the lender (`interbankLentUSD`, the shape of `repoLentUSD`) and wholesale on the borrower; the boundary keeps only what no bank will lend. The seed's matching claim (SEED_BURN_IN) remains the close for the opening stock. |
-| **CONSEQUENCE ROWS (rule 18)** | Equity prices past ~w80 and real-growth escapes at horizon: evidence, void as scoped; re-measure on the current reference before deciding a mechanism is missing. |
+**Emptied 2026-09-02 (user order): every live defect is a step of §5-FINALIZATION.** A defect
+found from here on is added THERE as a numbered step at its logical place, never to a second
+list. The rows this table carried — the unemployment ratchet, the dampers, behaviour in the
+stages, the security display struct, unbranded money, the drifting level, the register's opening
+size, the shock test at the damper, the institutional opening share, the manager/vehicle object,
+FX swap lines, bank resolution's remainder, logistics scale, the UK/EUR bank watches, the last
+boundary line's successor (the interbank market), the consequence rows, and the scoreboard's
+standing lines — are all in it; §7 keeps their history.
 
 ### 6.2 Watchlist — measure, do not fix
 
