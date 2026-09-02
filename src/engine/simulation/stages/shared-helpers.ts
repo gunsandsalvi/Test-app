@@ -9,7 +9,7 @@ import { defect } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { transferHolding } from '../../ledger/holdings-ledger';
 import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, facilityBookOf } from '../../../engine2/tranches';
+import { ladderRowsOf, TR_FLOATING, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
 import { INSTRUMENT_IDS } from '../../columns/intern';
 import { Company, Region, SmePool, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
@@ -404,6 +404,8 @@ export function applyPendingCorporateActionSettlements(
   const v2 = ctx.v2;
   const H = v2.holdings;
   const refOf = (t: string): number | undefined => v2.internedIdByString.get(t);
+  // 13b: an instrument is a tranche or its issuer; the issuer's ticker is one read either way.
+  const issuerTickerOf = (instrumentId: string): string | undefined => ctx.issuerTickerById?.get(issuerIdOf(v2, instrumentId));
   const pairKeyOf = (r: number): number => H.typeRef[r] * 0x400000 + H.instrRef[r];
   const toPairs = (byType: Map<string, Map<string, number>>): Map<number, number> => {
     const out = new Map<number, number>();
@@ -439,8 +441,8 @@ export function applyPendingCorporateActionSettlements(
         const newRows = rows.map((p) => {
           const ratio = byId.get(p.instrumentId);
           if (ratio === undefined || !(p.inventoryUSD > 0) || Math.abs(ratio - 1) < 1e-9) return p;
-          const issuerTicker = ctx.issuerTickerById?.get(p.instrumentId);
-          const issuerRegion = regionByIssuerId.get(p.instrumentId);
+          const issuerTicker = issuerTickerOf(p.instrumentId);
+          const issuerRegion = regionByIssuerId.get(issuerIdOf(v2, p.instrumentId));
           if (!issuerTicker || !issuerRegion) return p;
           const deltaUSD = p.inventoryUSD * (ratio - 1);
           const house = { kind: 'CLEARING_HOUSE' as const, region: issuerRegion };
@@ -506,7 +508,7 @@ export function applyPendingCorporateActionSettlements(
       if (!(denomUSD > 0)) return;
       denomByPair.set(k, denomUSD);
       const floatUSD = denomUSD - registerUSD;
-      const issuerTicker = ctx.issuerTickerById?.get(issuerId);
+      const issuerTicker = issuerTickerOf(issuerId);
       if (floatUSD > 0 && issuer && issuerTicker && ctx.paymentJournal) {
         journalPayment(ctx.paymentJournal, {
           payer: { kind: 'COMPANY', ticker: issuerTicker },
@@ -540,7 +542,7 @@ export function applyPendingCorporateActionSettlements(
           // issuer, so the money has a payer and a payee (rule 14) instead of appearing on the
           // holder's book while the issuer's ledger says it left.
           const shareUSD = owedUSD * (H.qtyUSD[r] / (denomByPair.get(k) ?? totalUSD));
-          const issuerTicker = ctx.issuerTickerById?.get(v2.internedStrings[H.instrRef[r]]);
+          const issuerTicker = issuerTickerOf(v2.internedStrings[H.instrRef[r]]);
           // §5-CLOSE C4: a holder paid by an issuer nobody can name is money from nobody — a
           // defect at the site that recorded the action, never a credit.
           if (!ctx.paymentJournal || !issuerTicker) {
@@ -587,7 +589,7 @@ export function applyPendingCorporateActionSettlements(
       }
       // CASH: and it comes FROM THE ISSUER, by name — a float INCREASE runs the same
       // instruction backwards, because a placement is paid for.
-      const principalIssuerTicker = ctx.issuerTickerById?.get(v2.internedStrings[H.instrRef[r]]);
+      const principalIssuerTicker = issuerTickerOf(v2.internedStrings[H.instrRef[r]]);
       if (ctx.paymentJournal && principalIssuerTicker && Math.abs(principalCashUSD) > 0) {
         journalPayment(ctx.paymentJournal, principalCashUSD > 0
           ? {
@@ -634,7 +636,7 @@ export function applyPendingCorporateActionSettlements(
       // §5-FINALIZATION step 13 (W2): equity has no ladder, so its issuer's side of the action is
       // wired HERE — a buyback returns the shares from the house to the issuer, a placement
       // creates them from the issuer to the house — and the house nets to zero on equity too.
-      const equityIssuerTicker = heldInShares(a.type) ? ctx.issuerTickerById?.get(a.id) : undefined;
+      const equityIssuerTicker = heldInShares(a.type) ? issuerTickerOf(a.id) : undefined;
       if (a.retiredUSD > 0) {
         const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.retiredUSD, shares: a.anyShares ? a.retiredSh : undefined };
         transferHolding(v2, holder, house, spec, 'corporate action: paper retired pro rata');
@@ -721,6 +723,7 @@ export function payHoldersAccruedInterest(
  */
 export function applyHolderInterestAccruals(
   ctx: {
+    v2: V2World;
     updatedInstitutionalEntities: InstitutionalEntity[];
     pendingHolderAccrualUSD: Map<string, number>;
     pendingHolderAccrualPayout: Set<string>;
@@ -831,7 +834,7 @@ export function applyHolderInterestAccruals(
     const byHolder = ctx.holderAccruedInterestUSD.get(instrumentKey);
     if (!byHolder) return;
     const issuerId = instrumentKey.slice(instrumentKey.indexOf(':') + 1);
-    const ticker = ctx.issuerTickerById?.get(issuerId);
+    const ticker = ctx.issuerTickerById?.get(issuerIdOf(ctx.v2, issuerId)); // 13b: a tranche key names its issuer through the store
     if (!ticker || !ctx.paymentJournal) {
       // §5-CLOSE C4: a coupon due from an issuer nobody can name is a defect at the site that
       // accrued it, not a receivable that quietly survives.

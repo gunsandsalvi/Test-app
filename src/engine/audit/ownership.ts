@@ -7,7 +7,7 @@ import { AuditFinding, B, pct, sum } from './types';
 import { marketCapOf } from '../../domain/company';
 import { ensureV2 } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
-import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf } from '../../engine2/tranches';
+import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf } from '../../engine2/tranches';
 import { bookHeadOf } from '../../engine2/holdings';
 
 /** O1 — two-sided: what the books hold of each debt class equals what is outstanding, in both directions. */
@@ -79,13 +79,14 @@ function o3(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const live = new Map(state.companies.map((c) => [c.id, c]));
   const ent = new Map(state.institutionalEntities.map((e) => [e.id, e]));
+  const v2o3 = ensureV2(state); // 13b: a row names a tranche or its issuer
   let orphan = 0, orphanUSD = 0, merged = 0, mergedUSD = 0, deadHolders = 0;
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) { if (e.itemizedHoldings.length) deadHolders++; return; }
     e.itemizedHoldings.forEach((h) => {
       const v = h.quantityOrNotionalUSD ?? 0;
       if (h.instrumentType === 'GOV_BOND') return;
-      const c = live.get(h.instrumentId);
+      const c = live.get(issuerIdOf(v2o3, h.instrumentId));
       if (c) { if (c.mergerAcquired) { merged++; mergedUSD += v; } return; }
       if (ent.get(h.instrumentId)) return;
       if (h.instrumentType === 'PE_FUND_INTEREST' || h.instrumentType === 'ETF_SHARE') return;

@@ -23,7 +23,6 @@ import { closeOutDerivativesOfParty } from './derivative-lifecycle';
 import { retireLadderFace, rebuildLadder } from '../../ledger/tranche-ledger';
 import { transferHolding } from '../../ledger/holdings-ledger';
 import { isTrancheKind } from '../../../domain/assets';
-import { internString } from '../../../engine2/world';
 import { GameState, RegionId, Company, InstitutionalEntity, ItemizedHolding } from '../../../types';
 import {
   Estate, EstateClaim, CLAIM_SENIORITY, estateAssetsUSD, claimsAtSeniority, outstandingUSD,
@@ -38,7 +37,7 @@ import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { cashOf } from '../../ledger/accounts';
-import { facilitiesOfBorrower } from '../../../engine2/tranches';
+import { facilitiesOfBorrower, issuerIdOf } from '../../../engine2/tranches';
 
 /** How many resolutions the realised recovery rate averages over before it displaces the prior. */
 export const RECOVERY_HISTORY_LENGTH = 24;
@@ -115,9 +114,10 @@ function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
     const H = index.v2.holdings;
     const byInstrument = new Map<string, number[]>();
     for (let r = bookHeadOf(index.v2, id); r >= 0; r = H.next[r]) {
-      const instrumentId = index.v2.internedStrings[H.instrRef[r]];
-      const rows = byInstrument.get(instrumentId);
-      if (rows) rows.push(r); else byInstrument.set(instrumentId, [r]);
+      // 13b: keyed by the ISSUER — a row names a tranche or its issuer; a claim is on the issuer.
+      const issuerId = issuerIdOf(index.v2, index.v2.internedStrings[H.instrRef[r]]);
+      const rows = byInstrument.get(issuerId);
+      if (rows) rows.push(r); else byInstrument.set(issuerId, [r]);
     }
     index.rowsByEntityInstrument.set(id, byInstrument);
   });
@@ -411,12 +411,12 @@ function reduceHolding(
       // §5-WIRES W2: the paper goes back to the estate by wire — recovered (cash arrived) or
       // written off (nothing did); the ledger debits the rows.
       const H = index.v2.holdings;
-      const takes: { type: ItemizedHolding['instrumentType']; region: RegionId; usd: number }[] = [];
+      const takes: { type: ItemizedHolding['instrumentType']; region: RegionId; usd: number; id: string }[] = [];
       for (let i = 0; i < rows.length && leftUSD > 0; i++) {
         const r = rows[i];
         const takeUSD = Math.min(leftUSD, H.qtyUSD[r]);
         leftUSD -= takeUSD;
-        if (takeUSD > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeUSD });
+        if (takeUSD > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeUSD, id: index.v2.internedStrings[H.instrRef[r]] });
       }
       // §5-WIRES W6: the holder's paper goes to the region's clearing house (the register side);
       // the dead issuer's ladder retires the same face against the house (the ladder side), so the
@@ -424,7 +424,7 @@ function reduceHolding(
       const dead = index.companyById.get(companyId);
       takes.forEach((t) => {
         transferHolding(index.v2, { kind: 'INSTITUTION', id }, { kind: 'CLEARING_HOUSE', region: t.region },
-          { instrumentType: t.type, instrumentId: companyId, issuerRegion: t.region, valueUSD: t.usd }, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
+          { instrumentType: t.type, instrumentId: t.id, issuerRegion: t.region, valueUSD: t.usd }, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
         if (dead && isTrancheKind(t.type)) {
           retireLadderFace(index.v2, { id: dead.id, ticker: dead.ticker, region: dead.region }, t.type as 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER', t.usd, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
         }
@@ -471,10 +471,10 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   // Bondholders and loan holders, from the books that actually hold the paper.
   // §7.307 holdings flip: row walk — a row on another issuer costs one int compare.
   const H = ctx.v2.holdings;
-  const compRef = internString(ctx.v2, comp.id);
   ctx.updatedInstitutionalEntities.forEach((e) => {
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
-      if (H.instrRef[r] !== compRef) continue;
+      // 13b: a row names a tranche or its issuer; the claim is on the issuer either way.
+      if (issuerIdOf(ctx.v2, ctx.v2.internedStrings[H.instrRef[r]]) !== comp.id) continue;
       const usd = H.qtyUSD[r];
       const instrumentType = ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
       // §7.241: exhaustive on purpose. The old else-if chain gave a NEW instrument type NO estate

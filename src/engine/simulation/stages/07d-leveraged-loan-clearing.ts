@@ -27,7 +27,7 @@
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, TR_FACILITY } from '../../../engine2/tranches';
+import { ladderRowsOf, TR_FLOATING, TR_FACILITY, issuerIdOf } from '../../../engine2/tranches';
 import { isActiveCompany } from '../../../domain/company';
 import {
   computeReservationSpreadBps,
@@ -221,8 +221,9 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     bookEntities.forEach((entity) => {
       const currentHoldingByCompany = new Map<string, number>();
       store.scan(entity.id, 'LEVERAGED_LOAN', (h) => {
-        if (!issuerIdsThisRegion.has(h.instrumentId)) return false;
-        currentHoldingByCompany.set(h.instrumentId, (currentHoldingByCompany.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+        const issuerId = issuerIdOf(v2, h.instrumentId); // 13b: a row names a tranche or its issuer
+        if (!issuerIdsThisRegion.has(issuerId)) return false;
+        currentHoldingByCompany.set(issuerId, (currentHoldingByCompany.get(issuerId) ?? 0) + h.quantityOrNotionalUSD);
         return true;
       });
       currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);

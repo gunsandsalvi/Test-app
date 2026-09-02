@@ -49,6 +49,9 @@ export interface TrancheStore {
   tail: Int32Array;
   /** Firms whose ladder has ever been synced — the week-start catch-up uses it to spot births. */
   synced: Set<string>;
+  /** §5-FINALIZATION 13b: the live row of a tranche id (interned) — an instrument resolves to its
+   *  issuer in one read (`issuerIdOf`). Maintained by the row writer and the row freer only. */
+  rowByIdRef: Map<number, number>;
 }
 
 /**
@@ -89,6 +92,7 @@ export function newTrancheStore(): TrancheStore {
     next: new Int32Array(cap).fill(-1),
     freeHead: -1,
     used: 0,
+    rowByIdRef: new Map(),
     head: new Int32Array(0),
     tail: new Int32Array(0),
     synced: new Set<string>(),
@@ -114,6 +118,7 @@ function growTranches(S: TrancheStore): void {
 
 /** A freed row carries nothing a scan could mistake for a live tranche. */
 function freeRow(S: TrancheStore, r: number): void {
+  if (S.rowByIdRef.get(S.idRef[r]) === r) S.rowByIdRef.delete(S.idRef[r]);
   S.callProt[r] = undefined; S.flags[r] = 0; S.bankRef[r] = -1; S.issuerRef[r] = -1; S.principalUSD[r] = 0;
   S.next[r] = S.freeHead; S.freeHead = r;
 }
@@ -152,6 +157,7 @@ function writeRow(S: TrancheStore, r: number, v2: V2World, t: DebtTranche): void
     | (t.seniority === 'SUBORDINATED' ? TR_SUBORDINATED : 0)
     | (t._refinanceInitiated ? TR_REFI_INITIATED : 0);
   S.idRef[r] = internString(v2, t.id);
+  S.rowByIdRef.set(S.idRef[r], r);
   S.bankRef[r] = t.facilityBankTicker === undefined ? -1 : internString(v2, t.facilityBankTicker);
   S.callProt[r] = t.callProtection;
 }
@@ -375,6 +381,20 @@ export function facilityBookOf(v2: V2World, bankTicker: string): number {
 export function facilitiesOfBorrower(v2: V2World, companyId: string): FacilityRow[] {
   const S = v2.tranches;
   return ladderRowsOf(v2, companyId).filter((r) => (S.flags[r] & TR_FACILITY) && S.bankRef[r] >= 0 && S.principalUSD[r] > 0.01).map((r) => facilityRowOf(v2, r));
+}
+
+/** §5-FINALIZATION 13b — AN INSTRUMENT'S ISSUER. A register row names either a company (equity,
+ *  and the credit kinds until the writers flip to tranche ids) or a TRANCHE; either way the
+ *  issuer is one read: the tranche's row carries its issuer, any other id is the issuer itself. */
+export function trancheRowOf(v2: V2World, instrumentId: string): number | undefined {
+  const ref = v2.internedIdByString.get(instrumentId);
+  return ref === undefined ? undefined : v2.tranches.rowByIdRef.get(ref);
+}
+export function issuerIdOf(v2: V2World, instrumentId: string): string {
+  const r = trancheRowOf(v2, instrumentId);
+  if (r === undefined) return instrumentId;
+  const iss = v2.tranches.issuerRef[r];
+  return iss >= 0 ? v2.internedStrings[iss] : instrumentId;
 }
 
 /** §5-WIRES D: the ladder's face on the live rows — total debt as a read. */

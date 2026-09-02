@@ -12,7 +12,7 @@ import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { ensureV2, internString, revHistSeed, rowOf, ringCopyRow } from '../../../engine2/world';
-import { materializeLadder, facilityBookOf } from '../../../engine2/tranches';
+import { materializeLadder, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
 import { rebuildLadder } from '../../ledger/tranche-ledger';
 import { pay } from './settlement';
 import { GameState, DebtTranche, RegionId, ItemizedHolding } from '../../../types';
@@ -404,12 +404,14 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       // rows exchange like the bonds' (it was the one company-keyed kind the exchange skipped).
       const cpRef = internString(ctx.v2, 'COMMERCIAL_PAPER');
       ctx.updatedInstitutionalEntities.forEach((e) => {
-        const swaps: { type: ItemizedHolding['instrumentType']; valueUSD: number; shares: number | undefined }[] = [];
+        const swaps: { type: ItemizedHolding['instrumentType']; valueUSD: number; shares: number | undefined; id: string }[] = [];
         for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
-          if (H.instrRef[r] !== targetIdRef) continue;
+          // 13b: a row names a tranche or its issuer; the target's paper is what resolves to it.
+          const rowId = ctx.v2.internedStrings[H.instrRef[r]];
+          if (H.instrRef[r] !== targetIdRef && issuerIdOf(ctx.v2, rowId) !== target.id) continue;
           const t = H.typeRef[r];
           if (t !== equityRefR && t !== corpBondRef && t !== levLoanRef && t !== cpRef) continue;
-          swaps.push({ type: ctx.v2.internedStrings[t] as ItemizedHolding['instrumentType'], valueUSD: H.qtyUSD[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r] });
+          swaps.push({ type: ctx.v2.internedStrings[t] as ItemizedHolding['instrumentType'], valueUSD: H.qtyUSD[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r], id: rowId });
         }
         if (swaps.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };
@@ -418,7 +420,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
         // ladders' (`rebuildLadder` below) and the equity issuer's, counted once.
         swaps.forEach((sw) => {
           const isEquity = heldInShares(sw.type);
-          const oldSpec = { instrumentType: sw.type, instrumentId: target.id, issuerRegion: target.region, valueUSD: sw.valueUSD, shares: sw.shares };
+          const oldSpec = { instrumentType: sw.type, instrumentId: sw.id, issuerRegion: target.region, valueUSD: sw.valueUSD, shares: sw.shares };
           transferHolding(ctx.v2, holder, { kind: 'CLEARING_HOUSE', region: target.region }, oldSpec, 'merger: target paper exchanged');
           // Step 13 (W2): the equity issuers' sides — the target's shares are cancelled (house →
           // target), the acquirer's created (acquirer → house); the credit kinds' are the ladders'.

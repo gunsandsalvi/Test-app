@@ -14,7 +14,7 @@ import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/worl
 import { bookHeadOf } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
 import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
-import { facilityBookOf, facilitiesOfBorrower } from '../engine2/tranches';
+import { facilityBookOf, facilitiesOfBorrower, issuerIdOf } from '../engine2/tranches';
 
 export type { ObjectRef, ObjectType, ObjectLabel, Series } from './types';
 export { refKey, sameRef } from './types';
@@ -187,7 +187,8 @@ export function bookOf(world: World, entityId: string): RegisterRow[] {
   return out;
 }
 
-/** Every register row that names an instrument — the holders of one company's paper. */
+/** Every register row that names an instrument — the holders of one company's paper (13b: a row
+ *  names a tranche or its issuer; the company's paper is every row that resolves to it). */
 export function holdersOf(world: World, instrumentId: string): RegisterRow[] {
   const out: RegisterRow[] = [];
   const ref = world.v2.internedIdByString.get(instrumentId);
@@ -195,10 +196,10 @@ export function holdersOf(world: World, instrumentId: string): RegisterRow[] {
   const H = world.v2.holdings;
   world.state.institutionalEntities.forEach((e) => {
     for (let r = bookHeadOf(world.v2, e.id); r >= 0; r = H.next[r]) {
-      if (H.instrRef[r] !== ref) continue;
+      if (H.instrRef[r] !== ref && issuerIdOf(world.v2, world.v2.internedStrings[H.instrRef[r]]) !== instrumentId) continue;
       out.push({
         holderId: e.id,
-        instrumentId,
+        instrumentId: world.v2.internedStrings[H.instrRef[r]],
         instrumentType: world.v2.internedStrings[H.typeRef[r]],
         region: world.v2.internedStrings[H.regionRef[r]],
         usd: H.qtyUSD[r],

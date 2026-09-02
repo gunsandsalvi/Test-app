@@ -32,7 +32,7 @@
 import { riskAversionOf } from '../../../domain/preferences';
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf } from '../../../engine2/tranches';
+import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
 import { REGION_IDS } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
@@ -698,8 +698,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       cpEntities.forEach((entity) => {
         const byIssuer = new Map<string, number>();
         store.scan(entity.id, 'COMMERCIAL_PAPER', (h) => {
-          if (!cpIssuerIds.has(h.instrumentId)) return false;
-          byIssuer.set(h.instrumentId, (byIssuer.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+          const issuerId = issuerIdOf(v2Mirror, h.instrumentId); // 13b: a row names a tranche or its issuer
+          if (!cpIssuerIds.has(issuerId)) return false;
+          byIssuer.set(issuerId, (byIssuer.get(issuerId) ?? 0) + h.quantityOrNotionalUSD);
           return true;
         });
         heldByIssuerByEntity.set(entity.id, byIssuer);
