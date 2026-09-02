@@ -14,6 +14,8 @@ export interface RegionSnapshot {
   centralBankAssetsUSD: number;
   sovereignOutstandingUSD: number;
   bankDepositsUSD: number;
+  /** The households' money settled this week and on a bank's line next week (T+1). */
+  householdInTransitUSD: number;
   bankLoansUSD: number;
 }
 export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>>;
@@ -34,6 +36,7 @@ export function snapshotOf(state: GameState): AuditSnapshot {
         const s = b.bankBalanceSheet!;
         return a + s.depositsUSD + (s.corporateDepositsUSD ?? 0) + (s.institutionalDepositsUSD ?? 0) + (s.smeDepositsUSD ?? 0);
       }, 0),
+      householdInTransitUSD: (reg.householdState as unknown as { pendingBankSettlementUSD?: number })?.pendingBankSettlementUSD ?? 0,
       bankLoansUSD: banks.reduce((a, b) => a + b.bankBalanceSheet!.businessLoanBookUSD + b.bankBalanceSheet!.consumerLoanBookUSD, 0),
     };
   });

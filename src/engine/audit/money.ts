@@ -154,8 +154,11 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
     if (!before || !cb || !reg) return;
-    const now = sum(banksOf(state, r), (b) => depositsOf(b.bankBalanceSheet!)) + cb.treasuryAccountUSD;
-    const moneyBefore = before.bankDepositsUSD + before.treasuryAccountUSD;
+    // Money is the bank lines, the treasury's account AND the households' money in transit —
+    // settled to the household sector this week, on a bank's line next week (T+1).
+    const inTransit = (reg.householdState as unknown as { pendingBankSettlementUSD?: number })?.pendingBankSettlementUSD ?? 0;
+    const now = sum(banksOf(state, r), (b) => depositsOf(b.bankBalanceSheet!)) + cb.treasuryAccountUSD + inTransit;
+    const moneyBefore = before.bankDepositsUSD + before.treasuryAccountUSD + before.householdInTransitUSD;
     // Every creator, by name: the payment ledger's (bank credit written, reserves the central
     // bank issued, what the banks paid out of their own account, money from other regions), the
     // household books' deposit writes, the interest the banks credited to deposits, and the
