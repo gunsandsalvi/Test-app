@@ -113,6 +113,10 @@ export interface GameState {
     centralBankIssuanceByRegion: Record<string, number>;
     bankOwnAccountByRegion: Record<string, number>;
     crossBorderByRegion: Record<string, number>;
+    /** §5-WIRES A — the account store's gate after the week's passes (must be zero). */
+    accountMismatchUSD: number;
+    accountMismatchWorst: string;
+    accountRowsUnmapped: number;
   };
   /** SEG1 — payments recorded AFTER the week's settlement cutoff (hc-lifecycle's tender
    * settlements, birth carves). A real net-settlement system rolls after-cutoff payments into

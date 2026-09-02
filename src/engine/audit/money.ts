@@ -176,6 +176,17 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
   return out;
 }
 
+/** M7 — §5-WIRES A: the account store, applied by one rule, agrees with every balance the books
+ *  carry after each settlement pass, and every settled row found a party's row. */
+function m7(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const s = state.lastSettlement;
+  if (!s) return out;
+  if (s.accountRowsUnmapped > 0) out.push({ family: 'M', check: 'M7 every settled row has an account', week, usd: s.accountRowsUnmapped, message: `${s.accountRowsUnmapped} settled rows named a party the account store has no row for` });
+  if (s.accountMismatchUSD > 1e3) out.push({ family: 'M', check: 'M7 accounts = books', week, usd: s.accountMismatchUSD, message: `the account store and the books differ by ${B(s.accountMismatchUSD)} after the week's passes — worst ${s.accountMismatchWorst}` });
+  return out;
+}
+
 export function auditMoney(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
-  return [...m1(state, week), ...m2(state, week), ...m3(state, week), ...m4(state, week), ...m5(state, week), ...m6(prev, state, week)];
+  return [...m1(state, week), ...m2(state, week), ...m3(state, week), ...m4(state, week), ...m5(state, week), ...m6(prev, state, week), ...m7(state, week)];
 }
