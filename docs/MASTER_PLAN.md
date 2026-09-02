@@ -413,7 +413,7 @@ decisions) is folded into it as its measurement tail — §7.289–301 hold the 
 | 10 | **CLOSE — the closed model** | **CLOSED (§7.349–366): the money family prints no line, the scoreboard is the standing gate, WIRES (row 11) carries the ownership/price families forward.** The campaign's own chain, for the record: C1 the AUDIT built (§7.349, six families in `src/engine/audit/`, the harness runs it weekly and prints the scoreboard). Next, in order: C2 the seed closes (the central bank backs reserves + TGA, wholesale seed = 0, every sovereign bond held, no currency plug, no unbacked field); C3 the UNMODELED party deleted (funding close → interbank/standing facility; seed suppliers → the segment; leftovers → defect); C4 every bank money flow a payment (DONE §7.352: IOR, household interest and principal, corporate deposit interest, dividends, originations; `evolveBankingSector` never touches cash; `creditUnbacked` deleted); C4b the cross-border settlement leg (DONE §7.353: `foreignOfficialClaimsUSD`, one signed line per central bank, summing to zero); C5 the treasury and households (DONE §7.354: the account moves by payments only, revenue = collections, the central bank paid at redemption and on coupons, the remittance a payment, no residual income or placeholder wealth, the float paid its dividend); C6 names (DONE §7.355). C5b DONE §7.356 (M1 closes to 0.9B). M4 DONE §7.357 (no balance negative at the close). O2 DONE §7.358, M6 DONE §7.359 — money that is not anyone's: 3.3B/4 lines from 2,100B/31. O1 + F2 DONE §7.360 (unplaced paper withdrawn; the payroll tax paid — the accounts family is clean but F1). **THE MONEY FAMILY CLOSES (§7.363–364): M1, M2, M4, M5, M6 print no line; money that is not anyone's 2,100B/31 lines → 1.66B on one M3 line in one week.** NO CAPS (user order, §7.365): every weekly move cap deleted, every reader of it measures instead; 13 weeks run; M5 closed again (§7.366, every fund's line re-struck): money that is not anyone's 2.93B on one line with NO caps. Then the PRICES campaign (§5-CLOSE (6)). |
 | 11 | **WIRES — every asset moves by a numbered instruction; everything clears by price** | **THE CAMPAIGN after CLOSE (user, 2026-09-02).** Built, each its own commit and record: W1 money (§7.367) → W2 securities (§7.368; its audit line open on the non-register holders) → W3 tranches (§7.369) → W4 goods (§7.370) → W5 void → W6 births/deaths (§7.371) → D derived reads, complete for market cap/total debt (§7.372), the loan books (§7.373), total assets (§7.374) → N dated wires + corporate tax (§7.376) → A the account store: gated (§7.377), then the authority of the pass with the households' transit gone (§7.378). **Next:** A3 per kind (companies' cash first — §7.379's design), A4 the switch, then R, then P. |
 | 12 | **INS — competition among insurers** | Three insurers per region BUILT (§7.375); the price competition is FINALIZATION step 16. |
-| 13 | **FINALIZATION — one list to the finished model** | **THE LIST (user, 2026-09-02).** §5-FINALIZATION: 26 numbered steps in build order — the ledger becomes the only book (A3–A4), the dead and the merged leave nothing behind, the stated-number registry, per-instrument price clearing, competition and behaviour, then the long-run measurements last. Supersedes §4.0 and §6.1. |
+| 13 | **FINALIZATION — one list to the finished model** | **THE LIST (user, 2026-09-02).** §5-FINALIZATION: 36 numbered steps in build order — the ledger becomes the only book (A3–A4), the dead and the merged leave nothing behind, the stated-number registry, per-instrument price clearing, competition and behaviour, then the long-run measurements last. Supersedes §4.0 and §6.1. |
 | 10 | **MGMT — corporate management in depth** | **SLICE 1 BUILT (§7.344): the preference pair on every deciding entity, the thresholds re-expressed through it, turnover on measured failure.** Charter in §5-MGMT / §5-BRAINS; what remains listed there. |
 
 ### The measurement debt (Tier 5 — finer reads still owed)
@@ -1078,6 +1078,31 @@ judge; every step names the line it closes.
     §7.283): the asset manager anchored on households' own fund holdings; `equity: 0.42` retired.
 20. **The security as a discriminated union; behaviour extracted from the stages** (STRUCT's
     open steps 2 and 4; the extract → fingerprint loop).
+
+**Part V-b — the half-built projects (found on the 2026-09-02 review; each was "slice 1" or "deferred" in its own section and is a step here now).**
+20b. **The derivative layer's remainders** (§5-DRV): FX swap lines once an FX funding market exists
+    (their own gate, §7.282 — build the market, then the lines); stage 12's player options off the
+    legacy layer onto the one contract.
+20c. **STRUCT's deferred three:** the `Money<C>` brand at `pay()` (its window has passed, §7.277 —
+    lands with the journal's currency column), the BankBook/View split with the fused type, the
+    `details`-bag discriminated union (its consumers are Aurora's now).
+20d. **The two cost ratios and the tax base still stated** (§3): the insurer's claims loss ratio and
+    the card operating cost (IND-R4) become measured loss and servicing events; the corporate tax
+    BASE (TAXR) is the statement's own; TAXR's transfer pricing and PROD's R&D spend, deferred with
+    reasons, get their gates re-read here.
+20e. **The seed's unwired positions** (§5-WIRES): the world's week-0 register, ladders and plant open
+    by wires from a SEED party that closes at week 0 — the seed is an event after all, and the W
+    family can then prove week 0 too.
+20f. **W5 — a housing market that clears dwellings by price** between households, builders and
+    estates; the aggregate stock (`housingStockUSD`, a median price, an ownership rate) becomes a
+    read of units with owners, and houses get their wires.
+20g. **NEWS slice 2** (§5-NEWS): follow-ups through an estate, auctions failed or under-subscribed,
+    damper binds, contract-break streaks.
+20h. **MGMT's remainder** (§5-MGMT) once the level row's measurement (step 22) is in.
+20i. **Aurora's remainders** (§5-AU): the money trace by reason, contracts and invoices as objects,
+    the deferred union above; the game layer stays PARKED by the user's order until they say so.
+20j. **The P1 periodicity sweep's remainder**: walk every rate, flow and index at its source for
+    its unit, once, and pin each with a test.
 
 **Part VI — the long-run measurements (each needs a run past 13 weeks; nothing above waits).**
 21. **The 1e-8 week-1 drift** (§7.370): a bisection by file with ONE dump per step.
