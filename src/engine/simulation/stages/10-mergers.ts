@@ -13,7 +13,6 @@ import { rekeyBankLinks } from './bank-resolution';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { ensureV2, internString, revHistSeed, rowOf, ringCopyRow } from '../../../engine2/world';
 import { materializeLadder, facilityBookOf } from '../../../engine2/tranches';
-import { moveFacilityLender } from '../../ledger/tranche-ledger';
 import { rebuildLadder } from '../../ledger/tranche-ledger';
 import { pay } from './settlement';
 import { GameState, DebtTranche, RegionId, ItemizedHolding } from '../../../types';
@@ -362,14 +361,6 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     mergeBankSheets(ab, tb);
     moveSectorRowsToBank(ctx.v2, target.ticker, acquirer.ticker); // A3.3: the sector parties' rows at the target join the acquirer's
     moveBankReserves(ctx.v2, target.ticker, acquirer.ticker); // A3.6a: and its reserves join the acquirer's row
-    // §5-FINALIZATION step 10: the target's facilities are rows on its borrowers' ladders that
-    // name it as lender; the acquirer's equity now carries them, so each is wired lender to
-    // lender (before this the loan rows moved and the ladders kept naming the absorbed bank,
-    // and the next sync wrote the whole book off the acquirer as "left the ladders").
-    ctx.updatedCompanies.concat(ctx.prevActivePrivateFirms).forEach((c) => {
-      moveFacilityLender(ctx.v2, { id: c.id, ticker: c.ticker, region: c.region }, target.ticker, acquirer.ticker, 'merger: facilities move to the acquiring bank');
-    });
-    restateBankSheetStatistics(ab, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker), facilityBookOf(ctx.v2, acquirer.ticker));
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (target.bankMarketShare ?? 0)).toFixed(4));
     target.bankBalanceSheet = undefined;
 
@@ -380,6 +371,9 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     // §7.339: one re-key for every link that names a bank — the customers' house-bank field, the
     // facility rows, the repo and prime-brokerage books, the offering pipeline, the derivatives.
     rekeyBankLinks(state, ctx, target.region as RegionId, target.ticker, acquirer.ticker);
+    // Steps 10/11: the re-key moved the target's facility rows to the acquirer as lender and its
+    // customers' house-bank links with them; the statistics are read once every link has moved.
+    restateBankSheetStatistics(ab, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker), facilityBookOf(ctx.v2, acquirer.ticker));
   }
 
   // OWN7: the target's PAPER moves with its debt. Holdings are keyed by the issuer's company

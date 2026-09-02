@@ -69,9 +69,13 @@ function m3(state: GameState, week: number): AuditFinding[] {
   // A3.6c-ii: a bank's corporate and institutional lines ARE its depositors' accounts
   // (`depositLinesAt`), so the line-versus-holders check is a tautology now; what remains
   // real is money with no bank at all.
-  const orphanCorp = sum(state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c) && !c.homeBankTicker), (c) => cashOf(v2, c));
-  const orphanInst = sum(state.institutionalEntities.filter((e) => !e.isDefaulted && !e.homeBankTicker), (e) => entityCashOf(v2, e));
-  if (Math.abs(orphanCorp) + Math.abs(orphanInst) > 1e6) out.push({ family: 'M', check: 'M3 balances with no bank', week, usd: orphanCorp + orphanInst, message: `${B(orphanCorp)} of firm cash and ${B(orphanInst)} of fund cash sit with no house bank` });
+  // §5-FINALIZATION step 11: a house bank that has no sheet (resolved, merged away) is no bank —
+  // the link is re-keyed at both events, and this is the measurement that it was.
+  const liveBanks = new Set(state.companies.filter((b) => b.isBankEntity && b.bankBalanceSheet && isActiveCompany(b)).map((b) => b.ticker));
+  const banked = (t: string | undefined) => !!t && liveBanks.has(t);
+  const orphanCorp = sum(state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c) && !banked(c.homeBankTicker)), (c) => cashOf(v2, c));
+  const orphanInst = sum(state.institutionalEntities.filter((e) => !e.isDefaulted && !banked(e.homeBankTicker)), (e) => entityCashOf(v2, e));
+  if (Math.abs(orphanCorp) + Math.abs(orphanInst) > 1e6) out.push({ family: 'M', check: 'M3 balances with no bank', week, usd: orphanCorp + orphanInst, message: `${B(orphanCorp)} of firm cash and ${B(orphanInst)} of fund cash sit with no live house bank` });
   // The household and SME lines are the sector rows themselves (A3.3/A3.4): nothing to compare.
   return out;
 }

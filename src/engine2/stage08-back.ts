@@ -1145,7 +1145,10 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       return vv;
     };
     let drawnRevolverRow = -1;
-    if (L8.wasDefaulted[row] !== 1 && L8.wasMergerAcquired[row] !== 1 && cash.usd < 0) {
+    // §5-FINALIZATION step 11: a committed line is a HOUSE BANK's credit. A firm with no house
+    // bank — a bank, by construction — has none to draw: its shortfall is its own book (its
+    // reserves, and the central bank's window), never a facility with no lender (§7.372).
+    if (L8.wasDefaulted[row] !== 1 && L8.wasMergerAcquired[row] !== 1 && cash.usd < 0 && L8.homeBankTicker[row]) {
       const revolverRateAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
       let alreadyDrawnUSD = 0;
       for (const r of rowList) if (TS.flags[r] & TR_FACILITY) alreadyDrawnUSD += TS.principalUSD[r];
@@ -1542,9 +1545,10 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // (book-settlement.ts, primary-settlement.ts). This line settled the whole of it against
       // the boundary while the CCP paid the boundary for the same paper.
       post(`primary ${o.purpose.toLowerCase()} proceeds (net of underwriting fee)`, settlement.proceedsUSD, undefined, false);
-    } else if (settlement && settlement.withdrawn && settlement.offering.purpose === 'REFINANCE' && maturingRow !== undefined) {
+    } else if (settlement && settlement.withdrawn && settlement.offering.purpose === 'REFINANCE' && maturingRow !== undefined && L8.homeBankTicker[row]) {
       // The market said no and the paper still matures: the revolver catches it — real market
-      // access closing when spreads gap, with a real penalty cost.
+      // access closing when spreads gap, with a real penalty cost. Step 11: a firm with no house
+      // bank (a bank) has no revolver; its maturity is repaid from its own book below.
       const revolverTranche: DebtTranche = {
         id: `${L8.companyId[row]}-REVOLVER-${nextWeek}`,
         principalUSD: maturingPrincipalUSD,
