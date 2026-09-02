@@ -13,6 +13,7 @@ import { auditAccounts } from './accounts';
 import { auditNames } from './names';
 import { AuditSnapshot, snapshotOf } from './snapshot';
 import { auditWires } from './wires';
+import { statedCounts, statedRegistry, StatedKind } from '../../domain/stated';
 
 export type { AuditFinding } from './types';
 
@@ -57,5 +58,8 @@ export function auditSummary(findings: AuditFinding[], weeks: number): string[] 
   const lastWeek = Math.max(0, ...findings.map((f) => f.week));
   const lastMoney = money.filter((f) => f.week === lastWeek);
   lines.push(`--- the money that is not anyone's, last week: ${B(lastMoney.reduce((a, f) => a + Math.abs(f.usd ?? 0), 0))} across ${lastMoney.length} lines ---`);
+  // §5-FINALIZATION R — the registry's count (§5-DIST-P's scoreboard): may fall, never rise.
+  const counts = statedCounts();
+  lines.push(`--- R · stated numbers registered: ${statedRegistry().length} (${(Object.keys(counts) as StatedKind[]).filter((k) => counts[k] > 0).map((k) => `${k.toLowerCase()} ${counts[k]}`).join(', ')}) ---`);
   return lines;
 }

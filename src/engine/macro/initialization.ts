@@ -1,5 +1,6 @@
 import { stashOpeningCash, stashSeedHouseholdLine } from '../ledger/accounts';
 import { govBondTrancheId } from '../../domain/sovereign-id';
+import { SEED_BUSINESS_LOAN_BOOK_TO_GDP, SEED_CONSUMER_LOAN_BOOK_TO_GDP } from '../../domain/stated';
 import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { openingSovereignRating } from './evolution';
 import { priceCommodityFutures } from '../pricing';
@@ -283,8 +284,9 @@ const FISCAL_DEFICIT_PCT_GDP = 0.05;
 const GOV_EMPLOYMENT_SHARE_OF_POPULATION = 0.055;
 
 export const BANK_BALANCE_SHEET_RATIOS = {
-  businessLoanBookToGdp: 0.040,
-  consumerLoanBookToGdp: 0.070,
+  // R: the two loan-book ratios are declared in the registry (domain/stated.ts).
+  businessLoanBookToGdp: SEED_BUSINESS_LOAN_BOOK_TO_GDP,
+  consumerLoanBookToGdp: SEED_CONSUMER_LOAN_BOOK_TO_GDP,
   depositsToGdp: 0.110,
   sovereignBondHoldingsToGdp: 0.020,
   cashReservesToGdp: 0.011,

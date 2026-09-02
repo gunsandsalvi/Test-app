@@ -26,6 +26,7 @@
  */
 
 import { beginEntityScope, endEntityScope, random } from '../engine/rng';
+import { PREFERENCE_PATIENCE_WEEKS_MIN, PREFERENCE_PATIENCE_WEEKS_MAX, PREFERENCE_RISK_AVERSION_MIN, PREFERENCE_RISK_AVERSION_MAX } from './stated';
 
 export interface Preferences {
   /** Time preference as a horizon: the weeks over which this management measures an outcome
@@ -38,12 +39,13 @@ export interface Preferences {
 }
 
 /** A month and a year — the UI calendar's month and §7.138's measured year. */
-export const PATIENCE_WEEKS_MIN = 4;
-export const PATIENCE_WEEKS_MAX = 52;
+export const PATIENCE_WEEKS_MIN = PREFERENCE_PATIENCE_WEEKS_MIN;
+export const PATIENCE_WEEKS_MAX = PREFERENCE_PATIENCE_WEEKS_MAX;
 /** The log-uniform median: ~14.4 weeks — a quarter, the structural clock every event runs on. */
 export const PATIENCE_MEDIAN_WEEKS = Math.sqrt(PATIENCE_WEEKS_MIN * PATIENCE_WEEKS_MAX);
-export const RISK_AVERSION_MIN = 0.5;
-export const RISK_AVERSION_MAX = 2.0;
+// R: the four endpoints are declared in the registry (domain/stated.ts), the two PREFERENCE ranges.
+export const RISK_AVERSION_MIN = PREFERENCE_RISK_AVERSION_MIN;
+export const RISK_AVERSION_MAX = PREFERENCE_RISK_AVERSION_MAX;
 
 function logUniform(u: number, lo: number, hi: number): number {
   return lo * Math.pow(hi / lo, u);

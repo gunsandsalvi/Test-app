@@ -13,6 +13,7 @@ import { determineCreditRating } from '../simulation/credit';
 import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financing';
 import { GENERATED_COMMODITIES } from './commodities-and-fx';
 import { random } from '../rng';
+import { SEED_FIRM_CONCENTRATION_DECAY, SEED_INSURER_INSTITUTIONAL_SHARE } from '../../domain/stated';
 
 export interface FirmSeedTemplate {
   ticker: string;
@@ -98,7 +99,8 @@ export function generateUniqueTicker(existingTickers: Set<string>): string {
 
 // A firm's rank within its sector (0 = largest) sets its scale via a Pareto/Zipf decay —
 // the same few-large/many-small concentration pattern used for category revenue splitting.
-const FIRM_CONCENTRATION_DECAY = 0.80;
+/** R: declared in the registry (domain/stated.ts) — the seed's rank-to-rank size decay. */
+const FIRM_CONCENTRATION_DECAY = SEED_FIRM_CONCENTRATION_DECAY;
 
 // Per-sector structural profile for the rank-0 (largest) firm: EBITDA margin, leverage
 // (debt/EBITDA) and cash intensity (cash/EBITDA). Lower-ranked (smaller) firms in the same
@@ -323,7 +325,7 @@ export function generateFirmSeeds(
   for (let i = 0; i < INSURERS_PER_REGION; i++) {
     seeds.push(buildTemplate(region, 'Financials', 0.5 + i * 0.25, existingTickers, existingNames, {
       institutionalRole: 'INSURER',
-      institutionalMarketShare: 0.42 * (Math.pow(FIRM_CONCENTRATION_DECAY, i) / insurerShareSum),
+      institutionalMarketShare: SEED_INSURER_INSTITUTIONAL_SHARE * (Math.pow(FIRM_CONCENTRATION_DECAY, i) / insurerShareSum),
     }));
   }
   // THREE asset managers, not one. A single manager per region could not sponsor a fund complex

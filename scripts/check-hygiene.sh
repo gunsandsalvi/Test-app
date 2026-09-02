@@ -118,4 +118,22 @@ if [ -n "$CASH_STRAY" ]; then
   exit 1
 fi
 
+# §5-FINALIZATION R — EVERY STATED NUMBER HAS AN OWNER. A fractional literal typed into the engine
+# is a claim about the answer with nobody's name on it (rule 19). The registry (domain/stated.ts)
+# is where such a number is declared — owner, reason, the measurement that replaces it — and its
+# literals are not counted here because they are owned. THE RATCHET: may fall, never rise; the way
+# to add a fraction is to declare it in the registry. Integers, `toFixed(n)` and comments are not
+# counted (an index, a print width and prose are not stated shapes).
+FRACTION='(^|[^A-Za-z0-9_.])[0-9]*\.[0-9]+([^0-9A-Za-z_]|$)'
+FRACTIONS=$(grep -rnE "$FRACTION" src/engine src/engine2 src/domain --include=*.ts 2>/dev/null \
+  | grep -vE '^src/domain/stated\.ts:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' | grep -vE 'toFixed\(' || true)
+FRACTION_COUNT=$(printf '%s' "$FRACTIONS" | grep -c . || true)
+# §7.401 struck the budget at the count measured with the first eight declarations in the registry.
+FRACTION_BUDGET=1381
+if [ "$FRACTION_COUNT" -gt "$FRACTION_BUDGET" ]; then
+  echo "ERROR: $FRACTION_COUNT fractional literals in the engine (budget $FRACTION_BUDGET) — a stated number with no owner."
+  echo "Declare it in src/domain/stated.ts (owner, reason, the measurement that replaces it) and import the constant."
+  exit 1
+fi
+
 echo "Repo hygiene check passed."
