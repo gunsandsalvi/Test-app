@@ -103,7 +103,29 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       .map((c) => ({ comp: c, sheet: c.bankBalanceSheet! }));
     const chosen = chooseAssumingBank(candidates, BANK_MIN_CAPITAL_RATIO);
     if (!chosen) {
-      console.log(`  [bank-resolution] w${week} ${regionId}:${bank.ticker} under PCA and NO assuming bank in the region — stays open`);
+      // §7.342 — THE LAST BANK STANDING IS RECAPITALISED BY ITS TREASURY. With no peer to
+      // assume the books there is nobody to resolve into, and leaving the bank open with no
+      // capital is what the first reference did: JPN's last bank sat under PCA from week 37,
+      // and by week 59 the region's unemployment was 80% (§7.342). The real answer is the one
+      // every crisis has used — a public capital injection to the working ratio, a fiscal cost
+      // that lands in the treasury account like the deposit guarantee does. The shareholders
+      // are not diluted here (no share mechanics on a bank's equity yet — recorded), which
+      // overstates what they keep; the injection itself is real money.
+      const sheet = bank.bankBalanceSheet!;
+      const injectionUSD = Math.max(0, assumingCapitalUSD(sheet) - sheet.bankEquityUSD);
+      if (injectionUSD > 0) {
+        pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'BANK', ticker: bank.ticker },
+          amountUSD: injectionUSD, reason: 'resolution: public recapitalisation' });
+        runSettlementStage(ctx);
+        restateBankSheetStatistics(bank.bankBalanceSheet!);
+      }
+      console.log(`  [bank-resolution] w${week} ${regionId}:${bank.ticker} under PCA with NO assuming bank — recapitalised by the treasury ${(injectionUSD / 1e9).toFixed(2)}B, ratio now ${bank.bankBalanceSheet!.bankCapitalRatio}`);
+      ctx.newsItems.push({
+        id: `bank-recap-${bank.ticker}-${week}`, week,
+        title: `${bank.name} recapitalised by the treasury`,
+        description: `${bank.ticker} fell below the ${(100 * PCA_CAPITAL_RATIO).toFixed(0)}% capital floor with no bank left to assume it; the ${regionId} treasury injected ${(injectionUSD / 1e9).toFixed(2)}B to bring it back to a working ratio.`,
+        category: 'CREDIT', impactBadge: '[BANK RECAPITALISED]', impactRegion: regionId, impactSector: bank.sector, affectedTicker: bank.ticker, urgent: true,
+      });
       return;
     }
     const acquirer = chosen.comp;

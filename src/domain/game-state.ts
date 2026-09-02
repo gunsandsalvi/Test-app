@@ -5,16 +5,16 @@
  * `Object.assign(comp, ...)` and several stages mutate the region objects in place. Treat any
  * reference you hold as live.
  *
- * RULE 3, OPEN: the last four fields are UI state (`isTradeModalOpen`, `selectedInstrument`,
- * `isNewsDrawerOpen`, and the two game-over flags) carried inside the simulation's own state
- * tree, so opening a modal touches the object the engine hashes for determinism. They belong in
- * the UI layer. Owner: AU.
+ * RULE 3, CLOSED (AU slice 1, §7.342): the UI state that used to live here (`isTradeModalOpen`,
+ * `selectedInstrument`, `isNewsDrawerOpen`, the two game-over flags) is gone — the shell keeps
+ * its workspace in the UI layer, and nothing the engine hashes for determinism moves when a
+ * screen opens.
  */
 
 import { RegionId, FxPair } from './geography';
 import { Company, CreditRating } from './company';
 import { InstitutionalEntity } from './institutions';
-import { Commodity, Dealer, TradeableInstrument } from './instruments';
+import { Commodity, Dealer } from './instruments';
 import { CompositeBenchmarkIndices } from './markets';
 import { Portfolio, ReturnAttribution } from './portfolio';
 import { NewsItem, DiagnosticsLog } from './events';
@@ -141,10 +141,5 @@ export interface GameState {
     marginAlert: string | null;
     attribution: ReturnAttribution;
   } | null;
-  isTradeModalOpen: boolean;
-  selectedInstrument: TradeableInstrument | null;
-  isNewsDrawerOpen: boolean;
   diagnosticsLogs: DiagnosticsLog[];
-  isGameOver: boolean;
-  gameOverReason: string | null;
 }

@@ -57,8 +57,6 @@ export function runNewsAndTurnSummaryStage(state: GameState, ctx: WeeklyStepCont
       volThetaUSD: ctx.attributionVolTheta,
     },
   };
-  const isGameOver = navUSD <= 0;
-  const gameOverReason = isGameOver ? 'Portfolio wiped out — NAV reached zero or below.' : null;
 
   return {
     ...state,
@@ -77,7 +75,5 @@ export function runNewsAndTurnSummaryStage(state: GameState, ctx: WeeklyStepCont
     newsFeed: updatedNewsFeed,
     diagnosticsLogs: updatedDiagnosticsLogs,
     turnSummary,
-    isGameOver,
-    gameOverReason
   };
 }

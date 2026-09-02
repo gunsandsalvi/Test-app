@@ -1691,9 +1691,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       },
     ],
     turnSummary: null,
-    isTradeModalOpen: false,
-    selectedInstrument: null,
-    isNewsDrawerOpen: false,
     diagnosticsLogs: [
       {
         week: 1,
@@ -1705,8 +1702,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         data: { capitalUSD: startingCash, regionsCount: 4, firmsCount: companies.length },
       },
     ],
-    isGameOver: false,
-    gameOverReason: null,
   };
 }
 

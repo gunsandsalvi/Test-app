@@ -1,0 +1,48 @@
+/**
+ * AU — THE ONE UI CALENDAR. The engine counts weeks; the UI never shows one (§5-AU, user rule).
+ * Week 0 is 1 January 2027; every date, month and duration on screen maps through here.
+ */
+
+const START = Date.UTC(2027, 0, 1);
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function dateOfWeek(week: number): Date {
+  return new Date(START + Math.max(0, week) * WEEK_MS);
+}
+
+/** "2 Apr 2027" */
+export function formatDate(week: number): string {
+  const d = dateOfWeek(week);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+/** "Apr 2027" */
+export function formatMonth(week: number): string {
+  const d = dateOfWeek(week);
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+/** "Apr" — the short axis label. */
+export function formatMonthShort(week: number): string {
+  return MONTHS[dateOfWeek(week).getUTCMonth()];
+}
+
+/** A span of weeks as a duration in months or years, never weeks: "3 months", "1.5 years". */
+export function formatSpan(weeks: number): string {
+  if (weeks < 4) return 'under a month';
+  const months = weeks / (52 / 12);
+  if (months < 12) return `${Math.round(months)} month${Math.round(months) === 1 ? '' : 's'}`;
+  const years = weeks / 52;
+  return `${years.toFixed(years < 3 ? 1 : 0)} years`;
+}
+
+/** The change-window labels §1.9 asks for: month on month, year on year. */
+export const WEEKS_PER_MONTH = 4;
+export const WEEKS_PER_YEAR = 52;
+
+/** The quarter a week falls in, on the UI calendar: "Q1 2027". */
+export function quarterLabel(week: number): string {
+  const d = dateOfWeek(week);
+  return `Q${Math.floor(d.getUTCMonth() / 3) + 1} ${d.getUTCFullYear()}`;
+}

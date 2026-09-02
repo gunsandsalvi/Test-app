@@ -570,8 +570,19 @@ let damperStreakByRawId = new Map<string, number>();
  *  struck against the flat cap overspends by exactly the widening (the small-cap ETF ran
  *  overdrawn by ~10M a week from week 15 for that reason). */
 export function damperStreakOf(rawId: string): number {
-  return damperStreakByRawId.get(rawId) ?? 0;
+  return Math.min(DAMPER_STREAK_WIDENING_MAX, damperStreakByRawId.get(rawId) ?? 0);
 }
+
+/**
+ * §7.342 — THE WIDENING IS BOUNDED. §7.338 let a name bound k weeks running move (1+k)× the
+ * flat cap; unbounded, a book that binds every week (a saturated float with no seller at any
+ * price — the dead-ceiling case) got a cap of 20× by week 20 and its prints ran away
+ * geometrically: JPN's institutional book re-marked ×4 a week from week 55 (21T → 8,000T in five
+ * weeks) and the region's unemployment went to 80%. Three extra notches is the exchange's own
+ * shape (a circuit breaker widens, then halts); past it a bind is a market with no other side,
+ * which the dead-ceiling diagnostic already names, and the damper is what keeps it printable.
+ */
+export const DAMPER_STREAK_WIDENING_MAX = 3;
 
 export function setDamperStreaks(byTaggedId: Record<string, number> | undefined): void {
   const next = new Map<string, number>();
@@ -799,7 +810,7 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
     const maxMove = Number.isNaN(packed.maxWeeklyStatMovePct)
       ? Infinity
       : (Math.abs(currentStat) * packed.maxWeeklyStatMovePct + (isYieldLike ? YIELD_LIKE_MIN_WEEKLY_MOVE_BPS : 0))
-        * (1 + packed.damperStreak[i]);
+        * (1 + Math.min(DAMPER_STREAK_WIDENING_MAX, packed.damperStreak[i]));
     const clearedStat = Number(
       Math.max(currentStat - maxMove, Math.min(currentStat + maxMove, solvedStat)).toFixed(4)
     );

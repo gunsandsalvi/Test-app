@@ -34,3 +34,6 @@
   100% { transform: translateX(-100%); }
 }
 
+/* AU — a panel body is a column flexbox that scrolls; its children keep their content height
+   (a card with overflow hidden would otherwise shrink to nothing when the column is full). */
+.aurora-body > * { flex-shrink: 0; }
