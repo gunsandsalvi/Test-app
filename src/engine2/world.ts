@@ -44,6 +44,24 @@ export interface V2World {
   priceRing: F64Ring;
   ratingRing: F64Ring;
   oasRing: F64Ring;
+  /** §5-WIRES A3 — THE PERSISTENT ACCOUNTS (engine/ledger/accounts.ts owns every read and
+   *  write): one balance per party key interned in this world's string table, living week to
+   *  week. Companies first (§7.384); the other kinds join per A3's list. Plain typed arrays and
+   *  a Map, clone-safe like every table here. */
+  accounts: PersistentAccounts;
+}
+
+export interface PersistentAccounts {
+  n: number;
+  /** The party's key (`KIND:name`, party.ts) as an interned string id. */
+  keyRef: Int32Array;
+  balanceUSD: Float64Array;
+  rowByKeyRef: Map<number, number>;
+}
+
+export function newPersistentAccounts(): PersistentAccounts {
+  const cap = 1 << 12;
+  return { n: 0, keyRef: new Int32Array(cap), balanceUSD: new Float64Array(cap), rowByKeyRef: new Map() };
 }
 
 /** A per-row fixed-capacity ring of f64 slots. `len` is the actual entry count (these rings'
@@ -69,6 +87,7 @@ export function ensureV2(state: V2Host): V2World {
     priceRing: makeF64Ring(52, 1 << 12),
     ratingRing: makeF64Ring(16, 1 << 12),
     oasRing: makeF64Ring(8, 1 << 12),
+    accounts: newPersistentAccounts(),
   };
   state.v2 = v2;
   return v2;

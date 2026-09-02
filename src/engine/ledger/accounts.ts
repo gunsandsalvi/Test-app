@@ -29,8 +29,79 @@
  */
 import { WeeklyStepContext } from '../simulation/stages/context';
 import { PartyRef } from './party';
-import { partyId, partyOf } from './party';
+import { partyId, partyOf, partyKey } from './party';
 import { RegionId } from '../../domain/geography';
+import { Company } from '../../domain/company';
+import { V2World, internString } from '../../engine2/world';
+
+// ---------------------------------------------------------------------------------------------
+// THIRD SLICE — THE PERSISTENT ACCOUNTS, COMPANIES FIRST (A3.1, §7.384). A company's balance
+// lives on the world (`v2.accounts`, keyed by the party's key interned in v2 — party ids are
+// process-local), the mirror opens a company's pass row FROM it, the projection writes the pass's
+// result back INTO it, and every reader takes `cashOf`; `Company.cash` no longer exists. A
+// company the store has no row for opens at zero the first time a pass sees it (a newborn's
+// balance arrives by payment — W6); the seed opens each firm's account where it wrote `cash`.
+// ---------------------------------------------------------------------------------------------
+
+function growPersistent(a: V2World['accounts']): void {
+  const cap = a.keyRef.length * 2;
+  const k = new Int32Array(cap); k.set(a.keyRef); a.keyRef = k;
+  const b = new Float64Array(cap); b.set(a.balanceUSD); a.balanceUSD = b;
+}
+
+/** The party's persistent row, or -1. */
+export function accountRowOf(v2: V2World, party: PartyRef): number {
+  return v2.accounts.rowByKeyRef.get(internString(v2, partyKey(party))) ?? -1;
+}
+
+/** Open the party's account. Opening one that exists is a defect: a balance has one row. */
+export function openAccount(v2: V2World, party: PartyRef, balanceUSD: number): number {
+  const a = v2.accounts;
+  const ref = internString(v2, partyKey(party));
+  if (a.rowByKeyRef.has(ref)) throw new Error(`ENGINE DEFECT: account ${partyKey(party)} opened twice`);
+  if (a.n >= a.keyRef.length) growPersistent(a);
+  const r = a.n++;
+  a.keyRef[r] = ref; a.balanceUSD[r] = balanceUSD;
+  a.rowByKeyRef.set(ref, r);
+  return r;
+}
+
+/** The party's row, opened at zero on first sight. */
+export function ensureAccount(v2: V2World, party: PartyRef): number {
+  const r = accountRowOf(v2, party);
+  return r >= 0 ? r : openAccount(v2, party, 0);
+}
+
+/** The party's balance; a party with no account holds nothing. */
+export function balanceOf(v2: V2World, party: PartyRef): number {
+  const r = accountRowOf(v2, party);
+  return r >= 0 ? v2.accounts.balanceUSD[r] : 0;
+}
+
+/**
+ * A3.1's transitional write, for the one site that still SETS a balance by fiat: a resolved
+ * bank's shell, whose company row was never money (a bank's goods-market self settles on its
+ * reserves; the row carries the seed's number). A3's bank slice deletes the row and this.
+ */
+export function resetAccount(v2: V2World, party: PartyRef, balanceUSD: number): void {
+  v2.accounts.balanceUSD[ensureAccount(v2, party)] = balanceUSD;
+}
+
+/**
+ * THE OPENING CASH A GENERATED FIRM'S FOUNDERS PUT IN — stashed beside the firm at generation
+ * (the same side channel the seed rings use, keyed by the object so the firm keeps its identity),
+ * read by the seed to open the account and by a birth to pay it; never a field on the Company.
+ */
+const openingCashStash = new WeakMap<object, number>();
+export function stashOpeningCash(comp: object, usd: number): void { openingCashStash.set(comp, usd); }
+export function openingCashOf(comp: object): number { return openingCashStash.get(comp) ?? 0; }
+
+/** A company's cash: its account. (A bank with a sheet still reads its company row here — the
+ *  seed's number, never moved, because its goods-market self settles on its reserves; A3's
+ *  bank slice makes that read the reserves.) */
+export function cashOf(v2: V2World, c: Pick<Company, 'ticker'>): number {
+  return balanceOf(v2, { kind: 'COMPANY', ticker: c.ticker });
+}
 
 /** Which line of a bank's book (or of the central bank's) a row is. */
 export const ACCOUNT_CLASSES = ['CORPORATE', 'INSTITUTIONAL', 'SME', 'HOUSEHOLD', 'RESERVES', 'TREASURY', 'CREATED', 'SECURITIES', 'VOID'] as const;
@@ -122,7 +193,9 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     ticker !== undefined && s.bankIdxOfTicker.has(ticker) ? s.bankIdxOfTicker.get(ticker)! : AT_NOWHERE;
   ctx.updatedCompanies.forEach((c) => {
     if (c.isBankEntity && c.bankBalanceSheet) return;
-    openRow(s, partyId({ kind: 'COMPANY', ticker: c.ticker }), bankIdxOf(c.homeBankTicker), 'CORPORATE', c.cash);
+    // A3.1: the pass row opens at the persistent balance; a firm with no account yet opens at zero.
+    const party: PartyRef = { kind: 'COMPANY', ticker: c.ticker };
+    openRow(s, partyId(party), bankIdxOf(c.homeBankTicker), 'CORPORATE', ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)]);
   });
   ctx.updatedInstitutionalEntities.forEach((e) => {
     openRow(s, partyId({ kind: 'INSTITUTION', id: e.id }), bankIdxOf(e.homeBankTicker), 'INSTITUTIONAL', e.cashUSD ?? 0);
@@ -225,7 +298,9 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
       if (agg && reserveDeltaUSD !== 0) agg.bankingSector = { ...agg.bankingSector, cashReservesUSD: agg.bankingSector.cashReservesUSD + reserveDeltaUSD };
       return;
     }
-    c.cash = balanceOfParty(s, partyId({ kind: 'COMPANY', ticker: c.ticker }));
+    // A3.1: the pass's result is the persistent balance.
+    const party: PartyRef = { kind: 'COMPANY', ticker: c.ticker };
+    ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)] = balanceOfParty(s, partyId(party));
   });
   ctx.updatedInstitutionalEntities.forEach((e) => { e.cashUSD = balanceOfParty(s, partyId({ kind: 'INSTITUTION', id: e.id })); });
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
@@ -256,9 +331,8 @@ export function compareToBooks(ctx: WeeklyStepContext, s: AccountStore): Account
     if (c.isBankEntity && c.bankBalanceSheet) {
       const bi = s.bankIdxOfTicker.get(c.ticker); if (bi === undefined) return;
       check(`${c.region}:${c.ticker} reserves`, c.bankBalanceSheet.cashReservesUSD, s.balanceUSD[s.reserveRowOfBank[bi]]);
-      return;
     }
-    check(`${c.region}:${c.ticker} cash`, c.cash, balanceOfParty(s, partyId({ kind: 'COMPANY', ticker: c.ticker })));
+    // A3.1: a company's balance IS the store's (there is no field to disagree with it).
   });
   ctx.updatedInstitutionalEntities.forEach((e) => check(`${e.region}:${e.id} cash`, e.cashUSD ?? 0, balanceOfParty(s, partyId({ kind: 'INSTITUTION', id: e.id }))));
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {

@@ -12,6 +12,8 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
+import { cashOf } from '../ledger/accounts';
+import { ensureV2 } from '../../engine2/world';
 
 const banksOf = (s: GameState, r?: RegionId) =>
   s.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c) && (!r || c.region === r));
@@ -60,13 +62,14 @@ function m2(state: GameState, week: number): AuditFinding[] {
 /** M3 — the trial balance: every holder's balance is a named bank's deposit line, and the lines are the sums. */
 function m3(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
+  const v2 = ensureV2(state);
   const bankByTicker = new Map(banksOf(state).map((b) => [b.ticker, b]));
   const corpByBank = new Map<string, number>();
   const instByBank = new Map<string, number>();
   state.companies.forEach((c) => {
     if (c.isBankEntity || !isActiveCompany(c)) return;
     const k = c.homeBankTicker ?? '';
-    corpByBank.set(k, (corpByBank.get(k) ?? 0) + c.cash);
+    corpByBank.set(k, (corpByBank.get(k) ?? 0) + cashOf(v2, c));
   });
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
@@ -81,7 +84,7 @@ function m3(state: GameState, week: number): AuditFinding[] {
     instGap += Math.abs(i - (bs.institutionalDepositsUSD ?? 0));
   });
   const orphanCorp = corpByBank.get('') ?? 0, orphanInst = instByBank.get('') ?? 0;
-  const corpTotal = sum(state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c)), (c) => Math.abs(c.cash));
+  const corpTotal = sum(state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c)), (c) => Math.abs(cashOf(v2, c)));
   if (corpGap > Math.max(1e7, corpTotal * 0.005)) out.push({ family: 'M', check: 'M3 corporate deposits = firms\' cash by bank', week, usd: corpGap, message: `firms' cash by house bank differs from the banks' corporate deposit lines by ${B(corpGap)} in all` });
   if (instGap > 1e8) out.push({ family: 'M', check: 'M3 institutional deposits = funds\' cash by bank', week, usd: instGap, message: `funds' cash by house bank differs from the banks' institutional deposit lines by ${B(instGap)}` });
   if (Math.abs(orphanCorp) + Math.abs(orphanInst) > 1e6) out.push({ family: 'M', check: 'M3 balances with no bank', week, usd: orphanCorp + orphanInst, message: `${B(orphanCorp)} of firm cash and ${B(orphanInst)} of fund cash sit with no house bank` });
@@ -102,8 +105,9 @@ function m3(state: GameState, week: number): AuditFinding[] {
 /** M4 — no negative balances: an overdraft is a loan nobody quoted. */
 function m4(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  const negCorp = state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c) && c.cash < -1e6);
-  if (negCorp.length) out.push({ family: 'M', check: 'M4 overdrawn firms', week, usd: sum(negCorp, (c) => c.cash), message: `${negCorp.length} firms overdrawn, ${B(sum(negCorp, (c) => c.cash))} in all (worst ${negCorp.sort((a, b) => a.cash - b.cash)[0].ticker} ${M(negCorp[0].cash)})` });
+  const v2 = ensureV2(state);
+  const negCorp = state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c) && cashOf(v2, c) < -1e6);
+  if (negCorp.length) out.push({ family: 'M', check: 'M4 overdrawn firms', week, usd: sum(negCorp, (c) => cashOf(v2, c)), message: `${negCorp.length} firms overdrawn, ${B(sum(negCorp, (c) => cashOf(v2, c)))} in all (worst ${negCorp.sort((a, b) => cashOf(v2, a) - cashOf(v2, b))[0].ticker} ${M(cashOf(v2, negCorp[0]))})` });
   const negInst = state.institutionalEntities.filter((e) => !e.isDefaulted && (e.cashUSD ?? 0) < -1e6);
   if (negInst.length) { const worst = [...negInst].sort((a, b) => (a.cashUSD ?? 0) - (b.cashUSD ?? 0))[0]; out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => e.cashUSD ?? 0), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => e.cashUSD ?? 0))} (worst ${worst.ticker ?? worst.id} ${worst.entityType} ${M(worst.cashUSD ?? 0)})` }); }
   REGION_IDS.forEach((r) => {

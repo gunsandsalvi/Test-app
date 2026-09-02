@@ -141,7 +141,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
   const latestSnap = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
   const dividendsAnnualUSD = Math.abs(latestSnap?.cashFlowStatement?.dividendsPaid ?? 0) * 4;
   const fixedOutflowsUSD = interest + (comp.maintenanceCapex ?? 0) + dividendsAnnualUSD;
-  const shockToCash = 1 - (fixedOutflowsUSD - Math.max(0, comp.cash)) / ebitda;
+  const shockToCash = 1 - (fixedOutflowsUSD - Math.max(0, cashOf(v2, comp))) / ebitda;
   const distance = Math.max(shockToCoverage, shockToCash);
 
   return normalCdf(-distance / annualEbitdaVol(v2, comp));
@@ -163,6 +163,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { marketCapOf } from '../../../domain/company';
+import { cashOf } from '../../ledger/accounts';
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
 export const RECOVERY_PRIOR_WEIGHT = 8;

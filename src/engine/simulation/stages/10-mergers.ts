@@ -24,6 +24,7 @@ import { WeeklyStepContext } from './context';
 import { issueHolding, transferHolding } from '../../ledger/holdings-ledger';
 import { heldInShares } from '../../../domain/assets';
 import { marketCapOf } from '../../../domain/company';
+import { cashOf } from '../../ledger/accounts';
 
 /**
  * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
@@ -132,7 +133,6 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     spin.employeeCount = employees;
     spin.sharesOutstanding = spinShares;
     spin.stockPrice = Number(spinPrice.toFixed(4));
-    spin.cash = 0;
     spin.debtTranches = [];
     spin.grossPPEUSD = (parent.grossPPEUSD ?? 0) * share;
     spin.accumulatedDepreciationUSD = (parent.accumulatedDepreciationUSD ?? 0) * share;
@@ -186,7 +186,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
 
     // Opening cash is CARVED from the parent through settlement, like a firm birth's — the
     // economy's total cash never moves.
-    const openingCashUSD = Math.max(0, parent.cash) * share;
+    const openingCashUSD = Math.max(0, cashOf(ctx.v2, parent)) * share;
     if (openingCashUSD > 0) {
       pay(ctx, {
         payer: { kind: 'COMPANY', ticker: parent.ticker },
@@ -207,7 +207,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // not a merger also fires this quarter.
   runDivestitures(ctx);
 
-  const merger = checkForMerger(ctx.updatedCompanies, ctx.nextWeek,
+  const merger = checkForMerger(ctx.v2, ctx.updatedCompanies, ctx.nextWeek,
     (Object.values(ctx.updatedRegions) as { supplyRelationships?: import('../../../domain/market-microstructure').SupplyRelationship[] }[])
       .flatMap((r) => r.supplyRelationships ?? []));
   if (!merger) return;
@@ -243,7 +243,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   pay(ctx, {
     payer: { kind: 'COMPANY', ticker: target.ticker },
     payee: { kind: 'COMPANY', ticker: acquirer.ticker },
-    amountUSD: Math.max(0, target.cash),
+    amountUSD: Math.max(0, cashOf(ctx.v2, target)),
     reason: 'merger: acquired cash absorbed',
   });
   // The tender: the target pays its equity holders of record their cash half, pro rata to the

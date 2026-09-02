@@ -36,6 +36,7 @@ import { WeeklyStepContext } from './context';
 import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
+import { cashOf } from '../../ledger/accounts';
 
 /** How many resolutions the realised recovery rate averages over before it displaces the prior. */
 export const RECOVERY_HISTORY_LENGTH = 24;
@@ -204,7 +205,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // invoice collections, this week's asset sales (pending until the close, counted here).
     const estateComp = index.companyById.get(estate.companyId);
     const availableUSD = estateComp
-      ? Math.max(0, estateComp.cash + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: estate.ticker }))
+      ? Math.max(0, cashOf(ctx.v2, estateComp) + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: estate.ticker }))
       : 0;
     const paidUSD = availableUSD > 1 ? distribute(ctx, index, estate, availableUSD) : 0;
 
@@ -253,16 +254,17 @@ function sellAssetsToPeers(
   if (invPriceUSD <= 1 && ppePriceUSD <= 1) return;
   const peers = ctx.updatedCompanies.filter((c) =>
     c.region === estate.regionId && c.sector === comp?.sector && isActiveCompany(c)
-    && !c.isBankEntity && !c.isInstitutionalEntity && c.id !== estate.companyId && c.cash > 0);
-  const totalPeerCashUSD = peers.reduce((a, c) => a + c.cash, 0);
+    && !c.isBankEntity && !c.isInstitutionalEntity && c.id !== estate.companyId && cashOf(ctx.v2, c) > 0);
+  const totalPeerCashUSD = peers.reduce((a, c) => a + cashOf(ctx.v2, c), 0);
   if (totalPeerCashUSD <= 1) return;
   const weekPriceUSD = invPriceUSD + ppePriceUSD;
   const preInvUSD = Object.values(comp?.outputInventoryBySubUnit ?? {}).reduce((a, r) => a + Math.max(0, r.valueUSD), 0);
   const origRows: Record<string, { unitsHeld: number; valueUSD: number }> = {};
   Object.entries(comp?.outputInventoryBySubUnit ?? {}).forEach(([k, r]) => { origRows[k] = { unitsHeld: r.unitsHeld, valueUSD: r.valueUSD }; });
   peers.forEach((peer) => {
-    const share = peer.cash / totalPeerCashUSD;
-    const payUSD = Math.min(weekPriceUSD * share, peer.cash);
+    const peerCashUSD = cashOf(ctx.v2, peer);
+    const share = peerCashUSD / totalPeerCashUSD;
+    const payUSD = Math.min(weekPriceUSD * share, peerCashUSD);
     if (payUSD <= 1) return;
     pay(ctx, {
       payer: { kind: 'COMPANY', ticker: peer.ticker },
@@ -484,7 +486,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
     regionId: comp.region as RegionId,
     openedWeek: ctx.nextWeek,
     assets: {
-      cashUSD: Math.max(0, comp.cash),
+      cashUSD: Math.max(0, cashOf(ctx.v2, comp)),
       receivablesUSD: Math.max(0, comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE * 0.6),
       inventoryUSD: Math.max(0, getOutputInventoryUSD(comp)),
       ppeUSD: netPpeUSD,

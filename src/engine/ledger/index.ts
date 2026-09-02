@@ -17,7 +17,6 @@ export type { PartyRef } from './party';
 export { partyId, partyOf, partyKey, partyFromKey } from './party';
 export type { PartyModule } from './parties';
 export { PARTY_REGISTRY, partyModule, holdsDeposit, isBankingSystem, isModelledParty } from './parties';
-export { creditHolderBalance } from './balance';
 export type { WireInstruction, WireJournal, AssetKind } from './wire';
 export { wire, wirePush, newWireJournal, setActiveWireJournal, activeWireJournal, internAsset, assetText, assetKindOfId, summarizeWires, ASSET_KINDS } from './wire';
 

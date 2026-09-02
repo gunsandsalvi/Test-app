@@ -15,6 +15,7 @@ import { issueTranche } from '../../ledger/tranche-ledger';
 import { smePoolId, facilityMarginBpsFor } from './bank-lending';
 import { PrimeBrokerageLine } from '../../../domain/prime-brokerage';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
+import { cashOf } from '../../ledger/accounts';
 
 /** What a broker charges over its standing line for a balance it did not agree to fund. */
 export const OVERDRAFT_PENALTY_BPS = 200;
@@ -39,7 +40,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
   // ---- 1. Firms: a revolver draw at the house bank (the 02b conversion, at the close). ----
   ctx.updatedCompanies.forEach((c) => {
     if (c.isDefaulted || c.isBankEntity || c.mergerAcquired || !c.homeBankTicker) return;
-    const balanceUSD = c.cash + pendingUSD({ kind: 'COMPANY', ticker: c.ticker });
+    const balanceUSD = cashOf(ctx.v2, c) + pendingUSD({ kind: 'COMPANY', ticker: c.ticker });
     if (!(balanceUSD < -1)) return;
     const drawUSD = -balanceUSD;
     const reg = ctx.updatedRegions[c.region];

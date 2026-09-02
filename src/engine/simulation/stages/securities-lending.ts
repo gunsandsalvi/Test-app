@@ -34,6 +34,7 @@ import { medianOf } from '../../../domain/volatility';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { cashOf } from '../../ledger/accounts';
 
 const sblInstrumentId = (regionId: RegionId, companyId: string) => `${regionId}-SBL-${companyId}`;
 export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
@@ -217,7 +218,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     });
     const floatValueById = new Map(listed.map((c) => [c.id, c.sharesOutstanding * c.stockPrice]));
     const totalFloatValueUSD = listed.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;
-    const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityUSD(c)]));
+    const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityUSD(c, cashOf(ctx.v2, c))]));
     const netInvestmentRateById = new Map(listed.map((c) => [c.id, companyNetInvestmentRate(c)]));
     const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
 

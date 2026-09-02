@@ -5,9 +5,12 @@ import { AuditSnapshot } from './snapshot';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, sum } from './types';
+import { cashOf } from '../ledger/accounts';
+import { ensureV2 } from '../../engine2/world';
 
 /** F1 — a firm's balance sheet closes and its statement cash is its ledger balance. */
 function f1(state: GameState, week: number): AuditFinding[] {
+  const v2 = ensureV2(state);
   const out: AuditFinding[] = [];
   let open = 0, openUSD = 0, cashGap = 0, cashN = 0;
   state.companies.forEach((c) => {
@@ -18,7 +21,7 @@ function f1(state: GameState, week: number): AuditFinding[] {
     const bs = latest.balanceSheet;
     const residual = bs.totalAssets - bs.totalLiabilities - bs.shareholdersEquity;
     if (Math.abs(residual) > Math.max(1e6, bs.totalAssets * 1e-3)) { open++; openUSD += residual; }
-    if (latest.week === state.currentWeek && Math.abs(bs.cash - c.cash) > Math.max(1e6, Math.abs(c.cash) * 0.01)) { cashN++; cashGap += bs.cash - c.cash; }
+    if (latest.week === state.currentWeek && Math.abs(bs.cash - cashOf(v2, c)) > Math.max(1e6, Math.abs(cashOf(v2, c)) * 0.01)) { cashN++; cashGap += bs.cash - cashOf(v2, c); }
   });
   if (open) out.push({ family: 'F', check: 'F1 balance sheet closes', week, usd: openUSD, message: `${open} firms' last filed balance sheet does not close (${B(openUSD)} net)` });
   if (cashN) out.push({ family: 'F', check: 'F1 statement cash = ledger cash', week, usd: cashGap, message: `${cashN} firms filed a cash line that is not their balance (${B(cashGap)} net)` });

@@ -22,7 +22,6 @@
  * and the callers do not.
  */
 
-import { WeeklyStepContext } from '../simulation/stages/context';
 import { PartyRef } from './party';
 
 /**
@@ -41,54 +40,4 @@ export interface Account {
   /** The named bank whose liability this balance is (null only for the central bank's own). */
   readonly bankTicker: string | null;
   balanceUSD: number;
-}
-
-/**
- * Move a holder's own balance. **This is the only function in the engine that may do so** — see
- * `check-hygiene.sh`, which fails the build on an assignment to a money field anywhere else.
- *
- * It writes the HOLDER's side only. The banking-system side (whose deposits, whose reserves) is the
- * settlement stage's, because it nets a whole week before it touches a bank. Callers that want a
- * conserved movement call `post()` instead and never see this.
- *
- * Returns false when the party could not be resolved, so the caller can report it rather than
- * silently lose the money — the one behaviour this module exists to prevent.
- */
-export function creditHolderBalance(
-  ctx: WeeklyStepContext,
-  party: PartyRef,
-  deltaUSD: number
-): boolean {
-  if (!isFinite(deltaUSD) || deltaUSD === 0) return true;
-  switch (party.kind) {
-    case 'COMPANY': {
-      const comp = ctx.updatedCompanies.find((c) => c.ticker === party.ticker);
-      if (!comp) return false;
-      comp.cash += deltaUSD;
-      return true;
-    }
-    case 'INSTITUTION': {
-      const entity = ctx.updatedInstitutionalEntities.find((e) => e.id === party.id);
-      if (!entity) return false;
-      entity.cashUSD = (entity.cashUSD ?? 0) + deltaUSD;
-      return true;
-    }
-    case 'SEGMENT': {
-      const seg = ctx.updatedRegions[party.region]?.smePools?.find((s) => s.industry === party.industry);
-      if (!seg) return false;
-      seg.cashUSD = (seg.cashUSD ?? 0) + deltaUSD;
-      return true;
-    }
-    case 'HOUSEHOLD': {
-      const hs = ctx.updatedRegions[party.region]?.householdState;
-      if (!hs) return false;
-      hs.depositsUSD = (hs.depositsUSD ?? 0) + deltaUSD;
-      return true;
-    }
-    // A bank's own reserves, the treasury account and the central bank's book are not holder
-    // balances: they are the banking system's own lines, and settlement owns them because it is
-    // the pass that knows the week's net. Nothing else may move them.
-    default:
-      return false;
-  }
 }

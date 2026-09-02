@@ -54,6 +54,7 @@ import { getFxToUsd } from './06-fx-and-trade';
 import { realizedAnnualVol } from '../../../domain/volatility';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
+import { cashOf } from '../../ledger/accounts';
 
 /** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
  *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
@@ -1247,6 +1248,7 @@ function buildRegionSupplyPlans(
 
 /** What every buyer in one region wants this week, before it is split across the two books. */
 function buildRegionDemandPlans(
+  v2: V2World,
   subUnitId: string,
   reg: Region,
   regionId: RegionId,
@@ -1301,7 +1303,7 @@ function buildRegionDemandPlans(
     const openBidUnits = Math.max(0, (demandUSD / referencePriceUSD) - contractPurchases);
     if (openBidUnits <= 0.001) return;
 
-    const cashRatio = comp.cash / Math.max(1, comp.annualRevenue);
+    const cashRatio = cashOf(v2, comp) / Math.max(1, comp.annualRevenue);
     // §5-BRAINS — the buyer's own horizon sets what it takes the price to BE: a patient buyer
     // anchors on the average of the last `patience` prints, an impatient one on last week's.
     // The cap on its ladder is reach × that expectation, so one short week moves a patient
@@ -1658,6 +1660,7 @@ function runSubUnitMarkets(
     const demandState = reg.categoryDemand[subUnitId];
     if (!demandState) return;
     demandPlans.push(...buildRegionDemandPlans(
+      v2,
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId],
       contractUnitsByCustomer, isCapexSupplierCategory, capexSupplierWeight, isRecipeInputCategory,
       govShare, hhShare, nextWeek
@@ -2078,7 +2081,7 @@ function runSubUnitMarkets(
           buyerAnnualDefaultProbability: buyerPd,
           recoveryRate: seller.recoveryRate ?? 0.4,
           sellerMarginShare: Math.max(0, (seller.ebitda ?? 0) / Math.max(1, seller.annualRevenue ?? 1)),
-          sellerCashUSD: seller.cash ?? 0,
+          sellerCashUSD: cashOf(v2, seller),
           sellerWeeklySalesUSD: (seller.annualRevenue ?? 0) / 52,
         });
         ctx.tradeInvoicesBooked.push({

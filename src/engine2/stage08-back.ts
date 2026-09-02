@@ -2015,7 +2015,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // to be reading the same book; comparing to a multiple the market no longer uses would be
       // two valuations of one company again.
       const boardFairValuePerShare = companyFairValuePerShare(
-        { ...comp, netIncome: newNetIncome, cash: cash.usd },
+        { ...comp, netIncome: newNetIncome }, cash.usd,
         reg.zeroRates?.tenor10Y ?? reg.policyRate,
         REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
         newTotalDebt

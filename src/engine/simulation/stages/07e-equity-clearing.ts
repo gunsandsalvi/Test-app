@@ -49,6 +49,7 @@ import { positionKey } from './securities-lending';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { cashOf } from '../../ledger/accounts';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
@@ -162,7 +163,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
 
     // Per-company real primitives, computed once per region-week — never inside the participants
     // loop, which would recompute them once per entity per name.
-    const bookEquityById = new Map(regionCompanies.map((c) => [c.id, companyBookEquityUSD(c)]));
+    const bookEquityById = new Map(regionCompanies.map((c) => [c.id, companyBookEquityUSD(c, cashOf(ctx.v2, c))]));
     const netInvestmentRateById = new Map(regionCompanies.map((c) => [c.id, companyNetInvestmentRate(c)]));
 
     // §7.327 — THE DEMAND BUILD'S DENSE COLUMNS. The participants loop below runs

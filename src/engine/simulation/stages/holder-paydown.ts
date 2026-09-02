@@ -24,6 +24,7 @@ import { Company, RegionId } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { DealerDeskInventory } from '../../../domain/dealer-desk';
 import { pay, pendingSettlementUSD, PartyRef } from './settlement';
+import { cashOf } from '../../ledger/accounts';
 
 export function reconcileHolderPrincipal(args: {
   ctx: WeeklyStepContext;
@@ -73,7 +74,7 @@ export function reconcileHolderPrincipal(args: {
     const issuer = issuerById.get(issuerId);
     if (trace && heldUSD - outstandingUSD > 1e9) {
       console.log(`  [paydown] ${deskBook} ${issuer?.ticker ?? issuerId} held ${(heldUSD / 1e6).toFixed(0)}M out ${(outstandingUSD / 1e6).toFixed(0)}M`
-        + `${!issuer ? ' SKIP:no-issuer' : issuer.isBankEntity ? ' SKIP:bank' : ` cash ${(issuer.cash / 1e6).toFixed(0)}M`}`);
+        + `${!issuer ? ' SKIP:no-issuer' : issuer.isBankEntity ? ' SKIP:bank' : ` cash ${(cashOf(ctx.v2, issuer) / 1e6).toFixed(0)}M`}`);
     }
     if (!issuer) return;
     // A BANK's own paper is WHOLESALE FUNDING, and its repayment accounting belongs to the
@@ -83,7 +84,7 @@ export function reconcileHolderPrincipal(args: {
     // slack rarely (twice in eight weeks across all banks).
     if (issuer.isBankEntity) return;
     const desiredBurnUSD = heldUSD - outstandingUSD;
-    const availableUSD = Math.max(0, issuer.cash + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: issuer.ticker }));
+    const availableUSD = Math.max(0, cashOf(ctx.v2, issuer) + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: issuer.ticker }));
     const burnUSD = Math.min(desiredBurnUSD, availableUSD);
     if (burnUSD > 1) factorByIssuer.set(issuerId, (heldUSD - burnUSD) / heldUSD);
   });

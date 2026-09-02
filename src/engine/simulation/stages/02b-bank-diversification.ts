@@ -41,6 +41,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
 import { SRF_SPREAD_BPS } from '../../macro/banking';
+import { cashOf } from '../../ledger/accounts';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
@@ -157,8 +158,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // an overdraft is credit ALREADY extended, and pricing it is the bank's only choice left.
     ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
       if (c.region !== regionId || c.isDefaulted || c.isBankEntity || c.mergerAcquired) return;
-      if (!c.homeBankTicker || !(c.cash < -1)) return;
-      const drawUSD = -c.cash;
+      const cashUSD = cashOf(ctx.v2, c);
+      if (!c.homeBankTicker || !(cashUSD < -1)) return;
+      const drawUSD = -cashUSD;
       // §5-CLOSE P1: priced off the borrower's own PD at its bank's hurdle, like every facility.
       const marginBps = facilityMarginBpsFor(ensureV2(state), c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker));
       const tranche = {
@@ -214,14 +216,15 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // the facility conversion drains it at 02b). A negative balance is the bank's overdraft
       // asset and the line nets it — the truth must net it too, or the reconcile "catches"
       // a convention, not a flow.
-      corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + c.cash);
+      corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + cashOf(ctx.v2, c));
     });
     if (process.env.RECON_TRACE === '1') {
       let negUSD = 0, negN = 0, unbankedUSD = 0, unbankedN = 0;
       ctx.updatedCompanies.forEach((c) => {
         if (c.region !== regionId || c.isBankEntity || c.mergerAcquired) return;
-        if (!c.homeBankTicker) { unbankedUSD += c.cash; unbankedN++; return; }
-        if (c.cash < 0) { negUSD += c.cash; negN++; }
+        const cashUSD = cashOf(ctx.v2, c);
+        if (!c.homeBankTicker) { unbankedUSD += cashUSD; unbankedN++; return; }
+        if (cashUSD < 0) { negUSD += cashUSD; negN++; }
       });
       console.log(`  [recon-base] w${ctx.nextWeek} ${regionId} negatives ${(negUSD / 1e6).toFixed(0)}M x${negN} | unbanked ${(unbankedUSD / 1e6).toFixed(0)}M x${unbankedN}`);
     }
@@ -504,15 +507,15 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const corpInterestUSD = sheet.corporateDepositInterestWeeklyUSD ?? 0;
       if (corpInterestUSD > 0) {
         const depositors = ctx.updatedCompanies.filter(
-          (c) => c.region === regionId && !c.isBankEntity && !c.mergerAcquired && c.homeBankTicker === bank.ticker && c.cash > 0
+          (c) => c.region === regionId && !c.isBankEntity && !c.mergerAcquired && c.homeBankTicker === bank.ticker && cashOf(ctx.v2, c) > 0
         );
-        const positiveUSD = depositors.reduce((a, c) => a + c.cash, 0);
+        const positiveUSD = depositors.reduce((a, c) => a + cashOf(ctx.v2, c), 0);
         if (positiveUSD > 0) {
           depositors.forEach((c) => {
             pay(ctx, {
               payer: { kind: 'BANK', ticker: bank.ticker },
               payee: { kind: 'COMPANY', ticker: c.ticker },
-              amountUSD: corpInterestUSD * (c.cash / positiveUSD),
+              amountUSD: corpInterestUSD * (cashOf(ctx.v2, c) / positiveUSD),
               reason: 'interest on corporate deposits',
             });
           });

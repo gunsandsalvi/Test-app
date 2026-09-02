@@ -325,7 +325,7 @@ export interface Company {
   netIncome: number;
   eps: number;
   sharesOutstanding: number;
-  cash: number;
+  // §5-WIRES A3.1: cash is a READ of the persistent account (`cashOf`, engine/ledger/accounts.ts).
   // §5-WIRES D: total debt is a READ of the ladder (`totalDebtOf`, `ladderTotalUSD`), not a field.
   currentLiabilities: number;
   debtTranches: DebtTranche[];

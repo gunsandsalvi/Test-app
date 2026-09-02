@@ -98,7 +98,7 @@ export function companyNetInvestmentRate(comp: Company): number {
 }
 
 /** Real book equity: the balance sheet's own shareholders' equity where a filing exists. */
-export function companyBookEquityUSD(comp: Company, totalDebtUSD: number = totalDebtOf(comp)): number {
+export function companyBookEquityUSD(comp: Company, cashUSD: number, totalDebtUSD: number = totalDebtOf(comp)): number {
   // A BANK's book equity is the equity line of its own balance sheet, not a PP&E-and-cash
   // reckoning built for an operating company. Its assets are loans, securities and reserves and
   // its liabilities are deposits and borrowings; the generic formula below sees almost none of
@@ -108,7 +108,7 @@ export function companyBookEquityUSD(comp: Company, totalDebtUSD: number = total
   const latest = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
   const filed = latest?.balanceSheet?.shareholdersEquity;
   if (filed !== undefined && isFinite(filed)) return filed;
-  return (comp.grossPPEUSD ?? 0) - (comp.accumulatedDepreciationUSD ?? 0) + comp.cash - totalDebtUSD;
+  return (comp.grossPPEUSD ?? 0) - (comp.accumulatedDepreciationUSD ?? 0) + cashUSD - totalDebtUSD;
 }
 
 /**
@@ -119,6 +119,9 @@ export function companyBookEquityUSD(comp: Company, totalDebtUSD: number = total
  */
 export function companyFairValuePerShare(
   comp: Company,
+  /** §5-WIRES A3.1: the firm's cash as the caller knows it — the account, or stage 08's
+   *  mid-week walk. */
+  cashUSD: number,
   riskFreeRate: number,
   holderRequiredReturn: number,
   /** §5-WIRES D: the ladder's face as the caller knows it mid-week (stage 08's fresh total);
@@ -129,7 +132,7 @@ export function companyFairValuePerShare(
   return fairValuePerShare({
     annualEarningsUSD: comp.netIncome,
     sharesOutstanding: comp.sharesOutstanding,
-    bookEquityUSD: companyBookEquityUSD(comp, totalDebtUSD),
+    bookEquityUSD: companyBookEquityUSD(comp, cashUSD, totalDebtUSD),
     netInvestmentRate: companyNetInvestmentRate(comp),
     riskFreeRate,
     beta: comp.beta ?? 1,

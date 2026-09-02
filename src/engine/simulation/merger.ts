@@ -4,6 +4,8 @@ import { isActiveCompany } from '../../domain/company';
 import { formatCurrency } from '../formatters';
 import { random } from '../rng';
 import { marketCapOf, totalDebtOf } from '../../domain/company';
+import { cashOf } from '../ledger/accounts';
+import { V2World } from '../../engine2/world';
 
 export interface MergerCandidate {
   acquirerTicker: string;
@@ -13,6 +15,7 @@ export interface MergerCandidate {
 }
 
 export function checkForMerger(
+  v2: V2World,
   activeCompanies: Company[],
   week: number,
   /** §5-DYN — the region's live supply graph, so integration can follow measured failure. */
@@ -40,7 +43,7 @@ export function checkForMerger(
 
   for (const acquirer of activeCompanies) {
     if (!isActiveCompany(acquirer) || !igRatings.includes(acquirer.creditRating)) continue;
-    if (acquirer.cash < 2 * Math.max(1, totalDebtOf(acquirer)) && totalDebtOf(acquirer) > 0) continue;
+    if (cashOf(v2, acquirer) < 2 * Math.max(1, totalDebtOf(acquirer)) && totalDebtOf(acquirer) > 0) continue;
     // (§7.240's `cash < 500` guard — dollars against books in billions, dead-open since the
     // dollar rescale — deleted rather than rescaled: the debt-cover gate above is the real test.)
 

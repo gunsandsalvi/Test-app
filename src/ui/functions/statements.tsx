@@ -15,6 +15,8 @@ import { formatDate, quarterLabel } from '../calendar';
 import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
 import { bankRwaUSD } from '../../domain/bank-pricing';
 import { totalDebtOf } from '../../domain/company';
+import { cashOf } from '../../engine/ledger/accounts';
+import { ensureV2 } from '../../engine2/world';
 
 interface Line { label: string; usd?: number; prior?: number; total?: boolean; text?: string }
 
@@ -135,7 +137,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
       ]} />
     ) : (
       <Statement units="USD millions · the live book (no quarter filed yet)" asOf={asOf} lines={[
-        { label: 'Cash', usd: c.cash },
+        { label: 'Cash', usd: cashOf(ensureV2(world.state), c) },
         { label: 'Gross plant', usd: c.grossPPEUSD },
         { label: 'Accumulated depreciation', usd: -(c.accumulatedDepreciationUSD ?? 0) },
         { label: 'Total debt', usd: totalDebtOf(c), total: true },

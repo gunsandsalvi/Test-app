@@ -14,6 +14,8 @@ import { GameState } from './types';
 import { createInitialGameState } from './engine/simulation';
 import { advanceWeeklyStepProfiled } from './engine/simulation/core';
 import { setClearingWorkersWeb, webWorkersAvailable } from './engine/simulation/stages/clearing-worker-pool-web';
+import { cashOf } from './engine/ledger/accounts';
+import { ensureV2 } from './engine2/world';
 
 interface WeekSample {
   week: number;
@@ -28,7 +30,8 @@ const WARMUP_WEEKS = 3;
  *  workers on vs off) computed the identical world. */
 function worldDigest(state: GameState): string {
   let sum = 0;
-  for (const c of state.companies) sum += c.stockPrice + c.cash;
+  const v2 = ensureV2(state);
+  for (const c of state.companies) sum += c.stockPrice + cashOf(v2, c);
   return sum.toPrecision(17);
 }
 const DIGEST_WEEKS = [1, 5, 10, 20, 50];

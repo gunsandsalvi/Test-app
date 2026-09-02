@@ -58,6 +58,7 @@ import {
   cpCreditPolicyShare, cpReservationYieldBps,
 } from '../../../domain/commercial-paper';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { cashOf } from '../../ledger/accounts';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
@@ -260,10 +261,11 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           if (!key || !isBillBucketKey(key)) return;
           heldByBucket.set(key, (heldByBucket.get(key) ?? 0) + (h.quantityOrNotionalUSD ?? 0));
         });
-        const targetUSD = corporateTreasuryTargetUSD(comp.cash ?? 0, comp.annualRevenue ?? 0, riskAversionOf(comp.management));
+        const cashUSD = cashOf(ctx.v2, comp);
+        const targetUSD = corporateTreasuryTargetUSD(cashUSD, comp.annualRevenue ?? 0, riskAversionOf(comp.management));
         const heldUSD = Array.from(heldByBucket.values()).reduce((a, v) => a + v, 0);
         if (!(targetUSD > 1) && !(heldUSD > 1)) return;
-        const budgetUSD = Math.max(0, (comp.cash ?? 0)
+        const budgetUSD = Math.max(0, cashUSD
           + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: comp.ticker }));
         const holdings = new Map<string, number>();
         const demand = new Map<string, ParticipantDemand>();
@@ -640,7 +642,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const dividendsQuarterUSD = Math.abs(latestSnap?.cashFlowStatement?.dividendsPaid ?? 0);
       const quarterOutflowsUSD = annualInterest / 4 + (comp.maintenanceCapex ?? 0) / 4 + dividendsQuarterUSD;
       const quarterInflowUSD = Math.max(0, comp.ebitda) / 4;
-      const projectedCashUSD = comp.cash - cpOutstandingUSD + quarterInflowUSD - quarterOutflowsUSD;
+      const projectedCashUSD = cashOf(ctx.v2, comp) - cpOutstandingUSD + quarterInflowUSD - quarterOutflowsUSD;
       const workingCapitalStockUSD = comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
       const rawGapUSD = Math.max(0, workingCapitalStockUSD - Math.max(0, projectedCashUSD));
       const targetCPUSD = rawGapUSD > comp.annualRevenue * CP_MIN_GAP_SHARE_OF_REVENUE

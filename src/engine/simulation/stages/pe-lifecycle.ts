@@ -36,6 +36,7 @@ import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { marketCapOf, totalDebtOf } from '../../../domain/company';
 import { ladderTotalUSD } from '../../../engine2/tranches';
+import { cashOf, openingCashOf } from '../../ledger/accounts';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -507,7 +508,7 @@ export function runPeLifecycleForRegion(
         // the last seller is willing to tender. Never below the printed price: nobody sells the
         // market a discount.
         const patientValuePerShare = companyFairValuePerShare(
-          listedTarget, riskFreeRate, PATIENT_HOLDER_REQUIRED_RETURN
+          listedTarget, cashOf(ctx.v2, listedTarget), riskFreeRate, PATIENT_HOLDER_REQUIRED_RETURN
         );
         const takeoutPricePerShare = Math.max(listedTarget.stockPrice, patientValuePerShare);
         const takeoutValueUSD = takeoutPricePerShare * listedTarget.sharesOutstanding;
@@ -814,8 +815,7 @@ export function runFirmBirthsForRegion(
       // §5-WIRES W6: the home bank's facility (fundNewbornDebt, below) funds the opening balance
       // first; the pool carves out the founders' remainder.
       const loanUSD = (c.debtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0);
-      const openingCashUSD = Math.min(Math.max(0, c.cash - loanUSD), Math.max(0, seg.cashUSD ?? 0));
-      c.cash = 0;
+      const openingCashUSD = Math.min(Math.max(0, openingCashOf(c) - loanUSD), Math.max(0, seg.cashUSD ?? 0));
       if (openingCashUSD > 0) {
         pay(ctx, {
           payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
@@ -860,7 +860,7 @@ export function runFirmBirthsForRegion(
   born.forEach((c) => {
     c.bornWeek = nextWeek;
     if (!c.homeBankTicker) {
-      c.homeBankTicker = banksForRelationship.pick(c.id, Math.max(0, c.cash));
+      c.homeBankTicker = banksForRelationship.pick(c.id, Math.max(0, openingCashOf(c)));
     }
     // §7.241 root fix: issuerTickerById is built once at context creation, so a firm born
     // mid-week was invisible to every coupon and corporate-action payment that week — the money

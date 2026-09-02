@@ -33,6 +33,7 @@ import { REGION_IDS } from '../../../domain/geography';
 import { TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../../../domain/company';
 import { PrivateFirmSeed } from '../../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
+import { cashOf, openingCashOf } from '../../ledger/accounts';
 
 /** A year of losing the merit order is structural — the same measured hold as §7.138. */
 const FDI_SUSTAINED_WEEKS = ANTITRUST_SUSTAINED_WEEKS;
@@ -134,10 +135,9 @@ export function runForeignDirectInvestment(
       // as a capital call that comes up short (§7.226) and the §7.288 financing cap: FDI spends
       // the cash pile above the treasurer's own operating buffer, never money that isn't there.
       const deployableUSD = Math.max(0,
-        comp.cash - comp.annualRevenue * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversionOf(comp.management));
-      const openingCashUSD = Math.min(Math.max(0, sub.cash), deployableUSD);
+        cashOf(ctx.v2, comp) - comp.annualRevenue * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversionOf(comp.management));
+      const openingCashUSD = Math.min(Math.max(0, openingCashOf(sub)), deployableUSD);
       if (!(openingCashUSD > 0)) continue;
-      sub.cash = 0; // construction: the opening balance arrives as the instruction below settles.
       sub.parentTicker = comp.ticker;
       // The stake is the PARENT's, not a founder household's: the private-business residual
       // (OWN4) excludes it by the same founderPct subtraction that defines it.

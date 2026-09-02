@@ -17,6 +17,7 @@
 import { GameState, Company } from '../types';
 import { V2World, ensureV2 } from './world';
 import { marketCapOf } from '../domain/company';
+import { cashOf } from '../engine/ledger/accounts';
 import { ladderTotalUSD } from './tranches';
 
 const F64_FIELDS = [
@@ -79,10 +80,11 @@ export interface CompanyStore {
  * Every fill of the store — the refresh, the per-row sync, the field mesh, the checker — routes
  * these names here, so no writer can put a stored copy of a derivation into a lane.
  */
-export const DERIVED_F64_FIELDS = ['marketCap', 'totalDebt'] as const;
+export const DERIVED_F64_FIELDS = ['marketCap', 'totalDebt', 'cash'] as const;
 export type DerivedF64Field = typeof DERIVED_F64_FIELDS[number];
 function derivedColumn(S: CompanyStore, f: DerivedF64Field, c: Company): number {
   if (f === 'marketCap') return marketCapOf(c);
+  if (f === 'cash') return S.v2 ? cashOf(S.v2, c) : NaN;
   return S.v2 ? ladderTotalUSD(S.v2, c.id) : NaN;
 }
 

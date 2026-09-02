@@ -1,5 +1,6 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE, REGION_IDS_SEED_ORDER } from '../types';
 import { stashSeedRing, peekSeedRing } from '../engine2/world';
+import { stashOpeningCash, openingCashOf } from './ledger/accounts';
 import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf, industryOfSubUnit } from '../domain/industry-registry';
 import { defect } from '../domain/defect';
 import { callProtectionForIssue } from '../domain/call-protection';
@@ -597,7 +598,6 @@ export function generateInitialCompanies(
         netIncome,
         eps,
         sharesOutstanding: tmpl.shares,
-        cash: tmpl.cashBase,
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
         debtTranches,
         capex,
@@ -707,6 +707,7 @@ export function generateInitialCompanies(
 
       stashSeedRing(company, 'rating', [tmpl.initialRating]);
       stashSeedRing(company, 'price', historicalPrices);
+      stashOpeningCash(company, tmpl.cashBase); // §5-WIRES A3.1: the seed opens its account with it
       companies.push(company);
     });
     // Flat per region rather than scaled to region size, matching SECTOR_FIRM_COUNT's
@@ -771,7 +772,6 @@ export function generateInitialCompanies(
         name: newName,
         annualRevenue: parent.annualRevenue * revenueScale,
         baselineAnnualRevenue: parent.baselineAnnualRevenue * revenueScale,
-        cash: parent.cash * revenueScale,
         // §5-CLOSE O2: a clone's cap is price × ITS shares — the share count scales with the
         // firm, the price is the parent's. Scaling the cap alone left every clone with a cap
         // that was not price × shares (up to 7×), and the seed then wrote shares onto the
@@ -784,6 +784,7 @@ export function generateInitialCompanies(
         historicalFundamentals: [...parent.historicalFundamentals]
       };
       stashSeedRing(newCompany, 'price', [...(peekSeedRing(parent, 'price') ?? [])]);
+      stashOpeningCash(newCompany, openingCashOf(parent) * revenueScale);
       companies.push(newCompany as any);
     }
 
@@ -826,7 +827,7 @@ export function generateInitialCompanies(
           c.annualRevenue *= lift;
           c.baselineAnnualRevenue *= lift;
           (c.debtTranches ?? []).forEach((t: DebtTranche) => { t.principalUSD *= lift; });
-          c.cash *= lift;
+          stashOpeningCash(c, openingCashOf(c) * lift);
           c.sharesOutstanding *= lift; // §5-WIRES D: the cap is price × shares; the lift is more of the firm at the market's price, so the SHARES lift (the register was seeded that way already)
           c.grossPPEUSD = (c.grossPPEUSD ?? 0) * lift;
           c.accumulatedDepreciationUSD = (c.accumulatedDepreciationUSD ?? 0) * lift;
@@ -932,7 +933,7 @@ export function normalizeProducingSectorRevenue(
       c.annualRevenue *= lift;
       c.baselineAnnualRevenue *= lift;
       (c.debtTranches ?? []).forEach((t: DebtTranche) => { t.principalUSD *= lift; });
-      c.cash *= lift;
+      stashOpeningCash(c, openingCashOf(c) * lift);
       c.sharesOutstanding *= lift; // §5-WIRES D: the cap is price × shares; the lift is more of the firm at the market's price, so the SHARES lift (the register was seeded that way already)
       c.grossPPEUSD = (c.grossPPEUSD ?? 0) * lift;
       c.accumulatedDepreciationUSD = (c.accumulatedDepreciationUSD ?? 0) * lift;
@@ -1240,7 +1241,6 @@ export function generatePrivateCompanies(
       // HC7), which is the only moment a share count should come into existence.
       sharesOutstanding: 0, stockPrice: 0, marketCap: 0,
       historicalPrices: [], forwardPE: 0,
-      cash: Math.round(ebitda * 0.6),
       currentLiabilities: Math.round(debtBase * 0.2 + revBase * 0.06),
       debtTranches,
       capex, maintenanceCapex, growthCapex: capex - maintenanceCapex,
@@ -1298,6 +1298,7 @@ export function generatePrivateCompanies(
       treasuryHoldings: [],
     } as unknown as Company;
     stashSeedRing(pc, 'rating', [rating]); // §4.C II.5
+    stashOpeningCash(pc, Math.round(ebitda * 0.6)); // §5-WIRES A3.1: a birth pays it
     return pc;
   });
 }

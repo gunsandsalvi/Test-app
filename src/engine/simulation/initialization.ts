@@ -73,6 +73,8 @@ import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGOR
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
+import { openAccount, openingCashOf } from '../ledger/accounts';
+import { ensureV2 } from '../../engine2/world';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand } from '../../domain/industry-registry';
 import { getRegionProductivityPerCapitaUSD, remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../bootstrap/population';
@@ -734,12 +736,12 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       })));
       regionCompanies.forEach(c => {
         if (c.isBankEntity) return;
-        c.homeBankTicker = houseBanks.pick(c.id, Math.max(0, c.cash));
+        c.homeBankTicker = houseBanks.pick(c.id, Math.max(0, openingCashOf(c)));
       });
       const corpDepositsByBank = new Map<string, number>();
       regionCompanies.forEach(c => {
         if (c.isBankEntity || !c.homeBankTicker) return;
-        corpDepositsByBank.set(c.homeBankTicker, (corpDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
+        corpDepositsByBank.set(c.homeBankTicker, (corpDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, openingCashOf(c)));
       });
       // SEG1: the segment pools get their own money, sized by the named private tier's measured
       // cash/revenue ratio — the tier's small firms hold working balances like its named ones
@@ -749,7 +751,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       {
         const namedPrivate = regionCompanies.filter(c => !c.isBankEntity && c.listingStatus === 'PRIVATE');
         const tierRevenueUSD = namedPrivate.reduce((a, c) => a + Math.max(0, c.annualRevenue), 0);
-        const tierCashUSD = namedPrivate.reduce((a, c) => a + Math.max(0, c.cash), 0);
+        const tierCashUSD = namedPrivate.reduce((a, c) => a + Math.max(0, openingCashOf(c)), 0);
         const cashToRevenue = tierRevenueUSD > 0 ? tierCashUSD / tierRevenueUSD : 0.08;
         (reg.smePools || []).forEach(seg => {
           seg.cashUSD = Math.round(Math.max(0, seg.annualRevenueUSD) * cashToRevenue);
@@ -1563,8 +1565,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const lateInstitutionalByBank = new Map<string, number>();
     companies.forEach(c => {
       if (c.region !== regionId || c.isBankEntity || c.homeBankTicker) return;
-      c.homeBankTicker = lateHouseBanks.pick(c.id, Math.max(0, c.cash));
-      lateCorporateByBank.set(c.homeBankTicker, (lateCorporateByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
+      c.homeBankTicker = lateHouseBanks.pick(c.id, Math.max(0, openingCashOf(c)));
+      lateCorporateByBank.set(c.homeBankTicker, (lateCorporateByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, openingCashOf(c)));
     });
     institutionalEntities.forEach(e => {
       if (e.region !== regionId || e.homeBankTicker) return;
@@ -1614,7 +1616,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     });
   }
 
-  return {
+  const state: GameState = {
     currentWeek: 1,
     year: 2026,
     rngSeed: seed,
@@ -1676,6 +1678,13 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       },
     ],
   };
+  // §5-WIRES A3.1: the seed opens every firm's account where it wrote `cash`. A bank's company
+  // row carries the seed's number too, until A3's bank slice makes a bank's cash its reserves.
+  {
+    const v2 = ensureV2(state);
+    companies.forEach((c) => openAccount(v2, { kind: 'COMPANY', ticker: c.ticker }, openingCashOf(c)));
+  }
+  return state;
 }
 
 

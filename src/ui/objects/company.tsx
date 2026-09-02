@@ -11,6 +11,8 @@ import { materializeLadder } from '../../engine2/tranches';
 import { isActiveCompany } from '../../domain/company';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, ringed, taped } from './common';
 import { marketCapOf, totalDebtOf } from '../../domain/company';
+import { cashOf } from '../../engine/ledger/accounts';
+import { ensureV2 } from '../../engine2/world';
 
 const RATING_CODES = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC', 'D'];
 
@@ -115,7 +117,8 @@ export const company = defineObject<Company>({
     const equityHolders = holdersOf(world, c.id).filter((h) => h.instrumentType === 'EQUITY');
     const heldUSD = equityHolders.reduce((a, h) => a + h.usd, 0);
     const floatShare = marketCapOf(c) > 0 ? heldUSD / marketCapOf(c) : undefined;
-    const netDebt = (totalDebtOf(c) ?? 0) - (c.cash ?? 0);
+    const cashUSD = cashOf(ensureV2(world.state), c);
+    const netDebt = (totalDebtOf(c) ?? 0) - cashUSD;
     const sheet = c.bankBalanceSheet;
     const lines = bankLinesTo(world, c.id);
     const contracts = contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker });
@@ -160,7 +163,7 @@ export const company = defineObject<Company>({
             <KV k="ebitda margin" hint={c.expectedEbitdaUSD !== undefined && c.annualRevenue > 0 ? `management expects ${pctLevel(c.expectedEbitdaUSD / c.annualRevenue)}` : undefined} v={c.annualRevenue > 0 ? pctLevel(c.ebitda / c.annualRevenue) : '—'} />
             <KV k="net debt / ebitda" hint={`leverage ${ratio(c.leverage)}`} v={c.ebitda > 0 ? ratio(netDebt / c.ebitda) : '—'} />
             <KV k="interest coverage" v={ratio(c.interestCoverage)} />
-            <KV k="cash" v={money(c.cash)} />
+            <KV k="cash" v={money(cashUSD)} />
             <KV k="people" hint={c.previousEmployeeCount !== undefined && c.previousEmployeeCount !== c.employeeCount ? `${c.employeeCount > c.previousEmployeeCount ? '+' : ''}${count(c.employeeCount - c.previousEmployeeCount)} this week` : undefined} v={count(c.employeeCount)} />
             {c.mothballedPpeShare ? <KV k="plant mothballed" v={pctLevel(c.mothballedPpeShare, 0)} /> : null}
           </Card>

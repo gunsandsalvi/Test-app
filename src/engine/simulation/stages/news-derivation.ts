@@ -22,6 +22,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { ladderTotalUSD } from '../../../engine2/tranches';
+import { cashOf } from '../../ledger/accounts';
 
 type Ref = NonNullable<NewsItem['refs']>[number];
 
@@ -111,7 +112,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: 'default',
       category: 'CREDIT',
       title: `${c.name} defaults`,
-      description: `${ticker} (${c.sector}, ${c.region}) ran out of cash: ${M(c.cash)} on hand against coverage of ${c.interestCoverage.toFixed(2)}×, ${M(c.annualRevenue)} of revenue and ${M(ladderTotalUSD(ctx.v2, c.id))} of debt; ${N(c.employeeCount)} people worked there${c.homeBankTicker ? `, banked at ${c.homeBankTicker}` : ''}.`,
+      description: `${ticker} (${c.sector}, ${c.region}) ran out of cash: ${M(cashOf(ctx.v2, c))} on hand against coverage of ${c.interestCoverage.toFixed(2)}×, ${M(c.annualRevenue)} of revenue and ${M(ladderTotalUSD(ctx.v2, c.id))} of debt; ${N(c.employeeCount)} people worked there${c.homeBankTicker ? `, banked at ${c.homeBankTicker}` : ''}.`,
       cause: why.text ? `This week it paid ${why.text}.` : undefined,
       refs: [...refs, ...why.refs],
       materialityUSD: Math.max(ladderTotalUSD(ctx.v2, c.id), c.annualRevenue),
@@ -143,7 +144,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: up ? 'upgrade' : 'downgrade',
       category: 'CREDIT',
       title: `${c.name} ${up ? 'upgraded' : 'downgraded'} to ${rc.to}${crossesIg ? (up ? ', back to investment grade' : ', out of investment grade') : ''}`,
-      description: `${rc.ticker} moves ${rc.from} → ${rc.to}; its bonds clear ${Math.round(c.oasSpreadBps)}bp over the curve and its protection ${Math.round(c.cdsSpreadBps)}bp. Leverage ${c.leverage.toFixed(1)}×, coverage ${c.interestCoverage.toFixed(1)}×, cash ${M(c.cash)}, revenue ${M(c.annualRevenue)}.`,
+      description: `${rc.ticker} moves ${rc.from} → ${rc.to}; its bonds clear ${Math.round(c.oasSpreadBps)}bp over the curve and its protection ${Math.round(c.cdsSpreadBps)}bp. Leverage ${c.leverage.toFixed(1)}×, coverage ${c.interestCoverage.toFixed(1)}×, cash ${M(cashOf(ctx.v2, c))}, revenue ${M(c.annualRevenue)}.`,
       refs: [company(c), region(c.region)],
       materialityUSD: ladderTotalUSD(ctx.v2, c.id),
       impactRegion: c.region, impactSector: c.sector, affectedTicker: rc.ticker,

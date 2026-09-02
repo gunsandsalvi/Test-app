@@ -158,5 +158,17 @@ if [ -n "$DERIVED_STRAY" ]; then
   echo "$DERIVED_STRAY"
   exit 1
 fi
+# §5-WIRES A3.1 — A FIRM'S CASH IS ITS ACCOUNT. `Company.cash` no longer exists; a balance is read
+# with `cashOf(v2, company)` (engine/ledger/accounts.ts). The type system refuses the field; this
+# catches the cast-hidden read (`as any`, `as unknown as Company`) by the names a company is
+# usually held under. A statement's own cash line (`bs.cash`), the kernel's cash box and the
+# front lanes carry the word legitimately and are not company objects.
+CASH_STRAY=$(grep -rnE "\b(c|comp|company|firm|acquirer|target|issuer|seller|buyer|parent|sub|spin|bank|peer|estateComp|listedTarget|newborn|holder)\.cash\b" src scripts --include=*.ts --include=*.tsx 2>/dev/null \
+  | grep -vE '^src/engine/ledger/accounts\.ts:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
+if [ -n "$CASH_STRAY" ]; then
+  echo "ERROR: a company's cash read as a field — it is its account: cashOf(v2, company) (engine/ledger/accounts.ts):"
+  echo "$CASH_STRAY"
+  exit 1
+fi
 
 echo "Repo hygiene check passed."

@@ -42,6 +42,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { REGION_IDS } from '../../../../domain/geography';
 import { derivativesBookOf, initialMarginUSD, strikeDerivatives } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
+import { cashOf } from '../../../ledger/accounts';
 
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
 
@@ -381,7 +382,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   ctx.updatedCompanies.forEach((c) => {
     const gaps = corpGapByTicker.get(c.ticker);
     if (!gaps) return;
-    strikeFor({ kind: 'COMPANY', ticker: c.ticker }, c.region, `CORP-${c.ticker}`, gaps, c.cash ?? 0);
+    strikeFor({ kind: 'COMPANY', ticker: c.ticker }, c.region, `CORP-${c.ticker}`, gaps, cashOf(ctx.v2, c));
   });
   strikeDerivatives(ctx, state, struck);
 

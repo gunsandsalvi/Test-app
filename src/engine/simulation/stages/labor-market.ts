@@ -66,6 +66,7 @@ import {
   revenueGrowthWindow, realEmploymentGrowthAnnual,
   quitRateWeeklyAt, firmQuitMultiplier, smoothedPriceAt, employerWeekPosting, PriceGrowthRow,
 } from '../../../domain/company-week/labor-demand';
+import { cashOf } from '../../ledger/accounts';
 
 const OCCUPATIONS = OCCUPATION_TYPES;
 
@@ -353,10 +354,11 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // against the wage per head, both measured on the firm's books, and a firm out of cash
       // hires nobody. What it may hire toward is still the level target, and the matching
       // friction still paces it.
+      const cashUSD = cashOf(ctx.v2, comp);
       const valueAddedPerHeadUSD = current > 0
         ? (comp.annualRevenue - Math.max(0, (comp.realInputConsumptionCostWeeklyUSD ?? 0) * 52)) / current
         : 0;
-      const affordableHireHeads = (comp.cash >= 0 && valueAddedPerHeadUSD > annualWagePerWorkerUSD)
+      const affordableHireHeads = (cashUSD >= 0 && valueAddedPerHeadUSD > annualWagePerWorkerUSD)
         ? Math.max(0, outputNeedHeads - current)
         : 0;
 
@@ -370,7 +372,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         outputNeedHeads,
         affordableHireHeads,
         affordableCutHeads,
-        cashIsNegative: comp.cash < 0,
+        cashIsNegative: cashUSD < 0,
         layoffSpeedMultiple: LAYOFF_SPEED_MULTIPLE * riskAversion,
         hiringSpeedMultiple: HIRING_ADJUSTMENT_SPEED_MULTIPLE / riskAversion,
       });
@@ -378,7 +380,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // LABOR_CAUSES=1 — which rule the week's layoffs came from, per region (the §7.345 trace).
       if (process.env.LABOR_CAUSES === '1' && layoffs > 0) {
         const cutSpeed = LAYOFF_SPEED_MULTIPLE * riskAversion;
-        const distress = comp.cash < 0 ? current * DISTRESS_LAYOFF_SPEED : 0;
+        const distress = cashUSD < 0 ? current * DISTRESS_LAYOFF_SPEED : 0;
         const afford = affordableCutHeads * cutSpeed;
         const cause = layoffs <= distress + 1e-9 ? 'distress' : layoffs <= afford + 1e-9 ? 'affordability' : 'growth';
         const key = `${regionId}:${cause}`;

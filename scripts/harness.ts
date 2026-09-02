@@ -18,6 +18,7 @@
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
+import { cashOf } from '../src/engine/ledger/accounts';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -340,7 +341,7 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
       if (excess > 50e6) {
         const flag = !c ? 'GONE' : c.isBankEntity ? 'BANK' : c.isDefaulted ? 'DEAD' : c.mergerAcquired ? 'MERGED' : 'live';
         rows.push(`${(excess / 1e6).toFixed(0)}M ${v.cls} ${c?.ticker ?? id} [${flag}]`
-          + ` out ${(outUSD / 1e6).toFixed(0)}M cash ${((c?.cash ?? 0) / 1e6).toFixed(0)}M`);
+          + ` out ${(outUSD / 1e6).toFixed(0)}M cash ${((c ? cashOf(ensureV2(state), c) : 0) / 1e6).toFixed(0)}M`);
       }
     });
     if (rows.length > 0) console.log(`  [mint] w${week} excess>50M: ${rows.sort((a, b) => parseFloat(b) - parseFloat(a)).slice(0, 12).join(' | ')}`);
@@ -1975,8 +1976,12 @@ const fpModule: HarnessModule = {
       writeFileSync(process.env.REGISTER_DUMP, lines.sort().join('\n'));
     }
     if (process.env.STATE_DUMP && w === (Number(process.env.STATE_DUMP_WEEK) || 1)) {
+      // §5-WIRES A3.1: a firm's cash is its account, not a field — the dump carries it as a column
+      // read off the ledger so the differ still sees every balance.
+      const dumpV2 = ensureV2(state);
       writeFileSync(process.env.STATE_DUMP,
-        JSON.stringify(state.companies, (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Number(v.toPrecision(15)) : v)));
+        JSON.stringify(state.companies.map((c) => ({ ...c, cash: cashOf(dumpV2, c) })),
+          (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Number(v.toPrecision(15)) : v)));
     }
     if (!FP || w > FP_WEEKS) return;
     console.log(`  [FP] w${w} ${canonicalFingerprint(state)}`);
@@ -2138,7 +2143,7 @@ const spiralModule: HarnessModule = {
       const alive = carriers.filter((c) => isActiveCompany(c));
       const line = carriers.slice(0, 12).map((c) => {
         const flag = isActiveCompany(c) ? '' : '✝';
-        return `${c.ticker}${flag} cash${((c.cash ?? 0) / 1e6).toFixed(0)}M rev${((c.annualRevenue ?? 0) / 1e6).toFixed(0)}M ni${((c.netIncome ?? 0) / 1e6).toFixed(1)}M`;
+        return `${c.ticker}${flag} cash${(cashOf(ensureV2(state), c) / 1e6).toFixed(0)}M rev${((c.annualRevenue ?? 0) / 1e6).toFixed(0)}M ni${((c.netIncome ?? 0) / 1e6).toFixed(1)}M`;
       }).join(' | ');
       console.log(`  [car] w${w} alive ${alive.length}/${carriers.length} :: ${line}`);
       const ledgerTicker = process.env.CARRIER_LEDGER;
