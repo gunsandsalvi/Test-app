@@ -143,9 +143,9 @@ export interface InstitutionalEntity {
    * Real, per-entity cash. Every fill this entity takes in a clearing stage settles against it,
    * so its securities and its money move together. Before this existed the entity's holdings
    * changed each week with nothing on the other side of the trade — a market on one side of the
-   * ledger only.
+   * ledger only. §5-WIRES A3.2: the balance is the entity's ACCOUNT (`entityCashOf`,
+   * engine/ledger/accounts.ts), not a field.
    */
-  cashUSD: number;
   /**
    * WS6 — cash this entity lent overnight in the general-collateral repo market this week
    * (stages/repo-clearing.ts). It matures back into cashUSD with interest at the start of the
@@ -205,14 +205,14 @@ export interface InstitutionalEntity {
  * mark of exactly this sum, read a week stale by every sizing pass (§7.374).
  */
 export function institutionTotalAssetsUSD(
-  e: { cashUSD?: number; repoLentUSD?: number; stockLoanNetUSD?: number; entityType: InstitutionalEntityType; peFund?: unknown },
-  bookUSD: number, pendingUSD: number, portfolioUSD: number
+  e: { repoLentUSD?: number; stockLoanNetUSD?: number; entityType: InstitutionalEntityType; peFund?: unknown },
+  cashUSD: number, bookUSD: number, pendingUSD: number, portfolioUSD: number
 ): number {
-  return (e.cashUSD ?? 0) + pendingUSD + (e.repoLentUSD ?? 0) + (e.stockLoanNetUSD ?? 0)
+  return cashUSD + pendingUSD + (e.repoLentUSD ?? 0) + (e.stockLoanNetUSD ?? 0)
     + (e.entityType === 'PRIVATE_EQUITY' && e.peFund ? portfolioUSD : bookUSD);
 }
 
 /** The seed's read, before the register exists: cash plus the entity's own itemized rows. */
-export function seedInstitutionTotalAssetsUSD(e: { cashUSD?: number; itemizedHoldings: { quantityOrNotionalUSD?: number }[] }): number {
-  return (e.cashUSD ?? 0) + e.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
+export function seedInstitutionTotalAssetsUSD(e: { itemizedHoldings: { quantityOrNotionalUSD?: number }[] }, openingCashUSD: number): number {
+  return openingCashUSD + e.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
 }

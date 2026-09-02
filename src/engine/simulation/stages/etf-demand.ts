@@ -1,3 +1,4 @@
+import { V2World } from '../../../engine2/world';
 /**
  * The demand schedule an INDEX FUND posts into a clearing book.
  *
@@ -15,6 +16,7 @@
 import { InstitutionalEntity } from '../../../types';
 import { ParticipantDemand } from './financial-clearing-engine';
 import { MarketIndex } from '../../../domain/indexes';
+import { entityCashOf } from '../../ledger/accounts';
 
 /**
  * A reservation level so far beyond any real schedule that the fund is always a full-size bidder.
@@ -54,6 +56,7 @@ export function indexFundDemand(
  * feature before any shares exist.
  */
 export function indexFundsForBook(
+  v2: V2World,
   entities: InstitutionalEntity[],
   indexes: MarketIndex[],
   indexIds: string[],
@@ -85,7 +88,7 @@ export function indexFundsForBook(
     // (measured: USAEQX overdrawn by <5M for 21 straight weeks at the §7.271 reference). The
     // sleeve is a year of its OWN expense ratio — the fund's own measured obligation, no new
     // constant — which is also what real index funds hold cash for.
-    const investableUSD = (holdingsUSD + (e.cashUSD ?? 0)) * (1 - (e.etf?.expenseRatioAnnual ?? 0));
+    const investableUSD = (holdingsUSD + entityCashOf(v2, e)) * (1 - (e.etf?.expenseRatioAnnual ?? 0));
     if (investableUSD > 0) out.push({ fund: e, index, investableUSD });
   });
   return out;

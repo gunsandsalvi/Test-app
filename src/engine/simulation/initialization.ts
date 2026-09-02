@@ -73,7 +73,7 @@ import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGOR
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
-import { openAccount, openingCashOf } from '../ledger/accounts';
+import { openAccount, openingCashOf, stashOpeningCash } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand } from '../../domain/industry-registry';
@@ -914,7 +914,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         ...attributeEquityHoldingsProportionally(entEquityShareUSD),
       ];
 
-      institutionalEntities.push({
+      const seededEntity: InstitutionalEntity = {
         id: comp.id,
         name: comp.name,
         ticker: comp.ticker,
@@ -927,7 +927,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // Real opening cash: the entity's own policy cash weight against its own book. Every
         // clearing fill from here on settles against this balance.
         // §5-CLOSE O2: plus the equity budget the issue could not absorb (see equityFillRatio).
-        cashUSD: totalAssetsUSD * targetFor(role, comp.hedgeFundStrategy).cashPct + entEquityShareUSD * (1 - equityFillRatio),
         equityCapitalUSD,
         sharesOutstanding: comp.sharesOutstanding,
         stockPrice: comp.stockPrice,
@@ -935,7 +934,12 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         assetAllocationTarget: targetFor(role, comp.hedgeFundStrategy),
         isDefaulted: comp.isDefaulted,
         historicalPrices: [...(peekSeedRing(comp, 'price') ?? [])],
-      });
+      };
+      // §5-WIRES A3.2: real opening cash — the entity's own policy cash weight against its own
+      // book, plus the equity budget the issue could not absorb (§5-CLOSE O2, equityFillRatio);
+      // the seed opens its account with it at assembly.
+      stashOpeningCash(seededEntity, totalAssetsUSD * targetFor(role, comp.hedgeFundStrategy).cashPct + entEquityShareUSD * (1 - equityFillRatio));
+      institutionalEntities.push(seededEntity);
     });
 
     // The same effective rate the macro bootstrap uses, so the seed's after-tax shape matches
@@ -962,13 +966,13 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       if (isManager && !((comp.managementFeeRate ?? 0) > 0)) return;
       // A manager's revenue is a fee on the book it runs; an insurer's is the premium its own
       // capital lets it write. Both read the entity, because both ARE the entity.
-      if (isManager) comp.aumUSD = seedInstitutionTotalAssetsUSD(entity);
+      if (isManager) comp.aumUSD = seedInstitutionTotalAssetsUSD(entity, openingCashOf(entity));
       const revenueUSD = isManager
         ? Math.max(10, comp.aumUSD! * comp.managementFeeRate!)
         : Math.max(10, Math.max(0, entity.equityCapitalUSD) * PREMIUM_TO_SURPLUS_RATIO);
       if (isInsurer) {
         comp.insurancePremiumsWrittenUSD = revenueUSD;
-        comp.technicalReservesUSD = Math.max(0, seedInstitutionTotalAssetsUSD(entity) - entity.equityCapitalUSD);
+        comp.technicalReservesUSD = Math.max(0, seedInstitutionTotalAssetsUSD(entity, openingCashOf(entity)) - entity.equityCapitalUSD);
       }
       const ebitdaUSD = revenueUSD * (isManager ? 0.35 : 0.15);
       comp.annualRevenue = revenueUSD;
@@ -998,7 +1002,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           freedUSD += h.quantityOrNotionalUSD * (1 - keep);
           return { ...h, quantityShares: h.quantityShares * keep, quantityOrNotionalUSD: h.quantityOrNotionalUSD * keep };
         });
-        if (freedUSD > 0) e.cashUSD = (e.cashUSD ?? 0) + freedUSD;
+        if (freedUSD > 0) stashOpeningCash(e, openingCashOf(e) + freedUSD);
       });
     }
 
@@ -1282,8 +1286,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     })));
     institutionalEntities.forEach(e => {
       if (e.region !== regionId) return;
-      e.homeBankTicker = houseBanks.pick(e.id, Math.max(0, e.cashUSD ?? 0));
-      byBank.set(e.homeBankTicker, (byBank.get(e.homeBankTicker) ?? 0) + Math.max(0, e.cashUSD ?? 0));
+      e.homeBankTicker = houseBanks.pick(e.id, Math.max(0, openingCashOf(e)));
+      byBank.set(e.homeBankTicker, (byBank.get(e.homeBankTicker) ?? 0) + Math.max(0, openingCashOf(e)));
     });
     regionBanks.forEach(b => {
       const instUSD = Math.round(byBank.get(b.ticker) ?? 0);
@@ -1373,7 +1377,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     if (sponsorable.length === 0) return;
     const lps = institutionalEntities.filter(e => e.region === regionId &&
       (e.entityType === 'INSURER' || e.entityType === 'PENSION_FUND' || e.entityType === 'ASSET_MANAGER'));
-    const lpWeights = new Map(lps.map((e) => [e.id, seedInstitutionTotalAssetsUSD(e)]));
+    const lpWeights = new Map(lps.map((e) => [e.id, seedInstitutionTotalAssetsUSD(e, openingCashOf(e))]));
     const lpWeightSum = lps.reduce((a, e) => a + lpWeights.get(e.id)!, 0) || 1;
     // The seed marks the sponsored stakes at the same multiple the running mark uses — what the
     // region's LISTED comps are worth per dollar of EBITDA — so week 0's NAV is not a different
@@ -1397,7 +1401,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       sharesOutstanding: 1,
       stockPrice: 0,
       itemizedHoldings: [],
-      cashUSD: 0,
       assetAllocationTarget: allocationTargetFor('MONEY_MARKET_FUND'),
       isDefaulted: false,
       historicalPrices: [],
@@ -1436,8 +1439,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           sharesOutstanding: 0,
           stockPrice: 0,
           itemizedHoldings: [],
-          cashUSD: 0,
-          assetAllocationTarget: allocationTargetFor('ETF'),
+              assetAllocationTarget: allocationTargetFor('ETF'),
           isDefaulted: false,
           historicalPrices: [],
           etf: {
@@ -1476,8 +1478,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         sharesOutstanding: 1,
         stockPrice: 0,
         itemizedHoldings: [],
-        cashUSD: 0,
-        assetAllocationTarget: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
+          assetAllocationTarget: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
         isDefaulted: false,
         historicalPrices: [],
         peFund: {
@@ -1530,7 +1531,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const tradable = outstanding;
         const weights = regionEntities.map(e => {
           const pct = kind === 'CORP_BOND' ? e.assetAllocationTarget.corpBondPct : e.assetAllocationTarget.loanPct;
-          return seedInstitutionTotalAssetsUSD(e) * pct * sleeve(e.entityType, ig);
+          return seedInstitutionTotalAssetsUSD(e, openingCashOf(e)) * pct * sleeve(e.entityType, ig);
         });
         const wSum = weights.reduce((a, b) => a + b, 0) || 1;
         regionEntities.forEach((e, i) => {
@@ -1570,8 +1571,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     });
     institutionalEntities.forEach(e => {
       if (e.region !== regionId || e.homeBankTicker) return;
-      e.homeBankTicker = lateHouseBanks.pick(e.id, Math.max(0, e.cashUSD ?? 0));
-      lateInstitutionalByBank.set(e.homeBankTicker, (lateInstitutionalByBank.get(e.homeBankTicker) ?? 0) + Math.max(0, e.cashUSD ?? 0));
+      e.homeBankTicker = lateHouseBanks.pick(e.id, Math.max(0, openingCashOf(e)));
+      lateInstitutionalByBank.set(e.homeBankTicker, (lateInstitutionalByBank.get(e.homeBankTicker) ?? 0) + Math.max(0, openingCashOf(e)));
     });
     if (lateCorporateByBank.size === 0 && lateInstitutionalByBank.size === 0) return;
     regionBanks.forEach(b => {
@@ -1683,6 +1684,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   {
     const v2 = ensureV2(state);
     companies.forEach((c) => openAccount(v2, { kind: 'COMPANY', ticker: c.ticker }, openingCashOf(c)));
+    institutionalEntities.forEach((e) => openAccount(v2, { kind: 'INSTITUTION', id: e.id }, openingCashOf(e)));
   }
   return state;
 }

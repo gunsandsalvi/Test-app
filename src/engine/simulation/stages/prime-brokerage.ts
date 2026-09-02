@@ -1,3 +1,4 @@
+import { entityCashOf } from '../../ledger/accounts';
 /**
  * HF1 — the prime brokerage session: a fund's leverage becomes a named bank's loan.
  *
@@ -147,7 +148,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       // them, and one sitting on cash does not borrow at all. The line is a constraint on that,
       // never a driver of it, which is what a credit line is.
       const sleeveTargetUSD = Math.max(0, fund.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, institutionTotalAssetsUSD(ctx, fund));
-      const cashGapUSD = sleeveTargetUSD - Math.max(0, fund.cashUSD ?? 0);
+      const cashGapUSD = sleeveTargetUSD - Math.max(0, entityCashOf(ctx.v2, fund));
       const targetDrawnUSD = Math.max(0, Math.min(lineUSD, drawnUSD + cashGapUSD));
       const deltaUSD = targetDrawnUSD - drawnUSD;
       if (Math.abs(deltaUSD) > 1) {
@@ -225,7 +226,7 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
       if (fund.region !== regionId || fund.entityType !== 'HEDGE_FUND' || fund.isDefaulted) return fund;
       const brokerTicker = fund.homeBankTicker;
       if (!brokerTicker) return fund;
-      const cashPlusPendingUSD = (fund.cashUSD ?? 0)
+      const cashPlusPendingUSD = entityCashOf(ctx.v2, fund)
         + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id });
       if (cashPlusPendingUSD >= -1) return fund;
       const drawUSD = Math.min(fund.primeBrokerageAvailableUSD ?? 0, -cashPlusPendingUSD);

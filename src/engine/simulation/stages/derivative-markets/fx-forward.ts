@@ -42,7 +42,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { REGION_IDS } from '../../../../domain/geography';
 import { derivativesBookOf, initialMarginUSD, strikeDerivatives } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
-import { cashOf } from '../../../ledger/accounts';
+import { cashOf, entityCashOf } from '../../../ledger/accounts';
 
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
 
@@ -375,7 +375,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   ctx.updatedInstitutionalEntities.forEach((entity) => {
     const gaps = gapByEntityRegion.get(entity.id);
     if (!gaps) return;
-    strikeFor({ kind: 'INSTITUTION', id: entity.id }, entity.region, entity.id, gaps, entity.cashUSD ?? 0);
+    strikeFor({ kind: 'INSTITUTION', id: entity.id }, entity.region, entity.id, gaps, entityCashOf(ctx.v2, entity));
   });
   // DER5 — the corporates' side, struck against the same desks at the same cleared basis. A
   // hedged exporter genuinely feels less of a currency move than an unhedged one.

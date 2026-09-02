@@ -9,6 +9,8 @@ import { institutionOf, bookOf, tapeSeries, contractsOf } from '../world';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, taped, words } from './common';
 import { hedgeFundStrategyProfile } from '../../domain/institution-profiles';
 import { institutionTotalAssetsFromState } from '../../engine/simulation/stages/institutional-balance-sheet';
+import { entityCashOf } from '../../engine/ledger/accounts';
+import { ensureV2 } from '../../engine2/world';
 
 export const institution = defineObject<InstitutionalEntity>({
   type: 'institution',
@@ -18,7 +20,7 @@ export const institution = defineObject<InstitutionalEntity>({
   list: (world) => world.state.institutionalEntities.map((e) => ({ id: e.id, obj: e })),
   label: (_w, id, e) => ({ ticker: e.ticker ?? id, name: e.name, kind: words(e.entityType) + (e.hedgeFundStrategy ? ` · ${words(e.hedgeFundStrategy)}` : ''), region: e.region }),
   keywords: (_w, _id, e) => [words(e.entityType), e.region.toLowerCase(), ...(e.hedgeFundStrategy ? [words(e.hedgeFundStrategy)] : [])],
-  headline: (w, _id, e) => ({ value: money(institutionTotalAssetsFromState(w.state, e)), sub: 'assets', neg: (e.cashUSD ?? 0) < 0 }),
+  headline: (w, _id, e) => ({ value: money(institutionTotalAssetsFromState(w.state, e)), sub: 'assets', neg: entityCashOf(ensureV2(w.state), e) < 0 }),
   series: (world, id) => [
     taped(world, `institution:${id}:assets`, 'assets', 'USD', (v) => money(v)),
     taped(world, `institution:${id}:cash`, 'cash', 'USD', (v) => money(v)),
@@ -40,7 +42,7 @@ export const institution = defineObject<InstitutionalEntity>({
       { key: 'name', label: 'name', render: (r, _w, nav) => <Link to={{ type: 'institution', id: r.id }} nav={nav}>{r.obj.ticker ?? r.id}</Link>, value: (r) => r.obj.ticker ?? r.id },
       { key: 'kind', label: 'kind', width: 1.3, render: (r) => words(r.obj.entityType), value: (r) => r.obj.entityType },
       { key: 'assets', label: 'assets', render: (r, w) => money(institutionTotalAssetsFromState(w.state, r.obj)), value: (r, w) => institutionTotalAssetsFromState(w.state, r.obj) },
-      { key: 'cash', label: 'cash', render: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? pctLevel((r.obj.cashUSD ?? 0) / t, 0) : '—'; }, value: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? (r.obj.cashUSD ?? 0) / t : 0; } },
+      { key: 'cash', label: 'cash', render: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? pctLevel(entityCashOf(ensureV2(w.state), r.obj) / t, 0) : '—'; }, value: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? entityCashOf(ensureV2(w.state), r.obj) / t : 0; } },
       { key: 'equity', label: 'equity', render: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? pctLevel(r.obj.equityCapitalUSD / t, 0) : '—'; }, value: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? r.obj.equityCapitalUSD / t : 0; } },
       { key: 'region', label: 'reg', width: 0.6, render: (r, _w, nav) => <Link to={{ type: 'region', id: r.obj.region }} nav={nav}>{r.obj.region}</Link>, value: (r) => r.obj.region },
     ],
@@ -57,6 +59,7 @@ export const institution = defineObject<InstitutionalEntity>({
     const strategy = hedgeFundStrategyProfile(e);
     const t = e.assetAllocationTarget;
     const totalAssetsUSD = institutionTotalAssetsFromState(world.state, e);
+    const eCashUSD = entityCashOf(ensureV2(world.state), e);
     return (
       <>
         <ObjectHeader
@@ -69,7 +72,7 @@ export const institution = defineObject<InstitutionalEntity>({
         />
         <StatGrid>
           <Stat label="assets" value={money(totalAssetsUSD)} sub={<ChangeSub series={assets} />} />
-          <Stat label="cash" value={money(e.cashUSD)} sub={e.cashUSD !== undefined && totalAssetsUSD > 0 ? `${pctLevel(e.cashUSD / totalAssetsUSD, 0)} of assets` : ''} neg={(e.cashUSD ?? 0) < 0} />
+          <Stat label="cash" value={money(eCashUSD)} sub={totalAssetsUSD > 0 ? `${pctLevel(eCashUSD / totalAssetsUSD, 0)} of assets` : ''} neg={eCashUSD < 0} />
           <Stat label="equity" value={money(e.equityCapitalUSD)} sub={totalAssetsUSD > 0 ? `${pctLevel(e.equityCapitalUSD / totalAssetsUSD, 0)} of assets` : ''} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>

@@ -18,7 +18,7 @@
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
-import { cashOf } from '../src/engine/ledger/accounts';
+import { cashOf, entityCashOf, resetAccount } from '../src/engine/ledger/accounts';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -158,7 +158,7 @@ const auditFindings: AuditFinding[] = [];
 let damperBindStreak = new Map<string, number>();
 const damperPersistentBinds = new Set<string>();
 let damperWorstStreak = 0;
-let prevStateForBookCheck: GameState | null = null;
+let prevBooksForBookCheck: Map<RegionId, number> | null = null;
 
 // ---- shared helpers (used by checks, modules and the live line) ----
 const REGIONS = REGION_IDS;
@@ -388,26 +388,30 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
   return out;
 }
 
-function checkInstitutionalBookConservation(prev: GameState, state: GameState, week: number) {
+/** A region's institutional book — cash (the account, §5-WIRES A3.2), repo lent, the rows. */
+const institutionalBookOf = (s: GameState, region: RegionId) =>
+  (s.institutionalEntities || [])
+    .filter((e) => e.region === region && !e.isDefaulted
+      && e.entityType !== 'MONEY_MARKET_FUND' && e.entityType !== 'ETF')
+    .reduce(
+      (sum, e) =>
+        sum + entityCashOf(ensureV2(s), e) + ((e as any).repoLentUSD ?? 0) + e.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0),
+      0
+    );
+/** Read at the close of each week, never off the previous state object: the persistent
+ *  account store is one object shared by every week's state (§7.354's lesson, again). */
+const institutionalBooksOf = (s: GameState) => new Map(REGION_IDS_SEED_ORDER.map((r) => [r, institutionalBookOf(s, r)]));
+
+function checkInstitutionalBookConservation(prevBooks: Map<RegionId, number>, state: GameState, week: number) {
   // The 5% band asserts a CLOSED book: securities and cash trade against each other, so the
   // total moves only by marks and small boundary flows. MMFs and ETFs are excluded because
   // their books are externally funded BY DESIGN — a subscription grows assets and the share
   // liability together (HH3 made this bind: AP capacity runs off real bank equity, so the
   // funds fill at the real pipe's speed) — and for the money fund the sharper identity is
   // asserted below instead: a $1-NAV book equals its shares outstanding.
-  const bookOf = (s: GameState, region: RegionId) =>
-    (s.institutionalEntities || [])
-      .filter((e) => e.region === region && !e.isDefaulted
-        && e.entityType !== 'MONEY_MARKET_FUND' && e.entityType !== 'ETF')
-      .reduce(
-        (sum, e) =>
-          sum + (e.cashUSD ?? 0) + ((e as any).repoLentUSD ?? 0) + e.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0),
-        0
-      );
-
   REGION_IDS_SEED_ORDER.forEach((region) => {
-    const before = bookOf(prev, region);
-    const after = bookOf(state, region);
+    const before = prevBooks.get(region) ?? 0;
+    const after = institutionalBookOf(state, region);
     if (!(before > 0)) return;
     const changePct = Math.abs(after - before) / before;
     // §7.341: 10%, not 5% — the book is MARKED, and since the damper adapts (§7.338, a name
@@ -428,7 +432,7 @@ function checkInstitutionalBookConservation(prev: GameState, state: GameState, w
     (state.institutionalEntities || [])
       .filter((e) => e.region === region && !e.isDefaulted && e.entityType === 'MONEY_MARKET_FUND')
       .forEach((mmf) => {
-        const bookUSD = (mmf.cashUSD ?? 0) + ((mmf as any).repoLentUSD ?? 0)
+        const bookUSD = entityCashOf(ensureV2(state), mmf) + ((mmf as any).repoLentUSD ?? 0)
           + mmf.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0);
         const sharesUSD = mmf.mmfSharesOutstandingUSD ?? 0;
         if (sharesUSD > 1e9 && Math.abs(bookUSD - sharesUSD) / sharesUSD > 0.02) {
@@ -976,7 +980,7 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
   // XB1: foreign institutions bid in this auction too, so starving only the DOMESTIC ones no
   // longer under-subscribes it — foreign demand absorbs the paper, which is the mechanism
   // working. A genuinely under-subscribed auction now means every eligible bidder is out of money.
-  shocked.institutionalEntities.forEach(e => { e.cashUSD = 0; });
+  { const sv2 = ensureV2(shocked); shocked.institutionalEntities.forEach(e => { resetAccount(sv2, { kind: 'INSTITUTION', id: e.id }, 0); }); }
 
   const baselineNext = advanceWeeklyStep(baseline);
   const shockedNext = advanceWeeklyStep(shocked);
@@ -1079,7 +1083,7 @@ const hhModule: HarnessModule = (() => {
         const sellableUSD = etfRows.reduce((a: number, x: any) => {
           const f = (s as any).institutionalEntities?.find((e: any) => e.id === x.fundId);
           const sh = f?.etf?.sharesOutstanding ?? 0;
-          const nav = sh > 0 ? ((f.itemizedHoldings ?? []).reduce((b: number, hh: any) => b + (hh.quantityOrNotionalUSD ?? 0), 0) + Math.max(0, f.cashUSD ?? 0)) / sh : 0;
+          const nav = sh > 0 ? ((f.itemizedHoldings ?? []).reduce((b: number, hh: any) => b + (hh.quantityOrNotionalUSD ?? 0), 0) + Math.max(0, f ? entityCashOf(ensureV2(s), f) : 0)) / sh : 0;
           return a + (x.shares ?? 0) * nav;
         }, 0);
         out.push(`      deposit headroom over the buffer ${B(headroomUSD)} vs a ${B(gapUSD)}/wk gap = ${gapUSD > 0 ? (headroomUSD / gapUSD).toFixed(0) : '∞'} weeks before forced selling starts`);
@@ -2026,7 +2030,7 @@ const bookTraceModule: HarnessModule = {
         (s.institutionalEntities || []).forEach((e) => {
           if (e.region !== region || e.isDefaulted
             || e.entityType === 'MONEY_MARKET_FUND' || e.entityType === 'ETF') return;
-          parts.cashUSD += e.cashUSD ?? 0;
+          parts.cashUSD += entityCashOf(ensureV2(s), e);
           parts.repoLentUSD += e.repoLentUSD ?? 0;
           e.itemizedHoldings.forEach((h) => {
             parts[h.instrumentType] = (parts[h.instrumentType] ?? 0) + h.quantityOrNotionalUSD;
@@ -2392,7 +2396,7 @@ function runHarness() {
 
     // 5. NAV identity
     checkNavIdentity(state, w);
-    if (prevStateForBookCheck) checkInstitutionalBookConservation(prevStateForBookCheck, state, w);
+    if (prevBooksForBookCheck) checkInstitutionalBookConservation(prevBooksForBookCheck, state, w);
     checkHouseholdCohortIdentity(state, w);
     checkLaborMarketIdentity(state, w);
     checkCentralBankIdentity(state, w);
@@ -2406,7 +2410,7 @@ function runHarness() {
       auditFindings.push(...found);
       found.forEach((f) => violations.push({ week: w, message: `[audit ${f.check}] ${f.message}` }));
     }
-    prevStateForBookCheck = state;
+    prevBooksForBookCheck = institutionalBooksOf(state);
 
     // 5b. The bank balance-sheet identity, per named bank, every week. Cash moves only by
     // named flows and every flow posts to both sides, so deposits + equity + secured funding
@@ -2514,7 +2518,7 @@ function runHarness() {
     // every week — the defect paying for its own cover. Found by the settlement sweep.
     state.institutionalEntities.forEach((e: any) => {
       if (e.isDefaulted) return;
-      const cashUSD = Number(e.cashUSD ?? 0);
+      const cashUSD = entityCashOf(ensureV2(state), e);
       if (cashUSD < -1e6) {
         violations.push({
           week: w,

@@ -1,3 +1,4 @@
+import { V2World } from '../../../engine2/world';
 /**
  * HC Wave 2 — the corporate lifecycle: LBOs, dividend recaps, exits, real IPOs, births, and
  * sponsor equity wiped on default.
@@ -36,7 +37,7 @@ import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { marketCapOf, totalDebtOf } from '../../../domain/company';
 import { ladderTotalUSD } from '../../../engine2/tranches';
-import { cashOf, openingCashOf } from '../../ledger/accounts';
+import { cashOf, openingCashOf, entityCashOf } from '../../ledger/accounts';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -128,12 +129,14 @@ const IPO_PREMIUM_OVER_ENTRY = 1.15;
  * impossible; HC4 built `lpCommitments` for exactly this and left the call to HC6.
  */
 export function dryPowderUSD(
+  v2: V2World,
   sponsor: InstitutionalEntity,
   lpById: Map<string, InstitutionalEntity>
 ): number {
   return (sponsor.peFund?.lpCommitments ?? []).reduce((sum, c) => {
     const undrawnUSD = Math.max(0, c.committedUSD - c.drawnUSD);
-    return sum + Math.min(undrawnUSD, Math.max(0, lpById.get(c.lpEntityId)?.cashUSD ?? 0));
+    const lp = lpById.get(c.lpEntityId);
+    return sum + Math.min(undrawnUSD, Math.max(0, lp ? entityCashOf(v2, lp) : 0));
   }, 0);
 }
 
@@ -152,7 +155,7 @@ function callCapitalUSD(ctx: WeeklyStepContext, sponsorId: string, requestedUSD:
     // to receive at this week's settlement — the calls below are payments now, so without the
     // pending term two calls in one week could draw the same dollar twice.
     const lpBudgetUSD = lp
-      ? Math.max(0, (lp.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: c.lpEntityId }))
+      ? Math.max(0, entityCashOf(ctx.v2, lp) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: c.lpEntityId }))
       : 0;
     return {
       commitment: c,
@@ -203,7 +206,7 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: n
   // had it: a fund moves what it has. §7.226 measured what its absence cost — PEF1 wired 0.495B
   // out of a 0.000B account and carried -0.50B for forty weeks.
   // SETL6: the fund's payable budget includes what settlement already owes or is owed it.
-  const sponsorBudgetUSD = (sponsor.cashUSD ?? 0)
+  const sponsorBudgetUSD = entityCashOf(ctx.v2, sponsor)
     + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: sponsorId });
   const { payableUSD: paidUSD } = distributable(amountUSD, totalDrawnUSD, sponsorBudgetUSD);
   if (!(paidUSD > 0)) return;
@@ -290,7 +293,7 @@ export function runPeLifecycleForRegion(
       });
     }
 
-    const availablePowderUSD = dryPowderUSD(sponsor, lpById);
+    const availablePowderUSD = dryPowderUSD(ctx.v2, sponsor, lpById);
 
     // ---- HC6a: dividend RECAP when the loan market is open. Real opportunistic supply — the
     // mechanism RVr identified as missing from the float's supply side. ----
@@ -397,7 +400,7 @@ export function runPeLifecycleForRegion(
       // which is a real thing for a fund at the end of its life.
       const buyer = sponsors.find((s2) =>
         s2.id !== sponsor.id && !s2.isDefaulted
-        && dryPowderUSD(s2, lpById) >= priceUSD);
+        && dryPowderUSD(ctx.v2, s2, lpById) >= priceUSD);
       if (buyer && priceUSD > 1e6) {
         const drawnUSD = callCapitalUSD(ctx, buyer.id, priceUSD);
         if (drawnUSD >= priceUSD * 0.999) {

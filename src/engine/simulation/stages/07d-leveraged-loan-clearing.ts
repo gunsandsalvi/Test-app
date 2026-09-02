@@ -324,7 +324,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // issuer's index weight rather than its own size. Measured on an LBO financing: the book
       // could HOLD it (53.7M of capacity against a 40.1M post-issue float) but could only FUND
       // 14.0M, so the solve ran past the sponsor's walk-away and every deal was pulled.
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, institutionTotalAssetsUSD(ctx, entity), 'LEVERAGED_LOAN', institutionUnsettledLessCollateralUSD(ctx, entity.id));
+      const classBudgetUSD = stagePurchaseBudgetUSD(ctx, entity, institutionTotalAssetsUSD(ctx, entity), 'LEVERAGED_LOAN', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
@@ -385,6 +385,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       .filter((d) => d.assetClass === 'LEVERAGED_LOAN' && d.region === regionId)
       .map((d) => d.id);
     const indexFundParticipants: ClearingParticipant[] = indexFundsForBook(
+      ctx.v2,
       regionIndexFunds, ctx.updatedMarketIndexes, bookIndexIds, (e) => store.currentHoldingsUSD(e.id)
     ).map(({ fund, index, investableUSD }) => {
       const demandByInstrumentId = new Map<string, ParticipantDemand>();

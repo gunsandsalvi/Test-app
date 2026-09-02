@@ -1,3 +1,4 @@
+import { entityCashOf } from '../../ledger/accounts';
 /**
  * WS9/XB2d/XB6 — the week's FX market: every participant's demand, one cleared rate per PAIR.
  *
@@ -221,7 +222,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
         maxHoldingUSD: capUSD,
         fullSizeStatRange: bookRate * speculatorFullSizeRangeFrac(sigma),
         // HF1: what it can actually pay with — its own cash plus what its prime broker will lend.
-        maxNetPurchaseUSD: Math.max(0, (e.cashUSD ?? 0) + (e.primeBrokerageAvailableUSD ?? 0)),
+        maxNetPurchaseUSD: Math.max(0, entityCashOf(ctx.v2, e) + (e.primeBrokerageAvailableUSD ?? 0)),
       });
       participants.push({ id: `${e.id}-${key}`, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
     });

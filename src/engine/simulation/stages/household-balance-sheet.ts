@@ -1,3 +1,4 @@
+import { entityCashOf } from '../../ledger/accounts';
 /**
  * HH1 — the household balance sheet, and the claims that link it to the institutions.
  *
@@ -97,7 +98,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const H = ctx.v2.holdings;
     let heldUSD = 0;
     for (let r = bookHeadOf(ctx.v2, fund.id); r >= 0; r = H.next[r]) heldUSD += H.qtyUSD[r];
-    const navUSD = heldUSD + Math.max(0, fund.cashUSD ?? 0);
+    const navUSD = heldUSD + Math.max(0, entityCashOf(ctx.v2, fund));
     return navUSD / shares;
   };
 

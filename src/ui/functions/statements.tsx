@@ -17,6 +17,7 @@ import { bankRwaUSD } from '../../domain/bank-pricing';
 import { totalDebtOf } from '../../domain/company';
 import { cashOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
+import { entityCashOf } from '../../engine/ledger/accounts';
 
 interface Line { label: string; usd?: number; prior?: number; total?: boolean; text?: string }
 
@@ -184,12 +185,13 @@ function InstitutionStatements({ world, e }: { world: World; e: InstitutionalEnt
   const byType = new Map<string, number>();
   book.forEach((r) => byType.set(r.instrumentType, (byType.get(r.instrumentType) ?? 0) + r.usd));
   const holdings = book.reduce((a, r) => a + r.usd, 0);
-  const assets = holdings + (e.cashUSD ?? 0);
+  const eCashUSD = entityCashOf(ensureV2(world.state), e);
+  const assets = holdings + eCashUSD;
   const lines: Line[] = [...byType.entries()].sort((a, b) => b[1] - a[1]).map(([t, usd]) => ({ label: t.toLowerCase().replace(/_/g, ' '), usd }));
   return (
     <Statement units="USD millions · the live book" asOf={formatDate(world.state.currentWeek)} lines={[
       ...lines,
-      { label: 'Cash at the house bank', usd: e.cashUSD ?? 0 },
+      { label: 'Cash at the house bank', usd: eCashUSD },
       { label: 'Total assets', usd: assets, total: true },
       { label: 'Owed to beneficiaries', usd: e.beneficiaryLiabilityUSD ?? 0 },
       { label: 'Equity capital', usd: e.equityCapitalUSD, total: true },

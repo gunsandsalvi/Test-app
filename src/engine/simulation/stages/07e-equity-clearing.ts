@@ -340,7 +340,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const equityIndexIds = INDEX_DEFINITIONS
       .filter((d) => d.assetClass === 'EQUITY' && (d.region === regionId || !d.region))
       .map((d) => d.id);
-    const indexFunds = indexFundsForBook(regionIndexFunds, ctx.updatedMarketIndexes, equityIndexIds, (e) => store.currentHoldingsUSD(e.id));
+    const indexFunds = indexFundsForBook(ctx.v2, regionIndexFunds, ctx.updatedMarketIndexes, equityIndexIds, (e) => store.currentHoldingsUSD(e.id));
     const indexFundParticipants: ClearingParticipant[] = indexFunds.map(({ fund, index, investableUSD }) => {
       const currentShares = currentSharesByEntity.get(fund.id) ?? new Map<string, number>();
       const demandByInstrumentId = new Map<string, ParticipantDemand>();

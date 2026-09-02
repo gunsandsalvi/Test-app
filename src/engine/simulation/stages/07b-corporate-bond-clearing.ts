@@ -355,7 +355,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // money. Apportioning it across the whole STOCK instead gave a new issue a slice the size
       // of its issuer's index weight rather than of the deal, which starved the primary market by
       // construction (see the same fix and its measurement in 07d).
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, institutionTotalAssetsUSD(ctx, entity), 'CORP_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
+      const classBudgetUSD = stagePurchaseBudgetUSD(ctx, entity, institutionTotalAssetsUSD(ctx, entity), 'CORP_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
@@ -421,6 +421,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       .filter((d) => d.assetClass === 'CORP_BOND' && d.region === regionId)
       .map((d) => d.id);
     const indexFundParticipants: ClearingParticipant[] = indexFundsForBook(
+      ctx.v2,
       regionIndexFunds, ctx.updatedMarketIndexes, bookIndexIds, (e) => store.currentHoldingsUSD(e.id)
     ).map(({ fund, index, investableUSD }) => {
       const demandByInstrumentId = new Map<string, ParticipantDemand>();

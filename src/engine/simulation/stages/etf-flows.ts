@@ -1,3 +1,4 @@
+import { entityCashOf } from '../../ledger/accounts';
 /**
  * ETF FLOWS — who buys the index, how the shares come into existence, and what the dealers do
  * about the gap.
@@ -75,7 +76,7 @@ function fundNavUSD(v2: import('../../../engine2/world').V2World, fund: Institut
   const H = v2.holdings;
   let holdingsUSD = 0;
   for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r];
-  return holdingsUSD + Math.max(0, fund.cashUSD ?? 0);
+  return holdingsUSD + Math.max(0, entityCashOf(v2, fund));
 }
 
 export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -318,7 +319,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // remaining violation family (§7.196 traced one of them; the reconcile plug was quietly paying
   // for it every week). A running budget is what every other book in this model gives a bidder.
   const budgetRemainingByInvestor = new Map<string, number>();
-  const budgetOf = (inv: { id: string; cashUSD?: number }): number => {
+  const budgetOf = (inv: { id: string }): number => {
     const existing = budgetRemainingByInvestor.get(inv.id);
     if (existing !== undefined) return existing;
     const opening = institutionSpendableUSD(ctx, inv);

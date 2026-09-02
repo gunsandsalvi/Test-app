@@ -12,7 +12,7 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
-import { cashOf } from '../ledger/accounts';
+import { cashOf, entityCashOf } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 
 const banksOf = (s: GameState, r?: RegionId) =>
@@ -74,7 +74,7 @@ function m3(state: GameState, week: number): AuditFinding[] {
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     const k = e.homeBankTicker ?? '';
-    instByBank.set(k, (instByBank.get(k) ?? 0) + (e.cashUSD ?? 0));
+    instByBank.set(k, (instByBank.get(k) ?? 0) + entityCashOf(v2, e));
   });
   let corpGap = 0, instGap = 0;
   bankByTicker.forEach((b, t) => {
@@ -108,8 +108,8 @@ function m4(state: GameState, week: number): AuditFinding[] {
   const v2 = ensureV2(state);
   const negCorp = state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c) && cashOf(v2, c) < -1e6);
   if (negCorp.length) out.push({ family: 'M', check: 'M4 overdrawn firms', week, usd: sum(negCorp, (c) => cashOf(v2, c)), message: `${negCorp.length} firms overdrawn, ${B(sum(negCorp, (c) => cashOf(v2, c)))} in all (worst ${negCorp.sort((a, b) => cashOf(v2, a) - cashOf(v2, b))[0].ticker} ${M(cashOf(v2, negCorp[0]))})` });
-  const negInst = state.institutionalEntities.filter((e) => !e.isDefaulted && (e.cashUSD ?? 0) < -1e6);
-  if (negInst.length) { const worst = [...negInst].sort((a, b) => (a.cashUSD ?? 0) - (b.cashUSD ?? 0))[0]; out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => e.cashUSD ?? 0), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => e.cashUSD ?? 0))} (worst ${worst.ticker ?? worst.id} ${worst.entityType} ${M(worst.cashUSD ?? 0)})` }); }
+  const negInst = state.institutionalEntities.filter((e) => !e.isDefaulted && entityCashOf(v2, e) < -1e6);
+  if (negInst.length) { const worst = [...negInst].sort((a, b) => entityCashOf(v2, a) - entityCashOf(v2, b))[0]; out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => entityCashOf(v2, e)), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => entityCashOf(v2, e)))} (worst ${worst.ticker ?? worst.id} ${worst.entityType} ${M(entityCashOf(v2, worst))})` }); }
   REGION_IDS.forEach((r) => {
     const tga = state.regions[r]?.centralBankSheet?.treasuryAccountUSD ?? 0;
     if (tga < -1e6) out.push({ family: 'M', check: 'M4 overdrawn treasury', week, usd: tga, message: `${r}: the treasury's account stands at ${B(tga)} — an overdraft at the central bank nobody granted` });

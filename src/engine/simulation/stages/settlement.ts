@@ -30,7 +30,7 @@
  */
 
 import { RegionId } from '../../../types';
-import { buildAccountMirror, applySettledRow, compareToBooks, projectBooks, AccountMismatch } from '../../ledger/accounts';
+import { buildAccountMirror, applySettledRow, compareToBooks, projectBooks, AccountMismatch, entityCashOf } from '../../ledger/accounts';
 import { WeeklyStepContext } from './context';
 
 /** Who is paying or being paid. Every party either holds a deposit at a named bank, or is one of
@@ -315,9 +315,9 @@ export function stockLoanCollateralHeldUSD(ctx: WeeklyStepContext, entityId: str
 
 /** What an institution can put behind a bid this week: its balance, plus what settlement already
  *  owes it, less the stock-loan collateral it is only holding. Never negative. */
-export function institutionSpendableUSD(ctx: WeeklyStepContext, entity: { id: string; cashUSD?: number }, withPending = true): number {
+export function institutionSpendableUSD(ctx: WeeklyStepContext, entity: { id: string }, withPending = true): number {
   const pendingUSD = withPending ? pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }) : 0;
-  return Math.max(0, (entity.cashUSD ?? 0) + pendingUSD - stockLoanCollateralHeldUSD(ctx, entity.id));
+  return Math.max(0, entityCashOf(ctx.v2, entity) + pendingUSD - stockLoanCollateralHeldUSD(ctx, entity.id));
 }
 
 /** The pending figure the class-budget rule takes, with the held collateral netted as if it were

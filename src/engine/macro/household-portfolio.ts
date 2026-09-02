@@ -26,6 +26,7 @@ import { InstitutionalEntity } from '../../domain/institutions';
 import { HouseholdState } from '../../domain/region-macro';
 import { isActiveCompany, isPubliclyListed } from '../../domain/company';
 import { marketCapOf, totalDebtOf } from '../../domain/company';
+import { entityCashOf } from '../ledger/accounts';
 
 /**
  * Founder stakes in this region's private tier, at the multiple the public market clears for
@@ -104,7 +105,7 @@ export function householdEtfHoldingsUSD(
     if (!fund?.etf || !(fund.etf.sharesOutstanding > 0)) return sum;
     let heldUSD = 0;
     for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) heldUSD += H.qtyUSD[r];
-    const navUSD = heldUSD + Math.max(0, fund.cashUSD ?? 0);
+    const navUSD = heldUSD + Math.max(0, entityCashOf(v2, fund));
     return sum + holding.shares * (navUSD / fund.etf.sharesOutstanding);
   }, 0);
 }

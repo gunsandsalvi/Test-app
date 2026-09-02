@@ -1,3 +1,4 @@
+import { entityCashOf } from '../../ledger/accounts';
 /**
  * The institutional balance sheet: the link between the money in the system and the price of
  * assets (plan §5-S11).
@@ -68,7 +69,7 @@ import { ladderTotalUSD } from '../../../engine2/tranches';
  * receivable as spendable would let the entity buy securities with money it had already lent.
  * It is part of the BOOK (markInstitutionalBooks), never of the budget.
  */
-export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, totalAssetsUSD: number, unsettledUSD = 0): number {
+export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashUSD: number, totalAssetsUSD: number, unsettledUSD = 0): number {
   // HF1: what its prime broker will actually lend it this week, less what it has already drawn.
   // Negative when the line has been CUT below the draw — which makes the fund a net seller in
   // this week's auctions, at whatever they clear, which is what a margin call is.
@@ -88,7 +89,7 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, totalA
   // committed, so the five books cannot each spend the same balance. The clearing legs are
   // payment instructions now (stages/book-settlement.ts) and the cash moves at the settlement
   // pass, so the unsettled position is where a commitment lives until then.
-  const investableCashUSD = Math.max(0, (entity.cashUSD ?? 0) + unsettledUSD - sleeveTargetUSD);
+  const investableCashUSD = Math.max(0, cashUSD + unsettledUSD - sleeveTargetUSD);
   return investableCashUSD + allowanceUSD;
 }
 
@@ -99,6 +100,7 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, totalA
  * the previous one actually agreed — the ordering is the settlement reality, not an artifact.
  */
 export function stagePurchaseBudgetUSD(
+  ctx: WeeklyStepContext,
   entity: InstitutionalEntity,
   /** §5-WIRES D: the entity's live total assets (`institutionTotalAssetsUSD`), the sleeve's base. */
   totalAssetsUSD: number,
@@ -109,7 +111,7 @@ export function stagePurchaseBudgetUSD(
   const investedPcts = t.corpBondPct + t.govBondPct + t.loanPct;
   if (investedPcts <= 0) return 0;
   const classPct = mandatePctOf(t, assetClass);
-  return availablePurchaseCapacityUSD(entity, totalAssetsUSD, unsettledUSD) * (classPct / investedPcts);
+  return availablePurchaseCapacityUSD(entity, entityCashOf(ctx.v2, entity), totalAssetsUSD, unsettledUSD) * (classPct / investedPcts);
 }
 
 /**
@@ -191,7 +193,7 @@ export function institutionTotalAssetsUSD(ctx: WeeklyStepContext, entity: Instit
   const portfolioUSD = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
     ? sponsorPortfolioUSD(entity, comparableMultiple(ctx, entity.region, ctx.prevActiveFirms), privateFirmIndex(ctx), ctx.v2)
     : 0;
-  return totalAssetsRead(entity, institutionBookUSD(ctx.v2, entity.id), pendingUSD, portfolioUSD);
+  return totalAssetsRead(entity, entityCashOf(ctx.v2, entity), institutionBookUSD(ctx.v2, entity.id), pendingUSD, portfolioUSD);
 }
 const privateIndexMemo = new WeakMap<object, Map<string, Company>>();
 function privateFirmIndex(ctx: WeeklyStepContext): Map<string, Company> {
@@ -207,5 +209,5 @@ export function institutionTotalAssetsFromState(state: GameState, entity: Instit
     ? sponsorPortfolioUSD(entity, comparableMultiple(state, entity.region, state.companies.filter((c) => isActiveCompany(c))),
         new Map(state.companies.filter((c) => !c.isBankEntity).map((c) => [c.id, c])), v2)
     : 0;
-  return totalAssetsRead(entity, institutionBookUSD(v2, entity.id), 0, portfolioUSD);
+  return totalAssetsRead(entity, entityCashOf(v2, entity), institutionBookUSD(v2, entity.id), 0, portfolioUSD);
 }

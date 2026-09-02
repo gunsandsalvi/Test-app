@@ -32,6 +32,7 @@ import { PartyRef } from './party';
 import { partyId, partyOf, partyKey } from './party';
 import { RegionId } from '../../domain/geography';
 import { Company } from '../../domain/company';
+import { InstitutionalEntity } from '../../domain/institutions';
 import { V2World, internString } from '../../engine2/world';
 
 // ---------------------------------------------------------------------------------------------
@@ -95,6 +96,11 @@ export function resetAccount(v2: V2World, party: PartyRef, balanceUSD: number): 
 const openingCashStash = new WeakMap<object, number>();
 export function stashOpeningCash(comp: object, usd: number): void { openingCashStash.set(comp, usd); }
 export function openingCashOf(comp: object): number { return openingCashStash.get(comp) ?? 0; }
+
+/** An institutional entity's cash: its account (A3.2). */
+export function entityCashOf(v2: V2World, e: Pick<InstitutionalEntity, 'id'>): number {
+  return balanceOf(v2, { kind: 'INSTITUTION', id: e.id });
+}
 
 /** A company's cash: its account. (A bank with a sheet still reads its company row here — the
  *  seed's number, never moved, because its goods-market self settles on its reserves; A3's
@@ -198,7 +204,9 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     openRow(s, partyId(party), bankIdxOf(c.homeBankTicker), 'CORPORATE', ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)]);
   });
   ctx.updatedInstitutionalEntities.forEach((e) => {
-    openRow(s, partyId({ kind: 'INSTITUTION', id: e.id }), bankIdxOf(e.homeBankTicker), 'INSTITUTIONAL', e.cashUSD ?? 0);
+    // A3.2: the pass row opens at the persistent balance; an entity with no account opens at zero.
+    const party: PartyRef = { kind: 'INSTITUTION', id: e.id };
+    openRow(s, partyId(party), bankIdxOf(e.homeBankTicker), 'INSTITUTIONAL', ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)]);
   });
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region];
@@ -302,7 +310,10 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
     const party: PartyRef = { kind: 'COMPANY', ticker: c.ticker };
     ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)] = balanceOfParty(s, partyId(party));
   });
-  ctx.updatedInstitutionalEntities.forEach((e) => { e.cashUSD = balanceOfParty(s, partyId({ kind: 'INSTITUTION', id: e.id })); });
+  ctx.updatedInstitutionalEntities.forEach((e) => {
+    const party: PartyRef = { kind: 'INSTITUTION', id: e.id };
+    ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)] = balanceOfParty(s, partyId(party));
+  });
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region]; if (!reg) return;
     (reg.smePools ?? []).forEach((seg) => { seg.cashUSD = balanceOfParty(s, partyId({ kind: 'SEGMENT', region, industry: seg.industry })); });
@@ -334,7 +345,6 @@ export function compareToBooks(ctx: WeeklyStepContext, s: AccountStore): Account
     }
     // A3.1: a company's balance IS the store's (there is no field to disagree with it).
   });
-  ctx.updatedInstitutionalEntities.forEach((e) => check(`${e.region}:${e.id} cash`, e.cashUSD ?? 0, balanceOfParty(s, partyId({ kind: 'INSTITUTION', id: e.id }))));
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region]; if (!reg) return;
     (reg.smePools ?? []).forEach((seg) => check(`${region}:${seg.industry} pool`, seg.cashUSD ?? 0, balanceOfParty(s, partyId({ kind: 'SEGMENT', region, industry: seg.industry }))));

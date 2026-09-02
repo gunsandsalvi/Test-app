@@ -163,7 +163,9 @@ fi
 # catches the cast-hidden read (`as any`, `as unknown as Company`) by the names a company is
 # usually held under. A statement's own cash line (`bs.cash`), the kernel's cash box and the
 # front lanes carry the word legitimately and are not company objects.
-CASH_STRAY=$(grep -rnE "\b(c|comp|company|firm|acquirer|target|issuer|seller|buyer|parent|sub|spin|bank|peer|estateComp|listedTarget|newborn|holder)\.cash\b" src scripts --include=*.ts --include=*.tsx 2>/dev/null \
+# A3.2: an institutional entity's `cashUSD` the same way (`entityCashOf`); a pool's `cashUSD`
+# (`seg`/`pool`) and the sector aggregate's are not yet flipped and are not matched here.
+CASH_STRAY=$(grep -rnE "\b(c|comp|company|firm|acquirer|target|issuer|seller|buyer|parent|sub|spin|bank|peer|estateComp|listedTarget|newborn|holder)\.cash\b|\b(e|f|entity|fund|mmf|lp|sponsor|investor|inv|manager|vehicle|etf|redeemer|lender|borrower|s2)\.cashUSD\b" src scripts --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE '^src/engine/ledger/accounts\.ts:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
 if [ -n "$CASH_STRAY" ]; then
   echo "ERROR: a company's cash read as a field — it is its account: cashOf(v2, company) (engine/ledger/accounts.ts):"

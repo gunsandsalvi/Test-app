@@ -41,7 +41,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
 import { SRF_SPREAD_BPS } from '../../macro/banking';
-import { cashOf } from '../../ledger/accounts';
+import { cashOf, entityCashOf } from '../../ledger/accounts';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
@@ -139,12 +139,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const institutionalDepositsByBank = new Map<string, number>();
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.region !== regionId || !e.homeBankTicker) return;
-      institutionalDepositsByBank.set(e.homeBankTicker, (institutionalDepositsByBank.get(e.homeBankTicker) ?? 0) + Math.max(0, e.cashUSD ?? 0));
+      institutionalDepositsByBank.set(e.homeBankTicker, (institutionalDepositsByBank.get(e.homeBankTicker) ?? 0) + Math.max(0, entityCashOf(ctx.v2, e)));
       // CASH: an entity whose balance is NEGATIVE is overdrawn, and the clamp above hides it —
       // the reconcile then re-plugs the same gap every week and the bypass meter reads it as
       // unrouted flow. It is neither: it is a fund spending money it does not have, and it needs
       // its own line so the meter measures what it claims to.
-      ctx.cashOverdraftUSD += Math.max(0, -(e.cashUSD ?? 0));
+      ctx.cashOverdraftUSD += Math.max(0, -entityCashOf(ctx.v2, e));
     });
     // §7.265 — THE OVERDRAFT CONVERSION: a company whose SETTLED balance stands negative has
     // already spent its bank's money, so the bank's de-facto credit becomes a de-jure facility

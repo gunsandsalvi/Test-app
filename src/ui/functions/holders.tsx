@@ -14,6 +14,8 @@ import { instrumentName } from '../objects/book';
 import { isActiveCompany } from '../../domain/company';
 import { marketCapOf, totalDebtOf } from '../../domain/company';
 import { institutionTotalAssetsFromState } from '../../engine/simulation/stages/institutional-balance-sheet';
+import { entityCashOf } from '../../engine/ledger/accounts';
+import { ensureV2 } from '../../engine2/world';
 
 /** A sovereign instrument id's tenor, read aloud: `…-t10` → "10y", `…-b13` → "13w bill". */
 function tenorWord(id: string): string {
@@ -74,7 +76,7 @@ function InstitutionHoldings({ world, id, nav }: { world: World; id: string; nav
   return (<>
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
       <Hint>{count(rows.length)} positions · {money(total)}</Hint>
-      <Hint>cash {money(e.cashUSD)} · assets {money(nav_)}</Hint>
+      <Hint>cash {money(entityCashOf(ensureV2(world.state), e))} · assets {money(nav_)}</Hint>
     </div>
     {rows.length === 0 ? <Card style={{ padding: 14, color: T.muted }}>an empty book — everything is in cash.</Card> : (
       <Table

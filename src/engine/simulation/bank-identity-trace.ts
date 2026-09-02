@@ -24,6 +24,7 @@ import { GameState } from '../../types';
 import { BankingSector } from '../../domain/banking';
 import { partyOf } from '../ledger/party';
 import { reasonText } from './stages/settlement';
+import { entityCashOf } from '../ledger/accounts';
 
 const TOLERANCE_USD = 5e6; // the harness's own threshold
 const NOISE_FLOOR_USD = 1e5; // per-stage deltas below this are rounding, not a leg
@@ -181,7 +182,7 @@ export class BankIdentityTrace {
     const e = ctx.updatedInstitutionalEntities.find(
       (x) => x.id === this.focusInstitutionId || (x as { ticker?: string }).ticker === this.focusInstitutionId);
     if (!e) return;
-    const cash = e.cashUSD ?? 0;
+    const cash = entityCashOf(ctx.v2, e);
     if (this.focusInstitutionCash !== undefined && Math.abs(cash - this.focusInstitutionCash) > 1e4) {
       console.log(`  [inst] w${ctx.nextWeek} ${this.focusInstitutionId} ${stage} cash `
         + `${(this.focusInstitutionCash / 1e6).toFixed(2)}M -> ${(cash / 1e6).toFixed(2)}M`);

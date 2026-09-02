@@ -1,3 +1,4 @@
+import { entityCashOf } from '../../ledger/accounts';
 /**
  * WS7 — money market funds: the missing dominant bid in the front-end books, funded by real
  * liabilities.
@@ -55,7 +56,7 @@ export function findRegionMmf(entities: InstitutionalEntity[], regionId: RegionI
  * fund quotes the floor its first dollar would earn (the RRP), net of fee — the honest opening
  * quote, and the reason the market can bootstrap itself when that beats the deposit rate.
  */
-export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, reg: Region): number {
+export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashUSD: number, reg: Region): number {
   const rrpRateAnnual = Math.max(0, reg.policyRate - ON_RRP_SPREAD_BPS / 10000);
   const repoRateAnnual = reg.repoRateAnnual ?? rrpRateAnnual;
 
@@ -73,12 +74,12 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, reg: Region)
   const repoLentUSD = entity.repoLentUSD ?? 0;
   // Idle cash is implicitly at the RRP window (the repo session credits that rate on the
   // overnight sleeve); the term half of the sleeve is en route to bills at ~the same floor.
-  const cashUSD = Math.max(0, entity.cashUSD ?? 0);
-  const totalUSD = billUSD + repoLentUSD + cashUSD;
+  const idleCashUSD = Math.max(0, cashUSD);
+  const totalUSD = billUSD + repoLentUSD + idleCashUSD;
   if (totalUSD <= 0) return Math.max(0, rrpRateAnnual - MMF_FEE_ANNUAL);
 
   const grossAnnual =
-    (billUSD * billYieldAnnual + repoLentUSD * repoRateAnnual + cashUSD * rrpRateAnnual) / totalUSD;
+    (billUSD * billYieldAnnual + repoLentUSD * repoRateAnnual + idleCashUSD * rrpRateAnnual) / totalUSD;
   return Math.max(0, grossAnnual - MMF_FEE_ANNUAL);
 }
 
@@ -130,7 +131,7 @@ export function divertHouseholdSavingsToMmf(
 export function refreshMmfQuotes(regionId: RegionId, reg: Region, ctx: WeeklyStepContext): void {
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.region !== regionId || e.entityType !== 'MONEY_MARKET_FUND' || e.isDefaulted) return e;
-    return { ...e, mmfNetYieldAnnual: Number(quoteMmfNetYieldAnnual(e, reg).toFixed(6)) };
+    return { ...e, mmfNetYieldAnnual: Number(quoteMmfNetYieldAnnual(e, entityCashOf(ctx.v2, e), reg).toFixed(6)) };
   });
 }
 
@@ -146,7 +147,7 @@ export function openCorporateSweepBooks(ctx: WeeklyStepContext): Map<RegionId, C
   REGION_IDS.forEach((regionId) => {
     const mmf = findRegionMmf(ctx.updatedInstitutionalEntities, regionId);
     if (!mmf) return;
-    books.set(regionId, { redeemableUSD: Math.max(0, mmf.cashUSD ?? 0), netInflowUSD: 0 });
+    books.set(regionId, { redeemableUSD: Math.max(0, entityCashOf(ctx.v2, mmf)), netInflowUSD: 0 });
   });
   return books;
 }
@@ -234,7 +235,7 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     // §7.307 holdings flip: row walk on the mirror.
     let holdingsUSD = 0;
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r];
-    const bookUSD = (e.cashUSD ?? 0) + holdingsUSD + (e.repoLentUSD ?? 0);
+    const bookUSD = entityCashOf(ctx.v2, e) + holdingsUSD + (e.repoLentUSD ?? 0);
     if (bookUSD <= 0) return e;
     const feeUSD = (bookUSD * MMF_FEE_ANNUAL) / 52;
     // §4.0 Tier 1 item 7 — A STABLE-NAV FUND DISTRIBUTES WHAT IT EARNED, NOT WHAT IT QUOTED.

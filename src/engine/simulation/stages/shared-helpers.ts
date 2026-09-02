@@ -163,7 +163,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { marketCapOf } from '../../../domain/company';
-import { cashOf } from '../../ledger/accounts';
+import { cashOf, entityCashOf } from '../../ledger/accounts';
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
 export const RECOVERY_PRIOR_WEIGHT = 8;
@@ -534,7 +534,7 @@ export function applyPendingCorporateActionSettlements(
         const pendingUSD = ctx.pendingNetById
           ? (ctx.pendingNetById[partyId({ kind: 'INSTITUTION', id: entity.id })] ?? 0)
           : 0;
-        const availableUSD = Math.max(0, (entity.cashUSD ?? 0) + pendingUSD
+        const availableUSD = Math.max(0, entityCashOf(v2, entity) + pendingUSD
           - committedPlacementUSD);
         const owedUSD = -principalCashUSD;
         const fundedShare = owedUSD > 0 ? Math.min(1, availableUSD / owedUSD) : 1;
@@ -598,10 +598,7 @@ export function applyPendingCorporateActionSettlements(
       }
     });
     void kept;
-    return {
-      ...entity,
-      cashUSD: entity.cashUSD ?? 0,
-    };
+    return { ...entity };
   });
   pending.clear();
   pendingCash?.clear();

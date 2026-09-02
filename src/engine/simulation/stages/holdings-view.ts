@@ -30,6 +30,7 @@ import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../dom
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
+import { entityCashOf } from '../../ledger/accounts';
 
 export interface RegionalHoldingsView {
   /** Every real institutional entity's holdings in this region, flattened. */
@@ -63,7 +64,7 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
   state.institutionalEntities.forEach((e) => {
     if (e.region !== regionId || e.isDefaulted) return;
     // WS6: cash lent overnight is the entity's money in transit, part of its cash position.
-    cash += (e.cashUSD ?? 0) + (e.repoLentUSD ?? 0);
+    cash += entityCashOf(ensureV2(state), e) + (e.repoLentUSD ?? 0);
     for (let r = bookHeadOf(v2a, e.id); r >= 0; r = Ha.next[r]) {
       const type = v2a.internedStrings[Ha.typeRef[r]] as ItemizedHolding['instrumentType'];
       const sh = Ha.shares[r];

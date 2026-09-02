@@ -16,6 +16,7 @@ import { smePoolId, facilityMarginBpsFor } from './bank-lending';
 import { PrimeBrokerageLine } from '../../../domain/prime-brokerage';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { cashOf } from '../../ledger/accounts';
+import { entityCashOf } from '../../ledger/accounts';
 
 /** What a broker charges over its standing line for a balance it did not agree to fund. */
 export const OVERDRAFT_PENALTY_BPS = 200;
@@ -82,7 +83,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
       if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankTicker) return fund;
       const brokerTicker = fund.homeBankTicker;
-      const balanceUSD = (fund.cashUSD ?? 0) + pendingUSD({ kind: 'INSTITUTION', id: fund.id });
+      const balanceUSD = entityCashOf(ctx.v2, fund) + pendingUSD({ kind: 'INSTITUTION', id: fund.id });
       if (balanceUSD >= -1) return fund;
       const drawUSD = -balanceUSD;
       const withinLineUSD = Math.min(fund.primeBrokerageAvailableUSD ?? 0, drawUSD);
