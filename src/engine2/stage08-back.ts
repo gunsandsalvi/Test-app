@@ -34,7 +34,6 @@ import {
 import { openCorporateSweepBooks, corporateSweepDecision, findRegionMmf } from '../engine/simulation/stages/money-market-fund';
 import { decideCorporateFinancing, committedLineHeadroomUSD } from '../engine/simulation/stages/corporate-financing';
 import { PrimaryOffering } from '../domain/primary-market';
-import { REVOLVER_MARGIN_BPS } from '../engine/simulation/stages/07f-short-debt-clearing';
 import { EMPLOYER_PAYROLL_TAX_RATE } from '../engine/bootstrap/national-accounts';
 import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/profiles';
 import { measureBeta, regionIndexOf } from '../engine/macro/indices';
@@ -1158,7 +1157,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     };
     let drawnRevolverRow = -1;
     if (L8.wasDefaulted[row] !== 1 && L8.wasMergerAcquired[row] !== 1 && cash.usd < 0) {
-      const revolverRateAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
+      const revolverRateAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
       let alreadyDrawnUSD = 0;
       for (const r of rowList) if (TS.flags[r] & TR_FACILITY) alreadyDrawnUSD += TS.principalUSD[r];
       const headroomUSD = Math.max(0, committedLineHeadroomUSD({
@@ -1174,7 +1173,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           id: `${L8.companyId[row]}-REVOLVER-LIQ-${nextWeek}`,
           principalUSD: drawUSD,
           rateType: 'FLOATING',
-          floatingMarginBps: REVOLVER_MARGIN_BPS,
+          floatingMarginBps: L8.facilityMarginBps[row],
           originationWeek: nextWeek,
           maturityWeek: nextWeek + 52,
           seniority: 'SENIOR',
@@ -1183,7 +1182,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           facilityBankTicker: L8.homeBankTicker[row],
         };
         drawnRevolverRow = pushLadderRow(v2, L8.companyId[row], revolver);
-        recordCredit(revolver.id, drawUSD, REVOLVER_MARGIN_BPS, 52, false);
+        recordCredit(revolver.id, drawUSD, L8.facilityMarginBps[row], 52, false);
         newTotalDebt += drawUSD;
         post('revolver drawn: liquidity shortfall', drawUSD,
           L8.homeBankTicker[row] ? { kind: 'BANK_CREDIT', ticker: L8.homeBankTicker[row] } : undefined);
@@ -1471,7 +1470,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // IND4: rating decides an issuer's ACCESS to the bond market; the industry tilts it by
       // what the money is buying. Long-lived assets are funded long, asset-light ones float.
       const refinanceAsFixed = fixedShareOf(comp) >= 0.5;
-      const revolverAllInAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
+      const revolverAllInAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
       enqueueOffering({
         id: `PO-${L8.companyId[row]}-${nextWeek}-REFI`,
         issuerId: L8.companyId[row],
@@ -1483,7 +1482,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         // Need-driven: the issuer walks only where the market is worse than its revolver.
         walkAwayStat: refinanceAsFixed
           ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
-          : REVOLVER_MARGIN_BPS,
+          : L8.facilityMarginBps[row],
         rateType: refinanceAsFixed ? 'FIXED' : 'FLOATING',
         leadBankTicker: leadBankFor(comp, TS.principalUSD[rTr]),
         announcedWeek: nextWeek,
@@ -1555,7 +1554,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         id: `${L8.companyId[row]}-REVOLVER-${nextWeek}`,
         principalUSD: maturingPrincipalUSD,
         rateType: 'FLOATING',
-        floatingMarginBps: REVOLVER_MARGIN_BPS,
+        floatingMarginBps: L8.facilityMarginBps[row],
         originationWeek: nextWeek,
         maturityWeek: nextWeek + 52,
         seniority: 'SENIOR',
@@ -1565,14 +1564,14 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       };
       rowList.push(pushLadderRow(v2, L8.companyId[row], revolverTranche));
       debtIssuanceThisWeek += revolverTranche.principalUSD;
-      recordCredit(revolverTranche.id, revolverTranche.principalUSD, REVOLVER_MARGIN_BPS,
+      recordCredit(revolverTranche.id, revolverTranche.principalUSD, L8.facilityMarginBps[row],
         Math.max(1, revolverTranche.maturityWeek - nextWeek), false);
       post('revolver draw: withdrawn refinancing', revolverTranche.principalUSD, bankCredit);
       pushNews({
         id: `refi-fail-${L8.ticker[row]}-${nextWeek}`,
         week: nextWeek,
         title: `${L8.ticker[row]} Pulls Refinancing, Draws Revolver`,
-        description: `${L8.name[row]} withdrew a ${formatCurrency(settlement.offering.sizeUSD, { compact: true })} refinancing at its walk-away and drew its revolver at policy+${REVOLVER_MARGIN_BPS}bps.`,
+        description: `${L8.name[row]} withdrew a ${formatCurrency(settlement.offering.sizeUSD, { compact: true })} refinancing at its walk-away and drew its revolver at policy+${L8.facilityMarginBps[row]}bps.`,
         category: 'CREDIT',
         impactBadge: '[FUNDING SQUEEZE]',
         impactRegion: L8.region[row],
@@ -1609,7 +1608,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       for (const r of rowList) totalDebtForGate += TS.principalUSD[r];
       if (bridgeUSD > Math.max(1e6, totalDebtForGate * 0.02)) {
         const asFixed = fixedShareOf(comp) >= 0.5;  // IND4: rating's access, industry's tilt
-        const revolverAllInAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
+        const revolverAllInAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
         enqueueOffering({
           id: `PO-${L8.companyId[row]}-${nextWeek}-MAINT`,
           issuerId: L8.companyId[row],
@@ -1621,7 +1620,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           // Terming out only makes sense below the bridge's own cost.
           walkAwayStat: asFixed
             ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
-            : REVOLVER_MARGIN_BPS,
+            : L8.facilityMarginBps[row],
           rateType: asFixed ? 'FIXED' : 'FLOATING',
           refinancesTrancheIds: bridges.map(r => v2.internedStrings[TS.idRef[r]]),
           leadBankTicker: leadBankFor(comp, bridgeUSD),

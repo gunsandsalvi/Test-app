@@ -12,8 +12,7 @@ import { WeeklyStepContext } from './context';
 import { RegionId } from '../../../types';
 import { pay, partyId, PartyRef } from './settlement';
 import { pushLadderRow } from '../../../engine2/tranches';
-import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
-import { smePoolId } from './bank-lending';
+import { smePoolId, facilityMarginBpsFor } from './bank-lending';
 import { PrimeBrokerageLine } from '../../../domain/prime-brokerage';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 
@@ -41,11 +40,13 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     const balanceUSD = c.cash + pendingUSD({ kind: 'COMPANY', ticker: c.ticker });
     if (!(balanceUSD < -1)) return;
     const drawUSD = -balanceUSD;
+    const reg = ctx.updatedRegions[c.region];
+    const marginBps = reg ? facilityMarginBpsFor(v2, c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker)) : 350;
     const tranche = {
       id: `${c.id}-REVOLVER-OD-${ctx.nextWeek}-C`,
       principalUSD: drawUSD,
       rateType: 'FLOATING' as const,
-      floatingMarginBps: REVOLVER_MARGIN_BPS,
+      floatingMarginBps: marginBps,
       originationWeek: ctx.nextWeek,
       maturityWeek: ctx.nextWeek + 52,
       seniority: 'SENIOR' as const,
@@ -56,7 +57,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     c.totalDebt = (c.totalDebt ?? 0) + drawUSD;
     ctx.creditEventsThisWeek.push({
       bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,
-      principalUSD: drawUSD, marginBps: REVOLVER_MARGIN_BPS,
+      principalUSD: drawUSD, marginBps,
       originationWeek: ctx.nextWeek, termWeeks: 52, retire: false,
     });
     pay(ctx, {
@@ -148,7 +149,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
         if (existing) existing.principalUSD = Math.round(existing.principalUSD + r.usd);
         else loans.push({
           id: `${c.ticker}-SME-${r.industry}`, borrowerId: r.poolId, borrowerKind: 'SME_POOL', principalUSD: Math.round(r.usd),
-          marginBps: REVOLVER_MARGIN_BPS, originationWeek: ctx.nextWeek, termWeeks: 52 * 5, status: 'PERFORMING',
+          marginBps: 350, originationWeek: ctx.nextWeek, termWeeks: 52 * 5, status: 'PERFORMING',
         });
       });
       const smeUSD = (smeRows ?? []).reduce((a, r) => a + r.usd, 0);

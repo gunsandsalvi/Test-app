@@ -53,7 +53,8 @@ import { SmePool } from '../../../domain/region-macro';
 import { bookPnL } from '../../ledger/bank-book';
 import { defect } from '../../../domain/defect';
 import { remainingLifeExpectancyYears, medianAdultAgeYears } from '../../bootstrap/population';
-import { creditRecoveryRate } from './shared-helpers';
+import { creditRecoveryRate, computeAnnualDefaultProbability } from './shared-helpers';
+import { V2World } from '../../../engine2/world';
 import { bankTotalAssetsUSD, stressedOutflowUSD, LIQUIDITY_COVERAGE_RATIO, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 
 /** Covenant-style ceiling on SME pool leverage — the same real lending constraint the bond
@@ -951,6 +952,28 @@ export function raiseCentralBankLoanUSD(sheet: BankingSector, settledCashUSD: nu
 }
 /** The penalty over the standing-facility rate an unsecured central-bank loan carries. */
 export const CENTRAL_BANK_LOAN_PENALTY_BPS = 100;
+
+/**
+ * §5-CLOSE P1 — THE FACILITY IS PRICED. A bank's revolver carried one stated margin for every
+ * borrower (350bp), which put the SENIOR bank claim wider than the same firm's own bond on 990
+ * of 2,443 issuers. The margin is the same quote the SME book gets: the borrower's own default
+ * probability (the one the credit market prices its hazard against), the lending bank's own cost
+ * of equity, and the region's realised recoveries — through `quoteLoanMarginBps`, the one loan
+ * price. A borrower with no named bank is quoted at the median bank's hurdle.
+ */
+export function facilityMarginBpsFor(
+  v2: V2World,
+  borrower: Company,
+  reg: Region,
+  bank?: { beta?: number; management?: Preferences }
+): number {
+  return quoteLoanMarginBps({
+    annualDefaultProbability: computeAnnualDefaultProbability(v2, borrower),
+    riskWeight: 1.0,
+    requiredReturnAnnual: bank ? bankRequiredReturnAnnual(bank, reg) : undefined,
+    recoveryRate: creditRecoveryRate(reg),
+  });
+}
 
 export function applyBankFundingSplit(
   sheet: BankingSector,

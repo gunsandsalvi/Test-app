@@ -213,7 +213,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // world.
   // §7.317 steps 1.1-1.2 — the back seam: one pass reads every firm's capital-block inputs
   // into typed lanes before the shard loop; the core reads rows, not objects.
-  const backLanes = buildBackLanes(state.companies, updatedRegions, companyUpdates, new Set(state.institutionalEntities.map(e => e.id)), ctx.carrierFreightRevenue, ctx.channelMarginRevenue, companyStore);
+  const backLanes = buildBackLanes(state.companies, updatedRegions, companyUpdates, new Set(state.institutionalEntities.map(e => e.id)), ctx.carrierFreightRevenue, ctx.channelMarginRevenue, companyStore, v2);
   const backDeps: import('../../../engine2/stage08-back').BackKernelDeps = {
     state, ctx, v2, F, backLanes, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,

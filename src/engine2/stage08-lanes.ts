@@ -21,6 +21,8 @@ import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation'
 import { isPubliclyListed, managedEntityIdsOf } from '../domain/company';
 import { industryOfSubUnit, financingProfileOf } from '../domain/industry-registry';
 import { CompanyStore } from './company-store';
+import { V2World } from './world';
+import { facilityMarginBpsFor } from '../engine/simulation/stages/bank-lending';
 import { patienceWeeksOf, riskAversionOf } from '../domain/preferences';
 
 export interface BackLanes {
@@ -68,6 +70,8 @@ export interface BackLanes {
   isBanksSector: Uint8Array;
   rndShareOfGrowthCapex: Float64Array;
   investmentGrade: Uint8Array;
+  /** §5-CLOSE P1 — the priced margin of this borrower's bank facility (NaN for a bank). */
+  facilityMarginBps: Float64Array;
   // --- §7.317 step 1.6a: the debt/tail blocks' scalar reads ---
   sharesOutstanding: Float64Array;
   stockPrice: Float64Array;
@@ -117,7 +121,9 @@ export function buildBackLanes(
   carrierFreightRevenue: Record<string, number>,
   channelMarginRevenue: Record<string, number>,
   S: CompanyStore,
+  v2: V2World,
 ): BackLanes {
+  const bankByTicker = new Map(companies.filter((c) => c.isBankEntity).map((c) => [c.ticker, c]));
   const n = companies.length;
   const f = () => new Float64Array(n);
   // §4.C Stage II.1 — the 1:1 scalar lanes ALIAS the company row store (refreshed by the stage
@@ -141,7 +147,7 @@ export function buildBackLanes(
     wuTradeReceivableCollectedUSD: f(), wuTradePayableBookedUSD: f(),
     wuTradePayableSettledUSD: f(), wuCapexPurchasesUSD: f(),
     addressableGrowthAnnual: f(), categoryShortfall: f(), avgCompetitiveness: f(),
-    isBanksSector: new Uint8Array(n), rndShareOfGrowthCapex: f(), investmentGrade: new Uint8Array(n),
+    isBanksSector: new Uint8Array(n), rndShareOfGrowthCapex: f(), investmentGrade: new Uint8Array(n), facilityMarginBps: f(),
     sharesOutstanding: N.sharesOutstanding, stockPrice: N.stockPrice, baselineDividendYield: N.baselineDividendYield, dividendYield: N.dividendYield,
     earningsWeekModulo: N.earningsWeekModulo, eps: N.eps, cdsSpreadBps: N.cdsSpreadBps, beta: N.beta,
     baselineAnnualRevenueUSD: N.baselineAnnualRevenue, lastOpportunisticOfferingWeek: N.lastOpportunisticOfferingWeek,
@@ -200,6 +206,7 @@ export function buildBackLanes(
     L.isBanksSector[i] = profileKeyOf(c) === 'BANK' ? 1 : 0;
     L.rndShareOfGrowthCapex[i] = lines.reduce((a, l) => Math.max(a, financingProfileOf(l.industry).rndShareOfGrowthCapex ?? 0), 0);
     L.investmentGrade[i] = isInvestmentGrade(c.creditRating) ? 1 : 0;
+    L.facilityMarginBps[i] = c.isBankEntity ? NaN_ : facilityMarginBpsFor(v2, c, updatedRegions[c.region], c.homeBankTicker ? bankByTicker.get(c.homeBankTicker) : undefined);
     L.employeeCountUpdate[i] = wu?.employeeCount ?? NaN_;
     L.bankCapitalRatio[i] = c.bankBalanceSheet?.bankCapitalRatio ?? NaN_;
     // NOTE (§7.320): revenueVolatility is NOT seam-computable — the PROFILE modules append

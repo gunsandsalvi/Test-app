@@ -35,10 +35,9 @@ import {
 import { runRegionalRepoSession } from './repo-clearing';
 import { maturingAt, repoInterestToMaturityUSD } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
-import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, repayCentralBankLoanUSD, CENTRAL_BANK_LOAN_PENALTY_BPS } from './bank-lending';
+import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, repayCentralBankLoanUSD, CENTRAL_BANK_LOAN_PENALTY_BPS, facilityMarginBpsFor } from './bank-lending';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay } from './settlement';
-import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 import { SRF_SPREAD_BPS } from '../../macro/banking';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
@@ -160,11 +159,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       if (c.region !== regionId || c.isDefaulted || c.isBankEntity || c.mergerAcquired) return;
       if (!c.homeBankTicker || !(c.cash < -1)) return;
       const drawUSD = -c.cash;
+      // §5-CLOSE P1: priced off the borrower's own PD at its bank's hurdle, like every facility.
+      const marginBps = facilityMarginBpsFor(ensureV2(state), c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker));
       const tranche = {
         id: `${c.id}-REVOLVER-OD-${ctx.nextWeek}`,
         principalUSD: drawUSD,
         rateType: 'FLOATING' as const,
-        floatingMarginBps: REVOLVER_MARGIN_BPS,
+        floatingMarginBps: marginBps,
         originationWeek: ctx.nextWeek,
         maturityWeek: ctx.nextWeek + 52,
         seniority: 'SENIOR' as const,
@@ -175,7 +176,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       c.totalDebt = (c.totalDebt ?? 0) + drawUSD;
       ctx.creditEventsThisWeek.push({
         bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,
-        principalUSD: drawUSD, marginBps: REVOLVER_MARGIN_BPS,
+        principalUSD: drawUSD, marginBps,
         originationWeek: ctx.nextWeek, termWeeks: 52, retire: false,
       });
       pay(ctx, {
