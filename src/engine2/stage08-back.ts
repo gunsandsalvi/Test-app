@@ -49,7 +49,8 @@ import { dividendDecision } from '../domain/company-week/distributions';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../engine/equity-valuation';
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
-import { ladderRowsOf, pushLadderRow, relinkLadder, materializeTranche, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
+import { ladderRowsOf, materializeTranche, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
+import { issueTranche, retireTranche, commitLadder } from '../engine/ledger/tranche-ledger';
 import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World } from './world';
 import { totalInputValueUSD } from './lots';
 
@@ -1092,6 +1093,9 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
   } = d;
   const L8 = d.backLanes;
   const reg = updatedRegions[L8.region[row]];
+  // §5-WIRES W3: every principal move in this kernel is a wire through the tranche ledger; the
+  // kernel reads the sealed store and asks the ledger to move face for this issuer.
+  const issuer = { id: L8.companyId[row], ticker: L8.ticker[row], region: L8.region[row] };
   const accruedTaxUSD = a.accruedTaxUSD;
   const annualInterest = a.annualInterest;
   const bankCredit = a.bankCredit;
@@ -1181,7 +1185,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           isBankFacility: true,
           facilityBankTicker: L8.homeBankTicker[row],
         };
-        drawnRevolverRow = pushLadderRow(v2, L8.companyId[row], revolver);
+        drawnRevolverRow = issueTranche(v2, issuer, revolver, 'revolver drawn: liquidity shortfall');
         recordCredit(revolver.id, drawUSD, L8.facilityMarginBps[row], 52, false);
         newTotalDebt += drawUSD;
         post('revolver drawn: liquidity shortfall', drawUSD,
@@ -1422,7 +1426,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           cashFloorUSD: L8.annualRevenueUSD[row] * 0.15,
           premiumPerDollar,
         });
-        TS.principalUSD[rTr] -= calledAmountUSD;
+        retireTranche(v2, issuer, rTr, calledAmountUSD, 'accretive call: principal retired');
         // The ladder change below reaches the holders through the register (settleCorporateAction-
         // OnHolders), which is what pays them; this line reports it on the cash walk only.
         post('accretive call: principal retired', -calledAmountUSD, undefined, false);
@@ -1454,7 +1458,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     });
     // Remove any tranche whose principalUSD reaches zero, then add the replacement issues.
     rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
-    for (const t of calledRefinanceTranches) rowList.push(pushLadderRow(v2, L8.companyId[row], t));
+    for (const t of calledRefinanceTranches) rowList.push(issueTranche(v2, issuer, t, 'accretive call: replacement issue'));
 
     // WS8: the year-early pre-refi and the at-maturity formula roll are both gone — a roll now
     // happens in the MARKET. A tranche one week from maturity is announced as a REFINANCE
@@ -1491,6 +1495,13 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
 
     const maturingRow = rowList.find(r => TS.maturityWeek[r] === nextWeek && !(TS.flags[r] & TR_CP));
     const maturingPrincipalUSD = maturingRow !== undefined ? TS.principalUSD[maturingRow] : 0;
+    // §5-WIRES W3: every row that matures this week hands its face back to the issuer by wire
+    // (the holders are paid by the register's paying agent on the same ladder delta).
+    for (const r of rowList) {
+      if (TS.maturityWeek[r] === nextWeek && !(TS.flags[r] & TR_CP) && TS.principalUSD[r] > 0.01) {
+        retireTranche(v2, issuer, r, TS.principalUSD[r], 'maturing tranche principal repaid');
+      }
+    }
     rowList = rowList.filter(r => TS.maturityWeek[r] !== nextWeek || (TS.flags[r] & TR_CP) !== 0);
     let debtIssuanceThisWeek = 0;
     let debtRepaymentThisWeek = 0;
@@ -1535,12 +1546,13 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           if (!retire.has(v2.internedStrings[TS.idRef[r]])) continue;
           retiredUSD += TS.principalUSD[r];
           recordCredit(v2.internedStrings[TS.idRef[r]], TS.principalUSD[r], 0, 0, true);
+          retireTranche(v2, issuer, r, TS.principalUSD[r], 'term-out: maintenance bridges retired');
         }
         rowList = rowList.filter(r => !retire.has(v2.internedStrings[TS.idRef[r]]));
         debtRepaymentThisWeek += retiredUSD;
         post('term-out: maintenance bridges retired', -retiredUSD, bankCredit);
       }
-      if (placedUSD > 1000) rowList.push(pushLadderRow(v2, L8.companyId[row], newTranche));
+      if (placedUSD > 1000) rowList.push(issueTranche(v2, issuer, newTranche, `primary ${o.purpose.toLowerCase()} placed`));
       debtIssuanceThisWeek += placedUSD;
       // WS8/CASH: reported here, PAID elsewhere by name — the clearing house pays the issuer for
       // what the book took, and the lead pays it for the residual and charges it the fee
@@ -1562,7 +1574,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         isBankFacility: true,
         facilityBankTicker: L8.homeBankTicker[row],
       };
-      rowList.push(pushLadderRow(v2, L8.companyId[row], revolverTranche));
+      rowList.push(issueTranche(v2, issuer, revolverTranche, 'revolver draw: withdrawn refinancing'));
       debtIssuanceThisWeek += revolverTranche.principalUSD;
       recordCredit(revolverTranche.id, revolverTranche.principalUSD, L8.facilityMarginBps[row],
         Math.max(1, revolverTranche.maturityWeek - nextWeek), false);
@@ -1592,7 +1604,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     }
 
     if (maintenanceFundingTranches.length > 0) {
-      for (const t of maintenanceFundingTranches) rowList.push(pushLadderRow(v2, L8.companyId[row], t));
+      for (const t of maintenanceFundingTranches) rowList.push(issueTranche(v2, issuer, t, 'maintenance funding bridge drawn'));
       debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
     }
 
@@ -1694,7 +1706,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
                   (facilityRepaidByBank.get(bankTicker) ?? 0) + repaid);
                 facilityRepaidUSD += repaid;
               }
-              TS.principalUSD[rTr] = remainingUSD;
+              retireTranche(v2, issuer, rTr, repaid, 'debt prepayment: principal retired');
             });
           rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
           let postPrepaySumUSD = 0;
@@ -1799,7 +1811,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           // without shrinking the asset breaks the per-bank identity, which is exactly what
           // happened when this was tried. One change to both sides, together. Owner: G2.
           if (TS.flags[rTr] & TR_FACILITY) facilityRepaidUSD += repaidUSD;
-          TS.principalUSD[rTr] = TS.principalUSD[rTr] - repaidUSD;
+          retireTranche(v2, issuer, rTr, repaidUSD, 'opportunistic deleveraging: principal repaid');
         });
       rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
       void facilityRepaidUSD;
@@ -2258,7 +2270,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.recoveryRate = round3(effectiveRecoveryRate);
 
-    relinkLadder(v2, L8.companyId[row], rowList);
+    commitLadder(v2, { id: L8.companyId[row], ticker: L8.ticker[row], region: L8.region[row] }, rowList);
 
     comp.productLines = updatedProductLines;
 

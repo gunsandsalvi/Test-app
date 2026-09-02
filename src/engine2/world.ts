@@ -16,7 +16,7 @@
 
 import { LotStore, newLotStore } from './lots';
 import { ContractTable, newContractTable } from './contracts';
-import { TrancheStore, newTrancheStore } from './tranches';
+import { TrancheStore, newTrancheStore, ReadonlyTrancheStore } from './tranches';
 import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
 
 export interface V2World {
@@ -31,7 +31,7 @@ export interface V2World {
   /** IND11 — the bilateral supply-contract book (§7.304's measured scaling monster). */
   contracts: ContractTable;
   /** §7.307/§7.310 — the debt ladder as rows (rows are the authority since §7.313). */
-  tranches: TrancheStore;
+  tranches: ReadonlyTrancheStore;
   /** §7.307 — the institutional register as rows (stage 1: a synced mirror of itemizedHoldings). */
   holdings: ReadonlyHoldingStore;
   /** §4.C II.5 — revenue history as a 13-slot ring per firm row (the object field is DELETED:

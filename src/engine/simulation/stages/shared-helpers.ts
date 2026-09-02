@@ -7,7 +7,7 @@
 import { journalPayment, partyId } from './settlement';
 import { defect } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
-import { retireHolding, issueHolding } from '../../ledger/holdings-ledger';
+import { transferHolding } from '../../ledger/holdings-ledger';
 import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
@@ -582,13 +582,17 @@ export function applyPendingCorporateActionSettlements(
     }
     if (!touched) return entity;
     actions.forEach((a) => {
-      const issuer = { kind: 'COMPANY' as const, ticker: ctx.issuerTickerById?.get(a.id) ?? a.id };
+      // §5-WIRES W3: the register side settles through the region's CLEARING HOUSE — the paying
+      // agent. The issuer's own wire is the LADDER's (house → issuer at retirement, issuer → house
+      // at placement, the tranche ledger), so the two sides of one action meet at the house and
+      // the issuer's wires count once. Equity (no ladder) settles the same way for symmetry.
+      const house = { kind: 'CLEARING_HOUSE' as const, region: a.region };
       const holder = { kind: 'INSTITUTION' as const, id: entity.id };
       if (a.retiredUSD > 0) {
-        retireHolding(v2, holder, issuer, { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.retiredUSD, shares: a.anyShares ? a.retiredSh : undefined }, 'corporate action: paper retired pro rata');
+        transferHolding(v2, holder, house, { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.retiredUSD, shares: a.anyShares ? a.retiredSh : undefined }, 'corporate action: paper retired pro rata');
       }
       if (a.placedUSD > 0) {
-        issueHolding(v2, issuer, holder, { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.placedUSD, shares: a.anyShares ? a.placedSh : undefined }, 'corporate action: paper placed pro rata');
+        transferHolding(v2, house, holder, { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.placedUSD, shares: a.anyShares ? a.placedSh : undefined }, 'corporate action: paper placed pro rata');
       }
     });
     void kept;

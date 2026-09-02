@@ -172,3 +172,13 @@ export const isIssuerEquityRow = (h: { instrumentType?: string }): boolean =>
  *  exchange all need, owned here. */
 export const heldInShares = (type: string): boolean =>
   type === 'EQUITY' || type === 'ETF_SHARE' || type === 'MMF_SHARE' || type === 'PE_FUND_INTEREST';
+
+/** §5-WIRES W3 — the kind of paper a debt tranche IS: a bank facility on the lender's book, commercial
+ *  paper, a floating-rate loan, or a fixed-rate bond. The tranche ledger's wires carry this kind
+ *  (a tranche is the issuer's record of that paper, not a kind of its own). */
+export const trancheKindOf = (t: { isBankFacility?: boolean; isCommercialPaper?: boolean; rateType: 'FIXED' | 'FLOATING' }):
+  'BANK_FACILITY' | 'COMMERCIAL_PAPER' | 'LEVERAGED_LOAN' | 'CORP_BOND' =>
+  t.isBankFacility ? 'BANK_FACILITY' : t.isCommercialPaper ? 'COMMERCIAL_PAPER' : t.rateType === 'FLOATING' ? 'LEVERAGED_LOAN' : 'CORP_BOND';
+/** The kinds of paper a ladder row can be — what W3's ladder identity covers. */
+export const isTrancheKind = (kind: string): boolean =>
+  kind === 'BANK_FACILITY' || kind === 'COMMERCIAL_PAPER' || kind === 'LEVERAGED_LOAN' || kind === 'CORP_BOND';

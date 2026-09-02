@@ -22,7 +22,8 @@
 
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import { pushLadderRow, ladderRowsOf, TR_FACILITY } from '../../../engine2/tranches';
+import {  ladderRowsOf, TR_FACILITY } from '../../../engine2/tranches';
+import { issueTranche } from '../../ledger/tranche-ledger';
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
 import { regionalDeskView } from '../../../domain/dealer-desk';
@@ -172,7 +173,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         isBankFacility: true,
         facilityBankTicker: c.homeBankTicker,
       };
-      pushLadderRow(ensureV2(state), c.id, tranche);
+      issueTranche(ensureV2(state), { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
       c.totalDebt = (c.totalDebt ?? 0) + drawUSD;
       ctx.creditEventsThisWeek.push({
         bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,

@@ -11,7 +11,7 @@
 import { WeeklyStepContext } from './context';
 import { RegionId } from '../../../types';
 import { pay, partyId, PartyRef } from './settlement';
-import { pushLadderRow } from '../../../engine2/tranches';
+import { issueTranche } from '../../ledger/tranche-ledger';
 import { smePoolId, facilityMarginBpsFor } from './bank-lending';
 import { PrimeBrokerageLine } from '../../../domain/prime-brokerage';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
@@ -53,7 +53,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       isBankFacility: true,
       facilityBankTicker: c.homeBankTicker,
     };
-    pushLadderRow(v2, c.id, tranche);
+    issueTranche(v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
     c.totalDebt = (c.totalDebt ?? 0) + drawUSD;
     ctx.creditEventsThisWeek.push({
       bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,

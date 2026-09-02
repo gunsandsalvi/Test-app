@@ -138,10 +138,11 @@ export function settlePricedOfferings(
       }
       inventory[deskBook] = rows;
       updateBankSheet(ctx, lead.ticker, { ...existingSheet, dealerDeskInventory: inventory });
-      // §5-WIRES W2: the paper the lead is left holding is delivered by the issuer, by wire —
-      // the money leg above ('underwriting residual taken by the lead') is its other half.
+      // §5-WIRES W2/W3: the paper the lead is left holding comes off the clearing house, by wire —
+      // the issuer delivered the WHOLE deal to the house when its tranche was issued (the tranche
+      // ledger, stage 08), the book's fills took the market's share, the lead takes the rest.
       if (issuerCompany) {
-        transferHolding(ctx.v2, { kind: 'COMPANY', ticker: issuerCompany.ticker }, { kind: 'BANK_SECURITIES', ticker: lead.ticker },
+        transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: regionId }, { kind: 'BANK_SECURITIES', ticker: lead.ticker },
           { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueUSD: residualUSD, shares: heldInShares(instrumentType) ? residualUnits : undefined },
           'underwriting residual delivered to the lead');
       }

@@ -35,6 +35,8 @@ export interface TrancheStore {
   flags: Uint8Array;
   idRef: Int32Array;               // interned tranche id
   bankRef: Int32Array;             // interned facilityBankTicker; -1 = absent
+  /** §5-WIRES W3: the wire that created the row (-1 for a seeded or born ladder — B's gap). */
+  wireRef: Int32Array;
   /** Call protection rides as the plain object it is — one per row, undefined when absent. */
   callProt: (DebtTranche['callProtection'] | undefined)[];
   next: Int32Array;
@@ -46,6 +48,24 @@ export interface TrancheStore {
   /** Firms whose ladder has ever been synced — the week-start catch-up uses it to spot births. */
   synced: Set<string>;
 }
+
+/**
+ * §5-WIRES W3 — THE LADDER IS SEALED. Outside `src/engine/ledger/` the store is a read-only view:
+ * a stage writing a tranche column does not compile. `engine/ledger/tranche-ledger.ts` is the one
+ * place a row's principal moves, and every move is a numbered wire; the functions below are its
+ * implementation (hygiene rule 5 guards the import boundary).
+ */
+export type ReadonlyTrancheStore = {
+  readonly [K in keyof TrancheStore]:
+    TrancheStore[K] extends Float64Array ? Readonly<Float64Array>
+    : TrancheStore[K] extends Int32Array ? Readonly<Int32Array>
+    : TrancheStore[K] extends Uint8Array ? Readonly<Uint8Array>
+    : TrancheStore[K] extends Set<string> ? ReadonlySet<string>
+    : TrancheStore[K] extends (infer E)[] ? readonly E[]
+    : TrancheStore[K];
+};
+/** The ledger's own handle on the store. Nothing else may hold one. */
+export const mutableTranches = (v2: V2World): TrancheStore => v2.tranches as unknown as TrancheStore;
 
 export function newTrancheStore(): TrancheStore {
   const cap = 1 << 13;
@@ -61,6 +81,7 @@ export function newTrancheStore(): TrancheStore {
     flags: new Uint8Array(cap),
     idRef: new Int32Array(cap),
     bankRef: new Int32Array(cap),
+    wireRef: new Int32Array(cap).fill(-1),
     callProt: new Array(cap),
     next: new Int32Array(cap).fill(-1),
     freeHead: -1,
@@ -81,6 +102,7 @@ function growTranches(S: TrancheStore): void {
   S.originationWeek = gI(S.originationWeek); S.maturityWeek = gI(S.maturityWeek);
   const flags = new Uint8Array(cap); flags.set(S.flags); S.flags = flags;
   S.idRef = gI(S.idRef); S.bankRef = gI(S.bankRef);
+  const wireRef = new Int32Array(cap).fill(-1); wireRef.set(S.wireRef); S.wireRef = wireRef;
   S.callProt.length = cap;
   const next = new Int32Array(cap).fill(-1); next.set(S.next); S.next = next;
   S.cap = cap;
@@ -129,7 +151,7 @@ function writeRow(S: TrancheStore, r: number, v2: V2World, t: DebtTranche): void
  * writer after it rebuilds or appends to `comp.debtTranches`; O(ladder) with row recycling.
  */
 export function syncLadderRows(v2: V2World, companyId: string, ladder: DebtTranche[] | undefined): void {
-  const S = v2.tranches;
+  const S = mutableTranches(v2);
   S.synced.add(companyId);
   const firmRow = rowOf(v2, companyId);
   const slot = slotFor(S, firmRow);
@@ -148,6 +170,7 @@ export function syncLadderRows(v2: V2World, companyId: string, ladder: DebtTranc
   for (let i = 0; i < ladder.length; i++) {
     const r = allocRow(S);
     writeRow(S, r, v2, ladder[i]);
+    S.wireRef[r] = -1;
     S.next[r] = -1;
     if (prev >= 0) S.next[prev] = r; else S.head[slot] = r;
     prev = r;
@@ -189,7 +212,7 @@ function canonicalRow(S: TrancheStore, v2: V2World, r: number): string {
 
 /** TRANCHE_SYNC_CHECK=1 — throw on the first firm whose rows disagree with its object ladder. */
 export function assertLaddersInSync(v2: V2World, companies: { id: string; ticker: string; debtTranches?: DebtTranche[] }[]): void {
-  const S = v2.tranches;
+  const S = mutableTranches(v2);
   for (const comp of companies) {
     const ladder = comp.debtTranches ?? [];
     const firmRow = v2.rowById.get(comp.id);
@@ -212,7 +235,7 @@ export function assertLaddersInSync(v2: V2World, companies: { id: string; ticker
 
 /** The firm's ladder as row indices, in ladder order; empty when the firm has no rows. */
 export function ladderRowsOf(v2: V2World, companyId: string): number[] {
-  const S = v2.tranches;
+  const S = mutableTranches(v2);
   const firmRow = v2.rowById.get(companyId);
   const rows: number[] = [];
   if (firmRow === undefined || firmRow >= S.head.length) return rows;
@@ -230,14 +253,16 @@ export function ensureLaddersSynced(v2: V2World, companies: { id: string; debtTr
 
 // ---- §7.311 writer-flip API: rows become the authority; these are the only mutators. ----
 
-/** Append one tranche to the firm's ladder (FIFO tail), returning its row. */
-export function pushLadderRow(v2: V2World, companyId: string, t: DebtTranche): number {
-  const S = v2.tranches;
+/** Append one tranche to the firm's ladder (FIFO tail), returning its row. §5-WIRES W3: the row
+ *  carries the wire that created it — a ladder row with no wire number does not compile. */
+export function pushLadderRow(v2: V2World, companyId: string, t: DebtTranche, wireNo: number): number {
+  const S = mutableTranches(v2);
   S.synced.add(companyId);
   const firmRow = rowOf(v2, companyId);
   const slot = slotFor(S, firmRow);
   const r = allocRow(S);
   writeRow(S, r, v2, t);
+  S.wireRef[r] = wireNo;
   S.next[r] = -1;
   if (S.tail[slot] >= 0) { S.next[S.tail[slot]] = r; S.tail[slot] = r; }
   else { S.head[slot] = r; S.tail[slot] = r; }
@@ -246,7 +271,7 @@ export function pushLadderRow(v2: V2World, companyId: string, t: DebtTranche): n
 
 /** Rebuild the firm's chain to exactly `keptRows` (in order), freeing every other current row. */
 export function relinkLadder(v2: V2World, companyId: string, keptRows: number[]): void {
-  const S = v2.tranches;
+  const S = mutableTranches(v2);
   const firmRow = v2.rowById.get(companyId);
   if (firmRow === undefined || firmRow >= S.head.length) return;
   const keep = new Set(keptRows);
@@ -268,7 +293,7 @@ export function relinkLadder(v2: V2World, companyId: string, keptRows: number[])
 
 /** One row materialized back to the canonical object shape (absent = the NaN/-1 sentinels). */
 export function materializeTranche(v2: V2World, r: number): DebtTranche {
-  const S = v2.tranches;
+  const S = mutableTranches(v2);
   const f = S.flags[r];
   const t: DebtTranche = {
     id: v2.internedStrings[S.idRef[r]],
@@ -294,3 +319,6 @@ export function materializeTranche(v2: V2World, r: number): DebtTranche {
 export function materializeLadder(v2: V2World, companyId: string): DebtTranche[] {
   return ladderRowsOf(v2, companyId).map((r) => materializeTranche(v2, r));
 }
+
+/** The wire that created a ladder row (-1: seeded or born without one). */
+export const trancheWireOf = (v2: V2World, r: number): number => v2.tranches.wireRef[r];

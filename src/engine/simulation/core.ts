@@ -62,7 +62,8 @@ import { runTradeSettlementStage } from './stages/trade-settlement';
 // Side effect only: registers the (Node-only, env-gated) clearing worker pool with the engine.
 import './stages/clearing-worker-pool';
 import { ensureV2 } from '../../engine2/world';
-import { syncLadderRows, assertLaddersInSync, materializeLadder } from '../../engine2/tranches';
+import {  assertLaddersInSync, materializeLadder } from '../../engine2/tranches';
+import { seedLadder } from '../ledger/tranche-ledger';
 import { ensureBooksSynced, assertBooksInSync, materializeBook, clearDirtyBooks } from '../../engine2/holdings';
 import './stages/native-kernels';
 import { runFreightClearingStage } from './stages/freight-clearing';
@@ -120,7 +121,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // and every birth path) gets its ladder mirrored before the week reads anything.
     const v2 = ensureV2(state);
     for (const c of state.companies) {
-      if (!v2.tranches.synced.has(c.id)) syncLadderRows(v2, c.id, c.debtTranches);
+      if (!v2.tranches.synced.has(c.id)) seedLadder(v2, c.id, c.debtTranches);
     }
     // Holdings flip stage 1 — the same catch-up for the institutional register: the seed and any
     // unhooked creation path (fund births, estate spawns) get their books mirrored here.
@@ -291,7 +292,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         ctx.updatedCompanies.push(...born);
       drainSeedRings({ v2: ensureV2(state), companies: born });
         const v2b = ensureV2(state);
-        for (const b of born) syncLadderRows(v2b, b.id, b.debtTranches);
+        for (const b of born) seedLadder(v2b, b.id, b.debtTranches);
       }
     });
     // §5-MNC: a firm that has lost a foreign merit order for the measured year builds there —
@@ -301,7 +302,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       ctx.updatedCompanies.push(...fdiBorn);
       drainSeedRings({ v2: ensureV2(state), companies: fdiBorn });
       const v2f = ensureV2(state);
-      for (const b of fdiBorn) syncLadderRows(v2f, b.id, b.debtTranches);
+      for (const b of fdiBorn) seedLadder(v2f, b.id, b.debtTranches);
     }
     // A take-private's tender is a corporate action recorded on the same per-week maps stage 08
     // uses — and stage 08 has already drained them by the time this stage runs, so settling here
@@ -462,6 +463,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // dying with the context (they used to be silently dropped — tender proceeds never landed).
     pendingPaymentJournal: ctx.paymentJournal,
     nextWireId: ctx.wireJournal.base + ctx.wireJournal.n,
-    lastWires: summarizeWires(ctx.wireJournal, (() => { let s = 0; for (let i = 0; i < ctx.paymentJournal.n; i++) s += ctx.paymentJournal.amountUSD[i]; return s; })()),
+    lastWires: summarizeWires(ctx.wireJournal, (() => { let s = 0; for (let i = 0; i < ctx.paymentJournal.n; i++) s += ctx.paymentJournal.amountUSD[i]; return s; })(),
+      (() => { const m = new Map<string, string>(); for (const c of nextState.companies) m.set(c.ticker, c.region); return (t: string) => m.get(t); })()),
   }, timings, stageTrace: trace };
 }

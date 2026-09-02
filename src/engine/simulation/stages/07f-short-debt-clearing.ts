@@ -32,7 +32,7 @@
 import { riskAversionOf } from '../../../domain/preferences';
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import { ladderRowsOf, pushLadderRow, relinkLadder, TR_FLOATING, TR_CP } from '../../../engine2/tranches';
+import { ladderRowsOf, TR_FLOATING, TR_CP } from '../../../engine2/tranches';
 import { REGION_IDS } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
@@ -45,8 +45,9 @@ import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from '
 import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
-import { pay, pendingSettlementUSD, PartyRef, institutionSpendableUSD } from './settlement';
+import { pay, pendingSettlementUSD, institutionSpendableUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, PrimaryTake } from './book-settlement';
+import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
 import { discountBillProceedsUSD, withdrawUnplacedIssuance } from '../../../domain/government';
@@ -722,10 +723,16 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           }
         });
         {
+          // §5-WIRES W3: matured paper hands its face back to the issuer by wire, then leaves the chain.
           const TSr = v2Mirror.tranches;
-          const kept = ladderRowsOf(v2Mirror, iss.comp.id)
-            .filter((r) => !((TSr.flags[r] & TR_CP) && TSr.maturityWeek[r] <= ctx.nextWeek));
-          relinkLadder(v2Mirror, iss.comp.id, kept);
+          const cpIssuer = { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId };
+          const kept: number[] = [];
+          for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
+            if ((TSr.flags[r] & TR_CP) && TSr.maturityWeek[r] <= ctx.nextWeek) {
+              if (TSr.principalUSD[r] > 0.01) retireTranche(v2Mirror, cpIssuer, r, TSr.principalUSD[r], 'commercial paper matured');
+            } else kept.push(r);
+          }
+          commitLadder(v2Mirror, cpIssuer, kept);
         }
       });
 
@@ -858,7 +865,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const placedUSD = outcome && !outcome.withdrawn ? Math.max(0, outcome.marketTakeUSD) : 0;
         // No floor on the level (rule 15): the paper exists at whatever the auction printed.
         if (placedUSD > 1) {
-          pushLadderRow(v2Mirror, iss.comp.id, {
+          issueTranche(v2Mirror, { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId }, {
             id: `${iss.comp.ticker}-CP-${ctx.nextWeek}`,
             principalUSD: placedUSD,
             rateType: 'FIXED',
@@ -867,7 +874,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             maturityWeek: ctx.nextWeek + CP_TENOR_WEEKS,
             seniority: 'SENIOR',
             isCommercialPaper: true,
-          } as DebtTranche);
+          } as DebtTranche, 'commercial paper placed');
         }
         // A roll it could not place is the real funding squeeze: the market said no (or said yes
         // at a level past the revolver, which is the same answer), and the committed bank line
@@ -876,7 +883,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const rollNeedUSD = Math.min(iss.maturedUSD, iss.wantedUSD);
         const revolverUSD = Math.max(0, rollNeedUSD - placedUSD);
         if (revolverUSD > 1) {
-          pushLadderRow(v2Mirror, iss.comp.id, {
+          issueTranche(v2Mirror, { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId }, {
             id: `${iss.comp.ticker}-REVOLVER-${ctx.nextWeek}`,
             principalUSD: revolverUSD,
             rateType: 'FLOATING',
@@ -890,7 +897,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             // on the other — one real thing represented two ways (rule 3).
             isBankFacility: true,
             facilityBankTicker: iss.comp.homeBankTicker,
-          } as DebtTranche);
+          } as DebtTranche, 'revolver draw: commercial paper roll failed');
           pay(ctx, {
             payer: { kind: 'BANK_CREDIT', ticker: iss.comp.homeBankTicker ?? '' },
             payee: { kind: 'COMPANY', ticker: iss.comp.ticker },
@@ -947,7 +954,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         primaryTakes(cpResult, (issuerId) => {
           const iss = issuerById.get(issuerId);
           return iss ? { kind: 'COMPANY', ticker: iss.comp.ticker } : undefined;
-        }, undefined, primaryAssetOf('COMMERCIAL_PAPER', regionId))
+        })
       );
     }
   });

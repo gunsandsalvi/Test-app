@@ -1,4 +1,5 @@
 /**
+import { moveFacilityLender } from '../../ledger/tranche-ledger';
  * §7.339 — BANK RESOLUTION: a bank under prompt corrective action is closed at the week's end
  * and its books go whole to the strongest live peer in its region, the same weekend.
  *
@@ -24,14 +25,14 @@ import {
 import { assumeBankBooks } from '../../ledger/bank-transfer';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { isActiveCompany } from '../../../domain/company';
-import { ladderRowsOf } from '../../../engine2/tranches';
-import { internString } from '../../../engine2/world';
 import { partyKey } from '../../ledger/party';
 import { getSimulationDate } from '../../formatters';
 import { WeeklyStepContext } from './context';
 import { derivativesBookOf } from './derivative-lifecycle';
 import { pay, runSettlementStage } from './settlement';
 import { fieldsOf, residualOf } from '../bank-identity-trace';
+import { ladderRowsOf } from '../../../engine2/tranches';
+import { moveFacilityLender } from '../../ledger/tranche-ledger';
 
 const sheetLinesUSD = (s: BankingSector): number =>
   Math.abs(s.depositsUSD) + Math.abs(s.corporateDepositsUSD ?? 0) + Math.abs(s.institutionalDepositsUSD ?? 0)
@@ -48,15 +49,11 @@ export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionI
   ctx.prevActivePrivateFirms.forEach((c) => { if (c.homeBankTicker === from) c.homeBankTicker = to; });
   ctx.updatedInstitutionalEntities.forEach((e) => { if (e.homeBankTicker === from) e.homeBankTicker = to; });
   // Facility tranches carry their lender as an interned ref on the row.
+  // §5-WIRES W3: a facility moving to the assuming bank is a wire, lender to lender.
   const v2 = ctx.v2;
-  const fromRef = v2.internedIdByString.get(from);
-  if (fromRef !== undefined) {
-    const toRef = internString(v2, to);
-    const TS = v2.tranches;
-    ctx.updatedCompanies.concat(ctx.prevActivePrivateFirms).forEach((c) => {
-      for (const r of ladderRowsOf(v2, c.id)) if (TS.bankRef[r] === fromRef) TS.bankRef[r] = toRef;
-    });
-  }
+  ctx.updatedCompanies.concat(ctx.prevActivePrivateFirms).forEach((c) => {
+    moveFacilityLender(v2, { id: c.id, ticker: c.ticker, region: c.region }, from, to, 'bank resolution: facilities assumed');
+  });
   const reg = ctx.updatedRegions[regionId];
   if (reg?.repoBook) {
     reg.repoBook = reg.repoBook.map((c) => ({

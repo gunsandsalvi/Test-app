@@ -12,7 +12,8 @@ import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { ensureV2, internString, revHistSeed, rowOf, ringCopyRow } from '../../../engine2/world';
-import { syncLadderRows, materializeLadder } from '../../../engine2/tranches';
+import { materializeLadder } from '../../../engine2/tranches';
+import { rebuildLadder } from '../../ledger/tranche-ledger';
 import { pay } from './settlement';
 import { GameState, DebtTranche, RegionId, ItemizedHolding } from '../../../types';
 import { getSimulationDate } from '../../formatters';
@@ -20,7 +21,7 @@ import { isAntitrustBlocked, isActiveCompany, isPubliclyListed } from '../../../
 import { checkForMerger } from '../merger';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
-import { issueHolding, retireHolding } from '../../ledger/holdings-ledger';
+import { issueHolding, transferHolding } from '../../ledger/holdings-ledger';
 import { heldInShares } from '../../../domain/assets';
 
 /**
@@ -338,10 +339,10 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     );
 
     const newLadder = [...protectedAcquirerTranches, ...consolidatedTranches];
-    syncLadderRows(v2m, acquirer.id, newLadder);
+    rebuildLadder(v2m, { id: acquirer.id, ticker: acquirer.ticker, region: acquirer.region }, newLadder, 'merger: ladders consolidated');
     acquirer.totalDebt = newLadder.reduce((s, t) => s + t.principalUSD, 0);
   }
-  syncLadderRows(v2m, target.id, []);
+  rebuildLadder(v2m, { id: target.id, ticker: target.ticker, region: target.region }, [], 'merger: target ladder assumed');
   target.totalDebt = 0;
 
   // HH4d (a hole the deposit-unification invariant exposed): an acquired BANK brings its whole
@@ -402,13 +403,16 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
         }
         if (swaps.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };
+        // §5-WIRES W3: the exchange settles through the clearing houses — the target's paper goes
+        // back to its house, the acquirer's comes from its own; the issuers' wires are the
+        // ladders' (`rebuildLadder` below) and the equity issuer's, counted once.
         swaps.forEach((sw) => {
-          retireHolding(ctx.v2, holder, { kind: 'COMPANY', ticker: target.ticker },
+          transferHolding(ctx.v2, holder, { kind: 'CLEARING_HOUSE', region: target.region },
             { instrumentType: sw.type, instrumentId: target.id, issuerRegion: target.region, valueUSD: sw.valueUSD, shares: sw.shares }, 'merger: target paper exchanged');
           const isEquity = heldInShares(sw.type);
           const newValueUSD = isEquity ? sw.valueUSD * stockRatio : sw.valueUSD;
           if (newValueUSD > 1) {
-            issueHolding(ctx.v2, { kind: 'COMPANY', ticker: acquirer.ticker }, holder,
+            transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: acquirer.region }, holder,
               { instrumentType: sw.type, instrumentId: acquirer.id, issuerRegion: acquirer.region, valueUSD: newValueUSD, shares: isEquity && acquirer.stockPrice > 0 ? newValueUSD / acquirer.stockPrice : sw.shares }, 'merger: acquirer paper delivered');
           }
         });

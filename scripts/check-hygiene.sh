@@ -125,5 +125,15 @@ if [ -n "$MUT_STRAY" ]; then
   echo "$MUT_STRAY"
   exit 1
 fi
+# §5-WIRES W3 — the same boundary for the ladder: engine2/tranches.ts's mutators are the tranche
+# ledger's implementation (engine/ledger/tranche-ledger.ts).
+TR_MUTATORS='(pushLadderRow|relinkLadder|syncLadderRows|mutableTranches)'
+TR_STRAY=$(grep -rnE "import \{[^}]*\b${TR_MUTATORS}\b[^}]*\} from '[^']*engine2/tranches(\.ts)?'" src --include=*.ts --include=*.tsx 2>/dev/null \
+  | grep -vE '^src/engine/ledger/|^src/engine2/tranches\.ts:|^src/engine2/world\.ts:' || true)
+if [ -n "$TR_STRAY" ]; then
+  echo "ERROR: a stage imports a ladder mutator — every tranche moves through engine/ledger/tranche-ledger.ts (a wire):"
+  echo "$TR_STRAY"
+  exit 1
+fi
 
 echo "Repo hygiene check passed."

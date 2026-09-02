@@ -12,11 +12,11 @@ import { PartyRef, partyId, partyOf } from './party';
 
 export type AssetKind =
   | 'MONEY' | 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER'
-  | 'ETF_SHARE' | 'MMF_SHARE' | 'TRANCHE' | 'GOOD' | 'HOUSE' | 'CONTRACT';
+  | 'ETF_SHARE' | 'MMF_SHARE' | 'BANK_FACILITY' | 'GOOD' | 'HOUSE' | 'CONTRACT';
 
 export const ASSET_KINDS: readonly AssetKind[] = [
   'MONEY', 'EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER',
-  'ETF_SHARE', 'MMF_SHARE', 'TRANCHE', 'GOOD', 'HOUSE', 'CONTRACT',
+  'ETF_SHARE', 'MMF_SHARE', 'BANK_FACILITY', 'GOOD', 'HOUSE', 'CONTRACT',
 ];
 const kindIdOf = new Map<AssetKind, number>(ASSET_KINDS.map((k, i) => [k, i]));
 export const assetKindOfId = (id: number): AssetKind => ASSET_KINDS[id];
@@ -135,11 +135,19 @@ export interface WireSummary {
    *  wires, keyed `region|kind` — received minus delivered, in USD at the wires' prices. The
    *  house is on both sides of every fill, so a non-zero net is a leg no wire named. */
   houseNetUSDByKey: Record<string, number>;
+  /** §5-WIRES W3: what the region's issuers put out net of what came back, keyed `region|kind` —
+   *  issued (from a COMPANY) minus retired (to a COMPANY). The ladders' change must equal it. */
+  issuerNetUSDByKey: Record<string, number>;
+  /** LADDER_TRACE=1 only: the same net per issuer ticker and kind, keyed `ticker|kind`. */
+  issuerNetUSDByTicker?: Record<string, number>;
 }
 
-export function summarizeWires(j: WireJournal, moneyPendingUSD = 0): WireSummary {
+export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssuer?: (ticker: string) => string | undefined): WireSummary {
   const byKind: Record<string, number> = {}; const valueUSDByKind: Record<string, number> = {};
   const houseNetUSDByKey: Record<string, number> = {};
+  const issuerNetUSDByKey: Record<string, number> = {};
+  const trace = typeof process !== 'undefined' && process.env?.LADDER_TRACE === '1';
+  const issuerNetUSDByTicker: Record<string, number> | undefined = trace ? {} : undefined;
   for (let i = 0; i < j.n; i++) {
     const k = ASSET_KINDS[j.kindId[i]];
     const valueUSD = j.quantity[i] * j.priceUSD[i];
@@ -149,6 +157,10 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0): WireSummary
     const from = partyOf(j.fromId[i]), to = partyOf(j.toId[i]);
     if (to.kind === 'CLEARING_HOUSE') { const key = `${to.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) + valueUSD; }
     if (from.kind === 'CLEARING_HOUSE') { const key = `${from.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) - valueUSD; }
+    if (regionOfIssuer) {
+      if (from.kind === 'COMPANY') { const rg = regionOfIssuer(from.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) + valueUSD; if (issuerNetUSDByTicker) { const tk = `${from.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) + valueUSD; } } }
+      if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueUSD; if (issuerNetUSDByTicker) { const tk = `${to.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueUSD; } } }
+    }
   }
-  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey };
+  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey, issuerNetUSDByKey, issuerNetUSDByTicker };
 }
