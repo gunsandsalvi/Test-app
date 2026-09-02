@@ -47,39 +47,37 @@ test('positive net: the acquirer is capitalised first, the receivership gets wha
   const s = sheet(); // assets 130, assumed 95, wholesale 30, equity 5 — identity holds
   assert.equal(identityResidual(s), 0);
   const plan = planBankResolution(s, 12, 4, CASH, linesOf(), FAC);
-  assert.equal(plan.ladderStaysUSD, 12);
-  assert.equal(plan.wholesaleAssumedUSD, 18);
-  assert.equal(plan.wholesaleHaircutUSD, 0);
-  assert.equal(plan.netBookUSD, 17); // equity 5 + the ladder 12 the acquirer does not assume
+  // The whole central-bank loan moves; the shell's own ladder stays on its rows as a claim and
+  // is never netted against it, so the net book is the equity and nothing else.
+  assert.equal(plan.ladderBailedInUSD, 12);
+  assert.equal(plan.centralBankLoanAssumedUSD, 30);
+  assert.equal(plan.netBookUSD, 5);
   assert.equal(plan.acquirerCapitalUSD, 4);
-  assert.equal(plan.estateUSD, 13);
+  assert.equal(plan.estateUSD, 1);
   assert.equal(plan.guaranteeUSD, 0);
 });
 
-test('a shortfall: the central bank is never haircut (§5-CLOSE) — the treasury guarantees the whole of it', () => {
+test('a shortfall: the central bank is never haircut — the treasury guarantees the whole of it', () => {
   const smallSheet = sheet({ bankEquityUSD: -8, centralBankLoanUSD: 43 });
   const small = planBankResolution(smallSheet, 0, 0, CASH, linesOf(), FAC);
-  assert.equal(small.wholesaleHaircutUSD, 0);
-  assert.equal(small.wholesaleAssumedUSD, 43);
+  assert.equal(small.centralBankLoanAssumedUSD, 43);
   assert.equal(small.guaranteeUSD, 8);
   assert.equal(small.estateUSD, 0);
   const capital = planBankResolution(sheet(), 0, 20, CASH, linesOf(), FAC); // net 5, capital 20 → shortfall 15, guaranteed
-  assert.equal(capital.wholesaleHaircutUSD, 0);
-  assert.equal(capital.wholesaleAssumedUSD, 30);
+  assert.equal(capital.centralBankLoanAssumedUSD, 30);
   assert.equal(capital.estateUSD, 0);
   assert.equal(capital.guaranteeUSD, 15);
   const beyondSheet = sheet({ bankEquityUSD: -50, centralBankLoanUSD: 30 });
   const beyond = planBankResolution(beyondSheet, 0, 5, CASH, linesOf({ householdUSD: 135 }), FAC);
-  assert.equal(beyond.wholesaleHaircutUSD, 0);
-  assert.equal(beyond.wholesaleAssumedUSD, 30);
+  assert.equal(beyond.centralBankLoanAssumedUSD, 30);
   assert.equal(beyond.guaranteeUSD, 55);
 });
 
-test('the ladder never exceeds the central bank loan line it lives inside', () => {
+test('the ladder is bailed in whole and never nets against the central bank loan', () => {
   const ladderSheet = sheet({ centralBankLoanUSD: 10 });
   const plan = planBankResolution(ladderSheet, 25, 0, CASH, linesOf(), FAC);
-  assert.equal(plan.ladderStaysUSD, 10);
-  assert.equal(plan.wholesaleAssumedUSD, 0);
+  assert.equal(plan.ladderBailedInUSD, 25);
+  assert.equal(plan.centralBankLoanAssumedUSD, 10);
 });
 
 test('the transfer closes both sheets: acquirer takes every line, target keeps only cash and the matching equity', () => {
@@ -100,9 +98,9 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
   let fCash = CASH, aCash = CASH; // the two accounts, moved here as the pass would
   const plan = planBankResolution(F, 0, 3, fCash, fLines, FAC);
   const cash = fCash;
-  absorbBankSheet(A, F, plan.wholesaleAssumedUSD);
-  A.bankEquityUSD += plan.netBookUSD + plan.wholesaleHaircutUSD - cash;
-  F.bankEquityUSD = cash; F.centralBankLoanUSD = 0;
+  absorbBankSheet(A, F, plan.centralBankLoanAssumedUSD);
+  A.bankEquityUSD += plan.netBookUSD - cash;
+  F.bankEquityUSD = cash;
   // The cash leg is a payment (reserves and equity on both sides); replay it here.
   aCash += cash; A.bankEquityUSD += cash; fCash -= cash; F.bankEquityUSD -= cash;
   // The depositors re-key to the acquirer: its corporate and institutional lines are theirs now.

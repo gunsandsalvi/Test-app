@@ -1,5 +1,5 @@
 /**
- * §7.339 — BANK RESOLUTION: a bank under prompt corrective action is closed at the week's end
+ * BANK RESOLUTION: a bank under prompt corrective action is closed at the week's end
  * and its books go whole to the strongest live peer in its region, the same weekend.
  *
  * Why it is its own stage and not a default: a firm that defaults keeps its assets and works
@@ -7,7 +7,7 @@
  * Monday under another name, deposits intact. Stage 08's default rule (cash out, coverage under
  * the floor) never fires on a bank — its cash is central-bank reserves and its coverage is a
  * margin — so before this stage a bank with no capital left simply kept trading, quoting loans
- * and holding deposits, dead on the books (§7.291/§7.301: UK NIM 27x from exactly this).
+ * and holding deposits, dead on the books.
  *
  * Runs after the close, on the week's final sheets, with an empty journal — so every leg it
  * posts settles in its own pass and nothing recorded earlier in the week is addressed to a bank
@@ -50,7 +50,7 @@ export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionI
   ctx.prevActivePrivateFirms.forEach((c) => { if (c.homeBankTicker === from) c.homeBankTicker = to; });
   ctx.updatedInstitutionalEntities.forEach((e) => { if (e.homeBankTicker === from) e.homeBankTicker = to; });
   // Facility tranches carry their lender as an interned ref on the row.
-  // §5-WIRES W3: a facility moving to the assuming bank is a wire, lender to lender.
+  // A facility moving to the assuming bank is a wire, lender to lender.
   const v2 = ctx.v2;
   ctx.updatedCompanies.concat(ctx.prevActivePrivateFirms).forEach((c) => {
     moveFacilityLender(v2, { id: c.id, ticker: c.ticker, region: c.region }, from, to, 'bank resolution: facilities assumed');
@@ -101,10 +101,10 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       .map((c) => ({ comp: c, sheet: c.bankBalanceSheet!, facilityBookUSD: facilityBookOf(ctx.v2, c.ticker) }));
     const chosen = chooseAssumingBank(candidates, BANK_MIN_CAPITAL_RATIO);
     if (!chosen) {
-      // §7.342 — THE LAST BANK STANDING IS RECAPITALISED BY ITS TREASURY. With no peer to
+      // THE LAST BANK STANDING IS RECAPITALISED BY ITS TREASURY. With no peer to
       // assume the books there is nobody to resolve into, and leaving the bank open with no
       // capital is what the first reference did: JPN's last bank sat under PCA from week 37,
-      // and by week 59 the region's unemployment was 80% (§7.342). The real answer is the one
+      // and by week 59 the region's unemployment was 80%. The real answer is the one
       // every crisis has used — a public capital injection to the working ratio, a fiscal cost
       // that lands in the treasury account like the deposit guarantee does. The shareholders
       // are not diluted here (no share mechanics on a bank's equity yet — recorded), which
@@ -203,15 +203,16 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
 
     const gb = (v: number) => `${(v / 1e9).toFixed(2)}B`;
     console.log(`  [bank-resolution] w${week} ${regionId}:${bank.ticker} -> ${acquirer.ticker}`
-      + ` | net ${gb(plan.netBookUSD)} capital ${gb(plan.acquirerCapitalUSD)} ladder-stays ${gb(plan.ladderStaysUSD)}`
-      + ` haircut ${gb(plan.wholesaleHaircutUSD)} guarantee ${gb(plan.guaranteeUSD)} estate ${gb(plan.estateUSD)}`
+      + ` | net ${gb(plan.netBookUSD)} capital ${gb(plan.acquirerCapitalUSD)} cb-loan ${gb(plan.centralBankLoanAssumedUSD)}`
+      + ` ladder-bailed-in ${gb(plan.ladderBailedInUSD)} guarantee ${gb(plan.guaranteeUSD)} estate ${gb(plan.estateUSD)}`
       + ` | acquirer ratio ${acquirer.bankBalanceSheet!.bankCapitalRatio}`);
     ctx.newsItems.push({
       id: `bank-resolution-${bank.ticker}-${week}`,
       week,
       title: `${bank.name} closed by the supervisor; ${acquirer.name} assumes its deposits`,
       description: `${bank.ticker} fell below the ${(100 * PCA_CAPITAL_RATIO).toFixed(0)}% capital floor and was resolved: `
-        + `${acquirer.ticker} takes its books and every deposit, capitalised at ${gb(plan.acquirerCapitalUSD)}. Wholesale lenders lose ${gb(plan.wholesaleHaircutUSD)}`
+        + `${acquirer.ticker} takes its books, every deposit and the ${gb(plan.centralBankLoanAssumedUSD)} owed to the central bank, capitalised at ${gb(plan.acquirerCapitalUSD)}`
+        + (plan.ladderBailedInUSD > 0 ? `; its own ${gb(plan.ladderBailedInUSD)} of bonds stay behind for the receivership` : '')
         + (plan.guaranteeUSD > 0 ? `; the treasury covers ${gb(plan.guaranteeUSD)} under the deposit guarantee` : '')
         + (plan.estateUSD > 0 ? `; ${gb(plan.estateUSD)} goes to the receivership for its bondholders and shareholders` : '')
         + '.',

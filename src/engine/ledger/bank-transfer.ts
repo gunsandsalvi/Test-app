@@ -1,5 +1,5 @@
 /**
- * §7.339 — ONE BANK'S BOOKS ONTO ANOTHER'S. The two events that move a bank whole — a merger
+ * ONE BANK'S BOOKS ONTO ANOTHER'S. The two events that move a bank whole — a merger
  * and a resolution — share this transfer; it lives in the ledger because it writes every
  * balance line there is. Cash is the one line it never touches: reserves move only by a named
  * flow, and the caller posts that leg (a merger moves them directly at the sheet level, a
@@ -69,15 +69,16 @@ export function mergeBankSheets(acquirer: BankingSector, target: BankingSector):
 
 /**
  * A resolution: the plan's non-cash transfer. The assuming bank's equity ends the deal up by
- * exactly the capital the plan says it needs: the net it took over, plus the haircut it did not
- * assume, plus the guarantee (a flow, below), less what it paid the receivership (a flow, below).
- * The failed bank keeps only its cash, matched by its equity, until the reserve leg settles — the
- * cash arrives on the acquirer as a flow that credits equity too, so the direct equity part is
- * the net plus the haircut, LESS the cash.
+ * exactly the capital the plan says it needs: the net it took over, plus the guarantee (a flow,
+ * below), less what it paid the receivership (a flow, below). The failed bank keeps only its
+ * cash, matched by its equity, until the reserve leg settles — the cash arrives on the acquirer
+ * as a flow that credits equity too, so the direct equity part is the net LESS the cash.
+ *
+ * The whole central-bank loan moves with the books, so nothing is left on the shell for the
+ * zeroing below to erase while the central bank still carries the asset.
  */
 export function assumeBankBooks(acquirer: BankingSector, target: BankingSector, plan: BankResolutionPlan, cashUSD: number): void {
-  absorbBankSheet(acquirer, target, plan.wholesaleAssumedUSD);
-  acquirer.bankEquityUSD += plan.netBookUSD + plan.wholesaleHaircutUSD - cashUSD;
+  absorbBankSheet(acquirer, target, plan.centralBankLoanAssumedUSD);
+  acquirer.bankEquityUSD += plan.netBookUSD - cashUSD;
   target.bankEquityUSD = cashUSD;
-  target.centralBankLoanUSD = 0;
 }

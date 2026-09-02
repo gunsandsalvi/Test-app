@@ -1,5 +1,5 @@
 /**
- * §7.302 / §7.339 — HOW A FAILED BANK IS RESOLVED, as pure rules over its own sheet.
+ * HOW A FAILED BANK IS RESOLVED, as pure rules over its own sheet.
  *
  * A bank does not default the way a firm does (cash out and coverage under the floor); it is
  * CLOSED by its supervisor when its capital is gone, and its books do not go through a workout —
@@ -58,21 +58,19 @@ export function bankAssumedLiabilitiesUSD(sheet: BankingSector, lines: DepositLi
 }
 
 export interface BankResolutionPlan {
-  /** The shell's own traded ladder, left behind as receivership claims (bailed in). It is
-   *  inside the wholesale line, so it comes OUT of what the assuming bank takes over. */
-  ladderStaysUSD: number;
-  /** The central bank's loan the assuming bank takes on, after the ladder. */
-  wholesaleAssumedUSD: number;
-  /** §5-CLOSE: the central bank is never haircut (a loss with no equity behind it would be money
-   *  from nowhere); the treasury's guarantee covers the shortfall instead. Always zero. */
-  wholesaleHaircutUSD: number;
+  /** The shell's own traded ladder, which stays on its rows as receivership claims. Its holders
+   *  take their loss through the estate; nothing here nets it against another liability. */
+  ladderBailedInUSD: number;
+  /** The central bank's loan the assuming bank takes on — all of it. The central bank is never
+   *  haircut: a loss with no equity behind it would be money from nowhere. */
+  centralBankLoanAssumedUSD: number;
   /** Assets minus everything assumed, before any loss is allocated: what the books are worth
    *  to whoever takes them, at book. */
   netBookUSD: number;
   /** The capital the assuming bank must hold against the book it takes on — its bid is the net
    *  less this, and this is what its equity gains from the deal, in every case. */
   acquirerCapitalUSD: number;
-  /** The public cost: what the bail-in of the ladder and the wholesale lenders could not fund. */
+  /** The public cost: what the net book could not cover. */
   guaranteeUSD: number;
   /** What the assuming bank pays the receivership: the net above the capital it needs. */
   estateUSD: number;
@@ -81,28 +79,31 @@ export interface BankResolutionPlan {
 /**
  * The least-cost bid. The assuming bank takes the books at book value and needs capital to carry
  * them — `acquirerCapitalUSD`, the working ratio on the risk it takes on. Its bid for the net is
- * whatever exceeds that; when the net falls short, the receivership owes it the difference, and
- * that shortfall is funded in the loss order: the shell's own ladder is already out (it stays
- * behind as a claim), the wholesale lenders are written down next, and the treasury pays the rest.
+ * whatever exceeds that; when the net falls short, the treasury pays the difference under the
+ * deposit guarantee.
+ *
+ * THE CENTRAL BANK'S LOAN MOVES WHOLE. It used to be netted against the failed bank's own bond
+ * ladder — `min(cbLoan, ownLadder)` stayed behind — and only the remainder was transferred,
+ * while the transfer then zeroed the shell's balance outright and the central bank kept the
+ * asset on `loansToBanksUSD`. A liability was deleted with no counterparty, and two different
+ * things (a traded ladder on the tranche ledger, an unsecured loan from the central bank) were
+ * treated as one. The ladder is bailed in where it lives: it stays on the shell's own rows and
+ * its holders take their loss through the estate, like any other issuer's bondholders.
  */
 export function planBankResolution(
   sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number, cashUSD: number, lines: DepositLines, facilityBookUSD: number,
 ): BankResolutionPlan {
-  const wholesaleUSD = Math.max(0, sheet.centralBankLoanUSD ?? 0);
-  const ladderStaysUSD = Math.min(wholesaleUSD, Math.max(0, ownLadderPrincipalUSD));
-  const transferableUSD = wholesaleUSD - ladderStaysUSD;
-  const netBookUSD = bankSheetAssetsUSD(sheet, cashUSD, facilityBookUSD) - bankAssumedLiabilitiesUSD(sheet, lines) - transferableUSD;
+  const centralBankLoanUSD = Math.max(0, sheet.centralBankLoanUSD ?? 0);
+  const netBookUSD = bankSheetAssetsUSD(sheet, cashUSD, facilityBookUSD) - bankAssumedLiabilitiesUSD(sheet, lines) - centralBankLoanUSD;
   const capitalUSD = Math.max(0, acquirerCapitalUSD);
   const estateUSD = Math.max(0, netBookUSD - capitalUSD);
   const shortfallUSD = Math.max(0, capitalUSD - netBookUSD);
-  const wholesaleHaircutUSD = 0;
   return {
-    ladderStaysUSD,
-    wholesaleAssumedUSD: transferableUSD - wholesaleHaircutUSD,
-    wholesaleHaircutUSD,
+    ladderBailedInUSD: Math.max(0, ownLadderPrincipalUSD),
+    centralBankLoanAssumedUSD: centralBankLoanUSD,
     netBookUSD,
     acquirerCapitalUSD: capitalUSD,
-    guaranteeUSD: shortfallUSD - wholesaleHaircutUSD,
+    guaranteeUSD: shortfallUSD,
     estateUSD,
   };
 }
