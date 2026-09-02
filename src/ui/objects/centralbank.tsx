@@ -60,6 +60,7 @@ export const centralbank = defineObject<Region>({
           <KV k="treasury account" v={money(cb?.treasuryAccountUSD)} />
           <KV k="currency in circulation" v={money(cb?.currencyInCirculationUSD)} />
           <KV k="fx reserves" v={money(r.fxReservesUSD)} />
+          <KV k="claims on other central banks" hint="official settlement · negative = their deposits here" v={money(cb?.foreignOfficialClaimsUSD)} />
           <KV k="last open-market purchase" v={money(cb?.lastOpenMarketPurchasesUSD)} />
           <KV k="last remittance to the treasury" v={money(cb?.lastRemittanceUSD)} />
           <KV k="banks at the window" v={atWindow.length ? atWindow.map((b) => <Link key={b.id} to={{ type: 'company', id: b.id }} nav={nav}>{b.ticker}</Link>).reduce<ReactNode[]>((acc, x, i) => (i ? [...acc, ' ', x] : [x]), []) : 'none'} />

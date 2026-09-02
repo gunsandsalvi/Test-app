@@ -306,6 +306,11 @@ export interface SettlementReport {
   centralBankIssuanceUSD: number;
   /** What the central bank's own books were left holding — see `centralBankResidualUSD`. Zero. */
   centralBankResidualUSD: number;
+  /** §5-CLOSE C4b — per region, the money that arrived from other regions less what left for
+   *  them, read off each instruction's two sides (a side with no region — the clearing house —
+   *  contributes nothing; its legs attribute through their other side). Booked on the central
+   *  banks as foreign official claims; sums to zero across regions by construction. */
+  crossBorderByRegion: Map<string, number>;
   /** Money that could not be applied: a party that does not exist, or a holder with no bank.
    *  Must be zero. A non-zero value is money leaving the system — the §7.86 defect's shape. */
   unresolvedUSD: number;
@@ -362,6 +367,7 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
     clearingHouseResidualUSD: a.clearingHouseResidualUSD + b.clearingHouseResidualUSD,
     centralBankIssuanceUSD: a.centralBankIssuanceUSD + b.centralBankIssuanceUSD,
     centralBankResidualUSD: a.centralBankResidualUSD + b.centralBankResidualUSD,
+    crossBorderByRegion: mergeMap(a.crossBorderByRegion, b.crossBorderByRegion),
     unresolvedUSD: a.unresolvedUSD + b.unresolvedUSD,
   };
 }
@@ -387,6 +393,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     clearingHouseResidualUSD: 0,
     centralBankIssuanceUSD: 0,
     centralBankResidualUSD: 0,
+    crossBorderByRegion: new Map(),
     unresolvedUSD: 0,
   };
   if (nInstructions === 0) {
@@ -405,6 +412,21 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const add = (id: number, deltaUSD: number) => {
     if (netById[id] === undefined) { netById[id] = deltaUSD; netTouched.push(id); }
     else netById[id] += deltaUSD;
+  };
+  const companyByTicker = new Map(ctx.updatedCompanies.map((c) => [c.ticker, c]));
+  const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
+  // §5-CLOSE C4b — which central bank's system a side of a payment lives in. Every party but
+  // the clearing house has one; the clearing house is the hub its legs pass through, so a leg
+  // to or from it attributes through its other side and the hub itself contributes nothing.
+  const regionOfParty = (ref: PartyRef): string | undefined => {
+    switch (ref.kind) {
+      case 'COMPANY': return companyByTicker.get(ref.ticker)?.region;
+      case 'INSTITUTION': return entityById.get(ref.id)?.region;
+      case 'BANK': case 'BANK_SECURITIES': case 'BANK_CREDIT': return companyByTicker.get(ref.ticker)?.region;
+      case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': return ref.region;
+      case 'CLEARING_HOUSE': return undefined;
+      default: return assertNever(ref, 'regionOfParty');
+    }
   };
   const traceUnresolved = process.env.UNRESOLVED_TRACE === '1';
   const sheetByTicker = traceUnresolved
@@ -428,6 +450,14 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     }
     add(payerIdx, -amountUSD);
     add(payeeIdx, amountUSD);
+    // §5-CLOSE C4b: the official-settlement leg. A same-region payment nets to nothing here; a
+    // cross-region one is money leaving one central bank's system for another's.
+    const payerRegion = regionOfParty(payerRef);
+    const payeeRegion = regionOfParty(payeeRef);
+    if (payerRegion !== payeeRegion) {
+      if (payerRegion !== undefined) addTo(report.crossBorderByRegion, payerRegion, -amountUSD);
+      if (payeeRegion !== undefined) addTo(report.crossBorderByRegion, payeeRegion, amountUSD);
+    }
     // The ledgers below key by the reason's TEXT, so it is un-interned only for the few payments
     // whose payer or payee is one of the kinds that keeps a per-reason ledger.
     const payerKind = payerRef.kind;
@@ -446,8 +476,6 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // ---- 2. Apply each party's net change to the balance it actually holds, and record which
   // bank's book that balance sits on. A party banking at the central bank (the government) moves
   // the treasury account instead of a deposit.
-  const companyByTicker = new Map(ctx.updatedCompanies.map((c) => [c.ticker, c]));
-  const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
 
   netTouched.forEach((id) => {
     const party = partyOf(id);
@@ -609,6 +637,17 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     };
     const aggRegion = ctx.updatedRegions[bank.region];
     if (aggRegion) aggRegion.bankingSector = { ...aggRegion.bankingSector, cashReservesUSD: aggRegion.bankingSector.cashReservesUSD + deltaUSD };
+  });
+
+  // ---- 4a. §5-CLOSE C4b: OFFICIAL SETTLEMENT. Reserves that crossed a border were credited by
+  // the receiving central bank against a claim on the paying one, whose own liability to it is
+  // the same number with the other sign. Booked here, from the instructions, in the same pass
+  // that moved the reserves — so every central bank's book closes every week and the world's
+  // claims net to zero.
+  report.crossBorderByRegion.forEach((deltaUSD, region) => {
+    const cb = ctx.updatedRegions[region as keyof typeof ctx.updatedRegions]?.centralBankSheet;
+    if (!cb) { report.unresolvedUSD += deltaUSD; return; }
+    cb.foreignOfficialClaimsUSD = (cb.foreignOfficialClaimsUSD ?? 0) + deltaUSD;
   });
 
   // ---- 4b. SETL2b: a loan and the deposit it creates, in ONE statement. The borrower's balance

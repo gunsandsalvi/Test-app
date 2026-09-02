@@ -16,19 +16,26 @@ const banksOf = (s: GameState, r?: RegionId) =>
   s.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c) && (!r || c.region === r));
 const depositsOf = (bs: Sheet) => bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + (bs.institutionalDepositsUSD ?? 0) + (bs.smeDepositsUSD ?? 0) + (bs.clientMarginUSD ?? 0);
 
-/** M1 — the central bank's balance sheet closes EXACTLY: assets = reserves + treasury account + currency, no unbacked line. */
+/** M1 — the central bank's balance sheet closes EXACTLY: assets = reserves + treasury account + currency
+ *  + the households' money in transit to their banks (settled this week, on a bank's book next — the
+ *  payer's bank has already lost the reserves), no unbacked line. */
 function m1(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   REGION_IDS.forEach((r) => {
-    const cb = state.regions[r]?.centralBankSheet;
+    const reg = state.regions[r];
+    const cb = reg?.centralBankSheet;
     if (!cb) return;
     const reserves = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.cashReservesUSD);
+    const inTransit = (reg.householdState as unknown as { pendingBankSettlementUSD?: number }).pendingBankSettlementUSD ?? 0;
     const assets = centralBankAssetsUSD(cb);
-    const residual = reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD - assets;
+    const residual = reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD + inTransit - assets;
     if (Math.abs(residual) > Math.max(1e6, assets * 1e-4)) {
-      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(cb.treasuryAccountUSD)} + currency ${B(cb.currencyInCirculationUSD)} exceed the central bank's assets ${B(assets)} by ${B(residual)} — bank money nothing was bought against` });
+      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(cb.treasuryAccountUSD)} + currency ${B(cb.currencyInCirculationUSD)} + in transit ${B(inTransit)} exceed the central bank's assets ${B(assets)} (foreign claims ${B(cb.foreignOfficialClaimsUSD ?? 0)}) by ${B(residual)} — bank money nothing was bought against` });
     }
   });
+  // C4b: the official-settlement claims are bilateral, so the world's sum is zero or a leak.
+  const claims = sum(REGION_IDS, (r) => state.regions[r]?.centralBankSheet?.foreignOfficialClaimsUSD ?? 0);
+  if (Math.abs(claims) > 1e6) out.push({ family: 'M', check: 'M1 foreign official claims net to zero', week, usd: claims, message: `the central banks' claims on each other sum to ${B(claims)}, not zero — a cross-border leg with one side missing` });
   return out;
 }
 
@@ -107,7 +114,7 @@ function m4(state: GameState, week: number): AuditFinding[] {
   const negCorp = state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c) && c.cash < -1e6);
   if (negCorp.length) out.push({ family: 'M', check: 'M4 overdrawn firms', week, usd: sum(negCorp, (c) => c.cash), message: `${negCorp.length} firms overdrawn, ${B(sum(negCorp, (c) => c.cash))} in all (worst ${negCorp.sort((a, b) => a.cash - b.cash)[0].ticker} ${M(negCorp[0].cash)})` });
   const negInst = state.institutionalEntities.filter((e) => !e.isDefaulted && (e.cashUSD ?? 0) < -1e6);
-  if (negInst.length) out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => e.cashUSD ?? 0), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => e.cashUSD ?? 0))}` });
+  if (negInst.length) { const worst = [...negInst].sort((a, b) => (a.cashUSD ?? 0) - (b.cashUSD ?? 0))[0]; out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => e.cashUSD ?? 0), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => e.cashUSD ?? 0))} (worst ${worst.ticker ?? worst.id} ${worst.entityType} ${M(worst.cashUSD ?? 0)})` }); }
   const negBank = banksOf(state).filter((b) => b.bankBalanceSheet!.cashReservesUSD < -1e6);
   if (negBank.length) out.push({ family: 'M', check: 'M4 negative reserves', week, usd: sum(negBank, (b) => b.bankBalanceSheet!.cashReservesUSD), message: `${negBank.map((b) => b.ticker).join(' ')} hold negative reserves` });
   REGION_IDS.forEach((r) => {

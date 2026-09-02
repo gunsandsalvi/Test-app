@@ -77,6 +77,7 @@ export function recordTape(tape: Tape, state: GameState): void {
       put(`centralbank:${r}:treasury account`, cb.treasuryAccountUSD);
       put(`centralbank:${r}:sovereign book`, Object.values(cb.sovereignHoldingsByTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0));
       put(`centralbank:${r}:currency`, cb.currencyInCirculationUSD);
+      put(`centralbank:${r}:foreign claims`, cb.foreignOfficialClaimsUSD);
       put(`centralbank:${r}:reserves`, reg.bankingSector?.centralBankReservesUSD);
     }
     Object.entries(reg.categoryDemand).forEach(([su, d]) => {

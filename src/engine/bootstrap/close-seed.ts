@@ -19,7 +19,7 @@
 import { Company, InstitutionalEntity, Region, RegionId } from '../../types';
 import { BankingSector } from '../../domain/banking';
 import { bankTotalAssetsUSD } from '../macro/banking';
-import { centralBankFxReservesUSD } from '../../domain/central-bank';
+import { centralBankFxReservesUSD, centralBankAssetsUSD } from '../../domain/central-bank';
 import { govBucketKeyOf } from '../../domain/sovereign-id';
 import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { weeklyInterestExpenseUSD } from '../../domain/government';
@@ -103,6 +103,6 @@ export function closeSeedMoney(
       return { ...t, principalUSD: Math.round(out > 0 ? t.principalUSD * (held / out) : 0) };
     });
     reg.governmentInterestWeeklyUSD = Math.round(weeklyInterestExpenseUSD(reg.govDebtTranches));
-    reg.centralBankBalanceSheet = Math.round(sumByTenor(cb.sovereignHoldingsByTenor) + centralBankFxReservesUSD(cb));
+    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb));
   });
 }

@@ -26,6 +26,14 @@ export interface CentralBank {
   /** §5-CLOSE — Asset: the unsecured loans to banks drawn at the funding close (the lender of
    *  last resort). Equals the sum of the banks' `centralBankLoanUSD`. */
   loansToBanksUSD: number;
+  /** §5-CLOSE C4b — OFFICIAL SETTLEMENT. When a payer in this region pays a payee in another,
+   *  reserves leave this central bank's system and appear in the other's; the receiving central
+   *  bank has credited its bank and holds a CLAIM on the paying one, which has a foreign
+   *  official DEPOSIT. One signed line per book: positive = claims on other central banks (an
+   *  asset), negative = their deposits here (a liability, carried on the asset side with its
+   *  sign). Written by settlement from the instructions themselves; sums to zero across the
+   *  world by construction, which the audit asserts. */
+  foreignOfficialClaimsUSD: number;
   /** Liability: the government's account. Drains reserves when it fills. */
   treasuryAccountUSD: number;
   /** Liability: notes in circulation — the slow, non-operational part of the balance sheet. */
@@ -82,7 +90,8 @@ export function centralBankFxReservesUSD(cb: CentralBank): number {
  * peg ever breaks.
  */
 export function centralBankAssetsUSD(cb: CentralBank): number {
-  return centralBankSovereignBookUSD(cb) + centralBankFxReservesUSD(cb) + (cb.loansToBanksUSD ?? 0);
+  return centralBankSovereignBookUSD(cb) + centralBankFxReservesUSD(cb) + (cb.loansToBanksUSD ?? 0)
+    + (cb.foreignOfficialClaimsUSD ?? 0);
 }
 
 /**
