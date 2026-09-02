@@ -1,9 +1,10 @@
 # THE MASTER PLAN — one file, one project: a closed circuit
 
 **Read §1 before touching anything.** §2 is the map, §3 IS THE WORK (one ordered project; take the
-first unfinished step), §4 the gates, §5 the lessons, §6 the watchlist, **§8 the full audit record
-behind §3's steps**. §1–6 are the plan and stay brief; §8 is an appendix you read at the step that
-needs it. There is no second rules file and no second work list — §3 is the only list.
+first step), §4 the gates, §5 the lessons, §6 the watchlist, **§8 the full audit record behind
+§3's steps**, §9 the log of what is already done. §1–6 are the plan and stay brief; §8 is an
+appendix you read at the step that needs it. There is no second rules file and no second work
+list — §3 is the only list, and it holds only what is still open.
 
 **A note on `§7.N`.** ~400 code comments cite `§7.N` — those are the ORIGINAL numbered records, and
 they live in git at `79c239b:docs/MASTER_PLAN.md` along with the superseded plan. §5 keeps every
@@ -11,15 +12,17 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `5454934` on `claude/master-plan-review-j2z20v`, pushed to `main` too (rule 16). Tree clean.
-- **Next step: §3 step 1(b)**, then 2, 3, … in order. §3 is the only work list.
-- **The reference to judge a change against:** `COUPON_TRACE=1 SHOCKS=0 WEEKS=16` at `5454934` —
-  **99 violations in 24 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
+- HEAD `8edb476` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
+  earlier one; the session that owns it may push nowhere else.)
+- **Next step: §3 step 2**, then 3, 4, … in order. §3 is the only work list, and it holds only
+  what is still OPEN — a finished step leaves it and lands in §9.
+- **The reference to judge a change against:** `COUPON_TRACE=1 SHOCKS=0 WEEKS=16` at `8edb476` —
+  **95 violations in 24 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
-- **Recording a step:** the step's own §3 entry is its record — mark it DONE in place and put the
-  measured numbers there, so the work list and the history are one thing. A lesson that a FUTURE
-  step could trip over goes in §5 as well; nothing else does.
+- **Recording a step:** delete the step from §3 and write its record in §9 — what changed, why,
+  and the measured numbers, for a reader who was not here. A lesson that a FUTURE step could
+  trip over goes in §5 as well; nothing else does.
 - Gates at HEAD: `tsc` 0, ESLint 347/354, hygiene pass, 125 tests.
 
 **Where this list came from (2026-09-02): a line-by-line audit of ~230 files / ~55k lines**, which
@@ -173,27 +176,13 @@ holds PURE-FUNCTION tests over `domain/` only — no engine run; hygiene enforce
 **One list, in order.** A closed circuit means: every dollar and share has a named counterparty at
 every instant; every asset that has a price has a CLEARED one and shows it; nothing is bounded,
 plugged or invented; and the instrument that measures all this is itself true. Each step is ONE
-commit, gated by §4, and its own entry here is its record (mark it DONE in place with the measured
-numbers). **The full audit detail behind each step is in §8** — read the step's area before
-starting it (the index is at the head of §7). Later parts depend on earlier ones — do not reorder.
+commit, gated by §4. **The full audit detail behind each step is in §8** — read the step's area
+before starting it (the index is at the head of §8). A finished step is deleted from here and
+recorded in §9, so this list is always exactly what is left. Later parts depend on earlier ones —
+do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-1. **The interest that is never paid — (a) DONE, (b) OPEN.** `trancheWeekAccrual` makes CP due only
-   in its maturity week; the register's accrual loop skipped exactly that week; `payHoldersAccruedInterest`
-   has ONE call site, inside it. So **CP interest accrued to holders from issue and was never once
-   paid**, and every bond/loan whose term is a whole number of periods lost its final coupon.
-   (a) The skip is gone from both sides (`front-core.ts:561` the issuer's expense,
-   `stage08-back.ts:1144` the holders' accrual) and, because 07f retires matured CP *before* stage
-   08 runs, the coupon is marked due where the paper is redeemed (`07f:782`). **Measured**
-   (COUPON_TRACE=1, 16 weeks — a 13-week run CANNOT show this: CP is issued in-run at +13 weeks, so
-   the first maturity is w16): CP paid 0.000B for ever → **0.157B at w16**, owed 0.286B → 0.141B
-   instead of growing without bound; loans pay 7.807B at w13; money family clean, unowned 0.00B.
-   One week's accrual on maturing CP is missed on BOTH sides equally (the row is gone before stage
-   08) — symmetric, and it closes when step 13 makes CP a discount instrument like the bills beside it.
-   (b) OPEN: `shared-helpers.ts:753-880` splits interest over the institutional register only — the
-   dealer desks hold the same paper, accrue nothing, and their share is paid to the other holders.
-   The principal path got its desk pass at `:437`; interest and `pendingHolderCashUSD` never did.
 2. **The residual delivered twice.** `primary-settlement.ts:147-150` and `:155-159` move the
    identical spec to the identical lead desk; neither writes a register row (`holdings-ledger.ts:44`
    resolves only INSTITUTION), so both are pure wires off the clearing house. This is the named
@@ -483,7 +472,8 @@ bills never accreted and write-offs never landed. §7.259 a residual paid for in
 equity as a phantom fee. §7.263 `comp.cash` has ONE mover: settlement. §7.286 the issuer pays holders
 directly; bank issuers are excluded because their paper is the wholesale roll's. §7.248 a pledge must
 follow the paper ON THE BOOK, not last week's scalar. §7.362 a week's money settles inside the week —
-three cycles, because a day has more than one. §7.377/§7.384 a balance is an ACCOUNT, not a field.
+three cycles, because a day has more than one. §7.377/§7.384 a balance is an ACCOUNT, not a field. §9.1 a desk's RECEIPT is income and needs
+its P&L write; only the principal legs beside it are asset swaps that need none.
 §7.372/§7.373/§7.374 market cap, total debt, the loan books and total assets are READS.
 
 **Stores and performance.** §7.311/§7.313 the rows are the ladder's authority; the object arrays are
@@ -2291,3 +2281,33 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
   lots, tax carryforward asymmetry, SME lock-out, preferences median); none pins a SHAPE outcome
   except `learning.test.ts:8`, which pins the seeded firm to `LEGACY_PRODUCTIVITY_DRIFT_ANNUAL` —
   a calibration test of `seedCumulativeUnits`, declared as such.
+
+## 9. THE LOG — WHAT IS DONE
+
+A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**1. The interest that is never paid.** (a, `5454934`) `trancheWeekAccrual` made CP due only in
+its maturity week and the register's accrual loop skipped exactly that week, so **CP interest
+accrued to holders from issue and was never once paid**, and every bond/loan whose term is a
+whole number of periods lost its final coupon. The skip is gone from both sides
+(`front-core.ts:561` the issuer's expense, `stage08-back.ts:1144` the holders' accrual) and,
+because 07f retires matured CP before stage 08 runs, the coupon is marked due where the paper is
+redeemed (`07f:782`). Measured (COUPON_TRACE=1, 16 weeks — a 13-week run CANNOT show this: CP is
+issued in-run at +13 weeks, so the first maturity is w16): CP paid 0.000B for ever → **0.157B at
+w16**, owed 0.286B → 0.141B instead of growing without bound; loans pay 7.807B at w13. One week's
+accrual on maturing CP is missed on BOTH sides equally (the row is gone before stage 08) —
+symmetric, and it closes when step 13 makes CP a discount instrument like the bills beside it.
+(b, `8edb476`) `applyHolderInterestAccruals` split interest over the institutional register
+alone; the dealer desks hold the same paper and their share was paid to the other holders. The
+same hole ran through `pendingHolderCashUSD` — a call premium went entirely to the register and
+an equity dividend paid the desks' shares to households as part of the float. A desk's position
+is ISSUER-keyed where a register row names a tranche, so it now holds the issuer's stack in the
+register's own proportions (and all of it where the register holds none), accrues on the same
+nested ledger, and is paid at the same coupon date; a cash action's denominator is the register,
+the desks and, for equity, the float. **A desk's receipt is INCOME** — cash on the securities
+account, no paper out — so it goes through `bookPnL`; without that leg M5 lit up for six banks
+over ten weeks in the first gate run, which is what named the missing write. Measured
+(COUPON_TRACE=1 SHOCKS=0 WEEKS=16): **99 violations in 24 families → 95 in 24**, money clean,
+unowned 0.00B; at w16 the desks accrue 0.078B of the week's 0.597B corporate-bond interest,
+0.205B of 0.902B on loans, 0.015B of 0.023B on CP, and are owed 1.579B / 0.564B / 0.102B.
+COUPON_TRACE now carries the desks' slice of accrued/paid/owed per type.
