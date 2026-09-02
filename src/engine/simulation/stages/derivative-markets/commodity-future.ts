@@ -15,6 +15,7 @@
  * money before the settlement pass.
  */
 
+import { bankReservesOf } from '../../../ledger/accounts';
 import { hedgeFundStrategyProfile } from '../../../../domain/institution-profiles';
 import { riskAversionOf } from '../../../../domain/preferences';
 import { Company } from '../../../../types';
@@ -118,7 +119,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         banks.forEach((bank) => {
           const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
           const capacityUSD = deskNotionalCapacityUSD(
-            leverageHeadroomUSD(sheet), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'COMMODITY_FUTURE');
+            leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'COMMODITY_FUTURE');
           const units = capacityUSD / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
           if (units > 0.0001) {
             sellers.push({ party: { kind: 'BANK', ticker: bank.ticker }, units });

@@ -66,7 +66,7 @@ export interface BankingSector {
   // no loan book of its own: a region's book is `regionLoanBooksUSD` over its named banks.
   depositsUSD: number;
   sovereignBondHoldingsUSD: number;
-  cashReservesUSD: number;
+  // §5-WIRES A3.6c: a bank's reserves are its account (`bankReservesOf`) — no field carries them.
   bankEquityUSD: number;
   bankCapitalRatio: number;
   netInterestMarginPct: number;

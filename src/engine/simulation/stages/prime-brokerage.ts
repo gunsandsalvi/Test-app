@@ -1,4 +1,4 @@
-import { entityCashOf } from '../../ledger/accounts';
+import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
 /**
  * HF1 — the prime brokerage session: a fund's leverage becomes a named bank's loan.
  *
@@ -129,7 +129,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
 
       // What the fund's OWN capital supports at that haircut, and what the broker can carry.
       const fundEquityUSD = Math.max(0, institutionTotalAssetsUSD(ctx, fund) - drawnUSD);
-      const brokerRoomUSD = Math.max(0, leverageHeadroomUSD(sheet)) + lentByBroker(priorBook, brokerTicker);
+      const brokerRoomUSD = Math.max(0, leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, brokerTicker))) + lentByBroker(priorBook, brokerTicker);
       const lineUSD = Math.min(maxDrawnUSD(fundEquityUSD, haircutRate), brokerRoomUSD);
 
       // The price: what the broker's own money costs it, plus the return it needs on the capital

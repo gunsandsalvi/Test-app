@@ -18,6 +18,7 @@
  * any counterparty that died.
  */
 
+import { bankReservesOf } from '../../../ledger/accounts';
 import { RegionId, Company } from '../../../../types';
 import { ensureV2 } from '../../../../engine2/world';
 import { institutionProfile } from '../../../../domain/institution-profiles';
@@ -118,7 +119,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       const capacityUSD = deskNotionalCapacityUSD(
-        leverageHeadroomUSD(sheet), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'CDS');
+        leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'CDS');
       if (!(capacityUSD > 0)) return;
       referenceIssuers.forEach((c) => {
         const annualPd = pdByIssuerId.get(c.id)!;

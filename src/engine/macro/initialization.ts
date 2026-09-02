@@ -476,7 +476,6 @@ function buildRegion(regionId: RegionId): Region {
   const bankingSector = {
     depositsUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.depositsToGdp)),
     sovereignBondHoldingsUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp)),
-    cashReservesUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.cashReservesToGdp)),
     bankEquityUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.bankEquityToGdp)),
     bankCapitalRatio: BANK_CAPITAL_RATIO,
     netInterestMarginPct,
@@ -501,6 +500,9 @@ function buildRegion(regionId: RegionId): Region {
     wholesaleFundingUSD: 0,
     corporateDepositsUSD: 0,
   };
+  // §5-WIRES A3.6c: the seed's stated reserves ride the opening-cash stash (the same channel a
+  // firm's opening cash rides) until close-seed opens each bank's account; no sheet carries them.
+  stashOpeningCash(bankingSector, Math.round(estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.cashReservesToGdp));
 
   const institutionalSector = {
     corpBondHoldingsUSD: 0,

@@ -1,4 +1,4 @@
-import { householdDepositsOf } from '../../ledger/accounts';
+import { householdDepositsOf, bankReservesOf } from '../../ledger/accounts';
 /**
  * Stage 2: Region Macro Evolution
  *
@@ -82,6 +82,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         occupationDemand: regionOccDemand,
         avgListedDividendYieldAnnual: regionAvgDividendYield,
         householdDepositsUSD: householdDepositsOf(ctx.v2, regionId),
+        bankReservesUSD: ctx.updatedCompanies.reduce((a, c) => a + (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? bankReservesOf(ctx.v2, c.ticker) : 0), 0),
       },
       ctx.nextWeek,
       equityRet,

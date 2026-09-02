@@ -5,6 +5,7 @@
  * Settlement moves it by design (the payments' legs land there); anything else that moves it is a
  * writer the ledger does not know about. Mirrors bank-identity-trace.ts; mutates nothing.
  */
+import { bankReservesOf } from '../ledger/accounts';
 import { GameState, RegionId } from '../../types';
 import { WeeklyStepContext } from './stages/context';
 import { REGION_IDS } from '../../domain/geography';
@@ -33,7 +34,7 @@ export class CentralBankIdentityTrace {
       ctx.updatedCompanies.forEach((c) => {
         if (!c.isBankEntity || c.region !== r || c.isDefaulted || c.mergerAcquired) return;
         const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[c.ticker]?.bankBalanceSheet) || c.bankBalanceSheet;
-        if (sheet) reserves += sheet.cashReservesUSD;
+        if (sheet) reserves += bankReservesOf(ctx.v2, c.ticker);
       });
       out.set(r, reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD - centralBankAssetsUSD(cb));
       parts.set(r, { reserves, tga: cb.treasuryAccountUSD, assets: centralBankAssetsUSD(cb) });

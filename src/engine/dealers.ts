@@ -43,7 +43,11 @@ const DEALER_COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#
 const ALL_ASSET_CLASSES = Object.keys(DESK_BOOK_BY_ASSET_TYPE) as AssetType[];
 
 /** The region's named banks, as the desks a player can deal with. Derived every week. */
-export function dealersFromBanks(banks: Company[]): Dealer[] {
+export function dealersFromBanks(
+  /** A3.6c: a bank's reserves — its account in the week (`bankReservesOf`), its opening stash at the seed. */
+  reservesOf: (bank: Company) => number,
+  banks: Company[]
+): Dealer[] {
   return banks
     .filter((b) => b.isBankEntity && b.bankBalanceSheet)
     .map((bank, i) => {
@@ -51,7 +55,7 @@ export function dealersFromBanks(banks: Company[]): Dealer[] {
       const grossUSD = dealerDeskGrossUSD(sheet.dealerDeskInventory);
       const capacityUSD = dealerDeskCapacityUSD({
         balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
-        leverageHeadroomUSD: leverageHeadroomUSD(sheet),
+        leverageHeadroomUSD: leverageHeadroomUSD(sheet, reservesOf(bank)),
         inventory: sheet.dealerDeskInventory,
         book: '',
       });

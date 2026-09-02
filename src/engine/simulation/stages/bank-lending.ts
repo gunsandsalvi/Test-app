@@ -173,7 +173,7 @@ export function migrateSmeDebtAtSeed(
     // until HH3 seeds the real pools and re-derives this again.
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     sheet.depositsUSD = Math.round((
-      businessLoanBookOf(sheet) + seedConsumerLoanBookUSD(reg, bank) + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
+      businessLoanBookOf(sheet) + seedConsumerLoanBookUSD(reg, bank) + sovUSD + openingCashOf(sheet) - sheet.bankEquityUSD
     ));
   });
 
@@ -364,7 +364,6 @@ export function runBankWeeklyLending(
       // payment (a borrower that died, a book a merger moved) is a WRITE-OFF — the asset is
       // gone and equity absorbs it; a loan that appeared with no payment behind it is a claim
       // minted from nothing, and that is a defect at whichever stage pushed the row.
-      cashReservesUSD: sheet.cashReservesUSD,
     },
     loanInterestWeeklyUSD,
     loanLossWeeklyUSD,
@@ -519,9 +518,9 @@ export function migrateHouseholdDebtAtSeed(
     sheet.bankEquityUSD = Math.round((sheet.bankEquityUSD + Math.max(0, newHouseholdRwaUSD - replacedRwaUSD) * priorRatio));
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     const fundingNeedUSD = Math.round((
-      loanBooksOf(sheet) + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
+      loanBooksOf(sheet) + sovUSD + openingCashOf(sheet) - sheet.bankEquityUSD
     ));
-    applyBankFundingSplit(sheet, Math.round(openingCashOf(hs) * share)); // the seed's provisional sizing (close-seed strikes the line)
+    applyBankFundingSplit(sheet, openingCashOf(sheet), Math.round(openingCashOf(hs) * share)); // the seed's provisional sizing (close-seed strikes the line)
     sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet))).toFixed(4));
   });
 
@@ -933,9 +932,9 @@ export function runBankHouseholdLending(
  * payment instruction (BANK_SECURITIES → the unmodeled wholesale lender), so the reserves move
  * where money moves and the boundary meter sees the flow under its own reason.
  */
-export function repayCentralBankLoanUSD(sheet: BankingSector): number {
+export function repayCentralBankLoanUSD(sheet: BankingSector, cashUSD: number): number {
   const bufferUSD = stressedOutflowUSD(sheet) * LIQUIDITY_COVERAGE_RATIO;
-  const excessCashUSD = Math.max(0, sheet.cashReservesUSD - bufferUSD);
+  const excessCashUSD = Math.max(0, cashUSD - bufferUSD);
   const repayUSD = Math.min(Math.max(0, sheet.centralBankLoanUSD ?? 0), excessCashUSD);
   if (repayUSD < 1e6) return 0;
   sheet.centralBankLoanUSD = (sheet.centralBankLoanUSD ?? 0) - repayUSD;
@@ -986,6 +985,8 @@ export function facilityMarginBpsFor(
 
 export function applyBankFundingSplit(
   sheet: BankingSector,
+  /** The bank's reserves (its account; at the seed, the stash close-seed opens it from). */
+  cashUSD: number,
   householdDepositsUSD: number,
   /** CASH: reserves this bank has already been billed for or promised but that have not settled
    *  yet. The sheet's repo and facility LIABILITIES are struck post-maturity the moment the
@@ -1008,7 +1009,7 @@ export function applyBankFundingSplit(
   // this split is not responsible for. Whatever is left is what deposits and wholesale money
   // have to cover.
   const fundingNeedUSD = Math.round((
-    bankTotalAssetsUSD(sheet) + pendingCashUSD - sheet.bankEquityUSD
+    bankTotalAssetsUSD(sheet, cashUSD) + pendingCashUSD - sheet.bankEquityUSD
       - (sheet.repoBorrowedUSD ?? 0) - (sheet.srfBorrowingUSD ?? 0)
   ));
   // §5-CLOSE: household money funds what the real corporate, institutional and segment

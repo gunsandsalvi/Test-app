@@ -14,6 +14,7 @@
  * reserve account at or above its buffer and the central bank counts real balances.
  */
 
+import { bankReservesOf } from '../../ledger/accounts';
 import { GameState } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { raiseCentralBankLoanUSD } from './bank-lending';
@@ -32,7 +33,8 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
     ctx.updatedCompanies.forEach((bank) => {
       if (!bank.isBankEntity || !bank.bankBalanceSheet || !isActiveCompany(bank)) return;
       const sheet = bank.bankBalanceSheet;
-      const raisedUSD = raiseCentralBankLoanUSD(sheet, sheet.cashReservesUSD, bankCashBufferRatioOf(bank));
+      const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
+      const raisedUSD = raiseCentralBankLoanUSD(sheet, reservesUSD, bankCashBufferRatioOf(bank));
       if (raisedUSD <= 0) return;
       raisedAny = true;
       // §5-CLOSE: the lender of last resort. The central bank pays with reserves it creates and
@@ -46,7 +48,7 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
         reason: 'central bank loan drawn',
       });
       if (process.env.FUNDING_TRACE === '1') {
-        console.log(`  [funding-close] w${ctx.nextWeek} r${round} ${bank.region}:${bank.ticker} raised ${(raisedUSD / 1e6).toFixed(0)}M (cash was ${(sheet.cashReservesUSD / 1e6).toFixed(0)}M)`);
+        console.log(`  [funding-close] w${ctx.nextWeek} r${round} ${bank.region}:${bank.ticker} raised ${(raisedUSD / 1e6).toFixed(0)}M (cash was ${(reservesUSD / 1e6).toFixed(0)}M)`);
       }
     });
     if (!raisedAny) return;

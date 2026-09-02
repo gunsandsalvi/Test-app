@@ -43,6 +43,7 @@
  * stage 8, 11, and 12 (all of which read yieldCurveParams/zeroRates as already-real values).
  */
 
+import { bankReservesOf } from '../../ledger/accounts';
 import { govBucketId, govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS, sovBucketKey } from './shared-helpers';
@@ -440,12 +441,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // SETL6: reserves plus what this week's already-agreed securities trades will settle —
       // the books clear before the settlement pass, so a commitment lives in the unsettled
       // position until then and a bank cannot fund two books with the same reserves.
-      const settledCashUSD = sheet.cashReservesUSD
+      const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
+      const settledCashUSD = reservesUSD
         + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
       const fundableUSD = Math.min(
         Math.max(0, settledCashUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
           + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
-        leverageHeadroomUSD(sheet)
+        leverageHeadroomUSD(sheet, reservesUSD)
       );
       // REPO2: collateral already pledged cannot simultaneously be sold, and the pledge names
       // the paper. The floor is now the face of THIS bucket that is actually encumbered — a
@@ -456,8 +458,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // bonds-versus-reserves choice that anchors the front end, now expressed as a price rather
       // than as a scaling factor on a quantity target.
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      const appetiteUSD = sovereignBookCapacityUSD(sheet);
-      const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet);
+      const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD);
+      const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD);
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);
         const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;

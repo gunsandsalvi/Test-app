@@ -641,7 +641,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // holder of the stock the central bank and the institutions do not take; where the
       // cohort's headroom cannot absorb that residual it is rationed pro-rata, never forced.
       const headroomByBank = new Map(regionBanksForSov.map(b =>
-        [b.ticker, leverageHeadroomUSD(b.bankBalanceSheet!)]));
+        [b.ticker, leverageHeadroomUSD(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!))]));
       const totalHeadroomUSD = Array.from(headroomByBank.values()).reduce((a, v) => a + v, 0);
       const takenByOthersUSD = (reg.institutionalSector.sovBondHoldingsUSD || 0)
         + totalSovBucketedUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
@@ -676,7 +676,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // stand in the funding side here exactly as the stored scalars did.
         bs.depositsUSD = Math.round((
           seedLoanBookShareUSD(reg, bank, 'business') + seedLoanBookShareUSD(reg, bank, 'consumer') + bs.sovereignBondHoldingsUSD +
-          bs.cashReservesUSD - bs.bankEquityUSD
+          openingCashOf(bs) - bs.bankEquityUSD
         ));
       });
 
@@ -695,7 +695,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         sovereignBondHoldingsByTenor: aggByTenor,
         sovereignBondHoldingsUSD: sumBank(bs => bs.sovereignBondHoldingsUSD),
         depositsUSD: sumBank(bs => bs.depositsUSD),
-        cashReservesUSD: sumBank(bs => bs.cashReservesUSD),
         bankEquityUSD: sumBank(bs => bs.bankEquityUSD),
       };
       // OWN6/OWN7: whatever the central bank and the capital-constrained banks left is the
@@ -783,11 +782,11 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // balance is a real liability now, so the bank holds the real asset behind it. The money
         // its customers deposited is central-bank money, exactly as a week-1 deposit inflow would
         // be. Without this the sheet opens short by the whole corporate line.
-        b.bankBalanceSheet!.cashReservesUSD += corpUSD + smeUSD;
+        stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + corpUSD + smeUSD);
         // Now that the corporate leg is known, the funding identity is re-derived: wholesale is
         // the residual AFTER real deposits, not a plug carrying money the companies already
         // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
-        applyBankFundingSplit(b.bankBalanceSheet!, Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
+        applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
       });
       reg.bankingSector = {
         ...reg.bankingSector,
@@ -1305,8 +1304,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     regionBanks.forEach(b => {
       const instUSD = Math.round(byBank.get(b.ticker) ?? 0);
       b.bankBalanceSheet!.institutionalDepositsUSD = instUSD;
-      b.bankBalanceSheet!.cashReservesUSD += instUSD;
-      applyBankFundingSplit(b.bankBalanceSheet!, Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+      stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + instUSD);
+      applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
     reg.bankingSector = {
       ...reg.bankingSector,
@@ -1326,7 +1325,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   });
 
   // G3b: the dealers the player trades with ARE the named banks' desks.
-  const dealers = dealersFromBanks(companies);
+  const dealers = dealersFromBanks((b) => openingCashOf(b.bankBalanceSheet!), companies);
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);
   const recentIPOs: { ticker: string; name: string; category: string; week: number }[] = [];
   const recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[] = [];
@@ -1594,15 +1593,14 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const instUSD = Math.round(lateInstitutionalByBank.get(b.ticker) ?? 0);
       sheet.corporateDepositsUSD += corpUSD;
       sheet.institutionalDepositsUSD = (sheet.institutionalDepositsUSD ?? 0) + instUSD;
-      sheet.cashReservesUSD += corpUSD + instUSD;
-      applyBankFundingSplit(sheet, Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+      stashOpeningCash(sheet, openingCashOf(sheet) + corpUSD + instUSD);
+      applyBankFundingSplit(sheet, openingCashOf(sheet), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
     reg.bankingSector = {
       ...reg.bankingSector,
       corporateDepositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0),
       institutionalDepositsUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0),
       depositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
-      cashReservesUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0),
     };
   });
 

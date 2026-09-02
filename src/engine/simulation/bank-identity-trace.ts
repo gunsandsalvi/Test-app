@@ -24,7 +24,7 @@ import { GameState } from '../../types';
 import { BankingSector } from '../../domain/banking';
 import { partyOf } from '../ledger/party';
 import { reasonText } from './stages/settlement';
-import { entityCashOf } from '../ledger/accounts';
+import { entityCashOf, bankReservesOf } from '../ledger/accounts';
 
 const TOLERANCE_USD = 5e6; // the harness's own threshold
 const NOISE_FLOOR_USD = 1e5; // per-stage deltas below this are rounding, not a leg
@@ -42,7 +42,7 @@ const FIELD_SIGNS: Record<string, 1 | -1> = {
   primeBrokerageLoansUSD: -1,
 };
 
-export function fieldsOf(bs: BankingSector): Record<string, number> {
+export function fieldsOf(bs: BankingSector, cashUSD: number): Record<string, number> {
   return {
     depositsUSD: bs.depositsUSD, corporateDepositsUSD: bs.corporateDepositsUSD ?? 0,
     institutionalDepositsUSD: bs.institutionalDepositsUSD ?? 0,
@@ -52,7 +52,7 @@ export function fieldsOf(bs: BankingSector): Record<string, number> {
     businessLoanBookUSD: businessLoanBookOf(bs), consumerLoanBookUSD: consumerLoanBookOf(bs),
     sovHoldingsUSD: Object.values(bs.sovereignBondHoldingsByTenor || {})
       .reduce((a: number, v) => a + (Number(v) || 0), 0),
-    cashReservesUSD: bs.cashReservesUSD, repoLentUSD: bs.repoLentUSD ?? 0,
+    cashReservesUSD: cashUSD, repoLentUSD: bs.repoLentUSD ?? 0,
     onRrpLendingUSD: bs.onRrpLendingUSD ?? 0,
     sovereignAccruedCouponUSD: bs.sovereignAccruedCouponUSD ?? 0,
     deskInventoryAbsUSD: Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryUSD: number }[]>)
@@ -61,14 +61,14 @@ export function fieldsOf(bs: BankingSector): Record<string, number> {
   };
 }
 
-export function residualOf(bs: BankingSector, signedDesk = false): number {
+export function residualOf(bs: BankingSector, cashUSD: number, signedDesk = false): number {
   const sovUSD = Object.values(bs.sovereignBondHoldingsByTenor || {})
     .reduce((a: number, v) => a + (Number(v) || 0), 0);
   return (
     bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + (bs.institutionalDepositsUSD ?? 0)
     + (bs.clientMarginUSD ?? 0) + (bs.smeDepositsUSD ?? 0) + (bs.centralBankLoanUSD ?? 0)
     + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + (bs.repoBorrowedUSD ?? 0)
-    - businessLoanBookOf(bs) - consumerLoanBookOf(bs) - sovUSD - bs.cashReservesUSD
+    - businessLoanBookOf(bs) - consumerLoanBookOf(bs) - sovUSD - cashUSD
     - (bs.repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0)
     - (bs.sovereignAccruedCouponUSD ?? 0)
     // The harness counts a desk row at Math.abs — a SHORT counted as an asset. trade.ts books
@@ -113,8 +113,8 @@ export class BankIdentityTrace {
       const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[c.ticker]?.bankBalanceSheet)
         || c.bankBalanceSheet;
       if (!sheet) return;
-      out.set(c.ticker, residualOf(sheet));
-      this.signedLast.set(c.ticker, residualOf(sheet, true));
+      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.ticker)));
+      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.ticker), true));
     });
     return out;
   }
@@ -126,7 +126,7 @@ export class BankIdentityTrace {
     const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[this.focusTicker]?.bankBalanceSheet)
       || c?.bankBalanceSheet;
     if (!sheet) return;
-    const now = fieldsOf(sheet);
+    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, this.focusTicker));
     if (this.focusFields) {
       const parts: string[] = [];
       let residualDelta = 0;

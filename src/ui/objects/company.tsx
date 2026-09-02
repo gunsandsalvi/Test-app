@@ -11,7 +11,7 @@ import { materializeLadder } from '../../engine2/tranches';
 import { isActiveCompany } from '../../domain/company';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, ringed, taped } from './common';
 import { marketCapOf, totalDebtOf } from '../../domain/company';
-import { cashOf } from '../../engine/ledger/accounts';
+import { cashOf, bankReservesOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 
 const RATING_CODES = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC', 'D'];
@@ -152,7 +152,7 @@ export const company = defineObject<Company>({
             <KV k="deposits" hint="all classes" v={money(sheet.depositsUSD + (sheet.corporateDepositsUSD ?? 0) + (sheet.institutionalDepositsUSD ?? 0) + (sheet.smeDepositsUSD ?? 0))} />
             <KV k="loans" hint="business · household" v={`${money(businessLoanBookOf(sheet))} · ${money(consumerLoanBookOf(sheet))}`} />
             <KV k="sovereign book" v={money(sheet.sovereignBondHoldingsUSD)} />
-            <KV k="reserves at the central bank" v={money(sheet.cashReservesUSD)} />
+            <KV k="reserves at the central bank" v={money(bankReservesOf(ensureV2(world.state), c.ticker))} />
             <KV k="central bank loan" hint="lender of last resort" v={money(sheet.centralBankLoanUSD ?? 0)} />
             <KV k="at the window" v={money(sheet.srfBorrowingUSD)} />
             <KV k="market share" hint="of the region's deposits" v={pctLevel(c.bankMarketShare)} />

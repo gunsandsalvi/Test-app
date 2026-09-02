@@ -41,7 +41,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
 import { SRF_SPREAD_BPS } from '../../macro/banking';
-import { cashOf, entityCashOf, poolCashOf, adjustSectorRow, adjustBankReserves } from '../../ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, adjustSectorRow, adjustBankReserves, bankReservesOf } from '../../ledger/accounts';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
@@ -49,7 +49,6 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   return {
     depositsUSD: bs.depositsUSD * share,
     sovereignBondHoldingsUSD: bs.sovereignBondHoldingsUSD * share,
-    cashReservesUSD: bs.cashReservesUSD * share,
     bankEquityUSD: bs.bankEquityUSD * share,
     bankCapitalRatio: bs.bankCapitalRatio,
     netInterestMarginPct: bs.netInterestMarginPct,
@@ -299,9 +298,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         return a + (pl.principalUSD * rate) / 52;
       }, 0);
 
+      const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
       const sheet = evolveBankingSector(
         prevSheet,
         { businessLoanUSD: businessLoanBookOf(prevSheet), consumerLoanUSD: consumerLoanBookOf(prevSheet) },
+        reservesUSD,
         reg.estimatedHouseholdIncomeUSD * share,
         reg.householdState.savingsRate,
         reg.policyRate,
@@ -440,8 +441,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // loans it wrote and retired, the amortization and interest it took, the deposit interest
       // it paid — is the household sector's row at this bank moving by the same amount.
       adjustSectorRow(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, bank.ticker, withDeposits.depositsUSD - prevSheet.depositsUSD);
-      // A3.6a: what the evolution did to the reserves line (its rounding) is the bank's row moving.
-      adjustBankReserves(ctx.v2, bank.ticker, withDeposits.cashReservesUSD - prevSheet.cashReservesUSD);
+      // A3.6a/c: the evolution used to return the reserves rounded to the dollar; the rounding is
+      // the bank's account moving by the fraction (a stated artifact kept for the run's identity).
+      adjustBankReserves(ctx.v2, bank.ticker, Math.round(reservesUSD) - reservesUSD);
       return { bank, sheet: withDeposits };
     });
 
@@ -496,7 +498,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // leaves here, bank-lending owns the write; the cash leaves at settlement, extinguishing
       // the reserves it created), and its interest is a payment to the named creditor.
       const cbSheet = reg.centralBankSheet;
-      const repaidUSD = repayCentralBankLoanUSD(sheet);
+      const repaidUSD = repayCentralBankLoanUSD(sheet, bankReservesOf(ctx.v2, bank.ticker));
       if (repaidUSD > 0) {
         if (cbSheet) cbSheet.loansToBanksUSD = Math.max(0, (cbSheet.loansToBanksUSD ?? 0) - repaidUSD);
         pay(ctx, {
@@ -557,10 +559,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const deskView = (book: string) =>
       Array.from(regionalDeskView(newSheets.map(({ sheet }) => sheet.dealerDeskInventory), book).entries())
         .filter(([, usd]) => Math.abs(usd) > 1);
-    const totalAssets = sumField((s) => loanBooksOf(s) + s.sovereignBondHoldingsUSD + s.cashReservesUSD);
+    const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet) + sheet.sovereignBondHoldingsUSD + bankReservesOf(ctx.v2, bank.ticker);
+    const totalAssets = newSheets.reduce((s, e) => s + assetsOf(e), 0);
     const weightedAvg = (f: (s: BankingSector) => number) =>
       totalAssets > 0
-        ? newSheets.reduce((s, { sheet }) => s + f(sheet) * (loanBooksOf(sheet) + sheet.sovereignBondHoldingsUSD + sheet.cashReservesUSD), 0) / totalAssets
+        ? newSheets.reduce((s, e) => s + f(e.sheet) * assetsOf(e), 0) / totalAssets
         : (newSheets.reduce((s, { sheet }) => s + f(sheet), 0) / Math.max(1, newSheets.length));
 
     // §7.241: `satisfies` over Required<BankingSector> makes this rebuild EXHAUSTIVE — the old
@@ -571,7 +574,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     reg.bankingSector = {
       depositsUSD: sumField((s) => s.depositsUSD),
       sovereignBondHoldingsUSD: sumField((s) => s.sovereignBondHoldingsUSD),
-      cashReservesUSD: sumField((s) => s.cashReservesUSD),
       bankEquityUSD: sumField((s) => s.bankEquityUSD),
       bankCapitalRatio: Number(weightedAvg((s) => s.bankCapitalRatio).toFixed(4)),
       netInterestMarginPct: Number(weightedAvg((s) => s.netInterestMarginPct).toFixed(4)),

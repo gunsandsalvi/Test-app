@@ -7,6 +7,7 @@
  * auction already knows how to price, and writing the fills back onto the bank that carried them.
  */
 
+import { bankReservesOf } from '../../ledger/accounts';
 import { bankCashBufferRatioOf } from '../../macro/banking';
 import { Company, RegionId } from '../../../types';
 import {
@@ -73,7 +74,7 @@ export function buildDealerDeskParticipants(args: {
     const prior = priorPositions(sheet.dealerDeskInventory, book);
     const capacityUSD = dealerDeskCapacityUSD({
       balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomUSD: leverageHeadroomUSD(sheet),
+      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
@@ -84,7 +85,7 @@ export function buildDealerDeskParticipants(args: {
     // A desk pays for inventory with the bank's own reserves, above the buffer it must keep —
     // the same real constraint the bank's investment book faces in 07c, and the reason a desk
     // with capital ratio to spare can still be unable to bid.
-    const settledCashUSD = sheet.cashReservesUSD
+    const settledCashUSD = bankReservesOf(ctx.v2, bank.ticker)
       + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
     const fundableUSD = Math.max(0, settledCashUSD - sheet.depositsUSD * bankCashBufferRatioOf(bank));
 
@@ -284,7 +285,7 @@ export function totalDeskCapacityUSD(ctx: WeeklyStepContext, banks: Company[], b
     if (!sheet) return;
     capacityUSD += dealerDeskCapacityUSD({
       balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomUSD: leverageHeadroomUSD(sheet),
+      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
@@ -307,7 +308,7 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
     if (!sheet) return;
     freeUSD.set(bank.ticker, dealerDeskCapacityUSD({
       balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomUSD: leverageHeadroomUSD(sheet),
+      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
     }));

@@ -39,10 +39,10 @@ export function isBankUnderPca(sheet: BankingSector): boolean {
 }
 
 /** Every asset on the sheet, cash included — the one asset side the identity counts. */
-export function bankSheetAssetsUSD(sheet: BankingSector): number {
+export function bankSheetAssetsUSD(sheet: BankingSector, cashUSD: number): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
-  return loanBooksOf(sheet) + sovUSD + sheet.cashReservesUSD
+  return loanBooksOf(sheet) + sovUSD + cashUSD
     + (sheet.repoLentUSD ?? 0) + (sheet.onRrpLendingUSD ?? 0)
     + (sheet.sovereignAccruedCouponUSD ?? 0)
     + dealerDeskGrossUSD(sheet.dealerDeskInventory)
@@ -86,12 +86,12 @@ export interface BankResolutionPlan {
  * behind as a claim), the wholesale lenders are written down next, and the treasury pays the rest.
  */
 export function planBankResolution(
-  sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number,
+  sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number, cashUSD: number,
 ): BankResolutionPlan {
   const wholesaleUSD = Math.max(0, sheet.centralBankLoanUSD ?? 0);
   const ladderStaysUSD = Math.min(wholesaleUSD, Math.max(0, ownLadderPrincipalUSD));
   const transferableUSD = wholesaleUSD - ladderStaysUSD;
-  const netBookUSD = bankSheetAssetsUSD(sheet) - bankAssumedLiabilitiesUSD(sheet) - transferableUSD;
+  const netBookUSD = bankSheetAssetsUSD(sheet, cashUSD) - bankAssumedLiabilitiesUSD(sheet) - transferableUSD;
   const capitalUSD = Math.max(0, acquirerCapitalUSD);
   const estateUSD = Math.max(0, netBookUSD - capitalUSD);
   const shortfallUSD = Math.max(0, capitalUSD - netBookUSD);
@@ -164,9 +164,9 @@ export function mergeDesks(mine: DealerDeskInventory | undefined, theirs: Dealer
 }
 
 /** The statistics a sheet reports, re-read after its lines moved (readings, never drivers). */
-export function restateBankSheetStatistics(sheet: BankingSector): void {
+export function restateBankSheetStatistics(sheet: BankingSector, cashUSD: number): void {
   const rwaUSD = bankRwaUSD(sheet);
   sheet.bankCapitalRatio = Number((rwaUSD > 0 ? sheet.bankEquityUSD / rwaUSD : 0.13).toFixed(4));
-  sheet.centralBankReservesUSD = Math.max(0, sheet.cashReservesUSD);
+  sheet.centralBankReservesUSD = Math.max(0, cashUSD);
   sheet.moneySupplyM2USD = sheet.depositsUSD + (sheet.corporateDepositsUSD ?? 0);
 }

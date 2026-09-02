@@ -184,7 +184,7 @@ export function moveSectorRowsToBank(v2: V2World, fromTicker: string, toTicker: 
 // `adjustSectorRow` set; the mirror reports a line that moved without its row. The field's
 // readers flip to `bankReservesOf` and the field dies in A3.6's next slice. ----
 
-/** A bank's reserves: its account. */
+/** A bank's reserves: its account (A3.6c — the sheet carries no line; this is the one read). */
 export function bankReservesOf(v2: V2World, bankTicker: string): number {
   return balanceOf(v2, { kind: 'BANK', ticker: bankTicker });
 }
@@ -304,13 +304,8 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
   banks.forEach((b) => {
     const bi = bankIndex(s, b.ticker);
     if (s.reserveRowOfBank.length <= bi) { const a = new Int32Array(bi + 16).fill(-1); a.set(s.reserveRowOfBank); s.reserveRowOfBank = a; }
-    // A3.6a: the pass row opens at the persistent row; a line that moved without it is reported.
-    const lineUSD = b.bankBalanceSheet!.cashReservesUSD;
-    const rowUSD = ctx.v2.accounts.balanceUSD[reserveRowOf(ctx.v2, b.ticker, lineUSD)];
-    if (Math.abs(lineUSD - rowUSD) > Math.max(1, Math.abs(lineUSD) * 1e-9)) {
-      console.log(`  [accounts] w${ctx.nextWeek} ${b.region}:${b.ticker} reserves line ${(lineUSD / 1e6).toFixed(3)}M moved without its row ${(rowUSD / 1e6).toFixed(3)}M`);
-    }
-    const row = openRow(s, partyId({ kind: 'BANK', ticker: b.ticker }), AT_CENTRAL_BANK, 'RESERVES', rowUSD);
+    // A3.6a/c: the pass row opens at the persistent row — the bank's reserves ARE that row.
+    const row = openRow(s, partyId({ kind: 'BANK', ticker: b.ticker }), AT_CENTRAL_BANK, 'RESERVES', ctx.v2.accounts.balanceUSD[reserveRowOf(ctx.v2, b.ticker, 0)]);
     s.reserveRowOfBank[bi] = row;
     // The bank's COMPANY party (its goods-market self) settles on its own reserves.
     s.rowsOfParty.set(partyId({ kind: 'COMPANY', ticker: b.ticker }), [row]);
@@ -451,13 +446,11 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
       const bi = s.bankIdxOfTicker.get(c.ticker); if (bi === undefined) return;
       const rr = s.reserveRowOfBank[bi];
       const t = lines.get(bi) ?? blankLines();
-      const reserveDeltaUSD = s.balanceUSD[rr] - s.openingUSD[rr];
       const sheet = c.bankBalanceSheet;
-      // A3.6a: the pass's result is the persistent row, and the line is the row.
+      // A3.6a/c: the pass's result is the persistent row; the sheet carries no reserves line.
       ctx.v2.accounts.balanceUSD[reserveRowOf(ctx.v2, c.ticker, 0)] = s.balanceUSD[rr];
       c.bankBalanceSheet = {
         ...sheet,
-        cashReservesUSD: s.balanceUSD[rr],
         // A3.4: the household line IS the household sector's row at this bank (landed above).
         depositsUSD: householdDepositsAt(ctx.v2, c.ticker),
         corporateDepositsUSD: t.CORPORATE,
@@ -465,8 +458,6 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
         // A3.3: the SME line IS the pool rows at this bank (written back below, before this runs).
         smeDepositsUSD: smeDepositsAt(ctx.v2, c.ticker),
       };
-      const agg = ctx.updatedRegions[c.region];
-      if (agg && reserveDeltaUSD !== 0) agg.bankingSector = { ...agg.bankingSector, cashReservesUSD: agg.bankingSector.cashReservesUSD + reserveDeltaUSD };
       return;
     }
     // A3.1: the pass's result is the persistent balance.
@@ -499,13 +490,7 @@ export function compareToBooks(ctx: WeeklyStepContext, s: AccountStore): Account
   const out: AccountMismatch[] = [];
   const tol = (x: number) => Math.max(1, Math.abs(x) * 1e-9);
   const check = (what: string, bookUSD: number, storeUSD: number) => { if (Math.abs(bookUSD - storeUSD) > tol(bookUSD)) out.push({ what, bookUSD, storeUSD }); };
-  ctx.updatedCompanies.forEach((c) => {
-    if (c.isBankEntity && c.bankBalanceSheet) {
-      const bi = s.bankIdxOfTicker.get(c.ticker); if (bi === undefined) return;
-      check(`${c.region}:${c.ticker} reserves`, c.bankBalanceSheet.cashReservesUSD, s.balanceUSD[s.reserveRowOfBank[bi]]);
-    }
-    // A3.1: a company's balance IS the store's (there is no field to disagree with it).
-  });
+  // A3.1/A3.6: a company's balance and a bank's reserves ARE the store's (no field to disagree).
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region]; if (!reg) return;
     const cb = reg.centralBankSheet;

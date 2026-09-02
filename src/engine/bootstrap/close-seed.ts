@@ -1,4 +1,4 @@
-import { sectorRowAt, openingCashOf, openAccount } from '../ledger/accounts';
+import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount } from '../ledger/accounts';
 import { V2World } from '../../engine2/world';
 /**
  * CLOSE C2 — THE SEED CLOSES (§5-CLOSE). Run once, after every book has been seeded and before
@@ -48,18 +48,18 @@ export function closeSeedMoney(
       const s: BankingSector = b.bankBalanceSheet!;
       const otherDepositsUSD = Math.max(0, s.corporateDepositsUSD ?? 0) + Math.max(0, s.institutionalDepositsUSD ?? 0)
         + Math.max(0, s.smeDepositsUSD ?? 0) + Math.max(0, s.clientMarginUSD ?? 0) + Math.max(0, s.centralBankLoanUSD ?? 0);
-      const needUSD = bankTotalAssetsUSD(s) - s.bankEquityUSD - (s.repoBorrowedUSD ?? 0) - (s.srfBorrowingUSD ?? 0) - otherDepositsUSD;
+      const needUSD = bankTotalAssetsUSD(s, openingCashOf(s)) - s.bankEquityUSD - (s.repoBorrowedUSD ?? 0) - (s.srfBorrowingUSD ?? 0) - otherDepositsUSD;
       if (needUSD >= 0) {
         s.depositsUSD = Math.round(needUSD);
       } else {
         // Over-funded: the depositors' money is real, so the bank holds it as reserves.
         s.depositsUSD = 0;
-        s.cashReservesUSD = Math.round(s.cashReservesUSD - needUSD);
+        stashOpeningCash(s, Math.round(openingCashOf(s) - needUSD));
       }
       householdDepositsUSD += s.depositsUSD;
       v2.accounts.balanceUSD[sectorRowAt(v2, { kind: 'HOUSEHOLD', region: regionId }, b.ticker)] = s.depositsUSD;
       // A3.6a: the bank's own account opens at the reserves the close strikes.
-      openAccount(v2, { kind: 'BANK', ticker: b.ticker }, s.cashReservesUSD);
+      openAccount(v2, { kind: 'BANK', ticker: b.ticker }, openingCashOf(s));
     });
     const hs = reg.householdState;
     // The seed's provisional sizing of the sector's deposits (macro/initialization.ts) is what
@@ -69,11 +69,10 @@ export function closeSeedMoney(
     reg.bankingSector = {
       ...reg.bankingSector,
       depositsUSD: Math.round(banks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0)),
-      cashReservesUSD: Math.round(banks.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0)),
     };
 
     // ---- 2. The central bank's book backs reserves and the treasury's account exactly. ----
-    const reservesUSD = banks.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0);
+    const reservesUSD = banks.reduce((a, b) => a + openingCashOf(b.bankBalanceSheet!), 0);
     cb.currencyInCirculationUSD = 0;
     const targetBookUSD = Math.max(0, reservesUSD + cb.treasuryAccountUSD - centralBankFxReservesUSD(cb));
     const currentBookUSD = sumByTenor(cb.sovereignHoldingsByTenor);

@@ -657,10 +657,9 @@ export function generateInitialCompanies(
           const bs = seedReg?.bankingSector;
           const share = tmpl.bankMarketShare ?? 0.25;
           if (!bs) return undefined;
-          return {
+          const sheet = {
             depositsUSD: bs.depositsUSD * share,
             sovereignBondHoldingsUSD: bs.sovereignBondHoldingsUSD * share,
-            cashReservesUSD: bs.cashReservesUSD * share,
             bankEquityUSD: bs.bankEquityUSD * share,
             bankCapitalRatio: bs.bankCapitalRatio,
             netInterestMarginPct: bs.netInterestMarginPct,
@@ -682,6 +681,9 @@ export function generateInitialCompanies(
             householdLoans: [],
             corporateDepositsUSD: 0,
           };
+          // A3.6c: this bank's share of the seed's stated reserves, stashed until close-seed opens its account.
+          stashOpeningCash(sheet, openingCashOf(bs) * share);
+          return sheet;
         })() : undefined,
         // Persistent idiosyncratic risk: smaller/higher-rank banks run a real, generated risk
         // premium (concentrated commercial exposure is a genuine real-world pattern for

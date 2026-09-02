@@ -111,6 +111,8 @@ export function evolveRegionMacro(
     /** §5-WIRES A3.4: the household sector's deposits — its rows at the region's banks, read off
      *  the ledger by the caller (this module never sees the world). */
     householdDepositsUSD: number;
+    /** §5-WIRES A3.6c: the region's bank reserves — its named banks' accounts, summed by the caller. */
+    bankReservesUSD: number;
   },
   week: number,
   equityReturn: number = 0,
@@ -792,6 +794,7 @@ export function evolveRegionMacro(
     region.bankingSector,
     // §5-WIRES D: the region's loan books are its named banks' rows, summed here.
     regionLoanBooksUSD(allCompanies.filter((c) => c.region === region.id && c.isBankEntity && !!c.bankBalanceSheet)),
+    microFeedback.bankReservesUSD,
     newEstimatedHouseholdIncomeUSD,
     newSavingsRate,
     region.policyRate,

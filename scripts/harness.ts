@@ -18,7 +18,7 @@
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
-import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, resetAccount, adjustBankReserves } from '../src/engine/ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, resetAccount, adjustBankReserves, bankReservesOf } from '../src/engine/ledger/accounts';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -567,7 +567,7 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     if (!cb) return;
     const reserves = state.companies
       .filter((c) => c.region === region && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
-      .reduce((a, c) => a + c.bankBalanceSheet!.cashReservesUSD, 0);
+      .reduce((a, c) => a + bankReservesOf(ensureV2(state), c.ticker), 0);
     // XB5: the asset side is the sovereign book PLUS the FX reserves. Leaving the reserves out
     // here while the engine counts them made the identity fail by exactly their size — 231 of
     // 273 violations at the XB close, and a harness bug rather than an engine one.
@@ -967,9 +967,8 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
   // funding for their bond bids) and every USA institution's real cash (their budgets).
   shocked.companies.forEach(c => {
     if (c.region === 'USA' && c.bankBalanceSheet) {
-      const beforeUSD = c.bankBalanceSheet.cashReservesUSD;
-      c.bankBalanceSheet.cashReservesUSD *= 0.01;
-      adjustBankReserves(ensureV2(shocked), c.ticker, c.bankBalanceSheet.cashReservesUSD - beforeUSD); // A3.6a: the drain moves the row
+      const beforeUSD = bankReservesOf(ensureV2(shocked), c.ticker);
+      adjustBankReserves(ensureV2(shocked), c.ticker, beforeUSD * 0.01 - beforeUSD); // the drain: the account keeps 1%
       // WS6 taught the check the same lesson S6 did, one field later: with a repo market, a
       // bank with drained CASH still bids — it funds the purchase secured against its
       // collateral, which is exactly why real sovereign auctions rarely fail. "Buyers with no
@@ -1983,11 +1982,11 @@ const fpModule: HarnessModule = {
       writeFileSync(process.env.REGISTER_DUMP, lines.sort().join('\n'));
     }
     if (process.env.STATE_DUMP && w === (Number(process.env.STATE_DUMP_WEEK) || 1)) {
-      // §5-WIRES A3.1: a firm's cash is its account, not a field — the dump carries it as a column
-      // read off the ledger so the differ still sees every balance.
+      // §5-WIRES A3.1/A3.6: a firm's cash and a bank's reserves are accounts, not fields — the
+      // dump carries them as columns read off the ledger so the differ still sees every balance.
       const dumpV2 = ensureV2(state);
       writeFileSync(process.env.STATE_DUMP,
-        JSON.stringify(state.companies.map((c) => ({ ...c, cash: cashOf(dumpV2, c) })),
+        JSON.stringify(state.companies.map((c) => ({ ...c, cash: cashOf(dumpV2, c), ...(c.bankBalanceSheet ? { reserves: bankReservesOf(dumpV2, c.ticker) } : {}) })),
           (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Number(v.toPrecision(15)) : v)));
     }
     if (!FP || w > FP_WEEKS) return;
@@ -2177,7 +2176,7 @@ const spiralModule: HarnessModule = {
               + ` eq ${(bs.bankEquityUSD / 1e9).toFixed(2)}B rwa ${(rwa / 1e9).toFixed(2)}B`
               + ` ratio ${(rwa > 0 ? bs.bankEquityUSD / rwa : 0).toFixed(4)}`
               + ` | biz ${(businessLoanBookOf(bs) / 1e9).toFixed(2)}B hh ${(consumerLoanBookOf(bs) / 1e9).toFixed(2)}B`
-              + ` cash ${(bs.cashReservesUSD / 1e9).toFixed(2)}B cbloan ${((bs.centralBankLoanUSD ?? 0) / 1e9).toFixed(2)}B`
+              + ` cash ${(bankReservesOf(ensureV2(state), c.ticker) / 1e9).toFixed(2)}B cbloan ${((bs.centralBankLoanUSD ?? 0) / 1e9).toFixed(2)}B`
               + ` desk ${(deskUSD / 1e9).toFixed(2)}B`
               + ` oas ${(c.oasSpreadBps ?? 0).toFixed(0)}bps rating ${c.creditRating}`);
           });
@@ -2424,6 +2423,7 @@ function runHarness() {
     state.companies.forEach((c: any) => {
       if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted || c.mergerAcquired) return;
       const bs = c.bankBalanceSheet;
+      const reservesUSD = bankReservesOf(ensureV2(state), c.ticker);
       const sovUSD = Object.values((bs.sovereignBondHoldingsByTenor || {}) as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
       const residualUSD: number =
         // SETL2: `corporateDepositsUSD` IS a liability now. Company payments settle through bank
@@ -2431,7 +2431,7 @@ function runHarness() {
         // would leave the ASSET unmatched — the mirror of the error this comment used to record.
         // HH4d: wholesale funding is a real liability line split out of the deposit label.
         bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + ((bs as any).institutionalDepositsUSD ?? 0) + ((bs as any).clientMarginUSD ?? 0) + ((bs as any).smeDepositsUSD ?? 0) + ((bs as any).centralBankLoanUSD ?? 0) + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
-        - bs.businessLoanBookUSD - bs.consumerLoanBookUSD - sovUSD - bs.cashReservesUSD
+        - bs.businessLoanBookUSD - bs.consumerLoanBookUSD - sovUSD - reservesUSD
         - ((bs as any).repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0)
         // CAL: a sovereign coupon earned and not yet paid is this bank's asset against the
         // treasury, and the treasury carries the same balance as its payable.
@@ -2454,7 +2454,7 @@ function runHarness() {
           + ` cbloan ${gb(bsx.centralBankLoanUSD)}B eq ${gb(bs.bankEquityUSD)}B`
           + ` srf ${gb(bs.srfBorrowingUSD)}B repoB ${gb(bsx.repoBorrowedUSD)}B`
           + ` || bizL ${gb(bs.businessLoanBookUSD)}B consL ${gb(bs.consumerLoanBookUSD)}B`
-          + ` sov ${gb(sovUSD)}B cash ${gb(bs.cashReservesUSD)}B`
+          + ` sov ${gb(sovUSD)}B cash ${gb(reservesUSD)}B`
           + ` repoL ${gb(bsx.repoLentUSD)}B rrp ${gb(bs.onRrpLendingUSD)}B`);
       }
       if (Math.abs(residualUSD) > 5e6) {
@@ -2466,10 +2466,10 @@ function runHarness() {
       // §7.340: a bank's reserve account cannot close the week negative — nothing in the model
       // lends a bank an unsecured overdraft at the central bank. It went unwatched while three
       // banks ran −0.4 to −1.1B (§6.1); the wholesale raise is what funds the shortfall now.
-      if (bs.cashReservesUSD < -1e6) {
+      if (reservesUSD < -1e6) {
         violations.push({
           week: w,
-          message: `Bank ${c.ticker} overdrawn at the central bank by ${(-bs.cashReservesUSD / 1e6).toFixed(1)}M — a shortfall nothing funded`
+          message: `Bank ${c.ticker} overdrawn at the central bank by ${(-reservesUSD / 1e6).toFixed(1)}M — a shortfall nothing funded`
         });
       }
     });

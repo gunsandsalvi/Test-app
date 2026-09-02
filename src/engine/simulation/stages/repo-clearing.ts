@@ -39,6 +39,7 @@
  * counterparty and closes that boundary).
  */
 
+import { bankReservesOf } from '../../ledger/accounts';
 import { RegionId, Region, InstitutionalEntity } from '../../../types';
 import { overPledgedByBucket } from '../../../domain/collateral';
 import { BankingSector } from '../../../domain/banking';
@@ -293,7 +294,7 @@ export function runRegionalRepoSession(
     // CASH: reserves plus what this week's already-posted legs will settle — the maturity it has
     // just been billed for is real money leaving, and a bank that cannot see it cannot know it is
     // short. The same read 07c makes before it bids.
-    const settledCashUSD = sheet.cashReservesUSD
+    const settledCashUSD = bankReservesOf(ctx.v2, bank.ticker)
       + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
     const shortfallUSD = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO - settledCashUSD;
     if (shortfallUSD <= 0) return;
@@ -371,7 +372,7 @@ export function runRegionalRepoSession(
   banks.forEach((bank) => {
     const sheet = sheetByTicker.get(bank.ticker);
     if (!sheet) return;
-    const surplusUSD = sheet.cashReservesUSD
+    const surplusUSD = bankReservesOf(ctx.v2, bank.ticker)
       + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker })
       - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO;
     if (surplusUSD > 0) bankSurplusUSD.set(bank.ticker, surplusUSD);

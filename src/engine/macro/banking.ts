@@ -87,13 +87,13 @@ export function bankCashBufferRatioOf(bank: { management?: import('../../domain/
 export const BASEL_MIN_LEVERAGE_RATIO = 0.03;
 
 /** Unweighted total assets — the leverage ratio's denominator. */
-export function bankTotalAssetsUSD(sheet: BankingSector): number {
+export function bankTotalAssetsUSD(sheet: BankingSector, cashUSD: number): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
   // G3a: the desks' inventory is an asset the bank OWNS and finances, and a cash security
   // consumes the leverage ratio one-for-one. Before the desks had owners it consumed nothing,
   // which is precisely what let a book with no capital behind it absorb any imbalance.
   return loanBooksOf(sheet) + sovUSD
-    + Math.max(0, sheet.cashReservesUSD) + (sheet.repoLentUSD ?? 0)
+    + Math.max(0, cashUSD) + (sheet.repoLentUSD ?? 0)
     // CAL: a coupon earned and not yet paid is an asset the bank holds against the treasury.
     + (sheet.sovereignAccruedCouponUSD ?? 0)
     + dealerDeskGrossUSD(sheet.dealerDeskInventory)
@@ -102,8 +102,8 @@ export function bankTotalAssetsUSD(sheet: BankingSector): number {
 }
 
 /** How much balance sheet the bank's equity still supports under the leverage floor. */
-export function leverageHeadroomUSD(sheet: BankingSector): number {
-  return Math.max(0, sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsUSD(sheet));
+export function leverageHeadroomUSD(sheet: BankingSector, cashUSD: number): number {
+  return Math.max(0, sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsUSD(sheet, cashUSD));
 }
 
 /**
@@ -140,9 +140,9 @@ export function stressedOutflowUSD(sheet: BankingSector): number {
  * which is the reserves-versus-bonds substitution S2 found to be load-bearing (§7.10), now
  * acting on the size of the book rather than on a scaling factor.
  */
-export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector): number {
+export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector, cashUSD: number): number {
   const requiredHqlaUSD = stressedOutflowUSD(sheet) * LIQUIDITY_COVERAGE_RATIO;
-  return Math.max(0, requiredHqlaUSD - Math.max(0, sheet.cashReservesUSD));
+  return Math.max(0, requiredHqlaUSD - Math.max(0, cashUSD));
 }
 
 /**
@@ -167,10 +167,10 @@ export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector): number {
  * securities book is bounded by what it can FINANCE, and a funding market is what makes that
  * bound real rather than notional.
  */
-export function sovereignBookCapacityUSD(sheet: BankingSector): number {
+export function sovereignBookCapacityUSD(sheet: BankingSector, cashUSD: number): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
-  return Math.max(0, sovUSD) + leverageHeadroomUSD(sheet);
+  return Math.max(0, sovUSD) + leverageHeadroomUSD(sheet, cashUSD);
 }
 
 const TENOR_BUCKET_YEARS: Record<string, number> = {
@@ -218,6 +218,9 @@ export function evolveBankingSector(
   /** §5-WIRES D: the region's loan books, read off its named banks' rows by the caller — the
    *  aggregate this evolves carries no rows and no stored copy of their sum. */
   loanBooks: { businessLoanUSD: number; consumerLoanUSD: number },
+  /** §5-WIRES A3.6c: the bank's reserves, its account read by the caller (a region's: the sum
+   *  of its named banks' accounts) — the sheet carries no line. */
+  cashUSD: number,
   estimatedHouseholdIncomeUSD: number,
   savingsRate: number,
   policyRate: number,
@@ -282,7 +285,6 @@ export function evolveBankingSector(
   traceLabel?: string
 ): BankingSector {
   // ---- The ledger. Every mutation below is a named flow posting to both of its sides. ----
-  const cashUSD = prevBanking.cashReservesUSD;
   let equityUSD = prevBanking.bankEquityUSD;
   let depositsUSD = prevBanking.depositsUSD;
   // G2/HH3: both credit books are ITEMIZED on the named banks and only the lending passes move
@@ -398,7 +400,7 @@ export function evolveBankingSector(
     : 0;
   const stressedUSD = stressedOutflowUSD(prevBanking) * LIQUIDITY_COVERAGE_RATIO;
   const liquidityShortfallShare = stressedUSD > 0
-    ? Math.max(0, Math.min(1, (stressedUSD - Math.max(0, prevBanking.cashReservesUSD)) / stressedUSD))
+    ? Math.max(0, Math.min(1, (stressedUSD - Math.max(0, cashUSD)) / stressedUSD))
     : 0;
   const contestedShare = Math.max(0, Math.min(1, Math.max(fundingPressure, liquidityShortfallShare)));
   const depositRate = alternativeCostAnnual * contestedShare;
@@ -481,12 +483,12 @@ export function evolveBankingSector(
     : 0.025;
   if (traceLabel && process.env.NIM_TRACE === '1') {
     console.log(`  [nim] ${traceLabel} NIM ${(netInterestMarginPct * 100).toFixed(2)}%`
-      + ` | income/wk: reserves ${((Math.max(0, prevBanking.cashReservesUSD) * policyRate) / 52 / 1e6).toFixed(1)}M`
+      + ` | income/wk: reserves ${((Math.max(0, cashUSD) * policyRate) / 52 / 1e6).toFixed(1)}M`
       + ` loans ${(itemizedLoanInterestWeeklyUSD / 1e6).toFixed(1)}M hh ${(householdLoanInterestWeeklyUSD / 1e6).toFixed(1)}M`
       + ` coupons ${(sovereignCouponWeeklyUSD / 1e6).toFixed(1)}M settled ${(settlementPaidInterestWeeklyUSD / 1e6).toFixed(1)}M`
       + ` | cost/wk: deposits ${(weeklyDepositInterestUSD / 1e6).toFixed(1)}M@${(depositRate * 100).toFixed(2)}%`
       + ` wholesale ${(wholesaleInterestUSD / 1e6).toFixed(1)}M corpDep ${(corporateDepositInterestUSD / 1e6).toFixed(1)}M`
-      + ` | stocks: cash ${(prevBanking.cashReservesUSD / 1e9).toFixed(2)}B bizLoans ${(businessLoanUSD / 1e9).toFixed(2)}B`
+      + ` | stocks: cash ${(cashUSD / 1e9).toFixed(2)}B bizLoans ${(businessLoanUSD / 1e9).toFixed(2)}B`
       + ` hhLoans ${(consumerLoanUSD / 1e9).toFixed(2)}B hhDep ${(depositsUSD / 1e9).toFixed(2)}B`
       + ` corpDep ${(corporateDepositsUSD / 1e9).toFixed(2)}B wholesale ${(wholesaleUSD / 1e9).toFixed(2)}B`
       + ` | policy ${(policyRate * 100).toFixed(2)}%`);
@@ -518,7 +520,6 @@ export function evolveBankingSector(
     dividendWeeklyUSD: Math.round(dividendWeeklyUSD),
     depositsUSD: Math.round(depositsUSD),
     sovereignBondHoldingsUSD: Math.round(sovereignUSD),
-    cashReservesUSD: Math.round(cashUSD),
     bankEquityUSD: Math.round(equityUSD),
     bankCapitalRatio: Number(newBankCapitalRatio.toFixed(4)),
     netInterestMarginPct: Number(netInterestMarginPct.toFixed(4)),

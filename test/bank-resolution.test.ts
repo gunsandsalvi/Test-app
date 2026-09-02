@@ -17,7 +17,7 @@ import {
 const loan = (principalUSD: number) => ({ id: `l${principalUSD}`, borrowerId: 'b', borrowerKind: 'COMPANY_FACILITY' as const, principalUSD, marginBps: 0, originationWeek: 0, termWeeks: 52, status: 'PERFORMING' as const });
 const sheet = (over: Partial<BankingSector> = {}): BankingSector => ({
   depositsUSD: 80, sovereignBondHoldingsUSD: 20,
-  cashReservesUSD: 10, bankEquityUSD: 5, bankCapitalRatio: 0.05, netInterestMarginPct: 0.02,
+  bankEquityUSD: 5, bankCapitalRatio: 0.05, netInterestMarginPct: 0.02,
   loanLossProvisionRateAnnualPct: 0.01, creditConditionsIndex: 0, centralBankReservesUSD: 10,
   moneySupplyM2USD: 80, itemizedHoldings: [], srfBorrowingUSD: 0, onRrpLendingUSD: 0,
   corpBondDealerInventory: [], sovereignBondHoldingsByTenor: { t10: 20 }, sovBondDealerInventory: [],
@@ -26,8 +26,10 @@ const sheet = (over: Partial<BankingSector> = {}): BankingSector => ({
   ...over,
 });
 
-const identityResidual = (s: BankingSector) =>
-  bankAssumedLiabilitiesUSD(s) + (s.centralBankLoanUSD ?? 0) + s.bankEquityUSD - bankSheetAssetsUSD(s);
+// A3.6c: a bank's reserves are its account, not a line — every sheet here banks 10 unless said.
+const CASH = 10;
+const identityResidual = (s: BankingSector, cashUSD = CASH) =>
+  bankAssumedLiabilitiesUSD(s) + (s.centralBankLoanUSD ?? 0) + s.bankEquityUSD - bankSheetAssetsUSD(s, cashUSD);
 
 test('PCA: closed below the ratio, open above it, closed at negative capital with no RWA', () => {
   assert.equal(isBankUnderPca(sheet({ bankEquityUSD: 100 * PCA_CAPITAL_RATIO - 1 })), true);
@@ -38,7 +40,7 @@ test('PCA: closed below the ratio, open above it, closed at negative capital wit
 test('positive net: the acquirer is capitalised first, the receivership gets what is left', () => {
   const s = sheet(); // assets 130, assumed 95, wholesale 30, equity 5 — identity holds
   assert.equal(identityResidual(s), 0);
-  const plan = planBankResolution(s, 12, 4);
+  const plan = planBankResolution(s, 12, 4, CASH);
   assert.equal(plan.ladderStaysUSD, 12);
   assert.equal(plan.wholesaleAssumedUSD, 18);
   assert.equal(plan.wholesaleHaircutUSD, 0);
@@ -49,24 +51,24 @@ test('positive net: the acquirer is capitalised first, the receivership gets wha
 });
 
 test('a shortfall: the central bank is never haircut (§5-CLOSE) — the treasury guarantees the whole of it', () => {
-  const small = planBankResolution(sheet({ bankEquityUSD: -8, centralBankLoanUSD: 43 }), 0, 0);
+  const small = planBankResolution(sheet({ bankEquityUSD: -8, centralBankLoanUSD: 43 }), 0, 0, CASH);
   assert.equal(small.wholesaleHaircutUSD, 0);
   assert.equal(small.wholesaleAssumedUSD, 43);
   assert.equal(small.guaranteeUSD, 8);
   assert.equal(small.estateUSD, 0);
-  const capital = planBankResolution(sheet(), 0, 20); // net 5, capital 20 → shortfall 15, guaranteed
+  const capital = planBankResolution(sheet(), 0, 20, CASH); // net 5, capital 20 → shortfall 15, guaranteed
   assert.equal(capital.wholesaleHaircutUSD, 0);
   assert.equal(capital.wholesaleAssumedUSD, 30);
   assert.equal(capital.estateUSD, 0);
   assert.equal(capital.guaranteeUSD, 15);
-  const beyond = planBankResolution(sheet({ bankEquityUSD: -50, centralBankLoanUSD: 30, depositsUSD: 135 }), 0, 5);
+  const beyond = planBankResolution(sheet({ bankEquityUSD: -50, centralBankLoanUSD: 30, depositsUSD: 135 }), 0, 5, CASH);
   assert.equal(beyond.wholesaleHaircutUSD, 0);
   assert.equal(beyond.wholesaleAssumedUSD, 30);
   assert.equal(beyond.guaranteeUSD, 55);
 });
 
 test('the ladder never exceeds the central bank loan line it lives inside', () => {
-  const plan = planBankResolution(sheet({ centralBankLoanUSD: 10 }), 25, 0);
+  const plan = planBankResolution(sheet({ centralBankLoanUSD: 10 }), 25, 0, CASH);
   assert.equal(plan.ladderStaysUSD, 10);
   assert.equal(plan.wholesaleAssumedUSD, 0);
 });
@@ -85,19 +87,20 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
     depositsUSD: 90, bankEquityUSD: 6, dealerDeskInventory: { 'corporate bond': [{ instrumentId: 'x', inventoryUSD: 1 }] },
   });
   assert.equal(identityResidual(A), 0);
-  const plan = planBankResolution(F, 0, 3);
-  const cash = F.cashReservesUSD;
+  let fCash = CASH, aCash = CASH; // the two accounts, moved here as the pass would
+  const plan = planBankResolution(F, 0, 3, fCash);
+  const cash = fCash;
   absorbBankSheet(A, F, plan.wholesaleAssumedUSD);
   A.bankEquityUSD += plan.netBookUSD + plan.wholesaleHaircutUSD - cash;
   F.bankEquityUSD = cash; F.centralBankLoanUSD = 0;
   // The cash leg is a payment (reserves and equity on both sides); replay it here.
-  A.cashReservesUSD += cash; A.bankEquityUSD += cash; F.cashReservesUSD -= cash; F.bankEquityUSD -= cash;
-  assert.ok(Math.abs(identityResidual(A)) < 1e-9, `acquirer residual ${identityResidual(A)}`);
+  aCash += cash; A.bankEquityUSD += cash; fCash -= cash; F.bankEquityUSD -= cash;
+  assert.ok(Math.abs(identityResidual(A, aCash)) < 1e-9, `acquirer residual ${identityResidual(A, aCash)}`);
   // The guarantee and the receivership payment are flows on the acquirer's own account.
-  A.cashReservesUSD += plan.guaranteeUSD - plan.estateUSD; A.bankEquityUSD += plan.guaranteeUSD - plan.estateUSD;
-  assert.ok(Math.abs(identityResidual(A)) < 1e-9);
+  aCash += plan.guaranteeUSD - plan.estateUSD; A.bankEquityUSD += plan.guaranteeUSD - plan.estateUSD;
+  assert.ok(Math.abs(identityResidual(A, aCash)) < 1e-9);
   assert.ok(Math.abs(A.bankEquityUSD - (6 + plan.acquirerCapitalUSD)) < 1e-9, 'the acquirer gains exactly the capital the book needs');
-  assert.equal(bankSheetAssetsUSD(F), 0);
+  assert.equal(bankSheetAssetsUSD(F, fCash), 0);
   assert.equal(bankAssumedLiabilitiesUSD(F) + F.bankEquityUSD, 0);
   const mortgage = A.householdLoans.find((p) => p.kind === 'MORTGAGE')!;
   assert.equal(mortgage.vintages!.length, 2);

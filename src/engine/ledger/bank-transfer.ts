@@ -65,7 +65,7 @@ export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, 
 /** A merger: everything moves, cash and equity included, at the sheet level. */
 export function mergeBankSheets(acquirer: BankingSector, target: BankingSector): void {
   absorbBankSheet(acquirer, target, target.centralBankLoanUSD ?? 0);
-  acquirer.cashReservesUSD += target.cashReservesUSD; target.cashReservesUSD = 0;
+  // A3.6c: the reserves move on the accounts (`moveBankReserves`, at the caller).
   acquirer.bankEquityUSD += target.bankEquityUSD; target.bankEquityUSD = 0;
 }
 
@@ -77,8 +77,7 @@ export function mergeBankSheets(acquirer: BankingSector, target: BankingSector):
  * cash arrives on the acquirer as a flow that credits equity too, so the direct equity part is
  * the net plus the haircut, LESS the cash.
  */
-export function assumeBankBooks(acquirer: BankingSector, target: BankingSector, plan: BankResolutionPlan): void {
-  const cashUSD = target.cashReservesUSD;
+export function assumeBankBooks(acquirer: BankingSector, target: BankingSector, plan: BankResolutionPlan, cashUSD: number): void {
   absorbBankSheet(acquirer, target, plan.wholesaleAssumedUSD);
   acquirer.bankEquityUSD += plan.netBookUSD + plan.wholesaleHaircutUSD - cashUSD;
   target.bankEquityUSD = cashUSD;

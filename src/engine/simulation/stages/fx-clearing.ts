@@ -1,4 +1,4 @@
-import { entityCashOf } from '../../ledger/accounts';
+import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
 /**
  * WS9/XB2d/XB6 — the week's FX market: every participant's demand, one cleared rate per PAIR.
  *
@@ -127,7 +127,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const sheet = c.bankBalanceSheet;
     if (!sheet) return;
     // DRV: the desk's remaining derivative budget is ONE number across every class it writes.
-    const capUSD = deskNotionalCapacityUSD(leverageHeadroomUSD(sheet), deskStandingPfeChargeUSD(ctx, state, c.ticker), 'FX_FORWARD');
+    const capUSD = deskNotionalCapacityUSD(leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, c.ticker)), deskStandingPfeChargeUSD(ctx, state, c.ticker), 'FX_FORWARD');
     if (capUSD > 0) deskCapacityByTicker.set(c.ticker, capUSD);
     arbitrageCapacityUSD += capUSD;
   });

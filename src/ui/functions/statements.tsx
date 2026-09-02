@@ -16,7 +16,7 @@ import { formatDate, quarterLabel } from '../calendar';
 import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
 import { bankRwaUSD } from '../../domain/bank-pricing';
 import { totalDebtOf } from '../../domain/company';
-import { cashOf, householdDepositsOf } from '../../engine/ledger/accounts';
+import { cashOf, householdDepositsOf, bankReservesOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { entityCashOf } from '../../engine/ledger/accounts';
 
@@ -58,14 +58,15 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     const sov = Object.values(bank.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     const deposits = bank.depositsUSD + (bank.corporateDepositsUSD ?? 0) + (bank.institutionalDepositsUSD ?? 0) + (bank.smeDepositsUSD ?? 0);
     const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);
-    const assets = loanBooksOf(bank) + sov + bank.cashReservesUSD + (bank.repoLentUSD ?? 0) + (bank.sovereignAccruedCouponUSD ?? 0) + desks + (bank.primeBrokerageLoansUSD ?? 0);
+    const reservesUSD = bankReservesOf(ensureV2(world.state), c.ticker);
+    const assets = loanBooksOf(bank) + sov + reservesUSD + (bank.repoLentUSD ?? 0) + (bank.sovereignAccruedCouponUSD ?? 0) + desks + (bank.primeBrokerageLoansUSD ?? 0);
     const liabilities = deposits + (bank.clientMarginUSD ?? 0) + (bank.centralBankLoanUSD ?? 0) + (bank.repoBorrowedUSD ?? 0) + (bank.srfBorrowingUSD ?? 0);
     body = (<>
       <Statement units="USD millions · the live sheet" asOf={formatDate(world.state.currentWeek)} lines={[
         { label: 'Business loans', usd: businessLoanBookOf(bank) },
         { label: 'Household loans', usd: consumerLoanBookOf(bank) },
         { label: 'Sovereign bonds', usd: sov },
-        { label: 'Reserves at the central bank', usd: bank.cashReservesUSD },
+        { label: 'Reserves at the central bank', usd: reservesUSD },
         { label: 'Repo lent', usd: bank.repoLentUSD ?? 0 },
         { label: 'Desk inventory, gross', usd: desks },
         { label: 'Prime brokerage loans', usd: bank.primeBrokerageLoansUSD ?? 0 },
@@ -241,7 +242,7 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
       { label: 'Business loans', usd: books.businessLoanUSD },
       { label: 'Household loans', usd: books.consumerLoanUSD },
       { label: 'Sovereign bonds', usd: sov },
-      { label: 'Reserves', usd: bs?.cashReservesUSD },
+      { label: 'Reserves', usd: world.state.companies.reduce((a, c) => a + (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? bankReservesOf(ensureV2(world.state), c.ticker) : 0), 0) },
       { label: 'Household deposits', usd: bs?.depositsUSD, total: true },
       { label: 'Corporate deposits', usd: bs?.corporateDepositsUSD },
       { label: 'Institutional deposits', usd: bs?.institutionalDepositsUSD },

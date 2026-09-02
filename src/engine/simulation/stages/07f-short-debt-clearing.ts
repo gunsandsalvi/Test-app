@@ -58,7 +58,7 @@ import {
   cpCreditPolicyShare, cpReservationYieldBps,
 } from '../../../domain/commercial-paper';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
-import { cashOf } from '../../ledger/accounts';
+import { cashOf, bankReservesOf } from '../../ledger/accounts';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
@@ -177,17 +177,18 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // doc for the 260-week runaway that made this necessary).
         // SETL6: reserves plus this week's already-agreed securities settlement — 07c's bids
         // are commitments that have not settled yet, and the same reserves cannot fund both.
-        const settledCashUSD = sheet.cashReservesUSD
+        const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
+        const settledCashUSD = reservesUSD
           + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
         // REPO2: the floor is the face of THIS bill bucket actually pledged, not a blended share.
         const encumberedFace = encumberedFaceByBucket(reg.repoBook ?? [], bank.ticker);
         const fundableUSD = Math.min(
           Math.max(0, settledCashUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
-          leverageHeadroomUSD(sheet)
+          leverageHeadroomUSD(sheet, reservesUSD)
         );
-        const appetiteUSD = sovereignBookCapacityUSD(sheet);
-        const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet);
+        const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD);
+        const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD);
         activeBuckets.forEach((b) => {
           const heldUSD = sheet.sovereignBondHoldingsByTenor?.[b.key] ?? 0;
           holdings.set(billInstrumentId(regionId, b.key), heldUSD);

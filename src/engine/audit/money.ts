@@ -12,7 +12,7 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
-import { cashOf, entityCashOf, poolCashOf, householdDepositsOf } from '../ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 
 const banksOf = (s: GameState, r?: RegionId) =>
@@ -27,7 +27,7 @@ function m1(state: GameState, week: number): AuditFinding[] {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
     if (!cb) return;
-    const reserves = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.cashReservesUSD);
+    const reserves = sum(banksOf(state, r), (b) => bankReservesOf(ensureV2(state), b.ticker));
     const assets = centralBankAssetsUSD(cb);
     const residual = reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD - assets;
     if (Math.abs(residual) > Math.max(1e6, assets * 1e-4)) {
@@ -114,8 +114,8 @@ function m4(state: GameState, week: number): AuditFinding[] {
     const tga = state.regions[r]?.centralBankSheet?.treasuryAccountUSD ?? 0;
     if (tga < -1e6) out.push({ family: 'M', check: 'M4 overdrawn treasury', week, usd: tga, message: `${r}: the treasury's account stands at ${B(tga)} — an overdraft at the central bank nobody granted` });
   });
-  const negBank = banksOf(state).filter((b) => b.bankBalanceSheet!.cashReservesUSD < -1e6);
-  if (negBank.length) out.push({ family: 'M', check: 'M4 negative reserves', week, usd: sum(negBank, (b) => b.bankBalanceSheet!.cashReservesUSD), message: `${negBank.map((b) => b.ticker).join(' ')} hold negative reserves` });
+  const negBank = banksOf(state).filter((b) => bankReservesOf(v2, b.ticker) < -1e6);
+  if (negBank.length) out.push({ family: 'M', check: 'M4 negative reserves', week, usd: sum(negBank, (b) => bankReservesOf(v2, b.ticker)), message: `${negBank.map((b) => b.ticker).join(' ')} hold negative reserves` });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     if (!reg) return;
@@ -136,7 +136,7 @@ function m5(state: GameState, week: number): AuditFinding[] {
     const bs = b.bankBalanceSheet!;
     const sov = sum(Object.values(bs.sovereignBondHoldingsByTenor ?? {}), (v) => Number(v) || 0);
     const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryUSD));
-    const assets = loanBooksOf(bs) + sov + bs.cashReservesUSD + (bs.repoLentUSD ?? 0) + (bs.sovereignAccruedCouponUSD ?? 0) + desks + (bs.primeBrokerageLoansUSD ?? 0);
+    const assets = loanBooksOf(bs) + sov + bankReservesOf(ensureV2(state), b.ticker) + (bs.repoLentUSD ?? 0) + (bs.sovereignAccruedCouponUSD ?? 0) + desks + (bs.primeBrokerageLoansUSD ?? 0);
     const liabilities = depositsOf(bs) + (bs.centralBankLoanUSD ?? 0) + (bs.repoBorrowedUSD ?? 0) + (bs.srfBorrowingUSD ?? 0);
     const residual = assets - liabilities - bs.bankEquityUSD;
     if (Math.abs(residual) > Math.max(1e7, assets * 2e-3)) out.push({ family: 'M', check: 'M5 bank sheet closes', week, usd: residual, message: `${b.region}:${b.ticker} assets ${B(assets)} − liabilities ${B(liabilities)} − equity ${B(bs.bankEquityUSD)} = ${B(residual)}` });

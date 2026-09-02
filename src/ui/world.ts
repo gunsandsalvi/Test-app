@@ -8,7 +8,7 @@
 
 import { GameState, Company, InstitutionalEntity, Region, RegionId } from '../types';
 import { loanBooksOf } from '../domain/banking';
-import { entityCashOf, poolCashOf, householdDepositsOf } from '../engine/ledger/accounts';
+import { entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf } from '../engine/ledger/accounts';
 import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/world';
 import { bookHeadOf } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
@@ -122,7 +122,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     put(`bank:${c.id}:capital ratio`, s.bankCapitalRatio);
     put(`bank:${c.id}:nim`, s.netInterestMarginPct);
     put(`bank:${c.id}:deposits`, s.depositsUSD + (s.corporateDepositsUSD ?? 0) + (s.institutionalDepositsUSD ?? 0) + (s.smeDepositsUSD ?? 0));
-    put(`bank:${c.id}:reserves`, s.cashReservesUSD);
+    put(`bank:${c.id}:reserves`, bankReservesOf(ensureV2(state), c.ticker));
     put(`bank:${c.id}:central bank loan`, s.centralBankLoanUSD ?? 0);
     put(`bank:${c.id}:loans`, loanBooksOf(s));
   });
