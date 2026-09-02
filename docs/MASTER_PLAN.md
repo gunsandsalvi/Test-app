@@ -12,12 +12,13 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `9268624` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
+- HEAD `81b6efc` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
   earlier one; the session that owns it may push nowhere else.)
-- **Next step: §3 step 3**, then 4, 5, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 4**, then 5, 6, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `9268624` —
-  **95 violations in 24 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `81b6efc` —
+  **95 violations in 26 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
+  (24 vs 26 families is cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
 - **Recording a step:** delete the step from §3 and write its record in §9 — what changed, why,
@@ -31,8 +32,8 @@ and **the sweep in full is
 in §8, by area, so nobody re-derives it** — including the long tail of minor, dead-code and
 already-fine findings that did not earn a step. §8 is a record, not a work list, and it was NOT
 re-verified: treat an unconfirmed finding there as a lead with a file:line. The headline that set the order: money and ownership do NOT close (interest accrued and
-never paid, a residual wired twice — both now closed, §9; three ledger paths dropping value
-silently; an estate that can never close), price is NOT universal (credit trades at par, commodity
+never paid, a residual wired twice, three ledger paths dropping value silently — all closed,
+§9; an estate that can never close), price is NOT universal (credit trades at par, commodity
 spot is a drift formula), and the instrument that measures all this is itself broken (the wires
 family never prints, the per-bank identity check has never fired).
 
@@ -184,13 +185,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-3. **The silent truncations.** `holdings-ledger.ts:79-103` (`debitRow`) takes what the rows hold and
-   drops the remainder with no defect after the full quantity was wired; `holdings-store.ts:155-176`
-   (`addShares`) drops an undeliverable remainder; `engine2/holdings.ts:313` (`pruneEmptyRows`)
-   tests DOLLARS and destroys SHARES; `holdings-store.ts:74-76` pairs week-start objects to
-   persistent row ids BY POSITION with no check, and finalize keeps and frees off that pairing.
-   Each becomes a `defect()`. Also: the free paths (`holdings.ts:118,191,226`) clear nothing, so a
-   freed row reads as live.
 4. **The goods mint.** `goods-ledger.ts:92-99` sells units that never existed and records
    `mintedUnits` so W4 can name it. The auction must not be able to sell what does not exist:
    ration the sale at the stock. Delete the `Math.max(0, held)` and the `Math.max(0, unitPriceUSD)`
@@ -470,7 +464,10 @@ equity as a phantom fee. §7.263 `comp.cash` has ONE mover: settlement. §7.286 
 directly; bank issuers are excluded because their paper is the wholesale roll's. §7.248 a pledge must
 follow the paper ON THE BOOK, not last week's scalar. §7.362 a week's money settles inside the week —
 three cycles, because a day has more than one. §7.377/§7.384 a balance is an ACCOUNT, not a field. §9.1 a desk's RECEIPT is income and needs
-its P&L write; only the principal legs beside it are asset swaps that need none.
+its P&L write; only the principal legs beside it are asset swaps that need none. §9.3 a guard on
+a ledger walk measures FLOAT NOISE, so its tolerance is relative to the quantities the walk
+touched — a fixed number of dollars is either a real threshold or useless. §9.3 again: two of
+the four truncations were covering live minting callers, and the guard is what named them.
 §7.372/§7.373/§7.374 market cap, total debt, the loan books and total assets are READS.
 
 **Stores and performance.** §7.311/§7.313 the rows are the ladder's authority; the object arrays are
@@ -2320,3 +2317,23 @@ not** — the whole effect is JPN CORP_BOND moving from −0.00B to 0.00B in wee
 0.005B. Most primaries are taken in full so the residual is small, and what the duplicate did
 wire, `debitRow` silently truncated on the second pass. W2's dust has another owner; do not
 re-derive this one.
+
+**3. The silent truncations.** (`81b6efc`) Four paths moved less than they were told to and said
+nothing. `holdings-ledger.debitRow` took `min(left, row)` per row and dropped the remainder,
+while `transferHolding`/`retireHolding` had already WIRED the full quantity — paper minted on
+the receiving side that never left the payer's book; it now defects, as `retireTranche` already
+did. `holdings-store.addShares` returned with an undeliverable remainder while the receiving leg
+is a separate call; it now defects. `pruneEmptyRows` kept a row only at `qtyUSD > 1` — a DOLLAR
+test that destroyed SHARES — and now keeps any row holding anything in either unit. The store's
+by-position pairing of book objects to persistent row ids is checked for length and instrument
+where it is made, because `finalize` keeps and frees off it. The free paths now clear the row
+they release, as the tranche store's does.
+**The guards immediately named two live minting callers, and fixing them is rule 2's pairing:**
+`etf-flows` struck the share count at the pre-flow NAV and valued the same shares at the
+post-flow one, so the two legs of one transaction disagreed — paper now leaves a book at what
+the book CARRIES it at, and the difference against the NAV the cash transacted at is the
+holder's gain; `securities-lending` let a recalled borrower 0.0001 shares short deliver the
+loan's full size, and now delivers what it holds. Both guards measure their residue RELATIVE to
+the quantities the walk touched, because a row-by-row subtraction's leftover is float noise.
+Measured (SHOCKS=0 WEEKS=16): **95 violations → 95**, money clean, unowned 0.00B, and sixteen
+weeks now run with all four invariants asserted.
