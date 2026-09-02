@@ -442,7 +442,6 @@ export function runRegionalRepoSession(
       // participants' own posted outside options — is the real bound. The damper is set so wide
       // it cannot be the thing that prints (the harness asserts the corridor every week, so a
       // damper-bound print would be caught as a violation, per §6's damper-diagnostic doctrine).
-      maxWeeklyStatMovePct: 1000,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `repo:${id}`));
     const clearedBps = result.newStatById.get(args.instrumentId) ?? args.currentBps;

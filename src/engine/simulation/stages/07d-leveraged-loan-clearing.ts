@@ -57,8 +57,6 @@ import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
 import { REGION_IDS } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
-
-const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
 const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
 const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
 // Senior-secured first-lien loans trade at a real, structural discount to the same issuer's
@@ -185,6 +183,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const totalOutstandingUSD =
       regionCompanies.reduce((s, c) => s + floatingDebtOf(c) + offeringSizeUSD(c), 0) || 1;
 
+    const priorDmById = new Map(regionCompanies.map((c) => [c.id, c.leveragedLoan?.discountMarginBps ?? 0]));
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingUSD: floatingDebtOf(c),
@@ -431,7 +430,6 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
     const result = clearFinancialAsset(instruments, allParticipants, priorDealerInventoryById, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
-      maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
       // OWN7: the float here is a stock these participants already hold, so an unsold
       // position stays with its holder rather than falling to a dealer nobody names.
       unsoldStaysWithHolder: true,
@@ -498,7 +496,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         bookSpreadBps: DEALER_SPREAD_BPS,
         oneWeekPriceRiskBps: oneWeekPriceRiskBps({
           statKind: 'YIELD_LIKE', currentStat: clearedStat,
-          maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
+          weeklyMovePct: Math.abs(clearedStat - (priorDmById.get(o.issuerId) ?? clearedStat)) / Math.max(1, Math.abs(clearedStat)),
           minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
           durationYears: durationById.get(o.issuerId) ?? 0,
         }),

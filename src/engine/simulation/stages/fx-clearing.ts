@@ -36,7 +36,7 @@ import { bookHeadOf } from '../../../engine2/holdings';
 import {
   fxWeeklySigma, speculatorReservationMoveFrac, speculatorFullSizeRangeFrac, speculatorMaxPositionUSD,
   centralBankReservationMoveFrac, centralBankFullSizeRangeFrac,
-  CENTRAL_BANK_FX_INTERVENTION_SHARE, MAX_WEEKLY_FX_MOVE_PCT,
+  CENTRAL_BANK_FX_INTERVENTION_SHARE,
 } from '../../../domain/fx-market';
 import {
   clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
@@ -319,7 +319,6 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
 
     const result = clearFinancialAsset([instrument], participants, new Map(), {
       dealerSpreadBps: 0,
-      maxWeeklyStatMovePct: MAX_WEEKLY_FX_MOVE_PCT / 100,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `fx:${id}`));
 

@@ -128,7 +128,7 @@ function runShardedKernelWeb(packed: PackedClearing, sab: SharedArrayBuffer): Ke
   const jobMeta = {
     sab, n, pCount: packed.pCount,
     dealerSpreadBps: packed.dealerSpreadBps,
-    maxWeeklyStatMovePct: packed.maxWeeklyStatMovePct,
+    maxWeeklyStatMovePct: Number.NaN /* no cap (§5-CLOSE) */,
     unsoldStaysWithHolder: packed.unsoldStaysWithHolder,
   };
   for (let i = 0; i < w; i++) {

@@ -86,10 +86,11 @@ export function sharesOnLoan(
  * enough history for one, and otherwise from the most the equity book itself will let a price move
  * in a week, which is the honest upper bound that book states about itself.
  */
-export function loanOneWeekGap(args: { annualVol: number | undefined; bookWeeklyMoveCap: number }): number {
+export function loanOneWeekGap(args: { annualVol: number | undefined; bookWeeklyMove: number }): number {
+  // §5-CLOSE: the name's own realised weekly move, or the book's measured median when it has
+  // no history of its own — never a posted cap.
   const fromVol = args.annualVol === undefined ? undefined : args.annualVol / Math.sqrt(52);
-  if (fromVol === undefined) return args.bookWeeklyMoveCap;
-  return Math.min(args.bookWeeklyMoveCap, fromVol);
+  return fromVol ?? args.bookWeeklyMove;
 }
 
 /**

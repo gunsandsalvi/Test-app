@@ -62,9 +62,8 @@ const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
 
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'bill';
-/** And the other book this stage owns (CP). */
 const CP_BOOK = 'commercial paper';
-const MAX_WEEKLY_YIELD_MOVE_PCT = 0.25; // short paper reprices to policy fast; damping is looser here
+/** And the other book this stage owns (CP). */
 /** A bank's pickup over reserves for holding a bill instead — the arbitrage band's width. */
 const BANK_BILL_PICKUP_BPS = 5;
 /** What an institution's cash sleeve wants over policy to lock cash into paper, per year of tenor. */
@@ -341,7 +340,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       const result = clearFinancialAsset(instruments, [...participants, ...deskParticipants], priorDealerInventory, {
         dealerSpreadBps: DEALER_SPREAD_BPS,
-        maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
         // OWN7: the float here is a stock these participants already hold, so an unsold
         // position stays with its holder rather than falling to a dealer nobody names.
         unsoldStaysWithHolder: true,
@@ -832,7 +830,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       const cpResult = clearFinancialAsset(cpInstruments, [...cpParticipants, ...cpDeskParticipants], new Map(), {
         dealerSpreadBps: DESK_SPREAD_BPS_BY_BOOK[CP_BOOK],
-        maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
         // OWN7: the float here is a stock these participants already hold, so an unsold
         // position stays with its holder rather than falling to a dealer nobody names.
         unsoldStaysWithHolder: true,

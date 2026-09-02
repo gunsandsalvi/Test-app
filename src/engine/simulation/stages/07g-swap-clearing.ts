@@ -178,7 +178,6 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
       // Bilateral, cleared through the same house as every other book; the desks' spread on it
       // is DER's next slice, with the CDS and option books that share the machinery.
       dealerSpreadBps: 0,
-      maxWeeklyStatMovePct: 0.25,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `swap:${id}`));
 

@@ -140,12 +140,15 @@ export function underwritingFeeBps(args: {
 export function oneWeekPriceRiskBps(args: {
   statKind: 'PRICE_LIKE' | 'YIELD_LIKE';
   currentStat: number;
-  maxWeeklyStatMovePct: number;
+  /** §5-CLOSE: the one-week move the desk MEASURED for this name (this week's cleared level
+   *  against last week's, as a fraction of the level) — there is no cap to read it off. */
+  weeklyMovePct: number;
   minWeeklyStatMoveBps?: number;
   durationYears?: number;
 }): number {
-  const moveInStat = Math.abs(args.currentStat) * args.maxWeeklyStatMovePct;
-  if (args.statKind === 'PRICE_LIKE') return args.maxWeeklyStatMovePct * 10000;
+  const movePct = Math.max(0, args.weeklyMovePct);
+  const moveInStat = Math.abs(args.currentStat) * movePct;
+  if (args.statKind === 'PRICE_LIKE') return movePct * 10000;
   return (moveInStat + (args.minWeeklyStatMoveBps ?? 0)) * Math.max(0, args.durationYears ?? 0);
 }
 

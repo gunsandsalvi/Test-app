@@ -39,7 +39,8 @@ import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD } from '../../macro/household-portfolio';
 import { BUFFER_TARGET_WEEKS } from '../../macro/household-cohorts';
 import { publicComparableEvMultiple } from './pe-lifecycle';
-import { MAX_WEEKLY_PRICE_MOVE_PCT } from './07e-equity-clearing';
+import { measuredWeeklyMove, medianOf } from '../../../domain/volatility';
+import { ringFill, rowOf } from '../../../engine2/world';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { REGION_IDS } from '../../../domain/geography';
@@ -259,8 +260,11 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const equityUSD = banks.reduce((s, c) => s + (c.bankBalanceSheet?.bankEquityUSD ?? 0), 0);
     // ETF2: the desks' capital over the risk a basket consumes while they hold it — the equity
     // book's own weekly move cap, which is the same number the prime brokers haircut equity by.
+    const scratch: number[] = [];
+    const moves = ctx.updatedCompanies.filter((c) => c.region === r && c.listingStatus !== 'PRIVATE' && !c.isDefaulted)
+      .map((c) => measuredWeeklyMove(ringFill(ctx.v2.priceRing, rowOf(ctx.v2, c.id), scratch))).filter((v): v is number => v !== undefined);
     apCapacityByRegion.set(r, apWeeklyCapacityUSD({
-      dealerEquityUSD: equityUSD, bookWeeklyMoveCap: MAX_WEEKLY_PRICE_MOVE_PCT,
+      dealerEquityUSD: equityUSD, bookWeeklyMove: medianOf(moves) ?? 0,
     }));
   });
 
@@ -700,7 +704,6 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       dealerSpreadBps: 0,
       // Undamped: a fund's shares can only move as far as the basket behind them plus the
       // assembly cost, which is a real bound and does not need a second one.
-      maxWeeklyStatMovePct: Number.NaN,
     });
     const clearedPrice = result.newStatById.get(instrumentId);
     if (clearedPrice === undefined || !(clearedPrice > 0)) return;

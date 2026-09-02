@@ -61,7 +61,7 @@ if (addon) {
     // kernel (canonical), so the oracle gate never compares a widened cap against a fixed one.
     for (let i = from; i < to; i++) if (packed.damperStreak[i] !== 0) return runClearingKernel(packed, from, to);
     scalars[0] = packed.n; scalars[1] = packed.pCount;
-    scalars[2] = packed.dealerSpreadBps; scalars[3] = packed.maxWeeklyStatMovePct;
+    scalars[2] = packed.dealerSpreadBps; scalars[3] = Number.NaN; // no cap (§5-CLOSE)
     scalars[4] = packed.unsoldStaysWithHolder ? 1 : 0;
     out.fillCount = addon.clearingKernel(
       [packed.float, packed.offering, packed.withdrawStat, packed.currentStat,

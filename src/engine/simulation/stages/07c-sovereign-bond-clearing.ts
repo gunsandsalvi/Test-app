@@ -73,8 +73,6 @@ const TENOR_BUCKETS: { key: string; years: number; zeroRateField: ZeroRateField 
   { key: 't10', years: 10, zeroRateField: 'tenor10Y' },
   { key: 't30', years: 30, zeroRateField: 'tenor30Y' },
 ];
-
-const MAX_WEEKLY_YIELD_MOVE_PCT = 0.20;
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
 const INSTITUTIONAL_REAL_RETURN_BPS = 150;
@@ -495,7 +493,6 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       priorDealerInventoryById,
       {
         dealerSpreadBps: DEALER_SPREAD_BPS,
-        maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
         // OWN7: the float here is a stock these participants already hold, so an unsold
         // position stays with its holder rather than falling to a dealer nobody names.
         unsoldStaysWithHolder: true,

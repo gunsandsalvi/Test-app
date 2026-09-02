@@ -35,8 +35,6 @@ import { buildDerivativeMarketView, derivativesBookOf, deskStandingPfeChargeUSD,
 
 const cdsInstrumentId = (regionId: RegionId, issuerId: string) => `${regionId}-CDS-${issuerId}`;
 
-/** A protection seller is short a credit it did not fund; its book reprices like any other. */
-const MAX_WEEKLY_CDS_MOVE_PCT = 0.25;
 
 export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2cds = ensureV2(state);
@@ -184,7 +182,6 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
     const result = clearFinancialAsset(instruments, participants, new Map(), {
       // Bilateral between named desks and funds; the clearing house takes no fee on it yet.
       dealerSpreadBps: 0,
-      maxWeeklyStatMovePct: MAX_WEEKLY_CDS_MOVE_PCT,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `cds:${id}`));
 

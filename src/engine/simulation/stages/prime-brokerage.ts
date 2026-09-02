@@ -11,7 +11,10 @@
  * that has to sell in this week's auctions, into the market that just moved against it.
  */
 
-import { GameState, RegionId } from '../../../types';
+import { GameState, RegionId, Region } from '../../../types';
+import { measuredWeeklyMove, measuredWeeklyBpsMove, medianOf } from '../../../domain/volatility';
+import { ringFill, rowOf } from '../../../engine2/world';
+import { computeSovereignRepoHaircuts } from './repo-clearing';
 import { PrimeBrokerageLine, maxDrawnUSD, drawnByFund, lentByBroker } from '../../../domain/prime-brokerage';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay, pendingSettlementUSD } from './settlement';
@@ -27,13 +30,31 @@ import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
  * Sovereign paper is the exception: it is the collateral the repo book already prices, and its
  * haircut is derived there from that bucket's own observed volatility.
  */
-const COLLATERAL_HAIRCUT: Record<string, number> = {
-  EQUITY: 0.18,          // 07e's MAX_WEEKLY_PRICE_MOVE_PCT
-  CORP_BOND: 0.25,       // 07b's MAX_WEEKLY_SPREAD_MOVE_PCT, on a book that trades on spread
-  LEVERAGED_LOAN: 0.25,  // 07d's
-  GOV_BOND: 0.05,        // the repo desk's own blended sovereign protection
-};
-const DEFAULT_HAIRCUT = 0.25;
+/**
+ * §5-CLOSE (user, 2026-09-02): THERE IS NO CAP TO READ A HAIRCUT OFF. A broker protects itself by
+ * the move it has MEASURED the collateral make: equity, twice the region's median realised
+ * weekly price move (the price ring); credit, twice the median realised weekly spread move in
+ * bps over a five-year duration (the OAS ring) plus the repo desk's own five-year sovereign
+ * haircut for the rate leg; sovereigns, the repo desk's blended protection. A collateral class
+ * with no history yet has no measured move, and the broker lends against it unprotected —
+ * which is what a broker with no history does, and what week 1 is.
+ */
+const CREDIT_COLLATERAL_DURATION_YEARS = 5;
+function measuredHaircutsFor(ctx: WeeklyStepContext, regionId: RegionId, reg: Region): Record<string, number> {
+  const v2 = ctx.v2;
+  const scratch: number[] = [];
+  const names = ctx.updatedCompanies.filter((c) => c.region === regionId && !c.isDefaulted && !c.isBankEntity);
+  const priceMoves = names.filter((c) => c.listingStatus !== 'PRIVATE')
+    .map((c) => measuredWeeklyMove(ringFill(v2.priceRing, rowOf(v2, c.id), scratch))).filter((v): v is number => v !== undefined);
+  const spreadMovesBps = names
+    .map((c) => measuredWeeklyBpsMove(ringFill(v2.oasRing, rowOf(v2, c.id), scratch))).filter((v): v is number => v !== undefined);
+  const sov = computeSovereignRepoHaircuts(reg);
+  const sovValues = Object.values(sov).filter((v) => Number.isFinite(v));
+  const sovBlended = sovValues.length ? sovValues.reduce((a, v) => a + v, 0) / sovValues.length : 0;
+  const equity = 2 * (medianOf(priceMoves) ?? 0);
+  const credit = 2 * ((medianOf(spreadMovesBps) ?? 0) / 10000) * CREDIT_COLLATERAL_DURATION_YEARS + (sov['t5'] ?? sovBlended);
+  return { EQUITY: equity, CORP_BOND: credit, LEVERAGED_LOAN: credit, GOV_BOND: sovBlended, DEFAULT: Math.max(equity, credit, sovBlended) };
+}
 
 export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext): void {
   void state;
@@ -41,6 +62,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
     const priorBook: PrimeBrokerageLine[] = reg.primeBrokerageBook ?? [];
+    const haircuts = measuredHaircutsFor(ctx, regionId, reg);
 
     // ---- Last week's financing, paid. Real money from the fund to the broker that lent it. ----
     priorBook.forEach((line) => {
@@ -89,10 +111,10 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
         const usd = Math.max(0, h.quantityOrNotionalUSD ?? 0);
         if (usd <= 0) return;
         bookUSD += usd;
-        weightedHaircutUSD += usd * (COLLATERAL_HAIRCUT[h.instrumentType] ?? DEFAULT_HAIRCUT);
+        weightedHaircutUSD += usd * (haircuts[h.instrumentType] ?? haircuts.DEFAULT);
         if (usd > largestUSD) largestUSD = usd;
       });
-      const baseHaircut = bookUSD > 0 ? weightedHaircutUSD / bookUSD : DEFAULT_HAIRCUT;
+      const baseHaircut = bookUSD > 0 ? weightedHaircutUSD / bookUSD : haircuts.DEFAULT;
       const concentration = bookUSD > 0 ? largestUSD / bookUSD : 1;
       const haircutRate = Math.min(1, baseHaircut * (1 + concentration));
 
@@ -218,7 +240,7 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
           drawnUSD: Math.round(drawUSD),
           // An emergency draw on a line the morning struck at zero balance carries the standing
           // terms for one week; the next morning's re-strike prices the whole balance properly.
-          haircutRate: DEFAULT_HAIRCUT,
+          haircutRate: measuredHaircutsFor(ctx, regionId, reg).DEFAULT,
           rateAnnual: Number((reg.policyRate + WHOLESALE_FUNDING_SPREAD_BPS / 10000).toFixed(6)),
           struckWeek: ctx.nextWeek,
         });

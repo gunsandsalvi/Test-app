@@ -288,7 +288,7 @@ export function runFxHedgingStage(state: GameState, ctx: WeeklyStepContext): voi
       };
       // Undamped: both sides are genuinely elastic here, so the level is the market's, and a
       // damper would be the only thing that could print instead of it (§6's doctrine).
-      const result = clearFinancialAsset([instrument], participants, new Map(), { dealerSpreadBps: 0, maxWeeklyStatMovePct: Number.NaN });
+      const result = clearFinancialAsset([instrument], participants, new Map(), { dealerSpreadBps: 0});
       const basisBps = Math.max(0, result.newStatById.get(instrumentId) ?? 0);
       clearedBasisBps.set(key, basisBps);
       result.newParticipantHoldings.forEach((byInstrument, entityId) => {

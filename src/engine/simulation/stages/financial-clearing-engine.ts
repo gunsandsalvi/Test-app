@@ -203,7 +203,6 @@ export interface ClearingParams {
    * jumping to an equilibrium that the next week's schedules immediately walk back, which is a
    * numerical artifact of discrete time rather than a market behaviour.
    */
-  maxWeeklyStatMovePct: number;
   /**
    * OWN7 — **an unsold holding stays with its holder.**
    *
@@ -528,7 +527,6 @@ export interface PackedClearing {
   dMinH: Float64Array;
   prevHolding: Float64Array;
   dealerSpreadBps: number;
-  maxWeeklyStatMovePct: number;
   unsoldStaysWithHolder: boolean;
 }
 
@@ -565,24 +563,7 @@ export function packedClearingBytes(n: number, pCount: number): number {
  * streak for a week — a cap, never a level (§1.15).
  */
 let damperStreakByRawId = new Map<string, number>();
-/** §7.341 — the streak an instrument carries into this week's clearing, for a buyer sizing its
- *  worst case: the cap a name bound k weeks running gets is (1+k)× the flat one, and a budget
- *  struck against the flat cap overspends by exactly the widening (the small-cap ETF ran
- *  overdrawn by ~10M a week from week 15 for that reason). */
-export function damperStreakOf(rawId: string): number {
-  return Math.min(DAMPER_STREAK_WIDENING_MAX, damperStreakByRawId.get(rawId) ?? 0);
-}
 
-/**
- * §7.342 — THE WIDENING IS BOUNDED. §7.338 let a name bound k weeks running move (1+k)× the
- * flat cap; unbounded, a book that binds every week (a saturated float with no seller at any
- * price — the dead-ceiling case) got a cap of 20× by week 20 and its prints ran away
- * geometrically: JPN's institutional book re-marked ×4 a week from week 55 (21T → 8,000T in five
- * weeks) and the region's unemployment went to 80%. Three extra notches is the exchange's own
- * shape (a circuit breaker widens, then halts); past it a bind is a market with no other side,
- * which the dead-ceiling diagnostic already names, and the damper is what keeps it printable.
- */
-export const DAMPER_STREAK_WIDENING_MAX = 3;
 
 export function setDamperStreaks(byTaggedId: Record<string, number> | undefined): void {
   const next = new Map<string, number>();
@@ -632,7 +613,6 @@ export function packClearing(
       n, pCount, float, offering, withdrawStat, currentStat, yieldLike, damperStreak, skip,
       present, dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding,
       dealerSpreadBps: params.dealerSpreadBps,
-      maxWeeklyStatMovePct: params.maxWeeklyStatMovePct ?? Number.NaN,
       unsoldStaysWithHolder: params.unsoldStaysWithHolder === true,
     };
     // Shared memory is reused across calls; zero what the packers below only conditionally set.
@@ -656,7 +636,6 @@ export function packClearing(
       dMinH: new Float64Array(n * pCount),
       prevHolding: new Float64Array(n * pCount),
       dealerSpreadBps: params.dealerSpreadBps,
-      maxWeeklyStatMovePct: params.maxWeeklyStatMovePct ?? Number.NaN,
       unsoldStaysWithHolder: params.unsoldStaysWithHolder === true,
     };
   }
@@ -806,20 +785,13 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
       }
     }
 
-    // Discrete-time damping, not a price bound: see maxWeeklyStatMovePct. Undamped when omitted.
-    const maxMove = Number.isNaN(packed.maxWeeklyStatMovePct)
-      ? Infinity
-      : (Math.abs(currentStat) * packed.maxWeeklyStatMovePct + (isYieldLike ? YIELD_LIKE_MIN_WEEKLY_MOVE_BPS : 0))
-        * (1 + Math.min(DAMPER_STREAK_WIDENING_MAX, packed.damperStreak[i]));
-    const clearedStat = Number(
-      Math.max(currentStat - maxMove, Math.min(currentStat + maxMove, solvedStat)).toFixed(4)
-    );
-    if (Math.abs(solvedStat - clearedStat) > Math.max(1e-6, Math.abs(solvedStat) * 1e-6)) {
-      // 1 = the market wanted a HIGHER stat than the damper let it print, 2 = lower. The
-      // direction is what turns the §6.1 bind count into a diagnosis (a name pinned UP for
-      // sixty weeks has a buyer with no reservation; pinned DOWN, a seller with no bid).
-      out.damper[o] = solvedStat > clearedStat ? 1 : 2;
-    }
+    // §5-CLOSE (user, 2026-09-02): THERE IS NO CAP. The book prints where demand met supply
+    // this week. The weekly move caps (18–25% by book, adaptive since §7.338, bounded since
+    // §7.342) were clamps on prices; 1,346 names were pinned against them at once and the print
+    // was the cap, not the market. A book with no other side now shows it as a price, and the
+    // desks, the issuer and the float are what answer it — never a bound.
+    const clearedStat = Number(solvedStat.toFixed(4));
+    void isYieldLike;
     out.clearedStat[o] = isFinite(clearedStat) ? clearedStat : currentStat;
 
     // Settle: cores first, then the discretionary layer pro rata — identical arithmetic to the

@@ -37,8 +37,6 @@ import { buildDerivativeMarketView, derivativesBookOf, deskStandingPfeChargeUSD,
 
 const contractId = (commodityId: string, tenor: number) => `FUT-${commodityId}-${tenor}M`;
 
-/** A future on a physical is as volatile as the physical; it reprices like the spot beneath it. */
-const MAX_WEEKLY_FUTURES_MOVE_PCT = 0.20;
 
 /** A firm's annual interest bill, from the coverage ratio its own statements already carry. */
 function annualInterestOf(c: Company): number {
@@ -204,7 +202,6 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
       const result = clearFinancialAsset(instruments, participants, new Map(), {
         // Bilateral between named hedgers, desks and funds; nobody stands between them yet.
         dealerSpreadBps: 0,
-        maxWeeklyStatMovePct: MAX_WEEKLY_FUTURES_MOVE_PCT,
       });
       ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `commodity:${id}`));
       const clearedPrice = result.newStatById.get(id);

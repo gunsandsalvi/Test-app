@@ -31,7 +31,7 @@ import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { entityRequiredReturn, maxOverweightMultipleOf } from './asset-allocation';
-import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, damperStreakOf } from './financial-clearing-engine';
+import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
@@ -53,8 +53,6 @@ const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
 
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'equity';
-/** Equity gaps more than credit; this is discrete-time damping, not a bound. */
-export const MAX_WEEKLY_PRICE_MOVE_PCT = 0.18;
 /** How far below its fair value a holder must see the price before it takes full size. */
 export const FULL_SIZE_PRICE_DISCOUNT = 0.30;
 
@@ -132,6 +130,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     };
     /** The shares this book must find owners for: the register that will exist once a deal prices. */
     const liveTradableSharesOf = (c: Company) => liveSharesOf(c);
+
+    const priorPriceById = new Map(regionCompanies.map((c) => [c.id, refPriceOf(c)]));
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
@@ -353,7 +353,10 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         // one bidder that never walks away from a rising print. Committing at the WORST
         // admissible price this week makes the cash constraint hold at settlement whatever
         // clears — the residual sticky −0.02B overdrafts after the in-kind fix were this.
-        const worstPriceUSD = Math.max(1e-9, refPrice * (1 + MAX_WEEKLY_PRICE_MOVE_PCT * (1 + damperStreakOf(c.instrumentId))));
+        // §5-CLOSE (user, 2026-09-02): THERE IS NO CAP. The fund commits at its reference price;
+        // if the print clears above it the fund has overspent and the close sweep names that as
+        // a margin draw at its broker — a real cost of never walking away, priced, not a bound.
+        const worstPriceUSD = Math.max(1e-9, refPrice);
         demandByInstrumentId.set(
           c.instrumentId,
           indexFundDemand(targetShares, institutionSpendableUSD(ctx, fund) * c.weight / worstPriceUSD, 'PRICE_LIKE')
@@ -444,7 +447,6 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants, ...(householdParticipant ? [householdParticipant] : [])];
     const result = clearFinancialAsset(instruments, allParticipants, new Map(), {
       dealerSpreadBps: DEALER_SPREAD_BPS,
-      maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
       // OWN7: the float here is a stock these participants already hold, so an unsold
       // position stays with its holder rather than falling to a dealer nobody names.
       unsoldStaysWithHolder: true,
@@ -611,7 +613,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       (o, clearedStat) => underwritingFeeBps({
         bookSpreadBps: DEALER_SPREAD_BPS,
         oneWeekPriceRiskBps: oneWeekPriceRiskBps({
-          statKind: 'PRICE_LIKE', currentStat: clearedStat, maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
+          statKind: 'PRICE_LIKE', currentStat: clearedStat,
+          weeklyMovePct: Math.abs(clearedStat - (priorPriceById.get(o.issuerId) ?? clearedStat)) / Math.max(1e-9, Math.abs(clearedStat)),
         }),
         dealSizeUSD: o.sizeUSD * clearedStat,
         deskCapacityUSD: bookCapacityUSD,

@@ -13,7 +13,7 @@ interface Job {
   n: number;
   pCount: number;
   dealerSpreadBps: number;
-  maxWeeklyStatMovePct: number; // NaN = undamped
+  maxWeeklyStatMovePct: number; // always NaN: no cap (§5-CLOSE)
   unsoldStaysWithHolder: boolean;
   from: number;
   to: number;

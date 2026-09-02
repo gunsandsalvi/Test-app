@@ -76,8 +76,6 @@ import { REGION_IDS } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
 
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
-// attractive names — tactical name selection is real and moves faster than the overall budget.
-const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
 const MAX_VALUE_TILT = 0.4;
 // How much a tightening/loosening real credit-conditions backdrop (reg.bankingSector's own
 // -1..+1 index) shifts what "fair value" means right now — real credit investors price a bond
@@ -197,6 +195,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const totalOutstandingUSD =
       regionCompanies.reduce((s, c) => s + fixedDebtOf(c) + offeringSizeUSD(c), 0) || 1;
 
+    const priorOasById = new Map(regionCompanies.map((c) => [c.id, c.oasSpreadBps]));
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingUSD: fixedDebtOf(c),
@@ -471,7 +470,6 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
     const result = clearFinancialAsset(instruments, allParticipants, priorDealerInventoryById, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
-      maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
       // OWN7: the float here is a stock these participants already hold, so an unsold
       // position stays with its holder rather than falling to a dealer nobody names.
       unsoldStaysWithHolder: true,
@@ -531,7 +529,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         bookSpreadBps: DEALER_SPREAD_BPS,
         oneWeekPriceRiskBps: oneWeekPriceRiskBps({
           statKind: 'YIELD_LIKE', currentStat: clearedStat,
-          maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
+          weeklyMovePct: Math.abs(clearedStat - (priorOasById.get(o.issuerId) ?? clearedStat)) / Math.max(1, Math.abs(clearedStat)),
           minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
           durationYears: durationById.get(o.issuerId) ?? 0,
         }),

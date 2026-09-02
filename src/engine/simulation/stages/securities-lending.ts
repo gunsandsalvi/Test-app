@@ -29,14 +29,13 @@ import { entityRequiredReturn, maxOverweightMultipleOf, fullSizeSpreadRangeBpsOf
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { realizedAnnualVol } from '../../../domain/volatility';
-import { MAX_WEEKLY_PRICE_MOVE_PCT, FULL_SIZE_PRICE_DISCOUNT } from './07e-equity-clearing';
+import { FULL_SIZE_PRICE_DISCOUNT } from './07e-equity-clearing';
+import { medianOf } from '../../../domain/volatility';
 import { REGION_IDS } from '../../../domain/geography';
 
 const sblInstrumentId = (regionId: RegionId, companyId: string) => `${regionId}-SBL-${companyId}`;
 export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
 
-/** A borrow fee is a rate on a stock, so it reprices like the credit books it is quoted beside. */
-const MAX_WEEKLY_FEE_MOVE_PCT = 0.25;
 
 const priceScratchSl: number[] = [];
 
@@ -285,9 +284,12 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       return;
     }
 
+    // §5-CLOSE: the book's measured median weekly move stands in for a name with no history.
+    const volById = new Map(borrowNames.map((c) => [c.id, realizedAnnualVol(ringFill(v2sl.priceRing, rowOf(v2sl, c.id), priceScratchSl), 26)]));
+    const bookWeeklyMove = (medianOf(Array.from(volById.values()).filter((v): v is number => v !== undefined)) ?? 0) / Math.sqrt(52);
     const gapByCompanyId = new Map(borrowNames.map((c) => [c.id, loanOneWeekGap({
-      annualVol: realizedAnnualVol(ringFill(v2sl.priceRing, rowOf(v2sl, c.id), priceScratchSl), 26),
-      bookWeeklyMoveCap: MAX_WEEKLY_PRICE_MOVE_PCT,
+      annualVol: volById.get(c.id),
+      bookWeeklyMove,
     })]));
 
     const instruments: ClearingInstrument[] = borrowNames.map((c) => {
@@ -307,7 +309,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       if (lastFee[borrowNames[i].id] === undefined) {
         inst.currentStat = Math.max(1, lendingReservationFeeBps({
           requiredReturn: riskFreeRate,
-          oneWeekGap: gapByCompanyId.get(borrowNames[i].id) ?? MAX_WEEKLY_PRICE_MOVE_PCT,
+          oneWeekGap: gapByCompanyId.get(borrowNames[i].id) ?? bookWeeklyMove,
         }));
       }
     });
@@ -337,7 +339,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           // required return. A volatile name is dearer to borrow without anyone saying so.
           reservationStat: lendingReservationFeeBps({
             requiredReturn,
-            oneWeekGap: gapByCompanyId.get(c.id) ?? MAX_WEEKLY_PRICE_MOVE_PCT,
+            oneWeekGap: gapByCompanyId.get(c.id) ?? bookWeeklyMove,
           }),
           // Its whole inventory is lendable — the shares it can deliver plus what it has out.
           maxHoldingUSD: held + lent,
@@ -356,7 +358,6 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     const result = clearFinancialAsset(instruments, participants, new Map(), {
       // Bilateral between named holders and named funds; no dealer stands between them.
       dealerSpreadBps: 0,
-      maxWeeklyStatMovePct: MAX_WEEKLY_FEE_MOVE_PCT,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `stock loan:${id}`));
 
