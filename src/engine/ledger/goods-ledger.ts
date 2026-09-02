@@ -1,5 +1,5 @@
 /**
- * §5-WIRES W4 — THE GOODS LEDGER. Every move of goods between two parties is a numbered wire
+ * THE GOODS LEDGER. Every move of goods between two parties is a numbered wire
  * (kind GOOD, the sub-unit as the asset, units as the quantity, the unit price the move was
  * struck at); what is not a move — production, consumption in a recipe, scrappage — is a
  * TRANSFORMATION recorded on the same journal, so the week's stock identity closes per region
@@ -21,13 +21,13 @@ import { wire, activeWireJournal } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { defect } from '../../domain/defect';
 
-export interface GoodsFlow { producedUnits: number; consumedUnits: number; scrappedUnits: number; mintedUnits: number }
+export interface GoodsFlow { producedUnits: number; consumedUnits: number; scrappedUnits: number }
 
 function flowOf(region: RegionId, subUnitId: string): GoodsFlow {
   const j = activeWireJournal();
   const key = `${region}|${subUnitId}`;
   let f = j.goodsFlows[key];
-  if (!f) { f = { producedUnits: 0, consumedUnits: 0, scrappedUnits: 0, mintedUnits: 0 }; j.goodsFlows[key] = f; }
+  if (!f) { f = { producedUnits: 0, consumedUnits: 0, scrappedUnits: 0 }; j.goodsFlows[key] = f; }
   return f;
 }
 
@@ -39,7 +39,10 @@ export const INTERNAL_MOVE = 0;
 export function deliverGoods(from: PartyRef, to: PartyRef, subUnitId: string, units: number, unitPriceUSD: number, reason: string): number {
   if (!(units > 0)) return -1;
   if (partyId(from) === partyId(to)) return INTERNAL_MOVE;
-  return wire({ from, to, kind: 'GOOD', asset: subUnitId, quantity: units, priceUSD: Math.max(0, unitPriceUSD), reason }, internReason);
+  // A negative unit price arriving here is an arithmetic error at the caller. Floored, it became
+  // a free delivery and defeated the wire ledger's own write-site guard.
+  if (unitPriceUSD < 0) defect(`${subUnitId} delivered at ${unitPriceUSD} per unit (${reason})`);
+  return wire({ from, to, kind: 'GOOD', asset: subUnitId, quantity: units, priceUSD: unitPriceUSD, reason }, internReason);
 }
 
 /** A delivered consignment lands on the buyer's input lots, with the wire that delivered it. */
@@ -89,14 +92,19 @@ export function settleOutputInventory(
     produceGoods(region, subUnitId, arrivedUnits);
     // In this association order — the stage's own — so the stock is bit-identical to what it was.
     const held = initialUnits + arrivedUnits - contractUnits - marketUnits;
-    if (held < -0.01) {
-      // Sold more than existed: the wires say the goods left, the stock says they were never
-      // there — the clamp below MINTS them. Recorded as minted, so the identity still closes
-      // and the audit names the mint as its own line (W4's "no unit sold that did not exist").
-      flowOf(region, subUnitId).mintedUnits += -held;
+    // A STOCK CANNOT BE NEGATIVE, AND NO SALE MAY MAKE IT ONE. The wires have already said the
+    // goods left; writing the balance as zero would mint the difference, so the sale that
+    // oversold the stock is the defect and it is named here. Below the noise of summing
+    // thousands of lots the balance is simply zero.
+    const dustUnits = 1e-9 * Math.max(1, initialUnits + arrivedUnits);
+    if (held < -dustUnits) {
+      defect(`${region} ${subUnitId} sold ${(-held).toFixed(4)} units it never held`
+        + ` — ${initialUnits.toFixed(2)} in stock and ${arrivedUnits.toFixed(2)} arrived against`
+        + ` ${contractUnits.toFixed(2)} on contract and ${marketUnits.toFixed(2)} at auction`);
     }
+    const heldUnits = held < 0 ? 0 : held;
     if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
-    update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: Math.max(0, held), valueUSD: Math.max(0, held) * unitPriceUSD };
+    update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: heldUnits, valueUSD: heldUnits * unitPriceUSD };
   } else {
     produceGoods(region, subUnitId, deliveredUnits);
     if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
@@ -130,7 +138,7 @@ export function moveOutputUnits(from: StockHolder, to: StockHolder, subUnitId: s
   return n;
 }
 
-/** §5-FINALIZATION step 8 — input lots move from one firm to another (an estate's sale to a
+/** Input lots move from one firm to another (an estate's sale to a
  *  peer): a wire; the units leave the seller's chain FIFO and land as one lot on the buyer at
  *  the cost they left at. Returns the wire number, or -1 when nothing moved. */
 export function moveInputUnits(v2: V2World, from: { id: string; ticker: string }, to: { id: string; ticker: string }, subUnitId: string, units: number, week: number, reason: string): number {

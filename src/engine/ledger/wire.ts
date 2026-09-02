@@ -52,7 +52,7 @@ export interface WireJournal {
   settleWeek: Int32Array;
   /** §5-WIRES W4: the week's transformations of goods (produced, consumed, scrapped) per
    *  `region|subUnit` — not moves, so not wires, but the other half of the stock identity. */
-  goodsFlows: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number; mintedUnits: number }>;
+  goodsFlows: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>;
   /** GOODS_TRACE=1: units the sellers' settlements counted as delivered, per `region|subUnit`. */
   goodsDelivered?: Record<string, number>;
 }
@@ -157,7 +157,7 @@ export interface WireSummary {
    *  what it bought), a carrier holds its consignments. */
   goodsNetUnitsByKey: Record<string, number>;
   /** §5-WIRES W4: the week's transformations per `region|subUnit`. */
-  goodsFlowByKey: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number; mintedUnits: number }>;
+  goodsFlowByKey: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>;
   goodsOutUnitsByKey?: Record<string, number>;
   goodsInUnitsByKey?: Record<string, number>;
   goodsDeliveredByKey?: Record<string, number>;

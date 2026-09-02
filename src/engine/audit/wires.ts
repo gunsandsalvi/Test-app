@@ -1,5 +1,5 @@
 /**
- * W — the wire family (§5-WIRES). W1: the week's money wires are exactly what settlement executed
+ * W — the wire family. W1: the week's money wires are exactly what settlement executed
  * (a payment row is a projection of a wire, never the other way round). W2+ arrive with the
  * asset kinds: a holding's change is the replay of its wires.
  */
@@ -87,14 +87,6 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       out.push({ family: 'W', check: 'W3 wires reproduce the ladders', week, usd, message: `${gaps.length} region-kinds' ladders moved by other than their wires (${gaps.map(([k, g]) => `${k.replace('|', ' ')} ${B(g)}`).slice(0, 4).join(' | ')}${gaps.length > 4 ? ' | …' : ''}) — face written on a ladder without a wire, or a wire no ladder took` });
     }
   }
-  // W4b: a unit sold that did not exist — the seller's settlement clamped a negative stock to zero
-  // and the sale went through anyway. Counted so the identity closes, named so it is a defect.
-  {
-    const minted = Object.entries(w.goodsFlowByKey ?? {}).filter(([, f]) => f.mintedUnits > 1e-3).sort((a, b) => b[1].mintedUnits - a[1].mintedUnits);
-    if (minted.length > 0) {
-      out.push({ family: 'W', check: 'W4 no unit sold that did not exist', week, usd: minted.reduce((a, [, f]) => a + f.mintedUnits, 0), message: `${minted.length} region-goods sold units their sellers never held (${minted.slice(0, 4).map(([k, f]) => `${k.replace('|', ' ')} ${f.mintedUnits.toFixed(1)}u`).join(' | ')}${minted.length > 4 ? ' | …' : ''}) — the stock settlement clamped a negative balance` });
-    }
-  }
   // W4: the goods identity — per region and sub-unit, in units, the stock's change is what was
   // produced less consumed and scrapped, plus what the wires brought in less what they took out.
   if (prev?.goodsUnitsByKey) {
@@ -104,7 +96,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
     const gaps: [string, number][] = [];
     keys.forEach((key) => {
       const delta = (now[key] ?? 0) - (prev.goodsUnitsByKey![key] ?? 0);
-      const f = flows[key]; const explained = (f ? f.producedUnits + f.mintedUnits - f.consumedUnits - f.scrappedUnits : 0) + (nets[key] ?? 0);
+      const f = flows[key]; const explained = (f ? f.producedUnits - f.consumedUnits - f.scrappedUnits : 0) + (nets[key] ?? 0);
       // The tolerance is floating-point dust on the GROSS flow (a lot's 0.0001u residue, the sum
       // of thousands of products), never a share of the stock.
       const gross = (f ? f.producedUnits + f.consumedUnits + f.scrappedUnits : 0) + Math.abs(nets[key] ?? 0) + Math.abs(delta);
