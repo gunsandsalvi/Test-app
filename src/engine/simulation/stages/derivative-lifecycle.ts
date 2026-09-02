@@ -20,9 +20,7 @@
 
 import { GameState, RegionId } from '../../../types';
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
-import {
-  DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey,
-} from '../../../domain/derivatives/contract';
+import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey } from '../../../domain/derivatives/contract';
 import { DerivativeMarketView } from '../../../domain/derivatives/profile';
 import { derivativeProfile } from '../../../domain/derivatives/registry';
 import { StandingBook } from '../../../domain/derivatives/standing-book';
@@ -145,6 +143,35 @@ function payToB(ctx: WeeklyStepContext, c: DerivativeContract, usdToB: number, r
   const ek = derivativePartyKey(payee);
   net.set(pk, (net.get(pk) ?? 0) - Math.abs(usdToB));
   net.set(ek, (net.get(ek) ?? 0) + Math.abs(usdToB));
+}
+
+/**
+ * §5-FINALIZATION step 8 — A PARTY'S DEATH CLOSES OUT EVERY CONTRACT IT STANDS ON, the week it
+ * dies: the settle's DEFAULTED branch, for every class at once, paid through the estate's
+ * account (a claim on it or a payment from it, like any other). Before this a class whose market
+ * had already run that week carried the dead party's contracts to its next settle, and the
+ * audit saw a contract with a dead party at every such week's end (O5).
+ */
+export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameState, party: DerivativeParty): number {
+  const book = derivativesBookOf(ctx, state);
+  const key = derivativePartyKey(party);
+  const view = buildDerivativeMarketView(ctx);
+  const net = new Map<string, number>();
+  const kept: DerivativeContract[] = [];
+  let closed = 0;
+  for (const c of book) {
+    const onA = derivativePartyKey(c.a) === key;
+    if (!onA && derivativePartyKey(c.b) !== key) { kept.push(c); continue; }
+    closed++;
+    // A counterparty that has ceased to exist leaves nobody to pay or be paid: flat.
+    if (view.partyState(onA ? c.b : c.a) === 'GONE') continue;
+    const profile = derivativeProfile(c.classId);
+    const markUSD = profile.markToMarketUSDToA(c, view);
+    if (markUSD !== null) payToB(ctx, c, -(markUSD - (c.settledMarkUSD ?? 0)), 'derivative close-out', net);
+    else payToB(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net);
+  }
+  if (closed > 0) ctx.derivativesBook = kept;
+  return closed;
 }
 
 /**

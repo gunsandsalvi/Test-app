@@ -52,12 +52,18 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
   const firmByTicker = new Map<string, (typeof ctx.prevActiveFirms)[number]>();
   ctx.prevActivePrivateFirms.forEach(c => firmByTicker.set(c.ticker, c));
   ctx.prevActiveFirms.forEach(c => firmByTicker.set(c.ticker, c));
+  // §5-FINALIZATION step 8: a dead buyer with an OPEN estate still takes delivery — the receiver
+  // liquidates what arrives (the workout sells input lots to peers as it sells finished stock).
+  const openEstateIds = new Set((ctx.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
+  const estateByTicker = new Map<string, (typeof ctx.updatedCompanies)[number]>();
+  ctx.updatedCompanies.forEach((c) => { if (c.isDefaulted && openEstateIds.has(c.id)) estateByTicker.set(c.ticker, c); });
 
   inFlight.forEach(shipment => {
     if (shipment.arrivalWeek > state.currentWeek) { stillMoving.push(shipment); return; }
     if (!companyUpdates[shipment.buyerTicker]) companyUpdates[shipment.buyerTicker] = {};
     const update = companyUpdates[shipment.buyerTicker];
-    const buyer = firmByTicker.get(shipment.buyerTicker);
+    const buyer = firmByTicker.get(shipment.buyerTicker) ?? estateByTicker.get(shipment.buyerTicker);
+    const toEstate = buyer !== undefined && !firmByTicker.has(shipment.buyerTicker);
     const carrier: PartyRef = shipment.carrierTicker
       ? { kind: 'COMPANY', ticker: shipment.carrierTicker }
       : { kind: 'SEGMENT', region: shipment.carrierRegion ?? (buyer?.region ?? 'USA'), industry: 'AutomotiveTransport' };
@@ -76,6 +82,12 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     // IND1: what arrives is routed by what it IS — a machine crossing an ocean becomes PP&E the
     // week it lands, not a lot nobody consumes.
     const kind = purchaseKindOf(shipment.subUnitId);
+    if (toEstate && kind !== 'RECIPE_INPUT') {
+      // A machine or an operating purchase landing at a receivership has no plant to enter and
+      // no week to be used in: scrapped by wire on landing (the estate's own account paid for it).
+      scrapGoods(buyer!.region, shipment.subUnitId, shipment.units);
+      return;
+    }
     if (kind !== 'RECIPE_INPUT') {
       if (kind === 'CAPITAL_GOOD') {
         // IND13 — landing is not entering service. An imported machine is commissioned on the

@@ -76,7 +76,7 @@ import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAnd
 import { openAccount, openingCashOf, stashOpeningCash, sectorRowAt, stashSeedHouseholdLine } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
-import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand } from '../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand, industryOfSubUnit } from '../../domain/industry-registry';
 import { getRegionProductivityPerCapitaUSD, remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../bootstrap/population';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
@@ -1240,7 +1240,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const buyer = pool[(wk + b.subUnitId.length) % pool.length];
         seededPipeline.push({
           buyerTicker: buyer.ticker,
-          sellerKey: `${b.from}_SEED_SUPPLIER`,
+          // Step 8: the seller is a party this model knows — the origin's segment pool of the good's
+          // industry (the seed's lots are paid for; the key names who they came from).
+          sellerKey: `PRIVATE:${b.from}:${industryOfSubUnit(b.subUnitId) ?? b.subUnitId}`,
           subUnitId: b.subUnitId,
           units: b.units / transit,
           landedCostPerUnit: perUnit,

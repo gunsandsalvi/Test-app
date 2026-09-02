@@ -17,7 +17,9 @@
 import { assertNever } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
-import { moveOutputUnits, scrapOutputUnitsTo } from '../../ledger/goods-ledger';
+import { moveOutputUnits, scrapOutputUnitsTo, moveInputUnits, scrapInputUnits, scrapGoods } from '../../ledger/goods-ledger';
+import { totalInputValueUSD, inputUnitsHeld, materializeInputInventory } from '../../../engine2/lots';
+import { closeOutDerivativesOfParty } from './derivative-lifecycle';
 import { retireLadderFace, rebuildLadder } from '../../ledger/tranche-ledger';
 import { transferHolding } from '../../ledger/holdings-ledger';
 import { isTrancheKind } from '../../../domain/assets';
@@ -122,7 +124,6 @@ function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
 }
 
 export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContext): void {
-  void state;
   const week = ctx.nextWeek;
   const estates: Estate[] = ctx.estates ?? [];
   const byCompanyId = new Map(estates.map((e) => [e.companyId, e]));
@@ -138,7 +139,17 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // A LIVE bank still never opens an estate here.
     if ((comp.isBankEntity && comp.bankResolvedWeek === undefined) || comp.isInstitutionalEntity) return;
     const estate = openEstate(comp, ctx);
-    if (!estate) return;
+    if (!estate) {
+      // A dead firm nobody has a claim on opens no estate — nothing takes delivery for it, so
+      // what is still on its way is scrapped by wire now, not on landing (step 8).
+      scrapConsignmentsTo(state, comp.ticker);
+      return;
+    }
+    // §5-FINALIZATION step 8: the death closes out every derivative the firm stands on, this
+    // week, through the estate's account — the survivor's replacement value is a claim on it
+    // or a payment into it, like any other.
+    closeOutDerivativesOfParty(ctx, state, { kind: 'COMPANY', ticker: comp.ticker });
+    if (comp.isBankEntity) closeOutDerivativesOfParty(ctx, state, { kind: 'BANK', ticker: comp.ticker });
     // §7.286 — THE FILING SEIZES NOTHING ANY MORE. §7.264 paid the debtor's cash into the
     // UNMODELED boundary at filing and drew the distributions back out of it — two legs of one
     // workout meeting at a party that is nobody. The debtor's account IS the estate's account:
@@ -176,6 +187,9 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // invoices' own due dates; here they are only COUNTED (via the one-pass sums above), so
     // the close condition knows when the last one is in.
     estate.assets.receivablesUSD = receivablesBySellerUSD.get(estate.ticker) ?? 0;
+    // §5-FINALIZATION step 8 — the inventory is the REAL rows too: the finished stock and the
+    // input lots (consignments the receiver took delivery of land here), read each week.
+    estate.assets.inventoryUSD = comp ? Math.max(0, getOutputInventoryUSD(comp)) + totalInputValueUSD(ctx.v2, comp.id) : 0;
 
     // Inventory leaves at the company's OWN turnover — the rate its market was taking the goods
     // before it failed — and at the discount a buyer needs for holding it that long.
@@ -216,6 +230,14 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     if (estateAssetsUSD(estate.assets) <= 1 && (availableUSD - paidUSD <= 1 || claimsRemainUSD <= 1)) {
       estate.closedWeek = week;
       writeOffResidual(ctx, index, estate);
+      // §5-FINALIZATION step 8: a closed estate takes no more delivery — what is still on its
+      // way is scrapped by wire (the carrier writes it off), and any last lots go with it.
+      if (comp) {
+        Object.entries(materializeInputInventory(ctx.v2, comp.id)).forEach(([subUnitId, lots]) => {
+          scrapInputUnits(ctx.v2, comp, subUnitId, lots.reduce((a, l) => a + l.unitsHeld, 0));
+        });
+        scrapConsignmentsTo(state, comp.ticker);
+      }
       // §5-WIRES W6: a closed estate leaves no ladder — whatever face no claim covered is
       // extinguished by wire, so a dead firm's debt cannot stand on a book nobody holds.
       if (comp) rebuildLadder(ctx.v2, { id: comp.id, ticker: comp.ticker, region: comp.region }, [], 'estate closed: ladder extinguished');
@@ -239,6 +261,19 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   ctx.estates = estates.filter((e) => e.closedWeek === undefined || week - e.closedWeek < 4);
 }
 
+/** Step 8 — what is still on its way to a firm nothing can take delivery for is scrapped by wire:
+ *  a named carrier held it as stock and writes it off; one the transport pool carried passed
+ *  through a sink at dispatch and was never stock (the same rule goods-arrival applies). */
+function scrapConsignmentsTo(state: GameState, buyerTicker: string): void {
+  const inFlight = state.goodsInTransit ?? [];
+  if (!inFlight.some((sh) => sh.buyerTicker === buyerTicker)) return;
+  state.goodsInTransit = inFlight.filter((sh) => {
+    if (sh.buyerTicker !== buyerTicker) return true;
+    if (sh.carrierTicker && sh.carrierRegion) scrapGoods(sh.carrierRegion, sh.subUnitId, sh.units);
+    return false;
+  });
+}
+
 /**
  * §7.286 — the week's asset slices go to NAMED PEERS: the region's same-sector active firms,
  * pro rata to their own cash, paying the workout's discounted price into the estate's account
@@ -258,9 +293,13 @@ function sellAssetsToPeers(
   const totalPeerCashUSD = peers.reduce((a, c) => a + cashOf(ctx.v2, c), 0);
   if (totalPeerCashUSD <= 1) return;
   const weekPriceUSD = invPriceUSD + ppePriceUSD;
-  const preInvUSD = Object.values(comp?.outputInventoryBySubUnit ?? {}).reduce((a, r) => a + Math.max(0, r.valueUSD), 0);
+  // The week's slice is of the whole inventory — finished stock AND input lots (step 8).
+  const preInvUSD = Object.values(comp?.outputInventoryBySubUnit ?? {}).reduce((a, r) => a + Math.max(0, r.valueUSD), 0)
+    + (comp ? totalInputValueUSD(ctx.v2, comp.id) : 0);
   const origRows: Record<string, { unitsHeld: number; valueUSD: number }> = {};
   Object.entries(comp?.outputInventoryBySubUnit ?? {}).forEach(([k, r]) => { origRows[k] = { unitsHeld: r.unitsHeld, valueUSD: r.valueUSD }; });
+  const origInputUnits: Record<string, number> = {};
+  if (comp) Object.keys(materializeInputInventory(ctx.v2, comp.id)).forEach((k) => { origInputUnits[k] = inputUnitsHeld(ctx.v2, comp.id, k); });
   peers.forEach((peer) => {
     const peerCashUSD = cashOf(ctx.v2, peer);
     const share = peerCashUSD / totalPeerCashUSD;
@@ -278,22 +317,30 @@ function sellAssetsToPeers(
     if (ppeShareUSD > 0) {
       peer.grossPPEUSD = (peer.grossPPEUSD ?? 0) + ppeShareUSD;
     }
-    if (comp?.outputInventoryBySubUnit && invSoldUSD > 0 && preInvUSD > 0) {
+    if (comp && invSoldUSD > 0 && preInvUSD > 0) {
       // §5-WIRES W4: the slice each peer takes moves by wire, off the ORIGINAL rows (the shares
       // are of the week's slice, not of what earlier peers left).
       const frac = Math.min(1, (invSoldUSD * share) / preInvUSD);
       Object.entries(origRows).forEach(([subUnitId, row]) => {
         moveOutputUnits(comp, peer, subUnitId, row.unitsHeld * frac, row.valueUSD * frac, 'estate inventory sold to peers');
       });
+      // §5-FINALIZATION step 8: the input lots the receiver holds go the same way, by wire.
+      Object.entries(origInputUnits).forEach(([subUnitId, units]) => {
+        moveInputUnits(ctx.v2, comp, peer, subUnitId, units * frac, ctx.nextWeek, 'estate input inventory sold to peers');
+      });
     }
   });
   // The rest of the week's slice is scrappage — unsold distressed inventory perishes.
-  if (comp?.outputInventoryBySubUnit && invSoldUSD > 0 && preInvUSD > 0) {
+  if (comp && invSoldUSD > 0 && preInvUSD > 0) {
     // The rows land exactly where the old scaling put them (`row *= keepFrac`): what the peers
     // did not take of the week's slice is scrapped, by wire-less transformation.
     const keepFrac = Math.max(0, 1 - invSoldUSD / preInvUSD);
     Object.entries(origRows).forEach(([subUnitId, row]) => {
       scrapOutputUnitsTo(comp, subUnitId, row.unitsHeld * keepFrac, row.valueUSD * keepFrac);
+    });
+    Object.entries(origInputUnits).forEach(([subUnitId, units]) => {
+      const keepUnits = units * keepFrac;
+      scrapInputUnits(ctx.v2, comp, subUnitId, Math.max(0, inputUnitsHeld(ctx.v2, comp.id, subUnitId) - keepUnits));
     });
   }
 }
@@ -488,7 +535,8 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
     assets: {
       cashUSD: Math.max(0, cashOf(ctx.v2, comp)),
       receivablesUSD: Math.max(0, comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE * 0.6),
-      inventoryUSD: Math.max(0, getOutputInventoryUSD(comp)),
+      // Step 8: the finished stock and the input lots — the rows the workout sells and re-reads weekly.
+      inventoryUSD: Math.max(0, getOutputInventoryUSD(comp)) + totalInputValueUSD(ctx.v2, comp.id),
       ppeUSD: netPpeUSD,
     },
     claims,

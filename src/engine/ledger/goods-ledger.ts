@@ -13,7 +13,7 @@
  * write it. The output stock stays the company's own record, written here only.
  */
 import { V2World } from '../../engine2/world';
-import { pushLot } from '../../engine2/lots';
+import { pushLot, consumeFifo } from '../../engine2/lots';
 import { isStorable } from '../../domain/industry-registry';
 import { RegionId } from '../../domain/geography';
 import { PartyRef, partyId } from './party';
@@ -128,6 +128,28 @@ export function moveOutputUnits(from: StockHolder, to: StockHolder, subUnitId: s
   const dst = inv[subUnitId] ?? (inv[subUnitId] = { unitsHeld: 0, valueUSD: 0 });
   dst.unitsHeld += units; dst.valueUSD += valueUSD;
   return n;
+}
+
+/** §5-FINALIZATION step 8 — input lots move from one firm to another (an estate's sale to a
+ *  peer): a wire; the units leave the seller's chain FIFO and land as one lot on the buyer at
+ *  the cost they left at. Returns the wire number, or -1 when nothing moved. */
+export function moveInputUnits(v2: V2World, from: { id: string; ticker: string }, to: { id: string; ticker: string }, subUnitId: string, units: number, week: number, reason: string): number {
+  if (!(units > 1e-9)) return -1;
+  const drawn = consumeFifo(v2, from.id, subUnitId, units);
+  const moved = Math.min(units, drawn.availableUnits);
+  if (!(moved > 1e-9)) return -1;
+  let costUSD = 0; for (const c of drawn.costsUSD) costUSD += c;
+  const n = deliverGoods({ kind: 'COMPANY', ticker: from.ticker }, { kind: 'COMPANY', ticker: to.ticker }, subUnitId, moved, costUSD / moved, reason);
+  pushLot(v2, to.id, subUnitId, `ESTATE:${from.ticker}`, moved, costUSD / moved, week, n);
+  return n;
+}
+
+/** Input lots perish or are abandoned: the units leave the chain FIFO and are scrapped. */
+export function scrapInputUnits(v2: V2World, from: { id: string; region: RegionId }, subUnitId: string, units: number): void {
+  if (!(units > 1e-9)) return;
+  const drawn = consumeFifo(v2, from.id, subUnitId, units);
+  const lost = Math.min(units, drawn.availableUnits);
+  if (lost > 1e-9) scrapGoods(from.region, subUnitId, lost);
 }
 
 /** Finished stock perishes or is abandoned down to a stated level: the difference is scrapped. */

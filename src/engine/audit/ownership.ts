@@ -140,7 +140,9 @@ function o5(state: GameState, week: number): AuditFinding[] {
   if (badIndex) out.push({ family: 'O', check: 'O5 index weights sum to one', week, usd: badIndex, message: `${badIndex} indices' weights do not sum to one` });
   let deadShip = 0;
   const idOrTicker = (key: string) => tickers.get(key) ?? state.companies.find((c) => c.id === key);
-  (state.goodsInTransit ?? []).forEach((g) => { const b = tickers.get(g.buyerTicker); if (!b || !isActiveCompany(b)) deadShip++; else if (!String(g.sellerKey).startsWith('PRIVATE') && !idOrTicker(String(g.sellerKey).replace(/^.*:/, ''))) deadShip++; });
+  // Step 8: a dead buyer with an OPEN estate still takes delivery — the receiver liquidates it.
+  const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
+  (state.goodsInTransit ?? []).forEach((g) => { const b = tickers.get(g.buyerTicker); if (!b || !(isActiveCompany(b) || openEstates.has(b.id))) deadShip++; else if (!String(g.sellerKey).startsWith('PRIVATE') && !idOrTicker(String(g.sellerKey).replace(/^.*:/, ''))) deadShip++; });
   if (deadShip) out.push({ family: 'O', check: 'O5 shipments have live buyer and seller', week, usd: deadShip, message: `${deadShip} consignments in transit to or from a firm that is gone` });
   return out;
 }
