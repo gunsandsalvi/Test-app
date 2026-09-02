@@ -41,7 +41,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
 import { SRF_SPREAD_BPS } from '../../macro/banking';
-import { cashOf, entityCashOf, poolCashOf } from '../../ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, adjustSectorRow } from '../../ledger/accounts';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
@@ -436,6 +436,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         ),
       };
       ctx.g2DeclinedOriginationUSD[regionId] = (ctx.g2DeclinedOriginationUSD[regionId] ?? 0) + lending.declinedOriginationUSD;
+      // §5-WIRES A3.4: what this bank's own book did to its household line this stage — the
+      // loans it wrote and retired, the amortization and interest it took, the deposit interest
+      // it paid — is the household sector's row at this bank moving by the same amount.
+      adjustSectorRow(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, bank.ticker, withDeposits.depositsUSD - prevSheet.depositsUSD);
       return { bank, sheet: withDeposits };
     });
 
@@ -687,10 +691,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // decomposition can count the banks' second creator (the first is the payment ledger).
     reg.householdBookDepositFlowWeeklyUSD = Math.round(
       mortgageOriginationUSD - mortgageDischargeUSD + consumerCreditUSD - bookPrincipalUSD - interestUSD);
-    const bankHouseholdDepositsUSD = newSheets.reduce((a, { sheet }) => a + sheet.depositsUSD, 0);
     reg.householdState = {
       ...hs,
-      depositsUSD: Math.round(bankHouseholdDepositsUSD),
       mmfSharesUSD: Math.round(((hs.mmfSharesUSD ?? 0) + regionDivertedUSD)),
       mortgageDebtUSD,
       creditCardDebtUSD,

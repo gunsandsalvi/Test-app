@@ -1,3 +1,6 @@
+import { RegionId } from '../../domain/geography';
+import { ensureV2 } from '../../engine2/world';
+import { householdDepositsOf } from '../../engine/ledger/accounts';
 /**
  * AU · macro — the region's dashboard: activity, prices, labour, money, the external account,
  * households, banks, the treasury — each line the number and its month-on-month where the tape
@@ -68,7 +71,7 @@ export const macro: FunctionModule = {
       </Card>
       <SectionLabel>households</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
-        <KV k="deposits" hint={sub('household deposits')} v={money(hs?.depositsUSD)} />
+        <KV k="deposits" hint={sub('household deposits')} v={money(householdDepositsOf(ensureV2(world.state), ref.id as RegionId))} />
         <KV k="net worth" hint={sub('household net worth')} v={money(hs?.netWorthUSD)} />
         <KV k="debt to income" v={ratio(hs?.householdDebtToIncomeRatio, 2)} />
         <KV k="savings rate" v={pctLevel(hs?.savingsRate)} />

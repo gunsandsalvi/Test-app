@@ -1,3 +1,4 @@
+import { openingCashOf } from '../../ledger/accounts';
 /**
  * G2 — itemized bank lending and endogenous money.
  *
@@ -520,7 +521,7 @@ export function migrateHouseholdDebtAtSeed(
     const fundingNeedUSD = Math.round((
       loanBooksOf(sheet) + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
     ));
-    applyBankFundingSplit(sheet, Math.round((hs.depositsUSD ?? 0) * share));
+    applyBankFundingSplit(sheet, Math.round(openingCashOf(hs) * share)); // the seed's provisional sizing (close-seed strikes the line)
     sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet))).toFixed(4));
   });
 

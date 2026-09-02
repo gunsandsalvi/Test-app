@@ -8,7 +8,7 @@
 
 import { GameState, Company, InstitutionalEntity, Region, RegionId } from '../types';
 import { loanBooksOf } from '../domain/banking';
-import { entityCashOf, poolCashOf } from '../engine/ledger/accounts';
+import { entityCashOf, poolCashOf, householdDepositsOf } from '../engine/ledger/accounts';
 import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/world';
 import { bookHeadOf } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
@@ -68,7 +68,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     put(`region:${r}:wage growth`, reg.wageGrowth);
     put(`region:${r}:bank nim`, reg.bankingSector?.netInterestMarginPct);
     put(`region:${r}:bank capital`, reg.bankingSector?.bankCapitalRatio);
-    put(`region:${r}:household deposits`, reg.householdState?.depositsUSD);
+    put(`region:${r}:household deposits`, householdDepositsOf(ensureV2(state), r));
     put(`region:${r}:household net worth`, reg.householdState?.netWorthUSD);
     put(`region:${r}:government revenue`, reg.governmentRevenueUSD);
     put(`region:${r}:government outlays`, reg.governmentOutlaysUSD ?? reg.governmentSpendingWeeklyUSD);

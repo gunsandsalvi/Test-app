@@ -1,3 +1,4 @@
+import { RegionId } from '../../domain/geography';
 /**
  * AU · statements — a firm's P&L, balance sheet and cash flow (the latest filed quarter beside
  * the one before), a bank's sheet, an institution's assets and liabilities, a region's national
@@ -15,7 +16,7 @@ import { formatDate, quarterLabel } from '../calendar';
 import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
 import { bankRwaUSD } from '../../domain/bank-pricing';
 import { totalDebtOf } from '../../domain/company';
-import { cashOf } from '../../engine/ledger/accounts';
+import { cashOf, householdDepositsOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { entityCashOf } from '../../engine/ledger/accounts';
 
@@ -252,7 +253,7 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
     ]} />;
   } else {
     body = <Statement units="USD millions · the household sector" asOf={asOf} lines={[
-      { label: 'Deposits', usd: hs?.depositsUSD },
+      { label: 'Deposits', usd: householdDepositsOf(ensureV2(world.state), r.id as RegionId) },
       { label: 'Money fund shares', usd: hs?.mmfSharesUSD },
       { label: 'Direct equity', usd: hs?.directEquityUSD },
       { label: 'ETF holdings', usd: hs?.etfHoldingsUSD },

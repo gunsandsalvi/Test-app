@@ -1,3 +1,6 @@
+import { RegionId } from '../../domain/geography';
+import { ensureV2 } from '../../engine2/world';
+import { householdDepositsOf } from '../../engine/ledger/accounts';
 /** AU · object: region — an economy: its people, prices, banks, treasury, central bank and markets. */
 
 import { Region } from '../../types';
@@ -72,7 +75,7 @@ export const region = defineObject<Region>({
           <KV k="price level" hint={cpi.length > 1 ? <ChangeSub series={cpi} /> : 'seed = 100'} v={num(r.consumerPriceIndex, 1)} />
           <KV k="labour market" hint="tightness · wage growth" v={`${num(r.laborMarketTightness, 2)} · ${pctLevel(r.wageGrowth)}`} />
           <KV k="banks" hint="capital · margin" v={`${pctLevel(r.bankingSector?.bankCapitalRatio, 1)} · ${pctLevel(r.bankingSector?.netInterestMarginPct, 2)}`} onTap={() => nav.go('banks')} />
-          <KV k="households" hint="deposits · net worth" v={`${money(r.householdState?.depositsUSD)} · ${money(r.householdState?.netWorthUSD)}`} onTap={() => nav.go('statements', { tab: 'households' })} />
+          <KV k="households" hint="deposits · net worth" v={`${money(householdDepositsOf(ensureV2(world.state), r.id as RegionId))} · ${money(r.householdState?.netWorthUSD)}`} onTap={() => nav.go('statements', { tab: 'households' })} />
           <KV k="treasury" hint="revenue · outlays, weekly" v={`${money(r.governmentRevenueUSD)} · ${money(r.governmentOutlaysUSD ?? r.governmentSpendingWeeklyUSD)}`} onTap={() => nav.go('statements', { tab: 'treasury' })} />
           <KV k="population" v={count(Math.round(r.totalPopulation))} />
         </Card>

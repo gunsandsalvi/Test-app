@@ -12,7 +12,7 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
-import { cashOf, entityCashOf, poolCashOf } from '../ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, householdDepositsOf } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 
 const banksOf = (s: GameState, r?: RegionId) =>
@@ -96,7 +96,7 @@ function m3(state: GameState, week: number): AuditFinding[] {
     const pools = sum(reg.smePools ?? [], (p) => poolCashOf(v2, r, p.industry));
     if (Math.abs(smeLine - pools) > Math.max(1e7, Math.abs(pools) * 0.005)) out.push({ family: 'M', check: 'M3 sme deposits = pools\' cash', week, usd: smeLine - pools, message: `${r}: the pools hold ${B(pools)} while the banks' SME lines say ${B(smeLine)}` });
     const hhLine = sum(banks, (b) => b.bankBalanceSheet!.depositsUSD);
-    const hh = reg.householdState?.depositsUSD ?? 0;
+    const hh = householdDepositsOf(v2, r);
     if (Math.abs(hhLine - hh) > Math.max(1e7, Math.abs(hh) * 0.005)) out.push({ family: 'M', check: 'M3 household deposits = banks\' line', week, usd: hhLine - hh, message: `${r}: households say ${B(hh)}, the banks' household line says ${B(hhLine)}` });
   });
   return out;
@@ -121,7 +121,7 @@ function m4(state: GameState, week: number): AuditFinding[] {
     if (!reg) return;
     const negPools = (reg.smePools ?? []).filter((p) => poolCashOf(v2, r, p.industry) < -1e6);
     if (negPools.length) out.push({ family: 'M', check: 'M4 overdrawn pools', week, usd: sum(negPools, (p) => poolCashOf(v2, r, p.industry)), message: `${r}: ${negPools.length} pools overdrawn ${B(sum(negPools, (p) => poolCashOf(v2, r, p.industry)))}` });
-    const hh = reg.householdState?.depositsUSD ?? 0;
+    const hh = householdDepositsOf(v2, r);
     if (hh < -1e6) out.push({ family: 'M', check: 'M4 overdrawn households', week, usd: hh, message: `${r}: household deposits ${B(hh)}` });
     const tga = reg.centralBankSheet?.treasuryAccountUSD ?? 0;
     if (tga < -1e6) out.push({ family: 'M', check: 'M4 overdrawn treasury', week, usd: tga, message: `${r}: treasury account ${B(tga)}` });

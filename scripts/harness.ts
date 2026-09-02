@@ -18,7 +18,7 @@
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
-import { cashOf, entityCashOf, poolCashOf, resetAccount } from '../src/engine/ledger/accounts';
+import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, resetAccount } from '../src/engine/ledger/accounts';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
@@ -702,7 +702,7 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
       .filter((c) => c.region === region && c.isBankEntity && !c.isDefaulted && !c.mergerAcquired && c.bankBalanceSheet)
       .reduce((a, c) => a + c.bankBalanceSheet!.depositsUSD, 0);
     if (bankDepositsUSD > 0) {
-      const hsView = hs.depositsUSD ?? 0;
+      const hsView = householdDepositsOf(ensureV2(state), region);
       if (Math.abs(hsView - bankDepositsUSD) / bankDepositsUSD > 1e-3) {
         violations.push({
           week,
@@ -1045,7 +1045,7 @@ const hhModule: HarnessModule = (() => {
           .reduce((a, e) => a + (e.beneficiaryLiabilityUSD ?? 0), 0);
         const held = hs.institutionalClaimsUSD ?? 0;
         const gap = Math.abs(instLiab - held) / Math.max(1, instLiab);
-        const nwParts = (hs.depositsUSD ?? 0) + (hs.mmfSharesUSD ?? 0) + (hs.equityHoldingsUSD ?? 0)
+        const nwParts = householdDepositsOf(ensureV2(s), r) + (hs.mmfSharesUSD ?? 0) + (hs.equityHoldingsUSD ?? 0)
           + (hs.housingStockUSD ?? 0)
           - ((hs.mortgageDebtUSD ?? 0) + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0));
         const nwGap = Math.abs(nwParts - (hs.netWorthUSD ?? 0)) / Math.max(1, Math.abs(hs.netWorthUSD ?? 1));
@@ -1054,13 +1054,14 @@ const hhModule: HarnessModule = (() => {
         const bankDeposits = s.companies
           .filter(c => c.region === r && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
           .reduce((a, c) => a + c.bankBalanceSheet!.depositsUSD, 0);
-        const depGap = Math.abs((hs.depositsUSD ?? 0) - bankDeposits) / Math.max(1, bankDeposits);
+        const depGap = Math.abs(householdDepositsOf(ensureV2(s), r) - bankDeposits) / Math.max(1, bankDeposits);
         out.push(`  ${r}: instLiab=${B(instLiab)} held=${B(held)} (gap ${pct(gap)}) | netWorth parts gap ${pct(nwGap)} | tier-sum gap ${pct(tierGap)} | deposits-vs-banks gap ${pct(depGap)}`);
       });
       out.push('--- household liquidity: how many weeks of committed outflow the cash covers ---');
       REGIONS.forEach(r => {
         const h = s.regions[r].householdState as any;
-        const dep = Math.max(0, (h.depositsUSD ?? 0) + (h.mmfSharesUSD ?? 0));
+        const hDepositsUSD = householdDepositsOf(ensureV2(s), r);
+        const dep = Math.max(0, hDepositsUSD + (h.mmfSharesUSD ?? 0));
         const ds = Math.max(0, h.weeklyDebtServiceUSD ?? 0);
         const cons = Math.max(0, s.regions[r].estimatedHouseholdIncomeUSD) * (1 - (h.savingsRate ?? 0)) / 52;
         const committed = ds + cons;
@@ -1074,7 +1075,7 @@ const hhModule: HarnessModule = (() => {
         // that binds on nothing — the failure mode this project keeps finding (§7.146, §7.159).
         const incomeUSD = Math.max(0, s.regions[r].estimatedHouseholdIncomeUSD);
         const floorUSD = (incomeUSD / 52) * 12;
-        const headroomUSD = Math.max(0, (h.depositsUSD ?? 0) - floorUSD);
+        const headroomUSD = Math.max(0, hDepositsUSD - floorUSD);
         const gapUSD = Math.max(0, -(incomeUSD * (h.savingsRate ?? 0)) / 52);
         // What a forced sale could actually REACH. Only fund shares are sellable: household
         // direct equity and private business have no trading channel, so they are wealth the

@@ -33,7 +33,7 @@ import { fieldsOf, residualOf } from '../bank-identity-trace';
 import { ladderRowsOf } from '../../../engine2/tranches';
 import { moveFacilityLender } from '../../ledger/tranche-ledger';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../../domain/banking';
-import { resetAccount, movePoolRowsToBank } from '../../ledger/accounts';
+import { resetAccount, moveSectorRowsToBank } from '../../ledger/accounts';
 
 const sheetLinesUSD = (s: BankingSector): number =>
   Math.abs(s.depositsUSD) + Math.abs(s.corporateDepositsUSD ?? 0) + Math.abs(s.institutionalDepositsUSD ?? 0)
@@ -141,7 +141,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
 
     // ---- 1. Every non-cash line moves (the ledger's transfer); the target keeps only its cash. ----
     assumeBankBooks(acquirer.bankBalanceSheet!, bank.bankBalanceSheet!, plan);
-    movePoolRowsToBank(ctx.v2, bank.ticker, acquirer.ticker); // A3.3: the pools' rows at the failed bank move with its SME line
+    moveSectorRowsToBank(ctx.v2, bank.ticker, acquirer.ticker); // A3.3: the sector parties' rows at the failed bank move with its SME line
     traceSheet('assumed', bank); traceSheet('assumed', acquirer);
 
     // ---- 2. The cash leg, the guarantee, and the world's links. ----

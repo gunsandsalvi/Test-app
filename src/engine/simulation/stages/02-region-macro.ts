@@ -1,3 +1,4 @@
+import { householdDepositsOf } from '../../ledger/accounts';
 /**
  * Stage 2: Region Macro Evolution
  *
@@ -80,6 +81,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         publicCompanyEmployment: ctx.regionPublicCompanyEmployment[regionId],
         occupationDemand: regionOccDemand,
         avgListedDividendYieldAnnual: regionAvgDividendYield,
+        householdDepositsUSD: householdDepositsOf(ctx.v2, regionId),
       },
       ctx.nextWeek,
       equityRet,

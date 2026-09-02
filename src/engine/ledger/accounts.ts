@@ -97,13 +97,14 @@ const openingCashStash = new WeakMap<object, number>();
 export function stashOpeningCash(comp: object, usd: number): void { openingCashStash.set(comp, usd); }
 export function openingCashOf(comp: object): number { return openingCashStash.get(comp) ?? 0; }
 
-// ---- A3.3 — THE SECTOR PARTIES' ROWS, ONE PER BANK, CARRIED. A pool (an SME tier) banks at every
-// bank of its region: its balance is a row at each, moved by settlement's split of each leg and
-// CARRIED week to week — never re-guessed from a total by this week's market shares (§7.378's
-// half-backed shortcut). A bank's SME deposit line is the sum of the pool rows at it. ----
+// ---- A3.3/A3.4 — THE SECTOR PARTIES' ROWS, ONE PER BANK, CARRIED. A pool (an SME tier) and the
+// household sector bank at every bank of their region: the balance is a row at each, moved by
+// settlement's split of each leg and CARRIED week to week — never re-guessed from a total by
+// this week's market shares (§7.378's half-backed shortcut). A bank's SME line is the sum of
+// the pool rows at it; its household line the household sector's row at it. ----
 
-/** The pool's row at a bank, opened at zero on first sight. */
-export function poolRowAt(v2: V2World, party: PartyRef, bankTicker: string): number {
+/** The sector party's row at a bank, opened at zero on first sight. */
+export function sectorRowAt(v2: V2World, party: PartyRef, bankTicker: string): number {
   const a = v2.accounts;
   const ref = internString(v2, partyKey(party));
   let byBank = a.bankRowsByParty.get(ref);
@@ -118,29 +119,55 @@ export function poolRowAt(v2: V2World, party: PartyRef, bankTicker: string): num
   return r;
 }
 
-/** A pool's cash: the sum of its rows across its region's banks. */
-export function poolCashOf(v2: V2World, region: RegionId, industry: string): number {
-  const byBank = v2.accounts.bankRowsByParty.get(internString(v2, partyKey({ kind: 'SEGMENT', region, industry: industry as never })));
+/** A sector party's balance: the sum of its rows across its region's banks. */
+export function sectorCashOf(v2: V2World, party: PartyRef): number {
+  const byBank = v2.accounts.bankRowsByParty.get(internString(v2, partyKey(party)));
   if (!byBank) return 0;
   let usd = 0; byBank.forEach((r) => { usd += v2.accounts.balanceUSD[r]; });
   return usd;
 }
+/** A pool's cash. */
+export const poolCashOf = (v2: V2World, region: RegionId, industry: string): number =>
+  sectorCashOf(v2, { kind: 'SEGMENT', region, industry: industry as never });
+/** The household sector's deposits (A3.4). */
+export const householdDepositsOf = (v2: V2World, region: RegionId): number =>
+  sectorCashOf(v2, { kind: 'HOUSEHOLD', region });
 
-/** A bank's SME deposit line: every pool's row at it. */
-export function smeDepositsAt(v2: V2World, bankTicker: string): number {
+/** A bank's line of one sector kind: every such party's row at it. */
+function sectorDepositsAt(v2: V2World, bankTicker: string, kind: 'SEGMENT' | 'HOUSEHOLD'): number {
   let usd = 0;
-  v2.accounts.bankRowsByParty.forEach((byBank) => { const r = byBank.get(bankTicker); if (r !== undefined) usd += v2.accounts.balanceUSD[r]; });
+  v2.accounts.bankRowsByParty.forEach((byBank, partyRef) => {
+    if (!v2.internedStrings[partyRef].startsWith(kind + ':')) return;
+    const r = byBank.get(bankTicker); if (r !== undefined) usd += v2.accounts.balanceUSD[r];
+  });
   return usd;
 }
+/** A bank's SME deposit line: every pool's row at it. */
+export const smeDepositsAt = (v2: V2World, bankTicker: string): number => sectorDepositsAt(v2, bankTicker, 'SEGMENT');
+/** A bank's household deposit line: the household sector's row at it (A3.4). */
+export const householdDepositsAt = (v2: V2World, bankTicker: string): number => sectorDepositsAt(v2, bankTicker, 'HOUSEHOLD');
 
-/** A bank leaves (resolved, merged): every pool's row at it joins its row at the assuming bank. */
-export function movePoolRowsToBank(v2: V2World, fromTicker: string, toTicker: string): void {
+/**
+ * A3.4 — A BANK'S OWN BOOK MOVES A SECTOR ROW. The household loan pass and the evolution move a
+ * bank's household line directly (a loan creates the borrower's deposit, amortization and
+ * interest destroy it, the bank's deposit interest credits it — §7.352, the bank's second money
+ * engine as DEPOSIT events on its own sheet): each such move is the household row at that bank
+ * moving by the same amount, so the line and the row cannot disagree. Retired when those
+ * passes are account operations themselves (A3.6).
+ */
+export function adjustSectorRow(v2: V2World, party: PartyRef, bankTicker: string, deltaUSD: number): void {
+  if (deltaUSD === 0) return;
+  v2.accounts.balanceUSD[sectorRowAt(v2, party, bankTicker)] += deltaUSD;
+}
+
+/** A bank leaves (resolved, merged): every sector party's row at it joins its row at the assuming bank. */
+export function moveSectorRowsToBank(v2: V2World, fromTicker: string, toTicker: string): void {
   v2.accounts.bankRowsByParty.forEach((byBank, partyRef) => {
     const r = byBank.get(fromTicker);
     if (r === undefined) return;
     const party = partyFromKey(v2.internedStrings[partyRef]);
     if (!party) return;
-    const to = poolRowAt(v2, party, toTicker);
+    const to = sectorRowAt(v2, party, toTicker);
     v2.accounts.balanceUSD[to] += v2.accounts.balanceUSD[r];
     v2.accounts.balanceUSD[r] = 0;
     byBank.delete(fromTicker);
@@ -265,13 +292,14 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     const shareSum = regionBanks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
     // The household sector: its balance at each bank is that bank's household line, and a leg
     // lands on the banks by market share at once — the split the pools' legs always had.
-    const hh = partyId({ kind: 'HOUSEHOLD', region });
+    const hhParty: PartyRef = { kind: 'HOUSEHOLD', region };
+    const hh = partyId(hhParty);
     const hhSplit: number[] = [];
     regionBanks.forEach((b) => {
-      openRow(s, hh, s.bankIdxOfTicker.get(b.ticker)!, 'HOUSEHOLD', b.bankBalanceSheet!.depositsUSD);
+      openRow(s, hh, s.bankIdxOfTicker.get(b.ticker)!, 'HOUSEHOLD', ctx.v2.accounts.balanceUSD[sectorRowAt(ctx.v2, hhParty, b.ticker)]);
       hhSplit.push(shareSum > 0 ? (b.bankMarketShare ?? 0) / shareSum : 1 / Math.max(1, regionBanks.length));
     });
-    if (regionBanks.length === 0) { openRow(s, hh, AT_NOWHERE, 'HOUSEHOLD', reg.householdState?.depositsUSD ?? 0); hhSplit.push(1); }
+    if (regionBanks.length === 0) { openRow(s, hh, AT_NOWHERE, 'HOUSEHOLD', householdDepositsOf(ctx.v2, region)); hhSplit.push(1); }
     s.splitOfParty.set(hh, Float64Array.from(hhSplit));
     // The pools: a CARRIED row at each bank (A3.3); a leg splits across them by market share.
     (reg.smePools ?? []).forEach((seg) => {
@@ -280,7 +308,7 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
       const split: number[] = [];
       regionBanks.forEach((b) => {
         const sh = shareSum > 0 ? (b.bankMarketShare ?? 0) / shareSum : 1 / Math.max(1, regionBanks.length);
-        openRow(s, p, s.bankIdxOfTicker.get(b.ticker)!, 'SME', ctx.v2.accounts.balanceUSD[poolRowAt(ctx.v2, party, b.ticker)]);
+        openRow(s, p, s.bankIdxOfTicker.get(b.ticker)!, 'SME', ctx.v2.accounts.balanceUSD[sectorRowAt(ctx.v2, party, b.ticker)]);
         split.push(sh);
       });
       if (regionBanks.length === 0) { openRow(s, p, AT_NOWHERE, 'SME', poolCashOf(ctx.v2, region, seg.industry)); split.push(1); }
@@ -338,18 +366,18 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
     if (!d) { d = blank(); deltaByBank.set(bi, d); }
     d[classOf(r)] += s.balanceUSD[r] - s.openingUSD[r];
   }
-  // A3.3: the pools' pass rows land on their persistent per-bank rows FIRST — the bank sheets
-  // below read the SME line off them.
+  // A3.3/A3.4: the sector parties' pass rows land on their persistent per-bank rows FIRST — the
+  // bank sheets below read the SME and household lines off them.
+  const landSectorRows = (party: PartyRef) => {
+    (s.rowsOfParty.get(partyId(party)) ?? []).forEach((r) => {
+      const bi = s.bankIdx[r];
+      if (bi >= 0) ctx.v2.accounts.balanceUSD[sectorRowAt(ctx.v2, party, s.banks[bi])] = s.balanceUSD[r];
+    });
+  };
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region]; if (!reg) return;
-    (reg.smePools ?? []).forEach((seg) => {
-      const party: PartyRef = { kind: 'SEGMENT', region, industry: seg.industry };
-      const rows = s.rowsOfParty.get(partyId(party)) ?? [];
-      rows.forEach((r) => {
-        const bi = s.bankIdx[r];
-        if (bi >= 0) ctx.v2.accounts.balanceUSD[poolRowAt(ctx.v2, party, s.banks[bi])] = s.balanceUSD[r];
-      });
-    });
+    landSectorRows({ kind: 'HOUSEHOLD', region });
+    (reg.smePools ?? []).forEach((seg) => landSectorRows({ kind: 'SEGMENT', region, industry: seg.industry }));
   });
   ctx.updatedCompanies.forEach((c) => {
     if (c.isBankEntity && c.bankBalanceSheet) {
@@ -361,7 +389,8 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
       c.bankBalanceSheet = {
         ...sheet,
         cashReservesUSD: sheet.cashReservesUSD + reserveDeltaUSD,
-        depositsUSD: sheet.depositsUSD + d.HOUSEHOLD,
+        // A3.4: the household line IS the household sector's row at this bank (landed above).
+        depositsUSD: householdDepositsAt(ctx.v2, c.ticker),
         corporateDepositsUSD: (sheet.corporateDepositsUSD ?? 0) + d.CORPORATE,
         institutionalDepositsUSD: (sheet.institutionalDepositsUSD ?? 0) + d.INSTITUTIONAL,
         // A3.3: the SME line IS the pool rows at this bank (written back below, before this runs).
@@ -381,7 +410,6 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
   });
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region]; if (!reg) return;
-    if (reg.householdState) reg.householdState.depositsUSD = balanceOfParty(s, partyId({ kind: 'HOUSEHOLD', region }));
     const cb = reg.centralBankSheet;
     if (cb) {
       const net = balanceOfParty(s, partyId({ kind: 'GOVERNMENT', region }));
@@ -411,7 +439,6 @@ export function compareToBooks(ctx: WeeklyStepContext, s: AccountStore): Account
   });
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region]; if (!reg) return;
-    check(`${region} households`, reg.householdState?.depositsUSD ?? 0, balanceOfParty(s, partyId({ kind: 'HOUSEHOLD', region })));
     const cb = reg.centralBankSheet;
     if (cb) check(`${region} treasury`, cb.treasuryAccountUSD - (cb.waysAndMeansUSD ?? 0), balanceOfParty(s, partyId({ kind: 'GOVERNMENT', region })));
   });

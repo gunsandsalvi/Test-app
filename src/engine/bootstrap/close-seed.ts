@@ -1,3 +1,5 @@
+import { sectorRowAt, openingCashOf } from '../ledger/accounts';
+import { V2World } from '../../engine2/world';
 /**
  * CLOSE C2 — THE SEED CLOSES (§5-CLOSE). Run once, after every book has been seeded and before
  * the aggregates are projected. Three identities the seed used to leave open are made exact:
@@ -31,6 +33,8 @@ export function closeSeedMoney(
   regions: Record<RegionId, Region>,
   companies: Company[],
   institutionalEntities: InstitutionalEntity[],
+  /** §5-WIRES A3.4: the world the seed is opening — the household sector's row at each bank opens at the line struck here. */
+  v2: V2World
 ): void {
   (Object.keys(regions) as RegionId[]).forEach((regionId) => {
     const reg = regions[regionId];
@@ -53,11 +57,13 @@ export function closeSeedMoney(
         s.cashReservesUSD = Math.round(s.cashReservesUSD - needUSD);
       }
       householdDepositsUSD += s.depositsUSD;
+      v2.accounts.balanceUSD[sectorRowAt(v2, { kind: 'HOUSEHOLD', region: regionId }, b.ticker)] = s.depositsUSD;
     });
     const hs = reg.householdState;
-    const priorHouseholdDepositsUSD = hs.depositsUSD ?? 0;
-    hs.depositsUSD = Math.round(householdDepositsUSD);
-    hs.netWorthUSD = Math.round((hs.netWorthUSD ?? 0) + (hs.depositsUSD - priorHouseholdDepositsUSD));
+    // The seed's provisional sizing of the sector's deposits (macro/initialization.ts) is what
+    // net worth was struck on; the residual replaces it and net worth moves by the difference.
+    const priorHouseholdDepositsUSD = openingCashOf(hs);
+    hs.netWorthUSD = Math.round((hs.netWorthUSD ?? 0) + (Math.round(householdDepositsUSD) - priorHouseholdDepositsUSD));
     reg.bankingSector = {
       ...reg.bankingSector,
       depositsUSD: Math.round(banks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0)),

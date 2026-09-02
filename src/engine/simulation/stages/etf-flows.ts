@@ -1,4 +1,4 @@
-import { entityCashOf } from '../../ledger/accounts';
+import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
 /**
  * ETF FLOWS — who buys the index, how the shares come into existence, and what the dealers do
  * about the gap.
@@ -234,7 +234,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       // The floor is the SAME buffer the saving decision is taken against — it is the same
       // buffer, so it is the same number (rule 3).
       const bufferFloorUSD = (reg.estimatedHouseholdIncomeUSD / 52) * BUFFER_TARGET_WEEKS;
-      const depositHeadroomUSD = Math.max(0, (hs.depositsUSD ?? 0) - bufferFloorUSD);
+      const depositHeadroomUSD = Math.max(0, householdDepositsOf(ctx.v2, region) - bufferFloorUSD);
       // Sell only the part of the gap the cash cannot meet, and never more than is held.
       const heldUSD = householdEtfHoldingsUSD(ctx.v2, hs, ctx.updatedInstitutionalEntities);
       const cashGapUSD = Math.max(0, -weeklySavingUSD - depositHeadroomUSD);

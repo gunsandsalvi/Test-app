@@ -108,6 +108,9 @@ export function evolveRegionMacro(
     /** HH4b: market-cap-weighted average dividend yield of this region's listed companies —
      * what the households' direct equity actually pays. Computed in stage 02 from real state. */
     avgListedDividendYieldAnnual?: number;
+    /** §5-WIRES A3.4: the household sector's deposits — its rows at the region's banks, read off
+     *  the ledger by the caller (this module never sees the world). */
+    householdDepositsUSD: number;
   },
   week: number,
   equityReturn: number = 0,
@@ -147,7 +150,6 @@ export function evolveRegionMacro(
     stapleSpendShare: 0.35,
     standardSpendShare: 0.50,
     luxurySpendShare: 0.15,
-    depositsUSD: region.estimatedHouseholdIncomeUSD * 0.6,
     equityHoldingsUSD: region.estimatedHouseholdIncomeUSD * 1.5,
     directEquityUSD: 0,
     housingStockUSD: 0,
@@ -367,7 +369,6 @@ export function evolveRegionMacro(
   // bank-diversification stage, with real flows — savings in, money-fund diversion out, the
   // banks' own competitive deposit interest, mortgage credit, lagged ETF settlements). This
   // stage carries the stock forward untouched.
-  const newDepositsUSD = Math.max(0, prevHS.depositsUSD || 0);
 
   // MS1: household equity is no longer a stock that appreciates by a formula return. It is the
   // sum of real claims — index-fund shares, listed float, founder stakes in the private tier —
@@ -438,7 +439,7 @@ export function evolveRegionMacro(
     : prevHS.householdDebtToIncomeRatio;
 
   // 3. Net worth
-  const newNetWorthUSD = newDepositsUSD + newEquityHoldingsUSD - totalHouseholdDebtUSD;
+  const newNetWorthUSD = microFeedback.householdDepositsUSD + newEquityHoldingsUSD - totalHouseholdDebtUSD;
   const netWorthToIncomeRatio = region.estimatedHouseholdIncomeUSD > 0
     ? newNetWorthUSD / region.estimatedHouseholdIncomeUSD
     : 1.0;
@@ -611,7 +612,7 @@ export function evolveRegionMacro(
     governmentTransfersWeeklyUSD: govObligations.transfersUSD,
     // DIST/MAC — the sector's real liquid assets, which each tier's buffer is measured against.
     // The savings RATE is no longer passed in: it is what comes out.
-    liquidAssetsUSD: Math.max(0, prevHS.depositsUSD ?? 0) + Math.max(0, prevHS.mmfSharesUSD ?? 0),
+    liquidAssetsUSD: Math.max(0, microFeedback.householdDepositsUSD) + Math.max(0, prevHS.mmfSharesUSD ?? 0),
     // DEM/DIST — the life-cycle saving rate, read off the real age structure (§7.181). Last
     // week's, because the cohorts are built before this week's ages are advanced; a week's lag on
     // a demographic share is not a lag anyone can measure.
@@ -1206,7 +1207,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       standardSpendShare: newStandardShare,
       luxurySpendShare: newLuxuryShare,
       netWorthUSD: newNetWorthUSD,
-      depositsUSD: newDepositsUSD,
       equityHoldingsUSD: newEquityHoldingsUSD,
       // Carried forward untouched; `stages/etf-flows.ts` marks them against this week's clears.
       directEquityUSD: prevHS.directEquityUSD ?? 0,

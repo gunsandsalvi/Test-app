@@ -1,3 +1,4 @@
+import { stashOpeningCash } from '../ledger/accounts';
 import { govBondTrancheId } from '../../domain/sovereign-id';
 import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { openingSovereignRating } from './evolution';
@@ -29,6 +30,9 @@ import { deriveSubUnitUnitPrice, TARGET_FIRMS_PER_REGION } from '../bootstrap/ca
 import { GENERATED_COMMODITIES, GENERATED_FX_PAIR_LEGS, getInitialFxRate, getCommodityBaseSpotPrice } from '../bootstrap/commodities-and-fx';
 import { getRegionYieldCurveParams, getRegionNeutralRate, getRegionInitialPolicyRate, getRegionProductivityGrowth, INFLATION_TARGET } from '../bootstrap/yield-curves';
 import { fxPairLabel, REGION_IDS_SEED_ORDER } from '../../domain/geography';
+
+/** Stash a seed object's provisional cash beside it (§5-WIRES A3.4) and hand it back. */
+function withOpeningCash<T extends object>(o: T, usd: number): T { stashOpeningCash(o, usd); return o; }
 
 export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): Record<WealthTier, WealthTierData> {
   const inc = estimatedHouseholdIncomeUSD;
@@ -631,7 +635,9 @@ function buildRegion(regionId: RegionId): Region {
     // Seeded from the stack this function just built, so week 0 rates the sovereign off the same
     // ratio week 1 will (§7.4).
     debtToGdpPctBottomUp: estimatedNominalGdpUSD > 0 ? totalGovDebtUSD / estimatedNominalGdpUSD : 0,
-    householdState: {
+    // §5-WIRES A3.4: the sector's deposits are its rows at the banks; the seed's provisional
+    // sizing rides a stash until close-seed strikes the lines and opens the rows.
+    householdState: withOpeningCash({
       consumerConfidence: 100,
       creditTierBooks: generateCreditTierBooks(creditCardDebtUSD, otherConsumerLoanDebtUSD),
       wageGrowth,
@@ -643,7 +649,6 @@ function buildRegion(regionId: RegionId): Region {
       standardSpendShare: Number(seedCohorts.spendShares.standard.toFixed(4)),
       luxurySpendShare: Number(seedCohorts.spendShares.luxury.toFixed(4)),
       cohorts: seedCohorts.cohorts,
-      depositsUSD,
       // MS1: the real components are struck by the simulation's first weekly pass, which is the
       // only place that knows the cleared prices and the private tier. The seed therefore opens
       // with the whole stock UNMODELED and lets that line be paid down as real claims are found —
@@ -662,7 +667,7 @@ function buildRegion(regionId: RegionId): Region {
       creditCardDebtUSD,
       otherConsumerLoanDebtUSD,
       netWorthUSD: 0,
-    },
+    }, depositsUSD),
     dotPlot1Y: policyRate,
     dotPlot2Y: neutralRate,
     historicalPolicyRates: generate52WeekHistory(policyRate, 0.008, 0.001),

@@ -1,4 +1,4 @@
-import { entityCashOf } from '../../ledger/accounts';
+import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
 /**
  * HH1 — the household balance sheet, and the claims that link it to the institutions.
  *
@@ -166,7 +166,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // settlement close moves the deposit and the pending bank leg), so this view no longer
     // debits it — doing both moved the same dollar twice, and the max(0,…) that guarded the
     // debit died with it (§7.46 L7). Only the SHARE register settles here.
-    const depositsUSD = hs.depositsUSD ?? 0;
+    const depositsUSD = householdDepositsOf(ctx.v2, region);
     const mmfSharesUSD = Math.max(0, hs.mmfSharesUSD ?? 0);
     const equityHoldingsUSD = realClaimsUSD;
 
@@ -291,7 +291,6 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       priorNetWorthUSD: hs.netWorthUSD ?? 0,
       housingStockUSD,
       homeEquityUSD,
-      depositsUSD,
       mmfSharesUSD,
       etfShares,
       etfHoldingsUSD,

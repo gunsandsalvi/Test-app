@@ -209,7 +209,7 @@ export interface HouseholdState {
   luxurySpendShare: number;
   netWorthUSD: number;
   durableGoodsStockUnits?: number;
-  depositsUSD: number;
+  // §5-WIRES A3.4: the sector's deposits are its rows at the region's banks (`householdDepositsOf`).
   /**
    * MS1 — household equity wealth, now a DERIVED SUM of the four lines below rather than a stock
    * that appreciates by a formula return. It was seeded as `income x 1.5` and multiplied weekly

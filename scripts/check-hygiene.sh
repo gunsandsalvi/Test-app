@@ -165,7 +165,7 @@ fi
 # front lanes carry the word legitimately and are not company objects.
 # A3.2: an institutional entity's `cashUSD` the same way (`entityCashOf`); a pool's `cashUSD`
 # (`seg`/`pool`, A3.3, `poolCashOf`) too; the sector aggregate's is the only one left.
-CASH_STRAY=$(grep -rnE "\b(c|comp|company|firm|acquirer|target|issuer|seller|buyer|parent|sub|spin|bank|peer|estateComp|listedTarget|newborn|holder)\.cash\b|\b(e|f|entity|fund|mmf|lp|sponsor|investor|inv|manager|vehicle|etf|redeemer|lender|borrower|s2|seg|pool|segment)\.cashUSD\b" src scripts --include=*.ts --include=*.tsx 2>/dev/null \
+CASH_STRAY=$(grep -rnE "\b(c|comp|company|firm|acquirer|target|issuer|seller|buyer|parent|sub|spin|bank|peer|estateComp|listedTarget|newborn|holder)\.cash\b|\b(e|f|entity|fund|mmf|lp|sponsor|investor|inv|manager|vehicle|etf|redeemer|lender|borrower|s2|seg|pool|segment)\.cashUSD\b|\b(hs|householdState)\.depositsUSD\b" src scripts --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE '^src/engine/ledger/accounts\.ts:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
 if [ -n "$CASH_STRAY" ]; then
   echo "ERROR: a company's cash read as a field — it is its account: cashOf(v2, company) (engine/ledger/accounts.ts):"

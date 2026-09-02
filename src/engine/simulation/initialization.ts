@@ -73,7 +73,7 @@ import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGOR
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
-import { openAccount, openingCashOf, stashOpeningCash, poolRowAt } from '../ledger/accounts';
+import { openAccount, openingCashOf, stashOpeningCash, sectorRowAt } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand } from '../../domain/industry-registry';
@@ -775,7 +775,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           const rowUSD = bankShareTotal > 0
             ? Math.round(openingCashOf(seg) * ((b.bankMarketShare ?? 0) / bankShareTotal))
             : Math.round(openingCashOf(seg) / regionBanksForLending.length);
-          seedV2.accounts.balanceUSD[poolRowAt(seedV2, { kind: 'SEGMENT', region: regionId, industry: seg.industry }, b.ticker)] = rowUSD;
+          seedV2.accounts.balanceUSD[sectorRowAt(seedV2, { kind: 'SEGMENT', region: regionId, industry: seg.industry }, b.ticker)] = rowUSD;
           smeUSD += rowUSD;
         });
         b.bankBalanceSheet!.smeDepositsUSD = smeUSD;
@@ -787,7 +787,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // Now that the corporate leg is known, the funding identity is re-derived: wholesale is
         // the residual AFTER real deposits, not a plug carrying money the companies already
         // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
-        applyBankFundingSplit(b.bankBalanceSheet!, Math.round((reg.householdState.depositsUSD ?? 0) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
+        applyBankFundingSplit(b.bankBalanceSheet!, Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
       });
       reg.bankingSector = {
         ...reg.bankingSector,
@@ -1306,7 +1306,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const instUSD = Math.round(byBank.get(b.ticker) ?? 0);
       b.bankBalanceSheet!.institutionalDepositsUSD = instUSD;
       b.bankBalanceSheet!.cashReservesUSD += instUSD;
-      applyBankFundingSplit(b.bankBalanceSheet!, Math.round((reg.householdState.depositsUSD ?? 0) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+      applyBankFundingSplit(b.bankBalanceSheet!, Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
     reg.bankingSector = {
       ...reg.bankingSector,
@@ -1595,7 +1595,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       sheet.corporateDepositsUSD += corpUSD;
       sheet.institutionalDepositsUSD = (sheet.institutionalDepositsUSD ?? 0) + instUSD;
       sheet.cashReservesUSD += corpUSD + instUSD;
-      applyBankFundingSplit(sheet, Math.round((reg.householdState.depositsUSD ?? 0) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+      applyBankFundingSplit(sheet, Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
     reg.bankingSector = {
       ...reg.bankingSector,
@@ -1609,7 +1609,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // §5-CLOSE C2: the seed closes — depositors fund the banks (wholesale is nobody's and is
   // zero), the central bank's book backs reserves and the treasury's account to the dollar, and
   // every sovereign bond has a holder. Runs after every book exists and before the projection.
-  closeSeedMoney(regions, companies, institutionalEntities);
+  closeSeedMoney(regions, companies, institutionalEntities, seedV2);
 
   // S7: project the real seeded books onto the sector aggregates before the first week runs, so
   // week 0's displayed numbers are the same derivation every later week uses. The aggregates
