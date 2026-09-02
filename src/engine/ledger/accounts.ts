@@ -1,8 +1,8 @@
 /**
  * §5-WIRES A — ONE KIND OF ACCOUNT FOR EVERY PARTY.
  *
- * Today a balance is a differently-named field on five types resolved by settlement's nine-way
- * kind switch (`balance.ts` states the end-state noun). This module is the account STORE: one row
+ * A balance used to be a differently-named field on five types, resolved by settlement's nine-way
+ * kind switch; both are gone (A3, A4 — §7.384–394). This module is the account STORE: one row
  * per (party, bank) — a company's deposit at its house bank, a bank's own reserves at the
  * central bank, the treasury's account there, the household sector's balance at each of its
  * region's banks (and the slice still in transit), a pool's balance at each bank by share — and
@@ -302,6 +302,11 @@ export interface AccountStore {
   rowsOfParty: Map<number, number[]>;
   /** For the multi-row sector parties, how a payment splits across their rows. */
   splitOfParty: Map<number, Float64Array>;
+  /** A4 — a bank's OWN-ACCOUNT parties (its BANK party and its goods-market self, both on its
+   *  reserve row) by bank index, and each one's net over the pass: a bank's own income and
+   *  expense, the one thing the rows' deltas cannot tell from a customer's money. */
+  ownAccountBankOfParty: Map<number, number>;
+  ownNetByParty: Map<number, number>;
 }
 
 function grow(s: AccountStore): void {
@@ -317,6 +322,7 @@ export function newAccountStore(): AccountStore {
   return {
     n: 0, partyId: new Int32Array(cap), bankIdx: new Int32Array(cap), classId: new Int8Array(cap), balanceUSD: new Float64Array(cap), openingUSD: new Float64Array(cap),
     banks: [], reserveRowOfBank: new Int32Array(0), bankIdxOfTicker: new Map(), rowsOfParty: new Map(), splitOfParty: new Map(),
+    ownAccountBankOfParty: new Map(), ownNetByParty: new Map(),
   };
 }
 
@@ -360,6 +366,8 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     s.reserveRowOfBank[bi] = row;
     // The bank's COMPANY party (its goods-market self) settles on its own reserves.
     s.rowsOfParty.set(partyId({ kind: 'COMPANY', ticker: b.ticker }), [row]);
+    s.ownAccountBankOfParty.set(partyId({ kind: 'BANK', ticker: b.ticker }), bi);
+    s.ownAccountBankOfParty.set(partyId({ kind: 'COMPANY', ticker: b.ticker }), bi);
     // Its credit-creation and securities accounts: voids at the bank itself.
     openRow(s, partyId({ kind: 'BANK_CREDIT', ticker: b.ticker }), bi, 'CREATED', 0);
     openRow(s, partyId({ kind: 'BANK_SECURITIES', ticker: b.ticker }), bi, 'SECURITIES', 0);
@@ -425,6 +433,7 @@ export function applySettledRow(s: AccountStore, payer: number, payee: number, a
 }
 
 function side(s: AccountStore, party: number, rows: number[], deltaUSD: number): void {
+  if (s.ownAccountBankOfParty.has(party)) s.ownNetByParty.set(party, (s.ownNetByParty.get(party) ?? 0) + deltaUSD);
   if (rows.length === 1) { leg(s, rows[0], deltaUSD); return; }
   const split = s.splitOfParty.get(party);
   for (let i = 0; i < rows.length; i++) { const w = split ? split[i] : 1 / rows.length; if (w !== 0) leg(s, rows[i], deltaUSD * w); }
@@ -437,6 +446,76 @@ function leg(s: AccountStore, row: number, deltaUSD: number): void {
     const rr = s.reserveRowOfBank[bi];
     if (rr >= 0) s.balanceUSD[rr] += deltaUSD;
   }
+}
+
+/** A4 — what the pass settled, read off the rows' deltas. */
+export interface SettledTallies {
+  /** Reserve movement per bank — what it settled across the central bank's books. */
+  reserveDeltaByBank: Map<string, number>;
+  /** Deposits created by this bank's own lending — they need no reserve settlement. */
+  creditCreatedByBank: Map<string, number>;
+  /** Reserves a bank's own SECURITIES account paid (−) or received (+): one asset for another. */
+  bankSecuritiesDeltaByBank: Map<string, number>;
+  /** Payments to/from a bank on its own account — income and expense, so equity moves too. */
+  bankEquityDeltaByBank: Map<string, number>;
+  /** Treasury account movement per region. */
+  tgaDeltaByRegion: Map<string, number>;
+  /** Reserves the central bank ISSUED (paid for assets with money it created), less what it
+   *  extinguished — the one party whose payments are not funded from a balance. */
+  centralBankIssuanceUSD: number;
+  centralBankIssuanceByRegion: Map<string, number>;
+  /** What the cleared books' central counterparty was left holding. Must be zero. */
+  clearingHouseResidualUSD: number;
+  /** Money that landed on a holder with no bank (a firm or fund with no house bank, a sector
+   *  with no live bank in its region): counted, never dropped. Must be zero. */
+  unresolvedUSD: number;
+}
+
+/**
+ * §5-WIRES A4 — THE TALLIES ARE READS OF THE ROWS' DELTAS. Settlement used to resolve every
+ * party's net through a nine-way switch on its kind to find which bank line it moved and to
+ * keep a dozen tallies beside the writes. The store already knows every row's bank and class
+ * and every row's opening balance, so what the pass settled is one walk over the rows; a bank's
+ * own-account nets (its income and expense) are the two parties on its reserve row, netted as
+ * they settled (`ownNetByParty`) — the same two sums the switch kept, added in the same order.
+ */
+export function settledTallies(s: AccountStore): SettledTallies {
+  const t: SettledTallies = {
+    reserveDeltaByBank: new Map(), creditCreatedByBank: new Map(), bankSecuritiesDeltaByBank: new Map(),
+    bankEquityDeltaByBank: new Map(), tgaDeltaByRegion: new Map(),
+    centralBankIssuanceUSD: 0, centralBankIssuanceByRegion: new Map(), clearingHouseResidualUSD: 0, unresolvedUSD: 0,
+  };
+  const addTo = (m: Map<string, number>, k: string, d: number) => m.set(k, (m.get(k) ?? 0) + d);
+  s.banks.forEach((ticker, bi) => {
+    const rr = s.reserveRowOfBank[bi];
+    if (rr >= 0) { const d = s.balanceUSD[rr] - s.openingUSD[rr]; if (d !== 0) addTo(t.reserveDeltaByBank, ticker, d); }
+    const own = s.ownNetByParty.get(partyId({ kind: 'BANK', ticker })) ?? 0;
+    const self = s.ownNetByParty.get(partyId({ kind: 'COMPANY', ticker })) ?? 0;
+    if (own !== 0) addTo(t.bankEquityDeltaByBank, ticker, own);
+    if (self !== 0) addTo(t.bankEquityDeltaByBank, ticker, self);
+  });
+  for (let r = 0; r < s.n; r++) {
+    const d = s.balanceUSD[r] - s.openingUSD[r];
+    if (d === 0) continue;
+    const cls = ACCOUNT_CLASSES[s.classId[r]];
+    const bi = s.bankIdx[r];
+    switch (cls) {
+      case 'CREATED': addTo(t.creditCreatedByBank, s.banks[bi], -d); break;
+      case 'SECURITIES': addTo(t.bankSecuritiesDeltaByBank, s.banks[bi], d); break;
+      case 'TREASURY': { const p = partyOf(s.partyId[r]); if (p.kind === 'GOVERNMENT') addTo(t.tgaDeltaByRegion, p.region, d); break; }
+      case 'VOID': {
+        const p = partyOf(s.partyId[r]);
+        if (p.kind === 'CENTRAL_BANK') { t.centralBankIssuanceUSD -= d; addTo(t.centralBankIssuanceByRegion, p.region, -d); }
+        else if (p.kind === 'CLEARING_HOUSE') t.clearingHouseResidualUSD += d;
+        break;
+      }
+      case 'CORPORATE': case 'INSTITUTIONAL': case 'SME': case 'HOUSEHOLD':
+        if (bi === AT_NOWHERE) t.unresolvedUSD += d;
+        break;
+      case 'RESERVES': break;
+    }
+  }
+  return t;
 }
 
 /**

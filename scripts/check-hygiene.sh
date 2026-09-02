@@ -20,66 +20,11 @@ if [ -n "$EXTRA" ]; then
   exit 1
 fi
 
-# 3. §5-STRUCT step 1 — THE LEDGER OWNS MONEY. A balance is written in one place, or conservation
-#    is not an invariant but a habit that every author has to share (§7.229, corrected in §7.230).
-#    A WRITE is a property assignment — `x.cashUSD = / += / -=` — never a local declaration; the
-#    first version of this rule counted `const cashUSD = ...` and reported three times the real
-#    number. `initialization.ts` builds the opening world and is allowed to; everything else routes
-#    through engine/ledger.
-MONEY_FIELDS='(cashUSD|cashReservesUSD|depositsUSD|corporateDepositsUSD|institutionalDepositsUSD|smeDepositsUSD|unmodeledDepositsUSD|wholesaleFundingUSD|bankEquityUSD)'
-# Owners of a balance: the ledger, the three bootstraps that build the opening world (the two
-# initializations and §5-CLOSE's close-seed, which sizes the week-0 deposit stock), and (until the
-# migration finishes) settlement's own apply pass and bank-lending's funding composition.
-# bank-identity-trace is a READ-ONLY instrument (BANK_IDENTITY_TRACE=1): it rebuilds the harness's
-# identity residual per stage and mutates nothing — its field maps trip the spread regex without
-# being writes.
-LEDGER_OWNED='^src/engine/ledger/|^src/engine/simulation/initialization\.ts:|^src/engine/macro/initialization\.ts:|^src/engine/bootstrap/close-seed\.ts:|^src/engine/simulation/stages/settlement\.ts:|^src/engine/simulation/stages/bank-lending\.ts:|^src/engine/simulation/bank-identity-trace\.ts:'
-STRAY=$(grep -rnE "(\.|\][[:space:]]*)${MONEY_FIELDS}[[:space:]]*(=[^=>]|\+=|-=)" src --include=*.ts --include=*.tsx 2>/dev/null \
-  | grep -vE "$LEDGER_OWNED" \
-  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
-STRAY_COUNT=$(printf '%s' "$STRAY" | grep -c . || true)
-# §7.241 — THE FORM THE OLD REGEX COULD NOT SEE. The codebase's dominant balance write is the
-# object-literal/spread rebuild — `cashUSD: (e.cashUSD ?? 0) + x` — which has no `=` to match, so
-# "budget 2" governed almost none of the real writes and the etf-flows bypass ran for months
-# unseen. This counts a money field given a COMPUTED value inside an object literal (a `:`
-# followed by an expression that does arithmetic or reads another field), excluding type
-# declarations (`: number`), plain copies (`cashUSD: cashUSD`, `cashUSD: 0`), and comments.
-# `sumField(` marks the 02b regional-aggregate DERIVED VIEW (a sum over the per-bank sheets,
-# §7.241's exhaustive rebuild) — a projection, not a balance write; the BankBook/View split
-# retires the exemption with the fused type.
-SPREAD_STRAY=$(grep -rnE "${MONEY_FIELDS}[[:space:]]*:[[:space:]]*[^,}]*(\+|-[^-]|\*|\?\?)" src --include=*.ts --include=*.tsx 2>/dev/null \
-  | grep -vE "$LEDGER_OWNED" \
-  | grep -v "sumField(" \
-  | grep -vE "${MONEY_FIELDS}[[:space:]]*:[[:space:]]*(number|Number\(|Math\.(round|abs|max\(0))" \
-  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
-SPREAD_STRAY_COUNT=$(printf '%s' "$SPREAD_STRAY" | grep -c . || true)
-# THE RATCHETS: each may fall, never rise. Lower them as sites migrate; at 0, withdraw the
-# allowances above one at a time and the rule becomes absolute.
-# The assignment-form survivors are NOT balances and share a field name with one (its own defect):
-#   estate-resolution  `estate.assets.cashUSD`      — an estate's asset SNAPSHOT; the money already moved
-#   holdings-view      `institutionalSector.cashUSD` — a derived sector AGGREGATE, a view not a holding
-# plus the bankEquityUSD sites newly under guard (13 writer files, §7.241 — bookPnL() is their exit).
-# §7.290 ratcheted 3 -> 2: the two survivors are 10-mergers' equity absorb (a stock transfer,
-# §7.275's deliberate non-P&L) and holdings-view's derived sector AGGREGATE (a view sharing the
-# field name, §7.230). Both construction-time `.cash = 0` births are instruction-borne carves.
-MONEY_WRITE_BUDGET=2
-if [ "$STRAY_COUNT" -gt "$MONEY_WRITE_BUDGET" ]; then
-  echo "ERROR: $STRAY_COUNT money-field writes outside engine/ledger (budget $MONEY_WRITE_BUDGET)."
-  echo "$STRAY"
-  echo "Route the movement through engine/ledger's post(). See §5-STRUCT step 1."
-  exit 1
-fi
-# §7.275 ratcheted 23 → 16: the bookPnL migration took the stage-side bankEquityUSD spread
-# rebuilds out (dealer-desks, 07c, 07f, bill-accretion, sovereign-calendar, trade,
-# estate-resolution). The 16 left are the split/absorb stock transfers, 02b's gated reconcile,
-# and the evolution seams — each waiting on its named gate, none of them P&L.
-MONEY_SPREAD_BUDGET=16
-if [ "$SPREAD_STRAY_COUNT" -gt "$MONEY_SPREAD_BUDGET" ]; then
-  echo "ERROR: $SPREAD_STRAY_COUNT spread-form money writes outside engine/ledger (budget $MONEY_SPREAD_BUDGET)."
-  echo "$SPREAD_STRAY"
-  echo "A balance rebuilt in an object literal is still a write. Route it through pay()/post()."
-  exit 1
-fi
+# 3. §5-STRUCT step 1 — THE LEDGER OWNS MONEY. The money-field write budget that lived here
+#    (`cashUSD`, `cashReservesUSD`, the four deposit lines, ratcheted 23 → 16 → 2) is RETIRED
+#    (§5-WIRES A4): none of those fields exists any more — a balance is an account
+#    (engine/ledger/accounts.ts) and the type system refuses the field. What remains below is the
+#    cast-hidden READ, which a type cannot see.
 
 # 4. §5-STRUCT step 4 — TYPE UNIONS ARE REGISTRIES, NOT SWITCHES. A literal comparison against a
 #    union member is a case that the compiler will not point you at when a member is added — and

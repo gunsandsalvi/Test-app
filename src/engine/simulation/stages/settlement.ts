@@ -30,7 +30,7 @@
  */
 
 import { RegionId } from '../../../types';
-import { buildAccountMirror, applySettledRow, compareToBooks, projectBooks, AccountMismatch, entityCashOf } from '../../ledger/accounts';
+import { buildAccountMirror, applySettledRow, compareToBooks, projectBooks, settledTallies, AccountMismatch, entityCashOf } from '../../ledger/accounts';
 import { WeeklyStepContext } from './context';
 
 /** Who is paying or being paid. Every party either holds a deposit at a named bank, or is one of
@@ -329,19 +329,11 @@ export function institutionUnsettledLessCollateralUSD(ctx: WeeklyStepContext, en
 export interface SettlementReport {
   instructions: number;
   grossUSD: number;
-  /** Net deposit change per bank ticker — what its customers' balances did on net. */
-  depositDeltaByBank: Map<string, number>;
+  /** A4: the tallies below are `settledTallies` — reads of the account rows' deltas. */
   /** Reserve movement per bank — what it had to settle across the central bank's books. */
   reserveDeltaByBank: Map<string, number>;
   /** Treasury account movement per region. */
   tgaDeltaByRegion: Map<string, number>;
-  /** Per-bank movement of the corporate deposit line — the liability leg that moves with the
-   *  reserves below, so asset and liability never drift apart. */
-  corporateDepositDeltaByBank: Map<string, number>;
-  /** Per-bank movement of the institutional deposit line. */
-  institutionalDepositDeltaByBank: Map<string, number>;
-  /** SEG1 — per-bank movement of the private-sector segment pools' deposit line. */
-  smeDepositDeltaByBank: Map<string, number>;
   /** HH — every household flow this week, per region, keyed by the payment's own reason and
    *  signed from the household's side. Household INCOME is derived from this (see
    *  stages/household-balance-sheet.ts): what they were actually paid, not a labor-share
@@ -359,8 +351,6 @@ export interface SettlementReport {
   bankEquityDeltaByBank: Map<string, number>;
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
   creditCreatedByBank: Map<string, number>;
-  /** Household flows handed to HH4d's T+1 channel — settled by next week's bank pass, not here. */
-  householdDeferredUSD: number;
   /** SETL6 — what the cleared books' central counterparty was left holding. Must be zero. */
   clearingHouseResidualUSD: number;
   /** SETL6 — reserves the central bank ISSUED this week by paying for assets with money it
@@ -428,18 +418,13 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
     ...b,
     instructions: a.instructions + b.instructions,
     grossUSD: a.grossUSD + b.grossUSD,
-    depositDeltaByBank: mergeMap(a.depositDeltaByBank, b.depositDeltaByBank),
     reserveDeltaByBank: mergeMap(a.reserveDeltaByBank, b.reserveDeltaByBank),
     tgaDeltaByRegion: mergeMap(a.tgaDeltaByRegion, b.tgaDeltaByRegion),
-    corporateDepositDeltaByBank: mergeMap(a.corporateDepositDeltaByBank, b.corporateDepositDeltaByBank),
-    institutionalDepositDeltaByBank: mergeMap(a.institutionalDepositDeltaByBank, b.institutionalDepositDeltaByBank),
-    smeDepositDeltaByBank: mergeMap(a.smeDepositDeltaByBank, b.smeDepositDeltaByBank),
     smePoolFlowsByPool: mergeNested(a.smePoolFlowsByPool, b.smePoolFlowsByPool),
     householdFlowsByRegion: mergeNested(a.householdFlowsByRegion, b.householdFlowsByRegion),
     treasuryFlowsByRegion: mergeNested(a.treasuryFlowsByRegion, b.treasuryFlowsByRegion),
     creditCreatedByBank: mergeMap(a.creditCreatedByBank, b.creditCreatedByBank),
     bankEquityDeltaByBank: mergeMap(a.bankEquityDeltaByBank, b.bankEquityDeltaByBank),
-    householdDeferredUSD: a.householdDeferredUSD + b.householdDeferredUSD,
     clearingHouseResidualUSD: a.clearingHouseResidualUSD + b.clearingHouseResidualUSD,
     centralBankIssuanceUSD: a.centralBankIssuanceUSD + b.centralBankIssuanceUSD,
     centralBankIssuanceByRegion: mergeMap(a.centralBankIssuanceByRegion, b.centralBankIssuanceByRegion),
@@ -460,18 +445,13 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const report: SettlementReport = {
     instructions: nInstructions,
     grossUSD: 0,
-    depositDeltaByBank: new Map(),
     reserveDeltaByBank: new Map(),
     tgaDeltaByRegion: new Map(),
-    corporateDepositDeltaByBank: new Map(),
-    institutionalDepositDeltaByBank: new Map(),
-    smeDepositDeltaByBank: new Map(),
     smePoolFlowsByPool: new Map(),
     householdFlowsByRegion: new Map(),
     treasuryFlowsByRegion: new Map(),
     creditCreatedByBank: new Map(),
     bankEquityDeltaByBank: new Map(),
-    householdDeferredUSD: 0,
     clearingHouseResidualUSD: 0,
     centralBankIssuanceUSD: 0,
     centralBankIssuanceByRegion: new Map(),
@@ -488,18 +468,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     return ctx.lastSettlementReport;
   }
 
-  // ---- 1. Net every party's position. Order-independent by construction (addition), so the
-  // result does not depend on the order stages happened to record their instructions.
-  // SCALE: netted on the party's integer id — a dense array and a touched-list, not a hash map
-  // keyed by a string rebuilt for each of ~290,000 legs a week.
-  const netById: number[] = [];
-  const netTouched: number[] = [];
-  // The journal already carries the id; looking it up again from a reconstructed ref was half of
-  // `partyId`'s calls for nothing.
-  const add = (id: number, deltaUSD: number) => {
-    if (netById[id] === undefined) { netById[id] = deltaUSD; netTouched.push(id); }
-    else netById[id] += deltaUSD;
-  };
+  // ---- 1. Apply every due row to the account store by the one rule (§5-WIRES A) and keep the
+  // per-reason ledgers the sector parties' income statements are built from.
   const companyByTicker = new Map(ctx.updatedCompanies.map((c) => [c.ticker, c]));
   const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
   // §5-CLOSE C4b — which central bank's system a side of a payment lives in. Every party but
@@ -521,8 +491,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     : undefined;
   const week = settlementWeek();
   // §5-WIRES A: the account store, mirrored from the books as they stand, takes every settled
-  // row by the one rule beside the legacy per-kind writes below; the gate at the end of the
-  // pass compares the two.
+  // row by the one rule; the tallies are read off its rows' deltas (A4); the gate at the end of
+  // the pass compares it to what the books still carry by name.
   const accounts = buildAccountMirror(ctx);
   for (let n = 0; n < nInstructions; n++) {
     if (!rowDue(journal, n, week)) continue; // §5-WIRES N: dated past this pass — carried below
@@ -542,8 +512,6 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         }
       });
     }
-    add(payerIdx, -amountUSD);
-    add(payeeIdx, amountUSD);
     // §5-CLOSE C4b: the official-settlement leg. A same-region payment nets to nothing here; a
     // cross-region one is money leaving one central bank's system for another's.
     const payerRegion = regionOfParty(payerRef);
@@ -571,167 +539,32 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     }
   }
 
-  // ---- 2. Apply each party's net change to the balance it actually holds, and record which
-  // bank's book that balance sits on. A party banking at the central bank (the government) moves
-  // the treasury account instead of a deposit.
+  // ---- 2. §5-WIRES A4: what the pass settled, read off the rows — no per-kind resolution, no
+  // second set of writes. A bank's reserves moved by its own row; its income and expense are
+  // its own-account parties' nets; a deposit its credit wrote, the treasury's account, the
+  // central bank's issuance and the clearing house's residual are the rows of those classes.
+  {
+    const t = settledTallies(accounts);
+    report.reserveDeltaByBank = t.reserveDeltaByBank;
+    report.creditCreatedByBank = t.creditCreatedByBank;
+    report.bankSecuritiesDeltaByBank = t.bankSecuritiesDeltaByBank;
+    report.bankEquityDeltaByBank = t.bankEquityDeltaByBank;
+    report.tgaDeltaByRegion = t.tgaDeltaByRegion;
+    report.centralBankIssuanceUSD = t.centralBankIssuanceUSD;
+    report.centralBankIssuanceByRegion = t.centralBankIssuanceByRegion;
+    report.clearingHouseResidualUSD = t.clearingHouseResidualUSD;
+    report.unresolvedUSD += t.unresolvedUSD;
+  }
 
-  netTouched.forEach((id) => {
-    const party = partyOf(id);
-    const deltaUSD = netById[id];
-    if (deltaUSD === 0) return;
-    switch (party.kind) {
-      case 'COMPANY': {
-        const comp = companyByTicker.get(party.ticker);
-        if (!comp) {
-          report.unresolvedUSD += deltaUSD;
-          // UNRESOLVED_TRACE=1 — name the account a payment could not find, at the moment it
-          // fails: the violation itself only carries the week's total.
-          if (process.env.UNRESOLVED_TRACE === '1') {
-            console.log(`  [unresolved] COMPANY ${party.ticker} net ${(deltaUSD / 1e6).toFixed(2)}M found no account`);
-          }
-          return;
-        }
-        // A BANK trading on its own account is not a depositor — it has no home bank, because
-        // it IS one. Its money is central-bank reserves and the other side is its own equity,
-        // exactly as the BANK party below. Routing it as an ordinary company dropped every such
-        // payment on the floor: a bank sells real services in the goods market (the financial
-        // sector's proxy product lines), so 14.7B a week was leaving the system unresolved at
-        // the point where `homeBankTicker` came back undefined.
-        if (comp.isBankEntity && comp.bankBalanceSheet) {
-          addTo(report.reserveDeltaByBank, comp.ticker, deltaUSD);
-          addTo(report.bankEquityDeltaByBank, comp.ticker, deltaUSD);
-          return;
-        }
-        // §5-WIRES A2: the balance is the account store's row; the tallies stay.
-        creditBank(report, comp.homeBankTicker, deltaUSD);
-        addTo(report.corporateDepositDeltaByBank, comp.homeBankTicker ?? '', deltaUSD);
-        return;
-      }
-      case 'INSTITUTION': {
-        const entity = entityById.get(party.id);
-        if (!entity) { report.unresolvedUSD += deltaUSD; if (process.env.UNRESOLVED_TRACE === '1') {
-            console.log(`  [unresolved] INSTITUTION ${party.id} net ${(deltaUSD / 1e6).toFixed(2)}M found no account ()`);
-          } return; }
-        creditBank(report, entity.homeBankTicker, deltaUSD);
-        addTo(report.institutionalDepositDeltaByBank, entity.homeBankTicker ?? '', deltaUSD);
-        return;
-      }
-      case 'SEGMENT': {
-        // SEG1: the pool's balance moves, and the liability sits with the region's banks in
-        // proportion to their size — same shape as the boundary's banking, but on a NAMED line
-        // belonging to a real (aggregate) actor rather than to nobody.
-        const seg = ctx.updatedRegions[party.region]?.smePools
-          ?.find((s) => s.industry === party.industry);
-        if (!seg) { report.unresolvedUSD += deltaUSD; if (process.env.UNRESOLVED_TRACE === '1') {
-            console.log(`  [unresolved] SEGMENT ${party.region}:${party.industry} net ${(deltaUSD / 1e6).toFixed(2)}M found no account (no pool)`);
-          } return; }
-        const segBanks = ctx.updatedCompanies.filter(
-          (c) => c.region === party.region && c.isBankEntity && c.bankBalanceSheet && !c.isDefaulted
-        );
-        const segTotalShare = segBanks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
-        if (segBanks.length === 0 || !(segTotalShare > 0)) { report.unresolvedUSD += deltaUSD; if (process.env.UNRESOLVED_TRACE === '1') {
-            console.log(`  [unresolved] SEGMENT ${party.region}:${party.industry} net ${(deltaUSD / 1e6).toFixed(2)}M found no account (no live bank)`);
-          } return; }
-        segBanks.forEach((b) => {
-          const shareUSD = deltaUSD * ((b.bankMarketShare ?? 0) / segTotalShare);
-          addTo(report.depositDeltaByBank, b.ticker, shareUSD);
-          addTo(report.smeDepositDeltaByBank, b.ticker, shareUSD);
-        });
-        return;
-      }
-      case 'HOUSEHOLD': {
-        const hs = ctx.updatedRegions[party.region]?.householdState;
-        if (!hs) { report.unresolvedUSD += deltaUSD; if (process.env.UNRESOLVED_TRACE === '1') {
-            console.log(`  [unresolved] HOUSEHOLD ${party.region} net ${(deltaUSD / 1e6).toFixed(2)}M found no account (no household state)`);
-          } return; }
-        // §5-WIRES A2: the household sector's money lands on its region's banks by market
-        // share AT ONCE — the same split the pools' legs always had — and the banks' reserves
-        // follow in the same pass. HH4d's T+1 hand-off (the flow recorded here, posted by next
-        // week's bank pass, in transit at nobody in between) is gone.
-        const hhBanks = ctx.updatedCompanies.filter(
-          (c) => c.region === party.region && c.isBankEntity && c.bankBalanceSheet && !c.isDefaulted
-        );
-        const hhTotalShare = hhBanks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
-        if (hhBanks.length === 0) { report.unresolvedUSD += deltaUSD; return; }
-        hhBanks.forEach((b) => {
-          const shareUSD = deltaUSD * (hhTotalShare > 0 ? (b.bankMarketShare ?? 0) / hhTotalShare : 1 / hhBanks.length);
-          addTo(report.depositDeltaByBank, b.ticker, shareUSD);
-        });
-        return;
-      }
-      case 'BANK': {
-        // A bank paying or being paid on its OWN account — not a customer's — moves its reserves,
-        // and because no deposit was created against them the other side is its EQUITY: this is
-        // the bank's own income or expense (SETL4: facility interest arrives this way). Crediting
-        // reserves alone would leave an asset with nothing behind it.
-        addTo(report.reserveDeltaByBank, party.ticker, deltaUSD);
-        addTo(report.bankEquityDeltaByBank, party.ticker, deltaUSD);
-        return;
-      }
-      case 'BANK_SECURITIES': {
-        // The bank's own book, not a customer's: reserves out, the security in — and the
-        // clearing stage that recorded this writes the security in the same pass. No equity
-        // leg, because nothing was earned or spent; one asset became another.
-        addTo(report.reserveDeltaByBank, party.ticker, deltaUSD);
-        addTo(report.bankSecuritiesDeltaByBank, party.ticker, deltaUSD);
-        return;
-      }
-      case 'CLEARING_HOUSE': {
-        report.clearingHouseResidualUSD += deltaUSD;
-        return;
-      }
-      case 'BANK_CREDIT': {
-        // Nothing to debit: the money did not exist a moment ago. Recorded so the reserve leg
-        // below knows this deposit was written rather than received.
-        addTo(report.creditCreatedByBank, party.ticker, -deltaUSD);
-        return;
-      }
-      case 'GOVERNMENT': {
-        addTo(report.tgaDeltaByRegion, party.region, deltaUSD);
-        return;
-      }
-      case 'CENTRAL_BANK':
-        // The central bank settles by issuing or extinguishing its own liability: it pays with
-        // reserves it creates, so nothing is debited here and the reserves simply appear at the
-        // payee's bank. Recorded because that is money entering the system, not moving within it.
-        report.centralBankIssuanceUSD -= deltaUSD;
-        addTo(report.centralBankIssuanceByRegion, party.region, -deltaUSD);
-        return;
-      default:
-        // §7.241: without this, a new party kind's settled money fell through the switch and was
-        // deleted without even touching `unresolvedUSD`. A new kind now fails to COMPILE here.
-        return assertNever(party, `settlement apply for net delta ${deltaUSD}`);
-    }
-  });
-
-  // ---- 3. Interbank settlement. A bank whose customers received more than they paid holds more
-  // deposits and is owed reserves; one whose customers paid out owes them. Same-bank payments
-  // have already netted to nothing inside each bank's own delta, so this is exactly the
-  // cross-bank residual — which is what settles across the central bank's books.
-  // Deposits a bank WROTE need no settlement; deposits it RECEIVED do. Subtracting its own
-  // credit creation leaves exactly the cross-bank residual — and if a bank lends to someone who
-  // banks elsewhere, the difference is a real reserve payment, which is also correct.
-  const settlingBanks = new Set<string>([...report.depositDeltaByBank.keys(), ...report.creditCreatedByBank.keys()]);
-  settlingBanks.forEach((ticker) => {
-    const received = report.depositDeltaByBank.get(ticker) ?? 0;
-    const written = report.creditCreatedByBank.get(ticker) ?? 0;
-    addTo(report.reserveDeltaByBank, ticker, received - written);
-  });
-
-  // ---- 4. Apply it. A bank whose customers were paid holds more money and more reserves; the
-  // one whose customers paid holds less of both. This is the leg that was missing entirely: the
-  // deposit stock moved on the companies' books and no bank's balance sheet ever knew (§7.86).
+  // ---- 3. Apply it. Every balance is the PROJECTION of the account store (`projectBooks`).
+  // Equity is not a balance: the bank's own-account legs are its income and expense, and they
+  // land here, on the sheet.
   const bankByTicker = new Map(
     ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet).map((c) => [c.ticker, c])
   );
-  // §5-WIRES A2: reserves and the deposit lines are the PROJECTION of the account store
-  // (`projectBooks`, after the equity leg below); a bank the tallies name but the store does not
-  // is money with no account. Equity is not a balance: the bank's own-account legs are its
-  // income and expense, and they land here.
-  report.reserveDeltaByBank.forEach((deltaUSD, ticker) => {
+  report.bankEquityDeltaByBank.forEach((equityDeltaUSD, ticker) => {
     const bank = bankByTicker.get(ticker);
-    if (!bank?.bankBalanceSheet) { report.unresolvedUSD += deltaUSD; return; }
-    const equityDeltaUSD = report.bankEquityDeltaByBank.get(ticker) ?? 0;
+    if (!bank?.bankBalanceSheet) { report.unresolvedUSD += equityDeltaUSD; return; }
     if (equityDeltaUSD !== 0) bank.bankBalanceSheet = { ...bank.bankBalanceSheet, bankEquityUSD: bank.bankBalanceSheet.bankEquityUSD + equityDeltaUSD };
   });
   projectBooks(ctx, accounts);
@@ -809,13 +642,6 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   return report;
 }
 
-function creditBank(report: SettlementReport, bankTicker: string | undefined, deltaUSD: number): void {
-  // A holder with no bank is a defect, not a rounding case: its money would leave the banking
-  // system exactly the way corporate cash used to (§7.86). Counted, never dropped.
-  if (!bankTicker) { report.unresolvedUSD += deltaUSD; return; }
-  addTo(report.depositDeltaByBank, bankTicker, deltaUSD);
-}
-
 function addToPool(report: SettlementReport, region: string, industry: string, reason: string, deltaUSD: number): void {
   addToNested(report.smePoolFlowsByPool, `${region}:${industry}`, reason, deltaUSD);
 }
@@ -833,17 +659,14 @@ function addTo(map: Map<string, number>, key: string, deltaUSD: number): void {
 /**
  * The central bank's liabilities only move BETWEEN buckets: what the treasury took in came out
  * of bank reserves, and the central bank's own issuance is the one place new reserves come from.
- *
- * Household flows are ADDED back, not subtracted: HH4d settles them next week, so this week the
- * payer's bank has already lost the reserves while the household's balance sits outside any
- * bank's book — reserves are short by exactly what households were paid, and the identity has to
- * say so. (This function stood unused from the day it was written, with that sign the other way
- * round; nothing read it, so nothing caught it. It runs every week now.)
+ * (This function stood unused from the day it was written, with a sign the other way round;
+ * nothing read it, so nothing caught it. It runs every week now. §5-WIRES A2 retired the T+1
+ * household channel it once added back.)
  */
 function centralBankResidualUSD(report: SettlementReport): number {
   let tga = 0;
   report.tgaDeltaByRegion.forEach((v) => { tga += v; });
   let reserves = 0;
   report.reserveDeltaByBank.forEach((v) => { reserves += v; });
-  return reserves + tga + report.householdDeferredUSD - report.centralBankIssuanceUSD;
+  return reserves + tga - report.centralBankIssuanceUSD;
 }
