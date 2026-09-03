@@ -64,7 +64,7 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
   state.institutionalEntities.forEach((e) => {
     if (e.region !== regionId || e.isDefaulted) return;
     // WS6: cash lent overnight is the entity's money in transit, part of its cash position.
-    cash += entityCashOf(ensureV2(state), e) + (e.repoLentUSD ?? 0);
+    cash += entityCashOf(ensureV2(state), e) + (e.repoLentUSD ?? 0) + (e.rrpLentUSD ?? 0);
     for (let r = bookHeadOf(v2a, e.id); r >= 0; r = Ha.next[r]) {
       const type = v2a.internedStrings[Ha.typeRef[r]] as ItemizedHolding['instrumentType'];
       const sh = Ha.shares[r];

@@ -1,5 +1,5 @@
 /**
- * PUB2 — the central bank as a real counterparty, and the Treasury General Account.
+ * The central bank as a real counterparty, and the Treasury General Account.
  *
  * Replaces two scalars that stood in for a balance sheet: `centralBankReservesUSD` (seeded at a
  * phantom 1e12 and drifted by a stance multiplier, sitting beside real per-bank cash) and
@@ -23,10 +23,10 @@ export interface CentralBank {
   region: RegionId;
   /** Assets: the real sovereign book, by tenor bucket. Clears in 07c like any other holder. */
   sovereignHoldingsByTenor: Record<string, number>;
-  /** §5-CLOSE — Asset: the unsecured loans to banks drawn at the funding close (the lender of
+  /** Asset: the unsecured loans to banks drawn at the funding close (the lender of
    *  last resort). Equals the sum of the banks' `centralBankLoanUSD`. */
   loansToBanksUSD: number;
-  /** §5-CLOSE C4b — OFFICIAL SETTLEMENT. When a payer in this region pays a payee in another,
+  /** C4b — OFFICIAL SETTLEMENT. When a payer in this region pays a payee in another,
    *  reserves leave this central bank's system and appear in the other's; the receiving central
    *  bank has credited its bank and holds a CLAIM on the paying one, which has a foreign
    *  official DEPOSIT. One signed line per book: positive = claims on other central banks (an
@@ -34,21 +34,27 @@ export interface CentralBank {
    *  sign). Written by settlement from the instructions themselves; sums to zero across the
    *  world by construction, which the audit asserts. */
   foreignOfficialClaimsUSD: number;
-  /** §5-CLOSE C5 — Asset: what the standing repo facility has LENT the banks (the CB's seat in
+  /** C5 — Asset: what the standing repo facility has LENT the banks (the CB's seat in
    *  the repo session; each draw creates reserves against pledged collateral). Derived from the
    *  region's repo book by the session that writes it — one writer. */
   standingFacilityLentUSD: number;
-  /** §5-WIRES A3.5 — the treasury's account (a liability) and the WAYS AND MEANS advance (an
+  /** LIABILITY: cash the non-banks have parked at the overnight reverse repo window. The other
+   *  side of the corridor from `standingFacilityLentUSD`, and the reason the administered floor
+   *  is a real rate: the money leaves the institution's account and is not spendable while it
+   *  sits here. Written by the repo session, one writer, and returned with interest the
+   *  following week. */
+  reverseRepoBorrowedUSD: number;
+  /** A3.5 — the treasury's account (a liability) and the WAYS AND MEANS advance (an
    *  asset: the treasury cannot overdraw; when its payments exceed its account the central bank
    *  advances the difference at the policy rate, and the next money in repays it) are the two
    *  signs of ONE account row (`treasuryAccountOf`/`waysAndMeansOf`, ledger/accounts.ts). No
    *  field carries either. */
-  /** §5-CLOSE — this week's interest INCOME on the lender-of-last-resort loans (02b) and on the
+  /** This week's interest INCOME on the lender-of-last-resort loans (02b) and on the
    *  standing facility's repo contracts (the repo session), remitted with the coupons: the
    *  central bank keeps no retained earnings, so its assets are exactly its liabilities. */
   lastLoanInterestUSD?: number;
   lastStandingFacilityInterestUSD?: number;
-  /** §5-CLOSE C5 — last week's reverse-repo interest the window paid the funds (a central-bank
+  /** C5 — last week's reverse-repo interest the window paid the funds (a central-bank
    *  expense, netted in the remittance like the interest on reserves). */
   lastReverseRepoInterestUSD?: number;
   /** Liability: notes in circulation — the slow, non-operational part of the balance sheet. */
@@ -110,14 +116,21 @@ export function centralBankAssetsUSD(cb: CentralBank, waysAndMeansUSD: number): 
 }
 
 /**
- * THE IDENTITY (§5-CLOSE): assets = reserves + treasury account + currency, every week, to the
- * dollar. Reserves are the banks' own cash (a derived input, one representation); currency is a
+ * THE IDENTITY: assets = reserves + treasury account + currency + the reverse repo window's
+ * take, every week, to the dollar. Reserves are the banks' own cash (a derived input, one
+ * representation); currency is a
  * STORED liability that moves only when the central bank issues it — never a residual that
  * closes the book, because a residual is where money appears from nowhere. The residual is
  * what the audit prints (M1) until every reserve movement has a purchase behind it.
  */
 export function centralBankIdentityResidualUSD(cb: CentralBank, bankReservesUSD: number, treasuryAccountUSD: number, waysAndMeansUSD: number): number {
-  return bankReservesUSD + treasuryAccountUSD + cb.currencyInCirculationUSD - centralBankAssetsUSD(cb, waysAndMeansUSD);
+  return centralBankLiabilitiesUSD(cb, bankReservesUSD, treasuryAccountUSD) - centralBankAssetsUSD(cb, waysAndMeansUSD);
+}
+
+/** Reserves, the treasury's account, the currency it has issued, and what the non-banks have
+ *  parked at the reverse repo window. */
+export function centralBankLiabilitiesUSD(cb: CentralBank, bankReservesUSD: number, treasuryAccountUSD: number): number {
+  return bankReservesUSD + treasuryAccountUSD + cb.currencyInCirculationUSD + (cb.reverseRepoBorrowedUSD ?? 0);
 }
 
 /**
@@ -128,7 +141,7 @@ export function centralBankIdentityResidualUSD(cb: CentralBank, bankReservesUSD:
  */
 export function remittanceUSD(
   couponIncomeWeeklyUSD: number,
-  /** §5-CLOSE C4/C5: the interest on reserves the central bank actually PAID this week (the
+  /** C4/C5: the interest on reserves the central bank actually PAID this week (the
    *  banks' `reservesInterestWeeklyUSD`, posted by 02b), not a rate on a stock. */
   interestOnReservesPaidUSD: number
 ): number {
@@ -179,12 +192,12 @@ export const CENTRAL_BANK_MAX_STOCK_SHARE = 0.50;
  * The week's open-market decision: how much of what matured goes back to work, and how much new
  * paper to buy on top. Three regimes, and the default is the boring one.
  *
- *  - **QE** — the rule wants a rate the floor forbids. Reinvest everything and buy a flow scaled
+ *  **QE** the rule wants a rate the floor forbids. Reinvest everything and buy a flow scaled
  *    to the easing that cannot be delivered.
- *  - **QT** — the rate tool has room again AND the book sits above the share it was built at.
+ *  **QT** the rate tool has room again AND the book sits above the share it was built at.
  *    Reinvest only part of what matures; the rest is real supply 07c has to find a buyer for,
  *    which is what makes QT a market event rather than an announcement.
- *  - **Neither** — reinvest in full. The book holds its LEVEL and lets its share of a growing
+ *  **Neither** reinvest in full. The book holds its LEVEL and lets its share of a growing
  *    stock drift, which is what a central bank not using the balance sheet actually does.
  */
 export function openMarketPolicy(args: {

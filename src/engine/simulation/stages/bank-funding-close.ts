@@ -1,11 +1,11 @@
 /**
- * §7.340 — THE FUNDING CLOSE: a bank whose reserve account ends the week below its operating
+ * THE FUNDING CLOSE: a bank whose reserve account ends the week below its operating
  * buffer raises wholesale money overnight to cover it, at its own cleared spread, from the same
  * lenders the morning roll repays (bank-lending.ts's `unrenewedWholesaleUSD`, in 02b).
  *
  * Why at the close and not in 02b beside the roll: the shortfall is made by the books that clear
  * AFTER 02b — the desks buy inventory sized by capital, not by cash, and the settlement of a
- * week's customer flows can take 50B of reserves out of one bank (§7.340 measured MIUJ at −25B
+ * week's customer flows can take 50B of reserves out of one bank (measured MIUJ at −25B
  * by week 3). A repo session or a raise struck in the morning cannot see any of it. A real
  * treasury funds its day at the end of the day; this is that.
  *
@@ -37,7 +37,7 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
       const raisedUSD = raiseCentralBankLoanUSD(sheet, householdDepositsAt(ctx.v2, bank.ticker), reservesUSD, bankCashBufferRatioOf(bank));
       if (raisedUSD <= 0) return;
       raisedAny = true;
-      // §5-CLOSE: the lender of last resort. The central bank pays with reserves it creates and
+      // The lender of last resort. The central bank pays with reserves it creates and
       // books the loan as its asset, so the money it made has a purchase behind it.
       const cb = ctx.updatedRegions[bank.region]?.centralBankSheet;
       if (cb) cb.loansToBanksUSD = (cb.loansToBanksUSD ?? 0) + raisedUSD;

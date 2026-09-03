@@ -1,5 +1,5 @@
 /**
- * WS6 — the overnight general-collateral repo market (one per region, weekly session).
+ * The overnight general-collateral repo market (one per region, weekly session).
  *
  * What it is. A bank whose week closes short of its own operating cash buffer sells government
  * paper overnight under an agreement to repurchase — cash against collateral, re-struck every
@@ -8,7 +8,7 @@
  * need — the central bank's standing facility, which is a posted-rate seat IN this auction
  * rather than a fallback around it.
  *
- * Why the corridor holds without a clamp (§5-WS6's design, now mechanical fact): every
+ * Why the corridor holds without a clamp: every
  * participant's reservation is its own administered outside option. A bank lender will not
  * accept less than the policy rate its reserves already earn (floor-system IOR); a non-bank
  * lender will not accept less than the ON RRP rate its idle cash can always earn; and no
@@ -17,16 +17,16 @@
  * live inside [policy − ON_RRP_SPREAD, policy + SRF_SPREAD] — asserted weekly by the
  * invariants harness, produced by nothing but the participants' schedules.
  *
- * Every quantity here is derived, not posted (§7.24's discipline — the administered rates are
+ * Every quantity here is derived, not posted (discipline — the administered rates are
  * rule 1's single sanctioned exception):
- *  - the HAIRCUT per collateral bucket is the lender's real protection: the repricing the
+ *  the HAIRCUT per collateral bucket is the lender's real protection: the repricing the
  *    bucket's own cleared yield could plausibly suffer before the collateral could be sold —
  *    duration × two standard deviations of its own observed weekly yield changes
  *    (historicalZeroCurves). It tightens borrowing capacity exactly when the curve turns
  *    volatile, which a posted percentage cannot do.
- *  - a BORROWER's size is its real shortfall to its own buffer, capped by unencumbered
+ *  a BORROWER's size is its real shortfall to its own buffer, capped by unencumbered
  *    collateral × (1 − haircut).
- *  - a LENDER's size is the cash its own week genuinely closed with: a bank's cash above its
+ *  a LENDER's size is the cash its own week genuinely closed with: a bank's cash above its
  *    buffer; an institution's overnight half of its cash sleeve (the same split WS5's bill
  *    sleeve already uses — G6 derives the split from real liability liquidity needs and
  *    retires the shared constant).
@@ -106,7 +106,7 @@ export function collateralCapacityUSD(
 }
 
 /**
- * REPO2 — what this bank could still raise, bucket by bucket, against paper it has not already
+ * What this bank could still raise, bucket by bucket, against paper it has not already
  * pledged. Encumbrance is now a property of the specific paper (domain/repo.ts), so pledging
  * thirty-year bonds no longer withholds the two-year book from the auction that prices it, and
  * the cash a pledge raises is that bucket's own haircut rather than a blended average.
@@ -132,7 +132,7 @@ export function unencumberedByBucket(
 export function unencumberedBorrowingCapacityUSD(
   sheet: BankingSector,
   haircuts: Record<string, number>,
-  /** REPO2: what this bank has already pledged, by bucket. Omitted falls back to the sheet's
+  /** What this bank has already pledged, by bucket. Omitted falls back to the sheet's
    *  derived scalar, for the callers that have no book to hand. */
   encumberedFace?: Map<string, number>
 ): number {
@@ -151,7 +151,7 @@ export function unencumberedBorrowingCapacityUSD(
 }
 
 /**
- * REPO2 — which paper a borrower actually pledges, and how much of it.
+ * Which paper a borrower actually pledges, and how much of it.
  *
  * LONGEST FIRST, and the reason is the whole point of holding the short end. A bank's bills are
  * its liquidity buffer: they are what the coverage ratio counts and what it must be able to SELL
@@ -198,7 +198,7 @@ const repoLenderParty = (lender: RepoParty, regionId: RegionId): PartyRef =>
 const repoInstrumentId = (regionId: RegionId) => `${regionId}-REPO-ON`;
 const repoTermInstrumentId = (regionId: RegionId) => `${regionId}-REPO-TERM`;
 const CB_SRF_SEAT_ID = 'CB-SRF';
-/** REPO3: the term book's maturity — one quarter, the tenor the curve's own front point prices,
+/** The term book's maturity — one quarter, the tenor the curve's own front point prices,
  *  so a lender's outside option over it is something the model already publishes. */
 export const REPO_TERM_WEEKS = 13;
 /** A perfectly elastic window stands at full size AT its posted rate; the numerical step that
@@ -211,7 +211,7 @@ export interface RepoSessionResult {
   /** GUARD — what a borrower could actually fund this week: its shortfall to the buffer bounded
    *  by its unencumbered collateral. Zero means there was nothing to clear, which is a quiet
    *  week; positive with `clearedVolumeUSD` at zero means a market with a real borrower and real
-   *  lenders transacted nothing, which is a defect (§7.102: the corridor assertion passed
+   *  lenders transacted nothing, which is a defect (: the corridor assertion passed
    *  VACUOUSLY for eight commits because the early return prints the floor as a literal). */
   fundableNeedUSD: number;
   /** What the session actually lent — market repo plus the window. */
@@ -234,7 +234,7 @@ export function runRegionalRepoSession(
   const week = ctx.nextWeek;
   const priorRepoRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
   const policyBps = reg.policyRate * 10000;
-  // §5-CLOSE: the window's interest income this week, remitted by the central-bank stage.
+  // The window's interest income this week, remitted by the central-bank stage.
   if (reg.centralBankSheet) reg.centralBankSheet.lastStandingFacilityInterestUSD = 0;
   const rrpBps = Math.max(0, policyBps - ON_RRP_SPREAD_BPS);
   const srfBps = policyBps + SRF_SPREAD_BPS;
@@ -277,7 +277,7 @@ export function runRegionalRepoSession(
   banks.forEach((b) => encumberedByTicker.set(b.ticker, encumberedFaceByBucket(carriedBook, b.ticker)));
 
   // ---- Borrowers: real shortfall to the buffer, bounded by unencumbered collateral. ----
-  // REPO3: the need splits by how long it has already lasted. Money a bank has needed every
+  // The need splits by how long it has already lasted. Money a bank has needed every
   // week — the part of this week's need that is simply ROLLING a contract that just matured —
   // is structural funding and belongs at term; the increment on top of it is this week's cash
   // dip and belongs overnight. A treasury that funds a permanent book overnight is running the
@@ -312,6 +312,9 @@ export function runRegionalRepoSession(
   // ---- Lenders (whether or not there is need this week, their idle overnight cash earns the
   // administered floor: an institution's unlent overnight sleeve is implicitly parked at the
   // RRP window, the same real posted-rate facility that anchors its reservation below). ----
+  // What was parked at the window last week comes back first, so the sleeve below is measured
+  // against the whole balance and not against a book that is still a week out the door.
+  returnParkedCash(ctx, regionId);
   const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId && !e.isDefaulted);
   const overnightSleeveByEntity = new Map<string, number>();
   regionEntities.forEach((e) => {
@@ -324,10 +327,10 @@ export function runRegionalRepoSession(
   const finish = (book: RepoContract[], onRateAnnual: number, termRateAnnual: number | undefined,
                   clearedVolumeUSD: number): RepoSessionResult => {
     reg.repoBook = book;
-    // §5-CLOSE C5: the window's lending is the central bank's ASSET, derived from the same book.
+    // C5: the window's lending is the central bank's ASSET, derived from the same book.
     if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentUSD = Math.round(repoLentUSD(book, { kind: 'CENTRAL_BANK' }));
     reg.repoTermRateAnnual = termRateAnnual === undefined ? undefined : Number(termRateAnnual.toFixed(6));
-    // REPO1: every scalar the sheets carried is now DERIVED from the book — the G2 pattern.
+    // Every scalar the sheets carried is now DERIVED from the book — the G2 pattern.
     banks.forEach((bank) => {
       const sheet = sheetByTicker.get(bank.ticker);
       if (!sheet) return;
@@ -355,7 +358,7 @@ export function runRegionalRepoSession(
   if (!(totalNeedUSD > 0)) {
     // No borrower: nothing clears, the overnight complex sits at its floor, and the sleeves
     // earn the RRP rate there.
-    creditRrpOnUnlentSleeves(ctx, regionId, overnightSleeveByEntity, new Map(), rrpBps);
+    parkUnlentSleevesAtTheWindow(ctx, regionId, overnightSleeveByEntity, new Map(), rrpBps);
     return finish(carriedBook, rrpBps / 10000, undefined, 0);
   }
 
@@ -442,7 +445,7 @@ export function runRegionalRepoSession(
       // Overnight money reprices to the corridor the week policy moves; the corridor — the
       // participants' own posted outside options — is the real bound. The damper is set so wide
       // it cannot be the thing that prints (the harness asserts the corridor every week, so a
-      // damper-bound print would be caught as a violation, per §6's damper-diagnostic doctrine).
+      // damper-bound print would be caught as a violation, per damper-diagnostic doctrine).
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `repo:${id}`));
     const clearedBps = result.newStatById.get(args.instrumentId) ?? args.currentBps;
@@ -582,7 +585,7 @@ export function runRegionalRepoSession(
       reason: 'repo drawdown',
     });
   });
-  creditRrpOnUnlentSleeves(ctx, regionId, overnightSleeveByEntity, lentByEntity, rrpBps);
+  parkUnlentSleevesAtTheWindow(ctx, regionId, overnightSleeveByEntity, lentByEntity, rrpBps);
 
   return finish(
     [...carriedBook, ...newContracts],
@@ -593,40 +596,91 @@ export function runRegionalRepoSession(
 }
 
 /**
- * The unlent remainder of each institution's overnight sleeve earns the RRP rate — the posted
- * facility that is also its reservation in the auction above. The income is real interest from
- * the central-bank boundary, the exact non-bank mirror of the IOR banks earn on reserves; G9
- * gives both a real paying balance sheet.
+ * THE REVERSE REPO WINDOW IS A REAL POSITION, not a rate paid on a phantom balance.
+ *
+ * The unlent remainder of an institution's overnight sleeve is parked at the central bank at the
+ * administered floor — the same posted rate that is its reservation in the auction above. The
+ * money LEAVES its account: that is what makes the floor a floor, and it is the only reason a
+ * posted rate belongs in a model where every price clears. Paid interest on a balance booked
+ * nowhere, the same dollar earned the administered rate and stayed spendable in every other book
+ * the same week.
+ *
+ * The cash returns with its interest at the start of the next session (`returnParkedCash`), so
+ * the position is genuinely overnight and the rate it was struck at travels with it.
  */
-function creditRrpOnUnlentSleeves(
+function parkUnlentSleevesAtTheWindow(
   ctx: WeeklyStepContext,
   regionId: RegionId,
   sleeveByEntity: Map<string, number>,
   lentByEntity: Map<string, number>,
   rrpBps: number
 ): void {
-  const cb = ctx.updatedRegions[regionId]?.centralBankSheet;
-  if (cb) cb.lastReverseRepoInterestUSD = 0;
   if (rrpBps <= 0 || sleeveByEntity.size === 0) return;
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.region !== regionId) return;
-    const parkedUSD = (sleeveByEntity.get(e.id) ?? 0) - (lentByEntity.get(e.id) ?? 0);
-    if (parkedUSD <= 0) return;
-    const interestUSD = (parkedUSD * (rrpBps / 10000)) / 52;
-    if (!(interestUSD > 0)) return;
-    // The window pays it, and now says so: the non-bank mirror of the IOR banks earn.
-    if (cb) cb.lastReverseRepoInterestUSD = (cb.lastReverseRepoInterestUSD ?? 0) + interestUSD;
-    pay(ctx, {
-      payer: { kind: 'CENTRAL_BANK', region: regionId },
-      payee: { kind: 'INSTITUTION', id: e.id },
-      amountUSD: interestUSD,
-      reason: 'reverse repo interest',
-    });
+    const wantUSD = (sleeveByEntity.get(e.id) ?? 0) - (lentByEntity.get(e.id) ?? 0);
+    if (wantUSD > 0) ctx.rrpIntendedByEntity.set(e.id, wantUSD);
   });
+  ctx.rrpRateAnnualByRegion.set(regionId, rrpBps / 10000);
 }
 
 /**
- * REPO2 — A MARGIN CALL ON THE COLLATERAL. A pledge is a claim on specific paper, and the auctions
+ * The window takes what is left at the CLOSE. It is an end-of-day facility: the money is in the
+ * institution's hands all week and goes to the central bank overnight, so taking it here rather
+ * than in the money-market session is what keeps every book's budget the same as the cash it
+ * actually had while it was trading.
+ */
+export function drawReverseRepoAtTheClose(ctx: WeeklyStepContext): void {
+  const parkedByRegion = new Map<string, number>();
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
+    const wantUSD = ctx.rrpIntendedByEntity.get(e.id) ?? 0;
+    const rateAnnual = ctx.rrpRateAnnualByRegion.get(e.region) ?? 0;
+    if (!(wantUSD > 0) || !(rateAnnual > 0)) return e;
+    // Only money it can actually spare: what its account holds NET of everything the week has
+    // already committed it to pay. Parked against the raw balance, a fund that still owes the
+    // close its trades ends the week overdrawn.
+    const parkedUSD = Math.min(wantUSD, institutionSpendableUSD(ctx, e));
+    if (!(parkedUSD > 0)) return e;
+    parkedByRegion.set(e.region, (parkedByRegion.get(e.region) ?? 0) + parkedUSD);
+    pay(ctx, {
+      payer: { kind: 'INSTITUTION', id: e.id },
+      payee: { kind: 'CENTRAL_BANK', region: e.region },
+      amountUSD: parkedUSD,
+      reason: 'reverse repo drawdown',
+    });
+    return { ...e, rrpLentUSD: parkedUSD, rrpRateAnnual: rateAnnual };
+  });
+  parkedByRegion.forEach((usd, regionId) => {
+    const cb = ctx.updatedRegions[regionId as RegionId]?.centralBankSheet;
+    if (cb) cb.reverseRepoBorrowedUSD = (cb.reverseRepoBorrowedUSD ?? 0) + usd;
+  });
+  ctx.rrpIntendedByEntity.clear();
+}
+
+/** Last week's parked cash, back with the interest it earned at the rate it was struck at. */
+function returnParkedCash(ctx: WeeklyStepContext, regionId: RegionId): void {
+  const cb = ctx.updatedRegions[regionId]?.centralBankSheet;
+  if (cb) cb.lastReverseRepoInterestUSD = 0;
+  let returnedUSD = 0;
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
+    if (e.region !== regionId || !(e.rrpLentUSD ?? 0)) return e;
+    const principalUSD = e.rrpLentUSD!;
+    const interestUSD = (principalUSD * (e.rrpRateAnnual ?? 0)) / 52;
+    returnedUSD += principalUSD;
+    if (cb && interestUSD > 0) cb.lastReverseRepoInterestUSD = (cb.lastReverseRepoInterestUSD ?? 0) + interestUSD;
+    pay(ctx, {
+      payer: { kind: 'CENTRAL_BANK', region: regionId },
+      payee: { kind: 'INSTITUTION', id: e.id },
+      amountUSD: principalUSD + interestUSD,
+      reason: 'reverse repo returned with interest',
+    });
+    return { ...e, rrpLentUSD: 0, rrpRateAnnual: undefined };
+  });
+  if (cb) cb.reverseRepoBorrowedUSD = Math.max(0, (cb.reverseRepoBorrowedUSD ?? 0) - returnedUSD);
+}
+
+/**
+ * A MARGIN CALL ON THE COLLATERAL. A pledge is a claim on specific paper, and the auctions
  * that price that paper run after the repo session: a bank whose bucket is rationed down can end
  * the week holding less of it than it pledged. The floor 07c and 07f post is what should stop
  * that, and it does when the book is deep enough to honour every mandated core — but the engine
@@ -648,10 +702,10 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       const company = ctx.updatedCompanies.find((c) => c.ticker === ticker && c.bankBalanceSheet);
       if (!company) return;
       const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
-      // §5-STRUCT step 3 — one definition of "over-pledged" (domain/collateral.ts). This used a
+      // step 3 — one definition of "over-pledged" (domain/collateral.ts). This used a
       // 1-dollar tolerance and the harness used 1e6, so a bank could be a million dollars
       // over-pledged, pass this reconcile, and fail the check in the same week — which is most of
-      // why §6.1's row survived two attempts at it (§7.226).
+      // why row survived two attempts at it.
       const pledged = encumberedFaceByBucket(book, ticker);
       const shortfallByBucket = overPledgedByBucket({
         pledgedByBucket: pledged,

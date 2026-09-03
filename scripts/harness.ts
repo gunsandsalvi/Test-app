@@ -409,7 +409,8 @@ const institutionalBookOf = (s: GameState, region: RegionId) =>
       && e.entityType !== 'MONEY_MARKET_FUND' && e.entityType !== 'ETF')
     .reduce(
       (sum, e) =>
-        sum + entityCashOf(ensureV2(s), e) + ((e as any).repoLentUSD ?? 0) + e.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0),
+        sum + entityCashOf(ensureV2(s), e) + ((e as any).repoLentUSD ?? 0) + ((e as any).rrpLentUSD ?? 0)
+          + e.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0),
       0
     );
 /** Read at the close of each week, never off the previous state object: the persistent
@@ -447,6 +448,7 @@ function checkInstitutionalBookConservation(prevBooks: Map<RegionId, number>, st
       .filter((e) => e.region === region && !e.isDefaulted && e.entityType === 'MONEY_MARKET_FUND')
       .forEach((mmf) => {
         const bookUSD = entityCashOf(ensureV2(state), mmf) + ((mmf as any).repoLentUSD ?? 0)
+          + ((mmf as any).rrpLentUSD ?? 0)
           + mmf.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0);
         const sharesUSD = mmf.mmfSharesOutstandingUSD ?? 0;
         if (sharesUSD > 1e9 && Math.abs(bookUSD - sharesUSD) / sharesUSD > 0.02) {

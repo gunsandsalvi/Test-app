@@ -289,6 +289,13 @@ export interface WeeklyStepContext {
   pendingHolderAccrualUSD: Map<string, number>;
   /** CAL — the instruments whose coupon falls due this week: their accrued balances become cash. */
   pendingHolderAccrualPayout: Set<string>;
+  /** What each institution means to park at the reverse repo window this week, decided in the
+   *  money-market session and drawn at the CLOSE — the window is an end-of-day facility, so the
+   *  cash is in the institution's hands while its books trade. */
+  rrpIntendedByEntity: Map<string, number>;
+  /** The window's posted rate per region, carried from the session that set the corridor to the
+   *  close that draws on it. */
+  rrpRateAnnualByRegion: Map<string, number>;
   /** §7.321 barrier mode: suppress emission-time running-net application (merge applies it). */
   deferPendingNet?: boolean;
   /** CAL — what each holder has EARNED and not yet been paid, by (instrument, holder). The
@@ -407,6 +414,8 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     cashOverdraftUSD: 0,
     pendingHolderAccrualUSD: new Map(),
     pendingHolderAccrualPayout: new Set(),
+    rrpIntendedByEntity: new Map(),
+    rrpRateAnnualByRegion: new Map(),
     holderAccruedInterestUSD: state.holderAccruedInterestUSD,
     sovereignAccruedInterestUSD: state.sovereignAccruedInterestUSD,
     tradeInvoiceFxGainUSD: 0,

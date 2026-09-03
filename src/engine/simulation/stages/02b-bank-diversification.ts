@@ -40,7 +40,7 @@ import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnua
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
-import { SRF_SPREAD_BPS } from '../../macro/banking';
+import { SRF_SPREAD_BPS, bankCashBufferRatioOf } from '../../macro/banking';
 import { cashOf, entityCashOf, poolCashOf, adjustSectorRow, adjustBankReserves, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
@@ -84,7 +84,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // how initial seeding works in companyGenerator.ts.
     const priorAggregate = reg.bankingSector;
 
-    // OWN5: a bank's market share is the deposits it actually won, measured off the sheets at
+    // A bank's market share is the deposits it actually won, measured off the sheets at
     // the start of this week. It was `0.35 x 0.72^rank`, fixed at seed and never revisited, and
     // it decided real things: which bank a borrower's cash settles at, how the segment pools'
     // balances are spread, and each bank's cut of dealer revenue. A bank that lost deposits kept
@@ -101,7 +101,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       }
     }
 
-    // WS7: the household savings flow chooses between deposits and the money fund on last
+    // The household savings flow chooses between deposits and the money fund on last
     // week's real yield gap, BEFORE the banks' deposit flow posts — the deposits simply never
     // arrive at the banks. This is the funding competition WS7 exists to create.
     const depositShare = savingsToDepositsShare(reg.householdState);
@@ -110,7 +110,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     // G2 slice 4: corporate deposits ARE the home companies' S5 cash — one representation,
     // derived weekly from the real ledger rather than stored twice.
-    // SETL5: the institutional deposit line, reconciled to the entities' real balances the same
+    // The institutional deposit line, reconciled to the entities' real balances the same
     // way the corporate one is — settlement maintains it week to week, and this catches cash
     // moved by stages not yet on instructions, carrying the matching reserve leg.
     ctx.updatedInstitutionalEntities.forEach((e) => {
@@ -121,12 +121,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // its own line so the meter measures what it claims to.
       ctx.cashOverdraftUSD += Math.max(0, -entityCashOf(ctx.v2, e));
     });
-    // §7.265 — THE OVERDRAFT CONVERSION: a company whose SETTLED balance stands negative has
+    // THE OVERDRAFT CONVERSION: a company whose SETTLED balance stands negative has
     // already spent its bank's money, so the bank's de-facto credit becomes a de-jure facility
     // draw at revolver pricing. Stage 08's own revolver fires on the walk's forward view, but
     // the books that run AFTER it (the late clearings, ETF flows, FX, the close) can settle a
     // company negative with no lender until this pass — measured as ~4.5B/week of standing
-    // negative balances (§7.264), money nobody funded. One statement, the SEG2e shape: the
+    // negative balances, money nobody funded. One statement, the SEG2e shape: the
     // tranche goes on the borrower, the credit event books the loan on the bank, and the
     // BANK_CREDIT payment writes the deposit back to zero — a loan creates a deposit. The
     // borrower's own machinery services and prepays it like any facility. No headroom test:
@@ -136,7 +136,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const cashUSD = cashOf(ctx.v2, c);
       if (!c.homeBankTicker || !(cashUSD < -1)) return;
       const drawUSD = -cashUSD;
-      // §5-CLOSE P1: priced off the borrower's own PD at its bank's hurdle, like every facility.
+      // P1: priced off the borrower's own PD at its bank's hurdle, like every facility.
       const marginBps = facilityMarginBpsFor(ensureV2(state), c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker));
       const tranche = {
         id: `${c.id}-REVOLVER-OD-${ctx.nextWeek}`,
@@ -173,13 +173,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       });
       console.log(`  [recon-base] w${ctx.nextWeek} ${regionId} negatives ${(negUSD / 1e6).toFixed(0)}M x${negN} | unbanked ${(unbankedUSD / 1e6).toFixed(0)}M x${unbankedN}`);
     }
-    // SEG1: the segment pools' balances, reconciled the same way — each pool's cash sits across
+    // The segment pools' balances, reconciled the same way — each pool's cash sits across
     // the region's banks pro-rata by market share (settlement spreads it identically; this
     // catches share drift and any balance moved outside instructions, with the reserve leg).
     const segmentCashUSD = (reg.smePools || []).reduce((a, s) => a + Math.max(0, poolCashOf(ctx.v2, regionId, s.industry)), 0);
     const regionBankShareTotal = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
 
-    // HH3: the week's real household-credit flows, per bank, for the region roll-up below.
+    // The week's real household-credit flows, per bank, for the region roll-up below.
     const householdFlowsByBank = new Map<string, {
       interestUSD: number; debtServicePrincipalUSD: number; principalUSD: number;
       mortgageOriginationUSD: number; mortgageDischargeUSD: number; mortgageRateQuotedAnnual: number; turnoverRateAnnual: number; mortgageBookUSD: number;
@@ -188,7 +188,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     const sovCouponByBucket = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
 
-    // REPO1: what each bank owes and is owed on contracts that come due this week.
+    // What each bank owes and is owed on contracts that come due this week.
     const dueThisWeek = maturingAt(reg.repoBook ?? [], ctx.nextWeek);
     const maturingRepo = (ticker: string) => {
       let borrowPrincipalUSD = 0, borrowInterestUSD = 0, lendPrincipalUSD = 0, lendInterestUSD = 0;
@@ -204,21 +204,21 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const share = bank.bankMarketShare ?? 1 / banks.length;
       const prevSheet = bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, share);
       const riskFactor = bank.bankRiskFactor ?? 1.0;
-      // §5-FINALIZATION step 10: the bank's facility book is its rows on the borrowers' ladders.
+      // step 10: the bank's facility book is its rows on the borrowers' ladders.
       const facilityRows = facilityRowsOf(ctx.v2, bank.ticker);
       const facilityBookUSD = facilityBookOf(ctx.v2, bank.ticker);
 
-      // G2: last week's itemized book earns its real interest — computed here so the margin
+      // Last week's itemized book earns its real interest — computed here so the margin
       // reads the same loans the book actually holds.
       const priorLoanInterestWeeklyUSD = (prevSheet.businessLoans || [])
         .filter((l) => l.status === 'PERFORMING')
         .reduce((a, l) => a + (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
-      // SETL4: the FACILITY interest is paid by the borrower as a real payment (stage 08 →
+      // The FACILITY interest is paid by the borrower as a real payment (stage 08 →
       // settlement), so the evolution measures it and never credits it; the facilities are the
       // ladder rows (step 10). SME pools have no cash ledger of their own and pay through the book.
       const priorFacilityInterestWeeklyUSD = facilityRows
         .reduce((a, f) => a + (f.principalUSD * (reg.policyRate + f.marginBps / 10000)) / 52, 0);
-      // SEG2d: the SME slice is a real payment now too — each pool pays its own interest from
+      // The SME slice is a real payment now too — each pool pays its own interest from
       // its own book (SEGMENT → BANK through settlement), on the same prior-week basis the
       // facility exclusion uses, so the evolution must not credit it either.
       let priorSmeInterestWeeklyUSD = 0;
@@ -237,7 +237,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           });
         });
 
-      // HH3: the household books' real accrual on the same prior-week basis — each pool at its
+      // The household books' real accrual on the same prior-week basis — each pool at its
       // own terms (a mortgage pool at its fixed WAC, card/term at policy plus their margins).
       const priorHouseholdInterestWeeklyUSD = (prevSheet.householdLoans || []).reduce((a, pl) => {
         const rate = pl.kind === 'MORTGAGE'
@@ -264,7 +264,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         // THIS bank's real tenor book at the real cleared curve — not the 10Y on a scalar.
         computeSovereignBookAnnualYield(prevSheet.sovereignBondHoldingsByTenor, reg.zeroRates),
         reg.creditConditionsSpilloverAdjustment ?? 0,
-        // REPO1: the CONTRACTS due this week mature inside as explicit flows — each at the rate
+        // The CONTRACTS due this week mature inside as explicit flows — each at the rate
         // it was struck at and over the term it ran, the standing facility included.
         maturingRepo(bank.ticker).borrowPrincipalUSD,
         maturingRepo(bank.ticker).borrowInterestUSD,
@@ -272,20 +272,20 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         maturingRepo(bank.ticker).lendInterestUSD,
         priorLoanInterestWeeklyUSD - priorSmeInterestWeeklyUSD,
         priorHouseholdInterestWeeklyUSD,
-        // PUB1: real coupons on this bank's own sovereign book.
+        // Real coupons on this bank's own sovereign book.
         Object.entries(prevSheet.sovereignBondHoldingsByTenor || {}).reduce(
           (a, [k, v]) => a + ((Number(v) || 0) * (sovCouponByBucket[k] ?? 0)) / 52, 0
         ),
         regionDivertedUSD * share,
         // Slice 5: the rate this bank's deposits must compete with.
         findRegionMmf(ctx.updatedInstitutionalEntities, regionId)?.mmfNetYieldAnnual ?? 0,
-        // G3c: what the market charges THIS bank for money — its own cleared credit spread,
+        // What the market charges THIS bank for money — its own cleared credit spread,
         // printed by the same corporate-bond auction that prices every other issuer.
         bank.oasSpreadBps > 0 ? bank.oasSpreadBps : WHOLESALE_FUNDING_SPREAD_BPS,
-        // COH4: the households' own measured split, so the funding-pressure denominator and the
-        // inflow it is measured against are the SAME number (§7.5's duplicated-constant shape).
+        // The households' own measured split, so the funding-pressure denominator and the
+        // inflow it is measured against are the SAME number.
         depositShare,
-        // §7.254: income the evolution must MEASURE but never credit to cash — the interest
+        // Income the evolution must MEASURE but never credit to cash — the interest
         // borrowers pay as real payments (facility + SME, via settlement) and the bill
         // accretion the sovereign book earned last week (non-cash, already in equity). Leaving
         // these out made the NIM statistic and the payout read a bank poorer than its ledger.
@@ -295,7 +295,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         `${regionId}:${bank.ticker}`
       );
 
-      // §5-CLOSE C4: the three flows the evolution DECIDED are PAID here, as instructions between
+      // C4: the three flows the evolution DECIDED are PAID here, as instructions between
       // named parties. Interest on reserves is the central bank's expense — it settles by
       // creating the reserves, and its remittance to the treasury is already net of it.
       if ((sheet.reservesInterestWeeklyUSD ?? 0) > 0) {
@@ -309,10 +309,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // The dividend goes to the register: the paying agent settles it pro rata to the holders
       // of record as a payment from this bank (reserves and equity leave at settlement).
       if ((sheet.dividendWeeklyUSD ?? 0) > 0) payHoldersCash(ctx, bank.id, 'EQUITY', sheet.dividendWeeklyUSD!);
-      // G2: the itemized book's own week — facility reconciliation, real interest accrual
+      // The itemized book's own week — facility reconciliation, real interest accrual
       // basis, real SME write-offs, and priced origination under the real capital constraint.
       const lending = runBankWeeklyLending(bank, sheet, reg, regionId, ctx.nextWeek);
-      // SEG2e: a loan creates a deposit — the pool's new money is written by this bank's own
+      // A loan creates a deposit — the pool's new money is written by this bank's own
       // credit (no reserve moves) and lands on the pool's cash and this bank's smeDepositsUSD
       // line at settlement, in the same week the loan appeared on the book above.
       lending.smeOriginationBySegment.forEach((grantedUSD, industry) => {
@@ -323,7 +323,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           reason: 'SME loan origination creates the pool deposit',
         });
       });
-      // HH3: the household books' own week — derived amortization, measured losses, and
+      // The household books' own week — derived amortization, measured losses, and
       // priced, capital-gated origination (mortgage demand off the real housing turnover).
       const household = runBankHouseholdLending(
         bank, lending.sheet, reg, reg.unemploymentRate * (0.6 + riskFactor * 0.4), ctx.nextWeek
@@ -348,8 +348,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         ),
       };
       ctx.g2DeclinedOriginationUSD[regionId] = (ctx.g2DeclinedOriginationUSD[regionId] ?? 0) + lending.declinedOriginationUSD;
-      // §5-WIRES A3.4/A3.6c-iii: what this bank's own book did to its household line this stage
-      // — the evolution's interest debit and deposit-interest credit (to the dollar), then the
+      // A3.4/A3.6c-iii: what this bank's own book did to its household line this stage
+      // the evolution's interest debit and deposit-interest credit (to the dollar), then the
       // loans it wrote and retired and the amortization it took — is the household sector's row
       // at this bank moving by the same amount, posted here as the one account operation.
       const householdLineUSD = evolvedHouseholdLineUSD + household.mortgageOriginationUSD - household.mortgageDischargeUSD
@@ -361,8 +361,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       return { bank, sheet: withDeposits };
     });
 
-    // SEG2f: the pool's debt is the DERIVED SUM of the loans the banks actually hold against it
-    // — one representation (rule 3). The in-place `debtUSD += granted` during origination only
+    // The pool's debt is the DERIVED SUM of the loans the banks actually hold against it
+    // one representation (rule 3). The in-place `debtUSD += granted` during origination only
     // sequences demand across banks within the pass; this write is the record, and it now
     // carries the loss leg too (write-offs used to shrink the banks' books while the segment's
     // number never noticed).
@@ -379,7 +379,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         const id = smePoolId(regionId, seg.industry);
         const principalUSD = poolTotals.get(id) ?? 0;
         seg.debtUSD = Math.round(principalUSD);
-        // §7.241: the blended margin of the pool's REAL loans, derived beside the principal —
+        // The blended margin of the pool's REAL loans, derived beside the principal —
         // sme-pools reads it for debt service instead of an invented +300bp, closing the
         // credit-transmission loop (a tightening now reaches measured pool distress).
         seg.blendedMarginBps = principalUSD > 0
@@ -388,7 +388,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       });
     }
 
-    // WS6: the weekly money-market session. Every real flow has posted; banks short of their
+    // The weekly money-market session. Every real flow has posted; banks short of their
     // buffer now fund against their collateral, surplus banks and institutional idle cash
     // lend, and the SRF sits in the book as the posted-rate seat of last resort — so there is
     // no separate "facility draw" step to run afterwards, and the region's overnight rate is
@@ -408,11 +408,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     if (reg.centralBankSheet) reg.centralBankSheet.lastLoanInterestUSD = 0;
     newSheets.forEach(({ bank, sheet }) => {
-      // §5-CLOSE — the central bank's loan is repaid from cash above the buffer (the liability
+      // The central bank's loan is repaid from cash above the buffer (the liability
       // leaves here, bank-lending owns the write; the cash leaves at settlement, extinguishing
       // the reserves it created), and its interest is a payment to the named creditor.
       const cbSheet = reg.centralBankSheet;
-      const repaidUSD = repayCentralBankLoanUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker));
+      const repaidUSD = repayCentralBankLoanUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), householdDepositsAt(ctx.v2, bank.ticker), bankCashBufferRatioOf(bank));
       if (repaidUSD > 0) {
         if (cbSheet) cbSheet.loansToBanksUSD = Math.max(0, (cbSheet.loansToBanksUSD ?? 0) - repaidUSD);
         pay(ctx, {
@@ -422,7 +422,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           reason: 'central bank loan repaid',
         });
       }
-      // §5-CLOSE C4: interest on corporate balances is paid to the depositors who earn it —
+      // C4: interest on corporate balances is paid to the depositors who earn it —
       // each firm with a positive balance at this bank, pro rata to its balance, at the rate
       // the evolution decided. (Estates and defaulted firms hold balances too; a balance is
       // a balance.)
@@ -459,10 +459,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     // The region-level bankingSector every other stage reads becomes the real sum of these
     // named banks, replacing (not supplementing) the single-formula aggregate stage 2 computed
-    // — one source of truth, now genuinely derived from real per-bank state instead of the
+    // one source of truth, now genuinely derived from real per-bank state instead of the
     // other way around.
     const sumField = (f: (s: BankingSector) => number) => newSheets.reduce((s, { sheet }) => s + f(sheet), 0);
-    // G3a: the region's view of one dealer book — every named desk's position, summed by name.
+    // The region's view of one dealer book — every named desk's position, summed by name.
     const deskView = (book: string) =>
       Array.from(regionalDeskView(newSheets.map(({ sheet }) => sheet.dealerDeskInventory), book).entries())
         .filter(([, usd]) => Math.abs(usd) > 1);
@@ -473,7 +473,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         ? newSheets.reduce((s, e) => s + f(e.sheet) * assetsOf(e), 0) / totalAssets
         : (newSheets.reduce((s, { sheet }) => s + f(sheet), 0) / Math.max(1, newSheets.length));
 
-    // §7.241: `satisfies` over Required<BankingSector> makes this rebuild EXHAUSTIVE — the old
+    // `satisfies` over Required<BankingSector> makes this rebuild EXHAUSTIVE — the old
     // literal silently dropped nine optional fields (every `?? 0` reader of the aggregate then
     // saw zero), and every future optional field would silently not aggregate. Now a new
     // BankingSector field fails to compile here until it is summed, averaged, or explicitly
@@ -506,7 +506,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         });
         return buckets;
       })(),
-      // G3a: dealer inventory is now OWNED, one desk per named bank (domain/dealer-desk.ts).
+      // Dealer inventory is now OWNED, one desk per named bank (domain/dealer-desk.ts).
       // These three arrays are the derived regional view of those desks and nothing decides off
       // them — the books that clear later this week overwrite them with their own session's
       // result, and a desk's position is only ever written by the bank that took it.
@@ -516,13 +516,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         ...deskView('bill').map(([instrumentId, inventoryUSD]) => ({ tenorKey: govBucketKeyOf(instrumentId, regionId) ?? instrumentId, inventoryUSD })),
       ],
       loanDealerInventory: deskView('leveraged loan').map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD })),
-      // WS6: the region's overnight book is the sum of the named banks' real positions. The
+      // The region's overnight book is the sum of the named banks' real positions. The
       // RATE is one market print per region and lives on reg.repoRateAnnual — never a second
       // copy on any sheet.
       repoLentUSD: sumField((s) => s.repoLentUSD ?? 0),
       repoBorrowedUSD: sumField((s) => s.repoBorrowedUSD ?? 0),
       repoEncumberedCollateralUSD: sumField((s) => s.repoEncumberedCollateralUSD ?? 0),
-      // G2: itemized loans live per bank; the aggregate carries no copy (a flattened region
+      // Itemized loans live per bank; the aggregate carries no copy (a flattened region
       // view would be a second ledger). Corporate deposits sum like everything else.
       businessLoans: [],
       householdLoans: [],
@@ -593,7 +593,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // purchases from the view and records them for next week's bank settlement). The diverted
     // savings become a real money-fund share stock on the household book instead of money that
     // vanished from the household view at the yield gate.
-    // §5-CLOSE M6: the deposits the household BOOK wrote this week — a loan creates the
+    // M6: the deposits the household BOOK wrote this week — a loan creates the
     // borrower's deposit, a repayment and the interest destroy it — reported so the money-stock
     // decomposition can count the banks' second creator (the first is the payment ledger).
     reg.householdBookDepositFlowWeeklyUSD = Math.round(

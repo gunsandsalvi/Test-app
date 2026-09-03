@@ -1,6 +1,6 @@
 import { entityCashOf } from '../../ledger/accounts';
 /**
- * WS7 — money market funds: the missing dominant bid in the front-end books, funded by real
+ * Money market funds: the missing dominant bid in the front-end books, funded by real
  * liabilities.
  *
  * The fund is an ordinary institutional entity whose whole book is the cash sleeve, so its
@@ -9,14 +9,14 @@ import { entityCashOf } from '../../ledger/accounts';
  * what an entity looks like when that sleeve is its entire balance sheet.
  *
  * The LIABILITY side is the real work, and both legs are real flows:
- *  - **Corporate treasury sweeps** (stage 08's cash ledger): a company's cash above its own
+ *  **Corporate treasury sweeps** (stage 08's cash ledger): a company's cash above its own
  *    working-capital need — the same WORKING_CAPITAL_SHARE_OF_REVENUE its CP program sizes
  *    against — buys fund shares at the fixed $1 NAV; the moment operations need the money back
  *    the treasurer redeems, bounded by the fund's real available cash that week (an unfilled
  *    redemption carries to the next session while the fund's shrunken bill/repo bids convert
  *    assets back to cash — the "redemptions force real asset sales" mechanism, expressed
  *    through the same schedules that built the book).
- *  - **The household yield-gap flow** (02b): the share of the weekly household savings flow
+ *  **The household yield-gap flow** (02b): the share of the weekly household savings flow
  *    that used to land in bank deposits moves toward whichever of the two rates is higher —
  *    deposits at the banks' deposit rate, or the fund's net yield. This is what finally makes
  *    banks COMPETE for funding: a hike the deposit beta lags flows straight out of deposits
@@ -72,14 +72,15 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashUSD: num
   const billYieldAnnual = billUSD > 0 ? computeSovereignBookAnnualYield(billByTenor, reg.zeroRates) : 0;
 
   const repoLentUSD = entity.repoLentUSD ?? 0;
-  // Idle cash is implicitly at the RRP window (the repo session credits that rate on the
-  // overnight sleeve); the term half of the sleeve is en route to bills at ~the same floor.
+  // What is parked at the reverse repo window earns the floor; the cash still on the account
+  // earns nothing until the next session decides where it goes.
+  const rrpLentUSD = entity.rrpLentUSD ?? 0;
   const idleCashUSD = Math.max(0, cashUSD);
-  const totalUSD = billUSD + repoLentUSD + idleCashUSD;
+  const totalUSD = billUSD + repoLentUSD + rrpLentUSD + idleCashUSD;
   if (totalUSD <= 0) return Math.max(0, rrpRateAnnual - MMF_FEE_ANNUAL);
 
   const grossAnnual =
-    (billUSD * billYieldAnnual + repoLentUSD * repoRateAnnual + idleCashUSD * rrpRateAnnual) / totalUSD;
+    (billUSD * billYieldAnnual + repoLentUSD * repoRateAnnual + rrpLentUSD * rrpRateAnnual) / totalUSD;
   return Math.max(0, grossAnnual - MMF_FEE_ANNUAL);
 }
 
@@ -96,7 +97,7 @@ export function divertHouseholdSavingsToMmf(
 ): number {
   const mmf = findRegionMmf(ctx.updatedInstitutionalEntities, regionId);
   if (!mmf || weeklySavingsDepositInflowUSD <= 0) return 0;
-  // G3c: what the banks actually decided to pay this week, not a second copy of a retired
+  // What the banks actually decided to pay this week, not a second copy of a retired
   // beta. One number, one writer — the depositor's choice is between this and the fund's yield.
   const depositRateAnnual = reg.bankingSector.depositRateAnnual ?? 0;
   const gap = (mmf.mmfNetYieldAnnual ?? 0) - depositRateAnnual;
@@ -105,7 +106,7 @@ export function divertHouseholdSavingsToMmf(
   const divertedUSD = weeklySavingsDepositInflowUSD * divertedShare;
   if (divertedUSD <= 0) return 0;
 
-  // §7.248: a REAL payment now. The household's deposit and the pending bank leg move at
+  // A REAL payment now. The household's deposit and the pending bank leg move at
   // settlement (T+1 to the banks, the same convention every post-bank-pass household flow
   // rides), the fund's cash and its home bank's institutional line move at the apply — and
   // `evolveBankingSector` no longer subtracts the diversion from the deposit flow itself,
@@ -169,11 +170,11 @@ export function corporateSweepDecision(
   if (cashAfterOperationsUSD > bufferUSD) {
     const sweepUSD = cashAfterOperationsUSD - bufferUSD;
     book.netInflowUSD += sweepUSD;
-    // §7.323 (user-authorized declared change): a sweep-in credits the fund's SHARE register and
+    // (user-authorized declared change): a sweep-in credits the fund's SHARE register and
     // settles as cash, but is NOT intraday liquidity to other redeemers — the redeemable pool is
     // the fund's OPENING cash, drawn down by redemptions only, and sweep money joins it at next
     // week's open (T+1, as a real corporate sweep deposit behaves). This is also what unhooks
-    // the back kernel's redemption barrier from the post phase (§7.322's serial chain).
+    // the back kernel's redemption barrier from the post phase.
     return { cashDeltaUSD: -sweepUSD, shareDeltaUSD: sweepUSD };
   }
   if (cashAfterOperationsUSD < bufferUSD && sharesUSD > 0) {
@@ -194,7 +195,7 @@ export function settleCorporateSweepBooks(books: Map<RegionId, CorporateSweepBoo
     if (e.entityType !== 'MONEY_MARKET_FUND') return e;
     const book = books.get(e.region);
     if (!book || book.netInflowUSD === 0) return e;
-    // SETL2: the CASH leg is settlement's now — the sweeping company names this fund as its
+    // The CASH leg is settlement's now — the sweeping company names this fund as its
     // counterparty, so the money moves once. Crediting it here as well credited the fund and
     // left the payment at the boundary too, creating the amount twice over. What belongs here
     // is the SHARE register: the fund issues shares against the money it received.
@@ -222,7 +223,7 @@ export function settleCorporateSweepBooks(books: Map<RegionId, CorporateSweepBoo
 export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   const feeByRegion = new Map<RegionId, number>();
   const feePayerByRegion = new Map<RegionId, string>();
-  // §7.126 — WHO THE NEW SHARES ARE ISSUED TO. This paid the yield by growing
+  // WHO THE NEW SHARES ARE ISSUED TO. This paid the yield by growing
   // `mmfSharesOutstandingUSD` and credited NO holder, so the fund's liability rose every week
   // while every holder's asset stood still: a one-sided flow (rule 14), measured at 2.5% of the
   // fund and compounding (41.39B outstanding against 40.34B held by week 6). The module's own
@@ -232,16 +233,16 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   const H = ctx.v2.holdings;
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.entityType !== 'MONEY_MARKET_FUND') return e;
-    // §7.307 holdings flip: row walk on the mirror.
+    // holdings flip: row walk on the mirror.
     let holdingsUSD = 0;
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r];
-    const bookUSD = entityCashOf(ctx.v2, e) + holdingsUSD + (e.repoLentUSD ?? 0);
+    const bookUSD = entityCashOf(ctx.v2, e) + holdingsUSD + (e.repoLentUSD ?? 0) + (e.rrpLentUSD ?? 0);
     if (bookUSD <= 0) return e;
     const feeUSD = (bookUSD * MMF_FEE_ANNUAL) / 52;
-    // §4.0 Tier 1 item 7 — A STABLE-NAV FUND DISTRIBUTES WHAT IT EARNED, NOT WHAT IT QUOTED.
+    // A STABLE-NAV FUND DISTRIBUTES WHAT IT EARNED, NOT WHAT IT QUOTED.
     // This paid `bookUSD × mmfNetYieldAnnual`, a QUOTE, while the assets earned their realized
     // income — two derivations of one number (rule 3), and the share liability outran the book
-    // by the gap, compounding (§7.253: 47 NAV-departure violations, book 2-3% under shares).
+    // by the gap, compounding (: 47 NAV-departure violations, book 2-3% under shares).
     // The $1-NAV identity is its own measure: the book's excess over the share liability, net
     // of the fee instruction below (whose cash leaves at the close), IS the undistributed
     // income. Distributing exactly that keeps book = shares by construction; a genuine LOSS
@@ -251,7 +252,7 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     feeByRegion.set(e.region, (feeByRegion.get(e.region) ?? 0) + feeUSD);
     feePayerByRegion.set(e.region, e.id);
     issuedByRegion.set(e.region, (issuedByRegion.get(e.region) ?? 0) + paidToHoldersUSD);
-    // §7.241: the fee's cash leg is a payment now (fund → manager, below); only the SHARE
+    // The fee's cash leg is a payment now (fund → manager, below); only the SHARE
     // register — not money — is written here.
     return {
       ...e,
@@ -296,7 +297,7 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     const pool = managersByRegion.get(e.region)?.total ?? 0;
     const payerId = feePayerByRegion.get(e.region);
     if (feeUSD <= 0 || pool <= 0 || !payerId) return;
-    // §7.241: the management fee moves as a PAYMENT (fund → manager), not as two object rebuilds
+    // The management fee moves as a PAYMENT (fund → manager), not as two object rebuilds
     // no bank ever saw. Settlement carries both deposit legs.
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: payerId },

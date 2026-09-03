@@ -623,6 +623,8 @@ function buildRegion(regionId: RegionId): Region {
       // opened as the government's row before close-seed (initialization.ts). No field.
       // §5-CLOSE: a stored liability at zero — never a residual.
       currencyInCirculationUSD: 0,
+      // The window opens empty: nothing is parked until the first repo session runs.
+      reverseRepoBorrowedUSD: 0,
       loansToBanksUSD: 0,
       foreignOfficialClaimsUSD: 0,
       standingFacilityLentUSD: 0,

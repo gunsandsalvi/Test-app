@@ -6,6 +6,7 @@ import { GameState, RegionId } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
 import { runOverdraftSweep } from './stages/overdraft-sweep';
+import { drawReverseRepoAtTheClose } from './stages/repo-clearing';
 import { runDerivativesStage } from './stages/derivatives';
 import { runSecuritiesLendingStage } from './stages/securities-lending';
 import { runEstateResolutionStage } from './stages/estate-resolution';
@@ -372,6 +373,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // margin account's sweep, run against everything the close is about to settle.
   // §5-CLOSE M4: every negative balance — firm, fund, pool — is named credit before the close.
   run('overdraft-sweep', () => runOverdraftSweep(ctx));
+  // THE OVERNIGHT WINDOW, before the close settles and before the banks square up. It is an
+  // end-of-day facility: the non-banks' idle cash goes to the central bank after the week's
+  // books have traded with it, the deposits leave the banks that held it, and the funding close
+  // below is where a bank short of reserves because of that borrows.
+  run('reverse-repo-draw', () => drawReverseRepoAtTheClose(ctx));
   // CASH: the CLOSE. Everything the late stages posted — the insurers, the money fund, the ETFs,
   // the FX desks, the estates, the treasury's redemptions — settles here. A week has two cycles
   // because a day does, and without the second one those stages had nowhere to send a payment.

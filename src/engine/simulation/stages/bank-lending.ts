@@ -46,15 +46,14 @@ import { BankingSector, BankLoan, HouseholdLoanPool, HouseholdLoanKind,
   MORTGAGE_SEED_SPREAD_OVER_10Y_BPS, MORTGAGE_OPERATING_COST_BPS, CARD_POOL_PAYMENT_RATE_WEEKLY, CARD_MIN_PRINCIPAL_RATE_WEEKLY,
   CARD_OPERATING_COST_BPS,
   CONSUMER_TERM_OPERATING_COST_BPS, HOUSING_TURNOVER_SEED_RATE_ANNUAL, housingTurnoverAnnual, MORTGAGE_LTV_AT_ORIGINATION,
-  MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER, DepositLines } from '../../../domain/banking';
+  MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER } from '../../../domain/banking';
 import { AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
 import { SmePool } from '../../../domain/region-macro';
 import { bookPnL } from '../../ledger/bank-book';
-import { defect } from '../../../domain/defect';
 import { remainingLifeExpectancyYears, medianAdultAgeYears } from '../../bootstrap/population';
 import { creditRecoveryRate, computeAnnualDefaultProbability } from './shared-helpers';
 import { V2World } from '../../../engine2/world';
-import { bankTotalAssetsUSD, stressedOutflowUSD, LIQUIDITY_COVERAGE_RATIO, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
+import { bankTotalAssetsUSD, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 import { facilityBookOf } from '../../../engine2/tranches';
 
 /** Covenant-style ceiling on SME pool leverage — the same real lending constraint the bond
@@ -878,16 +877,29 @@ export function runBankHouseholdLending(
  * identity forces the repayment; the roll does.
  *
  * Writes the liability down and returns the repayment; the CALLER settles the cash leg as a
- * payment instruction (BANK_SECURITIES → the unmodeled wholesale lender), so the reserves move
- * where money moves and the boundary meter sees the flow under its own reason.
+ * payment instruction (BANK_SECURITIES → CENTRAL_BANK), so the reserves the loan created are
+ * extinguished where the money moves.
  */
-export function repayCentralBankLoanUSD(sheet: BankingSector, cashUSD: number, lines: DepositLines): number {
-  const bufferUSD = stressedOutflowUSD(sheet, lines) * LIQUIDITY_COVERAGE_RATIO;
-  const excessCashUSD = Math.max(0, cashUSD - bufferUSD);
+export function repayCentralBankLoanUSD(sheet: BankingSector, cashUSD: number, householdDepositsUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
+  const excessCashUSD = Math.max(0, cashUSD - operatingCashBufferUSD(householdDepositsUSD, bufferRatio));
   const repayUSD = Math.min(Math.max(0, sheet.centralBankLoanUSD ?? 0), excessCashUSD);
   if (repayUSD < 1e6) return 0;
   sheet.centralBankLoanUSD = (sheet.centralBankLoanUSD ?? 0) - repayUSD;
   return repayUSD;
+}
+
+/**
+ * ONE DEFINITION OF THE OPERATING BUFFER, and both sides of the central bank's loan read it.
+ *
+ * The draw was sized against this — the settlement cash a bank keeps against its retail
+ * deposits — while the repayment released cash only above the LCR's HQLA requirement, a much
+ * larger number that a bank's SOVEREIGN BOOK also satisfies (`liquidityDrivenSovereignFloorUSD`
+ * is where that requirement belongs, and it is already there). Measured against cash alone, the
+ * repay threshold sat far above the raise threshold, so the loan ratcheted up and was never
+ * repaid. The repo session and the bill book size their own cash need the same way.
+ */
+export function operatingCashBufferUSD(householdDepositsUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
+  return Math.max(0, householdDepositsUSD) * bufferRatio;
 }
 
 /**
@@ -896,13 +908,13 @@ export function repayCentralBankLoanUSD(sheet: BankingSector, cashUSD: number, l
  * the window rate plus a penalty (`CENTRAL_BANK_LOAN_PENALTY_BPS`). This replaces the boundary's
  * "wholesale lender": the creditor is named, the interest is a payment to it, and the money it
  * creates is reserves the central bank's own asset backs — the identity closes by construction.
- * Repaid from excess cash above the buffer (`repayCentralBankLoanUSD`, in 02b).
+ * Repaid from cash above the SAME buffer (`repayCentralBankLoanUSD`, in 02b).
  *
  * Writes the liability up and returns the amount; the CALLER settles the cash leg as a payment
  * (CENTRAL_BANK → BANK_SECURITIES) and books the central bank's asset.
  */
 export function raiseCentralBankLoanUSD(sheet: BankingSector, householdDepositsUSD: number, settledCashUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
-  const shortfallUSD = householdDepositsUSD * bufferRatio - settledCashUSD;
+  const shortfallUSD = operatingCashBufferUSD(householdDepositsUSD, bufferRatio) - settledCashUSD;
   if (shortfallUSD < 1e6) return 0;
   sheet.centralBankLoanUSD = (sheet.centralBankLoanUSD ?? 0) + shortfallUSD;
   return shortfallUSD;

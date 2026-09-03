@@ -20,8 +20,8 @@ export interface InstitutionalSector {
  * every insurance regulator supervises, and the real limit on how fast an insurer can grow. Lives
  * here because the SEED and the weekly engine must read the same number: when they disagreed, the
  * bootstrap opened an insurer as an operating company and week 1 replaced its revenue with the
- * real premium base, which the harness reported as a 480x revenue runaway (§7.4's cold start,
- * §7.51). A structural primitive with one owner; it becomes an outcome in IND.
+ * real premium base, which the harness reported as a 480x revenue runaway (cold start,
+ * ). A structural primitive with one owner; it becomes an outcome in IND.
  */
 export const PREMIUM_TO_SURPLUS_RATIO = 1.2;
 
@@ -65,7 +65,7 @@ export interface AssetAllocationTarget {
   loanPct: number;
 }
 
-/** §7.279 — the mandate percent for one investable class, as a LOOKUP rather than the two
+/** The mandate percent for one investable class, as a LOOKUP rather than the two
  *  divergent if-chains that used to pick it (etf-flows and institutional-balance-sheet each
  *  had their own, and a new class would silently fall through to `loanPct` in one of them).
  *  A new investable class fails to compile here until its mandate line is named. */
@@ -80,16 +80,16 @@ export const mandatePctOf = (t: AssetAllocationTarget, cls: InvestableClass): nu
   t[MANDATE_FIELD[cls]];
 
 export interface InstitutionalEntity {
-  /** §5-BRAINS — this entity's board: the two preference primitives (domain/preferences.ts). */
+  /** This entity's board: the two preference primitives (domain/preferences.ts). */
   management?: import('./preferences').Preferences;
   financialStatementProfile?: FinancialStatementProfile;
   id: string;
   name: string;
   ticker: string;
   region: RegionId;
-  /** SETL5 — the bank this entity's cash sits at. An institution's balance is a bank's liability
+  /** The bank this entity's cash sits at. An institution's balance is a bank's liability
    * like anyone else's; without this its money lived outside the banking system, which is the
-   * blind spot that hid a 64B double-count (§7.90). */
+   * blind spot that hid a 64B double-count. */
   homeBankTicker?: string;
   entityType: InstitutionalEntityType;
   /** HF1 — set on HEDGE_FUND entities only; decides which markets this fund is actually in. */
@@ -98,22 +98,22 @@ export interface InstitutionalEntity {
    *  Its purchasing capacity above its own cash, and the replacement for a leverage ALLOWANCE
    *  that no one granted and no one could withdraw. Written by the prime-brokerage stage. */
   primeBrokerageAvailableUSD?: number;
-  // §5-WIRES D: total assets are a READ — `institutionTotalAssetsUSD` (domain) over the book's
+  // D: total assets are a READ — `institutionTotalAssetsUSD` (domain) over the book's
   // rows, cash, receivables and the sponsor's portfolio mark; never a stored mark.
   equityCapitalUSD: number;
   /**
-   * HH1 — what this institution owes its ultimate BENEFICIARIES: policyholder reserves, pension
+   * What this institution owes its ultimate BENEFICIARIES: policyholder reserves, pension
    * entitlements, fund shares. A derived residual, `totalAssetsUSD - equityCapitalUSD`, carried
    * here so both sides of the claim are visible on the books that hold them.
    *
-   * THE DIRECTION IS BACKWARDS, and it is load-bearing (§6.1, OWN6). In reality an institution's
+   * THE DIRECTION IS BACKWARDS, and it is load-bearing. In reality an institution's
    * assets exist BECAUSE it owes somebody: a pension fund is as big as its entitlements. Deriving
    * the liability from the assets means the sector's SIZE has no bottom-up anchor, which is why
    * `INSTITUTIONAL_OPENING_BOOK_SHARE` cannot yet be removed from the seed. Reverse it — build
    * the claim from the household side and size the entity from it — and that seed share goes.
    *
    * It was implicit and therefore owned by nobody. Measured at 740B across insurers, pension
-   * funds and asset managers (§7.48): the asset existed on this sheet and the matching claim
+   * funds and asset managers: the asset existed on this sheet and the matching claim
    * existed nowhere, which is the same real thing represented once instead of twice. The holder
    * is the household sector (`householdState.institutionalClaims`), because in reality every
    * dollar of a reserve or an entitlement belongs to a person.
@@ -143,11 +143,11 @@ export interface InstitutionalEntity {
    * Real, per-entity cash. Every fill this entity takes in a clearing stage settles against it,
    * so its securities and its money move together. Before this existed the entity's holdings
    * changed each week with nothing on the other side of the trade — a market on one side of the
-   * ledger only. §5-WIRES A3.2: the balance is the entity's ACCOUNT (`entityCashOf`,
+   * ledger only. A3.2: the balance is the entity's ACCOUNT (`entityCashOf`,
    * engine/ledger/accounts.ts), not a field.
    */
   /**
-   * WS6 — cash this entity lent overnight in the general-collateral repo market this week
+   * Cash this entity lent overnight in the general-collateral repo market this week
    * (stages/repo-clearing.ts). It matures back into cashUSD with interest at the start of the
    * next week's money-market session. Part of the entity's book (markInstitutionalBooks and
    * the S4 conservation check count it), NOT part of its weekly purchase capacity — the cash
@@ -155,6 +155,14 @@ export interface InstitutionalEntity {
    * securities with money it had already lent.
    */
   repoLentUSD?: number;
+  /**
+   * Cash parked at the central bank's overnight reverse repo window this week, at the rate it
+   * was struck at. The administered floor is a real facility, so the money genuinely leaves the
+   * account: like `repoLentUSD` it is part of the entity's book and not part of its purchase
+   * capacity, and it returns with interest at the start of the next money-market session.
+   */
+  rrpLentUSD?: number;
+  rrpRateAnnual?: number;
   /** HF — this entity's stock-loan book, netted to one number the way `repoLentUSD` nets the repo
    * one. Positive for whichever side the mark has moved toward; a short's P&L lives here.
    * Derived every week from the region's loan book — never set by hand. */
@@ -198,17 +206,17 @@ export interface InstitutionalEntity {
 }
 
 /**
- * §5-WIRES D — AN INSTITUTION'S TOTAL ASSETS ARE A READ, never a stored mark: its cash, what it is
- * owed this week (the unsettled legs of its trades and receipts), its overnight cash lent, its
- * stock-loan book, and its securities — the register's rows — or, for a sponsor, its portfolio
+ * AN INSTITUTION'S TOTAL ASSETS ARE A READ, never a stored mark: its cash, what it is owed this
+ * week (the unsettled legs of its trades and receipts), its overnight cash lent to banks and to
+ * the central bank's window, its stock-loan book, and its securities — the register's rows — or, for a sponsor, its portfolio
  * companies at the public comparable. The stored `totalAssetsUSD` this replaces was a week-end
- * mark of exactly this sum, read a week stale by every sizing pass (§7.374).
+ * mark of exactly this sum, read a week stale by every sizing pass.
  */
 export function institutionTotalAssetsUSD(
-  e: { repoLentUSD?: number; stockLoanNetUSD?: number; entityType: InstitutionalEntityType; peFund?: unknown },
+  e: { repoLentUSD?: number; rrpLentUSD?: number; stockLoanNetUSD?: number; entityType: InstitutionalEntityType; peFund?: unknown },
   cashUSD: number, bookUSD: number, pendingUSD: number, portfolioUSD: number
 ): number {
-  return cashUSD + pendingUSD + (e.repoLentUSD ?? 0) + (e.stockLoanNetUSD ?? 0)
+  return cashUSD + pendingUSD + (e.repoLentUSD ?? 0) + (e.rrpLentUSD ?? 0) + (e.stockLoanNetUSD ?? 0)
     + (e.entityType === 'PRIVATE_EQUITY' && e.peFund ? portfolioUSD : bookUSD);
 }
 

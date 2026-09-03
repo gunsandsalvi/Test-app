@@ -1,24 +1,23 @@
 /**
- * §5-STRUCT step 3 — THE GOVERNMENT, AS AN OBJECT.
+ * step 3 — THE GOVERNMENT, AS AN OBJECT.
  *
  * Before this there was no `Government` anywhere in the model: `domain/government.ts` held twelve
  * free functions over hand-assembled argument bags, and the state they operate on was ~25 fields
  * spread across `Region`. So there was no single place to ask "what does this government owe, what
- * can it spend, and is it inside its own budget" — which is precisely why §6.1's "EUR outlays
+ * can it spend, and is it inside its own budget" — which is precisely why "EUR outlays
  * exceed its budget" row has never closed. Nothing owned the question.
  *
  * This is a FAÇADE, deliberately. It reads the fields where they are today and owns the RULES; the
  * storage migrates off `Region` afterwards without touching a single caller. That ordering is what
- * makes the change safe to ship one stage at a time (§5-STRUCT, strangler fig).
+ * makes the change safe to ship one stage at a time.
  *
- * Columnar constraint (§7.228): it holds a region ID and a reference it does not own, never a copy.
+ * Columnar constraint: it holds a region ID and a reference it does not own, never a copy.
  * When the region's fields become typed-array columns, only the accessors below change.
  */
 
 import { RegionId } from './geography';
 import {
   decomposeGovernmentSpending, governmentOutlaysUSD, weeklyInterestExpenseUSD,
-  weeklyBillDiscountAccrualUSD,
 } from './government';
 import { GovDebtTranche } from './region-macro';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../engine/bootstrap/national-accounts';
@@ -51,7 +50,7 @@ export interface FiscalWeek {
   budgetUSD: number;
   /** What was actually paid out. */
   outlaysUSD: number;
-  /** Positive = spending beyond the stance's allowance. THE §6.1 row, as a number on the object
+  /** Positive = spending beyond the stance's allowance. THE row, as a number on the object
    *  rather than a violation discovered forty weeks downstream. */
   overrunUSD: number;
 }
@@ -62,10 +61,16 @@ export class Government {
     private readonly f: GovernmentFields
   ) {}
 
-  /** The coupon bill on the real debt stack, plus what the discount bills accrete. */
+  /**
+   * The coupon bill on the real debt stack, and only that. The discount the bills accrete is a
+   * statistic, not a debit: their cost lands in the redemption leg, so charging it here as well
+   * is the double count `weeklyBillDiscountAccrualUSD` documents. Bills are about a fifth of the
+   * stack, so the inflated figure shrank the primary budget every reader of this object saw —
+   * and it is what the fiscal red line tests a region against, biasing every one of them toward
+   * consolidation. Stage 11 always used the coupon alone; now they agree.
+   */
   interestWeeklyUSD(): number {
-    return weeklyInterestExpenseUSD(this.f.govDebtTranches)
-      + weeklyBillDiscountAccrualUSD(this.f.govDebtTranches);
+    return weeklyInterestExpenseUSD(this.f.govDebtTranches);
   }
 
   payrollWeeklyUSD(): number {
@@ -102,7 +107,7 @@ export class Government {
   }
 
   /**
-   * IS THIS GOVERNMENT INSIDE ITS OWN BUDGET? §6.1's EUR row asks exactly this and nothing could
+   * IS THIS GOVERNMENT INSIDE ITS OWN BUDGET? EUR row asks exactly this and nothing could
    * answer it, because the budget was computed in one stage and the outlays in another and no
    * object held both. A caller that wants to know now asks; a harness check that wants to fail on
    * it reads the same number the engine used.

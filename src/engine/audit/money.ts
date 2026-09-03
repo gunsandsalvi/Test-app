@@ -10,7 +10,7 @@ import { loanBooksOf, depositsOf } from '../../domain/banking';
 import { AuditSnapshot } from './snapshot';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
-import { centralBankAssetsUSD } from '../../domain/central-bank';
+import { centralBankAssetsUSD, centralBankLiabilitiesUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
@@ -32,9 +32,9 @@ function m1(state: GameState, week: number): AuditFinding[] {
     const reserves = sum(banksOf(state, r), (b) => bankReservesOf(v2, b.ticker));
     const tga = treasuryAccountOf(v2, r);
     const assets = centralBankAssetsUSD(cb, waysAndMeansOf(v2, r));
-    const residual = reserves + tga + cb.currencyInCirculationUSD - assets;
+    const residual = centralBankLiabilitiesUSD(cb, reserves, tga) - assets;
     if (Math.abs(residual) > Math.max(1e6, assets * 1e-4)) {
-      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(tga)} + currency ${B(cb.currencyInCirculationUSD)} exceed the central bank's assets ${B(assets)} (foreign claims ${B(cb.foreignOfficialClaimsUSD ?? 0)}, window ${B(cb.standingFacilityLentUSD ?? 0)}) by ${B(residual)} — bank money nothing was bought against` });
+      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(tga)} + currency ${B(cb.currencyInCirculationUSD)} + reverse repo ${B(cb.reverseRepoBorrowedUSD ?? 0)} exceed the central bank's assets ${B(assets)} (foreign claims ${B(cb.foreignOfficialClaimsUSD ?? 0)}, window ${B(cb.standingFacilityLentUSD ?? 0)}) by ${B(residual)} — bank money nothing was bought against` });
     }
   });
   // C4b: the official-settlement claims are bilateral, so the world's sum is zero or a leak.
