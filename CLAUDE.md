@@ -36,4 +36,6 @@ Two things it demands of you:
   `check-hygiene.sh` and fails when a cited `file:symbol` stops resolving or a source file appears
   in no tree — but it cannot tell you a node has become wrong, so that part is on you.
 
-The plan still governs: the atlas's findings become §3 steps, and mapping it is §3 step 37.
+The plan still governs. **Step 37 is done** — all 45 trees are mapped, and its 114 new findings
+are §3 PART VII's `37-*` steps. When one of those lands, **re-mark its tree's nodes in the same
+commit**; the gate checks that citations still resolve, not that a mark is still true.

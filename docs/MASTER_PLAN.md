@@ -965,39 +965,299 @@ do not reorder.
     hardcodes capex and linkage ids with `!`, so a new capital good silently misses its view;
     `assets/index.ts:173` tests `'MMF_SHARE'`, absent from the `HoldingType` this module owns.
 
-### PART VII — THE ATLAS IS MAPPED (the absences come out)
+### PART VII — WHAT THE ATLAS FOUND
 
-37. **MAP ALL 45 TREES ONTO THE CODE.** The required side is finished — 45 of 45 written from the
-    domain with the code shut, committed before any mapping, which is what makes an uncited node a
-    FINDING rather than an unwritten tree (§9, THE SYSTEM ATLAS). What is left is the other two
-    thirds of the method: **the mapping** (one `path/to/file.ts:symbolName` citation per node) and
-    **the diff** (what is MISSING, what DIVERGES, what is present but in the WRONG PLACE). Every
-    node that ends with no citation is a finding, and each finding either becomes a step here or
-    is recorded in the tree as OUT OF SCOPE with the reason — those are different answers and the
-    file must say which (`docs/systems/README.md`).
+Step 37 is DONE (§9, THE SYSTEM ATLAS — MAPPED). 45 trees and 2 instrument contracts walked onto
+the code, ~1,400 nodes marked, 910 machine-checked citations. It produced **331 findings**, of
+which 217 were already steps here or are measurements for step 38. The remaining **114 are new**,
+and they are consolidated below into the steps that actually close them — a finding is not a step,
+and twenty trees reporting one cause is one step, not twenty.
 
-    **The pilot already proved the yield.** Corporate credit alone produced steps 33–36: seniority
-    priced but never honoured, a credit event that can only ever be a missed payment, no
-    restructuring at all, one rating held by nobody. Four absences, none of which any sweep had
-    ever reported, from ONE tree of forty-five.
+**Ids are suffixed on 37 because that is where they came from**, matching the plan's own convention
+(13-SOV, 20-LLR, 21-BRACKET). Each step names the tree NODES it closes, so the atlas and the plan
+cannot drift apart: when the step lands, those nodes are re-marked in the same commit.
 
-    **Order.** Credit's own mapping is marked STALE and is re-walked first, against the depth-3
-    node ids it now has. Then the trees whose systems the code most plausibly HAS — the register,
-    the clearing engine, money and settlement, the banks, goods, equity — because a citation that
-    fails to resolve there is the strongest kind of finding. The trees whose systems the code may
-    not have at all (the derivative contract's twelve, trade credit, freight, housing, ratings)
-    come last, and a wholly uncited tree is itself the report.
+**Ordered by what unblocks what.** The first three make everything else measurable; the next four
+are single causes that each disable a whole channel; the rest are absent systems, in the order
+their absence distorts the most.
 
-    **The gate already holds the citations honest**: `scripts/check-atlas.sh` fails when a cited
-    `file:symbol` stops resolving, and when a `core.ts` stage or a file under `src` appears in
-    neither a tree nor `docs/systems/UNMAPPED` — so `UNMAPPED` shrinks as this step proceeds and
-    the count is printed on every commit (today: 34 citations, 295 files accounted for). Rule 25's
-    harness applies per commit as usual; a mapping commit changes no code and gates on §4's static
-    half.
+37-SEED. **THE SEED IS NEVER AUDITED, AND EVERY WEEK-1 VIOLATION IS UNATTRIBUTABLE.** (the-seed
+    A2, D3, C3, C3.a, E1, C4, C4.a, D2.) `auditWeek` runs only inside the harness week loop; before
+    it the harness runs `init` only. **No invariant family has ever seen the seed's own state.**
+    So every week-1 finding is ambiguous between a bad opening world and a bad mechanism, which is
+    a cost the archive has paid 91 times. Three parts, in order:
+    · run the audit at week 0 and make it a gate — the cheapest step in this list, and it must go
+      first because it changes how every other step is verified;
+    · **every corporate bond is issued in week zero** (`companyGenerator.ts` `maturityWeeks`
+      [260,520,780]/[260,520]/[364], `originationWeek: 0`), so no corporate bond matures inside a
+      60-week run and **the rollover channel has been off for the model's whole measurable life**.
+      Seed the ladder mid-life; the sovereign side already does and is the template;
+    · the opening spread curve, yield curve and FX rate are seeded ANSWERS (E1), and the accrual
+      ledgers open empty for paper seeded mid-life (D2).
+
+37-ZEROSUM. **THE INVARIANTS THAT WOULD HAVE CAUGHT THE REST.** Three checks that do not exist, each
+    one the cheapest possible detector for a defect this atlas found by reading. (derivative D1.b;
+    the-derivative-layer A4, D2.b; currency-and-fx D4; trade-credit C4; the-register B2.b.)
+    · **Σ mark-to-market across the parties to a derivative = 0, exactly** — the invariant that
+      distinguishes a derivative from a security, and nothing checks it. Two of four classes carry
+      no mark at all, so there is nothing to sum;
+    · **Σ FX revaluation gains + losses = the rate move on the net open position** — the only check
+      that catches a position revalued twice or not at all, added right after revaluation cleared
+      the whole M family at 16 weeks;
+    · **Σ receivables = Σ payables**, world-wide — one line, and it is the cheapest proof that
+      trade credit is still two-sided.
+    These are audit families, not mechanisms. They belong before the steps below because each one
+    would have found its defect without a person reading anything.
+
+37-LOSSRATE. **A LOSS RATE IS NOT A DEFAULT, AND FOUR SYSTEMS RUN ON ONE.** (banks-lending E1/E2;
+    sme-pools E1; firm-birth-and-death C2.a pooled tier, E3; housing C4/C4.a; cds D1.)
+    **The named-firm tier is CLEAN** — no hazard rate, no PD against a random draw; every named
+    default is a state test taken after the revolver is drawn, and the structural PD only prices.
+    Everywhere else it is arithmetic:
+    · `bank-lending.ts:243` — `lossUSD = principal × PD × LGD / 52`, weekly, for the SME tier. The
+      debt is extinguished by subtraction: no event, no borrower, no cash, no recovery;
+    · `BankLoan.status = 'DEFAULTED'` is declared and **assigned nowhere**, so a bank loan cannot
+      default, it erodes — no reclassification, no workout, no write-off date, and no provision
+      stock either (`loanLossProvisionRateAnnualPct` is a realised loss rate);
+    · housing default is a loss rate with **no foreclosure** — no house seized and no foreclosed
+      supply back into the price, which removes the loop that makes a housing bust a housing bust;
+    · inside an SME pool, entry is the accounting identity of exit, so the population is constant
+      by construction (E3's FORBID).
+    One mechanism closes all four: a pooled borrower that can cross a threshold, default as an
+    event with a date, and a recovery that is what something fetched. Large, and it is the single
+    largest hole in the credit channel now that the atlas has separated it from the clean half.
+
+37-MARGIN. **AN UNMET CALL BECOMES A LOAN — THREE INDEPENDENT SIGHTINGS OF ONE SHAPE.**
+    (prime-brokerage C3/C5/D1–D3, E4; hedge-funds D3/D6/E3, D5/D5.a; the-derivative-layer D4/D4.a,
+    D1/D5/F2; fund-shares C2.b/C4.a, F2.) The forced-seller channel is the mechanism four trees are
+    built around, and it is floored shut at one line each time:
+    · `prime-brokerage.ts` genuinely cuts the line and takes the cash back — then writes
+      `primeBrokerageAvailableUSD: Math.max(0, lineUSD − targetDrawnUSD)`, floored at zero, so the
+      forced-sale path that `institutional-balance-sheet.ts`'s own comment describes **has never
+      run**; then `overdraft-sweep.ts` lends the whole shortfall back from the same broker at
+      +200bp;
+    · in the derivative layer `payToB` has no cash test, so a variation-margin shortfall becomes a
+      revolver draw. Margin is a stated RATE, so it cannot rise when it matters — which deletes the
+      procyclicality that IS the contagion mechanism;
+    · household and MMF redemptions are **rationed by the fund's cash** rather than met by selling,
+      and a hedge fund has no redeemable share at all.
+    `grep "liquidat" stages/` returns five comments and zero code. Nothing in this model is ever
+    forced to sell anything, which is why no shock has ever propagated through a price.
+    Large. Sequence after 37-LOSSRATE; both need the same "a claim goes unpaid" primitive.
+
+37-IMMORTAL. **NOTHING CAN FAIL EXCEPT A FIRM AND A BANK.** (hedge-funds E3; insurers-and-pensions
+    A3/D3; prime-brokerage D4; private-equity D5/A4.) `InstitutionalEntity.isDefaulted` is read in
+    16 places and **written only by the seed**. Every fund, insurer, pension and sponsor is
+    immortal; a PE fund never winds up and the LP's claim is frozen at the seed. An underfunded
+    pension's `pensionHurdle` makes it reach for MORE risk with no solvency consequence. Small in
+    code — the reads already exist — and it is what makes 37-MARGIN's chain terminate somewhere.
+
+37-COSTOFCAPITAL. **NOBODY PAYS FOR MONEY, SO PRICE CANNOT REACH A DECISION.** (banks-funding B2/B2.a;
+    banks-lending C1/C1.a; the-capital-programme B1/B1.b/B5/B3; dealer-desks D3.) The transmission
+    channel this whole model exists to have, broken at three joints:
+    · **a bank has no cost of funds.** `quoteLoanMarginBps` has no funding term; the all-in rate is
+      `policyRate + margin`, so every bank prices loans as if it funded at the policy rate whatever
+      its own position. The central-bank loan even carries TWO rates — the NIM statistic charges
+      the bank's own cleared OAS and never debits equity, while the cash pays policy + 125bp flat;
+    · **investment is a rate on revenue.** `desiredGrowthCapex = revenue × ratio × six multipliers`
+      — B5's FORBID exactly — and **nothing anywhere compares an expected return to a cost of
+      capital.** The drag term that does exist reads `annualInterest / totalDebt`, the average
+      coupon on debt already outstanding, not the cleared marginal cost; the equity cost never
+      enters at all;
+    · a dealer's inventory consumes cash and capital and is **never charged rent**, so carrying a
+      position is free and the desk has no reason to shed it.
+    Large, and it is the step that makes every cleared price in Part IV actually do something.
+
+37-FX-CROSS. **THE MARKET CLEARS SIX PAIRS AND THE LEDGER READS THREE.** (fx-spot E3/A3/C3;
+    currency-and-fx C3/C3.a; fx-forwards B3/C4, A1.c/B1/E1, A4, C1/C1.a/C3, D3, A1.b/A2/E3.)
+    `fx-clearing.ts`'s XB6 header sets out at length why each pair must clear on its own flow — so
+    the USD stops being the cheapest vehicle currency BY CONSTRUCTION, with triangular consistency
+    demoted from an identity to an outcome that bounded desk arbitrageurs may fail to enforce. Then
+    `publishFxRates` promotes only the three legs against USA and every conversion triangulates
+    through the numéraire. **The market half of the fix landed and the ledger half never did**: the
+    arbitrage has no consequence and cannot be measured, and the USD is still the vehicle currency
+    by construction for every payment in the model. The same seam carries the rest of the FX gap:
+    · the **forward rate is not cleared** — `strike = spot × (1 − basis/10000)`, carrying no
+      interest differential, so it is not CIP either and carry is absent from the instrument;
+    · there are **two cross-currency bases with nothing to do with each other** — the cleared
+      `reg.crossCurrencyBasisBps`, and `evolveFxPair`'s cumulative random walk on
+      `basisSpreadBps + noise + (rDomestic − rForeign) × 20`, which is the one the player sees,
+      trades and books P&L on;
+    · **no XCS and no FX swap**, so the forward never delivers and the banks — who need this market
+      most — are not in it.
+    Medium. The cross half is small and at a seam; the forward and swap half is a real build.
+
+37-BENCHMARK. **THE THINGS EVERYTHING PRICES OFF ARE NOT PRICES.** (indices D1/E1/E2, D3/D3.a/D3.b,
+    D4/D4.a, A3; goods G1/G1.a.) Three of them, and each contaminates everything downstream:
+    · **two index systems, and the one everything reads is the invented one.**
+      `index-calculation.ts` builds a rule-based level from constituents and is read NOWHERE. What
+      is read is `macro/indices.ts:calculateCompositeIndices` — a stored level moved by a delta,
+      whose 52-week opening history is `generate52WeekHistory`, a random walk. `stage08-back:2016`
+      measures every beta off that history, so **for year one every beta in the model is a
+      covariance against a random walk** — and beta is the discount rate in `07e`'s
+      `fairValuePerShare`, in `bank-lending`, in `labor-market` and in `freight-clearing`;
+    · **the benchmark is a posted policy rate.** ~25 sites fix floating coupons on
+      `reg.policyRate`, set by a Taylor rule; `Company.referenceBenchmark` is a label nothing
+      prices off. A cleared overnight rate already exists (`repo-clearing` → `reg.repoRateAnnual`)
+      and nothing fixes on it, which makes this small;
+    · **there is no PPI** — one index wears both names, real growth is deflated by CPI, and the
+      input price is already cleared and distinguished at `price-index.ts:52`. The margin story
+      (user, 2026-09-03) has no second series to be a story about.
+    The first is large and urgent; the second and third are small.
+
+37-CDS-DIRECTION. **THE DEFAULT PROBABILITY IS AN INPUT TO THE SPREAD, NOT A READ FROM IT.**
+    (cds C2, A1.d, D5/E2/E3, B1/B3/B4.) `derivative-markets/cds.ts:88` computes
+    `computeAnnualDefaultProbability` from the firm's accounts, feeds it to every seller's
+    reservation and clears from those. Nothing anywhere inverts a spread. **The CDS market cannot
+    disagree with the accounting model**, which is rule 1 inverted in the one instrument whose
+    whole purpose is to hold a second opinion about a credit. With one tenor and `termKey: ''`
+    there is also no CDS curve and therefore no term structure of credit anywhere in the model.
+    Medium. Pair it with 37-LOSSRATE: a spread can only disagree once a default is an event.
+
+37-ESTATE. **A DEAD PARTY'S DERIVATIVES ARE PAID IN FULL, AHEAD OF EVERY RANKED CLAIM.**
+    (the-derivative-layer E2/E3; trade-credit D2; firm-birth-and-death D6.a, D1, D4/D4.a.)
+    `estate-resolution.ts:152` closes out derivatives at filing and `pay()`s replacement value out
+    of the estate's account, while the claim list built at `:520` carries five instrument types and
+    **no derivative** — accidental super-seniority over every secured lender. In the same estate,
+    **trade creditors rank nowhere while the estate COLLECTS the dead firm's receivables as an
+    asset**, so recoveries — and the model's calibrated recovery rate — are biased high by exactly
+    that asymmetry. Also here: a dead firm with no claims opens no estate and keeps its cash for
+    ever (rule 13), estate assets are sold to peers at a formula discount off book rather than
+    cleared, and a firm's death drops its headcount with no separation event. Medium; it is
+    §3.13's waterfall work seen from the liability side.
+
+37-DVP. **DELIVERY AND PAYMENT ARE TWO EVENTS, AND THE PAPER LEG IS THE LARGER ONE.**
+    (the-register C3.a/C3.b, D4; the-clearing-engine E4.) Securities wire at `holdings-writeback`,
+    cash at `settlement`, two stages apart — and `book-settlement.ts:89` caps the issuer's cash at
+    `min(takeTotal, tradingUSD)` while `:97` moves the **whole** take of paper, with `leftoverUSD`
+    zero in that case so the defect guard cannot fire. That is also why a settlement FAIL has no
+    code: there is no single event to fail. Two riders on the same commit: **nothing records what a
+    position cost** (no basis anywhere in `src`, so no realised gain and no tax base), and **a
+    market with no trades still prints** (`runClearingKernel` writes `clearedStat = currentStat` on
+    skip with no flag), which folds into 21-BRACKET's signature change.
+
+37-MMF. **THE MONEY FUND'S NAV IS ONE DOLLAR BY CONSTRUCTION.** (fund-shares D4, A3, B1.)
+    `mmfSharesOutstandingUSD` is measured in DOLLARS, not shares; income is distributed as new
+    shares and losses are swallowed by a `Math.max(0, …)`; redemption pays $1 per $1. Breaking the
+    buck is a harness measurement rather than an event, which is D4's FORBID exactly. It matters
+    beyond the fund: the MMF is the household's alternative to a deposit (user, 2026-09-03), so a
+    money fund that cannot break is a risk-free deposit substitute, and the substitution it is
+    supposed to drive is riskless in one direction. Small, and step-13-shaped — it needs a share
+    count.
+
+37-PENSION. **THE LIABILITY IS A CASH BALANCE, NOT A PRESENT VALUE.** (insurers-and-pensions
+    B1/B2/B2.a/B2.b/E3, A2.a/A2.b, B4/C3.) `beneficiaryLiabilityUSD` accumulates
+    `contributions − benefits + investment income`. No schedule, no discount rate, no discounting —
+    so B2.b's forbidden outcome, a liability that never moves when rates move, is reached by a
+    shorter road than a fixed rate, and solvency is measured against exactly the stored value E3
+    forbids. The sector is also a fund share rather than a liability: the investment result passes
+    straight to the beneficiary. This is the model's largest holder of duration having no duration.
+    Large.
+
+37-BOP. **THERE IS NO BALANCE OF PAYMENTS.** (cross-border D1/D2/D3/D3.a/D4.) `currentAccountPctGdp`
+    has **no writer at all** — seeded 0, rendered on two screens, permanently 0.0%. No financial
+    account exists. §3 step 15 lists that 0.0% among UI FORMATTING errors, which is the symptom and
+    not the cause (rule 29). Every ingredient exists and is unjoined: exports and imports from real
+    fills, income via the register, and `fx-clearing` already computes each entity's change in
+    foreign holdings by issuer region. Small-to-medium, and it is the read that would have shown
+    every cross-border defect this atlas found by hand.
+
+37-COMMODITY. **THERE IS NO COMMODITY STOCK — NOT A BAD ONE, NONE.** (commodities-spot
+    D2/D2.a/D5/F1/F2, A1.a/A4/D3/C3/B4, E1/E3/E4; commodity-futures C4.a/D2, B3.a/D3/E3,
+    B4/C1.a, A1.a/A2.) `Commodity.inventoryLevelPct` is a **percentage on a random walk in [0,100]**,
+    untouched by production or consumption and not an input to the price; supply and demand units
+    are two independent elasticity formulas never reconciled against each other. So the identity
+    `produced + opening = consumed + closing` has no terms. Every commodity exists TWICE — a
+    written price series, and a real goods sub-unit that genuinely clears — and the join runs one
+    way only. Downstream, futures converge by an ENFORCED boundary because nothing can be
+    delivered, there is no roll, and the carry arbitrageur cannot store. Large; step 22 owns the
+    spot walk and this is the half it does not cover. The goods side's W4 units identity is the
+    machinery it needs.
+
+37-HOUSING. **NO DWELLING EXISTS AS AN OBJECT.** (housing C5, C4/C4.a, and 26b/13's item 1.) Stock is
+    `population/2.5 × ownershipRate × medianHomePrice`; `HOME_OWNERSHIP_RATE` is written once at
+    init and never again; construction output never enters the stock; the wire ledger **declares an
+    asset kind `'HOUSE'` and no wire of that kind is ever written.** And **the lending standard
+    never tightens** — `MORTGAGE_DSTI_LIMIT` and `MORTGAGE_LTV_AT_ORIGINATION` are constants no
+    code path writes — so half the housing cycle is missing and only the rate channel loops.
+    The price itself is honest and worth protecting (a real marginal-buyer walk over tier
+    affordability at the keenest bank quote, floored at build cost). Medium; needs step 26's
+    unit-of-plant decision first.
+
+37-MANDA. **THERE IS NO M&A MARKET. THERE IS A COIN FLIP.** (m-and-a B5/B2/B2.a/B3/B4/C1/C2/C3,
+    E3/A4, D4.) `merger.ts:24` fires `random() < 0.20`, quarterly, at most one deal in the world,
+    at `marketCap × 1.15`. No funding test, no acceptance, no rival bidder, no walk-away — so the
+    credit market does not decide which deals happen and a target's owners cannot refuse. Two
+    synergies are assumed straight into the combined firm (`revenue × 0.85`, `heads × 0.75`) and
+    the headcount saving destroys jobs with no separation event. `D5` is one of the few present
+    nodes: the money really does move acquirer → target → holders of record. §3 has no M&A step at
+    all. Medium.
+
+37-SECLENDING. **THE LENDER LOSES THE DIVIDEND AND PAYS FOR THE PRIVILEGE.** (securities-lending
+    A3/A5.b, C1, C5/B3, D1.) No manufactured payment exists anywhere — `payHoldersCash` pays the
+    register, i.e. the BORROWER — so A3's defining property of a stock loan (title moves, economics
+    do not) is inverted. Collateral exactly equals the loan (`shares × stockPrice`, re-marked to
+    the same), so there is no haircut and the one-week gap is covered by nothing; there is no
+    chain, no agent, and a failed return never terminates. Small, and the tree's FORBID nodes
+    (no short without a borrow) are clean, so this is a completion rather than a rebuild.
+
+37-TRADECREDIT. **TRADE CREDIT HAS NO PRICE AND CANNOT BE WITHDRAWN.** (trade-credit A3/B4/C2,
+    B2/B3/D4.a, D1/D3.a, E1.) The system EXISTS and is real — domestic and cross-border, genuine
+    receivables and payables, cash both ways, terms derived from the buyer's PD and the seller's
+    own funding. What is missing is its price (no early-payment discount, so no implicit rate and
+    no factoring), its discretion (terms are a formula, so a worried supplier cannot tighten — the
+    mechanism by which a solvent firm dies of a rumour), and lateness, which does not exist at all.
+    The SME tier pays cash, and it is the tier that lives on trade credit. Medium.
+
+37-SURFACE. **THERE IS NO ACTOR, AND THE DEAD ONE WOULD BE PRIVILEGED.** (news-and-the-player-surface
+    C1–C4, E1/A5.a, B4, A4.) `executeTrade` has **zero callers**, and if wired it would break C2.a
+    three ways: `updatedCash = cash − spreadCostUSD` so the notional never leaves the account while
+    the desk IS charged it (money created at the ticket), the fill price arrives from the caller,
+    and `PartyRef` has ten kinds and no PLAYER. The read surface is a full god-view — correct for
+    an inspector, disqualifying for a player — and that is **a decision this step must take first,
+    not a bug**. Also here: `newsGenerator.ts` still asserts a stated 40% recovery on every default
+    while the estate computes a real one, and two display-only numbers are shown that no code
+    writes. B2.a holds — no mechanism reads the news feed. Blocked on the game layer, which the
+    user has parked; the DELETE half (dead code, invented news, display-only numbers) is not.
+
+37-SMALL. **THE ONES THAT ARE ONE COMMIT EACH.** Grouped because each is small, independent, and
+    would otherwise never be scheduled. Every one names its node so the tree can be re-marked:
+    · **ratings E1** — the sovereign rating's complete consumer list is five UI strings, and
+      **ratings C3** — collateral haircuts are one per instrument TYPE from the region's median
+      move, so a CCC and a AAA bond are identical collateral. That is the one leg of the downgrade
+      loop that is wholly absent, and a per-issuer OAS ring closes it with no rating table;
+    · **sovereign-credit F2** — a bill accretes at this week's interpolated curve point rather than
+      at the yield it was bought at, breaking the accretion stage's own conservation claim;
+    · **short-term-debt A2/E2** — the short end clears a YIELD, so a bill's return is re-set weekly
+      (13's shape, at the short end), and **B4** — a committed backstop is free, with no commitment
+      fee on undrawn headroom;
+    · **households D5.a** — MMF shares are issued pro rata and never chosen, so the deposit / money
+      fund / bill substitution never happens, and **F2** — nobody inherits anything;
+    · **labour B1** — participation moves by a constant keyed off a regime label with the wage
+      nowhere in it, and **C2/C3** — firing has no cost, only a pair of speeds;
+    · **freight E2** — `laneFillRatio` and `shippedShareByLaneSubUnit` are computed and read by
+      nobody, so capacity sets the PRICE of distance and never the QUANTITY;
+    · **goods B1.b** — `inputSupplyConstraintFactor` reaches only the UI;
+    · **equity A5/F3** — there is no vote, so a take-private extinguishes the register without a
+      tender anyone can refuse, and **C4** — `accrueInstitutionalIncome` skips every EQUITY row, so
+      a holder's equity P&L reaches no income statement;
+    · **private-equity B5** — LBO sources and uses do not balance: sellers are paid the equity
+      cheque while the debt proceeds stop at the target;
+    · **banks-lending F3** — no large-exposure limit, and `09-concentration-risk.ts:82` says in its
+      own comment that it measures something else.
+
+37-GOODS-RECIPE. **THE RECIPE IS A VALUE SHARE, SO EVERY INPUT SUBSTITUTES UNIT-ELASTICALLY.**
+    (goods A2.a.) `recipeInputs` is cents-per-dollar-of-revenue and the draw is
+    `neededUnits = neededUSD / inputUnitPrice`, so **a price doubling halves the physical draw.**
+    That is the strongest substitution assumption there is, sitting where the tree chose Leontief,
+    and it is invisible from the code — which reads as an ordinary units calculation. It changes
+    every input-output result in the model, so it is listed last deliberately: it must land when
+    there is a stable measurement to land it against, and its A/B is the whole point of it.
+    Large. **Do not start it before 37-SEED and 37-ZEROSUM.**
 
 ### PART VIII — MEASURE ONCE (rule 12)
 
-38. **The long run.** Only when 1–37 are done: `WEEKS=60 SHOCKS=1` (`npm run verify`), the batteries,
+38. **The long run.** Only when 1–36 and every `37-*` are done: `WEEKS=60 SHOCKS=1` (`npm run verify`), the batteries,
     the burn-in convergence gate. Then the standing measurements: the 1e-8 week-1 drift bisected one
     dump per step; the level and the unemployment ratchet; the state-growth drift on device; UK/EUR
     bank margins and the mint drift (the NIM measure with the sovereign-book accretion, and the
@@ -1011,6 +1271,18 @@ do not reorder.
       a hedged firm feeling less P&L from a shock it hedged;
     - the newer books' first prints: stock borrow clears, fee distribution, recall cascades; an ETF
       premium near zero in a calm week; channel margin a sensible fraction of shelf price.
+
+    **And the atlas's forty VERIFY nodes**, which are measurements and not mechanism gaps —
+    each one a "this should follow, measure whether it does" that nothing currently reads. They are
+    listed per tree in each file's §3 THE DIFF under *"A measurement, for §3 step 38"*, and they are
+    the standing reads this step exists to take. The ones worth naming here because they test a
+    CAUSAL CHAIN rather than a number: a credit tightening reducing investment through the cost of
+    capital and then output, with the build lag (the-capital-programme E4); a rate move showing as
+    liability, hedge and cash in three different places for a pension (insurers D5); inventories low
+    ⇒ backwardation (commodity-futures C3); heavier issuance moving the sovereign clearing price
+    (the-treasury E4); the fiscal balance against private net saving (the-treasury F4); a commodity
+    shock reaching margins, then inflation, then policy, in that order and never directly
+    (commodities-spot E4); one defect lighting one audit family (the-audit B8).
 
     A number that is still wrong here is a missing mechanism named at last, not a tuning target
     (rule 18).
@@ -1153,6 +1425,76 @@ was measured wrong. Treat a row there as a lead with a file:line, not a fact.
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**37 — THE SYSTEM ATLAS, MAPPED. 45 OF 45, AND 114 NEW FINDINGS.** The other two thirds of the
+method (§9, THE SYSTEM ATLAS — THE REQUIRED SIDE): every required tree and both instrument
+contracts walked onto the code, one `file.ts:symbol` citation per node, then the diff. Mapped by
+eight parallel agents split by code area, each working from one written spec, with the parent
+committing — the split was by CODE AREA rather than by tree count so that one agent's reading of a
+subsystem was reused across all of its trees.
+
+**The measured result: ~1,400 nodes marked, 910 machine-checked citations, 331 findings.** Of those,
+217 were already steps here or are step 38 measurements — which is itself the useful number, because
+it says the plan was not badly wrong about what it knew. **114 were new**, and they are §3 PART VII's
+`37-*` steps, consolidated: a finding is not a step, and twenty trees reporting one cause is one
+step. `docs/systems/UNMAPPED` fell from 321 lines to 109.
+
+**What the method actually bought, stated so the next person can judge it.** Three kinds of finding
+came out that a sweep cannot produce, and they are worth separating:
+
+1. **AN ABSENCE WITH NO LINE NUMBER.** `currentAccountPctGdp` has no writer — seeded 0, rendered on
+   two screens, permanently 0.0%; there is no balance of payments and no financial account at all.
+   `Commodity.inventoryLevelPct` is a percentage on a random walk that nothing reads, so there is no
+   commodity stock — not a bad one, none. No dwelling exists as an object; the wire ledger declares
+   an asset kind `'HOUSE'` and no wire of that kind is ever written. There is no M&A market, only a
+   quarterly `random() < 0.20` at a constant 15% premium. **No sweep reports these, because every
+   line involved is correct.**
+2. **A FORBID VIOLATED IN PLAIN SIGHT.** The treasury has a central-bank overdraft
+   (`waysAndMeansOf`) and it is the funding mechanism — the one node the user stated in their own
+   words. A bank loan cannot default, it erodes (`principal × PD × LGD / 52`, with
+   `status = 'DEFAULTED'` declared and assigned nowhere). An unmet margin call is refinanced, not
+   liquidated, at three independent points. The CDS default probability is an INPUT to the spread.
+   For year one every beta in the model is a covariance against a random walk.
+3. **A FORBID VERIFIED AND HOLDING**, which is worth as much and is the half that gets forgotten:
+   no buyer of last resort in any auction (`unsoldStaysWithHolder` on all five books, desks
+   capacity-bounded, the central bank's order a policy quantity struck outside the auction); no
+   netting across counterparties; no short without a borrow, enforced twice; unemployment a read of
+   summed real headcounts; the named-firm default a state test with no hazard rate anywhere. **These
+   are now written down as things a future change must not quietly break**, which they were not
+   before.
+
+**The ordering decision paid for itself, and here is the evidence.** The required side was written
+and committed before any mapping, so an uncited node is a finding rather than an unwritten tree.
+Two nodes prove it worked: `the-seed` A2 says the seed must pass the audit at week zero — `auditWeek`
+runs only inside the harness week loop, so **no invariant family has ever seen the seed's own
+state**, and every week-1 violation this project has chased was unattributable between seed and
+mechanism. `the-register` D4 says a register must answer what a position cost — there is no cost
+basis anywhere in `src`. Neither is a defect on any line; both are answers to a question nobody had
+written down.
+
+**Three corrections the mapping made to this plan's own text**, recorded because a plan that cannot
+be corrected by measurement is not a plan:
+· 20-LLR says the central-bank facility has "no penalty rate" — it has one
+  (`CENTRAL_BANK_LOAN_PENALTY_BPS = 100` over SRF). The three it genuinely lacks are collateral,
+  eligibility and a cap.
+· §9's 13c-FX-2 entry says `ctx.bilateralTradeWeeklyUSD` was deleted. It was removed from
+  `fx-clearing` only; it still accrues per-fill at `05-unit-bidding:1786` and is what
+  `06-fx-and-trade` publishes. F3 still holds (it is a report, not an input).
+· Steps 33 and 13-SOV are both WORSE than recorded: `SUBORDINATED` is never written at any of the
+  twelve creation sites, so `P1`'s subordinated arm has never fired in the model's life; and the
+  sovereign has FOUR holder registers, not one bucket, with `GOV_BOND` and `SOV_BOND` as two
+  `HoldingType` members for one thing.
+Two corrections went the other way and SOFTENED a finding, which matters as much: corporate credit
+D7 is diverging rather than absent (the accrual ledger does pay sold-out holders, so a coupon is not
+a windfall — what is missing is the buyer-to-seller leg at trade, which is 13b), and G4 is diverging
+(the estate does sell to real named peers, at a formula discount rather than at a price).
+
+**What keeps it alive.** `scripts/check-atlas.sh` runs inside `check-hygiene.sh` on every commit:
+910 citations must resolve, and every stage and source file must be in a tree or admitted in
+`UNMAPPED`. It cannot tell you a node has become WRONG — that part is on the reader, and `CLAUDE.md`
+now says so. When a `37-*` step lands, its tree's nodes are re-marked in the same commit; that is
+the discipline the whole instrument depends on, and it is the one the three dead documents in this
+repo's history failed.
 
 **THE SYSTEM ATLAS — THE REQUIRED SIDE, 45 OF 45.** Authorised by the user 2026-09-03 (*"Do the
 pilot. I like the idea of forcing it to be updated"* → *"Proceed with the other systems"* → *"move
