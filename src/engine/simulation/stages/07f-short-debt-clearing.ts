@@ -56,6 +56,8 @@ import { dealerDeskTicker } from '../../../domain/dealer-desk';
 import { discountBillProceedsUSD, withdrawUnplacedIssuance } from '../../../domain/government';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
+import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
+import { materializeGovLadder } from '../../../engine2/tranches';
 import {
   CP_SINGLE_ISSUER_LIMIT, CP_SHARE_OF_TERM_SLEEVE, CP_FULL_SIZE_YIELD_RANGE_BPS,
   cpCreditPolicyShare, cpReservationYieldBps,
@@ -105,7 +107,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
     const reg = ctx.updatedRegions[regionId];
 
     // ---- Bills ----
-    const liveBillTranches = (reg.govDebtTranches || []).filter(
+    // §3.13-SOV row 2: the ladder comes from the ONE store.
+    const liveBillTranches = materializeGovLadder(ctx.v2, regionId).filter(
       (t) => t.maturityWeek > ctx.nextWeek && isBillBucketKey(sovBucketKey(t.tenorAtIssuanceYears))
     );
     const outstandingByBucket = new Map<string, number>();
@@ -144,7 +147,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // them too — a mandate bound, not an assigned share.
       const billStockByRegion: Record<string, number> = {};
       (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
-        billStockByRegion[r] = (ctx.updatedRegions[r]?.govDebtTranches || [])
+        billStockByRegion[r] = materializeGovLadder(ctx.v2, r)
           .filter((t) => isBillBucketKey(sovBucketKey(t.tenorAtIssuanceYears)))
           .reduce((a, t) => a + t.principalUSD, 0);
       });
@@ -154,7 +157,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const totalBillStockUSD = activeBuckets.reduce((s, b) => s + (outstandingByBucket.get(b.key) ?? 0), 0) || 1;
       // OWN3: bills and bonds are one HQLA pool, so both books apportion a bank's single
       // appetite over the whole sovereign stock rather than each over its own half.
-      const wholeSovStockUSD = (reg.govDebtTranches || [])
+      const wholeSovStockUSD = materializeGovLadder(ctx.v2, regionId)
         .filter((t) => t.maturityWeek > ctx.nextWeek)
         .reduce((s, t) => s + Math.max(0, t.principalUSD), 0) || 1;
 
@@ -603,6 +606,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           if (!key || unplacedUSD <= 1) return;
           const r = withdrawUnplacedIssuance(reg.govDebtTranches, sovBucketKey, key, unplacedUSD);
           reg.govDebtTranches = r.tranches;
+          // §3.13-SOV row 2: the store follows the array at the moment the array moves, so the
+          // two never disagree mid-week and a reader may take either. Withdrawn paper is face
+          // that ceased to exist, so it leaves by wire like any retirement.
+          reconcileLadderByWire(ctx.v2, { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' }, reg.govDebtTranches, 'sovereign ladder');
         });
       }
       // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the

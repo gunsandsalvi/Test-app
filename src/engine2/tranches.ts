@@ -16,6 +16,7 @@
 
 import { DebtTranche } from '../domain/company';
 import { V2World, rowOf, internString } from './world';
+import { defect } from '../domain/defect';
 
 export const TR_FLOATING = 1;
 export const TR_CP = 2;
@@ -351,9 +352,13 @@ export function materializeTranche(v2: V2World, r: number): DebtTranche {
  * the stored field on all 260 rungs across five weeks once the seed stopped rounding the two ends
  * separately.
  */
-export function materializeGovLadder(v2: V2World, regionId: string): (DebtTranche & { tenorAtIssuanceYears: number })[] {
+export function materializeGovLadder(v2: V2World, regionId: string): (DebtTranche & { couponRate: number; tenorAtIssuanceYears: number })[] {
   return materializeLadder(v2, `GOV_${regionId}`).map((t) => ({
     ...t,
+    // A sovereign always states a coupon — fixed on a bond, and on a bill the rate its discount
+    // is struck from (`bond.md` N5). Absent is not "zero", it is a rung that was written without
+    // one, so it says so rather than being quietly defaulted into a free loan.
+    couponRate: t.couponRate ?? defect(`sovereign tranche ${t.id} carries no coupon`),
     tenorAtIssuanceYears: (t.maturityWeek - t.originationWeek) / 52,
   }));
 }

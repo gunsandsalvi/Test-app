@@ -9,6 +9,7 @@
 
 import { treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
 import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
+import { materializeGovLadder } from '../../../engine2/tranches';
 import { govBucketKeyOf, govBillTrancheId, govBondTrancheId, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, GovDebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
@@ -215,7 +216,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         maturedByBucket.set(key, (maturedByBucket.get(key) ?? 0) + t.principalUSD);
       });
       const preMaturityByBucket = new Map<string, number>();
-      (reg.govDebtTranches || []).forEach(t => {
+      materializeGovLadder(ctx.v2, regionId).forEach(t => {
         const key = sovBucketKey(t.tenorAtIssuanceYears);
         preMaturityByBucket.set(key, (preMaturityByBucket.get(key) ?? 0) + t.principalUSD);
       });
@@ -546,10 +547,12 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
     // PUB1: the government's real interest bill. The treasury's ACCOUNT is the TGA, a liability
     // of the central bank — see stages/central-bank.ts, which moves it and the reserves with it.
-    const interestWeeklyUSD = weeklyInterestExpenseUSD(reg.govDebtTranches);
+    // §3.13-SOV row 2: read from the ONE store. Safe here because every writer of the array
+    // reconciles the store at the moment it writes, so the two never disagree mid-week.
+    const interestWeeklyUSD = weeklyInterestExpenseUSD(materializeGovLadder(ctx.v2, regionId));
     reg.governmentInterestWeeklyUSD = Math.round(interestWeeklyUSD);
     // Reported, never debited — the bill's cost is already in the redemption leg (PUB3d).
-    reg.governmentBillDiscountAccrualUSD = Math.round(weeklyBillDiscountAccrualUSD(reg.govDebtTranches));
+    reg.governmentBillDiscountAccrualUSD = Math.round(weeklyBillDiscountAccrualUSD(materializeGovLadder(ctx.v2, regionId)));
     // §5-CLOSE C5: there are no holders this model does not name. Every tranche is held (the
     // seed closes, §7.350; the auction places or re-offers), and a coupon reaches a holder of
     // record on its date or it is not paid — nothing is "paid smoothly" to nobody.

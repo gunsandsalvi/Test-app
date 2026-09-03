@@ -47,6 +47,8 @@ import { bankReservesOf, bankDepositLines, householdDepositsAt } from '../../led
 import { govBucketId, govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS, sovBucketKey } from './shared-helpers';
+import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
+import { materializeGovLadder } from '../../../engine2/tranches';
 import { withdrawUnplacedIssuance } from '../../../domain/government';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
 import { institutionProfile } from '../../../domain/institution-profiles';
@@ -190,7 +192,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
   regionIds.forEach((regionId) => {
     ctx.holdingsStore!.nextEpoch();
     const reg = ctx.updatedRegions[regionId];
-    const liveTranches = reg.govDebtTranches || [];
+    // §3.13-SOV row 2: the ladder comes from the ONE store.
+    const liveTranches = materializeGovLadder(ctx.v2, regionId);
     if (liveTranches.length === 0) return;
 
     const outstandingByBucket = new Map<string, number>();
@@ -346,7 +349,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // fixed holder set, is gone: it decided the answer the auction is supposed to produce.
     const sovStockByRegion: Record<string, number> = {};
     (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
-      sovStockByRegion[r] = (ctx.updatedRegions[r]?.govDebtTranches || [])
+      sovStockByRegion[r] = materializeGovLadder(ctx.v2, r)
         .filter((t) => t.tenorAtIssuanceYears >= SOV_BILL_MAX_TENOR_YEARS)
         .reduce((a, t) => a + t.principalUSD, 0);
     });
@@ -640,6 +643,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       if (!key || unplacedUSD <= 1) return;
       const r = withdrawUnplacedIssuance(reg.govDebtTranches, sovBucketKey, key, unplacedUSD);
       reg.govDebtTranches = r.tranches;
+      // §3.13-SOV row 2: the store follows the array at the moment the array moves.
+      reconcileLadderByWire(ctx.v2, { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' }, reg.govDebtTranches, 'sovereign ladder');
       // A3.5: withdrawn paper rolls into no side map — the treasury's account runs lower and the
       // next block sees the advance it drew.
     });
