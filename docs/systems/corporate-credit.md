@@ -12,7 +12,7 @@ references this one (its own system), but the boundary with both is a node here.
 guidelines"), superseding the depth-2 version and its annotation. The depth-2 tree is in this
 file's history. Node types per `README.md`: **REASON**, **VERIFY**, **FORBID**.
 
-**The instrument's own characteristics are NOT repeated here.** They are `instrument-bond.md`
+**The instrument's own characteristics are NOT repeated here.** They are `../instruments/bond.md`
 N1–N14, which this system must satisfy in full; this tree covers what is true of the MARKET, the
 HOLDER and the LIFE around a bond, and states only where corporate answers a contract node its own
 way.

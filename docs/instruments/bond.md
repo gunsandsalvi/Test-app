@@ -1,8 +1,8 @@
 # INSTRUMENT CONTRACT: THE BOND
 
 Not a system — an **instrument contract**. Every tree whose instrument is a bond must satisfy all
-of it, and says per node HOW it satisfies it. Cited by `corporate-credit.md` and
-`sovereign-credit.md`, and by `short-term-debt.md` when that is written.
+of it, and says per node HOW it satisfies it. Cited by `../systems/corporate-credit.md` and `../systems/sovereign-credit.md`, and by
+`../systems/short-term-debt.md` when that is written.
 
 **Why this file exists** (user, 2026-09-03: *"we can have a different type of bond for sovereign,
 but it need to still have all the necessary characteristics of a bond"*). A sovereign bond and a

@@ -61,22 +61,69 @@ exists because a sovereign bond and a corporate bond are different TYPES, not on
 unused — and because the difference between "this type answers N differently" and "nobody ever
 answered N" is the whole point of the atlas.
 
-## Status
+## Status — 45 systems
 
-| System | Required tree | Mapped | Diff → §3 |
-|---|---|---|---|
-| [corporate credit](./corporate-credit.md) | ✅ 46 nodes | ✅ 32 ✅ / 9 ⚠️ / 5 ❌ | ✅ §3.33–36 |
+"The whole set" is these. The classification is the user's, reviewed 2026-09-03; granularity rule:
+**a system is something with its own required tree — its own instrument, actor or mechanism that
+could be wholly absent.** That is why banks are three and derivatives are five.
 
-Everything else is unwritten, and `UNMAPPED` names the 55 pipeline stages no tree covers yet —
-its length is the honest measure of how far along this is.
+| # | System | Tree | Mapped | Diff |
+|---|---|---|---|---|
+| | **INFRASTRUCTURE** | | | |
+| 1 | [money and settlement](./money-and-settlement.md) | ✅ | — | — |
+| 2 | the register | — | — | — |
+| 3 | the clearing engine | — | — | — |
+| 4 | the audit | — | — | — |
+| 5 | the seed | — | — | — |
+| 6 | currency and FX rates | — | — | — |
+| | **MARKETS** | | | |
+| 7 | [corporate credit](./corporate-credit.md) | ✅ d3 | ⚠️ stale | ✅ |
+| 8 | [sovereign credit](./sovereign-credit.md) | ✅ | — | — |
+| 9 | short-term debt | — | — | — |
+| 10 | [equity](./equity.md) | ✅ | — | — |
+| 11 | [the money market](./money-market.md) | ✅ | — | — |
+| 12 | FX spot | — | — | — |
+| 13 | fund shares (ETF, MMF) | — | — | — |
+| 14 | securities lending | — | — | — |
+| 15 | prime brokerage | — | — | — |
+| 16 | the derivative layer | — | — | — |
+| 17 | CDS | — | — | — |
+| 18 | interest-rate swaps | — | — | — |
+| 19 | FX forwards and XCS | — | — | — |
+| 20 | commodity futures | — | — | — |
+| 21 | commodities spot | — | — | — |
+| 22 | indices | — | — | — |
+| | **FINANCIAL INSTITUTIONS** | | | |
+| 23 | [banks — lending](./banks-lending.md) | ✅ | — | — |
+| 24 | [banks — funding and liquidity](./banks-funding-and-liquidity.md) | ✅ | — | — |
+| 25 | [banks — capital and resolution](./banks-capital-and-resolution.md) | ✅ | — | — |
+| 26 | dealer desks | — | — | — |
+| 27 | insurers and pensions | — | — | — |
+| 28 | hedge funds | — | — | — |
+| 29 | private equity | — | — | — |
+| | **PUBLIC SECTOR** | | | |
+| 30 | the treasury | — | — | — |
+| 31 | [the central bank](./the-central-bank.md) | ✅ | — | — |
+| | **FIRMS** | | | |
+| 32 | firm fundamentals | — | — | — |
+| 33 | the capital programme | — | — | — |
+| 34 | firm birth and death | — | — | — |
+| 35 | M&A and corporate control | — | — | — |
+| 36 | trade credit | — | — | — |
+| | **THE REAL ECONOMY** | | | |
+| 37 | [goods](./goods.md) | ✅ | — | — |
+| 38 | freight and logistics | — | — | — |
+| 39 | labour | — | — | — |
+| 40 | housing | — | — | — |
+| 41 | [households](./households.md) | ✅ | — | — |
+| 42 | SME pools | — | — | — |
+| | **CROSS-CUTTING** | | | |
+| 43 | cross-border | — | — | — |
+| 44 | ratings and assessment | — | — | — |
+| 45 | news and the player surface | — | — | — |
 
-**The pilot's verdict.** The method works, on the test that matters. It was NOT whether the tree
-rediscovered "credit has no price" — that was already known, and a tree that only confirms what
-you knew proves nothing. It is whether the tree found nodes nobody had raised. It found four:
-seniority never reaching the recovery waterfall (which turns out to be the CAUSE of a permanently
-failing audit, `P1`), no covenants, no acceleration, and no restructuring. All four came from
-writing the required side first and finding the cell empty — none of them would have been found by
-reading the credit files, because the credit files do not mention them.
+**Instrument contracts** live in [`../instruments/`](../instruments/): a tree whose subject is an
+instrument cites one rather than restating it. [`bond.md`](../instruments/bond.md) is the first.
 
-The gate bites, and that was tested rather than assumed: renaming a cited symbol fails the build,
-and adding an undescribed stage to `core.ts` fails the build.
+Progress is also measured mechanically: `UNMAPPED` lists every source file not yet in a tree, and
+`check-atlas.sh` prints the count on every commit.

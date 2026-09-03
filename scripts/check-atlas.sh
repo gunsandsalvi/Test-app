@@ -27,7 +27,7 @@
 # rule; see the note beside that rule.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-ATLAS_TREES=$(ls docs/systems/*.md 2>/dev/null | grep -v 'README\.md$' || true)
+ATLAS_TREES=$(ls docs/systems/*.md docs/instruments/*.md 2>/dev/null | grep -v 'README\.md$' || true)
 if [ -n "$ATLAS_TREES" ]; then
   ATLAS_FAIL=0
   ATLAS_CITES=0

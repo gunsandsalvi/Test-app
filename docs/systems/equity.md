@@ -20,7 +20,7 @@ Written 2026-09-03 from the domain, code shut.
   - A2.a a **share count** that changes only by a named event (A5, D, E)
 - **A3** REASON — a **CURRENCY** it is quoted in — the issuer's own money
 - **A4** REASON — it is **PERPETUAL**: no maturity, no redemption. Unlike every node of
-  `instrument-bond.md`, and the reason equity is a different instrument rather than a long bond
+  `../instruments/bond.md`, and the reason equity is a different instrument rather than a long bond
 - **A5** REASON — **CONTROL** rides with it: a vote per share
   - A5.a which makes a majority a thing that can be **bought** — see `m-and-a`
   - A5.b VERIFY — control has a value distinct from the cash flows, and a takeover pays for it

@@ -7,7 +7,7 @@ and the benchmark everything else is priced against. Excludes the central bank's
 Node types, per `README.md`: **REASON** (a thing that must exist and cannot be short-circuited),
 **VERIFY** (a thing to measure, never to enforce), **FORBID** (a thing that must be absent).
 
-**Satisfies `instrument-bond.md` N1–N14 in full.** Branch B states only where it answers a contract
+**Satisfies `../instruments/bond.md` N1–N14 in full.** Branch B states only where it answers a contract
 node differently from a corporate bond; everything it answers the same way is in the contract and
 is not repeated.
 
@@ -44,7 +44,7 @@ any mapping — the revisions are recorded per node so the review is auditable.
 ### B. HOW SOVEREIGN ANSWERS THE BOND CONTRACT
 
 **A sovereign bond is a TYPE of bond, and it must satisfy all fourteen characteristics in
-`instrument-bond.md`** (user, 2026-09-03: *"we can have a different type of bond for sovereign, but
+`../instruments/bond.md`** (user, 2026-09-03: *"we can have a different type of bond for sovereign, but
 it need to still have all the necessary characteristics of a bond"*). N1–N10 and N14 it answers
 exactly as a corporate bond does, and they are not repeated here. Where it answers DIFFERENTLY:
 
