@@ -521,7 +521,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           if (!comp || shares <= 0.0001) return;
           equityHoldings.push({
             instrumentId: comp.id, instrumentType: 'EQUITY', issuerRegion: regionId,
-            quantityShares: shares, quantityOrNotionalUSD: shares * comp.stockPrice,
+            quantityShares: shares, quantityOrNotionalUSD: shares * comp.stockPrice, units: shares,
           });
         });
         store.append(entity.id, equityHoldings);
@@ -537,7 +537,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           instrumentType: 'EQUITY',
           issuerRegion: regionId,
           quantityShares: shares,
-          quantityOrNotionalUSD: shares * comp.stockPrice,
+          quantityOrNotionalUSD: shares * comp.stockPrice, units: shares,
         });
       }
       // The engine's cash delta is in the same unit as the quantity — shares — so convert the

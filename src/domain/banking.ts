@@ -12,6 +12,19 @@ import { ItemizedHoldingType } from './assets';
 import { FxDealerBook } from './dealer-derivatives';
 import { DealerDeskInventory } from './dealer-desk';
 
+/**
+ * A POSITION: how many UNITS of what. Nothing else.
+ *
+ * `units` is required and is counted in the instrument's own unit — par dollars for credit,
+ * shares for equity and fund shares, the registry's `countedIn`. What the position is WORTH is
+ * `units × price`, computed at every read from the market's own print, and it is deliberately
+ * NOT a field here: a stored value cannot be re-marked, because the price that produced it is
+ * gone, and wherever a value has been stored beside units in this model the two have drifted.
+ *
+ * `quantityOrNotionalUSD` is what that stored value was called. It is still here and it is on its
+ * way out: every writer now sets `units`, and the readers move to `units × price` per asset class
+ * (step 13). When the last one has, the field goes and this type is `(instrument, units)`.
+ */
 export interface ItemizedHolding {
   instrumentId: string; // for equity: company.id; for CORP_BOND/LEVERAGED_LOAN/COMMERCIAL_PAPER: the issuer's company.id; for GOV_BOND: the tenor-bucket id; for ETF_SHARE: the fund entity's id
   /** Named and derived from the one superset (domain/assets — step 4); members unchanged. */
@@ -25,6 +38,12 @@ export interface ItemizedHolding {
    * set — the circularity that broke ownership convergence once already (task #28).
    */
   quantityShares?: number;
+  /**
+   * HOW MANY UNITS, in the instrument's own unit (`countedIn`). Required: a position that cannot
+   * say how much of something it is cannot be valued, and every kind that could not say ended up
+   * storing a dollar total and losing the price that made it.
+   */
+  units: number;
   /**
    * CREDIT only: the FACE the row holds. `quantityOrNotionalUSD` is then face x price — a derived
    * view of this, for exactly the reason `quantityShares` exists for equity: storing only the

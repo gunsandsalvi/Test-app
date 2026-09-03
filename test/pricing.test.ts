@@ -8,6 +8,7 @@ import {
   discountFactor, annuityFactor, levelPaymentFactor, presentValuePerFace,
   zeroRateAt, priceFromSpreadBps, spreadBpsFromPrice, ZeroCurve,
 } from '../src/domain/pricing';
+import { ASSET_REGISTRY } from '../src/domain/assets';
 
 const FLAT: ZeroCurve = { tenor3M: 0.04, tenor2Y: 0.04, tenor5Y: 0.04, tenor10Y: 0.04, tenor30Y: 0.04 };
 
@@ -70,4 +71,15 @@ test('a sloped curve is priced along its whole length, not at one point', () => 
 
 test('matured paper is worth its face', () => {
   assert.equal(priceFromSpreadBps({ annualCouponRate: 0.05, periodWeeks: 26, weeksToMaturity: 0 }, FLAT, 300), 1);
+});
+
+test('every asset kind declares what its quantity is counted in', () => {
+  // The property a stored dollar total cannot have: a kind that cannot say what its units ARE has
+  // no honest way to be valued, and every such kind in this model ended up storing the product of
+  // units and price and losing the price that made it.
+  for (const [type, m] of Object.entries(ASSET_REGISTRY)) {
+    assert.ok(['PAR_USD', 'SHARES', 'GOODS_UNITS', 'CONTRACTS', 'USD'].includes(m.countedIn), `${type} has no unit of measure`);
+    // Money is the only kind whose price is one by definition; everything else must be priced.
+    if (m.countedIn === 'USD') assert.equal(m.assetClass, 'CASH_LIKE', `${type} is counted in dollars but is not cash`);
+  }
 });

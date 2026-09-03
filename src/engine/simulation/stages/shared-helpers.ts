@@ -299,7 +299,7 @@ export function attributeItemizedHoldings(
         instrumentId: c.id,
         instrumentType: c.type,
         issuerRegion: c.region,
-        quantityOrNotionalUSD: take,
+        quantityOrNotionalUSD: take, units: take,
       });
       remaining -= take;
     }

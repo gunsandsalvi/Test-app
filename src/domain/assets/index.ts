@@ -33,7 +33,31 @@ export interface AssetModule {
   readonly hasCreditRisk: boolean;
   /** Does it have a price, or only a stat (a spread, a rate) that a price is derived from? */
   readonly quotedAs: 'PRICE' | 'YIELD_LIKE' | 'SPREAD_LIKE';
+  /**
+   * WHAT A QUANTITY OF IT IS COUNTED IN. Rule 9 says periodicity and the unit of meaning are part
+   * of a number; this is that rule applied to the quantity. A position is `units` of an
+   * instrument and its value is `units × price` — so a kind that cannot say what its units ARE
+   * has no honest way to be valued, and every such kind ended up storing a dollar total instead
+   * and losing the price that made it.
+   */
+  readonly countedIn: UnitOfMeasure;
 }
+
+/**
+ * The units a position can be counted in. Money is the degenerate one — a dollar is a dollar, so
+ * its price is 1 BY DEFINITION and it is the only place in the tree a hard-coded 1 belongs.
+ */
+export type UnitOfMeasure =
+  /** Face value in dollars: what a bond or a loan is a claim on. Its PRICE is per dollar of face. */
+  | 'PAR_USD'
+  /** A share of a company or a fund. */
+  | 'SHARES'
+  /** A physical unit of a good — the sub-unit registry's own unit. */
+  | 'GOODS_UNITS'
+  /** One contract of a derivative class. */
+  | 'CONTRACTS'
+  /** Dollars, whose price is one by definition. */
+  | 'USD';
 
 /**
  * ONE LINE PER KIND. A new asset type is a row here; every reader below keeps working, and any
@@ -41,17 +65,17 @@ export interface AssetModule {
  * compiler then demands for every existing kind. That is the property a string tag cannot have.
  */
 export const ASSET_REGISTRY: Record<AssetType, AssetModule> = {
-  EQUITY:         { assetClass: 'EQUITY',     carriesCoupon: false, lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE' },
-  CORP_BOND:      { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: true,  hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE' },
-  LEVERAGED_LOAN: { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE' },
-  SOV_BOND:       { assetClass: 'SOVEREIGN',  carriesCoupon: true,  lendable: true,  hasCreditRisk: false, quotedAs: 'YIELD_LIKE' },
-  CDS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE' },
-  IRS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE' },
-  TRS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE' },
-  XCS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE' },
-  COMMODITY:      { assetClass: 'COMMODITY',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE' },
-  OPTION:         { assetClass: 'DERIVATIVE', carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE' },
-  FX_SPOT:        { assetClass: 'CASH_LIKE',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE' },
+  EQUITY:         { assetClass: 'EQUITY',     carriesCoupon: false, lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'SHARES' },
+  CORP_BOND:      { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: true,  hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'PAR_USD' },
+  LEVERAGED_LOAN: { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'PAR_USD' },
+  SOV_BOND:       { assetClass: 'SOVEREIGN',  carriesCoupon: true,  lendable: true,  hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'PAR_USD' },
+  CDS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS' },
+  IRS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS' },
+  TRS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS' },
+  XCS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS' },
+  COMMODITY:      { assetClass: 'COMMODITY',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'GOODS_UNITS' },
+  OPTION:         { assetClass: 'DERIVATIVE', carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'CONTRACTS' },
+  FX_SPOT:        { assetClass: 'CASH_LIKE',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'USD' },
 };
 
 /** The one lookup. A caller that cannot find its question here should add a field, not a switch. */
@@ -62,6 +86,8 @@ export function assetModule(type: AssetType): AssetModule {
 export const assetClassOf = (type: AssetType): AssetClass => ASSET_REGISTRY[type].assetClass;
 export const carriesCoupon = (type: AssetType): boolean => ASSET_REGISTRY[type].carriesCoupon;
 export const isLendable = (type: AssetType): boolean => ASSET_REGISTRY[type].lendable;
+/** What a quantity of this kind is counted in — the other half of every price. */
+export const countedIn = (type: AssetType): UnitOfMeasure => ASSET_REGISTRY[type].countedIn;
 export const hasCreditRisk = (type: AssetType): boolean => ASSET_REGISTRY[type].hasCreditRisk;
 
 /**

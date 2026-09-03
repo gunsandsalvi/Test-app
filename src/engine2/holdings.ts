@@ -23,10 +23,16 @@ export interface HoldingStore {
   regionRef: Int32Array;  // interned issuerRegion
   qtyUSD: Float64Array;
   shares: Float64Array;   // NaN = absent (quantityShares)
-  /** NaN = absent. For CREDIT: the FACE the row holds. `qtyUSD` is then face x price — a derived
-   *  view, exactly as it is shares x price for equity, and for the same reason: the size of the
-   *  book must not depend on the price the book is supposed to set. */
-  faceUSD: Float64Array;
+  /**
+   * HOW MANY UNITS THE ROW HOLDS, in the instrument's own unit (`countedIn`): par dollars for
+   * credit, shares for equity and fund shares. NaN only while a writer has not been migrated.
+   *
+   * This is the quantity. `qtyUSD` is `units × price` — a derived view — and the reason the two
+   * are separate columns is that the size of a book must not depend on the price the book is
+   * supposed to set. Where this model stored only the product, the price was lost and the
+   * position could never be re-marked.
+   */
+  units: Float64Array;
   next: Int32Array;
   freeHead: number;
   used: number;
@@ -69,7 +75,7 @@ export function newHoldingStore(): HoldingStore {
     regionRef: new Int32Array(cap),
     qtyUSD: new Float64Array(cap),
     shares: new Float64Array(cap),
-    faceUSD: new Float64Array(cap),
+    units: new Float64Array(cap),
     next: new Int32Array(cap).fill(-1),
     freeHead: -1,
     used: 0,
@@ -87,7 +93,7 @@ function growHoldings(H: HoldingStore): void {
   const gF = (old: Float64Array) => { const a = new Float64Array(cap); a.set(old); return a; };
   const gI = (old: Int32Array) => { const a = new Int32Array(cap); a.set(old); return a; };
   H.typeRef = gI(H.typeRef); H.instrRef = gI(H.instrRef); H.regionRef = gI(H.regionRef);
-  H.qtyUSD = gF(H.qtyUSD); H.shares = gF(H.shares); H.faceUSD = gF(H.faceUSD);
+  H.qtyUSD = gF(H.qtyUSD); H.shares = gF(H.shares); H.units = gF(H.units);
   const next = new Int32Array(cap).fill(-1); next.set(H.next); H.next = next;
   const mark = new Int32Array(cap); mark.set(H.mark); H.mark = mark;
   H.cap = cap;
@@ -137,7 +143,7 @@ export function syncBookRows(v2: V2World, entityId: string, book: ItemizedHoldin
     H.regionRef[r] = internString(v2, h.issuerRegion);
     H.qtyUSD[r] = h.quantityOrNotionalUSD ?? 0;
     H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
-    H.faceUSD[r] = h.faceUSD === undefined ? Number.NaN : h.faceUSD;
+    H.units[r] = h.units;
     H.next[r] = -1;
     if (prev >= 0) H.next[prev] = r; else H.head[slot] = r;
     prev = r;
@@ -175,7 +181,7 @@ export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): 
   H.regionRef[r] = internString(v2, h.issuerRegion);
   H.qtyUSD[r] = h.quantityOrNotionalUSD ?? 0;
   H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
-  H.faceUSD[r] = h.faceUSD === undefined ? Number.NaN : h.faceUSD;
+  H.units[r] = h.units;
   H.next[r] = -1;
   if (H.tail[slot] >= 0) H.next[H.tail[slot]] = r; else H.head[slot] = r;
   H.tail[slot] = r;
@@ -241,7 +247,7 @@ export function freeBookRow(v2: V2World, r: number): void {
 function freeRow(H: HoldingStore, r: number): void {
   H.qtyUSD[r] = 0;
   H.shares[r] = Number.NaN;
-  H.faceUSD[r] = Number.NaN;
+  H.units[r] = Number.NaN;
   H.instrRef[r] = -1;
   H.typeRef[r] = -1;
   H.next[r] = H.freeHead;
@@ -283,10 +289,9 @@ export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[
       instrumentType: v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'],
       issuerRegion: v2.internedStrings[H.regionRef[r]] as ItemizedHolding['issuerRegion'],
       quantityOrNotionalUSD: H.qtyUSD[r],
+      units: Number.isNaN(H.units[r]) ? (Number.isNaN(sh) ? H.qtyUSD[r] : sh) : H.units[r],
     };
     if (!Number.isNaN(sh)) h.quantityShares = sh;
-    const face = H.faceUSD[r];
-    if (!Number.isNaN(face)) h.faceUSD = face;
     out.push(h);
   }
   return out;
@@ -300,13 +305,13 @@ export function ensureBooksSynced(v2: V2World, entities: { id: string; itemizedH
 }
 
 function canonical(h: ItemizedHolding): string {
-  return `${h.instrumentType}|${h.instrumentId}|${h.issuerRegion}|${h.quantityOrNotionalUSD ?? 0}|${h.quantityShares ?? 'x'}|${h.faceUSD ?? 'x'}`;
+  return `${h.instrumentType}|${h.instrumentId}|${h.issuerRegion}|${h.quantityOrNotionalUSD ?? 0}|${h.quantityShares ?? 'x'}|${h.units}`;
 }
 
 function canonicalRow(v2: V2World, r: number): string {
   const H = mutableHoldings(v2);
-  const sh = H.shares[r]; const face = H.faceUSD[r];
-  return `${v2.internedStrings[H.typeRef[r]]}|${v2.internedStrings[H.instrRef[r]]}|${v2.internedStrings[H.regionRef[r]]}|${H.qtyUSD[r]}|${Number.isNaN(sh) ? 'x' : sh}|${Number.isNaN(face) ? 'x' : face}`;
+  const sh = H.shares[r];
+  return `${v2.internedStrings[H.typeRef[r]]}|${v2.internedStrings[H.instrRef[r]]}|${v2.internedStrings[H.regionRef[r]]}|${H.qtyUSD[r]}|${Number.isNaN(sh) ? 'x' : sh}|${H.units[r]}`;
 }
 
 /** HOLDINGS_SYNC_CHECK=1 — throw on the first entity whose rows disagree with its book. */

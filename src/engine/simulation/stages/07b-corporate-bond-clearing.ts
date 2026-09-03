@@ -540,7 +540,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
             : undefined;
           splitAcrossTranches(v2, issuerId, 'CORP_BOND', newHoldingUSD, primary).forEach((t) => {
             // Written in par space; `credit-marking` prices it before anything reads a value.
-            if (t.usd > 1) newCorpHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceUSD: t.usd });
+            if (t.usd > 1) newCorpHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceUSD: t.usd, units: t.usd });
           });
         }
       }

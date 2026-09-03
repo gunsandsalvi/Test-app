@@ -40,8 +40,9 @@ export interface HoldingSpec {
   valueUSD: number;
   /** Shares moved (equity, fund shares); undefined for notional-only paper. */
   shares?: number;
-  /** CREDIT: the FACE moved. `valueUSD` is then face x price, so the wire carries a real price
-   *  instead of the 1.00 every notional instrument used to move at. */
+  /** HOW MANY UNITS moved, in the instrument's own unit — par for credit, shares for equity.
+   *  `valueUSD` is units x price, so the wire carries a real price instead of the 1.00 every
+   *  notional instrument used to move at. Defaults to shares, then to the value. */
   faceUSD?: number;
 }
 
@@ -69,13 +70,17 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
     H.qtyUSD[r] += spec.valueUSD;
     if (spec.shares !== undefined) H.shares[r] = (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]) + spec.shares;
-    if (spec.faceUSD !== undefined) H.faceUSD[r] = (Number.isNaN(H.faceUSD[r]) ? 0 : H.faceUSD[r]) + spec.faceUSD;
+    const movedUnits = spec.shares ?? spec.faceUSD ?? spec.valueUSD;
+    H.units[r] = (Number.isNaN(H.units[r]) ? 0 : H.units[r]) + movedUnits;
     markBookDirty(v2, holderId);
     return;
   }
   pushBookRow(v2, holderId, {
     instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
     quantityOrNotionalUSD: spec.valueUSD, quantityShares: spec.shares, faceUSD: spec.faceUSD,
+    // UNITS: shares where the instrument is share-counted, else par — which today equals the
+    // value, because credit's price is still pinned at 1 (step 13 is what unpins it).
+    units: spec.shares ?? spec.faceUSD ?? spec.valueUSD,
   });
 }
 
@@ -306,8 +311,8 @@ export function markCreditBook(
   let rows = 0, deltaUSD = 0;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (!isTrancheKind(v2.internedStrings[H.typeRef[r]])) continue;
-    if (Number.isNaN(H.faceUSD[r])) H.faceUSD[r] = H.qtyUSD[r];
-    const faceUSD = H.faceUSD[r];
+    if (Number.isNaN(H.units[r])) H.units[r] = H.qtyUSD[r];
+    const faceUSD = H.units[r];
     if (!(Math.abs(faceUSD) > 0)) continue;
     const price = priceOfInstrument(v2.internedStrings[H.instrRef[r]]);
     if (price === undefined) continue;

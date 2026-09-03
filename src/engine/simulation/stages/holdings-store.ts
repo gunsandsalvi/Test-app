@@ -221,7 +221,7 @@ export class HoldingsStore {
       instrumentType: type,
       issuerRegion,
       quantityShares: shares,
-      quantityOrNotionalUSD: shares * pricePerShare,
+      quantityOrNotionalUSD: shares * pricePerShare, units: shares,
     };
     slot.rows = [...slot.rows, row];
     slot.rowIds.push(-1); // a real row is allocated for it at the write-back

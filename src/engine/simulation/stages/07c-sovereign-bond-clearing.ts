@@ -531,7 +531,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
       const newGovHoldings: ItemizedHolding[] = [];
       newHoldings.forEach((usd, instrumentId) => {
-        if (usd > 1) newGovHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd });
+        if (usd > 1) newGovHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd, units: usd });
       });
       store.append(entity.id, newGovHoldings);
     });

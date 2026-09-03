@@ -590,7 +590,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
               instrumentId,
               instrumentType,
               issuerRegion: ctx.v2.internedStrings[H.regionRef[r]] as ItemizedHolding['issuerRegion'],
-              quantityOrNotionalUSD: qty,
+              quantityOrNotionalUSD: qty, units: qty,
             };
             if (!Number.isNaN(sh)) out.quantityShares = sh * share;
             byInstrument.set(key, out);

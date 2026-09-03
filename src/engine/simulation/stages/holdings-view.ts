@@ -81,6 +81,7 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
         instrumentType: type,
         issuerRegion: v2a.internedStrings[Ha.regionRef[r]] as ItemizedHolding['issuerRegion'],
         quantityOrNotionalUSD: Ha.qtyUSD[r],
+        units: Number.isNaN(Ha.units[r]) ? Ha.qtyUSD[r] : Ha.units[r],
       };
       if (!Number.isNaN(sh)) h.quantityShares = sh;
       institutionalHoldings.push(h);
@@ -115,7 +116,7 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
         instrumentId: govBucketId(regionId, tenorKey),
         instrumentType: 'GOV_BOND',
         issuerRegion: regionId,
-        quantityOrNotionalUSD: v,
+        quantityOrNotionalUSD: v, units: v,
       });
     });
   });

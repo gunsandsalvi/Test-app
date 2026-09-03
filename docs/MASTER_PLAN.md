@@ -2557,6 +2557,31 @@ behind. Folded into step 13, which owns the per-tranche world; O8 is the number 
 Measured: 165 in 35 → **181 in 36**, the whole rise being O8 firing every week on a defect that
 was always there.
 
+**13 (part 4). The abstraction forces units.** (`PENDING`) The previous attempt bolted a price
+onto the side of a value, which is not foundational: a side table can be absent, ignored, or
+disagreed with. The type has to make a valueless position impossible to express, and the
+compiler has to find every place that made one.
+
+Two changes, and between them they are the foundation:
+
+**Every asset kind declares what its quantity is COUNTED IN.** `AssetModule.countedIn` —
+`PAR_USD`, `SHARES`, `GOODS_UNITS`, `CONTRACTS`, `USD` — is required, so a new kind does not
+build until it has answered. Rule 9 says periodicity and the unit of meaning are part of a
+number; this is that rule applied to the quantity, and it is the half that was missing. **Money is
+the one kind counted in dollars, and its price is 1 BY DEFINITION** — a test asserts nothing else
+claims that.
+
+**A holding carries `units`, required.** The compiler named every writer that did not set one:
+**21 errors across 12 files**, which is the whole set — small, because writers are few and readers
+are many, and this is the cheap end to start from. Units are shares where the instrument is
+share-counted and par everywhere else. The store's column follows: what was added as `faceUSD`
+last commit IS the units column and is now named that, because face for credit is exactly "how
+many units" — one column whose meaning is the registry's `countedIn`, not two that overlap.
+
+**Nothing reads units for value yet, so the run is unchanged at 231 in 46** — and that is the
+last commit for which that is true. Units are now written everywhere and correct; the next step is
+that value STOPS being a stored field and becomes `units × price`, and the balance sheets move.
+
 **13 (part 3). The mark: built, measured, and deliberately not wired.** (`PENDING`) This is the
 big one and it did not land. The record is what it produced, because the next attempt should start
 from here rather than from the top.

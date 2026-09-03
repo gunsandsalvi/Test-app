@@ -519,7 +519,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const billHoldings: ItemizedHolding[] = [];
         fills.forEach((usd, instrumentId) => {
           const bookedUSD = usd - rebateOf(entity.id, instrumentId);
-          if (bookedUSD > 1) billHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: bookedUSD });
+          if (bookedUSD > 1) billHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: bookedUSD, units: bookedUSD });
         });
         ctx.holdingsStore!.append(entity.id, billHoldings);
       });
@@ -539,7 +539,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const billRows: ItemizedHolding[] = [];
         fills.forEach((usd, instrumentId) => {
           const bookedUSD = usd - rebateOf(treasuryParticipantId(ticker), instrumentId);
-          if (bookedUSD > 1) billRows.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: bookedUSD });
+          if (bookedUSD > 1) billRows.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: bookedUSD, units: bookedUSD });
         });
         // Step 13 (W2): the treasury's bill rows move by wire against the house (its rows are
         // keyed by bucket id, the older tranche-keyed rows read through the same bucket).
@@ -927,7 +927,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             ? { trancheId: `${iss.comp.ticker}-CP-${ctx.nextWeek}`, sliceUSD: primarySliceOf(usd - (prior?.get(issuerId) ?? 0), cpBoughtByIssuer.get(issuerId) ?? 0, outcome.marketTakeUSD) }
             : undefined;
           splitAcrossTranches(v2Mirror, issuerId, 'COMMERCIAL_PAPER', usd, primary).forEach((t) => {
-            if (t.usd > 1) rows.push({ instrumentId: t.instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceUSD: t.usd });
+            if (t.usd > 1) rows.push({ instrumentId: t.instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, units: t.usd, faceUSD: t.usd });
           });
         });
         store.append(entity.id, rows);

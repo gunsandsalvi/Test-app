@@ -502,7 +502,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
             ? { trancheId: primaryTrancheId(issuerId, offering.purpose, ctx.nextWeek), sliceUSD: primarySliceOf(newHoldingUSD - (prior?.get(issuerId) ?? 0), boughtByInstrument[ii], outcome.marketTakeUSD) }
             : undefined;
           splitAcrossTranches(v2, issuerId, 'LEVERAGED_LOAN', newHoldingUSD, primary).forEach((t) => {
-            if (t.usd > 1) newLoanHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceUSD: t.usd });
+            if (t.usd > 1) newLoanHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceUSD: t.usd, units: t.usd });
           });
         }
       }

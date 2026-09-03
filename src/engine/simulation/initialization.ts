@@ -548,7 +548,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           instrumentId: c.id,
           instrumentType: c.type,
           issuerRegion: c.region,
-          quantityOrNotionalUSD: shareUSD * (c.outstandingUSD / totalLoanCandidatesUSD),
+          quantityOrNotionalUSD: shareUSD * (c.outstandingUSD / totalLoanCandidatesUSD), units: shareUSD * (c.outstandingUSD / totalLoanCandidatesUSD),
         }));
     // Proportional-by-size, not attributeItemizedHoldings' size-sorted-greedy-with-a-40%-cap
     // fill: the real weekly clearing engine (07b-corporate-bond-clearing.ts) distributes an
@@ -564,7 +564,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           instrumentId: c.id,
           instrumentType: c.type,
           issuerRegion: c.region,
-          quantityOrNotionalUSD: shareUSD * (c.outstandingUSD / totalCorpCandidatesUSD),
+          quantityOrNotionalUSD: shareUSD * (c.outstandingUSD / totalCorpCandidatesUSD), units: shareUSD * (c.outstandingUSD / totalCorpCandidatesUSD),
         }));
 
     // Equity is seeded in SHARES, proportional to each name's market cap — the same shape
@@ -587,12 +587,16 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         .filter(c => shareUSD * equityFillRatio * (c.outstandingUSD / totalEquityCandidatesUSD) > 1)
         .map(c => {
           const nameUSD = shareUSD * equityFillRatio * (c.outstandingUSD / totalEquityCandidatesUSD);
+          // SHARES are the quantity; the dollars are shares x price, which is why the division
+          // happens once and both fields read the same number.
+          const shares = nameUSD / Math.max(0.01, equityPriceById.get(c.id) ?? 1);
           return {
             instrumentId: c.id,
             instrumentType: c.type,
             issuerRegion: c.region,
-            quantityShares: nameUSD / Math.max(0.01, equityPriceById.get(c.id) ?? 1),
+            quantityShares: shares,
             quantityOrNotionalUSD: nameUSD,
+            units: shares,
           };
         });
 
@@ -624,7 +628,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           instrumentId: `${regionId}-GOV-${key}`,
           instrumentType: 'GOV_BOND' as const,
           issuerRegion: regionId,
-          quantityOrNotionalUSD: shareUSD * (bucketUSD / totalSovBucketedUSD),
+          quantityOrNotionalUSD: shareUSD * (bucketUSD / totalSovBucketedUSD), units: shareUSD * (bucketUSD / totalSovBucketedUSD),
         }));
 
     // Seed each named bank's real sovereign book across the same tenor buckets the weekly
@@ -1008,7 +1012,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           if (!(issued > 0) || held <= issued) return h;
           const keep = issued / held;
           freedUSD += h.quantityOrNotionalUSD * (1 - keep);
-          return { ...h, quantityShares: h.quantityShares * keep, quantityOrNotionalUSD: h.quantityOrNotionalUSD * keep };
+          return { ...h, quantityShares: h.quantityShares * keep, quantityOrNotionalUSD: h.quantityOrNotionalUSD * keep , units: h.quantityShares * keep};
         });
         if (freedUSD > 0) stashOpeningCash(e, openingCashOf(e) + freedUSD);
       });
@@ -1497,7 +1501,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       lps.forEach(e => {
         const interestUSD = Math.round(investedUSD * (lpWeights.get(e.id)! / lpWeightSum));
         if (interestUSD > 1) {
-          e.itemizedHoldings.push({ instrumentId: fundId, instrumentType: 'PE_FUND_INTEREST', issuerRegion: regionId, quantityOrNotionalUSD: interestUSD });
+          e.itemizedHoldings.push({ instrumentId: fundId, instrumentType: 'PE_FUND_INTEREST', issuerRegion: regionId, quantityOrNotionalUSD: interestUSD, units: interestUSD });
         }
       });
     }
@@ -1552,7 +1556,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
             regionEntities.forEach((e, i) => {
               const qty = t.principalUSD * (weights[i] / wSum);
               if (qty > 1) {
-                e.itemizedHoldings.push({ instrumentId: t.id, instrumentType: kind, issuerRegion: regionId, quantityOrNotionalUSD: Math.round(qty) });
+                e.itemizedHoldings.push({ instrumentId: t.id, instrumentType: kind, issuerRegion: regionId, quantityOrNotionalUSD: Math.round(qty), units: Math.round(qty) });
               }
             });
           });
