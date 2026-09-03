@@ -373,6 +373,10 @@ let seedV2: import('../../engine2/world').V2World;
  * anything the seed opened, while still catching every firm and fund BORN later, which is the
  * other half of what it is for.
  */
+/** The treasury's issuer id in the tranche store — one per region, stable for the run. It is a
+ *  GOVERNMENT party (`TrancheIssuer.kind`), so its wires name the treasury and not a company. */
+const govIssuerId = (regionId: RegionId): string => `GOV_${regionId}`;
+
 function openSeededMirrors(state: GameState): void {
   const v2 = ensureV2(state);
   // Nothing is active before the first week; the guard is here so this cannot silently steal a
@@ -384,6 +388,16 @@ function openSeededMirrors(state: GameState): void {
     for (const c of state.companies) {
       if (!v2.tranches.synced.has(c.id)) seedLadder(v2, { id: c.id, ticker: c.ticker, region: c.region }, c.debtTranches);
     }
+    // §3.13-SOV row 2 — THE SOVEREIGN LADDER JOINS THE ONE STORE, BY WIRE LIKE ANY OTHER.
+    // `reg.govDebtTranches` is a plain array beside the engine2 store every corporate ladder
+    // lives in; that is the second of the five parallel structures. Opening it here puts sovereign
+    // paper under the same `Σ held = issued` and `wires reproduce the ladders` checks the
+    // corporate ladders answer to (`the-register.md` B2, W3) — which it has never been under.
+    (Object.keys(state.regions) as RegionId[]).forEach((regionId) => {
+      const ladder = state.regions[regionId]?.govDebtTranches;
+      if (!ladder?.length) return;
+      seedLadder(v2, { id: govIssuerId(regionId), ticker: govIssuerId(regionId), region: regionId, kind: 'GOVERNMENT' }, ladder);
+    });
     const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
     const issuerOfHolding = (h: ItemizedHolding): PartyRef => {
       if (holdingClassOf(h.instrumentType) === 'SOVEREIGN') return { kind: 'GOVERNMENT', region: h.issuerRegion };
