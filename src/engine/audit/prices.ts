@@ -13,6 +13,12 @@ import { calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { ensureV2 } from '../../engine2/world';
 import { isTrancheKind } from '../../domain/assets';
 import { trancheClearedPricePerFace } from '../credit-price';
+import { materializeGovLadder } from '../../engine2/tranches';
+import { priceFromYield, zeroRateAt } from '../../domain/pricing';
+
+/** A sovereign bond pays twice a year, which is what its price is discounted over. Stated here
+ *  rather than assumed at the call site so the convention is one fact (rule 9). */
+const SOVEREIGN_COUPON_PERIOD_WEEKS = 26;
 
 const RATING_RANK: Record<string, number> = { AAA: 0, AA: 1, A: 2, BBB: 3, BB: 4, B: 5, CCC: 6, D: 7 };
 
@@ -217,5 +223,53 @@ function p6(state: GameState, week: number): AuditFinding[] {
 }
 
 export function auditPrices(state: GameState, week: number): AuditFinding[] {
-  return [...p1(state, week), ...p2(state, week), ...p3(state, week), ...p4(state, week), ...p5(state, week), ...p6(state, week), ...x1(state, week), ...x2(state, week)];
+  return [...p1(state, week), ...p2(state, week), ...p3(state, week), ...p4(state, week), ...p5(state, week), ...p6(state, week), ...x1(state, week), ...x2(state, week), ...p8(state, week)];
 }
+
+/**
+ * P8 — §3.13-SOV row 4. THE SOVEREIGN BOOK IS CARRIED AT PAR AND IS NOT WORTH PAR.
+ *
+ * The sovereign is the one book in this model that clears a YIELD rather than a price
+ * (`assets/index.ts` declares it `YIELD_LIKE`; `financial-clearing-engine` then values every
+ * sovereign fill at `unitValueUSD = 1`). So a government bond changes hands at FACE whatever its
+ * coupon and whatever the curve says, and every holder carries it at face for its whole life.
+ *
+ * This is P5's twin, and the same defect one asset class over: it measures the ladder's face
+ * against what those same rungs are worth discounted at the curve the auction itself just
+ * cleared. Nothing here is a second opinion about the price — the yield IS the book's own
+ * output. If the two disagree, the model is holding one instrument at two values (rule 3), and
+ * the gap is the size of what row 4 has to close.
+ *
+ * It cannot go green by tuning. It goes green when the sovereign clears a price.
+ */
+function p8(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const v2 = ensureV2(state);
+  let faceUSD = 0, impliedUSD = 0, rungs = 0;
+  const byRegion: string[] = [];
+  REGION_IDS.forEach((r) => {
+    const reg = state.regions[r];
+    if (!reg) return;
+    let face = 0, implied = 0;
+    materializeGovLadder(v2, r).forEach((t) => {
+      const weeks = t.maturityWeek - state.currentWeek;
+      if (!(weeks > 0) || !(t.principalUSD > 0)) return;
+      const y = zeroRateAt(reg.zeroRates, weeks / 52);
+      const price = priceFromYield({ annualCouponRate: t.couponRate, periodWeeks: SOVEREIGN_COUPON_PERIOD_WEEKS, weeksToMaturity: weeks }, y);
+      face += t.principalUSD;
+      implied += t.principalUSD * price;
+      rungs++;
+    });
+    if (face > 0) {
+      faceUSD += face; impliedUSD += implied;
+      byRegion.push(`${r} ${pct(implied / face - 1)}`);
+    }
+  });
+  const gapUSD = faceUSD - impliedUSD;
+  if (rungs > 0 && Math.abs(gapUSD) > 1e6) {
+    out.push({ family: 'P', check: 'P8 the sovereign book is carried at par', week, usd: gapUSD,
+      message: `${rungs} sovereign rungs on ${B(faceUSD)} of face are carried at face against ${B(impliedUSD)} implied by the curve this book itself cleared — a ${B(gapUSD)} gap (${byRegion.join(' | ')}); the sovereign clears a YIELD and settles at par, so it has no price to be marked at` });
+  }
+  return out;
+}
+

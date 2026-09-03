@@ -1445,6 +1445,41 @@ was measured wrong. Treat a row there as a lead with a file:line, not a fact.
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
 
+**13-SOV ROW 4 — SIZED BEFORE IT IS BUILT: THE SOVEREIGN BOOK IS 57.34B AWAY FROM PAR.**
+
+The sovereign is the one book in this model that clears a YIELD rather than a price
+(`assets/index.ts` declares it `YIELD_LIKE`; `financial-clearing-engine.ts:956` then values every
+sovereign fill at `unitValueUSD = 1`). So a government bond changes hands at FACE whatever its
+coupon and whatever the curve says, and every holder carries it at face for its whole life. That
+is rule 1 failing outright on 1.88T of paper, and `../instruments/bond.md` N7.b in the
+instrument's own words.
+
+**`P8` measures it, and it is P5's twin one asset class over.** It reads the ladder's face against
+what those same rungs are worth discounted at the curve THE AUCTION ITSELF JUST CLEARED — not a
+second opinion about the price, the book's own output. Measured on the reference run: **76
+sovereign rungs on 1886.42B of face carried at face against 1829.07B implied, a 57.34B gap**, worst
+68.49B, by region USA −3.30% · JPN −2.76% · UK −3.03% · EUR −2.59%. It cannot go green by tuning;
+it goes green when the sovereign clears a price.
+
+Violations 67 in 24 families → 72 in 25: P8 fires in all five weeks including week 0.
+
+**The tools for the swap are in and tested** (`domain/pricing/bond.ts`): `priceFromYield` and
+`yieldFromPrice`, deliberately distinct from `priceFromSpreadBps` because a yield is ONE rate over
+the whole schedule where a spread is applied over a curve with every flow at its own tenor. Three
+tests, and one caught a wrong premise of mine: coupon = yield does NOT give par at every coupon
+frequency, because the discounting is at an annual EFFECTIVE yield, so a 4% coupon paid twice a
+year is worth more than one paid once (30y semi-annual 1.006849, quarterly 1.010290). The test now
+pins what is true — annual coupons exactly par to 1e-12, and paying sooner is worth more.
+
+**What is left of row 4**, and it is the change step 13 says must not be byte-identical: the
+instrument becomes `PRICE_LIKE`, the two reservation sites (institutional and bank) state their
+reservation YIELD as a reservation PRICE, `fullSizeStatRange` converts from a yield range to the
+price range it implies, `central-bank-demand`'s "no reservation" becomes kind-aware (in price
+space always-in-the-money is a HIGH reservation, not a low one), and the cleared price is turned
+back into the yield the curve is fitted through. The clearing engine itself needs nothing: it
+already orients generically (`u = stat` for YIELD_LIKE, `u = -stat` for PRICE_LIKE) and the dealer
+desks already read `isYieldLike` and adapt.
+
 **13-SOV ROWS 1 AND 2 — THE SOVEREIGN JOINS THE ONE STORE.** Five of the five parallel structures
 were: its own type, its own store, a holdings bucket with no instrument in it, a YIELD clearing,
 and its own curve. The first two are closed but for a deletion.
