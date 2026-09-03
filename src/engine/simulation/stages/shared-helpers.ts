@@ -5,6 +5,7 @@
  */
 
 import { journalPayment, partyId, PendingNetCtx } from './settlement';
+import { currencyOf } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { transferHolding } from '../../ledger/holdings-ledger';
@@ -161,7 +162,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { marketCapOf } from '../../../domain/company';
-import { cashOf, entityCashOf } from '../../ledger/accounts';
+import { cashOf, entityCashOf, settlementCurrencyOf } from '../../ledger/accounts';
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
 export const RECOVERY_PRIOR_WEIGHT = 8;
@@ -510,10 +511,10 @@ export function applyPendingCorporateActionSettlements(
           const desk = { kind: 'BANK_SECURITIES' as const, ticker: bank.ticker };
           const spec = { instrumentType: type as ItemizedHolding['instrumentType'], instrumentId: p.instrumentId, issuerRegion, valueUSD: Math.abs(deltaUSD) };
           if (deltaUSD < 0) {
-            journalPayment(ctx, { payer: { kind: 'COMPANY', ticker: issuerTicker }, payee: desk, amountUSD: -deltaUSD, reason: 'principal redeemed to holder of record' });
+            journalPayment(ctx, { payer: { kind: 'COMPANY', ticker: issuerTicker }, payee: desk, amount: -deltaUSD, currency: currencyOf(issuerRegion), reason: 'principal redeemed to holder of record' });
             transferHolding(ctx.v2, desk, house, spec, 'corporate action: desk paper retired pro rata');
           } else {
-            journalPayment(ctx, { payer: desk, payee: { kind: 'COMPANY', ticker: issuerTicker }, amountUSD: deltaUSD, reason: 'placement paid by holder of record' });
+            journalPayment(ctx, { payer: desk, payee: { kind: 'COMPANY', ticker: issuerTicker }, amount: deltaUSD, currency: currencyOf(issuerRegion), reason: 'placement paid by holder of record' });
             transferHolding(ctx.v2, house, desk, spec, 'corporate action: desk paper placed pro rata');
           }
           touched = true;
@@ -619,7 +620,8 @@ export function applyPendingCorporateActionSettlements(
             const amountUSD = owedUSD * (deskUSD / denomUSD) * (usd / deskBookUSD);
             if (!(amountUSD > 0)) return;
             journalPayment(ctx, {
-              payer, payee: holderPayee(deskId), amountUSD, reason: 'security payment to holder of record',
+              payer, payee: holderPayee(deskId), amount: amountUSD,
+              currency: currencyOf(issuer!.region), reason: 'security payment to holder of record',
             });
             const deskTicker = dealerDeskTicker(deskId);
             if (deskTicker !== undefined) deskIncomeByTicker.set(deskTicker, (deskIncomeByTicker.get(deskTicker) ?? 0) + amountUSD);
@@ -630,7 +632,8 @@ export function applyPendingCorporateActionSettlements(
           journalPayment(ctx, {
             payer,
             payee: { kind: 'HOUSEHOLD', region: issuer.region },
-            amountUSD: owedUSD * (floatUSD / denomUSD),
+            amount: owedUSD * (floatUSD / denomUSD),
+            currency: currencyOf(issuer!.region),
             reason: 'dividend to the public float',
           });
         }
@@ -669,7 +672,8 @@ export function applyPendingCorporateActionSettlements(
           journalPayment(ctx, {
             payer: { kind: 'COMPANY', ticker: issuerTicker },
             payee: { kind: 'INSTITUTION', id: entity.id },
-            amountUSD: shareUSD,
+            amount: shareUSD,
+            currency: settlementCurrencyOf(ctx.v2, { kind: 'COMPANY', ticker: issuerTicker }, { kind: 'INSTITUTION', id: entity.id }),
             reason: 'security payment to holder of record',
           });
           touched = true;
@@ -715,13 +719,15 @@ export function applyPendingCorporateActionSettlements(
           ? {
             payer: { kind: 'COMPANY', ticker: principalIssuerTicker },
             payee: { kind: 'INSTITUTION', id: entity.id },
-            amountUSD: principalCashUSD,
+            amount: principalCashUSD,
+            currency: settlementCurrencyOf(ctx.v2, { kind: 'COMPANY', ticker: principalIssuerTicker }, { kind: 'INSTITUTION', id: entity.id }),
             reason: 'principal redeemed to holder of record',
           }
           : {
             payer: { kind: 'INSTITUTION', id: entity.id },
             payee: { kind: 'COMPANY', ticker: principalIssuerTicker },
-            amountUSD: -principalCashUSD,
+            amount: -principalCashUSD,
+            currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: entity.id }, { kind: 'COMPANY', ticker: principalIssuerTicker }),
             reason: 'placement paid by holder of record',
           });
       } else if (principalCashUSD !== 0) {
@@ -1041,7 +1047,8 @@ export function applyHolderInterestAccruals(
       journalPayment(ctx, {
         payer,
         payee: holderPayee(holderId),
-        amountUSD: accruedUSD,
+        amount: accruedUSD,
+        currency: settlementCurrencyOf(ctx.v2, payer, holderPayee(holderId)),
         reason: 'coupon payment',
       });
     });

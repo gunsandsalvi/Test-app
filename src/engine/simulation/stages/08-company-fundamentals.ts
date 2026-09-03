@@ -11,6 +11,7 @@
 import {
   GameState, Company, NewsItem, RegionId,
 } from '../../../types';
+import { currencyOfId } from '../../../engine2/world';
 import { isActiveCompany, getOutputInventoryUSD } from '../../../domain/company';
 import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } from './shared-helpers';
 import { openCorporateSweepBooks, settleCorporateSweepBooks } from './money-market-fund';
@@ -315,10 +316,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     for (let k = 0; k < mine.journal.n; k++) {
       // §5-WIRES W1: the shard's rows were wired when it journaled them — fold the ROWS.
       journalAppendRow(j, mine.journal.payerId[k], mine.journal.payeeId[k],
-        mine.journal.amountUSD[k], mine.journal.reasonId[k], mine.journal.settleWeek[k]);
+        mine.journal.amount[k], currencyOfId(mine.journal.currencyId[k]), mine.journal.reasonId[k], mine.journal.settleWeek[k]);
       // §7.321 barrier mode: the running net, applied here in the merged (= original) leg
       // order; in normal shard mode emission already applied it and this replay must not.
-      if (deferMergeAppliesNet) applyPendingLeg(ctx, mine.journal.payerId[k], mine.journal.payeeId[k], mine.journal.amountUSD[k], mine.journal.settleWeek[k]);
+      if (deferMergeAppliesNet) applyPendingLeg(ctx, mine.journal.payerId[k], mine.journal.payeeId[k], mine.journal.amount[k], currencyOfId(mine.journal.currencyId[k]), mine.journal.settleWeek[k]);
     }
     mine.holderAccruals.forEach((v, k) => {
       ctx.pendingHolderAccrualUSD.set(k, (ctx.pendingHolderAccrualUSD.get(k) ?? 0) + v);
@@ -488,8 +489,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const replayShardA = (sh: BackAShardOut, i: number): void => {
       const st = (m: Int32Array) => (i > sh.lo ? m[i - 1] : 0);
       for (let k = st(sh.journalMark); k < sh.journalMark[i]; k++) {
-        journalPush(ctx.paymentJournal, sh.journalPayer[k], sh.journalPayee[k], sh.journalAmount[k], sh.journalReason[k], sh.journalSettle[k]);
-        applyPendingLeg(ctx, sh.journalPayer[k], sh.journalPayee[k], sh.journalAmount[k], sh.journalSettle[k]);
+        journalPush(ctx.paymentJournal, sh.journalPayer[k], sh.journalPayee[k], sh.journalAmount[k], currencyOfId(sh.journalCurrency[k]), sh.journalReason[k], sh.journalSettle[k]);
+        applyPendingLeg(ctx, sh.journalPayer[k], sh.journalPayee[k], sh.journalAmount[k], currencyOfId(sh.journalCurrency[k]), sh.journalSettle[k]);
       }
       for (let k = st(sh.holderAccMark); k < sh.holderAccMark[i]; k++) {
         const [key, v] = sh.holderAcc[k];
@@ -514,8 +515,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         for (let k = s(marks.news); k < marks.news[i]; k++) refinanceNews.push(acc.news[k]);
         const J = acc.journal;
         for (let k = s(marks.journalN); k < marks.journalN[i]; k++) {
-          journalAppendRow(ctx.paymentJournal, J.payerId[k], J.payeeId[k], J.amountUSD[k], J.reasonId[k], J.settleWeek[k]);
-          applyPendingLeg(ctx, J.payerId[k], J.payeeId[k], J.amountUSD[k], J.settleWeek[k]);
+          journalAppendRow(ctx.paymentJournal, J.payerId[k], J.payeeId[k], J.amount[k], currencyOfId(J.currencyId[k]), J.reasonId[k], J.settleWeek[k]);
+          applyPendingLeg(ctx, J.payerId[k], J.payeeId[k], J.amount[k], currencyOfId(J.currencyId[k]), J.settleWeek[k]);
         }
         for (let k = s(marks.hAcc); k < marks.hAcc[i]; k++) {
           const [key, v] = sl.hAcc[k];

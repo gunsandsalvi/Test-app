@@ -24,7 +24,7 @@ import { Company, RegionId } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { DealerDeskInventory } from '../../../domain/dealer-desk';
 import { pay, pendingSettlementUSD, PartyRef } from './settlement';
-import { cashOf } from '../../ledger/accounts';
+import { cashOf, settlementCurrencyOf } from '../../ledger/accounts';
 import { transferHolding, HoldingKind } from '../../ledger/holdings-ledger';
 
 export function reconcileHolderPrincipal(args: {
@@ -111,7 +111,7 @@ export function reconcileHolderPrincipal(args: {
       if (paidUSD <= 1) return;
       const payer = payerOf(issuerId);
       if (!payer) return;
-      pay(ctx, { payer, payee: { kind: 'INSTITUTION', id: entityId }, amountUSD: paidUSD, reason });
+      pay(ctx, { payer, payee: { kind: 'INSTITUTION', id: entityId }, amount: paidUSD, currency: settlementCurrencyOf(ctx.v2, payer, { kind: 'INSTITUTION', id: entityId }), reason });
     });
   });
   deskSheets.forEach(({ bank, sheet }) => {
@@ -128,7 +128,7 @@ export function reconcileHolderPrincipal(args: {
         if (payer) {
           // The desk's principal comes back as reserves against the position it loses — an
           // asset swap on the securities account, exactly like a sale (rule 14).
-          pay(ctx, { payer, payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker }, amountUSD: paidUSD, reason });
+          pay(ctx, { payer, payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker }, amount: paidUSD, currency: settlementCurrencyOf(ctx.v2, payer, { kind: 'BANK_SECURITIES', ticker: bank.ticker }), reason });
           // Step 13 (W2): the paper paid down leaves the desk by wire, to the house (the ladder's
           // own retirement wire met it there; the register's share is wired at its write-back).
           transferHolding(ctx.v2, { kind: 'BANK_SECURITIES', ticker: bank.ticker }, { kind: 'CLEARING_HOUSE', region: args.regionId },

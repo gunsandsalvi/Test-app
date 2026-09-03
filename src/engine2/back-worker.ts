@@ -49,6 +49,8 @@ export interface BackAShardOut {
   journalPayer: Int32Array;
   journalPayee: Int32Array;
   journalAmount: Float64Array;
+  /** §3.13c — which money each leg moves, as an index into CURRENCY_CODES. */
+  journalCurrency: Int8Array;
   journalReason: Int32Array;
   /** §5-WIRES N: the row's settle week. */
   journalSettle: Int32Array;
@@ -159,7 +161,8 @@ port.on('message', (job: BackAJob) => {
     lo: job.lo, hi: job.hi,
     journalPayer: journal.payerId.slice(0, journal.n),
     journalPayee: journal.payeeId.slice(0, journal.n),
-    journalAmount: journal.amountUSD.slice(0, journal.n),
+    journalAmount: journal.amount.slice(0, journal.n),
+    journalCurrency: journal.currencyId.slice(0, journal.n),
     journalReason: journal.reasonId.slice(0, journal.n),
     journalSettle: journal.settleWeek.slice(0, journal.n),
     journalMark,

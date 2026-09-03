@@ -18,6 +18,8 @@ import { LotStore, newLotStore, ReadonlyLotStore } from './lots';
 import { ContractTable, newContractTable } from './contracts';
 import { TrancheStore, newTrancheStore, ReadonlyTrancheStore } from './tranches';
 import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
+import { CurrencyCode, CURRENCY_CODES } from '../domain/geography';
+import { FxTable, PARITY_FX } from '../domain/currency';
 
 export interface V2World {
   /** Company id -> table row. Rows are addressing only — order carries no economics. */
@@ -49,22 +51,56 @@ export interface V2World {
    *  week. Companies first (§7.384); the other kinds join per A3's list. Plain typed arrays and
    *  a Map, clone-safe like every table here. */
   accounts: PersistentAccounts;
+  /** §3.13c — THE ONE RATE TABLE: what a unit of each currency is worth in the numéraire, as the
+   *  FX auction last cleared it. It lives on the world rather than on the week's context because
+   *  a balance cannot be read, converted or settled without it, and reads happen everywhere —
+   *  the audits, the UI and the harness hold no context. `fx-clearing` is its only writer. */
+  fx: Record<CurrencyCode, number>;
 }
 
+/**
+ * §3.13c — AN ACCOUNT IS (PARTY, CURRENCY). A party used to have exactly one balance, whose
+ * currency was implied by its region and read by nobody: a cross-border payment subtracted euros
+ * from one row and added dollars to another, and the ledger balanced because it was summing two
+ * things that are not the same kind of thing. A row now carries the money it is denominated in,
+ * a party holds as many rows as it holds currencies, and a payment that crosses converts at the
+ * cleared rate on the way.
+ */
 export interface PersistentAccounts {
   n: number;
-  /** The party's key (`KIND:name`, party.ts) as an interned string id. */
+  /** The account's key (`KIND:name|CUR`, party.ts + the currency) as an interned string id. */
   keyRef: Int32Array;
-  balanceUSD: Float64Array;
+  /** The row's balance, IN THE ROW'S OWN CURRENCY. */
+  balance: Float64Array;
+  /** Which money this row holds, as an index into CURRENCY_CODES. */
+  currencyId: Int8Array;
   rowByKeyRef: Map<number, number>;
-  /** A3.3 — a sector party's rows, one per bank it banks at: party key id → bank ticker → row. */
+  /** Every row of one party, across the currencies it holds: party key id → rows. */
+  rowsByPartyRef: Map<number, number[]>;
+  /** THE MONEY A PARTY KEEPS ITS BOOKS IN, as a currency id: the money its FIRST account was
+   *  opened in, which is by construction the one the seed gave it. Everything a party holds in
+   *  another money is worth what it converts to at this one — a firm does not re-denominate
+   *  because it was paid in yen. */
+  homeByPartyRef: Map<number, number>;
+  /** A3.3 — a sector party's rows, one per (bank, currency): party key id → `TICKER|CUR` → row. */
   bankRowsByParty: Map<number, Map<string, number>>;
 }
 
 export function newPersistentAccounts(): PersistentAccounts {
   const cap = 1 << 12;
-  return { n: 0, keyRef: new Int32Array(cap), balanceUSD: new Float64Array(cap), rowByKeyRef: new Map(), bankRowsByParty: new Map() };
+  return {
+    n: 0, keyRef: new Int32Array(cap), balance: new Float64Array(cap), currencyId: new Int8Array(cap),
+    rowByKeyRef: new Map(), rowsByPartyRef: new Map(), homeByPartyRef: new Map(), bankRowsByParty: new Map(),
+  };
 }
+
+/** The index CURRENCY_CODES holds each currency at — how a row stores its money in one byte. */
+export const CURRENCY_ID: Readonly<Record<CurrencyCode, number>> =
+  CURRENCY_CODES.reduce((m, c, i) => { m[c] = i; return m; }, {} as Record<CurrencyCode, number>);
+export const currencyOfId = (id: number): CurrencyCode => CURRENCY_CODES[id];
+
+/** The world's rates, as the immutable table every conversion takes. */
+export const fxOf = (v2: V2World): FxTable => v2.fx;
 
 /** A per-row fixed-capacity ring of f64 slots. `len` is the actual entry count (these rings'
  *  object fields had no unset-vs-empty distinction to preserve — revRing's does, and keeps
@@ -90,6 +126,9 @@ export function ensureV2(state: V2Host): V2World {
     ratingRing: makeF64Ring(16, 1 << 12),
     oasRing: makeF64Ring(8, 1 << 12),
     accounts: newPersistentAccounts(),
+    // Parity until the FX auction clears once — the only honest opening value, and one every
+    // read must survive, since the audits and the UI can be asked about week 0.
+    fx: { ...PARITY_FX },
   };
   state.v2 = v2;
   return v2;
@@ -103,6 +142,17 @@ export function rowOf(v2: V2World, companyId: string): number {
     v2.rowById.set(companyId, r);
   }
   return r;
+}
+
+/**
+ * A READ of the intern table: the id this string already has, or -1. Distinct from `internString`
+ * because interning MUTATES — a lookup that misses appends, which shifts every id assigned after
+ * it, and ids are addressing for lots, holdings and accounts. A read path that interns is a read
+ * path that changes the world (measured: `pendingSettlement` asking a party's currency moved the
+ * central bank's identity by 0.43B in week 4, purely by renumbering).
+ */
+export function stringRef(v2: V2World, s: string): number {
+  return v2.internedIdByString.get(s) ?? -1;
 }
 
 export function internString(v2: V2World, s: string): number {

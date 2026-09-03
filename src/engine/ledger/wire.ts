@@ -9,6 +9,7 @@
  * wire first, so a money row without a wire cannot exist (W1). Other asset kinds arrive in W2–W5.
  */
 import { PartyRef, partyId, partyOf } from './party';
+import { CurrencyCode, CURRENCY_CODES, NUMERAIRE } from '../../domain/geography';
 import { isVehicleClaim } from '../../domain/assets';
 
 export type AssetKind =
@@ -77,7 +78,13 @@ export function internAsset(asset: string): number {
   return id;
 }
 export const assetText = (id: number): string => assetTextById[id];
-export const MONEY_ASSET_ID = internAsset('USD');
+/** §3.13c — MONEY IS FOUR ASSETS, not one called 'USD'. A wire moving euros moves the EUR asset
+ *  at a price of 1 EUR, which is what "a euro is a euro" means; before this every money wire in
+ *  the model was labelled USD whatever it actually moved. */
+export const MONEY_ASSET_ID_BY_CURRENCY: Readonly<Record<CurrencyCode, number>> =
+  CURRENCY_CODES.reduce((m, c) => { m[c] = internAsset(c); return m; }, {} as Record<CurrencyCode, number>);
+/** The numéraire's money asset — the one a caller that has not yet been given a currency uses. */
+export const MONEY_ASSET_ID = MONEY_ASSET_ID_BY_CURRENCY[NUMERAIRE];
 
 function grow(j: WireJournal): void {
   const cap = j.fromId.length * 2;

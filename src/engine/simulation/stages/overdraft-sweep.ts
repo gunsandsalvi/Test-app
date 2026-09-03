@@ -9,6 +9,7 @@
  * balance is zero at settlement and the money that was spent has a lender.
  */
 import { WeeklyStepContext } from './context';
+import { currencyOf } from '../../../domain/geography';
 import { RegionId } from '../../../types';
 import { pay, PartyRef, pendingSettlementUSD } from './settlement';
 import { issueTranche } from '../../ledger/tranche-ledger';
@@ -53,7 +54,8 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     pay(ctx, {
       payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
       payee: { kind: 'COMPANY', ticker: c.ticker },
-      amountUSD: drawUSD,
+      amount: drawUSD,
+      currency: currencyOf(c.region),
       reason: 'overdraft converted to facility draw at the close',
     });
   });
@@ -77,7 +79,8 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       pay(ctx, {
         payer: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
         payee: { kind: 'INSTITUTION', id: fund.id },
-        amountUSD: drawUSD,
+        amount: drawUSD,
+        currency: currencyOf(fund.region),
         reason: withinLineUSD >= drawUSD ? 'prime brokerage drawdown' : 'prime brokerage drawdown past the line',
       });
       const penalty = withinLineUSD >= drawUSD ? 0 : OVERDRAFT_PENALTY_BPS;
@@ -120,7 +123,8 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
         pay(ctx, {
           payer: { kind: 'BANK_CREDIT', ticker: b.ticker },
           payee: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
-          amountUSD: shareUSD,
+          amount: shareUSD,
+          currency: currencyOf(regionId),
           reason: 'pool overdraft converted to SME facility draw',
         });
       });

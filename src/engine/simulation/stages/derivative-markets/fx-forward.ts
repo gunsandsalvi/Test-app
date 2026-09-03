@@ -42,7 +42,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { REGION_IDS } from '../../../../domain/geography';
 import { derivativesBookOf, initialMarginUSD, strikeDerivatives } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
-import { cashOf, entityCashOf, bankReservesOf } from '../../../ledger/accounts';
+import { cashOf, entityCashOf, bankReservesOf, settlementCurrencyOf } from '../../../ledger/accounts';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
@@ -359,7 +359,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       // Initial margin is the CLIENT'S money sitting with the desk: reserves move, equity does
       // not, and the desk carries it on its funding line as the liability it is.
       if (marginUSD > 0) {
-        pay(ctx, { payer: holder, payee: { kind: 'BANK_SECURITIES', ticker: dealer }, amountUSD: marginUSD, reason: 'fx forward initial margin' });
+        pay(ctx, { payer: holder, payee: { kind: 'BANK_SECURITIES', ticker: dealer }, amount: marginUSD, currency: settlementCurrencyOf(ctx.v2, holder, { kind: 'BANK_SECURITIES', ticker: dealer }), reason: 'fx forward initial margin' });
       }
       desk.chargedPfeUSD += writableUSD * FX.pfeAddOnRate;
       desk.book.grossNotionalUSD += writableUSD;

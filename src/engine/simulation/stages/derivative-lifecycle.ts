@@ -19,6 +19,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { settlementCurrencyOf } from '../../ledger/accounts';
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey } from '../../../domain/derivatives/contract';
 import { DerivativeMarketView } from '../../../domain/derivatives/profile';
@@ -138,7 +139,7 @@ function payToB(ctx: WeeklyStepContext, c: DerivativeContract, usdToB: number, r
   if (!(Math.abs(usdToB) > MIN_LEG_USD)) return;
   const payer = usdToB > 0 ? c.a : c.b;
   const payee = usdToB > 0 ? c.b : c.a;
-  pay(ctx, { payer, payee, amountUSD: Math.abs(usdToB), reason });
+  pay(ctx, { payer, payee, amount: Math.abs(usdToB), currency: settlementCurrencyOf(ctx.v2, payer, payee), reason });
   const pk = derivativePartyKey(payer);
   const ek = derivativePartyKey(payee);
   net.set(pk, (net.get(pk) ?? 0) - Math.abs(usdToB));
@@ -192,7 +193,8 @@ function releaseInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract, vie
   pay(ctx, {
     payer: { kind: 'BANK_SECURITIES', ticker: c.b.ticker },
     payee: c.a,
-    amountUSD: marginUSD,
+    amount: marginUSD,
+    currency: settlementCurrencyOf(ctx.v2, { kind: 'BANK_SECURITIES', ticker: c.b.ticker }, c.a),
     reason: 'initial margin returned',
   });
 }

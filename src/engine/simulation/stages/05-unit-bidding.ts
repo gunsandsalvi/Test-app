@@ -44,7 +44,7 @@ import { capacityMixShares } from '../../../domain/sme-pool';
 import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
 import { convertLocal, localToUsd, fromTable, snapshotFxToUsd, FxToUsd } from '../../../domain/currency';
 import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
-import { laneDistanceNm, REGION_IDS } from '../../../domain/geography';
+import { laneDistanceNm, REGION_IDS, currencyOf } from '../../../domain/geography';
 import { SourcingSplit } from './sourcing-intent';
 import { chooseInvoiceRegion, invoiceCurrencyOf } from '../../../domain/invoice-currency';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
@@ -769,16 +769,16 @@ function settleContracts(
     const supPid = supPidC[ss] >= 0 ? supPidC[ss] : (supPidC[ss] = pidOf(supplier));
     const custPid = custPidC[cs] >= 0 ? custPidC[cs] : (custPidC[cs] = pidOf(customer));
     if (st === CS_DEAD_EXPIRY) {
-      if (buyerLoss[i] > 0.01) payByIds(ctx, supPid, custPid, buyerLoss[i], R_NONPERF);
+      if (buyerLoss[i] > 0.01) payByIds(ctx, supPid, custPid, buyerLoss[i], currencyOf(customer.region), R_NONPERF);
       dead.push(r);
       continue;
     }
     if (sellerLoss[i] > 0.01) {
-      payByIds(ctx, custPid, supPid, sellerLoss[i], R_CANCEL);
+      payByIds(ctx, custPid, supPid, sellerLoss[i], currencyOf(customer.region), R_CANCEL);
     }
     availableBySupplier.set(supplier, availAfter[i]);
     if (topUpL[i] > 0.01) {
-      payByIds(ctx, custPid, supPid, topUpL[i], R_PROGRESS);
+      payByIds(ctx, custPid, supPid, topUpL[i], currencyOf(customer.region), R_PROGRESS);
     }
 
     const supUp = supUpC[ss] ?? (supUpC[ss] = wk.updateOf(supplier));
@@ -794,7 +794,7 @@ function settleContracts(
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualT[i];
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentL[i];
     if (isCapitalGoodCategory) custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentL[i];
-    payByIds(ctx, custPid, supPid, paymentL[i] - appliedL[i], R_DELIVERY);
+    payByIds(ctx, custPid, supPid, paymentL[i] - appliedL[i], currencyOf(customer.region), R_DELIVERY);
     // W4: the goods move supplier → customer by wire; the lot lands with it.
     const deliveryWire = deliverGoods({ kind: 'COMPANY', ticker: supplier.ticker }, { kind: 'COMPANY', ticker: customer.ticker }, subUnitId, actualT[i], actualT[i] > 0 ? paymentL[i] / actualT[i] : 0, 'contract delivery');
     addInputInventory(v2, custUp, customer, subUnitId, supplier.ticker, actualT[i], paymentL[i], nextWeek, deliveryWire);
@@ -804,7 +804,7 @@ function settleContracts(
     }
 
     if (st === CS_DEAD_TERMINATION) {
-      if (buyerLoss[i] > 0.01) payByIds(ctx, supPid, custPid, buyerLoss[i], R_NONPERF);
+      if (buyerLoss[i] > 0.01) payByIds(ctx, supPid, custPid, buyerLoss[i], currencyOf(customer.region), R_NONPERF);
       dead.push(r);
       continue;
     }
@@ -1954,7 +1954,7 @@ function runSubUnitMarkets(
         // stage, so it is named here rather than handed to the seller.
         const sellerPid = pidOfSeller(l.sellerKey, origin);
         const exWorksPaidUSD = l.units * exWorksBuyerMoney;
-        payByIds(ctx, buyerPid, sellerPid, exWorksPaidUSD, R_EXWORKS);
+        payByIds(ctx, buyerPid, sellerPid, exWorksPaidUSD, currencyOf(plan.regionId), R_EXWORKS);
         // WHAT A SELLER EARNED IS WHAT ITS BUYERS PAID IT. A cross-border buyer pays in ITS
         // money and the seller booked the auction's origin-money value of the same lot, so the
         // revenue on its statement and the cash on its account differed by the exchange rate —
@@ -1984,7 +1984,7 @@ function runSubUnitMarkets(
             // buyer-money convention until Money<C> lands at the pay seam.
             ctx.carrierFreightRevenue[carrierTicker] = (ctx.carrierFreightRevenue[carrierTicker] ?? 0)
               + (carrierRegion ? convertLocal(amountUSD, plan.regionId, carrierRegion, sourcing.fxToUsd) : amountUSD);
-            payByIds(ctx, buyerPid, carrierPid, amountUSD, R_FREIGHT);
+            payByIds(ctx, buyerPid, carrierPid, amountUSD, currencyOf(plan.regionId), R_FREIGHT);
           });
           // A lane no NAMED carrier serves is still sailed by SOMEBODY: the unnamed
           // small transporters the SME tier exists to represent. The freight pays the origin
@@ -1997,7 +1997,8 @@ function runSubUnitMarkets(
             pay(ctx, {
               payer: { kind: 'COMPANY', ticker: comp.ticker },
               payee: { kind: 'SEGMENT', region: origin, industry: 'AutomotiveTransport' },
-              amountUSD: unservedUSD,
+              amount: unservedUSD,
+              currency: currencyOf(origin),
               reason: 'freight on a lane no carrier serves',
             });
           }
@@ -2111,7 +2112,7 @@ function runSubUnitMarkets(
         // posted against the UNMODELED boundary on stage 08's cash walk — 9.2B gross over ten
         // weeks passing through a counterparty that does not exist, when the counterparty is
         // right here and has a name.
-        payByIds(ctx, sellerPid, buyerPid, invoicedUSD, R_TRADE_CREDIT);
+        payByIds(ctx, sellerPid, buyerPid, invoicedUSD, currencyOf(plan.regionId), R_TRADE_CREDIT);
         if (S05B_PROF) s05Buyers.invoice += performance.now() - __b1;
         // THE FX SPREAD HAS A PAYER NOW. A cross-border trade converts the buyer's
         // money, and until here every real-economy conversion happened at MID: the desks that
@@ -2135,7 +2136,8 @@ function runSubUnitMarkets(
               pay(ctx, {
                 payer: { kind: 'COMPANY', ticker: comp.ticker },
                 payee: { kind: 'BANK', ticker: b.ticker },
-                amountUSD: fxFeeUSD * share,
+                amount: fxFeeUSD * share,
+                currency: currencyOf(comp.region),
                 reason: 'fx conversion spread',
               });
             });
@@ -2186,7 +2188,7 @@ function runSubUnitMarkets(
       lots.forEach((l) => {
         const amountUSD = l.units * book.clearedPriceUSD;
         if (!(amountUSD > 0)) return;
-        payByIds(ctx, buyerPid, pidOfSeller(l.sellerKey, origin), amountUSD, reason);
+        payByIds(ctx, buyerPid, pidOfSeller(l.sellerKey, origin), amountUSD, currencyOf(origin), reason);
         paidToSellerByKey.set(l.sellerKey, (paidToSellerByKey.get(l.sellerKey) ?? 0) + amountUSD);
         if (buyerParty.kind === 'HOUSEHOLD') {
           addTo(hhSpentByRegion, buyerRegion, amountUSD);
@@ -2209,7 +2211,7 @@ function runSubUnitMarkets(
         const amountUSD = channelUSD * share;
         if (!(amountUSD > 0)) return;
         ctx.channelMarginRevenue[distributorTicker] = (ctx.channelMarginRevenue[distributorTicker] ?? 0) + amountUSD;
-        payByIds(ctx, hhPid.get(buyerRegion)!, pidOfCarrier(distributorTicker), amountUSD, R_CHANNEL);
+        payByIds(ctx, hhPid.get(buyerRegion)!, pidOfCarrier(distributorTicker), amountUSD, currencyOf(buyerRegion), R_CHANNEL);
       });
     });
     // The FX spread's LAST payers: a household or a treasury buying abroad converts at the same
@@ -2223,8 +2225,8 @@ function runSubUnitMarkets(
         const share = totalShare > 0 ? ((b.bankMarketShare ?? 0) || 1) / totalShare : 0;
         if (share <= 0) return;
         const bankPid = partyId({ kind: 'BANK', ticker: b.ticker });
-        if (hhFeeUSD > 0.01) payByIds(ctx, hhPid.get(buyerRegion)!, bankPid, hhFeeUSD * share, R_FX_SPREAD);
-        if (govFeeUSD > 0.01) payByIds(ctx, govPid.get(buyerRegion)!, bankPid, govFeeUSD * share, R_FX_SPREAD);
+        if (hhFeeUSD > 0.01) payByIds(ctx, hhPid.get(buyerRegion)!, bankPid, hhFeeUSD * share, currencyOf(buyerRegion), R_FX_SPREAD);
+        if (govFeeUSD > 0.01) payByIds(ctx, govPid.get(buyerRegion)!, bankPid, govFeeUSD * share, currencyOf(buyerRegion), R_FX_SPREAD);
       });
     });
   });

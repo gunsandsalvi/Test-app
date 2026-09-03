@@ -32,6 +32,7 @@ import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
 
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { RegionId, GameState } from '../../../types';
+import { publishFxRates } from './06-fx-and-trade';
 import { WeeklyStepContext } from './context';
 import { bookHeadOf } from '../../../engine2/holdings';
 import {
@@ -394,6 +395,8 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       : inverse && inverse.rate > 0 ? 1 / inverse.rate : 1;
   });
   ctx.currencyValueUSD = valueUSD;
+  // §3.13c: and the world's rate table, which the ledger settles at.
+  publishFxRates(ctx.v2, ctx.updatedFxPairs);
 
   // ---- XB6: the desks' positions are the fills their OWN schedules produced. Two things this
   // replaces, both the same defect wearing different clothes. (1) The desks used to be flattened

@@ -1,4 +1,4 @@
-import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
+import { entityCashOf, householdDepositsOf, settlementCurrencyOf } from '../../ledger/accounts';
 /**
  * ETF FLOWS — who buys the index, how the shares come into existence, and what the dealers do
  * about the gap.
@@ -45,7 +45,7 @@ import { measuredWeeklyMove, medianOf } from '../../../domain/volatility';
 import { ringFill, rowOf } from '../../../engine2/world';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
@@ -102,7 +102,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       pay(ctx, {
         payer: { kind: 'INSTITUTION', id: fund.id },
         payee: { kind: 'INSTITUTION', id: fund.etf!.sponsorEntityId },
-        amountUSD: feeUSD,
+        amount: feeUSD,
+        currency: currencyOf(fund.region),
         reason: 'etf expense ratio to sponsor',
       });
     }
@@ -468,13 +469,15 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         ? {
           payer: { kind: 'HOUSEHOLD', region: fund.region },
           payee: { kind: 'INSTITUTION', id: fund.id },
-          amountUSD: householdExecutedUSD,
+          amount: householdExecutedUSD,
+          currency: currencyOf(fund.region),
           reason: 'etf household flow',
         }
         : {
           payer: { kind: 'INSTITUTION', id: fund.id },
           payee: { kind: 'HOUSEHOLD', region: fund.region },
-          amountUSD: -householdExecutedUSD,
+          amount: -householdExecutedUSD,
+          currency: currencyOf(fund.region),
           reason: 'etf household flow',
         });
       // The register settles shares at the SAME price this cash leg paid — the fund's
@@ -497,7 +500,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id },
           payee: { kind: 'INSTITUTION', id: fund.id },
-          amountUSD: executedUSD,
+          amount: executedUSD,
+          currency: currencyOf(fund.region),
           reason: 'etf shares created',
         });
       }
@@ -613,7 +617,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: fundId },
             payee: { kind: 'INSTITUTION', id: investorId },
-            amountUSD: cashSliceUSD,
+            amount: cashSliceUSD,
+            currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: fundId }, { kind: 'INSTITUTION', id: investorId }),
             reason: 'etf in-kind redemption: cash slice',
           });
         }

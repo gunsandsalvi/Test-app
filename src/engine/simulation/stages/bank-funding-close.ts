@@ -15,6 +15,7 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import { currencyOf } from '../../../domain/geography';
 import { GameState } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { raiseCentralBankLoanUSD } from './bank-lending';
@@ -34,7 +35,7 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
       if (!bank.isBankEntity || !bank.bankBalanceSheet || !isActiveCompany(bank)) return;
       const sheet = bank.bankBalanceSheet;
       const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
-      const raisedUSD = raiseCentralBankLoanUSD(sheet, householdDepositsAt(ctx.v2, bank.ticker), reservesUSD, bankCashBufferRatioOf(bank));
+      const raisedUSD = raiseCentralBankLoanUSD(sheet, householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)), reservesUSD, bankCashBufferRatioOf(bank));
       if (raisedUSD <= 0) return;
       raisedAny = true;
       // The lender of last resort. The central bank pays with reserves it creates and
@@ -44,7 +45,8 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
       pay(ctx, {
         payer: { kind: 'CENTRAL_BANK', region: bank.region },
         payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker },
-        amountUSD: raisedUSD,
+        amount: raisedUSD,
+        currency: currencyOf(bank.region),
         reason: 'central bank loan drawn',
       });
       if (process.env.FUNDING_TRACE === '1') {

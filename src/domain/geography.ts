@@ -3,15 +3,42 @@
 export type RegionId = 'USA' | 'UK' | 'JPN' | 'EUR';
 
 /**
- * The currency each region issues. The model's RegionIds are places, not money — writing a pair
- * as 'EUR/USA' or 'USA/JPN' names a country where a currency belongs.
+ * THE MONEY. A region is a PLACE; a currency is the money issued there, and the two are not the
+ * same kind of thing — writing a pair as 'EUR/USA' names a country where a currency belongs.
+ *
+ * Every figure this model stores is denominated in one of these, and until now that fact lived
+ * only in a comment: 11,243 identifiers carried a `USD` suffix while `currency.ts` said in its
+ * own header that a figure is held in the money of whoever owns it. A German firm's `cashUSD`
+ * was euros. The suffix is now the type, and a number that moves without one does not compile.
  */
-export const CURRENCY_BY_REGION: Record<RegionId, string> = {
+export type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'JPY';
+
+/** The currency each region issues. */
+export const CURRENCY_BY_REGION: Record<RegionId, CurrencyCode> = {
   USA: 'USD',
   EUR: 'EUR',
   UK: 'GBP',
   JPN: 'JPY',
 };
+
+/** Where each currency is issued — the inverse, which the compiler forces complete. */
+export const REGION_BY_CURRENCY: Record<CurrencyCode, RegionId> = {
+  USD: 'USA',
+  EUR: 'EUR',
+  GBP: 'UK',
+  JPY: 'JPN',
+};
+
+/** Every currency, derived from the Record the compiler forces complete (the REGION_IDS pattern). */
+export const CURRENCY_CODES = Object.keys(REGION_BY_CURRENCY) as readonly CurrencyCode[];
+
+/** The world's numéraire: the one currency whose price in itself is 1 by definition. Every rate
+ *  in the model is quoted against it, which is a measurement convention and not a claim that
+ *  anybody's books are kept in it. */
+export const NUMERAIRE: CurrencyCode = 'USD';
+
+/** The money a region's residents keep their books in. */
+export const currencyOf = (region: RegionId): CurrencyCode => CURRENCY_BY_REGION[region];
 
 /**
  * Every region, derived from the one Record the compiler forces complete (§7.241): a new

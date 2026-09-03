@@ -40,6 +40,7 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import { currencyOf } from '../../../domain/geography';
 import { RegionId, Region, InstitutionalEntity } from '../../../types';
 import { overPledgedByBucket } from '../../../domain/collateral';
 import { BankingSector } from '../../../domain/banking';
@@ -227,7 +228,7 @@ export interface RepoSessionResult {
 export function runRegionalRepoSession(
   regionId: RegionId,
   reg: Region,
-  banks: { ticker: string }[],
+  banks: { ticker: string; region: RegionId }[],
   sheetByTicker: Map<string, BankingSector>,
   ctx: WeeklyStepContext
 ): RepoSessionResult {
@@ -267,7 +268,8 @@ export function runRegionalRepoSession(
     pay(ctx, {
       payer: { kind: 'BANK_SECURITIES', ticker: c.borrowerTicker },
       payee: repoLenderParty(c.lender, regionId),
-      amountUSD: dueUSD,
+      amount: dueUSD,
+      currency: currencyOf(regionId),
       reason: 'repo maturity',
     });
   });
@@ -296,7 +298,7 @@ export function runRegionalRepoSession(
     // short. The same read 07c makes before it bids.
     const settledCashUSD = bankReservesOf(ctx.v2, bank.ticker)
       + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
-    const shortfallUSD = householdDepositsAt(ctx.v2, bank.ticker) * MIN_CASH_BUFFER_RATIO - settledCashUSD;
+    const shortfallUSD = householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO - settledCashUSD;
     if (shortfallUSD <= 0) return;
     const capacityUSD = unencumberedBorrowingCapacityUSD(sheet, haircuts, encumberedByTicker.get(bank.ticker));
     const needUSD = Math.min(shortfallUSD, capacityUSD);
@@ -377,7 +379,7 @@ export function runRegionalRepoSession(
     if (!sheet) return;
     const surplusUSD = bankReservesOf(ctx.v2, bank.ticker)
       + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker })
-      - householdDepositsAt(ctx.v2, bank.ticker) * MIN_CASH_BUFFER_RATIO;
+      - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO;
     if (surplusUSD > 0) bankSurplusUSD.set(bank.ticker, surplusUSD);
   });
   const entitySleeveUSD = new Map(overnightSleeveByEntity);
@@ -581,7 +583,8 @@ export function runRegionalRepoSession(
     pay(ctx, {
       payer: repoLenderParty(c.lender, regionId),
       payee: { kind: 'BANK_SECURITIES', ticker: c.borrowerTicker },
-      amountUSD: c.principalUSD,
+      amount: c.principalUSD,
+      currency: currencyOf(regionId),
       reason: 'repo drawdown',
     });
   });
@@ -645,7 +648,8 @@ export function drawReverseRepoAtTheClose(ctx: WeeklyStepContext): void {
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: e.id },
       payee: { kind: 'CENTRAL_BANK', region: e.region },
-      amountUSD: parkedUSD,
+      amount: parkedUSD,
+      currency: currencyOf(e.region),
       reason: 'reverse repo drawdown',
     });
     return { ...e, rrpLentUSD: parkedUSD, rrpRateAnnual: rateAnnual };
@@ -671,7 +675,8 @@ function returnParkedCash(ctx: WeeklyStepContext, regionId: RegionId): void {
     pay(ctx, {
       payer: { kind: 'CENTRAL_BANK', region: regionId },
       payee: { kind: 'INSTITUTION', id: e.id },
-      amountUSD: principalUSD + interestUSD,
+      amount: principalUSD + interestUSD,
+      currency: currencyOf(regionId),
       reason: 'reverse repo returned with interest',
     });
     return { ...e, rrpLentUSD: 0, rrpRateAnnual: undefined };
@@ -739,7 +744,8 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
         pay(ctx, {
           payer: { kind: 'BANK_SECURITIES', ticker },
           payee,
-          amountUSD: callUSD,
+          amount: callUSD,
+          currency: currencyOf(regionId),
           reason: 'repo collateral call',
         });
       });

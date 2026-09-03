@@ -15,7 +15,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
-import { CURRENCY_BY_REGION } from '../../../domain/geography';
+import { CURRENCY_BY_REGION, CurrencyCode } from '../../../domain/geography';
 import { isActiveCompany } from '../../../domain/company';
 import { TradeInvoice } from '../../../domain/trade-invoice';
 import { WeeklyStepContext } from './context';
@@ -69,7 +69,8 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
     pay(ctx, {
       payer: { kind: 'COMPANY', ticker: invoice.buyerTicker },
       payee: { kind: 'COMPANY', ticker: invoice.sellerTicker },
-      amountUSD: settledUSD,
+      amount: settledUSD,
+      currency: invoice.currency as CurrencyCode,
       reason: 'trade invoice settled',
     });
 

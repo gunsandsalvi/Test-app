@@ -141,7 +141,7 @@ import { unclassifiedReasons } from '../src/engine/simulation/stages/settlement'
 import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
 import { productionLeadWeeksOf, seasonalFactor } from '../src/domain/industry-registry';
 import { SUBUNIT_PHYSICAL, deliveryModeOf } from '../src/domain/goods-physical';
-import { laneDistanceNm, REGION_IDS, REGION_IDS_SEED_ORDER } from '../src/domain/geography';
+import { laneDistanceNm, REGION_IDS, REGION_IDS_SEED_ORDER, currencyOf } from '../src/domain/geography';
 import { laneKey, laneTransitWeeks } from '../src/domain/carrier';
 import { isCarrier } from '../src/engine/simulation/stages/freight-clearing';
 import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
@@ -711,7 +711,7 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
     // between two formula-fed representations is the defect this check keeps dead.
     const bankDepositsUSD = state.companies
       .filter((c) => c.region === region && c.isBankEntity && !c.isDefaulted && !c.mergerAcquired && c.bankBalanceSheet)
-      .reduce((a, c) => a + householdDepositsAt(ensureV2(state), c.ticker), 0);
+      .reduce((a, c) => a + householdDepositsAt(ensureV2(state), c.ticker, currencyOf(c.region)), 0);
     if (bankDepositsUSD > 0) {
       const hsView = householdDepositsOf(ensureV2(state), region);
       if (Math.abs(hsView - bankDepositsUSD) / bankDepositsUSD > 1e-3) {
@@ -992,7 +992,7 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
   // XB1: foreign institutions bid in this auction too, so starving only the DOMESTIC ones no
   // longer under-subscribes it — foreign demand absorbs the paper, which is the mechanism
   // working. A genuinely under-subscribed auction now means every eligible bidder is out of money.
-  { const sv2 = ensureV2(shocked); shocked.institutionalEntities.forEach(e => { resetAccount(sv2, { kind: 'INSTITUTION', id: e.id }, 0); }); }
+  { const sv2 = ensureV2(shocked); shocked.institutionalEntities.forEach(e => { resetAccount(sv2, { kind: 'INSTITUTION', id: e.id }, currencyOf(e.region), 0); }); }
 
   const baselineNext = advanceWeeklyStep(baseline);
   const shockedNext = advanceWeeklyStep(shocked);
@@ -1065,7 +1065,7 @@ const hhModule: HarnessModule = (() => {
         const tierGap = Math.abs(tierSum - (hs.netWorthUSD ?? 0)) / Math.max(1, Math.abs(hs.netWorthUSD ?? 1));
         const bankDeposits = s.companies
           .filter(c => c.region === r && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
-          .reduce((a, c) => a + householdDepositsAt(ensureV2(s), c.ticker), 0);
+          .reduce((a, c) => a + householdDepositsAt(ensureV2(s), c.ticker, currencyOf(c.region)), 0);
         const depGap = Math.abs(householdDepositsOf(ensureV2(s), r) - bankDeposits) / Math.max(1, bankDeposits);
         out.push(`  ${r}: instLiab=${B(instLiab)} held=${B(held)} (gap ${pct(gap)}) | netWorth parts gap ${pct(nwGap)} | tier-sum gap ${pct(tierGap)} | deposits-vs-banks gap ${pct(depGap)}`);
       });

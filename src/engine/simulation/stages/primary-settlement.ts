@@ -18,6 +18,7 @@
  */
 
 import { Company, RegionId } from '../../../types';
+import { currencyOf } from '../../../domain/geography';
 import { PrimaryOffering, UNDERWRITING_FEE_BPS } from '../../../domain/primary-market';
 import { DealerDeskInventory } from '../../../domain/dealer-desk';
 import { WeeklyStepContext, updateBankSheet } from './context';
@@ -95,7 +96,8 @@ export function settlePricedOfferings(
         pay(ctx, {
           payer: { kind: 'BANK_SECURITIES', ticker: lead.ticker },
           payee: { kind: 'COMPANY', ticker: issuerCompany.ticker },
-          amountUSD: residualUSD,
+          amount: residualUSD,
+          currency: currencyOf(issuerCompany.region),
           reason: 'underwriting residual taken by the lead',
         });
       }
@@ -103,7 +105,8 @@ export function settlePricedOfferings(
         pay(ctx, {
           payer: { kind: 'COMPANY', ticker: issuerCompany.ticker },
           payee: { kind: 'BANK', ticker: lead.ticker },
-          amountUSD: feeUSD,
+          amount: feeUSD,
+          currency: currencyOf(issuerCompany.region),
           reason: 'underwriting fee',
         });
       }

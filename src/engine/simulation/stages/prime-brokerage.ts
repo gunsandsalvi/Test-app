@@ -13,6 +13,7 @@ import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
  */
 
 import { GameState, RegionId, Region } from '../../../types';
+import { currencyOf } from '../../../domain/geography';
 import { measuredWeeklyMove, measuredWeeklyBpsMove, medianOf } from '../../../domain/volatility';
 import { ringFill, rowOf } from '../../../engine2/world';
 import { computeSovereignRepoHaircuts } from './repo-clearing';
@@ -74,7 +75,8 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       pay(ctx, {
         payer: { kind: 'INSTITUTION', id: line.fundId },
         payee: { kind: 'BANK', ticker: line.brokerTicker },
-        amountUSD: interestUSD,
+        amount: interestUSD,
+        currency: currencyOf(line.regionId),
         reason: 'prime brokerage financing',
       });
     });
@@ -103,7 +105,8 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: fund.id },
             payee: { kind: 'BANK_SECURITIES', ticker: priorBook.find((l) => l.fundId === fund.id)!.brokerTicker },
-            amountUSD: drawnUSD,
+            amount: drawnUSD,
+            currency: currencyOf(fund.region),
             reason: 'prime brokerage repayment',
           });
         }
@@ -157,14 +160,16 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
           pay(ctx, {
             payer: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
             payee: { kind: 'INSTITUTION', id: fund.id },
-            amountUSD: deltaUSD,
+            amount: deltaUSD,
+            currency: currencyOf(fund.region),
             reason: 'prime brokerage drawdown',
           });
         } else {
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: fund.id },
             payee: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
-            amountUSD: -deltaUSD,
+            amount: -deltaUSD,
+            currency: currencyOf(fund.region),
             reason: 'prime brokerage repayment',
           });
         }
@@ -235,7 +240,8 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
       pay(ctx, {
         payer: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
         payee: { kind: 'INSTITUTION', id: fund.id },
-        amountUSD: drawUSD,
+        amount: drawUSD,
+        currency: currencyOf(fund.region),
         reason: 'prime brokerage drawdown',
       });
       const line = book.find((l) => l.fundId === fund.id);

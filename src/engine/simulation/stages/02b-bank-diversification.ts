@@ -20,6 +20,7 @@
  * money funds).
  */
 
+import { currencyOf } from '../../../domain/geography';
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
@@ -160,7 +161,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       pay(ctx, {
         payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
         payee: { kind: 'COMPANY', ticker: c.ticker },
-        amountUSD: drawUSD,
+        amount: drawUSD,
+        currency: currencyOf(c.region),
         reason: 'overdraft converted to facility draw',
       });
       if (process.env.OD_TRACE === '1' && drawUSD > 50e6) {
@@ -239,7 +241,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           pay(ctx, {
             payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
             payee: { kind: 'BANK', ticker: bank.ticker },
-            amountUSD: interestUSD,
+            amount: interestUSD,
+            currency: currencyOf(regionId),
             reason: 'SME pool interest to the lending bank',
           });
         });
@@ -254,7 +257,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       }, 0);
 
       const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
-      const householdOpenUSD = householdDepositsAt(ctx.v2, bank.ticker);
+      const householdOpenUSD = householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region));
       const { sheet, householdLineUSD: evolvedHouseholdLineUSD } = evolveBankingSector(
         prevSheet,
         { businessLoanUSD: businessLoanBookOf(prevSheet, facilityBookUSD), consumerLoanUSD: consumerLoanBookOf(prevSheet) },
@@ -309,7 +312,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         pay(ctx, {
           payer: { kind: 'CENTRAL_BANK', region: regionId },
           payee: { kind: 'BANK', ticker: bank.ticker },
-          amountUSD: sheet.reservesInterestWeeklyUSD!,
+          amount: sheet.reservesInterestWeeklyUSD!,
+          currency: currencyOf(regionId),
           reason: 'interest on reserves',
         });
         if (reg.centralBankSheet) {
@@ -330,7 +334,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         pay(ctx, {
           payer: { kind: 'BANK_CREDIT', ticker: bank.ticker },
           payee: { kind: 'SEGMENT', region: regionId, industry },
-          amountUSD: grantedUSD,
+          amount: grantedUSD,
+          currency: currencyOf(regionId),
           reason: 'SME loan origination creates the pool deposit',
         });
       });
@@ -365,7 +370,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // at this bank moving by the same amount, posted here as the one account operation.
       const householdLineUSD = evolvedHouseholdLineUSD + household.mortgageOriginationUSD - household.mortgageDischargeUSD
         + household.consumerCreditOriginationUSD - household.principalWeeklyUSD;
-      adjustSectorRow(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, bank.ticker, householdLineUSD - householdOpenUSD);
+      adjustSectorRow(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, bank.ticker, currencyOf(regionId), householdLineUSD - householdOpenUSD);
       // A3.6a/c: the evolution used to return the reserves rounded to the dollar; the rounding is
       // the bank's account moving by the fraction (a stated artifact kept for the run's identity).
       adjustBankReserves(ctx.v2, bank.ticker, Math.round(reservesUSD) - reservesUSD);
@@ -423,13 +428,14 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // leaves here, bank-lending owns the write; the cash leaves at settlement, extinguishing
       // the reserves it created), and its interest is a payment to the named creditor.
       const cbSheet = reg.centralBankSheet;
-      const repaidUSD = repayCentralBankLoanUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), householdDepositsAt(ctx.v2, bank.ticker), bankCashBufferRatioOf(bank));
+      const repaidUSD = repayCentralBankLoanUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)), bankCashBufferRatioOf(bank));
       if (repaidUSD > 0) {
         if (cbSheet) cbSheet.loansToBanksUSD = Math.max(0, (cbSheet.loansToBanksUSD ?? 0) - repaidUSD);
         pay(ctx, {
           payer: { kind: 'BANK_SECURITIES', ticker: bank.ticker },
           payee: { kind: 'CENTRAL_BANK', region: regionId },
-          amountUSD: repaidUSD,
+          amount: repaidUSD,
+          currency: currencyOf(regionId),
           reason: 'central bank loan repaid',
         });
       }
@@ -448,7 +454,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
             pay(ctx, {
               payer: { kind: 'BANK', ticker: bank.ticker },
               payee: { kind: 'COMPANY', ticker: c.ticker },
-              amountUSD: corpInterestUSD * (cashOf(ctx.v2, c) / positiveUSD),
+              amount: corpInterestUSD * (cashOf(ctx.v2, c) / positiveUSD),
+              currency: currencyOf(c.region),
               reason: 'interest on corporate deposits',
             });
           });
@@ -459,7 +466,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         pay(ctx, {
           payer: { kind: 'BANK', ticker: bank.ticker },
           payee: { kind: 'CENTRAL_BANK', region: regionId },
-          amountUSD: cbLoanInterestUSD,
+          amount: cbLoanInterestUSD,
+          currency: currencyOf(regionId),
           reason: 'central bank loan interest',
         });
         if (cbSheet) cbSheet.lastLoanInterestUSD = (cbSheet.lastLoanInterestUSD ?? 0) + cbLoanInterestUSD;

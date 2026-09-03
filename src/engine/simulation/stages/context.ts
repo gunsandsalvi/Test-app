@@ -249,6 +249,11 @@ export interface WeeklyStepContext {
 
   // Stage 05/06 boundary outputs, read by stage 08/12
   marketVolComponent: number;
+  /** §3.13c — THE WEEK'S RATES, as the FX auction last cleared them: what one unit of each money
+   *  is worth in the numéraire. Every payment that crosses a currency converts through this, and
+   *  it is the world's table (`v2.fx`) rather than a copy, so a stage cannot settle at a rate the
+   *  world does not hold. */
+  fx: import('../../../domain/currency').FxTable;
   getFxToUsd: (regionId: RegionId) => number;
   /** WS9/XB2d: each currency's cleared value in USD. Every pair is derived from two of these,
    * so no set of pair moves can violate triangular arbitrage. */
@@ -420,6 +425,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     systemicStressFactorGlobal: 0,
 
     marketVolComponent: 0,
+    fx: ensureV2(state).fx,
     getFxToUsd: () => 1.0,
     currencyValueUSD: undefined,
     bilateralTradeWeeklyUSD: {

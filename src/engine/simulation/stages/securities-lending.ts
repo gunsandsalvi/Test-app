@@ -32,10 +32,10 @@ import { wireHoldingMove } from '../../ledger/holdings-ledger';
 import { realizedAnnualVol } from '../../../domain/volatility';
 import { FULL_SIZE_PRICE_DISCOUNT } from './07e-equity-clearing';
 import { medianOf } from '../../../domain/volatility';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
-import { cashOf } from '../../ledger/accounts';
+import { cashOf, settlementCurrencyOf } from '../../ledger/accounts';
 
 const sblInstrumentId = (regionId: RegionId, companyId: string) => `${regionId}-SBL-${companyId}`;
 export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
@@ -122,7 +122,8 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: loan.lender.id },
             payee: { kind: 'INSTITUTION', id: loan.borrower.id },
-            amountUSD: loan.collateralUSD,
+            amount: loan.collateralUSD,
+            currency: currencyOf(issuer!.region),
             reason: 'stock loan closed on credit event',
           });
         }
@@ -134,7 +135,8 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id: loan.borrower.id },
           payee: { kind: 'INSTITUTION', id: loan.lender.id },
-          amountUSD: feeUSD,
+          amount: feeUSD,
+          currency: currencyOf(comp.region),
           reason: 'stock borrow fee',
         });
       }
@@ -152,13 +154,15 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           ? {
             payer: { kind: 'INSTITUTION', id: loan.borrower.id },
             payee: { kind: 'INSTITUTION', id: loan.lender.id },
-            amountUSD: marginCallUSD,
+            amount: marginCallUSD,
+            currency: currencyOf(comp.region),
             reason: 'stock loan variation margin',
           }
           : {
             payer: { kind: 'INSTITUTION', id: loan.lender.id },
             payee: { kind: 'INSTITUTION', id: loan.borrower.id },
-            amountUSD: -marginCallUSD,
+            amount: -marginCallUSD,
+            currency: currencyOf(comp.region),
             reason: 'stock loan variation margin returned',
           });
         loan.collateralUSD = markedUSD;
@@ -176,7 +180,8 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
             pay(ctx, {
               payer: { kind: 'INSTITUTION', id: loan.lender.id },
               payee: { kind: 'INSTITUTION', id: loan.borrower.id },
-              amountUSD: loan.collateralUSD,
+              amount: loan.collateralUSD,
+              currency: currencyOf(comp.region),
               reason: 'stock loan collateral returned',
             });
           }
@@ -463,7 +468,8 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: d.fundId },
             payee: { kind: 'INSTITUTION', id: lenderId },
-            amountUSD: collateralUSD,
+            amount: collateralUSD,
+            currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: d.fundId }, { kind: 'INSTITUTION', id: lenderId }),
             reason: 'stock loan collateral posted',
           });
           struck.push({

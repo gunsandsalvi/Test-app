@@ -35,7 +35,7 @@ import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
 import { remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS } from '../../bootstrap/population';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 
 /**
  * RULE 19 — `PENSION_CONTRIBUTION_RATE = 0.09` is GONE (COH2). Its own comment carried the exit
@@ -128,13 +128,15 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
         pay(ctx, {
           payer: { kind: 'COMPANY', ticker: comp.ticker },
           payee: { kind: 'INSTITUTION', id },
-          amountUSD: premiumUSD * insurerShare,
+          amount: premiumUSD * insurerShare,
+          currency: currencyOf(comp.region),
           reason: 'insurance premium',
         });
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id },
           payee: { kind: 'COMPANY', ticker: comp.ticker },
-          amountUSD: claimUSD * insurerShare,
+          amount: claimUSD * insurerShare,
+          currency: currencyOf(comp.region),
           reason: 'insurance claim',
         });
       });
@@ -154,13 +156,15 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       pay(ctx, {
         payer: { kind: 'HOUSEHOLD', region },
         payee: { kind: 'INSTITUTION', id },
-        amountUSD: householdPremiumsUSD * share,
+        amount: householdPremiumsUSD * share,
+        currency: currencyOf(region),
         reason: 'insurance premium',
       });
       pay(ctx, {
         payer: { kind: 'INSTITUTION', id },
         payee: { kind: 'HOUSEHOLD', region },
-        amountUSD: householdPremiumsUSD * claimRecoveryRate * share,
+        amount: householdPremiumsUSD * claimRecoveryRate * share,
+        currency: currencyOf(region),
         reason: 'insurance claim',
       });
     });
@@ -190,13 +194,15 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
         pay(ctx, {
           payer: { kind: 'HOUSEHOLD', region },
           payee: { kind: 'INSTITUTION', id: e.id },
-          amountUSD: weeklyContributionsUSD * share,
+          amount: weeklyContributionsUSD * share,
+          currency: currencyOf(region),
           reason: 'pension contribution',
         });
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id: e.id },
           payee: { kind: 'HOUSEHOLD', region },
-          amountUSD: weeklyBenefitsUSD * share,
+          amount: weeklyBenefitsUSD * share,
+          currency: currencyOf(region),
           reason: 'pension benefit',
         });
         // THE ENTITLEMENT IS A STOCK ACCUMULATED FROM REAL FLOWS, not a plug.

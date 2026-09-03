@@ -34,7 +34,7 @@ import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf, trancheRowOf } from '../../../engine2/tranches';
 import { splitAcrossTranches, primarySliceOf } from './register-split';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
@@ -187,7 +187,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // REPO2: the floor is the face of THIS bill bucket actually pledged, not a blended share.
         const encumberedFace = encumberedFaceByBucket(reg.repoBook ?? [], bank.ticker);
         const fundableUSD = Math.min(
-          Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker) * MIN_CASH_BUFFER_RATIO)
+          Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
           leverageHeadroomUSD(sheet, reservesUSD, facilityBookUSD)
         );
@@ -739,7 +739,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             pay(ctx, {
               payer: { kind: 'COMPANY', ticker: iss.comp.ticker },
               payee: { kind: 'BANK_SECURITIES', ticker },
-              amountUSD: repaidUSD,
+              amount: repaidUSD,
+              currency: currencyOf(iss.comp.region),
               reason: 'commercial paper redeemed',
             });
             // Step 13 (W2): the matured paper leaves the desk by wire, to the house (the ladder's
@@ -767,7 +768,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             pay(ctx, {
               payer: { kind: 'COMPANY', ticker: iss.comp.ticker },
               payee: { kind: 'INSTITUTION', id: entityId },
-              amountUSD: repaidUSD,
+              amount: repaidUSD,
+              currency: currencyOf(iss.comp.region),
               reason: 'commercial paper redeemed',
             });
           }
@@ -975,7 +977,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           pay(ctx, {
             payer: { kind: 'BANK_CREDIT', ticker: iss.comp.homeBankTicker ?? '' },
             payee: { kind: 'COMPANY', ticker: iss.comp.ticker },
-            amountUSD: revolverUSD,
+            amount: revolverUSD,
+            currency: currencyOf(iss.comp.region),
             reason: 'revolver drawn: commercial paper roll failed',
           });
           // SETL2b / step 10: a BANK_CREDIT payment writes the borrower's deposit at settlement,

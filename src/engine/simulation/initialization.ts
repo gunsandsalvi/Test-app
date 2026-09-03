@@ -85,10 +85,10 @@ import { unitMassTonnes } from '../../domain/goods-physical';
 import { defect } from '../../domain/defect';
 import { generateCarriers, seedFreightDemand, specMarginalRatesByLane } from '../bootstrap/carriers';
 import { runFreightClearing } from './stages/freight-clearing';
-import { getFxToUsd } from './stages/06-fx-and-trade';
+import { getFxToUsd, publishFxRates } from './stages/06-fx-and-trade';
 import { convertLocal, localToUsd } from '../../domain/currency';
 import { laneTransitWeeks } from '../../domain/carrier';
-import { laneDistanceNm } from '../../domain/geography';
+import { laneDistanceNm, currencyOf } from '../../domain/geography';
 import { InTransitShipment } from './stages/goods-arrival';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { burnInMode, burnIn } from './burn-in';
@@ -780,7 +780,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           const rowUSD = bankShareTotal > 0
             ? Math.round(openingCashOf(seg) * ((b.bankMarketShare ?? 0) / bankShareTotal))
             : Math.round(openingCashOf(seg) / regionBanksForLending.length);
-          seedV2.accounts.balanceUSD[sectorRowAt(seedV2, { kind: 'SEGMENT', region: regionId, industry: seg.industry }, b.ticker)] = rowUSD;
+          seedV2.accounts.balance[sectorRowAt(seedV2, { kind: 'SEGMENT', region: regionId, industry: seg.industry }, b.ticker, currencyOf(regionId))] = rowUSD;
           smeUSD += rowUSD;
         });
         // SETL2 (§7.4 — the seed must open in the shape the weekly engine maintains): a corporate
@@ -1197,6 +1197,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // would produce rather than on an artifact of a guessed fleet (§7.4).
   const seededUnitMassTonnes = seedUnitMassTonnes(regions);
   const seedFxToUsd = (regionId: RegionId) => getFxToUsd(fxPairs, regionId);
+  // §3.13c: the world opens at the seed's rates, so the very first payment across a border
+  // converts at a real number rather than the parity the table opens at.
+  publishFxRates(seedV2, fxPairs);
   const carrierTickers = new Set<string>(companies.map(c => c.ticker));
   const carrierNames = new Set<string>(companies.map(c => c.name));
   const carriers = generateCarriers(regions, seededUnitMassTonnes, seedFxToUsd, carrierTickers, carrierNames);
@@ -1608,10 +1611,10 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // its opening cash — before the close, which reads the banks' corporate and institutional lines
   // off them.
   // A3.1b: a bank has no company account — its money is its reserves (close-seed opens that row).
-  companies.forEach((c) => { if (!(c.isBankEntity && c.bankBalanceSheet)) openAccount(seedV2, { kind: 'COMPANY', ticker: c.ticker }, openingCashOf(c)); });
-  institutionalEntities.forEach((e) => openAccount(seedV2, { kind: 'INSTITUTION', id: e.id }, openingCashOf(e)));
+  companies.forEach((c) => { if (!(c.isBankEntity && c.bankBalanceSheet)) openAccount(seedV2, { kind: 'COMPANY', ticker: c.ticker }, currencyOf(c.region), openingCashOf(c)); });
+  institutionalEntities.forEach((e) => openAccount(seedV2, { kind: 'INSTITUTION', id: e.id }, currencyOf(e.region), openingCashOf(e)));
   // A3.5: the treasury's account opens at the operating balance the seed sized (macro/initialization.ts).
-  (Object.keys(regions) as RegionId[]).forEach((r) => { const cb = regions[r]?.centralBankSheet; if (cb) openAccount(seedV2, { kind: 'GOVERNMENT', region: r }, openingCashOf(cb)); });
+  (Object.keys(regions) as RegionId[]).forEach((r) => { const cb = regions[r]?.centralBankSheet; if (cb) openAccount(seedV2, { kind: 'GOVERNMENT', region: r }, currencyOf(r), openingCashOf(cb)); });
 
   // §5-CLOSE C2: the seed closes — depositors fund the banks (wholesale is nobody's and is
   // zero), the central bank's book backs reserves and the treasury's account to the dollar, and

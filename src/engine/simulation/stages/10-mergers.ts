@@ -8,6 +8,7 @@
  */
 
 import { restateBankSheetStatistics } from '../../../domain/bank-resolution';
+import { currencyOf } from '../../../domain/geography';
 import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
 import { reassignConsignments } from './goods-arrival';
@@ -199,7 +200,8 @@ function runDivestitures(ctx: WeeklyStepContext): void {
       pay(ctx, {
         payer: { kind: 'COMPANY', ticker: parent.ticker },
         payee: { kind: 'COMPANY', ticker: spin.ticker },
-        amountUSD: openingCashUSD,
+        amount: openingCashUSD,
+        currency: currencyOf(parent.region),
         reason: 'divestiture: opening balance carved from parent',
       });
     }
@@ -243,7 +245,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   pay(ctx, {
     payer: { kind: 'COMPANY', ticker: acquirer.ticker },
     payee: { kind: 'COMPANY', ticker: target.ticker },
-    amountUSD: cashPaid,
+    amount: cashPaid,
+    currency: currencyOf(target.region),
     reason: 'merger consideration (cash leg)',
   });
   // The target's own cash comes WITH the business (S5 leak #4) — as a payment, so the two home
@@ -251,7 +254,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   pay(ctx, {
     payer: { kind: 'COMPANY', ticker: target.ticker },
     payee: { kind: 'COMPANY', ticker: acquirer.ticker },
-    amountUSD: Math.max(0, cashOf(ctx.v2, target)),
+    amount: Math.max(0, cashOf(ctx.v2, target)),
+    currency: currencyOf(target.region),
     reason: 'merger: acquired cash absorbed',
   });
   // The tender: the target pays its equity holders of record their cash half, pro rata to the
@@ -273,14 +277,16 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     pay(ctx, {
       payer: { kind: 'COMPANY', ticker: target.ticker },
       payee: { kind: 'INSTITUTION', id: e.id },
-      amountUSD: tenderUSD,
+      amount: tenderUSD,
+      currency: currencyOf(target.region),
       reason: 'merger tender: cash for target shares',
     });
   });
   pay(ctx, {
     payer: { kind: 'COMPANY', ticker: target.ticker },
     payee: { kind: 'HOUSEHOLD', region: target.region },
-    amountUSD: Math.max(0, cashPaid - institutionalTenderUSD),
+    amount: Math.max(0, cashPaid - institutionalTenderUSD),
+    currency: currencyOf(target.region),
     reason: 'merger tender: cash for target shares',
   });
   const newShares = stockPaid / Math.max(1, acquirer.stockPrice);

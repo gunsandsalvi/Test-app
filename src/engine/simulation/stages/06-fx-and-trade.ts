@@ -19,6 +19,8 @@ import { evolveFxPair } from '../../macro/evolution';
 import { WeeklyStepContext } from './context';
 import { MARKET_REGION_IDS } from './05-unit-bidding';
 import { defect } from '../../../domain/defect';
+import { REGION_IDS, CURRENCY_BY_REGION } from '../../../domain/geography';
+import { V2World } from '../../../engine2/world';
 
 /**
  * USD per one unit of a region's currency.
@@ -40,9 +42,20 @@ export function getFxToUsd(updatedFxPairs: FxPair[], regionId: RegionId): number
   return defect(`no FX pair for ${regionId} against USA — the pair table is incomplete`);
 }
 
+/**
+ * §3.13c — PUBLISH THE WEEK'S RATES TO THE WORLD. `v2.fx` is what every conversion in the model
+ * reads: the ledger's when a payment crosses a currency, an audit's when it adds two books
+ * together, the UI's when it shows one number. It is written IN PLACE, because the week's context
+ * holds the same object — a replacement would leave every stage converting at last week's rate.
+ */
+export function publishFxRates(v2: V2World, fxPairs: FxPair[]): void {
+  REGION_IDS.forEach((r) => { v2.fx[CURRENCY_BY_REGION[r]] = getFxToUsd(fxPairs, r); });
+}
+
 export function runFxAndTradeStage(state: GameState, ctx: WeeklyStepContext): void {
   ctx.updatedFxPairs = state.fxPairs.map((fx) => evolveFxPair(fx, ctx.updatedRegions));
   ctx.getFxToUsd = (regionId: RegionId) => getFxToUsd(ctx.updatedFxPairs, regionId);
+  publishFxRates(ctx.v2, ctx.updatedFxPairs);
 
   MARKET_REGION_IDS.forEach(regionId => {
     let exportsWeeklyUSD = 0;

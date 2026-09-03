@@ -19,7 +19,7 @@ import { WeeklyStepContext } from './context';
 import { partyId, partyOf, PartyRef } from '../../ledger/party';
 import { reasonText } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { ladderTotalUSD } from '../../../engine2/tranches';
 import { cashOf, bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
@@ -67,7 +67,7 @@ function outflowsOf(ctx: WeeklyStepContext, party: PartyRef, byTicker: Map<strin
     if (j.payerId[r] !== id) continue;
     const reason = reasonText(j.reasonId[r]);
     const cur = byReason.get(reason) ?? { usd: 0, payee: j.payeeId[r] };
-    cur.usd += j.amountUSD[r];
+    cur.usd += j.amount[r];
     byReason.set(reason, cur);
   }
   const rows = [...byReason.entries()].sort((a, b) => b[1].usd - a[1].usd).slice(0, top);
@@ -240,7 +240,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         kind: 'central bank window',
         category: 'CENTRAL_BANK',
         title: `${b.name} borrows at the central bank`,
-        description: `${b.ticker} draws ${M(now)} at the standing facility: reserves ${M(bankReservesOf(ctx.v2, b.ticker))} against ${M(householdDepositsAt(ctx.v2, b.ticker))} of household deposits, capital ratio ${P(sheet.bankCapitalRatio)}, central bank loan ${M(sheet.centralBankLoanUSD ?? 0)}.`,
+        description: `${b.ticker} draws ${M(now)} at the standing facility: reserves ${M(bankReservesOf(ctx.v2, b.ticker))} against ${M(householdDepositsAt(ctx.v2, b.ticker, currencyOf(b.region)))} of household deposits, capital ratio ${P(sheet.bankCapitalRatio)}, central bank loan ${M(sheet.centralBankLoanUSD ?? 0)}.`,
         refs: [company(b), region(b.region)],
         materialityUSD: now,
         impactRegion: b.region, impactSector: b.sector, affectedTicker: b.ticker,

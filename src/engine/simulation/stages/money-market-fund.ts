@@ -37,7 +37,7 @@ import { WeeklyStepContext } from './context';
 import { computeSovereignBookAnnualYield, ON_RRP_SPREAD_BPS } from '../../macro/banking';
 import { CASH_SLEEVE_OVERNIGHT_SHARE } from './repo-clearing';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 /** The fund's annual expense ratio — a structural primitive like the deposit beta; G6/BP make
@@ -115,7 +115,8 @@ export function divertHouseholdSavingsToMmf(
   pay(ctx, {
     payer: { kind: 'HOUSEHOLD', region: regionId },
     payee: { kind: 'INSTITUTION', id: mmf.id },
-    amountUSD: divertedUSD,
+    amount: divertedUSD,
+    currency: currencyOf(regionId),
     reason: 'household savings into money fund',
   });
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
@@ -302,7 +303,8 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: payerId },
       payee: { kind: 'INSTITUTION', id: e.id },
-      amountUSD: feeUSD * (Math.max(0, institutionTotalAssetsUSD(ctx, e)) / pool),
+      amount: feeUSD * (Math.max(0, institutionTotalAssetsUSD(ctx, e)) / pool),
+      currency: currencyOf(e.region),
       reason: 'money fund management fee',
     });
   });

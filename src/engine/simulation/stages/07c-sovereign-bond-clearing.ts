@@ -66,7 +66,7 @@ import { clearedBookDelta } from '../../ledger/holdings-ledger';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 
@@ -448,7 +448,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const settledCashUSD = reservesUSD
         + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
       const fundableUSD = Math.min(
-        Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker) * MIN_CASH_BUFFER_RATIO)
+        Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
           + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
         leverageHeadroomUSD(sheet, reservesUSD, facilityBookUSD)
       );

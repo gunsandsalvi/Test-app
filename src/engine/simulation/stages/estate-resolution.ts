@@ -15,6 +15,7 @@
  */
 
 import { assertNever } from '../../../domain/defect';
+import { currencyOf } from '../../../domain/geography';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
 import { moveOutputUnits, scrapOutputUnitsTo, moveInputUnits, scrapInputUnits, scrapGoods } from '../../ledger/goods-ledger';
@@ -332,7 +333,8 @@ function sellAssetsToPeers(
     pay(ctx, {
       payer: { kind: 'COMPANY', ticker: peer.ticker },
       payee: { kind: 'COMPANY', ticker: estate.ticker },
-      amountUSD: payUSD,
+      amount: payUSD,
+      currency: currencyOf(estate.regionId),
       reason: 'estate asset sale to peers',
     });
     // What the payment buys, at the same share: the plant at its book value (the buyer's
@@ -393,7 +395,8 @@ function distribute(
       pay(ctx, {
         payer: { kind: 'COMPANY', ticker: estate.ticker },
         payee: holderRef(claim),
-        amountUSD: shareUSD,
+        amount: shareUSD,
+        currency: currencyOf(estate.regionId),
         reason: 'estate distribution',
       });
       reduceHolding(ctx, index, claim, estate.companyId, shareUSD, false);

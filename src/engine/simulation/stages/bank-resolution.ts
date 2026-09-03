@@ -16,6 +16,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { currencyOf } from '../../../domain/geography';
 import { BankingSector, DepositLines } from '../../../domain/banking';
 import { BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
 import {
@@ -136,7 +137,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       const injectionUSD = Math.max(0, assumingCapitalUSD(sheet, facilityBookOf(ctx.v2, bank.ticker)) - sheet.bankEquityUSD);
       if (injectionUSD > 0) {
         pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'BANK', ticker: bank.ticker },
-          amountUSD: injectionUSD, reason: 'resolution: public recapitalisation' });
+          amount: injectionUSD, currency: currencyOf(regionId), reason: 'resolution: public recapitalisation' });
         runSettlementStage(ctx);
         restateBankSheetStatistics(bank.bankBalanceSheet!, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker), facilityBookOf(ctx.v2, bank.ticker));
       }
@@ -171,16 +172,16 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // ---- 2. The cash leg, the guarantee, and the world's links. ----
     if (cashUSD > 0) {
       pay(ctx, { payer: { kind: 'BANK', ticker: bank.ticker }, payee: { kind: 'BANK', ticker: acquirer.ticker },
-        amountUSD: cashUSD, reason: 'resolution: reserves to the assuming bank' });
+        amount: cashUSD, currency: currencyOf(regionId), reason: 'resolution: reserves to the assuming bank' });
     } else if (cashUSD < 0) {
       // An overdrawn failed bank: the assuming bank makes the reserve account whole — part of the
       // net it took over, already in the equity line above.
       pay(ctx, { payer: { kind: 'BANK', ticker: acquirer.ticker }, payee: { kind: 'BANK', ticker: bank.ticker },
-        amountUSD: -cashUSD, reason: 'resolution: overdrawn reserves made whole' });
+        amount: -cashUSD, currency: currencyOf(regionId), reason: 'resolution: overdrawn reserves made whole' });
     }
     if (plan.guaranteeUSD > 0) {
       pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'BANK', ticker: acquirer.ticker },
-        amountUSD: plan.guaranteeUSD, reason: 'resolution: deposit guarantee on the hole' });
+        amount: plan.guaranteeUSD, currency: currencyOf(regionId), reason: 'resolution: deposit guarantee on the hole' });
     }
     rekeyBankLinks(state, ctx, regionId, bank.ticker, acquirer.ticker);
     // Premises and people go with the books: the branches open on Monday under the new name.
@@ -219,7 +220,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     ctx.defaultedTickers.push(bank.ticker);
     if (plan.estateUSD > 0) {
       pay(ctx, { payer: { kind: 'BANK', ticker: acquirer.ticker }, payee: { kind: 'COMPANY', ticker: bank.ticker },
-        amountUSD: plan.estateUSD, reason: 'resolution: net book value paid to the receivership' });
+        amount: plan.estateUSD, currency: currencyOf(regionId), reason: 'resolution: net book value paid to the receivership' });
       runSettlementStage(ctx);
     }
     restateBankSheetStatistics(acquirer.bankBalanceSheet!, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker), facilityBookOf(ctx.v2, acquirer.ticker));

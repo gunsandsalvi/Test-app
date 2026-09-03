@@ -158,14 +158,14 @@ export class BankIdentityTrace {
     if (!this.focusTicker) return;
     const j = ctx.paymentJournal;
     const byKey = new Map<string, number>();
-    for (let i = 0; i < j.amountUSD.length; i++) {
+    for (let i = 0; i < j.amount.length; i++) {
       const payer = partyOf(j.payerId[i]);
       const payee = partyOf(j.payeeId[i]);
       const touch = (ref: typeof payer, sign: 1 | -1) => {
         if ((ref.kind === 'BANK' || ref.kind === 'BANK_SECURITIES' || ref.kind === 'BANK_CREDIT')
           && ref.ticker === this.focusTicker) {
           const key = `${ref.kind} :: ${reasonText(j.reasonId[i])}`;
-          byKey.set(key, (byKey.get(key) ?? 0) + sign * j.amountUSD[i]);
+          byKey.set(key, (byKey.get(key) ?? 0) + sign * j.amount[i]);
         }
       };
       touch(payer, -1);
@@ -175,7 +175,7 @@ export class BankIdentityTrace {
       .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
       .map(([k, usd]) => `${k} ${(usd / 1e6).toFixed(3)}M`);
     console.log(`  [id-journal] w${ctx.nextWeek} ${this.focusTicker} before-${stage}`
-      + ` (journal ${j.amountUSD.length} rows, ${byKey.size} netted for focus):`
+      + ` (journal ${j.amount.length} rows, ${byKey.size} netted for focus):`
       + (rows.length ? `\n    ${rows.join('\n    ')}` : ' <none>'));
   }
 
@@ -195,13 +195,13 @@ export class BankIdentityTrace {
     if (stage !== '08-company-fundamentals' && stage !== 'labor-reconciliation') return;
     const j = ctx.paymentJournal;
     const byReason = new Map<string, number>();
-    for (let i = 0; i < j.amountUSD.length; i++) {
+    for (let i = 0; i < j.amount.length; i++) {
       const payer = partyOf(j.payerId[i]);
       const payee = partyOf(j.payeeId[i]);
       const touch = (ref: typeof payer, sign: 1 | -1) => {
         if (ref.kind === 'INSTITUTION' && ref.id === e.id) {
           const key = reasonText(j.reasonId[i]);
-          byReason.set(key, (byReason.get(key) ?? 0) + sign * j.amountUSD[i]);
+          byReason.set(key, (byReason.get(key) ?? 0) + sign * j.amount[i]);
         }
       };
       touch(payer, -1);

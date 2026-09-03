@@ -21,6 +21,14 @@
  * tallies. The household sector's legs land on its region's banks by market share AT ONCE — the
  * T+1 transit (`pendingBankSettlementUSD`) is gone, and with it N's money in transit.
  *
+ * §3.13c — AN ACCOUNT IS (PARTY, CURRENCY, BANK). A party used to have exactly one balance,
+ * whose currency was implied by the region it sat in and read by nobody, so a payment across a
+ * border took euros out of one row and put dollars into another and the ledger balanced. A row
+ * now carries the money it holds; a party holds as many rows as it holds currencies; a payment
+ * names its currency and lands on the rows of that currency, opening one at the party's own bank
+ * the first time it is paid in a money it has never held. What a party is WORTH is then a
+ * conversion (`cashOf`), at the rate the FX auction last cleared, and never a bare sum.
+ *
  * FIRST SLICE — A MIRROR WITH A GATE. The store is REBUILT from the balance fields
  * before every settlement pass, the pass applies each settled row to it beside the legacy
  * per-kind writes, and `compareToBooks` proves the two agree after the pass — per party, per
@@ -30,11 +38,12 @@
 import { WeeklyStepContext } from '../simulation/stages/context';
 import { PartyRef } from './party';
 import { partyId, partyOf, partyKey, partyFromKey } from './party';
-import { RegionId } from '../../domain/geography';
+import { RegionId, CurrencyCode, CURRENCY_CODES, currencyOf, NUMERAIRE } from '../../domain/geography';
+import { FxTable, convert } from '../../domain/currency';
 import { Company } from '../../domain/company';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { DepositLines } from '../../domain/banking';
-import { V2World, internString, ensureV2 } from '../../engine2/world';
+import { V2World, internString, stringRef, ensureV2, CURRENCY_ID, currencyOfId } from '../../engine2/world';
 
 // ---------------------------------------------------------------------------------------------
 // THIRD SLICE — THE PERSISTENT ACCOUNTS, COMPANIES FIRST (A3.1, ). A company's balance
@@ -48,41 +57,109 @@ import { V2World, internString, ensureV2 } from '../../engine2/world';
 function growPersistent(a: V2World['accounts']): void {
   const cap = a.keyRef.length * 2;
   const k = new Int32Array(cap); k.set(a.keyRef); a.keyRef = k;
-  const b = new Float64Array(cap); b.set(a.balanceUSD); a.balanceUSD = b;
+  const b = new Float64Array(cap); b.set(a.balance); a.balance = b;
+  const c = new Int8Array(cap); c.set(a.currencyId); a.currencyId = c;
 }
 
-/** The party's persistent row, or -1. */
-export function accountRowOf(v2: V2World, party: PartyRef): number {
-  return v2.accounts.rowByKeyRef.get(internString(v2, partyKey(party))) ?? -1;
+/** The one account key: who, and in what money. */
+export const accountKey = (party: PartyRef, currency: CurrencyCode): string => `${partyKey(party)}|${currency}`;
+
+/** The party's row in one currency, or -1. */
+export function accountRowOf(v2: V2World, party: PartyRef, currency: CurrencyCode): number {
+  const ref = stringRef(v2, accountKey(party, currency));
+  return ref < 0 ? -1 : (v2.accounts.rowByKeyRef.get(ref) ?? -1);
 }
 
-/** Open the party's account. Opening one that exists is a defect: a balance has one row. */
-export function openAccount(v2: V2World, party: PartyRef, balanceUSD: number): number {
+/** Open the party's account in one currency. Opening one that exists is a defect: a balance has one row. */
+export function openAccount(v2: V2World, party: PartyRef, currency: CurrencyCode, balance: number): number {
   const a = v2.accounts;
-  const ref = internString(v2, partyKey(party));
-  if (a.rowByKeyRef.has(ref)) throw new Error(`ENGINE DEFECT: account ${partyKey(party)} opened twice`);
+  const ref = internString(v2, accountKey(party, currency));
+  if (a.rowByKeyRef.has(ref)) throw new Error(`ENGINE DEFECT: account ${accountKey(party, currency)} opened twice`);
   if (a.n >= a.keyRef.length) growPersistent(a);
   const r = a.n++;
-  a.keyRef[r] = ref; a.balanceUSD[r] = balanceUSD;
+  a.keyRef[r] = ref; a.balance[r] = balance; a.currencyId[r] = CURRENCY_ID[currency];
   a.rowByKeyRef.set(ref, r);
+  const partyRef = internString(v2, partyKey(party));
+  const rows = a.rowsByPartyRef.get(partyRef);
+  if (rows) rows.push(r); else a.rowsByPartyRef.set(partyRef, [r]);
+  if (!a.homeByPartyRef.has(partyRef)) a.homeByPartyRef.set(partyRef, CURRENCY_ID[currency]);
   return r;
 }
 
-/** The party's row, opened at zero on first sight. */
-export function ensureAccount(v2: V2World, party: PartyRef): number {
-  const r = accountRowOf(v2, party);
-  return r >= 0 ? r : openAccount(v2, party, 0);
+/**
+ * THE MONEY THIS PARTY KEEPS ITS BOOKS IN — the currency its first account was opened in, which
+ * is the one the seed gave it. A party nobody has ever opened an account for keeps no books, and
+ * this is `undefined` rather than a guessed dollar: every read of it returns zero in that case,
+ * because a party with no account holds nothing and there is nothing to denominate.
+ */
+export function homeCurrencyOf(v2: V2World, party: PartyRef): CurrencyCode | undefined {
+  const ref = stringRef(v2, partyKey(party));
+  if (ref < 0) return undefined;
+  const id = v2.accounts.homeByPartyRef.get(ref);
+  return id === undefined ? undefined : currencyOfId(id);
 }
 
-/** The party's balance; a party with no account holds nothing. */
-export function balanceOf(v2: V2World, party: PartyRef): number {
-  const r = accountRowOf(v2, party);
-  return r >= 0 ? v2.accounts.balanceUSD[r] : 0;
+/** Declare the money a party keeps its books in, before it has been paid anything (the seed). */
+export function setHomeCurrency(v2: V2World, party: PartyRef, currency: CurrencyCode): void {
+  v2.accounts.homeByPartyRef.set(internString(v2, partyKey(party)), CURRENCY_ID[currency]);
+}
+
+/** The party's row in one currency, opened at zero on first sight. */
+export function ensureAccount(v2: V2World, party: PartyRef, currency: CurrencyCode): number {
+  const r = accountRowOf(v2, party, currency);
+  return r >= 0 ? r : openAccount(v2, party, currency, 0);
+}
+
+/** The party's balance in ONE currency; a party with no such account holds none of it. */
+export function balanceOf(v2: V2World, party: PartyRef, currency: CurrencyCode): number {
+  const r = accountRowOf(v2, party, currency);
+  return r >= 0 ? v2.accounts.balance[r] : 0;
+}
+
+/**
+ * What the party holds, expressed in ONE money: every currency row it has, converted at the rate
+ * the FX auction last cleared. A holder of dollars and yen is worth one number only once someone
+ * says in which money — that is the whole content of §3.13c, and why no read returns a bare sum.
+ */
+export function balanceOfIn(v2: V2World, party: PartyRef, currency: CurrencyCode): number {
+  const ref = stringRef(v2, partyKey(party));
+  const rows = ref < 0 ? undefined : v2.accounts.rowsByPartyRef.get(ref);
+  if (!rows) return 0;
+  if (rows.length === 1) {
+    const r = rows[0];
+    return convert(v2.accounts.balance[r], currencyOfId(v2.accounts.currencyId[r]), currency, v2.fx);
+  }
+  let total = 0;
+  for (const r of rows) total += convert(v2.accounts.balance[r], currencyOfId(v2.accounts.currencyId[r]), currency, v2.fx);
+  return total;
+}
+
+/**
+ * THE MONEY A PAYMENT BETWEEN THESE TWO SETTLES IN, where the obligation itself does not say.
+ *
+ * Most payments name their currency outright: a wage is in the employer's money, a coupon in the
+ * bond's, an invoice in the invoice's. What is left is the bilateral financial flows — a capital
+ * call, a management fee, variation margin, a broker's drawdown — where the contract exists only
+ * as two party ids. For those the obligation is denominated in the PAYER's book money, the money
+ * it is actually able to pay in, and the payee converts on receipt like any foreign receipt.
+ *
+ * This is a stated convention, not a derivation, and it is the one place §3.13c leaves one: an
+ * audit that finds a flow whose two parties keep different books is finding a contract that
+ * should carry its own currency field. Named here so there is exactly one of it.
+ */
+export function settlementCurrencyOf(v2: V2World, payer: PartyRef, payee: PartyRef): CurrencyCode {
+  return homeCurrencyOf(v2, payer) ?? homeCurrencyOf(v2, payee) ?? NUMERAIRE;
+}
+
+/** What the party holds, in the money it keeps its books in. */
+export function ownMoneyBalanceOf(v2: V2World, party: PartyRef): number {
+  const home = homeCurrencyOf(v2, party);
+  return home === undefined ? 0 : balanceOfIn(v2, party, home);
 }
 
 /** A balance SET by fiat — the harness's shocks only; no stage writes a balance. */
-export function resetAccount(v2: V2World, party: PartyRef, balanceUSD: number): void {
-  v2.accounts.balanceUSD[ensureAccount(v2, party)] = balanceUSD;
+export function resetAccount(v2: V2World, party: PartyRef, currency: CurrencyCode, balance: number): void {
+  v2.accounts.balance[ensureAccount(v2, party, currency)] = balance;
 }
 
 /**
@@ -107,49 +184,66 @@ export function seedHouseholdLineOf(sheet: object): number { return seedHousehol
 // this week's market shares. A bank's SME line is the sum of
 // the pool rows at it; its household line the household sector's row at it. ----
 
-/** The sector party's row at a bank, opened at zero on first sight. */
-export function sectorRowAt(v2: V2World, party: PartyRef, bankTicker: string): number {
+/** How a sector party's per-bank rows are keyed: one row per bank AND per money held there. */
+const bankSlot = (bankTicker: string, currency: CurrencyCode): string => `${bankTicker}|${currency}`;
+
+/** The sector party's row at a bank in one currency, opened at zero on first sight. */
+export function sectorRowAt(v2: V2World, party: PartyRef, bankTicker: string, currency: CurrencyCode): number {
   const a = v2.accounts;
   const ref = internString(v2, partyKey(party));
   let byBank = a.bankRowsByParty.get(ref);
   if (!byBank) { byBank = new Map(); a.bankRowsByParty.set(ref, byBank); }
-  let r = byBank.get(bankTicker);
+  const slot = bankSlot(bankTicker, currency);
+  let r = byBank.get(slot);
   if (r === undefined) {
     if (a.n >= a.keyRef.length) growPersistent(a);
     r = a.n++;
-    a.keyRef[r] = internString(v2, `${partyKey(party)}@${bankTicker}`); a.balanceUSD[r] = 0;
-    byBank.set(bankTicker, r);
+    a.keyRef[r] = internString(v2, `${partyKey(party)}@${slot}`);
+    a.balance[r] = 0; a.currencyId[r] = CURRENCY_ID[currency];
+    byBank.set(slot, r);
   }
   return r;
 }
 
-/** A sector party's balance: the sum of its rows across its region's banks. */
-export function sectorCashOf(v2: V2World, party: PartyRef): number {
-  const byBank = v2.accounts.bankRowsByParty.get(internString(v2, partyKey(party)));
+/** A sector party's balance across its banks, expressed in ONE money. */
+export function sectorCashOf(v2: V2World, party: PartyRef, currency: CurrencyCode): number {
+  const ref = stringRef(v2, partyKey(party));
+  const byBank = ref < 0 ? undefined : v2.accounts.bankRowsByParty.get(ref);
   if (!byBank) return 0;
-  let usd = 0; byBank.forEach((r) => { usd += v2.accounts.balanceUSD[r]; });
-  return usd;
+  let total = 0;
+  byBank.forEach((r) => { total += convert(v2.accounts.balance[r], currencyOfId(v2.accounts.currencyId[r]), currency, v2.fx); });
+  return total;
 }
-/** A pool's cash. */
+/** A pool's cash, in its own region's money. */
 export const poolCashOf = (v2: V2World, region: RegionId, industry: string): number =>
-  sectorCashOf(v2, { kind: 'SEGMENT', region, industry: industry as never });
-/** The household sector's deposits (A3.4). */
+  sectorCashOf(v2, { kind: 'SEGMENT', region, industry: industry as never }, currencyOf(region));
+/** The household sector's deposits (A3.4), in its own region's money. */
 export const householdDepositsOf = (v2: V2World, region: RegionId): number =>
-  sectorCashOf(v2, { kind: 'HOUSEHOLD', region });
+  sectorCashOf(v2, { kind: 'HOUSEHOLD', region }, currencyOf(region));
 
-/** A bank's line of one sector kind: every such party's row at it. */
-function sectorDepositsAt(v2: V2World, bankTicker: string, kind: 'SEGMENT' | 'HOUSEHOLD'): number {
-  let usd = 0;
+/** A bank's line of one sector kind: every such party's row at it, in the BANK's money — a
+ *  deposit line is what the bank owes, and a bank keeps its book in one money. */
+function sectorDepositsAt(v2: V2World, bankTicker: string, kind: 'SEGMENT' | 'HOUSEHOLD', currency: CurrencyCode): number {
+  let total = 0;
   v2.accounts.bankRowsByParty.forEach((byBank, partyRef) => {
     if (!v2.internedStrings[partyRef].startsWith(kind + ':')) return;
-    const r = byBank.get(bankTicker); if (r !== undefined) usd += v2.accounts.balanceUSD[r];
+    byBank.forEach((r, slot) => {
+      if (!slot.startsWith(bankTicker + '|')) return;
+      total += convert(v2.accounts.balance[r], currencyOfId(v2.accounts.currencyId[r]), currency, v2.fx);
+    });
   });
-  return usd;
+  return total;
 }
-/** A bank's SME deposit line: every pool's row at it. */
-export const smeDepositsAt = (v2: V2World, bankTicker: string): number => sectorDepositsAt(v2, bankTicker, 'SEGMENT');
+/** A bank's SME deposit line: every pool's row at it, in the bank's own money. The currency is
+ *  the CALLER's to name — a bank's money is a fact about the bank, and every caller here holds
+ *  the bank itself. (Deriving it from the bank's own account instead made the seed's funding
+ *  residual read a line before the account existed: the SME line came back zero and the
+ *  household residual swallowed it, 10.6B on the largest US bank.) */
+export const smeDepositsAt = (v2: V2World, bankTicker: string, currency: CurrencyCode): number =>
+  sectorDepositsAt(v2, bankTicker, 'SEGMENT', currency);
 /** A bank's household deposit line: the household sector's row at it (A3.4). */
-export const householdDepositsAt = (v2: V2World, bankTicker: string): number => sectorDepositsAt(v2, bankTicker, 'HOUSEHOLD');
+export const householdDepositsAt = (v2: V2World, bankTicker: string, currency: CurrencyCode): number =>
+  sectorDepositsAt(v2, bankTicker, 'HOUSEHOLD', currency);
 
 // ---- A3.6c-ii — THE CORPORATE AND INSTITUTIONAL LINES ARE THE DEPOSITORS' ACCOUNTS. A bank's
 // corporate line is the sum of the accounts of the firms whose house bank it is (a resolved
@@ -158,6 +252,11 @@ export const householdDepositsAt = (v2: V2World, bankTicker: string): number => 
 // is the number the projection used to write. No field carries either. ----
 
 type Depositor = { homeBankTicker?: string };
+/** The money a bank keeps its book in, off the bank itself. */
+const bankMoneyOf = (companies: readonly { ticker: string; region?: RegionId }[], bankTicker: string): CurrencyCode => {
+  for (const c of companies) if (c.ticker === bankTicker && c.region) return currencyOf(c.region);
+  return NUMERAIRE;
+};
 /** A bank's corporate deposit line: every firm banking there, its account. */
 export function corporateDepositsAt(v2: V2World, companies: readonly (Depositor & Pick<Company, 'ticker' | 'isBankEntity' | 'bankBalanceSheet'>)[], bankTicker: string): number {
   let usd = 0;
@@ -176,15 +275,16 @@ export function institutionalDepositsAt(v2: V2World, entities: readonly (Deposit
 /** A bank's four deposit lines, read off the ledger. */
 export function depositLinesAt(
   v2: V2World,
-  companies: readonly (Depositor & Pick<Company, 'ticker' | 'isBankEntity' | 'bankBalanceSheet'>)[],
+  companies: readonly (Depositor & Pick<Company, 'ticker' | 'isBankEntity' | 'bankBalanceSheet'> & { region?: RegionId })[],
   entities: readonly (Depositor & Pick<InstitutionalEntity, 'id'>)[],
   bankTicker: string
 ): DepositLines {
+  const money = bankMoneyOf(companies, bankTicker);
   return {
-    householdUSD: householdDepositsAt(v2, bankTicker),
+    householdUSD: householdDepositsAt(v2, bankTicker, money),
     corporateUSD: corporateDepositsAt(v2, companies, bankTicker),
     institutionalUSD: institutionalDepositsAt(v2, entities, bankTicker),
-    smeUSD: smeDepositsAt(v2, bankTicker),
+    smeUSD: smeDepositsAt(v2, bankTicker, money),
   };
 }
 /** The lines in the week: the pass's own holders. */
@@ -202,22 +302,25 @@ export const stateDepositLines = (state: { companies: readonly Company[]; instit
  * moving by the same amount, so the line and the row cannot disagree. Retired when those
  * passes are account operations themselves (A3.6).
  */
-export function adjustSectorRow(v2: V2World, party: PartyRef, bankTicker: string, deltaUSD: number): void {
-  if (deltaUSD === 0) return;
-  v2.accounts.balanceUSD[sectorRowAt(v2, party, bankTicker)] += deltaUSD;
+export function adjustSectorRow(v2: V2World, party: PartyRef, bankTicker: string, currency: CurrencyCode, delta: number): void {
+  if (delta === 0) return;
+  v2.accounts.balance[sectorRowAt(v2, party, bankTicker, currency)] += delta;
 }
 
 /** A bank leaves (resolved, merged): every sector party's row at it joins its row at the assuming bank. */
 export function moveSectorRowsToBank(v2: V2World, fromTicker: string, toTicker: string): void {
   v2.accounts.bankRowsByParty.forEach((byBank, partyRef) => {
-    const r = byBank.get(fromTicker);
-    if (r === undefined) return;
     const party = partyFromKey(v2.internedStrings[partyRef]);
     if (!party) return;
-    const to = sectorRowAt(v2, party, toTicker);
-    v2.accounts.balanceUSD[to] += v2.accounts.balanceUSD[r];
-    v2.accounts.balanceUSD[r] = 0;
-    byBank.delete(fromTicker);
+    // Each money moves to the same money at the assuming bank: an assumed deposit does not
+    // change what it is denominated in, and converting one here would book an FX gain nobody made.
+    [...byBank.keys()].filter((k) => k.startsWith(fromTicker + '|')).forEach((slot) => {
+      const r = byBank.get(slot)!;
+      const to = sectorRowAt(v2, party, toTicker, currencyOfId(v2.accounts.currencyId[r]));
+      v2.accounts.balance[to] += v2.accounts.balance[r];
+      v2.accounts.balance[r] = 0;
+      byBank.delete(slot);
+    });
   });
 }
 
@@ -231,46 +334,57 @@ export function moveSectorRowsToBank(v2: V2World, fromTicker: string, toTicker: 
 // `adjustSectorRow` set; the mirror reports a line that moved without its row. The field's
 // readers flip to `bankReservesOf` and the field dies in A3.6's next slice. ----
 
-/** A bank's reserves: its account (A3.6c — the sheet carries no line; this is the one read). */
+/** A bank's reserves, in its own money: every account it holds, converted at the cleared rate.
+ *  (A3.6c — the sheet carries no line; this is the one read.) */
 export function bankReservesOf(v2: V2World, bankTicker: string): number {
-  return balanceOf(v2, { kind: 'BANK', ticker: bankTicker });
+  return ownMoneyBalanceOf(v2, { kind: 'BANK', ticker: bankTicker });
 }
 
-/** The bank's reserve row; a bank the seed did not open (no central bank in its region, a sheet
- *  scaled from the aggregate) opens at its line the first time a pass sees it. */
-export function reserveRowOf(v2: V2World, bankTicker: string, openingUSD: number): number {
+/** The bank's reserve row in ITS OWN money; a bank the seed did not open (no central bank in its
+ *  region, a sheet scaled from the aggregate) opens at its line the first time a pass sees it. */
+export function reserveRowOf(v2: V2World, bankTicker: string, currency: CurrencyCode, opening: number): number {
   const party: PartyRef = { kind: 'BANK', ticker: bankTicker };
-  const r = accountRowOf(v2, party);
-  return r >= 0 ? r : openAccount(v2, party, openingUSD);
+  const r = accountRowOf(v2, party, currency);
+  return r >= 0 ? r : openAccount(v2, party, currency, opening);
 }
 
 /** A bank's own book moves its reserves line between passes: the row moves by the same amount.
  *  A bank with no row yet is opened at its line by the next mirror, which already carries the move. */
-export function adjustBankReserves(v2: V2World, bankTicker: string, deltaUSD: number): void {
-  if (deltaUSD === 0) return;
-  const r = accountRowOf(v2, { kind: 'BANK', ticker: bankTicker });
-  if (r >= 0) v2.accounts.balanceUSD[r] += deltaUSD;
+export function adjustBankReserves(v2: V2World, bankTicker: string, delta: number): void {
+  if (delta === 0) return;
+  const party: PartyRef = { kind: 'BANK', ticker: bankTicker };
+  const home = homeCurrencyOf(v2, party);
+  if (home === undefined) return;
+  const r = accountRowOf(v2, party, home);
+  if (r >= 0) v2.accounts.balance[r] += delta;
 }
 
-/** A bank leaves whole (a merger): its reserves join the acquirer's row. */
+/** A bank leaves whole (a merger): its reserves join the acquirer's rows, money by money. */
 export function moveBankReserves(v2: V2World, fromTicker: string, toTicker: string): void {
-  const from = accountRowOf(v2, { kind: 'BANK', ticker: fromTicker });
-  if (from < 0) return;
-  const to = reserveRowOf(v2, toTicker, 0);
-  v2.accounts.balanceUSD[to] += v2.accounts.balanceUSD[from];
-  v2.accounts.balanceUSD[from] = 0;
+  const from: PartyRef = { kind: 'BANK', ticker: fromTicker };
+  const fromRef = stringRef(v2, partyKey(from));
+  const rows = fromRef < 0 ? undefined : v2.accounts.rowsByPartyRef.get(fromRef);
+  if (!rows) return;
+  rows.forEach((r) => {
+    const cur = currencyOfId(v2.accounts.currencyId[r]);
+    const to = reserveRowOf(v2, toTicker, cur, 0);
+    v2.accounts.balance[to] += v2.accounts.balance[r];
+    v2.accounts.balance[r] = 0;
+  });
 }
 
-/** An institutional entity's cash: its account (A3.2). */
+/** An institutional entity's cash, in its own money: its accounts, converted (A3.2). */
 export function entityCashOf(v2: V2World, e: Pick<InstitutionalEntity, 'id'>): number {
-  return balanceOf(v2, { kind: 'INSTITUTION', id: e.id });
+  return ownMoneyBalanceOf(v2, { kind: 'INSTITUTION', id: e.id });
 }
 
 // ---- A3.5 — THE TREASURY'S ACCOUNT IS ONE ROW. Its balance at the central bank and the
 // ways-and-means advance are the two signs of the government party's net position: positive is
 // the account, negative the advance drawn. The seed opens it at the operating balance; every
 // pass moves it by the treasury's own payments; nothing else writes it. ----
-export function treasuryNetOf(v2: V2World, region: RegionId): number { return balanceOf(v2, { kind: 'GOVERNMENT', region }); }
+export function treasuryNetOf(v2: V2World, region: RegionId): number {
+  return balanceOfIn(v2, { kind: 'GOVERNMENT', region }, currencyOf(region));
+}
 /** The treasury's account at the central bank (a liability of the central bank). */
 export function treasuryAccountOf(v2: V2World, region: RegionId): number { return Math.max(0, treasuryNetOf(v2, region)); }
 /** The ways-and-means advance drawn (an asset of the central bank). */
@@ -280,7 +394,7 @@ export function waysAndMeansOf(v2: V2World, region: RegionId): number { return M
  *  goods-market self settles on its reserve row and it has no company row at all. */
 export function cashOf(v2: V2World, c: Pick<Company, 'ticker'> & { isBankEntity?: boolean; bankBalanceSheet?: unknown }): number {
   if (c.isBankEntity && c.bankBalanceSheet) return bankReservesOf(v2, c.ticker);
-  return balanceOf(v2, { kind: 'COMPANY', ticker: c.ticker });
+  return ownMoneyBalanceOf(v2, { kind: 'COMPANY', ticker: c.ticker });
 }
 
 /** Which line of a bank's book (or of the central bank's) a row is. */
@@ -297,15 +411,25 @@ export interface AccountStore {
   /** Index into `banks` (a ticker per index), or AT_CENTRAL_BANK / AT_NOWHERE. */
   bankIdx: Int32Array;
   classId: Int8Array;
-  balanceUSD: Float64Array;
+  /** Which money this row holds, as an index into CURRENCY_CODES. */
+  currencyId: Int8Array;
+  /** The row's balance, IN THE ROW'S OWN CURRENCY. */
+  balance: Float64Array;
   /** The balance the row opened the pass with — a line moves by (balance − opening). */
-  openingUSD: Float64Array;
-  /** Bank tickers by index, and the row of each bank's OWN reserve account. */
+  opening: Float64Array;
+  /** Bank tickers by index, and the row of each bank's OWN reserve account in its own money. */
   banks: string[];
   reserveRowOfBank: Int32Array;
   bankIdxOfTicker: Map<string, number>;
-  /** The rows of a party, in order (one for most parties; per bank for the sector parties). */
+  /** A bank's reserve row in a money that is not its own, opened the first time one arrives:
+   *  `bankIdx * CURRENCY_CODES.length + currencyId` → row. A bank funding a euro deposit holds
+   *  euro liquidity against it; netting that into its own reserves at the week's rate would
+   *  book an FX position the bank never took. */
+  foreignReserveRow: Map<number, number>;
+  /** The rows of a party, in order, across every money it holds. */
   rowsOfParty: Map<number, number[]>;
+  /** The rows of a party in ONE money, in bank order: party → currency id → rows. */
+  rowsOfPartyCur: Map<number, Map<number, number[]>>;
   /** For the multi-row sector parties, how a payment splits across their rows. */
   splitOfParty: Map<number, Float64Array>;
   /** A4 — a bank's OWN-ACCOUNT parties (its BANK party and its goods-market self, both on its
@@ -320,14 +444,17 @@ function grow(s: AccountStore): void {
   const gi = (o: Int32Array) => { const a = new Int32Array(cap); a.set(o); return a; };
   const g8 = (o: Int8Array) => { const a = new Int8Array(cap); a.set(o); return a; };
   const gf = (o: Float64Array) => { const a = new Float64Array(cap); a.set(o); return a; };
-  s.partyId = gi(s.partyId); s.bankIdx = gi(s.bankIdx); s.classId = g8(s.classId); s.balanceUSD = gf(s.balanceUSD); s.openingUSD = gf(s.openingUSD);
+  s.partyId = gi(s.partyId); s.bankIdx = gi(s.bankIdx); s.classId = g8(s.classId);
+  s.currencyId = g8(s.currencyId); s.balance = gf(s.balance); s.opening = gf(s.opening);
 }
 
 export function newAccountStore(): AccountStore {
   const cap = 1 << 12;
   return {
-    n: 0, partyId: new Int32Array(cap), bankIdx: new Int32Array(cap), classId: new Int8Array(cap), balanceUSD: new Float64Array(cap), openingUSD: new Float64Array(cap),
-    banks: [], reserveRowOfBank: new Int32Array(0), bankIdxOfTicker: new Map(), rowsOfParty: new Map(), splitOfParty: new Map(),
+    n: 0, partyId: new Int32Array(cap), bankIdx: new Int32Array(cap), classId: new Int8Array(cap),
+    currencyId: new Int8Array(cap), balance: new Float64Array(cap), opening: new Float64Array(cap),
+    banks: [], reserveRowOfBank: new Int32Array(0), bankIdxOfTicker: new Map(), foreignReserveRow: new Map(),
+    rowsOfParty: new Map(), rowsOfPartyCur: new Map(), splitOfParty: new Map(),
     ownAccountBankOfParty: new Map(), ownNetByParty: new Map(),
   };
 }
@@ -338,21 +465,63 @@ function bankIndex(s: AccountStore, ticker: string): number {
   return i;
 }
 
-export function openRow(s: AccountStore, party: number, bankIdx: number, cls: AccountClass, balanceUSD: number): number {
+export function openRow(s: AccountStore, party: number, bankIdx: number, cls: AccountClass, currency: CurrencyCode, balance: number): number {
   if (s.n >= s.partyId.length) grow(s);
   const r = s.n++;
-  s.partyId[r] = party; s.bankIdx[r] = bankIdx; s.classId[r] = ACCOUNT_CLASSES.indexOf(cls); s.balanceUSD[r] = balanceUSD; s.openingUSD[r] = balanceUSD;
+  const cur = CURRENCY_ID[currency];
+  s.partyId[r] = party; s.bankIdx[r] = bankIdx; s.classId[r] = ACCOUNT_CLASSES.indexOf(cls);
+  s.currencyId[r] = cur; s.balance[r] = balance; s.opening[r] = balance;
   const rows = s.rowsOfParty.get(party);
   if (rows) rows.push(r); else s.rowsOfParty.set(party, [r]);
+  let byCur = s.rowsOfPartyCur.get(party);
+  if (!byCur) { byCur = new Map(); s.rowsOfPartyCur.set(party, byCur); }
+  const inCur = byCur.get(cur);
+  if (inCur) inCur.push(r); else byCur.set(cur, [r]);
   return r;
 }
 
-/** Σ of a party's rows — its balance across every bank it holds money at. */
-export function balanceOfParty(s: AccountStore, party: number): number {
-  const rows = s.rowsOfParty.get(party);
+/** Σ of a party's rows in ONE money — its balance across every bank it holds that money at. */
+export function balanceOfPartyIn(s: AccountStore, party: number, currency: CurrencyCode): number {
+  const rows = s.rowsOfPartyCur.get(party)?.get(CURRENCY_ID[currency]);
   if (!rows) return 0;
-  let b = 0; for (const r of rows) b += s.balanceUSD[r];
+  let b = 0; for (const r of rows) b += s.balance[r];
   return b;
+}
+
+/**
+ * The party's rows in one money, opening them if it has never held it: one per bank it banks at,
+ * in the same order as its home-money rows, so the split that spreads a sector leg across its
+ * banks lines up. This is the moment a firm acquires a foreign-currency account, and it happens
+ * because somebody paid it in that money — which is how it happens in the world.
+ */
+function rowsInCurrency(s: AccountStore, party: number, currency: CurrencyCode): number[] {
+  const cur = CURRENCY_ID[currency];
+  let byCur = s.rowsOfPartyCur.get(party);
+  if (!byCur) { byCur = new Map(); s.rowsOfPartyCur.set(party, byCur); }
+  const existing = byCur.get(cur);
+  if (existing) return existing;
+  const template = s.rowsOfParty.get(party);
+  if (!template || template.length === 0) return [];
+  // Mirror the party's FIRST money — its home rows — bank for bank.
+  const homeCur = s.currencyId[template[0]];
+  const homeRows = byCur.get(homeCur) ?? template;
+  const opened: number[] = [];
+  homeRows.forEach((r) => {
+    opened.push(openRowRaw(s, party, s.bankIdx[r], s.classId[r], cur, 0));
+  });
+  byCur.set(cur, opened);
+  return opened;
+}
+
+/** `openRow` by raw ids — the internal form the on-demand foreign row uses. */
+function openRowRaw(s: AccountStore, party: number, bankIdx: number, classId: number, cur: number, balance: number): number {
+  if (s.n >= s.partyId.length) grow(s);
+  const r = s.n++;
+  s.partyId[r] = party; s.bankIdx[r] = bankIdx; s.classId[r] = classId;
+  s.currencyId[r] = cur; s.balance[r] = balance; s.opening[r] = balance;
+  const rows = s.rowsOfParty.get(party);
+  if (rows) rows.push(r); else s.rowsOfParty.set(party, [r]);
+  return r;
 }
 
 /**
@@ -362,50 +531,72 @@ export function balanceOfParty(s: AccountStore, party: number): number {
 export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
   const s = newAccountStore();
   const banks = ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet);
+  const a = ctx.v2.accounts;
+  /** Open a party's pass rows: its home money first, then every OTHER money it carried into the
+   *  week — a firm paid in yen last week still holds yen this week, and a mirror that opened only
+   *  its home row would settle that balance out of existence. */
+  const openCarried = (party: PartyRef, bankIdx: number, cls: AccountClass, home: CurrencyCode): number => {
+    const row = openRow(s, partyId(party), bankIdx, cls, home, ctx.v2.accounts.balance[ensureAccount(ctx.v2, party, home)]);
+    (a.rowsByPartyRef.get(internString(ctx.v2, partyKey(party))) ?? []).forEach((pr) => {
+      const cur = currencyOfId(a.currencyId[pr]);
+      if (cur !== home) openRow(s, partyId(party), bankIdx, cls, cur, a.balance[pr]);
+    });
+    return row;
+  };
   // Banks first: every other row may point at one, and a bank's own COMPANY party is its reserves.
   s.reserveRowOfBank = new Int32Array(Math.max(1, banks.length)).fill(-1);
   banks.forEach((b) => {
     const bi = bankIndex(s, b.ticker);
-    if (s.reserveRowOfBank.length <= bi) { const a = new Int32Array(bi + 16).fill(-1); a.set(s.reserveRowOfBank); s.reserveRowOfBank = a; }
+    if (s.reserveRowOfBank.length <= bi) { const arr = new Int32Array(bi + 16).fill(-1); arr.set(s.reserveRowOfBank); s.reserveRowOfBank = arr; }
     // A3.6a/c: the pass row opens at the persistent row — the bank's reserves ARE that row.
-    const row = openRow(s, partyId({ kind: 'BANK', ticker: b.ticker }), AT_CENTRAL_BANK, 'RESERVES', ctx.v2.accounts.balanceUSD[reserveRowOf(ctx.v2, b.ticker, 0)]);
+    const money = currencyOf(b.region);
+    const bankParty: PartyRef = { kind: 'BANK', ticker: b.ticker };
+    const row = openRow(s, partyId(bankParty), AT_CENTRAL_BANK, 'RESERVES', money,
+      ctx.v2.accounts.balance[reserveRowOf(ctx.v2, b.ticker, money, 0)]);
     s.reserveRowOfBank[bi] = row;
+    // Any other money the bank carried into the week is its foreign liquidity row.
+    (a.rowsByPartyRef.get(internString(ctx.v2, partyKey(bankParty))) ?? []).forEach((pr) => {
+      const cur = a.currencyId[pr];
+      if (currencyOfId(cur) === money) return;
+      s.foreignReserveRow.set(bi * CURRENCY_CODES.length + cur,
+        openRow(s, partyId(bankParty), AT_CENTRAL_BANK, 'RESERVES', currencyOfId(cur), a.balance[pr]));
+    });
     // The bank's COMPANY party (its goods-market self) settles on its own reserves.
-    s.rowsOfParty.set(partyId({ kind: 'COMPANY', ticker: b.ticker }), [row]);
-    s.ownAccountBankOfParty.set(partyId({ kind: 'BANK', ticker: b.ticker }), bi);
+    s.rowsOfParty.set(partyId({ kind: 'COMPANY', ticker: b.ticker }), s.rowsOfParty.get(partyId(bankParty))!.slice());
+    s.rowsOfPartyCur.set(partyId({ kind: 'COMPANY', ticker: b.ticker }), new Map(s.rowsOfPartyCur.get(partyId(bankParty))!));
+    s.ownAccountBankOfParty.set(partyId(bankParty), bi);
     s.ownAccountBankOfParty.set(partyId({ kind: 'COMPANY', ticker: b.ticker }), bi);
     // Its credit-creation and securities accounts: voids at the bank itself.
-    openRow(s, partyId({ kind: 'BANK_CREDIT', ticker: b.ticker }), bi, 'CREATED', 0);
-    openRow(s, partyId({ kind: 'BANK_SECURITIES', ticker: b.ticker }), bi, 'SECURITIES', 0);
+    openRow(s, partyId({ kind: 'BANK_CREDIT', ticker: b.ticker }), bi, 'CREATED', money, 0);
+    openRow(s, partyId({ kind: 'BANK_SECURITIES', ticker: b.ticker }), bi, 'SECURITIES', money, 0);
   });
   const bankIdxOf = (ticker: string | undefined): number =>
     ticker !== undefined && s.bankIdxOfTicker.has(ticker) ? s.bankIdxOfTicker.get(ticker)! : AT_NOWHERE;
   ctx.updatedCompanies.forEach((c) => {
     if (c.isBankEntity && c.bankBalanceSheet) return;
     // A3.1: the pass row opens at the persistent balance; a firm with no account yet opens at zero.
-    const party: PartyRef = { kind: 'COMPANY', ticker: c.ticker };
-    openRow(s, partyId(party), bankIdxOf(c.homeBankTicker), 'CORPORATE', ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)]);
+    openCarried({ kind: 'COMPANY', ticker: c.ticker }, bankIdxOf(c.homeBankTicker), 'CORPORATE', currencyOf(c.region));
   });
   ctx.updatedInstitutionalEntities.forEach((e) => {
     // A3.2: the pass row opens at the persistent balance; an entity with no account opens at zero.
-    const party: PartyRef = { kind: 'INSTITUTION', id: e.id };
-    openRow(s, partyId(party), bankIdxOf(e.homeBankTicker), 'INSTITUTIONAL', ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)]);
+    openCarried({ kind: 'INSTITUTION', id: e.id }, bankIdxOf(e.homeBankTicker), 'INSTITUTIONAL', currencyOf(e.region));
   });
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region];
     if (!reg) return;
+    const money = currencyOf(region);
     const regionBanks = banks.filter((b) => b.region === region && !b.isDefaulted);
-    const shareSum = regionBanks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
+    const shareSum = regionBanks.reduce((acc, b) => acc + (b.bankMarketShare ?? 0), 0);
     // The household sector: its balance at each bank is that bank's household line, and a leg
     // lands on the banks by market share at once — the split the pools' legs always had.
     const hhParty: PartyRef = { kind: 'HOUSEHOLD', region };
     const hh = partyId(hhParty);
     const hhSplit: number[] = [];
     regionBanks.forEach((b) => {
-      openRow(s, hh, s.bankIdxOfTicker.get(b.ticker)!, 'HOUSEHOLD', ctx.v2.accounts.balanceUSD[sectorRowAt(ctx.v2, hhParty, b.ticker)]);
+      openRow(s, hh, s.bankIdxOfTicker.get(b.ticker)!, 'HOUSEHOLD', money, ctx.v2.accounts.balance[sectorRowAt(ctx.v2, hhParty, b.ticker, money)]);
       hhSplit.push(shareSum > 0 ? (b.bankMarketShare ?? 0) / shareSum : 1 / Math.max(1, regionBanks.length));
     });
-    if (regionBanks.length === 0) { openRow(s, hh, AT_NOWHERE, 'HOUSEHOLD', householdDepositsOf(ctx.v2, region)); hhSplit.push(1); }
+    if (regionBanks.length === 0) { openRow(s, hh, AT_NOWHERE, 'HOUSEHOLD', money, householdDepositsOf(ctx.v2, region)); hhSplit.push(1); }
     s.splitOfParty.set(hh, Float64Array.from(hhSplit));
     // The pools: a CARRIED row at each bank (A3.3); a leg splits across them by market share.
     (reg.smePools ?? []).forEach((seg) => {
@@ -414,43 +605,62 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
       const split: number[] = [];
       regionBanks.forEach((b) => {
         const sh = shareSum > 0 ? (b.bankMarketShare ?? 0) / shareSum : 1 / Math.max(1, regionBanks.length);
-        openRow(s, p, s.bankIdxOfTicker.get(b.ticker)!, 'SME', ctx.v2.accounts.balanceUSD[sectorRowAt(ctx.v2, party, b.ticker)]);
+        openRow(s, p, s.bankIdxOfTicker.get(b.ticker)!, 'SME', money, ctx.v2.accounts.balance[sectorRowAt(ctx.v2, party, b.ticker, money)]);
         split.push(sh);
       });
-      if (regionBanks.length === 0) { openRow(s, p, AT_NOWHERE, 'SME', poolCashOf(ctx.v2, region, seg.industry)); split.push(1); }
+      if (regionBanks.length === 0) { openRow(s, p, AT_NOWHERE, 'SME', money, poolCashOf(ctx.v2, region, seg.industry)); split.push(1); }
       s.splitOfParty.set(p, Float64Array.from(split));
     });
     // A3.5: the treasury's net position at the central bank — its persistent row.
-    openRow(s, partyId({ kind: 'GOVERNMENT', region }), AT_CENTRAL_BANK, 'TREASURY', ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, { kind: 'GOVERNMENT', region })]);
-    openRow(s, partyId({ kind: 'CENTRAL_BANK', region }), AT_NOWHERE, 'VOID', 0);
-    openRow(s, partyId({ kind: 'CLEARING_HOUSE', region }), AT_NOWHERE, 'VOID', 0);
+    openCarried({ kind: 'GOVERNMENT', region }, AT_CENTRAL_BANK, 'TREASURY', money);
+    openRow(s, partyId({ kind: 'CENTRAL_BANK', region }), AT_NOWHERE, 'VOID', money, 0);
+    openRow(s, partyId({ kind: 'CLEARING_HOUSE', region }), AT_NOWHERE, 'VOID', money, 0);
   });
   return s;
 }
 
-/** One settled row, by the one rule. A party the store has no row for is reported, not dropped. */
-export function applySettledRow(s: AccountStore, payer: number, payee: number, amountUSD: number): boolean {
-  const pr = s.rowsOfParty.get(payer), qr = s.rowsOfParty.get(payee);
-  if (!pr || !qr) return false;
-  side(s, payer, pr, -amountUSD);
-  side(s, payee, qr, amountUSD);
+/**
+ * One settled row, by the one rule, IN ONE MONEY. A party the store has no row for is reported,
+ * not dropped. Both legs are the same amount of the same currency — a payment is one instruction,
+ * not two — so a euro payment moves euros out of the payer and euros into the payee, and the
+ * payee's own money is whatever it converts that to when it reads its books.
+ */
+export function applySettledRow(s: AccountStore, payer: number, payee: number, amount: number, currency: CurrencyCode): boolean {
+  if (!s.rowsOfParty.has(payer) || !s.rowsOfParty.has(payee)) return false;
+  const pr = rowsInCurrency(s, payer, currency), qr = rowsInCurrency(s, payee, currency);
+  if (pr.length === 0 || qr.length === 0) return false;
+  side(s, payer, pr, -amount);
+  side(s, payee, qr, amount);
   return true;
 }
 
-function side(s: AccountStore, party: number, rows: number[], deltaUSD: number): void {
-  if (s.ownAccountBankOfParty.has(party)) s.ownNetByParty.set(party, (s.ownNetByParty.get(party) ?? 0) + deltaUSD);
-  if (rows.length === 1) { leg(s, rows[0], deltaUSD); return; }
+function side(s: AccountStore, party: number, rows: number[], delta: number): void {
+  if (s.ownAccountBankOfParty.has(party)) s.ownNetByParty.set(party, (s.ownNetByParty.get(party) ?? 0) + delta);
+  if (rows.length === 1) { leg(s, rows[0], delta); return; }
   const split = s.splitOfParty.get(party);
-  for (let i = 0; i < rows.length; i++) { const w = split ? split[i] : 1 / rows.length; if (w !== 0) leg(s, rows[i], deltaUSD * w); }
+  for (let i = 0; i < rows.length; i++) { const w = split ? split[i] : 1 / rows.length; if (w !== 0) leg(s, rows[i], delta * w); }
 }
 
-function leg(s: AccountStore, row: number, deltaUSD: number): void {
-  s.balanceUSD[row] += deltaUSD;
+function leg(s: AccountStore, row: number, delta: number): void {
+  s.balance[row] += delta;
   const bi = s.bankIdx[row];
   if (bi >= 0) {
-    const rr = s.reserveRowOfBank[bi];
-    if (rr >= 0) s.balanceUSD[rr] += deltaUSD;
+    const rr = reserveRowFor(s, bi, s.currencyId[row]);
+    if (rr >= 0) s.balance[rr] += delta;
   }
+}
+
+/** The bank's reserve row in one money: its own account for its own currency, a liquidity row
+ *  opened on demand for any other. Reserves settle in the money the deposit is denominated in. */
+function reserveRowFor(s: AccountStore, bankIdx: number, cur: number): number {
+  const own = s.reserveRowOfBank[bankIdx];
+  if (own < 0 || s.currencyId[own] === cur) return own;
+  const key = bankIdx * CURRENCY_CODES.length + cur;
+  const existing = s.foreignReserveRow.get(key);
+  if (existing !== undefined) return existing;
+  const r = openRowRaw(s, s.partyId[own], AT_CENTRAL_BANK, ACCOUNT_CLASSES.indexOf('RESERVES'), cur, 0);
+  s.foreignReserveRow.set(key, r);
+  return r;
 }
 
 /** A4 — what the pass settled, read off the rows' deltas. */
@@ -484,26 +694,43 @@ export interface SettledTallies {
  * own-account nets (its income and expense) are the two parties on its reserve row, netted as
  * they settled (`ownNetByParty`) — the same two sums the switch kept, added in the same order.
  */
-export function settledTallies(s: AccountStore): SettledTallies {
+export function settledTallies(s: AccountStore, fx: FxTable): SettledTallies {
   const t: SettledTallies = {
     reserveDeltaByBank: new Map(), creditCreatedByBank: new Map(), bankSecuritiesDeltaByBank: new Map(),
     bankEquityDeltaByBank: new Map(), tgaDeltaByRegion: new Map(),
     centralBankIssuanceUSD: 0, centralBankIssuanceByRegion: new Map(), clearingHouseResidualUSD: 0, unresolvedUSD: 0,
   };
   const addTo = (m: Map<string, number>, k: string, d: number) => m.set(k, (m.get(k) ?? 0) + d);
+  /** A row's move, in the money of the book that reports it. */
+  const moved = (r: number, into: CurrencyCode): number =>
+    convert(s.balance[r] - s.opening[r], currencyOfId(s.currencyId[r]), into, fx);
   s.banks.forEach((ticker, bi) => {
     const rr = s.reserveRowOfBank[bi];
-    if (rr >= 0) { const d = s.balanceUSD[rr] - s.openingUSD[rr]; if (d !== 0) addTo(t.reserveDeltaByBank, ticker, d); }
+    if (rr < 0) return;
+    const money = currencyOfId(s.currencyId[rr]);
+    { const d = moved(rr, money); if (d !== 0) addTo(t.reserveDeltaByBank, ticker, d); }
+    // What it settled in every OTHER money is reserve movement too, at this pass's rate.
+    CURRENCY_CODES.forEach((cur, ci) => {
+      const fr = s.foreignReserveRow.get(bi * CURRENCY_CODES.length + ci);
+      if (fr === undefined) return;
+      const d = moved(fr, money); if (d !== 0) addTo(t.reserveDeltaByBank, ticker, d);
+    });
     const own = s.ownNetByParty.get(partyId({ kind: 'BANK', ticker })) ?? 0;
     const self = s.ownNetByParty.get(partyId({ kind: 'COMPANY', ticker })) ?? 0;
     if (own !== 0) addTo(t.bankEquityDeltaByBank, ticker, own);
     if (self !== 0) addTo(t.bankEquityDeltaByBank, ticker, self);
   });
   for (let r = 0; r < s.n; r++) {
-    const d = s.balanceUSD[r] - s.openingUSD[r];
-    if (d === 0) continue;
+    if (s.balance[r] === s.opening[r]) continue;
     const cls = ACCOUNT_CLASSES[s.classId[r]];
     const bi = s.bankIdx[r];
+    // Every tally below is a book's own line, so each is read in that book's money: a bank's in
+    // the bank's, a treasury's in its region's. A pass that moved two currencies reports one
+    // number per book, converted at the rate that pass settled at, and never a bare sum.
+    const into = bi >= 0 && s.reserveRowOfBank[bi] >= 0
+      ? currencyOfId(s.currencyId[s.reserveRowOfBank[bi]])
+      : currencyOfId(s.currencyId[r]);
+    const d = moved(r, into);
     switch (cls) {
       case 'CREATED': addTo(t.creditCreatedByBank, s.banks[bi], -d); break;
       case 'SECURITIES': addTo(t.bankSecuritiesDeltaByBank, s.banks[bi], d); break;
@@ -534,7 +761,7 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
   const landSectorRows = (party: PartyRef) => {
     (s.rowsOfParty.get(partyId(party)) ?? []).forEach((r) => {
       const bi = s.bankIdx[r];
-      if (bi >= 0) ctx.v2.accounts.balanceUSD[sectorRowAt(ctx.v2, party, s.banks[bi])] = s.balanceUSD[r];
+      if (bi >= 0) ctx.v2.accounts.balance[sectorRowAt(ctx.v2, party, s.banks[bi], currencyOfId(s.currencyId[r]))] = s.balance[r];
     });
   };
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
@@ -545,24 +772,30 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
   ctx.updatedCompanies.forEach((c) => {
     if (c.isBankEntity && c.bankBalanceSheet) {
       const bi = s.bankIdxOfTicker.get(c.ticker); if (bi === undefined) return;
-      const rr = s.reserveRowOfBank[bi];
       // A3.6: the pass's result is the persistent row; the sheet carries no reserves line and no
-      // deposit line (the sector rows landed above ARE its household and SME lines).
-      ctx.v2.accounts.balanceUSD[reserveRowOf(ctx.v2, c.ticker, 0)] = s.balanceUSD[rr];
+      // deposit line (the sector rows landed above ARE its household and SME lines). Its own
+      // money and every other it settled in each land on their own row.
+      landEveryMoney(ctx, s, { kind: 'BANK', ticker: c.ticker });
       return;
     }
-    // A3.1: the pass's result is the persistent balance.
-    const party: PartyRef = { kind: 'COMPANY', ticker: c.ticker };
-    ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)] = balanceOfParty(s, partyId(party));
+    // A3.1: the pass's result is the persistent balance, money by money.
+    landEveryMoney(ctx, s, { kind: 'COMPANY', ticker: c.ticker });
   });
-  ctx.updatedInstitutionalEntities.forEach((e) => {
-    const party: PartyRef = { kind: 'INSTITUTION', id: e.id };
-    ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)] = balanceOfParty(s, partyId(party));
-  });
+  ctx.updatedInstitutionalEntities.forEach((e) => landEveryMoney(ctx, s, { kind: 'INSTITUTION', id: e.id }));
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     // A3.5: the pass's result is the persistent row; the two signs are reads.
-    const party: PartyRef = { kind: 'GOVERNMENT', region };
-    ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)] = balanceOfParty(s, partyId(party));
+    landEveryMoney(ctx, s, { kind: 'GOVERNMENT', region });
+  });
+}
+
+/** A party's pass rows land on its persistent accounts, one per money — never netted together:
+ *  a firm that ended the week holding dollars and yen holds both next week. */
+function landEveryMoney(ctx: WeeklyStepContext, s: AccountStore, party: PartyRef): void {
+  const byCur = s.rowsOfPartyCur.get(partyId(party));
+  if (!byCur) return;
+  byCur.forEach((rows, cur) => {
+    let total = 0; for (const r of rows) total += s.balance[r];
+    ctx.v2.accounts.balance[ensureAccount(ctx.v2, party, currencyOfId(cur))] = total;
   });
 }
 // A3.5: `compareToBooks` — the first slice's gate — is gone with the last field it

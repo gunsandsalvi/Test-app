@@ -6,6 +6,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { currencyOf } from '../../../domain/geography';
 import { categoryPriceTier, HouseholdPriceTier } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
@@ -81,7 +82,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
           payee: { kind: 'HOUSEHOLD', region: regionId },
-          amountUSD: payrollUSD,
+          amount: payrollUSD,
+          currency: currencyOf(regionId),
           reason: 'government payroll',
         });
       }
@@ -94,7 +96,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
           payee: { kind: 'HOUSEHOLD', region: regionId },
-          amountUSD: transfersUSD,
+          amount: transfersUSD,
+          currency: currencyOf(regionId),
           reason: 'government transfers',
         });
       }
@@ -119,7 +122,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
             pay(ctx, {
               payer: { kind: 'SEGMENT', region: regionId, industry: pool.industry },
               payee: { kind: 'HOUSEHOLD', region: regionId },
-              amountUSD: wagesUSD,
+              amount: wagesUSD,
+              currency: currencyOf(regionId),
               reason: 'private-sector tier wages',
             });
             // §5-CLOSE F2: the pool remits the employer payroll tax on its own wage bill.
@@ -127,7 +131,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
             pay(ctx, {
               payer: { kind: 'SEGMENT', region: regionId, industry: pool.industry },
               payee: { kind: 'GOVERNMENT', region: regionId },
-              amountUSD: payrollTaxUSD,
+              amount: payrollTaxUSD,
+              currency: currencyOf(regionId),
               reason: 'employer payroll tax',
             });
             ctx.payrollTaxByRegion[regionId] = (ctx.payrollTaxByRegion[regionId] ?? 0) + payrollTaxUSD;

@@ -332,42 +332,6 @@ do not reorder.
     `07b:530` clears one instrument per COMPANY. Clearing per tranche in price space closes it.
     Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
     DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
-13-SOV. **THE SOVEREIGN IS A BOND — CONVERT IT COMPLETELY** (user, 2026-09-03: *"the
-    sovereign needs to be completely converted. it should have the same construction of a normal
-    bond, they are a normal bond with some different characteristics."*)
-
-    `GovDebtTranche` (`region-macro.ts:312`) is `{ id, principalUSD, couponRate, originationWeek,
-    maturityWeek, tenorAtIssuanceYears }` — a **strict subset** of `DebtTranche`
-    (`company.ts:75`), field for field. A sovereign here is a fixed-rate senior bullet bond whose
-    issuer is a government; it has no characteristic a corporate bond lacks, it only LACKS ones
-    (no seniority stack, no call protection, no floating leg). For that non-difference it carries
-    **five parallel structures**:
-
-    | | corporate | sovereign |
-    |---|---|---|
-    | type | `DebtTranche` | `GovDebtTranche` — a subset |
-    | store | the engine2 tranche store | `reg.govDebtTranches`, a plain array |
-    | holdings | itemized, per instrument, per holder | `sovereignBondHoldingsByTenor: Record<tenorKey, USD>` — **a bucket with no instrument in it** |
-    | clearing | clears a **price** | `07c` clears a **YIELD**, then writes `reg.zeroRates` |
-    | curve | derived from cleared prices | `reg.zeroRates` / `computeSovereignBookAnnualYield`, its own object |
-
-    Row 3 is step 12's miskeying still standing: you cannot ask who holds a given government
-    bond, because the holding is keyed by TENOR BUCKET, not by instrument. Row 4 is rule 1
-    failing outright — the sovereign is the one asset in the model that does not trade on a
-    price. Row 5 is step 25's two-curve-owners defect, which cannot be fixed while the curve is
-    the thing that clears rather than a read of what cleared.
-
-    **The conversion.** A sovereign becomes a `DebtTranche` issued by a GOVERNMENT party: same
-    type, same store, same itemized holdings, cleared to a PRICE by the same engine, with the
-    zero curve DERIVED from those cleared prices. `GovDebtTranche`,
-    `sovereignBondHoldingsByTenor` and the parallel curve path are deleted. This subsumes the
-    sovereign half of step 25 and `assets/index.ts`'s `YIELD_LIKE` row.
-    Known consumers to move: `macro/banking.ts:91,170,566`, `macro/evolution.ts:815`,
-    `macro/initialization.ts:392,491`, `audit/ownership.ts:46`, `audit/money.ts:126`,
-    `companyGenerator.ts:673`, `ledger/bank-transfer.ts:42-46`, `repo-clearing.ts:99,119,712`,
-    `holdings-view.ts:109,316`, `07f:197,478`, `07c`, `11-fiscal-and-sovereign-debt.ts`,
-    `government.ts`, `government-entity.ts`.
-
 13c. **CURRENCY IS THE OTHER UNIVERSAL CHARACTERISTIC** (user, 2026-09-03: *"Every single asset
     has a specific currency in which it's issued and in which is priced on, that's another key
     universal characteristic… why is so much stuff called USD?"*)
@@ -406,10 +370,53 @@ do not reorder.
     transfer of units of a currency asset. This subsumes step 30c's `Money<C>` brand and the
     journal's currency column, which were parked in PART VI for want of exactly this.
 
-    **Order:** the TYPE first (an asset cannot be declared without its currency), then the ledger
-    (`pay`, accounts, holdings), then the audits (every cross-region identity currently adds
-    euros to dollars — those failures are the finding), then the rename, which is mechanical once
-    the type carries the truth and must be LAST so the compiler has been doing the work.
+    **Order, set by the user 2026-09-03** (*"The first thing is currency is a needed field in the
+    clearing and cash settlement systems. Everything that touches money or assets need to have a
+    currency. and each entity needs a bank account per currency… Implement it, let the code throw
+    errors and fix them. also rename the variables so that they actually make sense. Then do
+    sovereign and the rest. this is a move fast break things kind of job."*): **13c runs BEFORE
+    13-SOV.** The TYPE first (nothing that holds money may be declared without its currency),
+    then SETTLEMENT and ACCOUNTS (an account per entity per currency; `pay` carries a currency
+    and converts at the cleared rate), then CLEARING (every instrument quotes in a currency),
+    then the audits — every cross-region identity today adds euros to dollars, and those failures
+    are the finding — then the RENAME, mechanical once the type carries the truth, and last so
+    the compiler has been doing the work. Break it and fix forward; do not preserve the run.
+
+13-SOV. **THE SOVEREIGN IS A BOND — CONVERT IT COMPLETELY** (user, 2026-09-03: *"the
+    sovereign needs to be completely converted. it should have the same construction of a normal
+    bond, they are a normal bond with some different characteristics."*)
+
+    `GovDebtTranche` (`region-macro.ts:312`) is `{ id, principalUSD, couponRate, originationWeek,
+    maturityWeek, tenorAtIssuanceYears }` — a **strict subset** of `DebtTranche`
+    (`company.ts:75`), field for field. A sovereign here is a fixed-rate senior bullet bond whose
+    issuer is a government; it has no characteristic a corporate bond lacks, it only LACKS ones
+    (no seniority stack, no call protection, no floating leg). For that non-difference it carries
+    **five parallel structures**:
+
+    | | corporate | sovereign |
+    |---|---|---|
+    | type | `DebtTranche` | `GovDebtTranche` — a subset |
+    | store | the engine2 tranche store | `reg.govDebtTranches`, a plain array |
+    | holdings | itemized, per instrument, per holder | `sovereignBondHoldingsByTenor: Record<tenorKey, USD>` — **a bucket with no instrument in it** |
+    | clearing | clears a **price** | `07c` clears a **YIELD**, then writes `reg.zeroRates` |
+    | curve | derived from cleared prices | `reg.zeroRates` / `computeSovereignBookAnnualYield`, its own object |
+
+    Row 3 is step 12's miskeying still standing: you cannot ask who holds a given government
+    bond, because the holding is keyed by TENOR BUCKET, not by instrument. Row 4 is rule 1
+    failing outright — the sovereign is the one asset in the model that does not trade on a
+    price. Row 5 is step 25's two-curve-owners defect, which cannot be fixed while the curve is
+    the thing that clears rather than a read of what cleared.
+
+    **The conversion.** A sovereign becomes a `DebtTranche` issued by a GOVERNMENT party: same
+    type, same store, same itemized holdings, cleared to a PRICE by the same engine, with the
+    zero curve DERIVED from those cleared prices. `GovDebtTranche`,
+    `sovereignBondHoldingsByTenor` and the parallel curve path are deleted. This subsumes the
+    sovereign half of step 25 and `assets/index.ts`'s `YIELD_LIKE` row.
+    Known consumers to move: `macro/banking.ts:91,170,566`, `macro/evolution.ts:815`,
+    `macro/initialization.ts:392,491`, `audit/ownership.ts:46`, `audit/money.ts:126`,
+    `companyGenerator.ts:673`, `ledger/bank-transfer.ts:42-46`, `repo-clearing.ts:99,119,712`,
+    `holdings-view.ts:109,316`, `07f:197,478`, `07c`, `11-fiscal-and-sovereign-debt.ts`,
+    `government.ts`, `government-entity.ts`.
 
 13b. **Coupon accruals are dated wires.** `pendingHolderAccrualUSD` is a side map beside the
     paper. It should be a dated wire that RE-KEYS with the paper when the paper moves, landing on

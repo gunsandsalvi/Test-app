@@ -11,6 +11,7 @@
  */
 
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
+import { currencyOf, RegionId } from '../domain/geography';
 import { GameState, Company, DebtTranche, NewsItem, SegmentFinancial } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { BackLanes } from './stage08-lanes';
@@ -376,6 +377,9 @@ function makeCashPoster(ticker: string, region: Company['region'], cashUSD: numb
     // SCALE §7.303 — the walk's own party ids, interned once per company: every settled leg
     // used to re-probe two string maps (partyId x2) per post, ~40k+ legs a week.
     const selfPartyId = partyId({ kind: 'COMPANY', ticker });
+    // §3.13c: a firm's cash walk is in the firm's own money — every leg it posts is
+    // denominated there, and a counterparty in another money converts on receipt.
+    const money = currencyOf(region as RegionId);
     const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true, settleWeek?: number) => {
       if (!isFinite(amountUSD) || amountUSD === 0) return;
       // §5-WIRES N: a leg dated past this week is an OBLIGATION — journaled now, numbered now,
@@ -384,8 +388,8 @@ function makeCashPoster(ticker: string, region: Company['region'], cashUSD: numb
       if (settleWeek !== undefined && settleWeek > settlementWeek()) {
         const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted dated '${label}' for ${ticker} with no counterparty`);
         const reasonId = internReason(label);
-        if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, reasonId, settleWeek);
-        else payByIds(ctx, selfPartyId, otherId, -amountUSD, reasonId, settleWeek);
+        if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, money, reasonId, settleWeek);
+        else payByIds(ctx, selfPartyId, otherId, -amountUSD, money, reasonId, settleWeek);
         return;
       }
       // SCALE §7.303 — the drill-down rows are display retention with NO consumer anywhere in
@@ -408,8 +412,8 @@ function makeCashPoster(ticker: string, region: Company['region'], cashUSD: numb
       // §5-CLOSE: a settled leg with no counterparty is a defect at the site that posted it.
       const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted '${label}' for ${ticker} (${(amountUSD / 1e6).toFixed(3)}M) with no counterparty`);
       const reasonId = internReason(label);
-      if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, reasonId);
-      else payByIds(ctx, selfPartyId, otherId, -amountUSD, reasonId);
+      if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, money, reasonId);
+      else payByIds(ctx, selfPartyId, otherId, -amountUSD, money, reasonId);
     };
   return { post, cash, cashLedger };
 }
@@ -641,7 +645,8 @@ function runCashWalk(args: {
         pay(ctx, {
           payer: { kind: 'COMPANY', ticker },
           payee: { kind: 'BANK', ticker: homeBankTicker },
-          amountUSD: facilityInterestWeeklyUSD,
+          amount: facilityInterestWeeklyUSD,
+          currency: currencyOf(region as RegionId),
           reason: 'facility interest to the lending bank',
         });
       }

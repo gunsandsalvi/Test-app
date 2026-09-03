@@ -12,6 +12,7 @@
  */
 
 import { waysAndMeansOf } from '../../ledger/accounts';
+import { currencyOf } from '../../../domain/geography';
 import { GameState, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
@@ -42,12 +43,12 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // cash), so it is paid on the accrual, weekly. Without this leg the remittance below handed
     // the treasury coupon income it had never paid out: money from nobody, one coupon a week.
     if (couponIncomeUSD > 0) {
-      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amountUSD: couponIncomeUSD, reason: 'sovereign coupon to the central bank' });
+      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amount: couponIncomeUSD, currency: currencyOf(regionId), reason: 'sovereign coupon to the central bank' });
     }
     // The ways-and-means advance costs the policy rate, paid like any interest.
     const waysAndMeansInterestUSD = (waysAndMeansOf(ctx.v2, regionId) * reg.policyRate) / 52;
     if (waysAndMeansInterestUSD > 0) {
-      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amountUSD: waysAndMeansInterestUSD, reason: 'ways and means interest' });
+      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amount: waysAndMeansInterestUSD, currency: currencyOf(regionId), reason: 'ways and means interest' });
     }
     // The bill book's accretion is the central bank's income too (a discount bill pays no coupon;
     // its return is the pull to par, which the treasury pays at maturity), and it is remitted
@@ -71,9 +72,9 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // The remittance is a payment too: the central bank's net income to the treasury (or, in a
     // loss week, the treasury's top-up of the central bank). ----
     if (remitUSD > 0) {
-      pay(ctx, { payer: { kind: 'CENTRAL_BANK', region: regionId }, payee: { kind: 'GOVERNMENT', region: regionId }, amountUSD: remitUSD, reason: 'central bank remittance' });
+      pay(ctx, { payer: { kind: 'CENTRAL_BANK', region: regionId }, payee: { kind: 'GOVERNMENT', region: regionId }, amount: remitUSD, currency: currencyOf(regionId), reason: 'central bank remittance' });
     } else if (remitUSD < 0) {
-      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amountUSD: -remitUSD, reason: 'treasury covers the central bank\'s loss' });
+      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amount: -remitUSD, currency: currencyOf(regionId), reason: 'treasury covers the central bank\'s loss' });
     }
     cb.lastCouponIncomeUSD = Math.round(couponIncomeUSD);
     cb.lastRemittanceUSD = Math.round(remitUSD);

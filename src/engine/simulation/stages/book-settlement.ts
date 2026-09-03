@@ -33,6 +33,7 @@
  */
 
 import { RegionId } from '../../../types';
+import { currencyOf } from '../../../domain/geography';
 import { WeeklyStepContext } from './context';
 import { pay, PartyRef } from './settlement';
 import { defect } from '../../../domain/defect';
@@ -77,8 +78,8 @@ export function settleClearedBook(
     if (!deltaUSD) return;
     const party = partyOf(participantId) ?? defect(`${book} clearing: participant '${participantId}' names no party this model can pay`);
     const legReason = reason;
-    if (deltaUSD > 0) pay(ctx, { payer: ccp, payee: party, amountUSD: deltaUSD, reason: legReason });
-    else pay(ctx, { payer: party, payee: ccp, amountUSD: -deltaUSD, reason: legReason });
+    if (deltaUSD > 0) pay(ctx, { payer: ccp, payee: party, amount: deltaUSD, currency: currencyOf(regionId), reason: legReason });
+    else pay(ctx, { payer: party, payee: ccp, amount: -deltaUSD, currency: currencyOf(regionId), reason: legReason });
   });
 
   // What is left after the fees is what the week's PRIMARY placed, and it belongs to the issuers
@@ -89,7 +90,7 @@ export function settleClearedBook(
   if (primaryUSD > 0 && takeTotalUSD > 0) {
     primaryTakes.forEach((t) => {
       const amountUSD = Math.max(0, t.amountUSD) * (primaryUSD / takeTotalUSD);
-      if (amountUSD > 0) pay(ctx, { payer: ccp, payee: t.party, amountUSD, reason: `${book} primary proceeds` });
+      if (amountUSD > 0) pay(ctx, { payer: ccp, payee: t.party, amount: amountUSD, currency: currencyOf(regionId), reason: `${book} primary proceeds` });
     });
   }
   // §5-WIRES W2: the asset half of the primary — the issuer's paper to the clearing house, the
@@ -118,8 +119,8 @@ export function settleClearedBook(
   if (deskTotalUSD !== 0 && totalShare > 0) {
     feeDesks.forEach((desk) => {
       const amountUSD = deskTotalUSD * (desk.share / totalShare);
-      if (amountUSD > 0) pay(ctx, { payer: ccp, payee: { kind: 'BANK', ticker: desk.ticker }, amountUSD, reason: `${book} dealer fee` });
-      else if (amountUSD < 0) pay(ctx, { payer: { kind: 'BANK', ticker: desk.ticker }, payee: ccp, amountUSD: -amountUSD, reason: `${book} dealer fee` });
+      if (amountUSD > 0) pay(ctx, { payer: ccp, payee: { kind: 'BANK', ticker: desk.ticker }, amount: amountUSD, currency: currencyOf(regionId), reason: `${book} dealer fee` });
+      else if (amountUSD < 0) pay(ctx, { payer: { kind: 'BANK', ticker: desk.ticker }, payee: ccp, amount: -amountUSD, currency: currencyOf(regionId), reason: `${book} dealer fee` });
     });
   }
 }

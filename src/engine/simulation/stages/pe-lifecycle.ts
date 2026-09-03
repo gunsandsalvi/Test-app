@@ -22,6 +22,7 @@ import { V2World } from '../../../engine2/world';
  */
 
 import { distributable } from '../../../domain/fund';
+import { currencyOf } from '../../../domain/geography';
 import { Company, InstitutionalEntity, Region, RegionId, DebtTranche, NewsItem } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { PrimaryOffering, mandateAllocator } from '../../../domain/primary-market';
@@ -37,7 +38,7 @@ import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { marketCapOf, totalDebtOf } from '../../../domain/company';
 import { ladderTotalUSD } from '../../../engine2/tranches';
-import { cashOf, openingCashOf, entityCashOf, poolCashOf } from '../../ledger/accounts';
+import { cashOf, openingCashOf, entityCashOf, poolCashOf, settlementCurrencyOf } from '../../ledger/accounts';
 import { issueHolding } from '../../ledger/holdings-ledger';
 import { bumpRegister } from './register-index';
 
@@ -178,7 +179,8 @@ function callCapitalUSD(ctx: WeeklyStepContext, sponsorId: string, requestedUSD:
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: x.commitment.lpEntityId },
       payee: { kind: 'INSTITUTION', id: sponsorId },
-      amountUSD: shareUSD,
+      amount: shareUSD,
+      currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: x.commitment.lpEntityId }, { kind: 'INSTITUTION', id: sponsorId }),
       reason: 'private fund capital call',
     });
   });
@@ -220,7 +222,8 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: n
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: sponsorId },
       payee: { kind: 'INSTITUTION', id: c.lpEntityId },
-      amountUSD: shareUSD,
+      amount: shareUSD,
+      currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: sponsorId }, { kind: 'INSTITUTION', id: c.lpEntityId }),
       reason: 'private fund distribution',
     });
   });
@@ -409,7 +412,8 @@ export function runPeLifecycleForRegion(
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: buyer.id },
             payee: { kind: 'INSTITUTION', id: sponsor.id },
-            amountUSD: priceUSD,
+            amount: priceUSD,
+            currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: buyer.id }, { kind: 'INSTITUTION', id: sponsor.id }),
             reason: 'private company sold sponsor-to-sponsor',
           });
           distributeToLps(ctx, sponsor.id, priceUSD);
@@ -588,7 +592,8 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id: deal.sponsorId },
           payee: { kind: 'HOUSEHOLD', region: comp.region },
-          amountUSD: calledUSD,
+          amount: calledUSD,
+          currency: currencyOf(comp.region),
           reason: 'take-private proceeds to the founding households',
         });
         sellerRegion.householdState.netWorthUSD += calledUSD;
@@ -657,7 +662,8 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       pay(ctx, {
         payer: { kind: 'COMPANY', ticker: comp.ticker },
         payee: { kind: 'INSTITUTION', id: deal.sponsorId },
-        amountUSD: settlement.proceedsUSD,
+        amount: settlement.proceedsUSD,
+        currency: currencyOf(comp.region),
         reason: 'dividend recap to sponsor',
       });
       // A recap's proceeds belong to the investors, not the manager: they go straight back out.
@@ -745,7 +751,8 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
   pay(ctx, {
     payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
     payee: { kind: 'COMPANY', ticker: c.ticker },
-    amountUSD: tranche.principalUSD,
+    amount: tranche.principalUSD,
+    currency: currencyOf(c.region),
     reason: 'firm birth: facility proceeds',
   });
   c.debtTranches = [tranche];
@@ -840,7 +847,8 @@ export function runFirmBirthsForRegion(
         pay(ctx, {
           payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
           payee: { kind: 'COMPANY', ticker: c.ticker },
-          amountUSD: openingCashUSD,
+          amount: openingCashUSD,
+          currency: currencyOf(regionId),
           reason: 'firm birth: opening balance carved from pool',
         });
       }

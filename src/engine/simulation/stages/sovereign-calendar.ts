@@ -45,7 +45,7 @@ import { PartyRef, pay, partyKey, partyFromKey } from './settlement';
 import { sovereignCouponByBucket, sovereignCouponDueShare } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
 import { isActiveCompany } from '../../../domain/company';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 
@@ -131,7 +131,8 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
           payee,
-          amountUSD,
+          amount: amountUSD,
+          currency: currencyOf(regionId),
           reason: 'sovereign coupon',
         });
         paidUSD += amountUSD;

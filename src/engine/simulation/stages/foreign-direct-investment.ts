@@ -29,7 +29,7 @@ import { Company, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
 import { isActiveCompany, ANTITRUST_SUSTAINED_WEEKS } from '../../../domain/company';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { convertLocal } from '../../../domain/currency';
 import { TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../../../domain/company';
 import { PrivateFirmSeed } from '../../bootstrap/private-firms';
@@ -154,7 +154,8 @@ export function runForeignDirectInvestment(
       pay(ctx, {
         payer: { kind: 'COMPANY', ticker: comp.ticker },
         payee: { kind: 'COMPANY', ticker: sub.ticker },
-        amountUSD: openingCashUSD,
+        amount: openingCashUSD,
+        currency: currencyOf(sub.region as RegionId),
         reason: 'FDI: subsidiary capitalized from the parent',
       });
       born.push(sub);

@@ -519,7 +519,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     pendingPaymentJournal: ctx.paymentJournal,
     nextWireId: ctx.wireJournal.base + ctx.wireJournal.n,
     ...(process.env.GOODS_TRACE === '1' ? { lotReceiptsTrace: (ctx.wireJournal as unknown as { lotReceipts?: Record<string, number> }).lotReceipts ?? {} } : {}),
-    lastWires: summarizeWires(ctx.wireJournal, (() => { let s = 0; for (let i = 0; i < ctx.paymentJournal.n; i++) s += ctx.paymentJournal.amountUSD[i]; return s; })(),
+    lastWires: summarizeWires(ctx.wireJournal, (() => { let s = 0; for (let i = 0; i < ctx.paymentJournal.n; i++) s += ctx.paymentJournal.amount[i]; return s; })(),
       (() => { const m = new Map<string, string>(); for (const c of nextState.companies) m.set(c.ticker, c.region); return (t: string) => m.get(t); })(), reasonText),
   }, timings, stageTrace: trace };
 }
