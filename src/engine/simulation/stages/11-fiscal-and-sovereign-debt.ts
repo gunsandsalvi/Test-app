@@ -8,6 +8,7 @@
  */
 
 import { treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
+import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
 import { govBucketKeyOf, govBillTrancheId, govBondTrancheId, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, GovDebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
@@ -784,6 +785,18 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       bankingSector: updatedBankingSector,
       institutionalSector: updatedInstitutionalSector,
     };
+  });
+
+  // §3.13-SOV row 2 — the store follows the array, by wire, once all three writers have run
+  // (11-fiscal above, and 07c/07f's withdrawals earlier in the week). Dual-write: the array is
+  // still the authority. When the readers move, this call and the array go together.
+  (Object.keys(updatedRegions) as RegionId[]).forEach((regionId) => {
+    reconcileLadderByWire(
+      ctx.v2,
+      { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' },
+      updatedRegions[regionId].govDebtTranches,
+      'sovereign ladder',
+    );
   });
 
   const generatedNews = generateWeeklyNews(

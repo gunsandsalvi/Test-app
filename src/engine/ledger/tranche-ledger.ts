@@ -164,6 +164,50 @@ export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromTicke
  * The chain is claimed empty first, so a firm that somehow arrives here twice cannot double its
  * ladder — the rows come only from the issues below.
  */
+/**
+ * §3.13-SOV row 2 — BRING A STORE LADDER BACK INTO LINE WITH AN OBJECT LADDER, BY WIRE.
+ *
+ * The dual-write stage of the sovereign's store migration. `reg.govDebtTranches` is still the
+ * authority and is rebuilt in three places a week — 11-fiscal drops what matured and appends what
+ * was issued, and 07c and 07f withdraw what an auction failed to place. Mirroring each of those
+ * separately is three chances to miss one; diffing once, after all three have run, is one.
+ *
+ * It wires the difference rather than overwriting the rows, and that distinction is the whole
+ * lesson of §9.37-SEED: `syncLadderRows` would make the store agree instantly and leave the paper
+ * standing with no wire behind it, which is how a ladder passes `Σ held = issued` and fails
+ * `wires reproduce the ladders`. Face that appeared is ISSUED, face that vanished is RETIRED, and
+ * both are numbered wires a holder can be found for.
+ *
+ * When the readers move to the store this function is what deletes: the array stops being written
+ * and there is nothing left to reconcile against.
+ */
+export function reconcileLadderByWire(v2: V2World, issuer: TrancheIssuer, ladder: readonly DebtTranche[] | undefined, reason: string): void {
+  const S = mutableTranches(v2);
+  const want = new Map<string, DebtTranche>();
+  for (const t of ladder ?? []) if (t.principalUSD > 0.01) want.set(t.id, t);
+  // What the store carries now, row by row.
+  for (const r of ladderRowsOf(v2, issuer.id)) {
+    const id = v2.internedStrings[S.idRef[r]];
+    const target = want.get(id);
+    const have = S.principalUSD[r];
+    if (target === undefined) {
+      if (have > 0.01) retireTranche(v2, issuer, r, have, `${reason}: gone from the ladder`);
+      continue;
+    }
+    // Present in both: move the face to what the ladder says, in whichever direction.
+    const delta = target.principalUSD - have;
+    if (delta < -0.01) retireTranche(v2, issuer, r, -delta, `${reason}: face reduced`);
+    else if (delta > 0.01) {
+      const n = wire({ from: issuerParty(issuer), to: holderOfRow(v2, r, issuer.region), kind: kindOfRow(v2, r), asset: id, quantity: delta, priceUSD: 1, reason: `${reason}: face increased` }, internReason);
+      void n;
+      S.principalUSD[r] += delta;
+    }
+    want.delete(id);
+  }
+  // Anything the ladder has and the store does not is a new issue.
+  want.forEach((t) => { issueTranche(v2, issuer, t, `${reason}: new issue`); });
+}
+
 export function seedLadder(v2: V2World, issuer: TrancheIssuer, ladder: DebtTranche[] | undefined): void {
   syncLadderRows(v2, issuer.id, []);
   for (const t of ladder ?? []) if (t.principalUSD > 0.01) issueTranche(v2, issuer, t, 'seed: ladder opened');
