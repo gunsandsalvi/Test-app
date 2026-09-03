@@ -118,6 +118,10 @@ export function evolveRegionMacro(
     /** §5-FINALIZATION step 10: the region's loan books — its named banks' SME rows plus their
      *  facility rows on the borrowers' ladders, summed by the caller (`regionLoanBooksUSD`). */
     bankLoanBooks: { businessLoanUSD: number; consumerLoanUSD: number };
+    /** What households measurably received and paid over the whole of LAST week, read off the
+     *  completed settlement report by the caller. Undefined in week 1, when there is no prior
+     *  week to read. */
+    householdWeek?: { receiptsUSD: number; taxPaidUSD: number; dividendsUSD: number };
   },
   week: number,
   equityReturn: number = 0,
@@ -557,24 +561,24 @@ export function evolveRegionMacro(
   // out separately here (wages + unemployment transfers + a flat 15% capital income, no tax and
   // no government transfers), so the week-1 economy did not describe the same one the bootstrap
   // had built — the two definitions have to be one definition.
-  // HH4b — the capital receipts that recycle debt service back into the consumption budget:
+  // The capital receipts that recycle debt service back into the consumption budget:
   // real deposit interest, real dividends on the households' direct equity, and the named seed
-  // residual (see the builder's input doc). At seed the sum equals debt service by the
+  // residual. At seed the sum equals debt service by the
   // residual's construction; from week 1 the two move apart with rates and payouts, and that
   // differential is the household rate channel.
   const annualCapitalReceiptsUSD = {
-    // HH: what the banks MEASURABLY paid their household depositors last week, at their own
-    // competitive deposit rates (02b sums it). The `deposits x policyRate x 0.6` this replaces
+    // What the banks MEASURABLY paid their household depositors last week, at their own
+    // competitive deposit rates (stage 02b sums it). The `deposits x policyRate x 0.6` this replaces
     // was a second derivation of a flow the banks already compute and post — rule 3, and it
     // disagreed with them by whatever the deposit competition was doing.
     depositInterestUSD: (region.householdDepositInterestWeeklyUSD ?? 0) * 52,
-    // §5-CLOSE C5: the dividends the public float was PAID last week (the register's paying
-    // agent pays the float's share to the household sector of the issuer's region), read off
-    // the household flow ledger — not a yield times a mark. The residual "return path" of debt
-    // service (a share of income from nobody, 14.7% of it) is deleted: income is what arrived.
-    dividendsUSD: (region.lastWeekHouseholdDividendsUSD ?? 0) * 52,
+    // The dividends the public float was PAID last week (the register's paying agent pays the
+    // float's share to the household sector of the issuer's region), read off the household flow
+    // ledger — not a yield times a mark. The residual "return path" of debt service (a share of
+    // income from nobody, 14.7% of it) is deleted: income is what arrived.
+    dividendsUSD: (microFeedback.householdWeek?.dividendsUSD ?? 0) * 52,
   };
-  // HH — INCOME IS THE SUM OF PAYMENTS. It used to be
+  // INCOME IS THE SUM OF PAYMENTS. It used to be
   // `computeHouseholdDisposableIncomeUSD(totalWageIncomeUSD, transfers)`: wages as
   // productivity x LABOR_SHARE_OF_OUTPUT across the occupation pools, capital income as a fixed
   // ratio to wages, tax as a flat effective rate. Three imposed constants deciding what half the
@@ -585,18 +589,18 @@ export function evolveRegionMacro(
   // payment, the government's transfers, and the interest the banks really paid on their
   // deposits — less the tax they really remitted, annualised. The dividend leg on their direct
   // equity is a real holding at a real cleared yield and stays; `capitalReceiptsAnnualUSD`
-  // carries the ONE named residual left (HH4b's unbuilt receipt channels), as a level that
+  // carries the ONE named residual left (the unbuilt receipt channels), as a level that
   // shrinks when a channel becomes real rather than as a share of the income it feeds.
   //
   // Non-circular by construction: wages come from each employer's own offer and headcount, not
-  // from this number. The seed still opens on the identity (§7.4) and week 1 is the first week
-  // this measurement exists.
-  const measuredWeeklyReceiptsUSD = region.lastWeekHouseholdReceiptsUSD;
-  const newEstimatedHouseholdIncomeUSD = measuredWeeklyReceiptsUSD !== undefined
+  // from this number. The seed still opens on the identity, and week 1 is the first week with a
+  // prior week to measure.
+  const measuredWeek = microFeedback.householdWeek;
+  const newEstimatedHouseholdIncomeUSD = measuredWeek !== undefined
     ? Math.round(Math.max(0,
       // The dividends are inside the measured receipts already (a payment to the household
       // sector like any other); they are split out above only for the cohorts' allocation.
-      (measuredWeeklyReceiptsUSD - (region.lastWeekHouseholdTaxPaidUSD ?? 0)) * 52
+      (measuredWeek.receiptsUSD - measuredWeek.taxPaidUSD) * 52
     ))
     : Math.round(computeHouseholdDisposableIncomeUSD({
       wageIncomeUSD: totalWageIncomeUSD,

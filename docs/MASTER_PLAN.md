@@ -12,20 +12,23 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `bf2ecf9` on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree
-  clean. (This branch replaces `claude/master-plan-review-j2z20v`.)
-- **Next step: §3 step 11b's remainder** (O5), then 11c, then 13 and PART II. §3 is the only list. §3 is the only work list, and it holds only
-  what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `bf2ecf9` —
-  **131 violations in 32 families**, "the money that is not anyone's" **0.06B across 2 lines**
-  (M1's drift and M7's dust), M6 still grazing its band in 1 week of 16. See §9.11 and §6.
+- HEAD on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree clean.
+- **Take the FIRST step in §3 and do not skip.** §3 is the only work list and it holds only what
+  is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
+  that names anything but §3's first line; one was written, it disagreed with §3's order, and two
+  steps were skipped behind it.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 9b —
+  **138 violations in 35 families**, "the money that is not anyone's" **0.10B across 2 lines**
+  (M1's drift and M7's dust). The prior reference was 131/32 with 0.47B across 3 lines; see §9.9b
+  for why the count rose and the unowned money fell. Read the number off the run, not off this
+  line — the earlier 0.06B written here was a mis-transcription of a 0.47B print.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
 - **Recording a step:** delete the step from §3 and write its record in §9 — what changed, why,
   and the measured numbers, for a reader who was not here. A lesson that a FUTURE step could
   trip over goes in §5 as well; nothing else does.
-- Gates at HEAD: `tsc` 0, ESLint 342/354, hygiene pass, 126 tests.
+- Gates at HEAD: `tsc` 0, ESLint 341/354, hygiene pass, 126 tests.
 
 **Where this list came from (2026-09-02): a line-by-line audit of ~230 files / ~55k lines**, which
 found ~380 defects. Every material one is a step in §3 at its file:line (or, once done, in §9),
@@ -186,14 +189,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-9b. **The household week has no lag.** `household-balance-sheet.ts:53` reads the week's own
-    settlement report, which at that point holds the intraday pass only, so every household flow
-    the close settles is lost. It cannot simply read the prior week whole (step 9 measured it):
-    the fields are named for a one-week lag and stage 02 consumes them the week after, so that
-    makes them two weeks stale and breaks M6's within-week identity. The fix is to delete the lag
-    — stage 02 reads the household week in the week it happened — and then the complete report is
-    the natural source. `ctx.priorWeekFlows.householdFlowsByRegion` is already persisted and
-    waiting for it.
 11b. **A dead firm's goods still move.** The money half is closed (§9.11b): M7's unmapped rows
     were all `payee BANK_SECURITIES`, a resolved bank's desk keeping its unpaid coupons, and both
     ends of a shipment now follow the books on a merger and on an estate close. What is LEFT is
@@ -206,6 +201,13 @@ do not reorder.
 11c. **The central bank's book drifts.** M1 misses by **0.06B on a 208B sheet in 4 weeks of 16**
     at HEAD, having been clean for the whole project before the death rate rose. Small, real, and
     the money family's only sized line besides 11b's dust. Bisect from `56dc3ee`.
+11d. **A creator is missing from M6's list.** The money stock moves by named creators only;
+    `audit/money.ts:120` names seven of them. In a week of large gross cross-border flow (week 8,
+    UK: cross-border +27.82B, banks' own account −21.25B, stock moved 0.36B) **2.55B is
+    unexplained**. Either a real creator has no name in that list or one of the seven is measured
+    on a different basis from the stock it is compared against. Found by step 9b, which did not
+    cause it.
+
 ### PART II — THE INSTRUMENTS ARE REAL
 
 13. **Face, and price × face** (the "credit always trades at par" defect). The tranche row carries
@@ -2247,6 +2249,40 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**9b. The household week has no lag.** (`PENDING`) `household-balance-sheet.ts` recorded what
+households earned mid-week, reading the week's OWN settlement report — which at that point holds
+the intraday pass only. **Every household flow the close and the funding cycle settled was
+lost**: not double counted, not deferred, simply absent from the income the economy runs on. It
+then parked the answer in three region fields for stage 02 to read the following week.
+
+The lag is deleted rather than lengthened. Stage 02 reads the household week at the top of the
+week from `ctx.priorWeekFlows.householdFlowsByRegion` — last week COMPLETE across all three
+settlement cycles, which was already persisted and unused — and passes it to `evolveRegionMacro`
+as `householdWeek`. The staleness is unchanged (it was already a week old by the time stage 02
+consumed it), the data is whole, and `lastWeekHouseholdReceiptsUSD`, `lastWeekHouseholdTaxPaidUSD`
+and `lastWeekHouseholdDividendsUSD` are retired (rule 19). Week 1 has no prior week and falls back
+to the bootstrap identity exactly as before.
+
+The measured income moves a long way, because the close settles a large share of it: weekly
+household income USA 731.9B → 527.9B, EUR 283.7B → 503.6B, UK 235.8B → 194.4B, JPN 294.2B →
+170.2B. The dispersion is the point — each region's close settles a different mix of receipts and
+tax, and the intraday-only read had been flattening all four toward the same wrong shape.
+
+Measured (SHOCKS=0 WEEKS=16): **131 in 32 → 138 in 35**, and **"the money that is not anyone's"
+0.47B across 3 lines → 0.10B across 2**. The money family is what this step is about and it
+improved: M5 (bank sheet closes, 2/16) and O3 (register rows name a live instrument, 2/16) went
+CLEAN, M1 4/16 → 2/16, M7 3/16 → 1/16. The count rose because household income drives
+consumption, consumption drives the goods auction, and the whole run re-paths: the +7 is P- and
+X-family market-behaviour lines (rule 12 — not evaluated mid-project) plus one new money line.
+Not rolled back (rule 20): the derivation is right and the print is a path.
+
+**The new money line is a real finding and is now step 11d.** M6 fires once (week 8, UK) at 2.55B
+unexplained. It CANNOT be mechanically caused by this change — M6's inputs are the settlement
+report plus `householdBookDepositFlowWeeklyUSD` and `householdDepositInterestWeeklyUSD`, none of
+which this step touches — so it is a pre-existing gap in M6's list of money creators that a large
+cross-border week exposes (that week: cross-border +27.82B and banks' own account −21.25B against
+a 0.36B move in the stock).
 
 **1. The interest that is never paid.** (a, `5454934`) `trancheWeekAccrual` made CP due only in
 its maturity week and the register's accrual loop skipped exactly that week, so **CP interest

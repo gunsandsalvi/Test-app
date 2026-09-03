@@ -11,12 +11,41 @@ import { facilityBookOf } from '../../../engine2/tranches';
 
 import { GameState, RegionId } from '../../../types';
 import { getSimulationDate } from '../../formatters';
-import { isActiveCompany } from '../../../domain/company';
 import { evolveRegionMacro } from '../../macro/evolution';
 import { computeOccupationDemand } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
 import { marketCapOf } from '../../../domain/company';
+
+/**
+ * What households received and paid over the whole of LAST week: every wage, transfer and
+ * dividend that landed on the household sector, less the tax they remitted, plus the interest
+ * their banks paid them.
+ *
+ * It is read here, at the top of the week, from the completed prior report. It used to be
+ * recorded mid-week by the household balance sheet stage, which runs before the close and so saw
+ * only the intraday pass — every household flow the close and the funding cycle settled was
+ * simply lost. Reading it here costs no extra staleness (the number was already a week old by
+ * the time this stage consumed it) and retires the three region fields that carried it.
+ */
+function householdWeekOf(
+  ctx: WeeklyStepContext, regionId: RegionId, depositInterestUSD: number
+): { receiptsUSD: number; taxPaidUSD: number; dividendsUSD: number } | undefined {
+  const flows = ctx.priorWeekFlows.householdFlowsByRegion.get(regionId);
+  if (!flows) return undefined;
+  let receiptsUSD = depositInterestUSD;
+  let taxPaidUSD = 0;
+  let dividendsUSD = 0;
+  flows.forEach((amountUSD, reason) => {
+    if (amountUSD > 0) {
+      receiptsUSD += amountUSD;
+      if (reason === 'dividend to the public float') dividendsUSD += amountUSD;
+      return;
+    }
+    if (reason.includes('tax')) taxPaidUSD += -amountUSD;
+  });
+  return { receiptsUSD, taxPaidUSD, dividendsUSD };
+}
 
 export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): void {
   const globalInflationShock = (random() - 0.5) * 0.0008;
@@ -33,7 +62,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
 
     const regionFirms = ctx.prevActiveFirms.filter(f => f.region === regionId);
 
-    // HC3: employment change is measured over the SAME universe on both sides — public and
+    // Employment change is measured over the SAME universe on both sides — public and
     // private firms together (the segments carry only the SME residual now). An asymmetric pair
     // here read the private tier's arrival as a mass layoff and pinned unemployment at its cap.
     const employmentFirms = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(f => f.region === regionId);
@@ -50,7 +79,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     const boundedGdpContribution = (capexGdpImpactWeekly * 52);
 
     const regionOccDemand = computeOccupationDemand(
-      // HC3: private firms are real employers with real sector occupation mixes; the segments
+      // Private firms are real employers with real sector occupation mixes; the segments
       // supply only the SME residual's statistical demand.
       [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms],
       state.regions[regionId].smePools,
@@ -64,7 +93,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     // premium. The real version of that comparison is the auction itself, in 07c, where real
     // demand meets real supply.)
 
-    // HH4b: what the region's listed equity actually pays — market-cap-weighted, real state.
+    // What the region's listed equity actually pays — market-cap-weighted, real state.
     const regionListed = state.companies.filter(
       (c) => c.region === regionId && !c.isDefaulted && (marketCapOf(c) ?? 0) > 0
     );
@@ -87,23 +116,24 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         bankReservesUSD: ctx.updatedCompanies.reduce((a, c) => a + (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? bankReservesOf(ctx.v2, c.ticker) : 0), 0),
         bankDepositLines: ctx.updatedCompanies.reduce((a, c) => (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? addDepositLines(a, bankDepositLines(ctx, c.ticker)) : a), ZERO_DEPOSIT_LINES),
         bankLoanBooks: regionLoanBooksUSD(ctx.updatedCompanies.filter((c) => c.region === regionId && c.isBankEntity && !!c.bankBalanceSheet), (b) => facilityBookOf(ctx.v2, b.ticker)),
+        householdWeek: householdWeekOf(ctx, regionId, state.regions[regionId].householdDepositInterestWeeklyUSD ?? 0),
       },
       ctx.nextWeek,
       equityRet,
       state.commodities,
-      // NAT2: what this region produces is what its weather can take from it.
+      // What this region produces is what its weather can take from it.
       ctx.prevActiveFirms
     );
     ctx.updatedRegions[regionId] = updatedRegion;
 
-    // S7: the macro institutional-sector accrual is deleted. It applied a flat
+    // The macro institutional-sector accrual is deleted. It applied a flat
     // investmentIncomeMarginPct to three aggregates and accreted the result into sector cash and
     // sector equity every week — a second, formula-driven income stream running beside the real
-    // one (S11 credits every entity its real coupons at its issuers' real terms), and a second
+    // one (every entity is credited its real coupons at its issuers' real terms), and a second
     // writer of numbers that are now derived from the real books each week in holdings-view.ts.
     // Two representations of one real thing; the real one survives.
 
-    // OWN1: the three ownership shares are no longer drifted here. They were an input that
+    // The three ownership shares are no longer drifted here. They were an input that
     // decided real things (three books' float, every bank's sovereign target, household direct
     // equity) while owning nothing; they are now measured off the real books in stage 11.
 
@@ -115,7 +145,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     ctx.diagnosticLogs.push({
       week: ctx.nextWeek,
       // The WORLD'S date, not the operator's clock. A wall-clock timestamp inside GameState made
-      // two same-seed runs hash differently and masked a real determinism check (§7.32).
+      // two same-seed runs hash differently and masked a real determinism check.
       timestamp: getSimulationDate(ctx.nextWeek).toISOString(),
       category: 'MACRO',
       message: `[MACRO] ${regionId} GDP Breakdown:`,
@@ -124,7 +154,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     });
   });
 
-  // Cross-border spillover, PUB2b: keyed off REAL balance-sheet policy instead of the retired
+  // Cross-border spillover, keyed off REAL balance-sheet policy instead of the retired
   // stance scalar. A central bank easing harder than the rest of the world loosens credit
   // conditions abroad; the observable is its reinvestment share, which is 1 when passive and
   // below 1 in QT.

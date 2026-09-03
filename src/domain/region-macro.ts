@@ -831,10 +831,6 @@ export interface Region {
   /** HH — interest the region's banks actually paid on household deposits this week, summed from
    *  their own deposit rates. Part of measured household income; not re-derived anywhere. */
   householdDepositInterestWeeklyUSD?: number;
-  /** HH — what households MEASURABLY received and paid last week, from the settlement report.
-   *  `estimatedHouseholdIncomeUSD` is derived from this rather than from a labor-share identity. */
-  lastWeekHouseholdReceiptsUSD?: number;
-  lastWeekHouseholdTaxPaidUSD?: number;
   /**
    * PUB1e: the ONE per-category procurement budget. Stage 03 derives it from the treasury's real
    * primary budget; stage 05 bids exactly it. Before this the two disagreed — the demand stage
@@ -855,9 +851,6 @@ export interface Region {
   /** §5-CLOSE M6 — the deposits the household loan books wrote this week (origination less
    *  discharge, amortization and interest), the banks' second money creator. Written by 02b. */
   householdBookDepositFlowWeeklyUSD?: number;
-  /** §5-CLOSE C5 — last week's dividends paid to the public float (the household sector), a
-   *  slice of `lastWeekHouseholdReceiptsUSD`, split out for the cohorts' allocation. */
-  lastWeekHouseholdDividendsUSD?: number;
   centralBankSheet?: CentralBank;
   /**
    * PUB1b/§5-CLOSE C5 — tax actually collected this week from real payers: corporate (quarterly,

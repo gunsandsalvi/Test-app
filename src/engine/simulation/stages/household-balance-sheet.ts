@@ -6,7 +6,7 @@ import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
  * from a price something else cleared. It owns one question: what do households actually own, and
  * against whom?
  *
- * The answer used to be a single number that appreciated by a formula return. MS1 replaced most of
+ * The answer used to be a single number that appreciated by a formula return. Real claims replaced most of
  * it with real claims; this stage adds the largest missing one and it was never missing from the
  * world at all — it was sitting on the institutions' own balance sheets with no holder.
  *
@@ -14,7 +14,7 @@ import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
  * 455B is policyholder reserves. A pension fund's 146B against 17B is entitlements. An asset
  * manager's 188B against 31B is fund shares. Measured together, **740B was a liability to somebody
  * and nobody held the claim** the same real thing represented once instead of twice, and
- * 46% of the gap MS1 had to label unmodeled.
+ * 46% of the gap that had to be labelled unmodeled.
  *
  * It is DERIVED, never stated: the claim is the residual `totalAssets − equityCapital` on a real
  * balance sheet, re-marked every week. So when an insurer's bond book falls, household wealth
@@ -22,12 +22,12 @@ import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
  * the institution's own equity capital is excluded because that half is already attributed: these
  * are listed companies whose shares clear in 07e and sit in somebody's register.
  *
- * Entity types whose liabilities already have named holders are left alone — money funds (WS7's
- * shareholders), ETFs (MS1's), and private equity (HC4's named LP commitments) — or the same
+ * Entity types whose liabilities already have named holders are left alone — money funds (their
+ * shareholders), ETFs (theirs), and private equity (its named LP commitments) — or the same
  * dollar would be claimed twice.
  */
 
-import { GameState, RegionId, InstitutionalEntity } from '../../../types';
+import { GameState, InstitutionalEntity } from '../../../types';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { WeeklyStepContext } from './context';
 import { ETF_INCEPTION_NAV_PER_SHARE } from '../../../domain/etf';
@@ -46,35 +46,6 @@ import { regionalDeskView } from '../../../domain/dealer-desk';
 // (domain/institution-profiles.ts) — a new kind states it or fails to build.
 
 export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepContext): void {
-  // ---- 0. HH: what households MEASURABLY earned this week. Household income is the sum of what
-  // they were paid — every employer's wages, the government's transfers, the interest the banks
-  // really paid on their deposits — less the tax they really remitted. Recorded here for stage
-  // 02 to read next week; a spend is not income, so purchases are excluded by name. ----
-  // The week's own report, which at this point holds the intraday pass: what the close settles
-  // for households is NOT in it. Reading the prior week's complete report instead would make
-  // these fields two weeks stale by the time stage 02 consumes them — they are already a
-  // one-week lag by name — and it breaks M6, whose identity is within a week. The close cycle's
-  // household flows are still missing; closing that needs the lag itself gone, not a longer one.
-  const householdFlows = ctx.lastSettlementReport?.householdFlowsByRegion;
-  if (householdFlows) {
-    (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
-      const reg = ctx.updatedRegions[regionId];
-      if (!reg) return;
-      let receiptsUSD = reg.householdDepositInterestWeeklyUSD ?? 0;
-      let taxPaidUSD = 0;
-      let dividendsUSD = 0;
-      householdFlows.get(regionId)?.forEach((amountUSD, reason) => {
-        if (amountUSD > 0) { receiptsUSD += amountUSD; if (reason === 'dividend to the public float') dividendsUSD += amountUSD; return; }
-        if (reason.includes('tax')) taxPaidUSD += -amountUSD;
-      });
-      reg.lastWeekHouseholdReceiptsUSD = Math.round(receiptsUSD);
-      reg.lastWeekHouseholdTaxPaidUSD = Math.round(taxPaidUSD);
-      // C5: the dividends the public float was paid — a slice of the receipts above,
-      // split out so the cohorts can put it where the equity exposure is.
-      reg.lastWeekHouseholdDividendsUSD = Math.round(dividendsUSD);
-    });
-  }
-
   // ---- 1. Each institution records what it owes its beneficiaries. ----
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     if (!institutionProfile(entity.entityType).beneficiariesAreHouseholds) {
@@ -124,7 +95,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const etfShares = [...(hs.etfShares ?? [])];
     ctx.updatedInstitutionalEntities.forEach((fund) => {
       if (fund.entityType !== 'ETF' || fund.region !== region) return;
-      // DIST — SIGNED. A negative figure is a REDEMPTION: the household sold shares to raise cash
+      // SIGNED. A negative figure is a REDEMPTION: the household sold shares to raise cash
       // it could not find in its deposits. Both directions settle here, on the same
       // arithmetic, because they are the same transaction with the sign flipped — and a
       // redemption that credited no deposits and retired no shares would be money from nowhere.
@@ -162,7 +133,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     );
     const privateBusinessEquityUSD = householdPrivateBusinessEquityUSD(region, ctx.updatedCompanies, evMultiple);
 
-    // ---- 5. C5: household financial wealth is the claims that EXIST — fund shares,
+    // Household financial wealth is the claims that EXIST — fund shares,
     // the public float, private business equity, claims on institutions. The placeholder that
     // used to fill the gap to "1.5x income" (assets nobody issued, earning nothing) is deleted.
     const realClaimsUSD = etfHoldingsUSD + directEquityUSD + privateBusinessEquityUSD + institutionalClaimsUSD;
@@ -188,7 +159,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const mmfSharesUSD = Math.max(0, hs.mmfSharesUSD ?? 0);
     const equityHoldingsUSD = realClaimsUSD;
 
-    // ---- 7. HH4c: the tier balance sheets are DERIVED SPLITS of the same marked components —
+    // The tier balance sheets are DERIVED SPLITS of the same marked components —
     // tier net worth is a sum over real lines, not a drifted stock. The split weights are
     // stated primitives (SCF-shaped); what they split is real, so when home prices move it is
     // the middle tiers' net worth that moves, and when equities rally it is the top's — the
@@ -196,7 +167,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     if (reg.wealthDistribution) {
       const consumerDebtUSD = (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0);
 
-      // DIST/COH — THE DEPOSIT SPLIT IS AN OUTCOME OF WHO SAVED, not a stated weight.
+      // THE DEPOSIT SPLIT IS AN OUTCOME OF WHO SAVED, not a stated weight.
       //
       // own sentence is "who holds deposits is whose savings accumulated", and it was
       // not true: `W.deposits` applied a fixed share of the aggregate every week, so a tier that
@@ -218,7 +189,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       const depositShareOf = (_t: WealthTier, i: number) =>
         liquidTotal > 0 ? liquidByTier[i] / liquidTotal : 0;
 
-      // DIST/COH — AND THE OTHER FINANCIAL SPLITS FALL OUT OF THE SAME TWO MEASUREMENTS.
+      // AND THE OTHER FINANCIAL SPLITS FALL OUT OF THE SAME TWO MEASUREMENTS.
       //
       // A tier's holding of an asset class is the stock its own saving built, allocated by its own
       // appetite for risk — and the model measures both: `accumulatedSavingsUSD` and
@@ -252,7 +223,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       const cautiousShareOf = (t: WealthTier, i: number) =>
         cautiousTotal > 0 ? cautiousByTier[i] / cautiousTotal : 0;
 
-      // DIST/COH — HOUSING AND DEBT FOLLOW DIFFERENT MEASUREMENTS AGAIN, and that is the point:
+      // HOUSING AND DEBT FOLLOW DIFFERENT MEASUREMENTS AGAIN, and that is the point:
       // each of tables was a separate stated number precisely because nobody had asked
       // what CAUSED it.
       //
