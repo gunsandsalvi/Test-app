@@ -146,7 +146,7 @@ import { laneKey, laneTransitWeeks } from '../src/domain/carrier';
 import { isCarrier } from '../src/engine/simulation/stages/freight-clearing';
 import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
 import { DERIVATIVE_CLASSES } from '../src/domain/derivatives/registry';
-import { auditWeek, auditSummary, AuditFinding } from '../src/engine/audit';
+import { auditWeek, auditSeed, auditSummary, AuditFinding } from '../src/engine/audit';
 
 interface Violation {
   week: number;
@@ -2230,6 +2230,26 @@ function runHarness() {
   const initialRevenueByTicker = new Map(state.companies.map(c => [c.ticker, c.annualRevenue]));
   const knownTickers = new Set(state.companies.map(c => c.ticker));
   MODULES.forEach(m => { try { m.init?.(state); } catch (e) { violations.push({ week: 0, message: `[harness:${m.name}] init threw: ${e}` }); } });
+
+  // §3.37-SEED — THE SEED IS AUDITED, AND IT NEVER WAS. `docs/systems/the-seed.md` A2.
+  //
+  // `auditWeek` ran only inside the week loop below, so no invariant family had ever seen the
+  // OPENING state. Every week-1 finding was therefore ambiguous between a bad seed and a bad
+  // mechanism, and that ambiguity costs a search that cannot succeed: there is no stage to find a
+  // seed defect in. `auditSeed` asks the stock questions the opening world can answer, takes no
+  // previous week and does not become one — so week 1's proof of the seed's WIRES against the
+  // empty world is untouched. Read-only by contract (`docs/systems/the-audit.md` C4), so it runs
+  // before the pre-run mechanism tests and does not move the RNG stream they depend on.
+  {
+    const found = auditSeed(state);
+    auditFindings.push(...found);
+    found.forEach((f) => violations.push({ week: 0, message: `[audit ${f.check}] ${f.message}` }));
+    if (found.length) {
+      console.log(`  ! [week 0 · the seed] ${found.length} audit finding(s) — the opening world, not a mechanism`);
+      found.slice(0, VERBOSE ? found.length : 8).forEach((f) => console.log(`     ! [${f.check}] ${f.message}`));
+      if (!VERBOSE && found.length > 8) console.log(`     ! ...+${found.length - 8} more at week 0`);
+    }
+  }
 
   if (SHOCKS) {
     // Pre-run mechanism tests (each builds its own world; violations land in the same pool).

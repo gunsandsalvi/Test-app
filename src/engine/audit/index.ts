@@ -45,6 +45,39 @@ export function auditWeek(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
+/**
+ * §3.37-SEED — THE OPENING WORLD, AUDITED. `docs/systems/the-seed.md` A2.
+ *
+ * The audit ran only inside the week loop, so no family had ever seen the state the world STARTS
+ * in. That made every week-1 finding ambiguous between a bad seed and a bad mechanism, and the
+ * cost of that ambiguity is a search that cannot succeed: a violation present at week 0 is the
+ * seed's, and there is no stage to find it in.
+ *
+ * Two things make this a different call from `auditWeek(state, 0)`, and both matter:
+ *
+ * · **It passes no previous week, and it does not become one.** `lastSnapshot` opens as the EMPTY
+ *   world on purpose (see the comment on its declaration): week 1 is thereby held to "everything
+ *   that exists was WIRED into existence", which proves the SEED's wires as well as week 1's.
+ *   Overwriting it here would silently hand week 1 the seed as its baseline and retire that check
+ *   — trading a real proof for a new one instead of adding one. So the seed is asked the stock
+ *   questions now, and its wires are still proved at week 1, exactly as before.
+ * · **It asks only what a stock can answer.** Week 0 has no elapsed week, so every "what moved"
+ *   check is asking about a flow that has not happened; `wires.ts` and `accounts.ts:F2` guard on
+ *   `week === 0` for that reason. What is left — ownership, prices, names, the balance identities
+ *   — is exactly the set of questions the opening world is answerable for.
+ */
+export function auditSeed(state: GameState): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const run = (name: string, f: () => AuditFinding[]) => { try { out.push(...f()); } catch (e) { out.push({ family: 'F', check: `${name} threw`, week: 0, message: String(e) }); } };
+  run('money', () => auditMoney(undefined, state, 0));
+  run('ownership', () => auditOwnership(state, 0));
+  run('prices', () => auditPrices(state, 0));
+  run('accounts', () => auditAccounts(undefined, state, 0));
+  run('names', () => auditNames(state, 0));
+  run('wires', () => auditWires(undefined, state, 0));
+  return out;
+}
+
 const FAMILY_WORDS: Record<string, string> = { M: 'money', O: 'ownership', P: 'prices', X: 'cross-market', F: 'accounts', N: 'names', W: 'wires' };
 
 /** The scoreboard: per check, the weeks it failed, the worst size, the last message. */

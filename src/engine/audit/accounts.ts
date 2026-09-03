@@ -46,7 +46,9 @@ function f2(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
       const dTga = treasuryNetOf(ensureV2(state), r) - (prev[r]!.treasuryAccountUSD - prev[r]!.waysAndMeansUSD);
       if (Math.abs(dTga - settled) > 1e6) out.push({ family: 'F', check: 'F2 treasury account moves by its payments', week, usd: dTga - settled, message: `${r}: the account (net of the ways-and-means advance) moved ${B(dTga)} but its payments net to ${B(settled)}; ${B(dTga - settled)} written by something that is not a payment` });
     }
-    if (Math.abs(reg.governmentRevenueUSD - taxes) > Math.max(1e6, taxes * 1e-3)) out.push({ family: 'F', check: 'F2 revenue = tax remitted', week, usd: reg.governmentRevenueUSD - taxes, message: `${r}: revenue reported ${B(reg.governmentRevenueUSD)} against ${B(taxes)} of tax actually remitted` });
+    // §3.37-SEED: `taxes` is what was remitted THIS WEEK. At week 0 no week has elapsed, so the
+    // comparison is against a zero that means "not yet", not "not paid".
+    if (week > 0 && Math.abs(reg.governmentRevenueUSD - taxes) > Math.max(1e6, taxes * 1e-3)) out.push({ family: 'F', check: 'F2 revenue = tax remitted', week, usd: reg.governmentRevenueUSD - taxes, message: `${r}: revenue reported ${B(reg.governmentRevenueUSD)} against ${B(taxes)} of tax actually remitted` });
   });
   return out;
 }

@@ -13,6 +13,12 @@ import { issuerIdOf } from '../../engine2/tranches';
 export function auditWires(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const w = state.lastWires; const s = state.lastSettlement;
+  // §3.37-SEED: week 0 is the OPENING STATE and no week has elapsed, so there is no journal to
+  // find and its absence is not a finding. Every check below this line asks what MOVED, which is
+  // a question the seed cannot be asked — the seed is a stock (`docs/systems/the-seed.md` A3).
+  // The seed's own wires are still proved, at week 1, because the audit's `lastSnapshot` opens as
+  // the EMPTY world and `auditSeed` deliberately does not overwrite it.
+  if (week === 0) return out;
   if (!w) { out.push({ family: 'W', check: 'W1 the week has a wire journal', week, message: 'no wires were recorded this week' }); return out; }
   // What settled this week = this week's money wires, less the tail recorded after the last pass
   // (it settles next week), plus last week's tail (it settled this week).
