@@ -49,7 +49,14 @@ family never prints, the per-bank identity check has never fired).
 Standing user directives. Not suggestions.
 
 1. **Every price is the result of real supply/demand clearing.** OAS, discount margin, yield, P/E
-   are statistics DERIVED from a cleared price, never the mechanism that sets it. One exception:
+   are statistics DERIVED from a cleared price, never the mechanism that sets it.
+   **Restated by the user (2026-09-03) because a draft of step 13 inverted it:** every asset is
+   measured in UNITS — par value, shares, tonnes, contracts — and carries the cleared PRICE those
+   units trade at. **Every asset trades on price.** You VALUE a loan on its discount margin and
+   you TRADE it on price; the margin is what you inferred, the price is what was decided. A
+   mechanism that clears a spread and derives a price from it has the causation backwards, and
+   `financial-clearing-engine.ts:956`'s `statKind === 'PRICE_LIKE' ? clearedStat : 1` is where
+   that is written down today. One exception:
    central-bank ADMINISTERED rates (SRF / ON RRP) — a posted rate with a REAL QUANTITY RESPONSE,
    which means a position booked on both sheets. A posted rate with no position is not the exception.
 2. **NO BOUNDS OF ANY KIND (user, 2026-09-02: "no more boundaries, no more dampeners, no more
@@ -237,51 +244,80 @@ do not reorder.
     is step 13. **One holdout on the convention:** `engine/nelsonSiegel.ts` discounts continuously
     (`exp(-z·t)`) where everything else compounds discretely. Unify it in the same commit as 13's
     sovereign pricing — moving it alone re-prices every sovereign for no gain.
-13. **Face, and price × face — and ONE NAME for one piece of paper.** **SIZED by `P5`, and the
-    machinery is BUILT AND NOT WIRED (§9.13 part 3) — read that record before touching this.**
-    The register now has a `faceUSD` column, the ledger has `markCreditBook`, `domain/pricing` has
-    the price, `engine/credit-price.ts` is the one adapter between them, and
-    `stages/credit-marking.ts` is the stage. One line in `core.ts` turns it on, **and turning it on
-    alone takes the run from 231 in 46 to 426 in 61.** It does not converge for two reasons, both
-    measured, and BOTH must be closed first:
-    (a) **Every writer of a credit row must maintain FACE.** `creditRow` adds to the value and only
-    adds to the face when the caller passes one, so any non-book path that touches a credit row —
-    an estate write-off, a primary settlement, a desk transfer, securities lending — drives face
-    below value. Measured with the mark OFF and only the audit reading face: `O1` fires 16 weeks of
-    16 at −92B/−128B/−237B and `O6` at −461B. That is the divergence, not the mark.
-    (b) **The mark must be the LAST word on a value in the week.** Wired after
-    `holdings-writeback`, later stages and next week's books write rows back in par space, so the
-    register ends the week part marked and part not.
-    Then, and only then, every held-versus-issued identity switches to `faceUSD` in one commit
-    with the mark: `O1`'s `add`, `O6`, `O7`, and the three books' scan reads (07b, 07d, 07f), each
-    of which is marked with a comment naming this step. (The "credit always trades at
-    par" defect, plus rule 3). **The register keys credit by TRANCHE and the dealer desks key the
-    same paper by ISSUER, and the two sets are disjoint: `O8` measures 11,655 desk positions worth
-    301B on the issuer key and NOT ONE on a tranche.** The register was migrated to per-tranche
-    rows (13a/13b, §9); the desks were left behind, so every move between a desk and the register
-    wires a sale of one name against a purchase of another, the two do not cancel to the dollar,
-    and the residue is what `W2` reports as the clearing house left holding paper (32 findings a
-    run). An issuer-keyed position also cannot be CHECKED — `O7` compares a claim against the
-    ladder row it names, and a position naming a company names no row — so this is upstream of
-    11f as well. The desks move to the tranche key with everything else here.
+13. **EVERY ASSET TRADES ON PRICE** (user, 2026-09-03: *"every asset is measured in units (be it
+    par value, or number of shares, etc), every asset has a price attached to it as the cleared
+    price. Every asset trades on price. DMs and OASs and all else is a measure derived. When I
+    trade a loan the price is the thing that is decided (I value the loan based on the DM but I
+    trade it on price)."*) This is rule 1 restated, and the earlier drafts of this step had the
+    causation BACKWARDS — they treated the spread as the cleared thing and derived a price from
+    it (§9.13 part 3 is the failure). **The spread is a statistic. The price is the trade.**
+
+    **THE MODEL, four lines:**
+    · an asset is a QUANTITY of UNITS — par for credit, shares for equity, tonnes for a
+      commodity, contracts for a future;
+    · an instrument has ONE cleared price a week, and its auction is what produces it;
+    · **value = units × price**, derived at every read, never stored beside the units;
+    · OAS, DM and yield are DERIVED from the cleared price by inverting the paper's own cash
+      flows. A participant VALUES with a spread and BIDS a price — which is why
+      `domain/pricing` needs both directions and why each belongs on a different side of the
+      auction.
+
+    **WHERE IT IS BROKEN, precisely.** `financial-clearing-engine.ts:956` reads
+    `unitValueUSD = statKind === 'PRICE_LIKE' ? clearedStat : 1` — a YIELD_LIKE book's unit is
+    worth ONE, always. `assets/index.ts:45-47` declares CORP_BOND and LEVERAGED_LOAN
+    `SPREAD_LIKE` and SOV_BOND `YIELD_LIKE`. Those two facts ARE "credit trades at par"; everything
+    else downstream is a consequence.
+
+    **THE ORDER, and it is the order that matters** — §9.13 part 3 failed by changing what a
+    number MEANS while two subsystems still disagreed about it:
+    1. **Units, while units still equal value.** Give every credit row its `units` (par) and make
+       every writer maintain it. Price is pinned at 1, so units == value by construction and a
+       check can PROVE it: nothing can break, because the two numbers are the same. This is the
+       step §9.13 part 3 skipped, and the leak it found (`creditRow` adds to value and not to
+       face) is the whole reason it must come first.
+    2. **One price per instrument, seeded at par.** A cleared-price store, written only by an
+       auction, read by everything. Seeded at 1.00 so week one is byte-identical.
+    3. **The books clear in PRICE.** Flip the credit and sovereign books to `PRICE_LIKE`. Each
+       participant turns its spread view into a reservation PRICE with `priceFromSpreadBps` —
+       that is the "I value it on DM" half — and the engine clears a price like every other book.
+       `unitValueUSD` then needs no ternary: it is the cleared price, and the cash leg becomes
+       units × price for free.
+    4. **The statistic is derived after the clear.** `spreadBpsFromPrice` inverts the cleared
+       price into the OAS or DM and publishes it (`comp.oasSpreadBps`, `leveragedLoan
+       .discountMarginBps`). `07b:271`'s spread stops being an input and becomes a report.
+    5. **Value is derived everywhere, and the identities split by unit.** An OWNERSHIP check
+       compares UNITS to UNITS and never touches price (`O1`, `O6`, `O7`, `W3`); a MONEY check
+       compares VALUE (`M5`, `F1`, the sheets). That split is what §9.13 part 3 got wrong: it
+       marked the value and left the ownership checks comparing a mark to a face.
+    6. **Delete what the price replaces.** `holdings-ledger.ts:46`'s `priceUSD = 1`;
+       `12-portfolio:141`'s round trip and `carryCalculator.ts` (step 26 owns them);
+       `index-calculation.ts`'s own discounting — each becomes a read of the cleared price.
+
+    **What is already built and correct** (§9.12b, §9.13 parts 1–3): `domain/pricing` with both
+    directions and the term structure; `engine/credit-price.ts` as the one adapter;
+    `markCreditBook` in the ledger; the `faceUSD` column, which becomes `units`. What was wrong
+    was only the direction, and step 3 above is where it turns round.
+
+    **ONE NAME FOR ONE PIECE OF PAPER travels with this.** The register keys credit by TRANCHE and
+    the desks now do too (§9.12), but `O8` still counts a 0.42B tail where the split names an
+    issuer with no live tranche of the kind. A position in paper that does not exist should be
+    nothing, not a row under another name.
+
     **AND IT OWNS 11f: the register holds paper no ladder carries.** `O7` measures it every week —
     ~55 tranches over-claimed in a typical week, and since step 12 put the desks on the tranche
-    key `O1` and `O6` see it too (5.65B and 9.08B in their worst weeks). `register-split.ts:65`
-    spreads a holder's whole ISSUER-level position across that issuer's live tranches pro rata by
-    face with no cap, which is exactly right when holders in aggregate hold what was issued and
-    faithfully distributes the excess when they do not. The split is the messenger; the sender is
-    that **the book clears at issuer level while the paper exists at tranche level** (`07b:530`
-    iterates `regionCompanies`, one instrument per COMPANY). Two hypotheses are already spent and
-    must not be repeated: (a) incomplete claims — DISPROVED, the visitors claim by issuer so for
-    an instrument it is all or none; (b) the issuer/tranche oscillation — DISPROVED AND MEASURED,
-    keeping an untouched position's rows verbatim made O7 WORSE (105 tranches and 0.10B against
-    55 and 0.01B) and moved W2 not at all.
-    The tranche row carries FACE; a holding's value is price × face. Build `domain/bond-pricing.ts` (price from spread, the
-    inverse of the OAS/DM the books already clear), give the engine a real `unitValueUSD` for
-    YIELD_LIKE books, settle primaries at the cleared price rather than par, mark desks and NAV off
-    it, and keep accrual and estate claims on FACE. `holdings-ledger.ts:46-49` (`priceOf` returns
-    `priceUSD = 1`) is the wire-layer site. Sites inventoried in the audit: `07f:930` (CP at par with
-    an annual coupon on 13-week paper), `12-portfolio:110`, `institutional-balance-sheet.ts:192`.
+    key `O1` and `O6` see it too. `register-split.ts:65` spreads a holder's whole ISSUER-level
+    position across that issuer's live tranches pro rata by face with no cap, which is right when
+    holders in aggregate hold what was issued and faithfully distributes the excess when they do
+    not. The split is the messenger; the sender is that **the book clears at issuer level while
+    the paper exists at tranche level** (`07b:530` iterates `regionCompanies`, one instrument per
+    COMPANY). Clearing per tranche in price space closes both at once. Two hypotheses are spent
+    and must not be repeated: (a) incomplete claims — DISPROVED, the visitors claim by issuer so
+    for an instrument it is all or none; (b) the issuer/tranche oscillation — DISPROVED AND
+    MEASURED, keeping an untouched position's rows verbatim made O7 WORSE (105 tranches and 0.10B
+    against 55 and 0.01B) and moved W2 not at all.
+    `holdings-ledger.ts:46-49` is the wire-layer site. Other sites inventoried in the audit:
+    `07f:930` (CP at par with an annual coupon on 13-week paper), `12-portfolio:110`,
+    `institutional-balance-sheet.ts:192`.
 13b. **Coupon accruals are dated wires.** `pendingHolderAccrualUSD` is a side map beside the
     paper. It should be a dated wire that RE-KEYS with the paper when the paper moves, landing on
     the per-tranche register — the same treatment every other claim now gets. Step 13 keeps
