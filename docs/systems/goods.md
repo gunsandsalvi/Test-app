@@ -106,10 +106,181 @@ Written 2026-09-03 from the domain, code shut, and revised once against the user
 
 ## 2. THE MAPPING
 
-*(unmapped — this file's first commit is the required tree alone)*
+Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+checked by `scripts/check-atlas.sh`.
+
+| Node | Code | |
+|---|---|---|
+| A1 a sub-unit with a physical unit of measure | `src/domain/goods-physical.ts:unitMassTonnes` | ✅ |
+| A2 produced from inputs by a recipe | `src/domain/industry-registry.ts:firmInputIntensities` | ✅ |
+| **A2.a fixed input quantities per unit — Leontief, no substitution** | `src/engine2/front-core.ts:RECIPE_INTENSITY` | ❌ |
+| A2.b plus labour, plus capital services | `src/engine/simulation/stages/05-unit-bidding.ts:firmWeeklyCostUSD` | ⚠️ |
+| A3 storable or perishable | `src/domain/goods-physical.ts:shelfLifeWeeksOf` | ✅ |
+| A4 homogeneous within its sub-unit | `src/engine/simulation/stages/05-unit-bidding.ts:runSubUnitMarkets` | ✅ |
+| B1 the production DECISION, quantity the outcome | `src/engine/simulation/stages/05-unit-bidding.ts:buildRegionSupplyPlans` | ✅ |
+| B1.a capacity is a reason and binds | `src/engine/simulation/stages/05-unit-bidding.ts:weeklyCapacityUnits` | ✅ |
+| **B1.b inputs on hand are a reason; shortage is a real state** | `src/engine2/front-core.ts:newInputSupplyConstraintFactor` | ⚠️ |
+| B1.c labour available is a reason | `src/engine/simulation/stages/05-unit-bidding.ts:staffedShare` | ✅ |
+| B1.d VERIFY utilisation is a read of the outcome | — | ❌ |
+| **B2 production consumes the inputs it consumes** | `src/engine2/front-core.ts:consumeFifoOnViews` | ⚠️ |
+| B3 work in progress, owned by somebody | `src/engine/simulation/stages/05-unit-bidding.ts:advanceProductionPipeline` | ✅ |
+| B4 yield — not everything started is finished | — | ❌ |
+| B5 unit cost = inputs + wages + capital charge | `src/engine/simulation/stages/05-unit-bidding.ts:prospectiveUnitCostUSD` | ⚠️ |
+| C1 sellers offer, buyers post the most they will pay | `src/engine/simulation/stages/double-auction.ts:AuctionOffer` | ✅ |
+| C2 a price clears per (good, market, period) | `src/engine/simulation/stages/double-auction.ts:clearDoubleAuction` | ✅ |
+| C3 buyers are heterogeneous and bid for their own reasons | `src/engine/simulation/stages/05-unit-bidding.ts:buildRegionDemandPlans` | ✅ |
+| C4 rationing by a rule stated once | `src/engine/simulation/stages/double-auction.ts:offerFill` | ✅ |
+| C5 unsold output stays with the seller | `src/engine/ledger/goods-ledger.ts:settleOutputInventory` | ✅ |
+| C6 priced in the seller's currency; the buyer converts | `src/domain/currency.ts:convertLocal` | ✅ |
+| D1 goods move physically from seller to buyer | `src/engine/ledger/goods-ledger.ts:deliverGoods` | ✅ |
+| D2 it takes time and costs money | `src/domain/carrier.ts:laneTransitWeeks` | ✅ |
+| D3 a carrier is a named party that earns the freight | `src/engine/simulation/stages/freight-clearing.ts:isCarrier` | ✅ |
+| D4 landed cost = ex-works + freight | `src/engine/simulation/stages/sourcing-intent.ts:freightPerUnitUSD` | ✅ |
+| D5 goods in transit are owned by somebody | `src/engine/simulation/stages/goods-arrival.ts:InTransitShipment` | ✅ |
+| **E1 stock is units; value is units × a price** | `src/engine/ledger/goods-ledger.ts:setOutputStock` | ⚠️ |
+| **E2 carried at the LOWER OF COST AND NRV** | — | ❌ |
+| E2.a a write-down is not reversed | — | ❌ |
+| E2.b broker-dealers carry at fair value | — | ❌ |
+| **E2.c FORBID never carried at market above cost** | `src/engine/ledger/goods-ledger.ts:settleOutputInventory` | ❌ |
+| E3 the holding loss is an event with a P&L line | — | ❌ |
+| E4 spoilage, obsolescence, shrinkage remove units | `src/engine/ledger/goods-ledger.ts:scrapGoods` | ⚠️ |
+| E5 FIFO or weighted average; never LIFO | `src/engine2/lots.ts:consumeFifoOnViews` | ✅ |
+| F1 the buyer pays the seller, by name | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
+| F2 payment terms | `src/domain/trade-invoice.ts:paymentTermWeeks` | ✅ |
+| F3 trade credit is a loan between two named firms | `src/engine/simulation/stages/trade-settlement.ts:runTradeSettlementStage` | ✅ |
+| F4 the freight is paid to the carrier | `src/engine/simulation/stages/05-unit-bidding.ts:R_FREIGHT` | ✅ |
+| F5 revenue on delivery; COGS is the units that left | `src/engine2/front-core.ts:realInputConsumptionCostUSD` | ⚠️ |
+| **G1 PPI and CPI are different indices** | — | ❌ |
+| **G1.a PPI — prices received at the factory gate** | — | ❌ |
+| G1.b CPI — prices paid by households | `src/engine/simulation/stages/price-index.ts:buildCpiBasket` | ✅ |
+| G1.c VERIFY the two diverge, and the gap is the wedge | — | ❌ |
+| G2 inflation is the change in the relevant index | `src/engine/simulation/stages/price-index.ts:computeCpiLevel` | ⚠️ |
+| G3 real and nominal output are distinguishable | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:gdpGrowthBottomUp` | ⚠️ |
+| G4 VERIFY capacity utilisation is a read | — | ❌ |
 
 ---
 
 ## 3. THE DIFF
 
-*(unmapped)*
+### ❌ A2.a — THE RECIPE IS A VALUE SHARE, SO EVERY INPUT SUBSTITUTES UNIT-ELASTICALLY
+
+The node chose fixed coefficients and stated the cost of choosing them. The code has the opposite,
+and it is not an approximation of Leontief — it is a *unit elasticity of substitution*, which is
+the strongest substitution assumption in common use.
+
+`industry-registry.ts:203` — `recipeInputs: { upstream_extraction: 0.55, … }` — is **55 cents of
+upstream extraction per dollar of refined-products REVENUE**, not a quantity per unit of output.
+`front-core.ts:659-666` then does exactly what that implies:
+
+```
+const neededUSD   = lineProductionUSD * RECIPE_INTENSITY[r];   // dollars in, fixed share
+const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice); // …divided by the price
+```
+
+So when an input's cleared price doubles, the firm draws **half the physical units** and its input
+bill is unchanged. A supply shock cannot bite as a real production constraint, because the firm
+economises on the scarce input by exactly the amount that keeps its cost share constant — the
+smoothing A2.a exists to forbid. It runs the other way too: when the firm's own OUTPUT price
+rises, `lineProductionUSD` (revenue ÷ 52) rises and it draws more input units for the same
+physical output.
+
+Not named in `MASTER_PLAN.md` §3. **Becomes a §3 step**, and a large one: it is the recipe's unit
+of account, so it touches the registry's 37 sub-unit BOMs, `firmInputIntensities`, the stage-05
+input bid (`computeRecipeInputNeedUSD`, same shape), the intermediate-demand solve
+(`totalOutputFromFinalDemand`) and the kernel draw together.
+
+### ❌ B1.b / ⚠️ B2 — THE INPUT SHORTAGE IS MEASURED, AND NOTHING READS IT
+
+Two separate defects that compound.
+
+**The shortage is inert.** `front-core.ts:667` measures `physicalFulfillment` from the real FIFO
+draw, `:671` mins it with stage 04's `mktFulfill`, `:673` smooths it into
+`newInputSupplyConstraintFactor`, and `stage08-back.ts:2282` stores it on the company. It is then
+read by **`src/ui/functions/lines.tsx:33` and nothing else** — no production decision, no revenue
+term, no capacity term. A firm that received none of an input it needs makes exactly as much as a
+firm that received all of it. B1.b's "a shortage is a real state" is true of the field and false
+of the world.
+
+**The consumption is not the decision's consequence.** B2 requires the draw to be the physical
+consequence of B1's quantity. It is sized from `annualRevenue / 52 × plShare` in stage 08
+(`front-core.ts:657`), a *different stage* from the one that decided `targetProductionUnits`
+(`05-unit-bidding.ts:1088`), against a *different quantity* (last week's annualized revenue rather
+than this week's planned units). The stock identity `W4` (`audit/wires.ts`) still closes, because
+consumption is recorded wherever it happens — but what a firm consumes and what it decided to make
+are two numbers with no arithmetic between them.
+
+**Becomes a §3 step** (one step, since the fix is the same wiring: production decides, the draw
+follows, and the shortfall caps output).
+
+### ❌ E2 / E2.c — FINISHED STOCK IS MARKED TO MARKET, IN BOTH DIRECTIONS
+
+`goods-ledger.ts:110` and `:123` both write `valueUSD = heldUnits * unitPriceUSD`, and
+`05-unit-bidding.ts:1839` passes `results[plan.regionId].clearedPriceUSD` — **this week's cleared
+price**. There is no cost basis on finished goods anywhere: not a lot chain, not a weighted
+average, not a field. So the stock is revalued up when the market rises (E2.c's exact FORBID —
+profit the firm has not earned), revalued down when it falls, and neither move is a P&L event
+anybody books (E3). The one write-down that does exist is the warehousing charge
+(`front-core.ts:598`, `outNewValue = outValue − outValue × CARRY_RATE_WEEKLY`), and stage 05
+overwrites it the following week with units × the new price.
+
+This is the second half of §3 step 13's `goods-ledger.ts:123` finding — step 13 records that the
+price is **discarded**; this records that before it is discarded it has already **replaced the
+cost**. **Already §3 step 13** for E1, and the lower-of-cost-and-NRV rule (E2, E2.a, E3) is the
+mechanism step 13's item 2 says is new. Note for whoever takes 13: E5's FIFO machinery already
+exists for input lots (`engine2/lots.ts`), so the missing piece is a cost basis on *output*, not a
+new flow convention.
+
+### ❌ G1 / G1.a — THERE IS NO PPI. ONE INDEX WEARS BOTH NAMES
+
+`grep -ri 'ppi\|producerPrice' src` returns nothing. The model publishes a household CPI
+(`price-index.ts`), correctly built on the **shelf** price, and one other price aggregate: stage
+04's `newPriceIndex`, which is a formula (§3 step 23) read only by the UI. So:
+
+- there is no production-weighted, factory-gate index at all;
+- real output is deflated by the consumer index — `11-fiscal:174`,
+  `gdpGrowthBottomUp = (nominal YoY) − reg.inflation`, where `reg.inflation` is CPI. G3 is
+  therefore ⚠️ rather than ❌: the deflation happens, with the wrong deflator;
+- G1.c's wedge — distribution margin plus consumption tax plus import mix — cannot be read,
+  which means **margin compression is invisible**, and the tree names that as most of what a cost
+  shock does to a firm.
+
+The inputs for a real PPI are all present and already measured per sub-unit:
+`demandState.exWorksUnitPriceUSD` (05-unit-bidding:2306) is the factory gate, and
+`totalUnitsSuppliedThisWeek` is the production weight. **Becomes a §3 step** — small, and it is
+the measurement §3 step 23 will need to prove it deleted the right index.
+
+### ❌ B4 / E4 / B1.d — THREE THINGS THAT NEVER HAPPEN TO A UNIT
+
+- **B4 yield.** `advanceProductionPipeline` (05-unit-bidding:240) returns exactly what was started
+  `leadWeeks` ago: `arrivedUnits === startedUnits`, always. No scrap, no defect rate, no loss.
+- **E4 spoilage.** `scrapGoods` exists and is real, but its only callers are estate resolution
+  (`estate-resolution.ts:253,365,369`) and a consignment whose buyer died
+  (`goods-arrival.ts:97,110`). `shelfLifeWeeksOf` is read once — by `distribution.ts:47`, to size
+  the channel's margin. **Nothing in the model ever perishes.** What decays is the *value* of
+  output stock (the carrying charge above), which is a cost, not a unit.
+- **B1.d / G4 utilisation.** `weeklyCapacityUnits` and `targetProductionUnits` sit beside each
+  other in one function and their ratio is never taken.
+
+B4 and E4 **become a §3 step** together (both are unit-destroying transformations the goods ledger
+already has the wire kind for — `scrapGoods` — so this is wiring, not a new mechanism). B1.d/G4
+are **a measurement, for §3 step 38**.
+
+### ⚠️ B5 / F5 — THE COST OF A UNIT AND THE COST OF THE UNITS THAT LEFT
+
+B5's three terms are two. `05-unit-bidding.ts:945` builds `firmWeeklyCostUSD` as current payroll +
+real input lots consumed + the trailing residual; the capital charge is not in it. Capital appears
+only as `marginPremium = costOfCapital * 1.5` on the *ask* (`:1188`), so a firm's break-even test
+is taken against a cost that excludes the return on its plant, and the `1.5` is a stated shape
+§3 step 30 will find. F5 follows from E2: COGS is the FIFO cost of inputs consumed, which is
+right for the input leg, but the finished units that left have no cost to relieve — their carrying
+value was the market price.
+
+### ✅ WHAT IS SOLID, AND WORTH SAYING
+
+C, D and F map almost cleanly, and they are the parts a code-derived tree would have been least
+likely to demand. The auction is one implementation (`double-auction.ts`) shared with freight, it
+rations pro rata by an explicit rule, and the anchor is the last print rather than a bound. The
+delivery chain is complete end to end: three price levels with three real payees (ex-works,
+landed, shelf), freight paid by the buyer to a named carrier, a consignment held by that carrier
+while it moves, trade credit with terms and a write-off, and a stock identity (`W4`) that audits
+Δstock = produced − consumed − scrapped + wires, in units, per region and sub-unit, every week.
