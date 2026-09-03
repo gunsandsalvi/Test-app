@@ -262,10 +262,18 @@ possible detector for a defect this project found by reading code instead.
       omission: the seed has no history to have issued INTO. Self-consistent, so it leaks nothing;
       a level error, and one that gets larger the more of the ladder is aged.
     **And the two the week-0 audit put on the board**, both real and neither owned by another
-    step: `F1` — 685 firms file a cash line that is not their balance (−78.80B); `O7` — 409
-    tranches claimed beyond face by float dust, where the check has NO dust tolerance at all
-    (rule 28 read the other way round: a tolerance of zero fires on representation error). The
-    second is step 27's shape and is recorded there too.
+    step:
+    · `F1` — 685 firms file a cash line that is not their balance (−78.80B);
+    · `O7` — 409 tranches claimed beyond their face, **$439.28 in total, about $1.07 each.**
+      *(CORRECTED: an earlier note here said O7 had no dust tolerance and was firing on
+      representation error. It has one, and it is right —* `1e-9 × max(face, claimed) × rows`,
+      *absolute and scaling with the sum actually performed, exactly as rule 28 asks. The
+      excesses are ABOVE it and are therefore real: at these magnitudes a dollar is some four
+      billion ulps, not a rounding.* The cause is the seed allocating each holder's slice with
+      its own rounding, so the slices sum to slightly more than the face — a claim on paper that
+      does not exist, which is rule 13 at a small size. It dies with step 13, which replaces the
+      allocation with a per-tranche clear; it is NOT step 27's, and the earlier note filing it
+      there was wrong too.)*
 
 12. **ONE THING, ONE KEY** (user, 2026-09-03). *(Mostly done — §9.12. What is left is the tail.)*
     **THE POLICY, stated once so a check can test it:**
@@ -1550,8 +1558,9 @@ the seed opened and still catches every firm and fund BORN later, which is its o
 empty, `O6` had been comparing a zero against a zero and passing, and `P5`'s register walk had
 nothing to walk. Complete, they read: `O6` clean; `P5` — the seed opens 903.14B of credit marked
 at FACE against 920.56B implied by its own seeded spreads, a −17.42B gap, which is step 13 visible
-at week 0; `O7` — 409 tranches claimed beyond face by float dust; `F1` — 685 firms filing a cash
-line that is not their balance, −78.80B.
+at week 0; `O7` — 409 tranches claimed beyond their face by $439.28 in total, which is real and
+not dust (see §3.37-SEED's corrected note); `F1` — 685 firms filing a cash line that is not their
+balance, −78.80B.
 
 Gates: tsc clean, eslint 341 (ratchet), 135 tests, hygiene (atlas 910 citations), build ok.
 
