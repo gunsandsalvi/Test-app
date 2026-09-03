@@ -17,11 +17,9 @@ There is deliberately no section 7 in this file, so the citation can never be mi
   is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
   that names anything but §3's first line; one was written, it disagreed with §3's order, and two
   steps were skipped behind it.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 9b —
-  **138 violations in 35 families**, "the money that is not anyone's" **0.10B across 2 lines**
-  (M1's drift and M7's dust). The prior reference was 131/32 with 0.47B across 3 lines; see §9.9b
-  for why the count rose and the unowned money fell. Read the number off the run, not off this
-  line — the earlier 0.06B written here was a mis-transcription of a 0.47B print.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 11b —
+  **136 violations in 34 families**, "the money that is not anyone's" **0.10B across 2 lines**
+  (M1's drift and M7's dust). Read the number off the run, not off this line.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
@@ -189,18 +187,12 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11b. **A dead firm's goods still move.** The money half is closed (§9.11b): M7's unmapped rows
-    were all `payee BANK_SECURITIES`, a resolved bank's desk keeping its unpaid coupons, and both
-    ends of a shipment now follow the books on a merger and on an estate close. What is LEFT is
-    `O5`: **132 consignments in transit to or from a firm that is gone**, 1 week of 16 at HEAD,
-    and it is neither of those two paths — the merger re-keys both ends now and the estate sweeps
-    both ends now. Diagnose from `audit/ownership.ts:188`: the buyer is in `state.companies` but
-    neither active nor holding an open estate, so it is a firm whose estate CLOSED (which they now
-    do, §9.5) and was dropped from `state.estates` four weeks later, with consignments created or
-    surviving after the sweep. M7's 5 remaining rows are worth 0.00B and can ride with it.
-11c. **The central bank's book drifts.** M1 misses by **0.06B on a 208B sheet in 4 weeks of 16**
-    at HEAD, having been clean for the whole project before the death rate rose. Small, real, and
-    the money family's only sized line besides 11b's dust. Bisect from `56dc3ee`.
+11c. **The central bank's book drifts.** EUR's M1 misses by **0.08B and 0.10B on a 159B and a
+    201B sheet, in weeks 15 and 16 of 16** at HEAD, having been clean for the whole project before
+    the death rate rose. Reserves + reverse repo exceed the assets they are supposed to be held
+    against. It is the money family's largest open line. Bisect from `56dc3ee`.
+    Note the shape: it appears only in the last two weeks and grows with the reverse-repo book,
+    which step 7 built — start there rather than at the central bank.
 11d. **A creator is missing from M6's list.** The money stock moves by named creators only;
     `audit/money.ts:120` names seven of them. In a week of large gross cross-border flow (week 8,
     UK: cross-border +27.82B, banks' own account −21.25B, stock moved 0.36B) **2.55B is
@@ -2360,6 +2352,36 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**11b (part 2). A dead firm's goods still move — the deliveries follow the books.** (`PENDING`)
+The money half closed earlier (below); what was left was `O5`, up to 196 consignments in transit
+to a firm that is gone. The plan's diagnosis pointed at an estate that had closed and been
+dropped. It was wrong, and the instrument said so on the first run: the O5 line now buckets a
+dead buyer by WHY it is dead and whether the consignment has landed, and the answer was **100%
+`bank/afloat`** in every failing week — not one estate, not one merger, every single one a bank
+with goods still on the water.
+
+`rekeyBankLinks` in `bank-resolution.ts` opens with "every link in the world that names the failed
+bank now names the assuming one" and re-keys eleven of them — house banks, facility rows, repo,
+prime brokerage, the offering pipeline, sovereign and desk accruals, derivatives. Consignments
+were the twelfth and were not there. A bank buys goods like any other firm; the assuming bank took
+the business and left the shipments behind, so what was afloat named a bank that no longer existed
+and stayed afloat against nobody. Both bank outcomes are covered by this one site: a failing bank
+is either recapitalised by its treasury (it lives, nothing to move) or resolved into an acquirer,
+and the re-key runs on that path before the shell is marked defaulted.
+
+The merger stage had its own copy of the same re-key. There is now ONE — `reassignConsignments` in
+`goods-arrival.ts`, which owns the shipment type — used by the merger and by the resolution
+(rule 3).
+
+Measured (SHOCKS=0 WEEKS=16): **138 in 35 → 136 in 34**, and the family diff is a single line:
+**O5 goes from 2/16 weeks (worst 196) to CLEAN**. Nothing else moved by one violation.
+M7's 5–6 remaining rows are worth 0.00B and ride with 11c.
+
+**The lesson, and it is the second time this project has paid for it:** the plan's written
+diagnosis of an open defect is a HYPOTHESIS, not a finding. Make the instrument name the cause
+before writing the fix — one extra field on the audit line turned a guess about estates into a
+one-word answer, and the fix was four lines.
 
 **9b. The household week has no lag.** (`PENDING`) `household-balance-sheet.ts` recorded what
 households earned mid-week, reading the week's OWN settlement report — which at that point holds

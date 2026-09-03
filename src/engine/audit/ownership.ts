@@ -25,7 +25,7 @@ function o1(state: GameState, week: number): AuditFinding[] {
       if (t.isCommercialPaper) o.cp += t.principalUSD; else if (t.rateType === 'FIXED') o.corp += t.principalUSD; else o.loan += t.principalUSD;
     });
   });
-  // §5-CLOSE O1: paper issued THIS week is in the auction (07c/07f place it next week, and what
+  // Paper issued THIS week is in the auction (07c/07f place it next week, and what
   // they cannot place is withdrawn from the ladder); it is offered, not yet anyone's, and not
   // yet owed to nobody either. Everything older must have a holder.
   REGION_IDS.forEach((r) => { outstanding[r].sov = sum((state.regions[r]?.govDebtTranches ?? []).filter((t) => t.originationWeek < state.currentWeek), (t) => t.principalUSD); });
@@ -101,7 +101,7 @@ function o3(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
-/** O4 — every facility has a live borrower and a live lender. §5-FINALIZATION step 10: the
+/** O4 — every facility has a live borrower and a live lender. The
  *  lender's book IS the facility rows on the borrowers' ladders (there is no second list to
  *  disagree with), so what is left to check is that each row names a borrower that is active
  *  or in an open estate, and a lender that still has a sheet. */
@@ -180,12 +180,36 @@ function o5(state: GameState, week: number): AuditFinding[] {
   let badIndex = 0;
   (state.marketIndexes ?? []).forEach((x) => { const w = sum(x.constituents, (c) => c.weight); if (x.constituents.length && Math.abs(w - 1) > AUDIT_BOOKS_TOLERANCE) badIndex++; });
   if (badIndex) out.push({ family: 'O', check: 'O5 index weights sum to one', week, usd: badIndex, message: `${badIndex} indices' weights do not sum to one` });
-  let deadShip = 0;
+  // The two halves are counted apart, because they are not the same finding. A dead BUYER is a
+  // consignment that will be scrapped on arrival rather than landed on nobody, so what it
+  // measures is how long the model carries goods for a consignee that cannot take them. A dead
+  // SELLER is a shipment that is perfectly deliverable — the goods left before the firm died and
+  // the live buyer will receive them — so a count there is a question about the check.
+  let deadBuyerShip = 0, deadSellerShip = 0;
   const idOrTicker = (key: string) => tickers.get(key) ?? state.companies.find((c) => c.id === key);
-  // Step 8: a dead buyer with an OPEN estate still takes delivery — the receiver liquidates it.
+  // A dead buyer with an OPEN estate still takes delivery — the receiver liquidates it.
   const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
-  (state.goodsInTransit ?? []).forEach((g) => { const b = tickers.get(g.buyerTicker); if (!b || !(isActiveCompany(b) || openEstates.has(b.id))) deadShip++; else if (!String(g.sellerKey).startsWith('PRIVATE') && !idOrTicker(String(g.sellerKey).replace(/^.*:/, ''))) deadShip++; });
-  if (deadShip) out.push({ family: 'O', check: 'O5 shipments have live buyer and seller', week, usd: deadShip, message: `${deadShip} consignments in transit to or from a firm that is gone` });
+  const estateOf = new Map((state.estates ?? []).map((e) => [e.companyId, e]));
+  const why = new Map<string, number>();
+  const bump = (k: string) => why.set(k, (why.get(k) ?? 0) + 1);
+  (state.goodsInTransit ?? []).forEach((g) => {
+    const b = tickers.get(g.buyerTicker);
+    if (!b || !(isActiveCompany(b) || openEstates.has(b.id))) {
+      deadBuyerShip++;
+      const landed = g.arrivalWeek <= week ? 'landed' : 'afloat';
+      if (!b) bump(`not in companies/${landed}`);
+      else if (b.mergerAcquired) bump(`merger-acquired/${landed}`);
+      else if (b.isBankEntity) bump(`bank/${landed}`);
+      else if (estateOf.get(b.id)?.closedWeek !== undefined) bump(`estate closed/${landed}`);
+      else if (estateOf.has(b.id)) bump(`estate still open/${landed}`);
+      else bump(`dead, no estate opened/${landed}`);
+      return;
+    }
+    if (!String(g.sellerKey).startsWith('PRIVATE') && !idOrTicker(String(g.sellerKey).replace(/^.*:/, ''))) deadSellerShip++;
+  });
+  const deadShip = deadBuyerShip + deadSellerShip;
+  const breakdown = [...why.entries()].sort((a, b2) => b2[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ');
+  if (deadShip) out.push({ family: 'O', check: 'O5 shipments have live buyer and seller', week, usd: deadShip, message: `${deadShip} consignments in transit to or from a firm that is gone (${deadBuyerShip} to a dead buyer${breakdown ? `: ${breakdown}` : ''}; ${deadSellerShip} from a dead seller)` });
   return out;
 }
 

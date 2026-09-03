@@ -29,10 +29,32 @@ export interface InTransitShipment {
   /** What the buyer paid per unit, in its own money — price, freight and all. */
   landedCostPerUnit: number;
   arrivalWeek: number;
-  /** §5-WIRES W4: who holds the consignment while it moves — a named carrier, or the origin
+  /** Who holds the consignment while it moves — a named carrier, or the origin
    *  region's transport pool (no ticker) on a lane no named fleet serves. */
   carrierTicker?: string;
   carrierRegion?: RegionId;
+}
+
+/**
+ * BOTH ENDS OF A SHIPMENT FOLLOW THE BOOKS. A firm that is absorbed — by a merger, or by the
+ * resolution of a bank into the one that assumes it — hands over its deliveries with everything
+ * else it owns: what was on its way TO it is now owed to the successor, and what was on its way
+ * FROM it is now shipped by the successor. Left un-keyed, the consignment names a firm that no
+ * longer exists and stays on the water against nobody for the rest of the run.
+ */
+export function reassignConsignments(
+  state: GameState,
+  from: { ticker: string; id: string },
+  to: { ticker: string; id: string }
+): void {
+  (state.goodsInTransit ?? []).forEach((sh) => {
+    if (sh.buyerTicker === from.ticker) sh.buyerTicker = to.ticker;
+    const seller = String(sh.sellerKey ?? '');
+    const sellerId = seller.replace(/^.*:/, '');
+    if (sellerId !== from.id && sellerId !== from.ticker) return;
+    sh.sellerKey = seller.slice(0, seller.length - sellerId.length)
+      + (sellerId === from.id ? to.id : to.ticker);
+  });
 }
 
 export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -46,13 +68,13 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
 
   // One index, not a scan per shipment. The `.find` this replaces walked ~2,000 firms for every
   // one of ~10,000 in-transit consignments — O(shipments x firms), the exact per-item-scan
-  // anti-pattern §7.32 records three prior instances of, and it made a stage that hands boxes to
+  // anti-pattern, and it made a stage that hands boxes to
   // their owners cost 99ms a week. Public firms first so a duplicate ticker resolves the same
   // way the sequential find did (tickers are unique by construction; this is belt and braces).
   const firmByTicker = new Map<string, (typeof ctx.prevActiveFirms)[number]>();
   ctx.prevActivePrivateFirms.forEach(c => firmByTicker.set(c.ticker, c));
   ctx.prevActiveFirms.forEach(c => firmByTicker.set(c.ticker, c));
-  // §5-FINALIZATION step 8: a dead buyer with an OPEN estate still takes delivery — the receiver
+  // A dead buyer with an OPEN estate still takes delivery — the receiver
   // liquidates what arrives (the workout sells input lots to peers as it sells finished stock).
   const openEstateIds = new Set((ctx.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   const estateByTicker = new Map<string, (typeof ctx.updatedCompanies)[number]>();
@@ -75,11 +97,11 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
       if (shipment.carrierTicker && shipment.carrierRegion) scrapGoods(shipment.carrierRegion, shipment.subUnitId, shipment.units);
       return;
     }
-    // §5-WIRES W4: the consignment leaves the carrier's hands for the buyer's, by wire.
+    // The consignment leaves the carrier's hands for the buyer's, by wire.
     const wireNo = deliverGoods(carrier, { kind: 'COMPANY', ticker: buyer.ticker }, shipment.subUnitId, shipment.units, shipment.landedCostPerUnit, 'consignment delivered');
     // Copy once on first touch, append in place after — same list, none of the per-shipment
     // whole-array rebuilds (the GC was 10% of the weekly step before this pass).
-    // IND1: what arrives is routed by what it IS — a machine crossing an ocean becomes PP&E the
+    // What arrives is routed by what it IS — a machine crossing an ocean becomes PP&E the
     // week it lands, not a lot nobody consumes.
     const kind = purchaseKindOf(shipment.subUnitId);
     if (toEstate && kind !== 'RECIPE_INPUT') {
@@ -90,7 +112,7 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     }
     if (kind !== 'RECIPE_INPUT') {
       if (kind === 'CAPITAL_GOOD') {
-        // IND13 — landing is not entering service. An imported machine is commissioned on the
+        // Landing is not entering service. An imported machine is commissioned on the
         // same lead a domestic one is; the ocean crossing was the other half of the wait.
         if (!update.capexUnderConstruction) update.capexUnderConstruction = [];
         update.capexUnderConstruction.push({
@@ -99,12 +121,12 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
         });
       }
       arrivedUnits += shipment.units;
-      // §5-WIRES W4: a machine becomes plant and an operating purchase is used on landing —
+      // A machine becomes plant and an operating purchase is used on landing —
       // consumed on receipt, never stock.
       consumeGoods(buyer.region, shipment.subUnitId, shipment.units);
       return;
     }
-    // ENGINE V2 (§7.304) — the consignment lands on the persistent lot table.
+    // The consignment lands on the persistent lot table.
     receiveInputLot(v2, buyer.id, shipment.subUnitId, shipment.sellerKey,
       shipment.units, shipment.landedCostPerUnit, state.currentWeek, wireNo);
     arrivedUnits += shipment.units;

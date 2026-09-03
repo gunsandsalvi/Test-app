@@ -10,6 +10,7 @@
 import { restateBankSheetStatistics } from '../../../domain/bank-resolution';
 import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
+import { reassignConsignments } from './goods-arrival';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { ensureV2, internString, revHistSeed, rowOf, ringCopyRow } from '../../../engine2/world';
 import { materializeLadder, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
@@ -478,18 +479,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     const rekey = (p: DerivativeParty): DerivativeParty => (p.kind === 'COMPANY' && p.ticker === target.ticker ? { kind: 'COMPANY', ticker: acquirer.ticker } : p);
     ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekey(c.a), b: rekey(c.b) }));
   }
-  // BOTH ENDS OF A SHIPMENT FOLLOW THE BOOKS. The buyer side was re-keyed and the SELLER side was
-  // not, so a consignment the target was shipping named a firm that no longer exists the moment
-  // the merger closed — and the ownership audit found it in transit from nobody for the rest of
-  // the run. The acquirer took the target's whole book; it took its deliveries with it.
-  (state.goodsInTransit ?? []).forEach((sh) => {
-    if (sh.buyerTicker === target.ticker) sh.buyerTicker = acquirer.ticker;
-    const seller = String(sh.sellerKey ?? '');
-    const sellerId = seller.replace(/^.*:/, '');
-    if (sellerId === target.id || sellerId === target.ticker) {
-      sh.sellerKey = seller.slice(0, seller.length - sellerId.length) + (sellerId === target.id ? acquirer.id : acquirer.ticker);
-    }
-  });
+  reassignConsignments(state, target, acquirer);
   Object.entries(target.outputInventoryBySubUnit ?? {}).forEach(([subUnitId, row]) => {
     moveOutputUnits(target, acquirer, subUnitId, row.unitsHeld, row.valueUSD, 'merger: finished stock assumed');
   });

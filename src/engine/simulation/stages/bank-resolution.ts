@@ -22,6 +22,7 @@ import {
   assumingCapitalUSD, chooseAssumingBank, isBankUnderPca, planBankResolution, restateBankSheetStatistics, PCA_CAPITAL_RATIO,
 } from '../../../domain/bank-resolution';
 import { assumeBankBooks } from '../../ledger/bank-transfer';
+import { reassignConsignments } from './goods-arrival';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { isActiveCompany } from '../../../domain/company';
 import { partyKey } from '../../ledger/party';
@@ -94,6 +95,14 @@ export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionI
   const rekeyParty = (p: DerivativeParty): DerivativeParty =>
     ('ticker' in p && p.ticker === from) ? { ...p, ticker: to } : p;
   ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekeyParty(c.a), b: rekeyParty(c.b) }));
+  // THE DELIVERIES MOVE WITH THE BOOKS. A resolved bank buys goods like any other firm, and its
+  // consignments were the one link this function did not re-key: the assuming bank took the
+  // business but not the shipments, so what was still on the water named a bank that no longer
+  // existed. Every consignment the ownership audit found in transit to a firm that is gone was
+  // this — a bank, and always still afloat.
+  const idOf = (t: string) => ctx.updatedCompanies.find((c) => c.ticker === t)?.id;
+  const fromId = idOf(from), toId = idOf(to);
+  if (fromId && toId) reassignConsignments(state, { ticker: from, id: fromId }, { ticker: to, id: toId });
 }
 
 export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -201,7 +210,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // the assuming bank owed it for the net. ----
     bank.bankBalanceSheet = undefined;
     bank.homeBankTicker = acquirer.ticker;
-    // A3.1b: the shell has no company account yet; the first pass opens one at zero at its acquirer.
+    // The shell has no company account yet; the first pass opens one at zero at its acquirer.
     bank.isDefaulted = true;
     bank.defaultedWeek = week;
     bank.bankResolvedWeek = week;
