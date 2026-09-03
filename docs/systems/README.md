@@ -67,6 +67,11 @@ answered N" is the whole point of the atlas.
 **a system is something with its own required tree — its own instrument, actor or mechanism that
 could be wholly absent.** That is why banks are three and derivatives are five.
 
+**45 of 45 required trees written (2026-09-03); 1 of 45 mapped.** The required side is now
+complete, which is what makes the mapping meaningful: a node with no citation is a finding, and
+until every system had a required side, an uncited node could always have been an unwritten tree
+instead. Mapping is the next phase, and it is where the findings come out.
+
 | # | System | Tree | Mapped | Diff |
 |---|---|---|---|---|
 | | **INFRASTRUCTURE** | | | |
@@ -112,15 +117,15 @@ could be wholly absent.** That is why banks are three and derivatives are five.
 | 36 | [trade credit](./trade-credit.md) | ✅ | — | — |
 | | **THE REAL ECONOMY** | | | |
 | 37 | [goods](./goods.md) | ✅ | — | — |
-| 38 | freight and logistics | — | — | — |
-| 39 | labour | — | — | — |
-| 40 | housing | — | — | — |
+| 38 | [freight and logistics](./freight-and-logistics.md) | ✅ | — | — |
+| 39 | [labour](./labour.md) | ✅ | — | — |
+| 40 | [housing](./housing.md) | ✅ | — | — |
 | 41 | [households](./households.md) | ✅ | — | — |
-| 42 | SME pools | — | — | — |
+| 42 | [SME pools](./sme-pools.md) | ✅ | — | — |
 | | **CROSS-CUTTING** | | | |
-| 43 | cross-border | — | — | — |
-| 44 | ratings and assessment | — | — | — |
-| 45 | news and the player surface | — | — | — |
+| 43 | [cross-border](./cross-border.md) | ✅ | — | — |
+| 44 | [ratings and assessment](./ratings-and-assessment.md) | ✅ | — | — |
+| 45 | [news and the player surface](./news-and-the-player-surface.md) | ✅ | — | — |
 
 **Instrument contracts** live in [`../instruments/`](../instruments/): a tree whose subject is an
 instrument cites one rather than restating it. There are two:
