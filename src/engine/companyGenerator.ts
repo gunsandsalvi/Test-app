@@ -1,4 +1,4 @@
-import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE, REGION_IDS_SEED_ORDER } from '../types';
+import { Company, CreditRating, RegionId, Sector, DebtTranche, ProductLine, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE, REGION_IDS_SEED_ORDER } from '../types';
 import { stashSeedRing, peekSeedRing } from '../engine2/world';
 import { stashOpeningCash, openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf } from './ledger/accounts';
 import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf, industryOfSubUnit } from '../domain/industry-registry';
@@ -71,7 +71,7 @@ export function getCategoryDemandSeedUSD(
  * much of an industry is carried by firms too small to name. So the named tier's share is its
  * complement, exactly, and the private tier's carve happens inside the SME half where HC always
  * put it. The three tiers then partition total output by construction and cannot over- or
- * under-claim it (rule 13 — a share is an outcome of the one structural primitive, not a fourth
+ * under-claim it (rule 2 — a share is an outcome of the one structural primitive, not a fourth
  * stated number).
  */
 /**
@@ -113,7 +113,7 @@ export function deriveInitialRevenueUSD(
   const totalRankWeight = Array.from({ length: totalCompaniesInCategory }, (_, i) => Math.pow(decayBase, i)).reduce((a, b) => a + b, 0);
   // `category` is an INDUSTRY key here and a sub-unit id at other call sites; accept either
   // rather than making the caller know which (it is the same question: whose industry is this).
-  const industry = (INDUSTRY_REGISTRY as any)[category as string]
+  const industry = INDUSTRY_REGISTRY[category as Industry]
     ? (category as unknown as Industry)
     : industryOfSubUnit(category as string);
   if (!industry) defect(`deriveInitialRevenueUSD: ${String(category)} is neither an industry nor a sub-unit`);
@@ -335,7 +335,7 @@ function debtLadderShape(rank: number): { weights: number[]; maturityWeeks: numb
  * subsequent seeded number in the world and the maturity change could not be told apart from the
  * shift. A hash consumes nothing, so the only thing that moves is what this step is about.
  *
- * It is not a real-world ratio (rule 4). It is the no-information answer: nothing in this model
+ * It is not a real-world ratio (rule 2). It is the no-information answer: nothing in this model
  * says when a given firm issued, so age is uniform over the tenor.
  */
 function seedAgeFraction(trancheId: string): number {
@@ -604,7 +604,9 @@ export function generateInitialCompanies(
       if (tmpl.sector === 'Banks') financialStatementProfile = 'BANK';
       else if (tmpl.institutionalRole === 'INSURER') financialStatementProfile = 'INSURER';
       else if (tmpl.institutionalRole === 'ASSET_MANAGER' || tmpl.institutionalRole === 'PENSION_FUND' || tmpl.institutionalRole === 'HEDGE_FUND') financialStatementProfile = 'ASSET_MANAGER';
-      else if ((tmpl.sector as string) === 'RealEstate' || (tmpl as any).producedCommodityId === 'commercial_construction') financialStatementProfile = 'REIT';
+      // A REIT is named by what it BUILDS. The other half of this test was `sector === 'RealEstate'`,
+      // a value `Sector` has never had, so it could not be true — a dead comparison a cast hid.
+      else if (tmpl.producedCommodityId === 'commercial_construction') financialStatementProfile = 'REIT';
       
       const company: Company = {
         financialStatementProfile,
@@ -706,7 +708,7 @@ export function generateInitialCompanies(
             srfBorrowingUSD: 0,
             onRrpLendingUSD: 0,
             corpBondDealerInventory: [],
-            sovereignBondHoldingsByTenor: {},
+            sovereignBondHoldingsByBond: {},
             sovBondDealerInventory: [],
             loanDealerInventory: [],
             repoLentUSD: 0,
@@ -726,8 +728,9 @@ export function generateInitialCompanies(
         bankRiskFactor: tmpl.sector === 'Banks' ? Number((0.75 + tmpl.rank * 0.18 + (random() - 0.5) * 0.25).toFixed(3)) : undefined,
         isBankEntity: tmpl.sector === 'Banks',
         isInstitutionalEntity: !!tmpl.institutionalRole,
-        institutionalEntityType: tmpl.institutionalRole as any,
-        institutionalRole: (tmpl.institutionalRole ?? null) as any,
+        institutionalEntityType: tmpl.institutionalRole === 'HEDGE_FUND' || !tmpl.institutionalRole
+          ? undefined : tmpl.institutionalRole,
+        institutionalRole: tmpl.institutionalRole ?? null,
         institutionalMarketShare: tmpl.institutionalMarketShare,
         hedgeFundStrategy: tmpl.hedgeFundStrategy,
         beta: tmpl.beta,
@@ -739,7 +742,7 @@ export function generateInitialCompanies(
         outputInventoryBySubUnit: {},
         recentFulfillmentEMA: 1.0,
         treasuryHoldings: [],
-        producedCommodityId: (tmpl as any).producedCommodityId,
+        producedCommodityId: tmpl.producedCommodityId,
       };
 
       stashSeedRing(company, 'rating', [tmpl.initialRating]);
@@ -817,7 +820,7 @@ export function generateInitialCompanies(
       // alone left clones whose cap was not price × shares, and the seed wrote register shares
       // against that cap.
       scaleFirmSize(newCompany, revenueScale);
-      companies.push(newCompany as any);
+      companies.push(newCompany);
     }
 
     // ---- SCALE — THINNING THE ROSTER MUST NOT SHRINK THE ECONOMY. ----
@@ -825,13 +828,13 @@ export function generateInitialCompanies(
     // The padding above is a REPRESENTATION choice — its own comment says so, "breadth of the
     // roster a player can pick from, not the region's economic scale". It was not: every clone
     // ADDED its revenue and its jobs to the region, so the number of names was setting regional
-    // GDP and employment (rule 13 — a quantity a mechanism should produce, imposed instead).
+    // GDP and employment (rule 2 — a quantity a mechanism should produce, imposed instead).
     // Measured at half roster: 5.2M jobs and 0.43T of output simply vanished, while the SME pool
     // the named tier is carved OUT of stayed exactly where it was.
     //
     // So a thinned roster hands what it drops to the names that remain. The region's output and
     // its payroll are identical at every resolution; only the GRANULARITY changes, which is what
-    // makes the roster size a RESOLUTION parameter (rule 19) rather than an economic input.
+    // makes the roster size a RESOLUTION parameter (rule 2) rather than an economic input.
     // Headcount is not scaled here because `dealProductLinesAndHeadcount` below re-derives it
     // from revenue over productivity — conserve the revenue and the jobs follow.
     if (UNIVERSE_SCALE < 1) {
@@ -843,7 +846,7 @@ export function generateInitialCompanies(
         // Every m-th name in the order they were generated: a stride, not the largest, so the
         // size distribution the roster carries is sampled rather than truncated at the top.
         const stride = roster.length / keepCount;
-        const kept: any[] = [];
+        const kept: Company[] = [];
         const keptIds = new Set<string>();
         for (let i = 0; i < keepCount; i++) {
           const c = roster[Math.floor(i * stride)];
@@ -990,7 +993,7 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
  * This pass decides which sub-units each firm produces, what share of each category it holds, and
  * through value added — how many people it employs. It is weighted by `demandLevelAnnualUSD`, so the
  * producer base converges on demand's own shape and a new sub-unit in the registry gets producers
- * with no generator edit (BP1b, rule 17).
+ * with no generator edit (BP1b, rule 15).
  *
  * **It is exported because it has to run TWICE, and that closes a fixed point the plan called
  * genuine.** Category demand is seeded three times: a placeholder in
@@ -1006,7 +1009,7 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
  * its revenue, its PP&E, and therefore its capex — is set before any line is dealt, so `I` does
  * not move when the lines are re-dealt. Re-dealing against the authoritative vector is a fixed
  * point reached in one pass, not an iteration. It also draws no RNG: the deal is a deterministic
- * greedy over a sorted list, so running it twice relabels nothing (rule 10).
+ * greedy over a sorted list, so running it twice relabels nothing (rule 11).
  */
 export function dealProductLinesAndHeadcount(
   companies: Company[],
@@ -1039,7 +1042,7 @@ export function dealProductLinesAndHeadcount(
     sectorComps.forEach((comps, sector) => {
       comps.sort((a, b) => b.baselineAnnualRevenue - a.baselineAnnualRevenue);
 
-      // BP1b (rule 17): lines are DEALT from the registry, weighted by this region's own seeded
+      // BP1b (rule 15): lines are DEALT from the registry, weighted by this region's own seeded
       // demand — supply seeded to meet the demand the economy states, so a new sub-unit
       // in the registry gets producers with no generator edit. Deterministic greedy: each firm
       // (largest first) takes the sub-units its sector currently under-serves most, so every
@@ -1055,7 +1058,7 @@ export function dealProductLinesAndHeadcount(
       let assignedTotalUSD = 0;
 
       comps.forEach((c) => {
-        let lines: any[] = [];
+        let lines: ProductLine[] = [];
 
         // A producedCommodityId-tagged company was seeded to be a real producer of one modeled
         // commodity — it carries the matching line (from the registry's own linkage) or it never
@@ -1065,7 +1068,7 @@ export function dealProductLinesAndHeadcount(
           const parent = (Object.entries(INDUSTRY_REGISTRY) as [Industry, { subUnits: { unitId: string }[] }][])
             .find(([, spec]) => spec.subUnits.some(su => su.unitId === commodityLinkage.subUnitId));
           if (parent) {
-            lines = [{ industry: parent[0], subUnitId: commodityLinkage.subUnitId, revenueShare: 1.0, competitiveness: 0 }];
+            lines = [{ industry: parent[0], subUnitId: commodityLinkage.subUnitId, revenueShare: 1.0, competitiveness: 0, categoryMarketShare: 0 }];
           }
         }
 
@@ -1087,9 +1090,11 @@ export function dealProductLinesAndHeadcount(
           scored.sort((a, b) => (b.deficitUSD - a.deficitUSD) || (a.idx - b.idx));
           const picked = scored.slice(0, k);
           const pickedWeightUSD = picked.reduce((a, e) => a + e.x.weightUSD, 0) || 1;
+          // `categoryMarketShare` is an OUTCOME and is computed below over the whole roster; it
+          // opens at zero, which is also what that pass writes for a category with no demand.
           lines = picked.map(e => ({
             industry: e.x.industry, subUnitId: e.x.unitId,
-            revenueShare: e.x.weightUSD / pickedWeightUSD, competitiveness: 0,
+            revenueShare: e.x.weightUSD / pickedWeightUSD, competitiveness: 0, categoryMarketShare: 0,
           }));
           picked.forEach(e => assignedUSD.set(e.x.unitId,
             (assignedUSD.get(e.x.unitId) ?? 0) + (e.x.weightUSD / pickedWeightUSD) * c.baselineAnnualRevenue));
@@ -1169,12 +1174,8 @@ export function dealProductLinesAndHeadcount(
         const catTotal = catTotals[line.subUnitId];
         line.categoryMarketShare = catTotal > 0 ? (line.revenueShare * c.annualRevenue) / catTotal : 0;
       });
-      let maxLine: any = null;
-      (c.productLines || []).forEach(line => {
-        if (!maxLine || line.revenueShare > maxLine.revenueShare) {
-          maxLine = line;
-        }
-      });
+      const maxLine = (c.productLines || []).reduce<ProductLine | null>(
+        (best, line) => (!best || line.revenueShare > best.revenueShare ? line : best), null);
       if (maxLine) {
         c.primarySubUnitId = maxLine.subUnitId;
       }

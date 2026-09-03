@@ -14,9 +14,9 @@
  * static within a run). Strings die at this boundary (interned seller keys).
  */
 
-import { LotStore, newLotStore, ReadonlyLotStore } from './lots';
+import { newLotStore, ReadonlyLotStore } from './lots';
 import { ContractTable, newContractTable } from './contracts';
-import { TrancheStore, newTrancheStore, ReadonlyTrancheStore } from './tranches';
+import { newTrancheStore, ReadonlyTrancheStore } from './tranches';
 import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
 import { CurrencyCode, CURRENCY_CODES } from '../domain/geography';
 import { FxTable, PARITY_FX } from '../domain/currency';
@@ -40,7 +40,7 @@ export interface V2World {
    *  the weekly `[...slice(-12), x]` allocated a fresh array per firm per week, and the §7.320
    *  mid-loop-append trap lived in the aliasing; a ring has neither). Plain arrays, not SAB —
    *  batteries deep-clone v2 with structuredClone, and SAB-backed lanes would SHARE memory
-   *  across clones (noted §1.24 deviation: clone-safety wins; workers get mirrors, §7.306). */
+   *  across clones (noted §1.18 deviation: clone-safety wins; workers get mirrors, §7.306). */
   revRing: { slots: Float64Array; len: Uint8Array; start: Uint8Array; cap: number };
   /** §4.C II.5 — the other Company history rings (same clone-safety note as revRing). */
   priceRing: F64Ring;

@@ -125,7 +125,7 @@ function outputPriceVsBaselineOf(comp: Company, reg: Region): number {
 /**
  * §7.249 — the deflator is THE PRICE OF WHAT THIS EMPLOYER SELLS, over THE SAME WINDOW as the
  * nominal growth it deflates. The old form subtracted the REGION's 52-WEEK CPI from a 12-week
- * annualized firm growth: rule 9 twice over — a different population (dispersion in category
+ * annualized firm growth: rule 8 twice over — a different population (dispersion in category
  * prices became phantom real growth per firm) and a different period (a base effect in the YoY
  * measure at week 53 read as +90pp of real growth for every firm at once, and the labour market
  * answered with mass rehiring, a demand surge, a ×3 price week and a mass shed — §7.247's
@@ -194,7 +194,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     // `f(theta) = A x theta^MATCHING_ELASTICITY`, concave, because a vacancy takes time to fill.
     // This was LINEAR in tightness, which is the same claim with an elasticity of 1 — that every
     // extra vacancy finds its worker instantly — and it contradicted the matching function in its
-    // own file (rule 3). It was not normalised to the rest point either, so a neutral market quit
+    // own file (rule 4). It was not normalised to the rest point either, so a neutral market quit
     // 5% below baseline.
     //
     // Linear, it was also unbounded upward, and tightness is `vacancies / seekers` — a ratio whose
@@ -213,7 +213,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
 
     interface Posting { comp: Company; vacancies: number; layoffs: number; quits: number }
     const postings: Posting[] = [];
-    const segmentPostings: { seg: any; vacancies: number; layoffs: number; quits: number }[] = [];
+    const segmentPostings: { seg: SmePool; vacancies: number; layoffs: number; quits: number }[] = [];
 
     employers.forEach((comp) => {
       const current = Math.max(0, comp.employeeCount);
@@ -316,7 +316,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // wage bill and wage pressure with no output behind them — and the first 60-week run of
       // this mechanism ended at nominal GDP 2.6e+37 (weeks 55–60; the 30-week probe sat at 3–6%
       // unemployment and missed it). This is the SAME physical statement stage 05 makes, on the
-      // hiring side (rule 3): demand beyond full staffing is served by CAPEX building plant
+      // hiring side (rule 4): demand beyond full staffing is served by CAPEX building plant
       // (§7.129's response reads the shortage), not by hiring.
       // §7.269 — the ceiling is the PLANT's, not the seed's (domain/company.ts). A firm whose
       // delivered capex grew its PP&E can staff the bigger plant; frozen at the seed headcount,
@@ -329,7 +329,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // while outputNeedHeads exceeds its books), so even the clean ~0.5%/yr multiplier shaved
       // marginal firms out of the rescue every week and released exactly the growth-signal
       // layoffs the override exists to veto — a ratchet, not a level shift. It was also a
-      // §1.9 periodicity mismatch (a trailing, baseline-priced demand read divided by an
+      // §1.8 periodicity mismatch (a trailing, baseline-priced demand read divided by an
       // instant multiplier) and a double-count: the firm's OWN learning already reaches its
       // labour demand through the netting (the flow) and the ceiling below (the cap). Both
       // sides of this ratio are struck at the BASELINE vintage, deliberately.
@@ -350,7 +350,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // TEST. Gating hiring on earnings above the capital charge (§7.110's symmetry) meant
       // that at a 10% ten-year yield almost no firm could hire at all — the burn-in's cause
       // trace read ZERO vacancies in every region at 25% unemployment, which is not a labour
-      // market anybody works in (rule 1). The marginal hire's own test is value added per head
+      // market anybody works in (rule 3). The marginal hire's own test is value added per head
       // against the wage per head, both measured on the firm's books, and a firm out of cash
       // hires nobody. What it may hire toward is still the level target, and the matching
       // friction still paces it.
@@ -417,7 +417,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       );
       const desiredWeeklyChange = current * (growthAnnual / 52);
       const quits = current * quitRateWeekly;
-      const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector as any);
+      const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector);
       const vacancies = desiredWeeklyChange >= 0
         ? desiredWeeklyChange * HIRING_ADJUSTMENT_SPEED_MULTIPLE + quits
         : quits;
@@ -429,7 +429,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // The rule above is `cash < 0 → shed`, applied PER FIRM to the named tier: each firm
       // crosses its own threshold or does not. Applied to a pool's TOTAL it says something quite
       // different — that either every firm in the pool has distress layoffs or none does — and it
-      // is the same code at two resolutions with only one of them right (rule 3, §5-DIST).
+      // is the same code at two resolutions with only one of them right (rule 4, §5-DIST).
       //
       // DIST already measures which strata cannot service what they owe, and the exiting weight
       // at the absorbing barrier is drawn from exactly that (§7.143). The employment side reads
@@ -474,7 +474,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       OCCUPATIONS.forEach((occ) => { employedByOccBefore[occ] += Math.max(0, comp.employeeCount) * (mix[occ] ?? 0); });
     });
     (reg.smePools || []).forEach((seg) => {
-      const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector as any);
+      const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector);
       OCCUPATIONS.forEach((occ) => {
         employedByOccBefore[occ] += Math.max(0, seg.employment) * ((mix as Partial<Record<OccupationType, number>>)[occ] ?? 0);
       });
@@ -613,7 +613,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // below the level the seed happened to solve for. **Measured: at 33.6% unemployment with
       // tightness at 0.000, the employment-weighted average offer was RISING (1.0000 → 1.0181)
       // and the going rate had fallen 1.9% in twenty weeks, all of it composition.** A wage that
-      // cannot fall under a third of the workforce out of work is not a price (rule 1).
+      // cannot fall under a third of the workforce out of work is not a price (rule 3).
       //
       // The mirror of "could not fill" is "could fill at will": how slack the market it is
       // hiring into actually is, which this stage already measures as tightness. At tightness 1
@@ -668,7 +668,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       ctx.companyUpdates[comp.ticker].unfilledVacancyShare = Number(unfilledShare.toFixed(4));
     });
     segmentPostings.forEach(({ seg, vacancies, layoffs, quits }: { seg: SmePool; vacancies: number; layoffs: number; quits: number }) => {
-      const mix = (occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector as any)) as Partial<Record<OccupationType, number>>;
+      const mix = (occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector)) as Partial<Record<OccupationType, number>>;
       const hired = filledFor(vacancies, mix);
       seg.employment = Math.max(0, Math.round(seg.employment + hired - layoffs - quits));
     });
@@ -767,7 +767,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
  * held 3.5% phantom employment through a default wave).
  */
 export function reconcileEmploymentView(
-  reg: any,
+  reg: Region,
   employers: Company[],
   carriedVacanciesByOcc?: Record<OccupationType, number>,
   hiresByOcc?: Record<OccupationType, number>,

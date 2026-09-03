@@ -45,7 +45,7 @@ export interface EtfFund {
    * ETF2 — WHAT A SHARE ACTUALLY TRADES AT. Cleared in a book of its own (stages/etf-flows.ts):
    * the float is what the fund's investors hold between them, the primary offering is what the
    * APs will create, and no AP creates below net asset value — which is what holds the top of the
-   * discount without a bound anywhere (rule 15: a participant's price, not a bracket).
+   * discount without a bound anywhere (rule 6: a participant's price, not a bracket).
    *
    * Undefined before the book has run for this fund.
    */
@@ -91,7 +91,7 @@ export const ETF_EXPENSE_RATIO_ANNUAL: Record<'EQUITY' | 'CORP_BOND' | 'LEVERAGE
  * OF_EQUITY = 0.25` is a QUARTER of equity, while the paragraph beside it argued that a desk
  * turning baskets over inside the settlement cycle should move several times its equity. Either
  * the value was an order of magnitude low or the reasoning was wrong, and picking between them by
- * hand would have been choosing the answer (rule 13).
+ * hand would have been choosing the answer (rule 2).
  *
  * **So it is derived, and the reasoning wins.** An AP does not WAREHOUSE a creation basket — it
  * buys and delivers it, so what its capital has to cover is not the notional but the PRICE MOVE

@@ -403,7 +403,7 @@ export function treasuryAccountOf(v2: V2World, region: RegionId): number { retur
 /** The ways-and-means advance drawn (an asset of the central bank). */
 export function waysAndMeansOf(v2: V2World, region: RegionId): number { return Math.max(0, -treasuryNetOf(v2, region)); }
 
-/** A company's cash: its account. A bank's cash IS its reserves (A3.1b,, rule 3): its
+/** A company's cash: its account. A bank's cash IS its reserves (A3.1b,, rule 4): its
  *  goods-market self settles on its reserve row and it has no company row at all. */
 export function cashOf(v2: V2World, c: Pick<Company, 'ticker'> & { isBankEntity?: boolean; bankBalanceSheet?: unknown }): number {
   if (c.isBankEntity && c.bankBalanceSheet) return bankReservesOf(v2, c.ticker);

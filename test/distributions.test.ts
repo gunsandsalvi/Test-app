@@ -19,7 +19,7 @@ test('earnings bind when the declared yield outruns them', () => {
 });
 
 test('a loss-making company pays nothing, with no clamp anywhere', () => {
-  // §1.2: it falls out of sizing on earnings rather than on capitalisation.
+  // §1.6: it falls out of sizing on earnings rather than on capitalisation.
   assert.equal(dividendDecision({ ...base, netIncomeUSD: -1e9 }).accrualWeeklyUSD, 0);
   assert.equal(dividendDecision({ ...base, netIncomeUSD: 0 }).accrualWeeklyUSD, 0);
   assert.equal(sustainableDividendWeeklyUSD(-5e9, 0.9), 0);

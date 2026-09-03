@@ -22,7 +22,7 @@ Written 2026-09-03 from the domain, code shut.
     become the baseline
 - **A3** REASON — and **how much**, in a unit, so the size is comparable week to week
 - **A4** REASON — the tolerance is **float dust** — the accumulated representation error of the
-  arithmetic that produced the number — never a percentage of it (rule 28)
+  arithmetic that produced the number — never a percentage of it (rule 7)
   - A4.a a percentage tolerance hides a defect that scales, which is every defect that matters
 
 ### B. THE FAMILIES — WHAT MUST BE TRUE
@@ -31,9 +31,9 @@ Written 2026-09-03 from the domain, code shut.
 - **B2** REASON — **ownership is conserved**: Σ holdings = issued, per instrument
   (`the-register.md` B2)
 - **B3** REASON — **prices exist and are cleared**: every instrument that anyone marks has a price
-  that came out of a mechanism (rule 1, `the-clearing-engine.md` D1)
+  that came out of a mechanism (rule 3, `the-clearing-engine.md` D1)
 - **B4** REASON — **cross-market consistency**: the same economic thing has one value however it
-  is reached (rule 3) — a bond's price and its derived spread, a share and the index containing it
+  is reached (rule 4) — a bond's price and its derived spread, a share and the index containing it
 - **B5** REASON — **accounts balance**: assets − liabilities = equity, for every entity, read and
   not stored
 - **B6** REASON — **names resolve**: every party referenced exists, every issuer of a held
@@ -52,7 +52,7 @@ Written 2026-09-03 from the domain, code shut.
 - **C3** REASON — with the **same invariants every week**: an invariant that is skipped in some
   weeks measures the skipping, not the world
 - **C4** FORBID — **the audit never repairs.** It observes. A checker that fixes what it finds
-  destroys the evidence and guarantees the cause survives (rule 29)
+  destroys the evidence and guarantees the cause survives (rule 12)
 
 ### D. WHAT IT PRODUCES
 - **D1** REASON — a **count by family**, comparable across runs, so a change can be attributed
@@ -122,7 +122,7 @@ step is, so a future reader can tell a known gap from a new one.
 ### ❌ A4 / A4.a — PERCENTAGE TOLERANCES, AND THE ATLAS AGREES WITH RULE 28
 
 `ownership.ts:59` forgives `max(5e7, o * AUDIT_BOOKS_TOLERANCE)`; `money.ts:135` forgives
-`max(1e7, assets * 2e-3)`. Node A4 is rule 28 restated from the domain side and reaches the same
+`max(1e7, assets * 2e-3)`. Node A4 is rule 7 restated from the domain side and reaches the same
 verdict independently: a tolerance is the accumulated representation error of the arithmetic that
 produced the number, so it is absolute, and a percentage forgives exactly the defects that scale.
 **Already §3 step 27**, which owns the full inventory. No new step.
@@ -146,7 +146,7 @@ statement of why they are wrong rather than merely weak.
 ### ⚠️ A3 — THE SIZE IS A NUMBER WITHOUT ITS CURRENCY
 
 `AuditFinding.usd` is a bare number, and its name says USD while the value is whatever money the
-check summed — the same defect as everywhere else in the tree (rule 9, §3 step 13c). It matters
+check summed — the same defect as everywhere else in the tree (rule 8, §3 step 13c). It matters
 more here than elsewhere: the scoreboard ADDS finding sizes across regions to produce "the money
 that is not anyone's", which sums four currencies. **Already §3 step 13c**, but this is the one
 place where the rename is not cosmetic, and it is worth doing this call site first.

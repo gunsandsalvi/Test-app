@@ -17,7 +17,7 @@ import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stage
 import { BackLanes } from './stage08-lanes';
 import {
   isActiveCompany, isPubliclyListed, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare,
-  managedEntityIdsOf, TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE,
+  TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE,
 } from '../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../domain/call-protection';
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
@@ -27,7 +27,7 @@ import { SECTOR_BENCHMARKS } from '../engine/pricing';
 import { annuityFactor, zeroRateAt } from '../domain/pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../engine/formatters';
 import { determineCreditRating } from '../engine/simulation/credit';
-import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
+import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../engine/simulation/constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../engine/companyGenerator';
 import {
   getRatingBucket, settleCorporateActionOnHolders, payHoldersCash, DEFAULT_COVERAGE_FLOOR,
@@ -44,7 +44,7 @@ import { defect } from '../domain/defect';
 import { partyId } from '../engine/ledger/party';
 import { planCapitalProgramme, capacityRetirement } from '../domain/company-week/capital-programme';
 import { learningUpdate, seedCumulativeUnits } from '../domain/company-week/learning';
-import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '../domain/company-week/credit-standing';
+import { creditMetrics, revolverDrawUSD, isInDefault } from '../domain/company-week/credit-standing';
 import { callEconomics, callableAmountUSD } from '../domain/company-week/debt-ladder';
 import { profileIncome } from '../domain/company-week/income-statement';
 import { dividendDecision } from '../domain/company-week/distributions';
@@ -75,7 +75,6 @@ const round4 = (v: number) => Math.round(v * 10000) / 10000;
 export const STANDARD_CORP_TENOR_YEARS = 5;
 
 /** IND4 — a firm's payout discipline is its INDUSTRY's, from the registry. */
-const DEFAULT_MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
 function fixedShareOf(comp: Company): number {
   const base = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5;
   const primary = (comp.productLines || [])[0];
@@ -288,7 +287,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   const newMaintenanceShortfallStreak = programme.maintenanceShortfallStreak;
   const weeklyDebtFundedPortion = programme.debtFundedMaintenanceUSD;
 
-  // The bridge is a REAL tranche on a real bank's book (§1.3: one writer per fact).
+  // The bridge is a REAL tranche on a real bank's book (§1.4: one writer per fact).
   let maintenanceFundingTranches: DebtTranche[] = [];
   if (weeklyDebtFundedPortion > 1000) {
     maintenanceFundingTranches = [{
@@ -373,7 +372,7 @@ function makeCashPoster(ticker: string, region: Company['region'], cashUSD: numb
     // without any bank knowing (§7.86). Each post now names a counterparty; where the model does
     // not have one yet it says so explicitly (`UNMODELED`), and the size of that line is the
     // honest measure of how much of the payment graph is still unnamed — a number to watch down
-    // as later slices name each flow, not a plug (rule 13).
+    // as later slices name each flow, not a plug (rule 2).
     // SCALE §7.303 — the walk's own party ids, interned once per company: every settled leg
     // used to re-probe two string maps (partyId x2) per post, ~40k+ legs a week.
     const selfPartyId = partyId({ kind: 'COMPANY', ticker });
@@ -495,7 +494,7 @@ function runCashWalk(args: {
       // already booked against `bankEquityUSD` in the sector ledger (macro/banking.ts — interest
       // earned and paid, repo interest, wholesale and deposit funding, dividends), so settling
       // this bridge as well credited the same income to the same equity twice, out of a boundary
-      // that does not exist. Two independent quantities for one balance is rule 3.
+      // that does not exist. Two independent quantities for one balance is rule 4.
       post('bank net income accrual', newNetIncome / 52, undefined, false);
       // IND-R1: and its staff. A bank paying wages settles like any other payer — reserves out,
       // households' deposits in — and because a bank's payment is on its OWN account the other
@@ -556,7 +555,7 @@ function runCashWalk(args: {
       // boundary structurally PAID declining firms and charged nobody. The lag is a reporting
       // statement, not a flow: nobody owes it, so no cash moves for it at all. Cash binds to
       // what actually settled — the sales anchor, finally binding (§539's expectation applies:
-      // prints may get uglier and that is the honest direction, §1.20).
+      // prints may get uglier and that is the honest direction, §1.13).
       const nonAuctionReceiptsUSD = Math.max(0, newRevenue / 52 - settledSalesUSD);
       if (process.env.BOUNDARY_TRACE === '1' && nonAuctionReceiptsUSD > 1e6) {
         boundaryTraceByFirm.set(boundaryTraceKey, (boundaryTraceByFirm.get(boundaryTraceKey) ?? 0) + nonAuctionReceiptsUSD);
@@ -589,7 +588,7 @@ function runCashWalk(args: {
       // A firm pays its staff in full. What is left of the week's operating outflow is the rest
       // of running the business; it cannot be negative, and a payroll larger than the accrued
       // operating cost is a firm whose cash falls faster than its P&L — which is what that is.
-      // The same payroll the P&L above was charged — one number, computed once (rule 3).
+      // The same payroll the P&L above was charged — one number, computed once (rule 4).
       const wagesPaidUSD = weeklyPayrollUSD;
       post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: region as Company['region'] });
       // §5-CLOSE F2: THE EMPLOYER'S PAYROLL TAX IS A PAYMENT. The treasury used to accrue it from
@@ -607,7 +606,7 @@ function runCashWalk(args: {
       // cost that is neither wages nor a purchase the auction covers.
       //
       // The supplier used to be picked here, by a size-weighted hash over the SME pools. That was
-      // an allocation standing in for a purchasing decision — the thing rule 13 forbids — and it
+      // an allocation standing in for a purchasing decision — the thing rule 2 forbids — and it
       // is deleted rather than tuned.
       // §7.285 (2), the cost half of the same pair — closed WITH the receipts half, as the
       // frontier's own doc demanded (both are accruals; removing one side alone makes every
@@ -658,7 +657,7 @@ function runCashWalk(args: {
       void bondCouponDue; void loanCouponDue; void cpCouponDue;
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
       // now arrives somewhere — the treasury's account — instead of leaving the model.
-      // §5-TAXR — the accrual IS the statement's tax line (rule 14: the P&L and the payment are
+      // §5-TAXR — the accrual IS the statement's tax line (rule 5: the P&L and the payment are
       // one number). The `max(0, EBIT − interest) × rate` recomputation this replaces was the
       // old gate surviving in the cash walk: carryforwards and the accelerated schedule now
       // reach the dollars the treasury actually receives, which is the whole point of them.
@@ -829,8 +828,8 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // stance drifts weekly, seeded at 0.31) governed the corporate tax ACCRUAL forty lines below
     // and the SME pools' in stage 11, and `HOUSEHOLD_EFFECTIVE_TAX_RATE` governed households. So
     // a firm reported its earnings after 21% tax and remitted cash at 31% — the P&L and the
-    // payment disagreed about the same liability (rule 14) — and the government's own tax policy
-    // could not touch corporate taxation at all however hard it pulled its one lever (rule 13).
+    // payment disagreed about the same liability (rule 5) — and the government's own tax policy
+    // could not touch corporate taxation at all however hard it pulled its one lever (rule 2).
     //
     // One rate, from the region that sets it. It is the same number the accrual, the SME pools
     // and the WACC already use, so the four of them stop being four opinions.
@@ -842,7 +841,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     const capexCommissionedThisWeekUSD = F.capexCommissionedUSD[row];
     const stillUnderConstruction = F.stillUnderConstruction[row];
     /** The statement's own tax line, year-rate — the weekly cash accrual below remits exactly
-     *  this (rule 14: the P&L and the payment are one number). */
+     *  this (rule 5: the P&L and the payment are one number). */
     let taxPaidAnnualRateUSD = F.taxPaidAnnualRateUSD[row];
 
     const updatedProductLines = F.updatedProductLines[row];
@@ -863,7 +862,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // IND1: what it costs to hold a good is a property of THE GOOD, not of the firm — warehouse
     // space per tonne divided by its value density, plus its own spoilage. The company-level
     // `inventoryCarryingCostRate` it replaces was one flat 0.02 charging a fab and a dairy alike
-    // (rule 3: one representation, and it belongs on the thing being held).
+    // (rule 4: one representation, and it belongs on the thing being held).
     // §5-STRUCT step 2 — the warehouse charge lives on the firm's stocks
     // (domain/company-week/inventory.ts). It is REPORTED here and settled below, because the
     // charge has a payee (IND16: the distribution sector) and the stock does not.
@@ -872,7 +871,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
 
     const newExecutionQuality = F.newExecutionQuality[row];
 
-    // BP1c (rule 17): a stage does not switch on a kind — it keys the kind once and calls the
+    // BP1c (rule 15): a stage does not switch on a kind — it keys the kind once and calls the
     // profile. The four financial statement paths live in stages/profiles/. The OPERATING path
     // is the front pass's now; only the profile dispatch still runs here, until profiles/ ports.
     if (F.isProfile[row] === 1) {
@@ -1012,7 +1011,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // Credit metrics
     // §5-STRUCT step 2 — the two ratios a rating is struck on live on the firm's credit standing
     // (domain/company-week/credit-standing.ts), unbounded and for the stated reason: a bound is not
-    // a measurement (§1.15), and the clamps these used to carry destroyed the information that a
+    // a measurement (§1.6), and the clamps these used to carry destroyed the information that a
     // firm has no earnings at all.
     const { leverage: newLeverage, coverage: newCoverage } = creditMetrics({
       isBank: L8.sector[row] === 'Banks',
@@ -1083,9 +1082,7 @@ export function runMmfRedemption(comp: Company, row: number, d: BackKernelDeps, 
  *  Parallel-safe after the barrier. */
 export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: ReturnType<typeof runBackCoreA>) {
   const {
-    state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
-    regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
-    primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
+    state, ctx, v2, nextWeek, updatedRegions, regionMedianRevenueUSD, primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
   } = d;
   const L8 = d.backLanes;
   const reg = updatedRegions[L8.region[row]];
@@ -1094,49 +1091,15 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
   const issuer = { id: L8.companyId[row], ticker: L8.ticker[row], region: L8.region[row] };
   const annualInterest = a.annualInterest;
   const bankCredit = a.bankCredit;
-  const cap = a.cap;
-  const capexCommissionedThisWeekUSD = a.capexCommissionedThisWeekUSD;
-  const carryingCostUSD = a.carryingCostUSD;
   const cash = a.cash;
-  const cashLedger = a.cashLedger;
-  const costDriversUSD = a.costDriversUSD;
-  const effectiveDebtRate = a.effectiveDebtRate;
-  const facilityInterestWeeklyUSD = a.facilityInterestWeeklyUSD;
   const maintenanceFundingTranches = a.maintenanceFundingTranches;
-  const measuredInputConsumptionWeeklyUSD = a.measuredInputConsumptionWeeklyUSD;
-  const newAccumulatedDepreciationUSD = a.newAccumulatedDepreciationUSD;
-  const newBaselineDividendYield = a.newBaselineDividendYield;
-  const newCapex = a.newCapex;
   const newCoverage = a.newCoverage;
-  const newDividendYield = a.newDividendYield;
   let newEbit = a.newEbit;
   let newEbitda = a.newEbitda;
-  const newEmployeeCount = a.newEmployeeCount;
-  const newEps = a.newEps;
-  const newExecutionQuality = a.newExecutionQuality;
-  const newGrossPPEUSD = a.newGrossPPEUSD;
-  const newGrowthCapex = a.newGrowthCapex;
-  const newInputSupplyConstraintFactor = a.newInputSupplyConstraintFactor;
   const newLeverage = a.newLeverage;
-  const newMaintenanceCapex = a.newMaintenanceCapex;
-  const newMaintenanceShortfallStreak = a.newMaintenanceShortfallStreak;
-  const newNetIncome = a.newNetIncome;
-  const newOccupationMixDrift = a.newOccupationMixDrift;
-  const newOutputInventoryBySubUnit = a.newOutputInventoryBySubUnit;
-  const newRecentFulfillmentEMA = a.newRecentFulfillmentEMA;
-  const newRecurringBaseUSD = a.newRecurringBaseUSD;
   let newRevenue = a.newRevenue;
-  const newRndExpense = a.newRndExpense;
   let newTotalDebt = a.newTotalDebt;
   const post = a.post;
-  const sec = a.sec;
-  const stillUnderConstruction = a.stillUnderConstruction;
-  const targetProductionUSD = a.targetProductionUSD;
-  const taxPaidAnnualRateUSD = a.taxPaidAnnualRateUSD;
-  const updatedProductLines = a.updatedProductLines;
-  const weeklyDepreciation = a.weeklyDepreciation;
-  const weeklyInterest = a.weeklyInterest;
-  const weeklyPayrollUSD = a.weeklyPayrollUSD;
 
     // §7.311 WRITER FLIP — the ladder lives on the rows. The kernel works a LOCAL list of row
     // indices (order = ladder order), mutates principals in place, appends via pushLadderRow,
@@ -1749,7 +1712,6 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
               const repaid = Math.min(TS.principalUSD[rTr], toPrepayUSD / (1 + premiumPerDollar));
               toPrepayUSD -= repaid * (1 + premiumPerDollar);
               recordPremium(rTr, repaid * premiumPerDollar);
-              const remainingUSD = TS.principalUSD[rTr] - repaid;
               if ((TS.flags[rTr] & TR_FACILITY) && TS.bankRef[rTr] >= 0 && repaid > 0) {
                 // The deposit destruction is posted to the facility's LENDER (t.facilityBankTicker),
                 // not the home bank — splitting the two put the deposit on one bank and the
@@ -1880,7 +1842,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // CRD/DER2 — THE CDS SPREAD IS CLEARED NOW (07h), not decorated here.
     //
     // What stood here was `oasSpreadBps + a random draw in [-4, +4]`, bounded to [10, 5000]: a
-    // decoration on another price with a clamp on each end, which is rule 1 and rule 15 in two
+    // decoration on another price with a clamp on each end, which is rule 3 and rule 6 in two
     // lines. Nothing traded it and nobody was on either side, so a bank could not lay off a
     // credit concentration at all — the only way to reduce one was to stop lending. The
     // protection book prices it against real hedging demand and real sellers, and the difference
@@ -1907,10 +1869,8 @@ function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
 
 export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: number, pre?: BackCoreOut) => Company {
   const {
-    state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
-    regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
-    primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering, pushNews,
-  } = d;
+    state, ctx, v2, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
+    } = d;
 /**
  * §7.317 steps 1.5/1.7 — THE BACK CORE, lifted whole: capital → cash walk → liquidity → debt →
  * rating, verbatim, ending where the earnings/filing/write-back POST begins. Reads lanes and v2
@@ -1926,7 +1886,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
     }
     const core = pre ?? runBackCore(comp, row, d);
-    const { annualInterest, bondCallPremiumUSD, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, cap, capexCommissionedThisWeekUSD, cashLedger, costDriversUSD, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumUSD, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, preActionFixedUSD, preActionFloatingUSD, preFaceByRow, rowList, sec, settlement, stillUnderConstruction, targetProductionUSD, updatedProductLines, weeklyDepreciation, weeklyPayrollUSD, post, cash } = core;
+    const { annualInterest, bondCallPremiumUSD, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, capexCommissionedThisWeekUSD, cashLedger, costDriversUSD, debtIssuanceThisWeek, debtRepaymentThisWeek, isDefaulted, loanCallPremiumUSD, measuredInputConsumptionWeeklyUSD, newAccumulatedDepreciationUSD, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPEUSD, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseUSD, newRevenue, newRndExpense, newTotalDebt, preActionFixedUSD, preActionFloatingUSD, preFaceByRow, rowList, sec, stillUnderConstruction, targetProductionUSD, updatedProductLines, weeklyDepreciation, weeklyPayrollUSD, post, cash } = core;
     const L8 = d.backLanes;
     const reg = updatedRegions[L8.region[row]];
     const weekUpdate = companyUpdates[L8.ticker[row]];
@@ -2014,7 +1974,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // maintained rather than used. An earnings surprise already moves the price through the
     // earnings it reports, and a downgrade through the cleared spread — the narrative is an
     // output of real mechanisms, not an input beside them.
-    // IDX / rule 15: no floor. `comp.stockPrice` arrives here as 07e's CLEARED price, and a
+    // IDX / rule 6: no floor. `comp.stockPrice` arrives here as 07e's CLEARED price, and a
     // company whose equity the market has decided is worthless approaches zero — the endgame is
     // delisting and default, not a ten-cent bound that then feeds market cap, index levels and
     // the take-private arithmetic. Only the non-negativity remains, which is arithmetic.
@@ -2044,7 +2004,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // What this replaces: the block that stood here compared a target sleeve to the current book
     // and closed the gap by MINTING the paper — `treasuryHoldings.push(...)` against an UNMODELED
     // payer — or by scaling every row down and taking cash from the same nowhere. It was a
-    // holding decided by a formula and a purchase with no seller, which is rule 13 and rule 1 in
+    // holding decided by a formula and a purchase with no seller, which is rule 2 and rule 3 in
     // one block. 07f runs the treasurer's bid through the bill auction against real sellers
     // (domain/company.ts owns the sleeve arithmetic), and this stage now simply carries what
     // that auction filled.
@@ -2169,7 +2129,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // G5: the baseline drifts toward what this REGION's workouts have actually recovered, not
     // toward a prior nobody measured. And the 0.10 floor is gone with the mechanism that
     // justified it — recovery is what selling real assets against real claims produces, and if
-    // that is near zero for an issuer with nothing to sell, that is the answer (rule 2).
+    // that is near zero for an issuer with nothing to sell, that is the answer (rule 6).
     const regionRecovery = creditRecoveryRate(reg);
     const newBaselineRecoveryRate = round4((comp.baselineRecoveryRate ?? regionRecovery) * 0.998 + regionRecovery * 0.002);
     const effectiveRecoveryRate = Math.max(0, newBaselineRecoveryRate * (1 - systemicStressFactor));

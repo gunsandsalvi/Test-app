@@ -3,7 +3,7 @@
  *
  * **The design decision, stated once so it cannot drift:** the books the clearing stages write
  * ARE the ledger. Per-entity `InstitutionalEntity.itemizedHoldings` (07b/07c/07d), per-bank
- * `bankBalanceSheet.sovereignBondHoldingsByTenor`, and the dealer inventories are the only
+ * `bankBalanceSheet.sovereignBondHoldingsByBond`, and the dealer inventories are the only
  * stores anyone writes. Every sector-level number is a DERIVED VIEW computed here.
  *
  * What this replaces. Stage 11 rebuilt `institutionalSector.itemizedHoldings` and
@@ -21,7 +21,6 @@
  * the real books, or it does not exist.
  */
 
-import { govBucketId } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, ensureLaddersSynced, facilityRowsOf, materializeGovLadder } from '../../../engine2/tranches';
 import { bookHeadOf, ensureBooksSynced } from '../../../engine2/holdings';
@@ -106,14 +105,14 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
   let bankSov = 0;
   state.companies.forEach((c: Company) => {
     if (c.region !== regionId || !c.bankBalanceSheet || !isActiveCompany(c)) return;
-    Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}).forEach(([tenorKey, usd]) => {
+    Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, usd]) => {
       const v = Number(usd) || 0;
       if (v <= 0) return;
       bankSov += v;
       bankHoldings.push({
-        // This view minted a SECOND id format (`_GOV_`) for paper every book ids as
-        // `-GOV-` — the fork seed. One format now.
-        instrumentId: govBucketId(regionId, tenorKey),
+        // §3.13-SOV row 3: the key IS the bond's id. This view once minted a second id format
+        // (`_GOV_`) and then a bucket id; the book's own key is the only one now.
+        instrumentId: bondId,
         instrumentType: 'GOV_BOND',
         issuerRegion: regionId,
         quantityOrNotionalUSD: v, units: v,
@@ -313,7 +312,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
 
     const sheet = c.bankBalanceSheet;
     if (!sheet || !isActiveCompany(c)) return;
-    Object.values(sheet.sovereignBondHoldingsByTenor || {}).forEach((usd) => {
+    Object.values(sheet.sovereignBondHoldingsByBond || {}).forEach((usd) => {
       // A bank holds its OWN sovereign as its liquidity buffer (07c's domestic mandate).
       a.sovBond.bankUSD += Math.max(0, Number(usd) || 0);
     });
@@ -343,7 +342,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
     a.sovBond.outstandingUSD = materializeGovLadder(v2hv, r)
       .reduce((s, t) => s + Math.max(0, t.principalUSD), 0);
-    Object.values(reg.centralBankSheet?.sovereignHoldingsByTenor || {}).forEach((usd) => {
+    Object.values(reg.centralBankSheet?.sovereignHoldingsByBond || {}).forEach((usd) => {
       a.sovBond.centralBankUSD += Math.max(0, Number(usd) || 0);
     });
   });

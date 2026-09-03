@@ -40,7 +40,7 @@ no price". A sweep finds defects. Only a reference model finds absences.
   deficit banks borrow" is not a requirement — it is what happens. The requirement is that each
   bank posts a schedule out of its own position, cost and constraints, and **who ends up on which
   side is the result.** A tree written in outcomes reads as complete and then licenses code that
-  assigns the outcome directly, which is rule 1's defect wearing the atlas's clothes. So every
+  assigns the outcome directly, which is rule 3's defect wearing the atlas's clothes. So every
   node takes one of three forms, and the form is marked:
   - **REASON** — "it has a cost of funds and a position it wants": checkable, and cannot be
     short-circuited by writing the answer down.

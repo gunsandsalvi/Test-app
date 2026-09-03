@@ -1,6 +1,6 @@
 /**
  * AU — a FUNCTION is one module: a word, the object types it applies to, and a render. The
- * shell never switches on a type outside the registries (rule 17 for the UI).
+ * shell never switches on a type outside the registries (rule 15 for the UI).
  */
 
 import { ReactNode } from 'react';

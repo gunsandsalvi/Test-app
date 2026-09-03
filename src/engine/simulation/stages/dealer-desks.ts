@@ -176,7 +176,7 @@ export function buildDealerDeskParticipants(args: {
  * the book's inventory (derived, for the readers that still want one aggregate).
  *
  * The cash leg itself settles in `settleClearedBook` against `BANK_SECURITIES` — reserves move,
- * equity does not, because the securities are the other side (rule 14). What DOES hit equity is
+ * equity does not, because the securities are the other side (rule 5). What DOES hit equity is
  * the spread the desk paid the book on its own flow, exactly as the bank's investment book books
  * it in 07c: cash left beyond what the paper cost, and the identity drifts by the fee if the P&L
  * does not say so.

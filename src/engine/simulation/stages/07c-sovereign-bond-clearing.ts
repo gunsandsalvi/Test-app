@@ -5,10 +5,10 @@
  * real supply and demand, exactly like corporate bonds — never a macro formula. This is the
  * sovereign-bond adapter over the generalized clearing engine (financial-clearing-engine.ts).
  *
- * Instruments are the region's own real, outstanding debt bucketed into the 4 standard tenor
+ * Instruments are the region's own real, outstanding bonds, one clearing instrument each, at the
  * points it's actually issued at (2Y/5Y/10Y/30Y — see 11-fiscal-and-sovereign-debt.ts's issuance
  * calendar). Real participants:
- *   - Each named bank, with its own real sovereignBondHoldingsByTenor and a real bottom-up target
+ *   - Each named bank, with its own real sovereignBondHoldingsByBond and a real bottom-up target
  *     (sovBondOwnership.bankShare * the real outstanding stock, distributed across named banks
  *     by relative deposit size — never each bank independently computing depositsUSD * a ratio,
  *     which has no structural relationship to how much sovereign debt actually exists), tilted
@@ -44,14 +44,12 @@
  */
 
 import { bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
-import { govBucketId, govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
-import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
-import { SOV_BILL_MAX_TENOR_YEARS, sovBucketKey } from './shared-helpers';
-import { sovereignCouponByBucket } from '../../../domain/government';
-import { priceFromYield, yieldFromPrice, PaperTerms, COUPON_PERIOD_WEEKS } from '../../../domain/pricing';
+
+import { GameState, RegionId, ItemizedHolding } from '../../../types';
+import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
+import { priceFromYield, yieldFromPrice, zeroRateAt, PaperTerms, COUPON_PERIOD_WEEKS } from '../../../domain/pricing';
 import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
 import { materializeGovLadder } from '../../../engine2/tranches';
-import { withdrawUnplacedIssuance } from '../../../domain/government';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
@@ -65,22 +63,16 @@ import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, d
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { maxOverweightMultipleOf } from './asset-allocation';
+import { holdingClassOf } from '../../../domain/assets';
 import { centralBankParticipant, applyCentralBankFills, wireCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { clearedBookDelta } from '../../ledger/holdings-ledger';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
-import { encumberedFaceByBucket } from '../../../domain/repo';
+import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 
-type ZeroRateField = 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y';
-const TENOR_BUCKETS: { key: string; years: number; zeroRateField: ZeroRateField }[] = [
-  { key: 't2', years: 2, zeroRateField: 'tenor2Y' },
-  { key: 't5', years: 5, zeroRateField: 'tenor5Y' },
-  { key: 't10', years: 10, zeroRateField: 'tenor10Y' },
-  { key: 't30', years: 30, zeroRateField: 'tenor30Y' },
-];
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
 const INSTITUTIONAL_REAL_RETURN_BPS = 150;
@@ -91,23 +83,10 @@ const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['sovereign bond'];
 const BOOK = 'sovereign bond';
 const BANK_PREFERRED_TENOR_YEARS = 3; // a bank's HQLA book skews shorter/more liquid than a typical bond investor
 // The liability-driven core share is the kind registry's `sovereignCoreShare` row
-// (domain/institution-profiles.ts) — one owner per fact about a kind (rule 17).
+// (domain/institution-profiles.ts) — one owner per fact about a kind (rule 15).
 
 const INSTITUTIONAL_PREFERRED_TENOR_YEARS = 12; // insurers/pension funds match long-dated liabilities
 
-// How macro conditions reach the curve now that no formula writes it (see this file's header
-// and the deleted block in macro/evolution.ts). Both signals are comparisons against real,
-// already-existing quantities in the same units — the administered policy rate and the region's
-// own expected inflation — never an independently invented "fair yield" level, which has no
-// guaranteed relationship to the bootstrapped curve and saturates into a one-way tilt.
-const POLICY_SPREAD_SCALE_BPS = 300; // pickup over the policy rate that fully forms a bank's front-end view
-const MAX_POLICY_TILT = 0.20;
-const FRONT_END_SUBSTITUTION_TENOR_YEARS = 3; // how far along the curve a bond still substitutes for cash at the CB
-const RESERVE_SUBSTITUTION_SCALE_BPS = 300; // pickup over the policy rate that fully swings the bond-vs-reserves choice
-const MAX_RESERVE_SUBSTITUTION = 0.5; // a bank must always carry some HQLA and cannot lever into unlimited bonds
-const REAL_YIELD_SCALE_BPS = 1000; // real yield that fully forms a duration view
-const MAX_INFLATION_TILT = 0.15;
-const LONG_END_TENOR_YEARS = 20; // tenor at which a holder is fully exposed to the inflation view
 
 /** Extra yield a holder wants for committing duration away from its preferred maturity. */
 function durationPremiumBps(tenorYears: number, preferredTenorYears: number): number {
@@ -162,13 +141,6 @@ function computeSovereignReservationYieldBps(
     + durationPremiumBps(tenorYears, preferredTenorYears);
 }
 
-function bucketInstrumentId(regionId: RegionId, tenorKey: string): string {
-  return govBucketId(regionId, tenorKey);
-}
-
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
 
 /**
  * Every holder's view of what a bond is really paying: its nominal yield less the inflation the
@@ -176,17 +148,6 @@ function clamp(v: number, min: number, max: number): number {
  * by banks and institutions because it is not a mandate preference — it is arithmetic that
  * applies to anyone holding the paper.
  */
-function realYieldSignal(
-  reg: { expectedInflation: number; targetInflation: number },
-  bucket: { years: number },
-  currentYieldBps: number
-): number {
-  // Same horizon-matched expectation as the reservation above: a holder judging a 10-year bond's
-  // real yield uses the inflation it expects over ten years, not this week's print.
-  const realYieldBps = currentYieldBps - expectedInflationOverTenor(reg as any, bucket.years) * 10000;
-  const durationExposure = Math.min(1, bucket.years / LONG_END_TENOR_YEARS);
-  return clamp((realYieldBps / REAL_YIELD_SCALE_BPS) * durationExposure, -MAX_INFLATION_TILT, MAX_INFLATION_TILT);
-}
 
 export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds = REGION_IDS;
@@ -198,29 +159,41 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const liveTranches = materializeGovLadder(ctx.v2, regionId);
     if (liveTranches.length === 0) return;
 
-    const outstandingByBucket = new Map<string, number>();
-    const bucketKeyByTrancheId = new Map<string, string>();
-    TENOR_BUCKETS.forEach((b) => outstandingByBucket.set(b.key, 0));
-    liveTranches.forEach((t) => {
-      // Bills (below 2Y) clear in 07f-short-debt-clearing.ts; folding them in here would count
-      // the same paper in two markets and hand the two-year bucket a phantom float.
-      if (t.tenorAtIssuanceYears < SOV_BILL_MAX_TENOR_YEARS) return;
-      const bucket = TENOR_BUCKETS.reduce((best, b) =>
-        Math.abs(b.years - t.tenorAtIssuanceYears) < Math.abs(best.years - t.tenorAtIssuanceYears) ? b : best
-      );
-      outstandingByBucket.set(bucket.key, (outstandingByBucket.get(bucket.key) ?? 0) + t.principalUSD);
-      bucketKeyByTrancheId.set(t.id, bucket.key);
-    });
-
-    const activeBuckets = TENOR_BUCKETS.filter((b) => (outstandingByBucket.get(b.key) ?? 0) > 0);
-    if (activeBuckets.length === 0) return;
-    const bondBucketKeys = activeBuckets.map((b) => b.key);
+    // §3.13-SOV row 3 — THE AUCTION PRICES BONDS. THERE IS NO BUCKET.
+    //
+    // This book used to clear four TENOR BUCKETS per region — t2/t5/t10/t30 — and every rung was
+    // snapped to the nearest one. A group has no issue date, no coupon of its own and no
+    // maturity: its coupon was a face-weighted average and its "tenor" was the label on the
+    // group, not any bond's remaining life. So the model could not be asked who held a given
+    // government bond, `o3` had to carve out GOV_BOND from "every row names a live instrument",
+    // and this file's own comment recorded the consequence — "two id spaces for one instrument".
+    //
+    // The instruments are the live rungs. Each carries its own coupon and its own REMAINING life,
+    // which is what a buyer actually prices; a ten-year bond issued six years ago is a four-year
+    // bond and is now priced as one.
+    const bonds = liveTranches
+      // Bills (below 2Y at issue) clear in 07f; folding them in here would count the same paper
+      // in two markets.
+      .filter((t) => t.tenorAtIssuanceYears >= SOV_BILL_MAX_TENOR_YEARS && t.principalUSD > 0)
+      .map((t) => ({
+        id: t.id,
+        outstandingUSD: t.principalUSD,
+        couponRate: t.couponRate,
+        /** Years of life LEFT, not years at issue. */
+        years: Math.max(1 / 52, (t.maturityWeek - state.currentWeek) / 52),
+        weeksToMaturity: Math.max(1, t.maturityWeek - state.currentWeek),
+      }))
+      .filter((b) => b.weeksToMaturity > 1);
+    if (process.env.SOV_TRACE === '1') console.log(`  [sov-entry] ${regionId} live=${liveTranches.length} bonds=${bonds.length} cw=${state.currentWeek}`);
+    if (bonds.length === 0) return;
+    const bondIds = bonds.map((b) => b.id);
+    const totalBondOutstandingUSD = bonds.reduce((s, b) => s + b.outstandingUSD, 0) || 1;
 
     // PUB2b: the central bank's open-market order, placed by stage 11 last week. It is a size
     // with no reservation level — policy is a quantity this auction prices, not a premium.
     // Read BEFORE the float below, because whether it bids decides whether its book is for sale.
     const cbOrder = reg.centralBankSheet
-      ? centralBankParticipant(reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k), 'PRICE_LIKE')
+      ? centralBankParticipant(reg.centralBankSheet, bondIds, 'PRICE_LIKE')
       : null;
 
     // OWN7 — the missing shrink. The float is what the participants in THIS book can hold
@@ -239,24 +212,24 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // under a TRANCHE id — two id spaces for one instrument. Reading the wrong one silently counts
     // a whole book as passive: measured when it happened, the float collapsed and every real
     // holder was forced out into the dealer (institutions 201B -> 0, dealer 0 -> 99B).
-    const bucketKeyByInstrumentId = new Map<string, string>();
-    activeBuckets.forEach((b) => bucketKeyByInstrumentId.set(bucketInstrumentId(regionId, b.key), b.key));
-    const bucketOf = (instrumentId: string): string | undefined =>
-      bucketKeyByInstrumentId.get(instrumentId) ?? bucketKeyByTrancheId.get(instrumentId);
-
-    const nonParticipantByBucket = new Map<string, number>();
-    const reserveBucket = (key: string | undefined, usd: number) => {
-      if (!key || !(usd > 0)) return;
-      nonParticipantByBucket.set(key, (nonParticipantByBucket.get(key) ?? 0) + usd);
+    // One id space: the tranche's. The comment this replaces recorded the old defect — "an
+    // institution holds this book's paper under the BUCKET instrument id, a corporate treasury
+    // under a TRANCHE id — two id spaces for one instrument" — and reading the wrong one silently
+    // counted a whole book as passive. There is only one to read now.
+    const heldById = new Set(bondIds);
+    const nonParticipantById = new Map<string, number>();
+    const reserveBond = (id: string | undefined, usd: number) => {
+      if (!id || !heldById.has(id) || !(usd > 0)) return;
+      nonParticipantById.set(id, (nonParticipantById.get(id) ?? 0) + usd);
     };
     if (!cbOrder && reg.centralBankSheet) {
-      Object.entries(reg.centralBankSheet.sovereignHoldingsByTenor || {})
-        .forEach(([key, usd]) => reserveBucket(key, Number(usd) || 0));
+      Object.entries(reg.centralBankSheet.sovereignHoldingsByBond || {})
+        .forEach(([id, usd]) => reserveBond(id, Number(usd) || 0));
     }
     ctx.prevActiveFirms.forEach((c) => {
       if (c.region !== regionId) return;
       (c.treasuryHoldings || []).forEach((h) =>
-        reserveBucket(bucketOf(h.instrumentId), h.quantityOrNotionalUSD ?? 0));
+        reserveBond(h.instrumentId, h.quantityOrNotionalUSD ?? 0));
     });
 
     //   - AND THE THIRD, which OWN7 missed, IS NOT A HOLDER AT ALL — it is UNSOLD PAPER, and it
@@ -282,39 +255,38 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     //     for by whoever takes it, and offered again next week if nobody does. An undersubscribed
     //     auction is then a real event with a real consequence for the treasury's account,
     //     instead of a silent placement.
-    const realHoldingsByBucket = new Map<string, number>();
-    const addReal = (key: string | undefined, usd: number) => {
-      if (!key || !(usd > 0)) return;
-      realHoldingsByBucket.set(key, (realHoldingsByBucket.get(key) ?? 0) + usd);
+    const realHoldingsById = new Map<string, number>();
+    const addReal = (id: string | undefined, usd: number) => {
+      if (!id || !heldById.has(id) || !(usd > 0)) return;
+      realHoldingsById.set(id, (realHoldingsById.get(id) ?? 0) + usd);
     };
     ctx.prevActiveFirms.forEach((c) => {
       if (c.region === regionId && c.bankBalanceSheet) {
-        Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {})
-          .forEach(([key, usd]) => addReal(key, Number(usd) || 0));
+        Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond || {})
+          .forEach(([id, usd]) => addReal(id, Number(usd) || 0));
       }
       (c.treasuryHoldings || []).forEach((h) =>
-        addReal(bucketOf(h.instrumentId), h.quantityOrNotionalUSD ?? 0));
+        addReal(h.instrumentId, h.quantityOrNotionalUSD ?? 0));
     });
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.isDefaulted) return;
       (e.itemizedHoldings || []).forEach((h) => {
-        if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return;
-        addReal(bucketOf(h.instrumentId), h.quantityOrNotionalUSD ?? 0);
+        if (holdingClassOf(h.instrumentType) !== 'SOVEREIGN' || h.issuerRegion !== regionId) return;
+        addReal(h.instrumentId, h.quantityOrNotionalUSD ?? 0);
       });
     });
     if (reg.centralBankSheet) {
-      Object.entries(reg.centralBankSheet.sovereignHoldingsByTenor || {})
-        .forEach(([key, usd]) => addReal(key, Number(usd) || 0));
+      Object.entries(reg.centralBankSheet.sovereignHoldingsByBond || {})
+        .forEach(([id, usd]) => addReal(id, Number(usd) || 0));
     }
     // The desks' own book is held paper like any other: it comes out of what is reservable.
-    // (This read named a field that does not exist on the row — `bucketKey` for `tenorKey` —
+    // (This read named a field that does not exist on the row — `bondId` for `bondId` —
     // so the dealer's position had never once been subtracted. G3a.)
-    (reg.bankingSector.sovBondDealerInventory || []).forEach((pos) => addReal(pos.tenorKey, pos.inventoryUSD));
-    const unheldByBucket = new Map<string, number>();
-    activeBuckets.forEach((b) => unheldByBucket.set(b.key, Math.max(0,
-      (outstandingByBucket.get(b.key) ?? 0) - (realHoldingsByBucket.get(b.key) ?? 0))));
+    (reg.bankingSector.sovBondDealerInventory || []).forEach((pos) => addReal(pos.bondId, pos.inventoryUSD));  // bondId now carries the bond id
+    const unheldById = new Map<string, number>();
+    bonds.forEach((b) => unheldById.set(b.id, Math.max(0, b.outstandingUSD - (realHoldingsById.get(b.id) ?? 0))));
 
-    const totalOutstandingUSD = activeBuckets.reduce((s, b) => s + (outstandingByBucket.get(b.key) ?? 0), 0) || 1;
+    const totalOutstandingUSD = totalBondOutstandingUSD;
 
     // §3.13-SOV row 4 — THE SOVEREIGN CLEARS A PRICE.
     //
@@ -326,52 +298,47 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     //
     // Nothing about anyone's REASON changes. A sovereign buyer's reservation genuinely is a
     // yield — its alternative is the policy rate — so it still computes one, and then states it
-    // as the price that yield implies on the bucket's own cash flows. What changes is what the
+    // as the price that yield implies on the bond's own cash flows. What changes is what the
     // auction solves for, and therefore what a fill is worth.
     //
-    // The bucket's coupon is the face-weighted coupon of the rungs in it, from the one store.
-    const bucketCoupon = sovereignCouponByBucket(materializeGovLadder(ctx.v2, regionId), sovBucketKey);
-    const termsOfBucket = (b: { key: string; years: number }): PaperTerms => ({
-      annualCouponRate: bucketCoupon[b.key] ?? reg.zeroRates[TENOR_BUCKETS.find((t) => t.key === b.key)!.zeroRateField],
+    // Each bond carries its own coupon and its own remaining life. No average, no label.
+    type SovBond = { id: string; outstandingUSD: number; couponRate: number; years: number; weeksToMaturity: number };
+    const termsOf = (b: SovBond): PaperTerms => ({
+      annualCouponRate: b.couponRate,
       periodWeeks: COUPON_PERIOD_WEEKS,
-      weeksToMaturity: Math.max(1, Math.round(b.years * 52)),
+      weeksToMaturity: b.weeksToMaturity,
     });
-    /** A reservation stated in yield, restated as the price that yield implies. */
-    const priceAtYieldBps = (b: { key: string; years: number }, yieldBps: number): number =>
-      priceFromYield(termsOfBucket(b), yieldBps / 10000);
-    /** A willingness-to-move stated in yield, restated as the price move it implies at the
-     *  bucket's current level. Duration does the conversion, which is what duration IS. */
-    const priceRangeOfYieldRange = (b: { key: string; years: number }, yBps: number, rangeBps: number): number =>
+    /** A reservation stated in yield, restated as the price that yield implies on THIS bond. */
+    const priceAtYieldBps = (b: SovBond, yieldBps: number): number => priceFromYield(termsOf(b), yieldBps / 10000);
+    /** A willingness-to-move stated in yield, restated as the price move it implies on this
+     *  bond at its own level. Duration does the conversion, which is what duration IS — and a
+     *  bond's duration is its own, so the four-year rung and the thirty-year rung no longer
+     *  share one number. */
+    const priceRangeOfYieldRange = (b: SovBond, yBps: number, rangeBps: number): number =>
       Math.max(1e-9, Math.abs(priceAtYieldBps(b, yBps) - priceAtYieldBps(b, yBps + rangeBps)));
-    const historyLen = reg.historicalZeroCurves?.length ?? 0;
+    /** The curve's yield at this bond's own remaining tenor — the level it is priced against. */
+    const curveYieldBpsOf = (b: SovBond): number => zeroRateAt(reg.zeroRates, b.years) * 10000;
 
-    const instruments: ClearingInstrument[] = activeBuckets.map((b) => {
-      const currentYieldDecimal = reg.zeroRates[b.zeroRateField];
-      return {
-        id: bucketInstrumentId(regionId, b.key),
-        outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
-        // XB1 removed the `foreignShare` carve-out, which subtracted an owner that did not
-        // exist. OWN7 puts back the carve-out that IS real: what holders outside this book
-        // already own (above). Every bidder here is a real holder, so what is left is genuinely
-        // in play — and the allocation now sums to the stock rather than past it.
-        tradableFloatUSD: Math.max(0,
-          (outstandingByBucket.get(b.key) ?? 0)
-          - (nonParticipantByBucket.get(b.key) ?? 0)
-          - (unheldByBucket.get(b.key) ?? 0)),
-        // PUB: the treasury's own offering — every dollar of this bucket no book holds yet.
-        primaryOfferingUSD: unheldByBucket.get(b.key) ?? 0,
-        currentStat: priceAtYieldBps(b, currentYieldDecimal * 10000), // price per unit of face
-        statKind: 'PRICE_LIKE',
-        durationYears: b.years,
-        // No floor or ceiling — nominal sovereign yields have gone genuinely negative in real
-        // markets; the actual bound is whatever real demand versus supply clears to.
-      };
-    });
+    const instruments: ClearingInstrument[] = bonds.map((b) => ({
+      id: b.id,
+      outstandingUSD: b.outstandingUSD,
+      // XB1 removed the `foreignShare` carve-out, which subtracted an owner that did not exist.
+      // OWN7 puts back the carve-out that IS real: what holders outside this book already own.
+      // Every bidder here is a real holder, so what is left is genuinely in play.
+      tradableFloatUSD: Math.max(0,
+        b.outstandingUSD - (nonParticipantById.get(b.id) ?? 0) - (unheldById.get(b.id) ?? 0)),
+      // PUB: the treasury's own offering — every dollar of THIS BOND no book holds yet.
+      primaryOfferingUSD: unheldById.get(b.id) ?? 0,
+      currentStat: priceAtYieldBps(b, curveYieldBpsOf(b)), // price per unit of face
+      statKind: 'PRICE_LIKE',
+      durationYears: b.years,
+      // No floor or ceiling — nominal sovereign yields have gone genuinely negative in real
+      // markets; the actual bound is whatever real demand versus supply clears to.
+    }));
 
     // Real participants: named banks (own HQLA-liquidity-driven book) + institutional entities
     // (own real target, distributed by relative weight — never an independent number).
     const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
-    const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
 
     // XB1: every region's institutions bid here, not just this one's, and each one's target is
     // ITS OWN book — assets x its government-bond allocation x what its mandate allows in this
@@ -403,9 +370,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const wholeSovStockUSD = liveTranches.reduce((s2, t) => s2 + Math.max(0, t.principalUSD), 0) || 1;
 
     /** The instruments THIS auction prices — every other holding passes through untouched. */
-    const ownBucketInstrumentIds = new Set(activeBuckets.map((b) => bucketInstrumentId(regionId, b.key)));
+    const ownInstrumentIds = new Set(bondIds);
 
-    // SCALE C1: positions come off the shared store's GOV_BOND rows. Only the four BOND buckets
+    // SCALE C1: positions come off the shared store's GOV_BOND rows. Only the BONDS
     // this auction actually prices are claimed. Bills are instrumentType GOV_BOND too, and clear
     // in 07f — sweeping them in here put them in the rebuilt-from-fills set, so this stage
     // deleted every bill position with no cash leg. Measured as the UK institutional book losing
@@ -413,10 +380,10 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // instruments it cleared — unclaimed rows pass through the write-back untouched.
     const store = ctx.holdingsStore!;
     const entityParticipants: ClearingParticipant[] = biddingEntities.map((entity) => {
-      const currentByBucket = new Map<string, number>();
+      const currentByBond = new Map<string, number>();
       store.scan(entity.id, 'GOV_BOND', (h) => {
-        if (!ownBucketInstrumentIds.has(h.instrumentId)) return false;
-        currentByBucket.set(h.instrumentId, (currentByBucket.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+        if (!ownInstrumentIds.has(h.instrumentId)) return false;
+        currentByBond.set(h.instrumentId, (currentByBond.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
         return true;
       });
 
@@ -426,14 +393,15 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // the same choice the banks below face and the reason the front end tracks policy.
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       const entityTarget = rawEntityTargets.get(entity.id) ?? 0;
-      // The entity's real money for this auction (S11), apportioned across tenor buckets by
+      // The entity's real money for this auction (S11), apportioned across the bonds by
       // their share of the market. Banks below carry no such cap: their real constraint is the
       // reserve position S2 already built, not a cash budget.
       const classBudgetUSD = stagePurchaseBudgetUSD(ctx, entity, institutionTotalAssetsUSD(ctx, entity), 'GOV_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
-      activeBuckets.forEach((b) => {
-        const id = bucketInstrumentId(regionId, b.key);
-        const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;
-        demandByInstrumentId.set(id, {
+      bonds.forEach((b) => {
+        // Its share of the market is its own face over the whole stock — the bond's, not a
+        // share is the bond's own.
+        const shareOfMarket = b.outstandingUSD / totalOutstandingUSD;
+        demandByInstrumentId.set(b.id, {
           // XB2: a foreign holder hedges this bond, so what it needs from it is its home
           // requirement plus the hedge's cost. Under CIP that is exactly the policy-rate
           // difference — which makes cross-border demand chase the spread over the LOCAL short
@@ -442,25 +410,27 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
             computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS)
             + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
                 ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate))),
-          maxHoldingUSD: entityTarget * bucketShareOfMarket * maxOverweightMultipleOf(entity),
-          fullSizeStatRange: priceRangeOfYieldRange(b, reg.zeroRates[b.zeroRateField] * 10000, SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
-          maxNetPurchaseUSD: classBudgetUSD * bucketShareOfMarket,
+          maxHoldingUSD: entityTarget * shareOfMarket * maxOverweightMultipleOf(entity),
+          fullSizeStatRange: priceRangeOfYieldRange(b, curveYieldBpsOf(b), SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
+          maxNetPurchaseUSD: classBudgetUSD * shareOfMarket,
           // Liability-driven core: an insurer's claim reserves and a pension fund's benefit
           // promises still exist when yields look poor, and something has to match them.
-          minHoldingUSD: entityTarget * bucketShareOfMarket * institutionProfile(entity.entityType).sovereignCoreShare,
+          minHoldingUSD: entityTarget * shareOfMarket * institutionProfile(entity.entityType).sovereignCoreShare,
         });
       });
 
-      return { id: entity.id, currentHoldingsByInstrumentId: currentByBucket, demandByInstrumentId };
+      return { id: entity.id, currentHoldingsByInstrumentId: currentByBond, demandByInstrumentId };
     });
 
-    const repoHaircuts = computeSovereignRepoHaircuts(reg);
+    // §3.13-SOV row 3: haircuts are per bond, off the ladder this auction is pricing.
+    const repoHaircuts = computeSovereignRepoHaircuts(reg, (id) => bonds.find((b) => b.id === id)?.years);
     const bankParticipants: ClearingParticipant[] = regionBanks.map((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-      const encumberedFace = encumberedFaceByBucket(reg.repoBook ?? [], bank.ticker);
-      const currentByBucket = new Map<string, number>();
-      Object.entries(sheet.sovereignBondHoldingsByTenor || {}).forEach(([key, v]) => {
-        currentByBucket.set(bucketInstrumentId(regionId, key), Number(v) || 0);
+      const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.ticker);
+      const currentByBond = new Map<string, number>();
+      Object.entries(sheet.sovereignBondHoldingsByBond || {}).forEach(([id, v]) => {
+        if (!ownInstrumentIds.has(id)) return;
+        currentByBond.set(id, Number(v) || 0);
       });
 
       // WS6 closes the loop the old comment left open ("their real constraint is the reserve
@@ -487,7 +457,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         leverageHeadroomUSD(sheet, reservesUSD, facilityBookUSD)
       );
       // REPO2: collateral already pledged cannot simultaneously be sold, and the pledge names
-      // the paper. The floor is now the face of THIS bucket that is actually encumbered — a
+      // the paper. The floor is now the face of THIS BOND that is actually encumbered — a
       // blended share withheld thirty-year paper from the two-year book and vice versa.
 
       // A bank's reservation yield is the administered rate it can earn on reserves instead, plus
@@ -497,29 +467,31 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD, facilityBookUSD);
       const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD, bankDepositLines(ctx, bank.ticker));
-      activeBuckets.forEach((b) => {
-        const id = bucketInstrumentId(regionId, b.key);
-        const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;
-        const bucketShareOfSovStock = (outstandingByBucket.get(b.key) ?? 0) / wholeSovStockUSD;
-        demandByInstrumentId.set(id, {
+      bonds.forEach((b) => {
+        const shareOfMarket = b.outstandingUSD / totalOutstandingUSD;
+        const shareOfSovStock = b.outstandingUSD / wholeSovStockUSD;
+        demandByInstrumentId.set(b.id, {
+          // The duration premium is on THIS bond's remaining life, so a rung six years into a
+          // ten-year life is priced as the four-year bond it now is.
           reservationStat: priceAtYieldBps(b, reg.policyRate * 10000 + durationPremiumBps(b.years, BANK_PREFERRED_TENOR_YEARS)),
-          maxHoldingUSD: appetiteUSD * bucketShareOfSovStock,
-          fullSizeStatRange: priceRangeOfYieldRange(b, reg.zeroRates[b.zeroRateField] * 10000, SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
-          maxNetPurchaseUSD: fundableUSD * bucketShareOfMarket,
+          maxHoldingUSD: appetiteUSD * shareOfSovStock,
+          fullSizeStatRange: priceRangeOfYieldRange(b, curveYieldBpsOf(b), SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
+          maxNetPurchaseUSD: fundableUSD * shareOfMarket,
           // Two floors, whichever binds: collateral already pledged overnight cannot be sold,
-          // and a bank cannot sell below the liquidity its reserves do not already cover.
+          // and a bank cannot sell below the liquidity its reserves do not already cover. The
+          // pledge names the paper, so the floor is the face of THIS BOND that is encumbered.
           minHoldingUSD: Math.max(
-            encumberedFace.get(b.key) ?? 0,
-            liquidityFloorUSD * bucketShareOfSovStock
+            encumberedFace.get(b.id) ?? 0,
+            liquidityFloorUSD * shareOfSovStock
           ),
         });
       });
 
-      return { id: bank.ticker, currentHoldingsByInstrumentId: currentByBucket, demandByInstrumentId };
+      return { id: bank.ticker, currentHoldingsByInstrumentId: currentByBond, demandByInstrumentId };
     });
 
     const priorDealerInventoryById = new Map<string, number>();
-    (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(bucketInstrumentId(regionId, p.tenorKey), p.inventoryUSD));
+    (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.bondId, p.inventoryUSD));
 
     // G3a: each bank's govvie desk, distinct from the investment book it also runs above.
     const deskParticipants = buildDealerDeskParticipants({
@@ -543,22 +515,32 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Apply: real cleared yields -> refit the Nelson-Siegel curve so every other consumer rides
     // on these real points.
-    const observedPoints = activeBuckets.map((b) => ({
-      tenorYears: b.years,
-      // §3.13-SOV row 4: the auction cleared a PRICE; the yield is read off it. That is the
-      // direction rule 1 requires, and the curve below is fitted through what the market paid.
-      yield: (() => {
-        const px = result.newStatById.get(bucketInstrumentId(regionId, b.key));
-        return px === undefined ? reg.zeroRates[b.zeroRateField] : yieldFromPrice(termsOfBucket(b), px);
-      })(),
-    }));
-    const fittedParams = fitNelsonSiegelParams(observedPoints, reg.yieldCurveParams.lambda);
-    const newZeroRates = { ...reg.zeroRates };
-    activeBuckets.forEach((b) => {
-      const point = observedPoints.find((p) => p.tenorYears === b.years)!;
-      newZeroRates[b.zeroRateField] = point.yield;
-    });
-    newZeroRates.tenor3M = calculateNelsonSiegelZeroRate(0.25, fittedParams);
+    // Every bond that traded is a point on the curve, at ITS OWN remaining tenor and the yield
+    // ITS OWN cleared price implies. The curve is a read of what the market paid for real bonds
+    // (rule 3, and §3.25's one curve owner), not a refit of four synthetic points.
+    const observedPoints = bonds
+      .map((b) => {
+        const px = result.newStatById.get(b.id);
+        return px === undefined ? undefined : { tenorYears: b.years, yield: yieldFromPrice(termsOf(b), px) };
+      })
+      .filter((p): p is { tenorYears: number; yield: number } => p !== undefined);
+    if (process.env.SOV_TRACE === '1') {
+      console.log(`  [sov-trace] ${regionId} w${ctx.nextWeek}: bonds=${bonds.length} points=${observedPoints.length} ` +
+        bonds.slice(0, 4).map((b) => `${b.id}@${b.years.toFixed(2)}y out=${(b.outstandingUSD / 1e9).toFixed(1)}B float=${((instruments.find((i) => i.id === b.id)?.tradableFloatUSD ?? 0) / 1e9).toFixed(1)}B px=${result.newStatById.get(b.id)?.toFixed(5) ?? 'none'}`).join(' | '));
+    }
+    const fittedParams = observedPoints.length > 0
+      ? fitNelsonSiegelParams(observedPoints, reg.yieldCurveParams.lambda)
+      : reg.yieldCurveParams;
+    // The published tenor points are READS of the fitted curve at those tenors — they are what
+    // the curve says, not a fifth and sixth place a rate is stored (rule 4). A bond at 7.3 years
+    // informs the 5Y and 10Y points through the fit, which is what a curve is FOR.
+    const newZeroRates = {
+      tenor3M: calculateNelsonSiegelZeroRate(0.25, fittedParams),
+      tenor2Y: calculateNelsonSiegelZeroRate(2, fittedParams),
+      tenor5Y: calculateNelsonSiegelZeroRate(5, fittedParams),
+      tenor10Y: calculateNelsonSiegelZeroRate(10, fittedParams),
+      tenor30Y: calculateNelsonSiegelZeroRate(30, fittedParams),
+    };
     reg.yieldCurveParams = fittedParams;
     reg.zeroRates = newZeroRates;
 
@@ -576,7 +558,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     });
 
     // Apply: each bank's real new holdings, keyed back to plain tenor keys, plus the derived
-    // scalar total (sovereignBondHoldingsUSD stays the sum of buckets).
+    // scalar total (sovereignBondHoldingsUSD stays the sum of the book).
     regionBanks.forEach((bank) => {
       const newHoldings = result.newParticipantHoldings.get(bank.ticker) ?? new Map<string, number>();
       // §7.235: a bank with no sheet has no securities book to move, and the `?.` reads below
@@ -586,26 +568,26 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
       if (!existingSheet) return;
       // A clearing stage may only rewrite the instruments it actually cleared (§7.34). This
-      // auction prices the four BOND buckets; the bank's BILL buckets (b13/b26/b52, cleared in
-      // 07f) pass through untouched. Rebuilding the whole book from this auction's fills
+      // auction prices the BONDS; the bank's BILLS (cleared in 07f) pass through untouched.
+      // Rebuilding the whole book from this auction's fills
       // deleted every bank's bill position with no cash leg — the exact WS5 bug, fixed on the
       // institutional path at the time and sitting unnoticed here until the per-bank identity
       // invariant existed to catch it (measured: 26.6B of USA bank bills vanished in week 1).
-      const newBuckets: Record<string, number> = {};
-      // Step 13 (W2): the bank's bond book moves by wire against the house, bucket by bucket.
+      const newBook: Record<string, number> = {};
+      // Step 13 (W2): the bank's bond book moves by wire against the house, bond by bond.
       const bondsBefore = new Map<string, { valueUSD: number }>(), bondsAfter = new Map<string, { valueUSD: number }>();
-      Object.entries(existingSheet?.sovereignBondHoldingsByTenor || {}).forEach(([key, v]) => {
-        if (!ownBucketInstrumentIds.has(bucketInstrumentId(regionId, key))) newBuckets[key] = Number(v) || 0;
-        else bondsBefore.set(bucketInstrumentId(regionId, key), { valueUSD: Number(v) || 0 });
+      Object.entries(existingSheet?.sovereignBondHoldingsByBond || {}).forEach(([id, v]) => {
+        if (!ownInstrumentIds.has(id)) newBook[id] = Number(v) || 0;
+        else bondsBefore.set(id, { valueUSD: Number(v) || 0 });
       });
       newHoldings.forEach((usd, instrumentId) => {
-        const key = govBucketKeyOf(instrumentId, regionId);
-        if (key) { newBuckets[key] = usd; bondsAfter.set(instrumentId, { valueUSD: usd }); }
+        newBook[instrumentId] = usd;
+        bondsAfter.set(instrumentId, { valueUSD: usd });
       });
       clearedBookDelta({ kind: 'BANK_SECURITIES', ticker: bank.ticker }, regionId, 'GOV_BOND', bondsBefore, bondsAfter, () => undefined, 'sovereign bond clearing fill');
-      const prevClearedUSD = activeBuckets.reduce((s, b) => s + (existingSheet?.sovereignBondHoldingsByTenor?.[b.key] ?? 0), 0);
-      const newClearedUSD = activeBuckets.reduce((s, b) => s + (newBuckets[b.key] ?? 0), 0);
-      const newTotalUSD = Object.values(newBuckets).reduce((s, v) => s + v, 0);
+      const prevClearedUSD = bonds.reduce((acc, b) => acc + (existingSheet?.sovereignBondHoldingsByBond?.[b.id] ?? 0), 0);
+      const newClearedUSD = bonds.reduce((acc, b) => acc + (newBook[b.id] ?? 0), 0);
+      const newTotalUSD = Object.values(newBook).reduce((acc, v) => acc + v, 0);
       const cashDeltaUSD = result.netCashDeltaByParticipantId.get(bank.ticker) ?? 0;
       // The dealer fee inside the cash leg is an expense: cash left the bank beyond what the
       // bonds cost, and P&L must say so or the balance-sheet identity drifts by the fee.
@@ -616,7 +598,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // alone.
       updateBankSheet(ctx, bank.ticker, {
         ...bookPnL(existingSheet, -feeUSD, 'sovereign book fee', bank.ticker),
-        sovereignBondHoldingsByTenor: newBuckets,
+        sovereignBondHoldingsByBond: newBook,
         sovereignBondHoldingsUSD: Math.round(newTotalUSD),
       });
     });
@@ -632,21 +614,23 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     if (cbOrder && reg.centralBankSheet) {
       const cbFills = result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>();
       // Step 13 (W2): the central bank's fills are wires from the house.
-      wireCentralBankFills(regionId, reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k), cbFills, 'sovereign bond clearing fill');
+      wireCentralBankFills(regionId, reg.centralBankSheet, bondIds, cbFills, 'sovereign bond clearing fill');
       const filled = applyCentralBankFills(
-        reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k), cbFills
+        reg.centralBankSheet, bondIds, cbFills
       );
       reg.centralBankSheet.lastOpenMarketPurchasesUSD = Math.round(filled);
     }
 
     // Apply: the desks' inventory, owned by the banks that took it. This auction prices the
-    // BOND buckets only — the bill rows (07f's book) pass through, the same partition the
+    // BONDS only — the bill rows (07f's book) pass through, the same partition the
     // banks' own holdings above obey.
     const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
-    const billDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => isBillBucketKey(p.tenorKey));
-    const newDealerInventory: { tenorKey: string; inventoryUSD: number }[] = [];
+    // Rows this auction did not price pass through: the bills, which are 07f's book.
+    const billDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !ownInstrumentIds.has(p.bondId));
+    const newDealerInventory: { bondId: string; inventoryUSD: number }[] = [];
     deskViewById.forEach((inventoryUSD, instrumentId) => {
-      if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ tenorKey: govBucketKeyOf(instrumentId, regionId) ?? instrumentId, inventoryUSD });
+      // The desk's row names the BOND (the field is still called bondId; it is the id now).
+      if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ bondId: instrumentId, inventoryUSD });
     });
     reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: [...newDealerInventory, ...billDealerRows] };
 
@@ -675,10 +659,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const o = result.primaryOutcomeById.get(inst.id);
       const placedUSD = o && !o.withdrawn ? Math.max(0, o.marketTakeUSD) : 0;
       const unplacedUSD = Math.max(0, (inst.primaryOfferingUSD ?? 0) - placedUSD);
-      const key = govBucketKeyOf(inst.id, regionId);
-      if (!key || unplacedUSD <= 1) return;
-      const r = withdrawUnplacedIssuance(reg.govDebtTranches, sovBucketKey, key, unplacedUSD);
-      reg.govDebtTranches = r.tranches;
+      if (unplacedUSD <= 1) return;
+      // §3.13-SOV row 3: the paper that found no buyer is THIS BOND's, so it comes off THIS
+      // BOND. It used to be withdrawn from a group and spread over whatever rungs were in it,
+      // which took face off bonds the auction had actually placed.
+      reg.govDebtTranches = (reg.govDebtTranches ?? [])
+        .map((t) => (t.id === inst.id ? { ...t, principalUSD: Math.max(0, t.principalUSD - unplacedUSD) } : t))
+        .filter((t) => t.principalUSD > 0.01);
       // §3.13-SOV row 2: the store follows the array at the moment the array moves.
       reconcileLadderByWire(ctx.v2, { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' }, reg.govDebtTranches, 'sovereign ladder');
       // A3.5: withdrawn paper rolls into no side map — the treasury's account runs lower and the

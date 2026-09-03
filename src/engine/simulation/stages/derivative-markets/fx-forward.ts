@@ -158,7 +158,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   // ---- DER — THE CROSS-CURRENCY BASIS IS A CLEARED PRICE.
   //
   // What it replaced: `MAX_BASIS x utilization x (0.35 + 0.65 x oneWayShare)` — a formula with a
-  // ceiling whose maximum was an observed crisis-era level (rule 4) and whose split was invented.
+  // ceiling whose maximum was an observed crisis-era level (rule 2) and whose split was invented.
   // The FLOAT is what the region's desks can still write — real supply, bounded by real balance
   // sheets. The PARTICIPANTS are the hedgers, whose schedules slope the right way by construction:
   // full size when the hedge is free, nothing at all once the basis passes what the risk is worth

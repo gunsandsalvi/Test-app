@@ -25,13 +25,32 @@ export interface NewsItem {
   cause?: string;
 }
 
+/**
+ * One firm's quarter as stage 08 reports it. It was declared twice — `EarningsReportEvent` in
+ * `newsGenerator.ts` with `sector: string`, and inline on `WeeklyStepContext` as `any[]` — so the
+ * two could not disagree loudly and the sector arrived as a bare string on one side of the same
+ * row (rule 4: one representation per real thing).
+ */
+export interface EarningsReport {
+  ticker: string;
+  name: string;
+  actualEps: number;
+  consensusEps: number;
+  surprisePct: number;
+  guidanceSnippet: string;
+  sector: Sector;
+  region: RegionId;
+}
+
 export interface DiagnosticsLog {
   week: number;
-  timestamp: string;
-  category: 'MACRO' | 'MICRO' | 'EARNINGS' | 'CREDIT' | 'CONTAGION' | 'EXECUTION';
+  timestamp?: string;
+  /** Severity, when the writer states one. */
+  level?: 'INFO' | 'WARN' | 'ERROR';
+  category?: 'MACRO' | 'MICRO' | 'EARNINGS' | 'CREDIT' | 'CONTAGION' | 'EXECUTION';
   message: string;
   deltaText?: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
 }
 
 export interface ChartModalData {

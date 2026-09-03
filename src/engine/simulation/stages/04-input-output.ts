@@ -78,7 +78,7 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
   // real demand share of the GLOBAL total determines its real share of that global supply — the
   // same "ration proportionally to who actually wants it" principle already used for pro-rata
   // auction allocation elsewhere in this pipeline, not an arbitrary per-region split.
-  const bidQuantitiesByRegionAndInputCat: Record<RegionId, Record<string, { demanderSubUnit: string; bidQuantity: number }[]>> = {} as any;
+  const bidQuantitiesByRegionAndInputCat: Record<RegionId, Record<string, { demanderSubUnit: string; bidQuantity: number }[]>> = {} as Record<RegionId, Record<string, { demanderSubUnit: string; bidQuantity: number }[]>>;
   regionIds.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
     bidQuantitiesByRegionAndInputCat[regionId] = {};

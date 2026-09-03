@@ -43,7 +43,7 @@ export function formatSpan(weeks: number): string {
   return `${years.toFixed(years < 3 ? 1 : 0)} years`;
 }
 
-/** The change-window labels §1.9 asks for: month on month, year on year. */
+/** The change-window labels §1.8 asks for: month on month, year on year. */
 export const WEEKS_PER_MONTH = 4;
 export const WEEKS_PER_YEAR = 52;
 

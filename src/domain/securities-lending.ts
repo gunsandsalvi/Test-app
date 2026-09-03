@@ -4,7 +4,7 @@
  * **What was missing.** `HedgeFundStrategy` has carried `'LONG_SHORT_EQUITY'` since the funds were
  * introduced, and the comment beside it has said the same thing the whole time: it needs a real
  * short to be whole. It never had one. A "long-short" fund in this model held longs, and the short
- * half of its name was a label on an enum — the exact shape rule 3 exists to forbid, one real thing
+ * half of its name was a label on an enum — the exact shape rule 4 exists to forbid, one real thing
  * (a paired book) with no representation at all. Nothing in the model could express a participant
  * who profits when a price falls, so every equity schedule sloped the same way and the only bearish
  * act available to anyone was to own less.
@@ -15,7 +15,7 @@
  *
  *  - **BORROW.** The lender's shares move to the borrower against cash collateral at the market
  *    value, and the borrower pays a fee for the loan. Both legs are real money between two named
- *    parties, so a fund cannot short what it cannot collateralise (rule 14).
+ *    parties, so a fund cannot short what it cannot collateralise (rule 5).
  *  - **LOCATE.** The borrow is an auction, not an entitlement. The float this book prices is the
  *    borrow DEMAND; the participants are the holders who will lend. A borrow the auction does not
  *    fill is a short that does not happen — which is what "hard to borrow" means when it is a
@@ -27,7 +27,7 @@
  *    the price in 07e, which widens every remaining short's loss, while the borrow auction reprices
  *    against a lendable base that just got smaller.
  *
- * **The price this book sets** is the borrow FEE, in bps of market value per year (rule 9). It is
+ * **The price this book sets** is the borrow FEE, in bps of market value per year (rule 8). It is
  * YIELD_LIKE: a lender supplies more of its inventory the higher the fee, so a large borrow demand
  * against a small lendable base clears dear. A lender's reservation is what the loan costs it to
  * carry — the capital consumed by the one-week gap the collateral would have to cover, at the
@@ -47,7 +47,7 @@ export interface SecurityLoan {
   lender: LendingParty;
   borrower: LendingParty;
   shares: number;
-  /** The fee the loan was struck at, in bps of market value per year (rule 9). */
+  /** The fee the loan was struck at, in bps of market value per year (rule 8). */
   feeBps: number;
   /** What the borrower posted, and what comes back when the shares do. */
   collateralUSD: number;

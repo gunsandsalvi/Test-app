@@ -7,7 +7,6 @@ import { ProfileInput, ProfilePnl } from './types';
 
 export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, state, ctx } = input;
-  let newRevenue = 0;
 
   // XB3a-2: a carrier's revenue is the freight it actually carried this week, at the rate its
   // lanes cleared at — not units sold into the goods auction, which it does not participate
@@ -15,7 +14,7 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // the crew it really employs at the region's going wage, so a fuel spike or a wage round
   // lands on its margin the same week.
   const weeklyFreightUSD = ctx.carrierFreightRevenue[comp.ticker] ?? 0;
-  newRevenue = Math.max(10, weeklyFreightUSD * 52);
+  const newRevenue = Math.max(10, weeklyFreightUSD * 52);
   { const v2r = ensureV2(state); revHistPush(v2r, rowOf(v2r, comp.id), newRevenue); }
 
   // FUEL BURNS ON VOYAGES SAILED, NOT ON THE FLEET'S EXISTENCE. This
@@ -27,7 +26,7 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // its capacity).
   let fullFleetFuelTonnes = 0;
   let capacityTonneNm = 0;
-  (comp.carrierFleet?.assets ?? []).forEach((asset: any) => {
+  (comp.carrierFleet?.assets ?? []).forEach((asset) => {
     const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);
     const perWeek = weeklyCapacityTonnes(asset, distanceNm);
     const voyages = asset.capacityTonnes > 0 ? perWeek / asset.capacityTonnes : 0;
@@ -45,7 +44,7 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // This stays as the physical burn the fleet reports; the remaining gap is that the BID is
   // sized off revenue rather than off these tonnes, which is a real difference in a fuel spike.
   const weeklyFuelTonnes = fullFleetFuelTonnes * utilization;
-  // IND-R1, rule 3: ONE payroll. This used to be `sum(asset.crewCount) x crewAnnualWageUSD` —
+  // IND-R1, rule 4: ONE payroll. This used to be `sum(asset.crewCount) x crewAnnualWageUSD` —
   // a second wage bill computed off the fleet spec, which the labor market cannot touch, while
   // `employeeCount` (which it hires and fires, and which pays the households) moved
   // independently. The crew bill is the common payroll now, charged by the caller; fuel is the

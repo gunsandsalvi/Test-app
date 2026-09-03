@@ -19,8 +19,7 @@ import { pay } from './settlement';
 import {
   centralBankAssetsUSD, remittanceUSD,
 } from '../../../domain/central-bank';
-import { sovereignCouponByBucket } from '../../../domain/government';
-import { sovBucketKey } from './shared-helpers';
+import { sovereignCouponByBond } from '../../../domain/government';
 import { materializeGovLadder } from '../../../engine2/tranches';
 
 export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -33,9 +32,9 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // remitted to the treasury. Negative when policy exceeds the portfolio yield — a central bank
     // remitting nothing after a hiking cycle, reproduced rather than modelled separately. ----
     // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
-    const couponByBucket = sovereignCouponByBucket(materializeGovLadder(ctx.v2, regionId), sovBucketKey);
-    const couponIncomeUSD = Object.entries(cb.sovereignHoldingsByTenor || {})
-      .reduce((a, [k, v]) => a + ((Number(v) || 0) * (couponByBucket[k] ?? 0)) / 52, 0);
+    const couponByBond = sovereignCouponByBond(materializeGovLadder(ctx.v2, regionId));
+    const couponIncomeUSD = Object.entries(cb.sovereignHoldingsByBond || {})
+      .reduce((a, [k, v]) => a + ((Number(v) || 0) * (couponByBond[k] ?? 0)) / 52, 0);
     // What 02b actually PAID, recorded by 02b at the moment it paid it. Re-summing the banks'
     // own fields here read a set resolution had already changed, so a bank that was paid its
     // interest and then resolved dropped out of the expense the remittance is meant to net.

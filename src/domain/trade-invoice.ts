@@ -68,7 +68,7 @@ export function paymentTermWeeks(args: {
   // buyer. A receivable is the seller lending its own working capital, so it can carry only as
   // many weeks of its own sales as its cash covers. Without this the arithmetic above hands a
   // near-riskless buyer terms of 4.4e17 weeks — which is not generous credit, it is a missing
-  // mechanism (rule 2: find what should compensate, do not clamp the symptom).
+  // mechanism (rule 6: find what should compensate, do not clamp the symptom).
   const fundingAffordableWeeks = sellerWeeklySalesUSD > 0
     ? Math.max(0, sellerCashUSD) / sellerWeeklySalesUSD
     : 0;

@@ -67,7 +67,7 @@ export {
   quoteLoanMarginBps, quoteHouseholdMarginBps, consumerAnnualLossRate, consumerTermAnnualLossRate,
 } from '../../../domain/bank-pricing';
 import {
-  BANK_WORKING_CAPITAL_RATIO, BANK_TARGET_ROE, BANK_MIN_CAPITAL_RATIO,
+  BANK_WORKING_CAPITAL_RATIO, BANK_MIN_CAPITAL_RATIO,
   quoteLoanMarginBps, quoteHouseholdMarginBps, consumerAnnualLossRate, consumerTermAnnualLossRate,
 } from '../../../domain/bank-pricing';
 /**
@@ -104,7 +104,7 @@ function smePoolAnnualPd(seg: SmePool): number {
 
 export { bankRwaUSD } from '../../../domain/bank-pricing';
 import { bankRwaUSD } from '../../../domain/bank-pricing';
-import { businessLoanBookOf, loanBooksOf } from '../../../domain/banking';
+import { businessLoanBookOf } from '../../../domain/banking';
 import { seedLoanBookUSD } from '../../macro/initialization';
 
 /**
@@ -172,7 +172,7 @@ export function migrateSmeDebtAtSeed(
     // double-count) leaves the bank sheet entirely. Funding side re-derived so the sheet still
     // balances (same discipline as the WS6 seed); the consumer side is the seed's stated book
     // until HH3 seeds the real pools and re-derives this again.
-    const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+    const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     stashSeedHouseholdLine(sheet, Math.round((
       businessLoanBookOf(sheet, facilityBookOf(v2, bank.ticker)) + seedConsumerLoanBookUSD(reg, bank) + sovUSD + openingCashOf(sheet) - sheet.bankEquityUSD
     )));
@@ -468,10 +468,6 @@ export function migrateHouseholdDebtAtSeed(
     // Equity scales with the risk the books add, at the ratio this bank already ran — no new
     // constant, and the opening capital ratio is preserved by construction.
     sheet.bankEquityUSD = Math.round((sheet.bankEquityUSD + Math.max(0, newHouseholdRwaUSD - replacedRwaUSD) * priorRatio));
-    const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-    const fundingNeedUSD = Math.round((
-      loanBooksOf(sheet, facilityBookUSD) + sovUSD + openingCashOf(sheet) - sheet.bankEquityUSD
-    ));
     applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookUSD, Math.round(openingCashOf(hs) * share)); // the seed's provisional sizing (close-seed strikes the line)
     sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet, facilityBookUSD))).toFixed(4));
   });
@@ -590,7 +586,6 @@ export function runBankHouseholdLending(
   // less the cost of selling it, against the loan — deep equity means small severity, and a
   // price crash walks severity up as LTV approaches 1.
   const housingStockUSD = Math.max(0, hs?.housingStockUSD ?? 0);
-  const mortgageBookUSD = Math.max(1, hs?.mortgageDebtUSD ?? 1);
   // DIST/HSG — SEVERITY IS `E[f(LTV)]` NOW, NOT `f(E[LTV])`.
   //
   // It used to read one average LTV for the whole region — measured at 0.340 — into a curve that
@@ -632,7 +627,7 @@ export function runBankHouseholdLending(
 
   // The lending standard, hoisted: what one household's income supports at THIS bank's quote.
   // Both the turnover rate below and the origination block further down read it, and computing it
-  // twice is how two answers to one question appear (rule 3).
+  // twice is how two answers to one question appear (rule 4).
   const householdsCount = Math.max(1, (reg.totalPopulation ?? 0) / AVERAGE_HOUSEHOLD_SIZE);
   const weeklyIncomePerHouseholdUSD = Math.max(0, reg.estimatedHouseholdIncomeUSD) / 52 / householdsCount;
   const rWeekly = Math.max(0.00001, marketMortgageRate / 52);
@@ -670,7 +665,6 @@ export function runBankHouseholdLending(
       // new expensive ones behaves like one — which is what makes a mortgage book slow to
       // reprice, and what the single blended WAC could only approximate.
       const vintages = pl.vintages ?? [];
-      let resetPrincipalUSD = 0;
       let interestUSD = 0;
       let scheduledUSD = 0;
       let lossUSD = 0;
@@ -707,7 +701,6 @@ export function runBankHouseholdLending(
         if (v.fixedForWeeks <= 0) {
           v.rateAnnual = Number(currentMortgageRateAnnual(reg).toFixed(4));
           v.fixedForWeeks = MORTGAGE_FIXED_PERIOD_WEEKS;
-          resetPrincipalUSD += v.principalUSD;
         }
       });
       interestWeeklyUSD += interestUSD;
@@ -773,7 +766,7 @@ export function runBankHouseholdLending(
       // Vintages that have amortised away leave the book rather than lingering at zero.
       pl.vintages = vintages.filter((v) => v.principalUSD > 1);
       // `principalUSD`, `wacAnnual` and `wamWeeks` are MEASUREMENTS of the vintages now — kept
-      // so every existing reader still finds the one number it expects (rule 3).
+      // so every existing reader still finds the one number it expects (rule 4).
       const bookUSD = pl.vintages.reduce((a, v) => a + v.principalUSD, 0);
       pl.principalUSD = bookUSD;
       pl.wacAnnual = bookUSD > 0
@@ -960,7 +953,7 @@ export function applyBankFundingSplit(
    *  whose repo book halved that week. */
   pendingCashUSD = 0
 ): void {
-  // CASH/rule 3 — ONE IDENTITY, NOT TWO. This used to re-derive the funding need from its own
+  // CASH/rule 4 — ONE IDENTITY, NOT TWO. This used to re-derive the funding need from its own
   // partial list of assets: loans, sovereigns and cash, and nothing else. It knew nothing about
   // repo lent or borrowed, the standing facility, the desks' inventory or the margin loans out to
   // funds — so it disagreed with `evolveBankingSector`'s residual, which counts all of them, and

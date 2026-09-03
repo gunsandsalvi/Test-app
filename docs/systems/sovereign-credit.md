@@ -57,7 +57,7 @@ exactly as a corporate bond does, and they are not repeated here. Where it answe
     the tranche are not the same object
 - **B4** FORBID — bond **N13.a**: the ranking exists and **never varies. All of it is pari passu.**
   This is not a missing feature and not a field left unused — it is what a sovereign IS, and a
-  `seniority` field whose only correct value is a constant is the second representation rule 3
+  `seniority` field whose only correct value is a constant is the second representation rule 4
   forbids
 - **B5** FORBID — bond **N12**: default is a missed payment and **nothing else**. There are no
   covenants to breach and no acceleration to trigger
@@ -73,7 +73,7 @@ exactly as a corporate bond does, and they are not repeated here. Where it answe
   choose uniform price)*. Every winning bidder pays the stop-out. Chosen because it is what most
   sovereigns now run for bills and bonds, because it removes the winner's-curse adjustment a
   multiple-price auction forces every bidder to make, and because it needs exactly one cleared
-  number — which is what rule 1 already wants from every book here
+  number — which is what rule 3 already wants from every book here
 - **C3** REASON — **primary dealers with an obligation to bid**, in exchange for privileges
   - C3.a this obligation — **not** a central-bank backstop — is why a sovereign auction
     technically cannot fail
@@ -164,8 +164,8 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | **A4.b its own money versus someone else's** | `src/domain/geography.ts:currencyOf` | ❌ |
 | B1 N5 a bill accretes, a bond pays — two instruments | `src/domain/government.ts:isDiscountBill` | ⚠️ |
 | B2 N3 its own money or another's | `src/domain/geography.ts:currencyOf` | ❌ |
-| B3 N2/N8 fungible within a benchmark LINE | `src/domain/sovereign-id.ts:govBucketId` | ⚠️ |
-| B3.a a re-opening adds to an existing line | `src/domain/sovereign-id.ts:govBucketKeyOf` | ⚠️ |
+| B3 N2/N8 fungible within a benchmark LINE | `src/domain/sovereign-id.ts:govBondTrancheId` | ❌ |
+| B3.a a re-opening adds to an existing line | — | ❌ |
 | B4 FORBID the ranking never varies — all pari passu | `src/domain/region-macro.ts:GovDebtTranche` | ✅ |
 | B5 FORBID no covenants, no acceleration | `src/domain/region-macro.ts:GovDebtTranche` | ✅ |
 | B6 N11 no early-termination regime; buyback and switch instead | `src/domain/region-macro.ts:GovDebtTranche` | ⚠️ |
@@ -189,13 +189,13 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | D4 it is the benchmark other credit is spread to | `src/domain/pricing/bond.ts:zeroRateAt` | ✅ |
 | D5 repo collateral, at the smallest haircut of any asset | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
 | D6 VERIFY the bid-offer is a consequence, not a prior | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
-| **E1 a register: who holds how much of WHICH LINE** | `src/domain/banking.ts:sovereignBondHoldingsByTenor` | ❌ |
+| **E1 a register: who holds how much of WHICH LINE** | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ❌ |
 | E2 holder classes hold for different reasons | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
 | E2.a banks — the regulatory liquidity buffer | `src/engine/macro/banking.ts:liquidityDrivenSovereignFloorUSD` | ✅ |
 | E2.b insurers and pensions — duration against liabilities | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:durationPremiumBps` | ⚠️ |
-| E2.c the central bank — monetary policy | `src/engine/simulation/stages/central-bank-demand.ts:plannedPurchasesByTenor` | ✅ |
+| E2.c the central bank — monetary policy | `src/engine/simulation/stages/central-bank-demand.ts:plannedPurchasesByBond` | ✅ |
 | E2.d foreign official — reserves | — | ❌ |
-| E2.e funds — relative value | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:realYieldSignal` | ✅ |
+| E2.e funds — relative value | — | ❌ |
 | E2.f households and corporates, holding it DIRECTLY | `src/engine/simulation/stages/07f-short-debt-clearing.ts:treasuryParticipantId` | ⚠️ |
 | **E3 marked at the cleared price** | — | ❌ |
 | E4 pledgeable, at a haircut | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
@@ -210,7 +210,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | G3 a default is selective and negotiated; there is no estate | — | ❌ |
 | G4 restructuring by exchange offer, with holdouts | — | ❌ |
 | G5 the consequence is exclusion, not liquidation | — | ❌ |
-| H1 the central bank buys as policy, in a size it chooses | `src/engine/simulation/stages/central-bank-demand.ts:plannedPurchasesByTenor` | ✅ |
+| H1 the central bank buys as policy, in a size it chooses | `src/engine/simulation/stages/central-bank-demand.ts:plannedPurchasesByBond` | ✅ |
 | H2 the purchase CREATES reserves; the base grows | `src/engine/simulation/stages/central-bank-demand.ts:wireCentralBankFills` | ✅ |
 | H3 the coupon on its holding returns as remittance | `src/engine/simulation/stages/central-bank.ts:runCentralBankStage` | ✅ |
 | **H4 monetary financing vs OMO is a POLICY constraint** | `src/engine/ledger/accounts.ts:waysAndMeansOf` | ❌ |
@@ -232,15 +232,15 @@ Branches D and E fall out of the first; the whole of G and half of A out of the 
 |---|---|---|
 | 1 type | `GovDebtTranche` is a strict subset of `DebtTranche` | `region-macro.ts:312` — `{id, principalUSD, couponRate, originationWeek, maturityWeek, tenorAtIssuanceYears}`, six fields, every one of them also on `company.ts:75`. No `seniority`, no `rateType`, no `callProtection`, no `paymentsPerYear`, no currency |
 | 2 store | a plain array, not the engine2 tranche store | `reg.govDebtTranches` — 20 read sites across `src`, all of them `(reg.govDebtTranches ?? []).filter/reduce`; `withdrawUnplacedIssuance` rebuilds the array with `.map(t => ({...t}))` |
-| 3 holdings | a bucket with **no instrument in it** | `banking.ts:129` `sovereignBondHoldingsByTenor: Record<string, number>` for banks, `centralBankSheet.sovereignHoldingsByTenor` for the CB, `sovBondDealerInventory[].tenorKey` for the desks, and `GOV_BOND` register rows keyed by `sovereign-id.ts:govBucketId` (`USA\|t10`) for institutions — **four holder registers, none of them naming a bond** |
+| 3 holdings | ✅ DONE — every store keys by BOND | `banking.ts:129` `sovereignBondHoldingsByBond` for banks, `centralBankSheet.sovereignHoldingsByBond` for the CB, `sovBondDealerInventory[].bondId` for the desks, `GOV_BOND` register rows on the tranche id for institutions. Four stores, one id space; `audit/ownership.ts:o11` is the invariant and `o3` no longer exempts sovereigns |
 | 4 clearing | `07c` clears a **YIELD** | `07c:331` `statKind: 'YIELD_LIKE'`, `currentStat: currentYieldDecimal * 10000`; `financial-clearing-engine.ts:956` then values every fill at `1` because the stat is not `PRICE_LIKE` |
 | 5 curve | its own object | `07c:517-524` writes `reg.zeroRates` from the cleared yields and `reg.yieldCurveParams` from a fit through them, in the same pass |
 
-Row 3 is the one that costs the most nodes. **E1 asks who holds how much of which LINE and the
-model cannot answer at any granularity finer than a tenor bucket**, which is why F3's redemption
-shrinks every holder pro-rata (`11-fiscal:200-225`), why F1's coupon pays each holder the bucket's
-**principal-weighted average** coupon rather than its own bond's (`government.ts:sovereignCouponByBucket`),
-and why `auditOwnership` can reconcile bucket sums while nobody can say who owns anything.
+Row 3 cost the most nodes and is DONE: E1 asks who holds how much of which LINE, and every store
+now answers by bond — F1's coupon is the bond's own (`government.ts:sovereignCouponByBond`), F3's
+redemption finds the holders of the bond that matured, and `audit/ownership.ts:o11` fails any
+position naming an id no ladder carries. What remains of the five is row 2's declared delete and
+row 5's parallel curve.
 Row 4 is D2 exactly inverted: the node says the yield is derived from the price and never sets it,
 and the yield is the only thing that clears.
 
@@ -348,10 +348,10 @@ weekly), so this is an inputs defect, not a missing mechanism.
 
 B1: a bill and a bond are one `GovDebtTranche` separated by `isDiscountBill(tenor) → tenor < 1.5`,
 and every downstream reader carries the test (`weeklyInterestExpenseUSD` filters bills out,
-`sovereignCouponByBucket` filters them out, `bill-accretion.ts` exists to give them the return the
+`sovereignCouponByBond` filters them out, `bill-accretion.ts` exists to give them the return the
 coupon path does not). B3/B3.a: the tree asks for a benchmark LINE that a re-opening taps; the code
-has a tenor BUCKET that pools every bond of that tenor ever issued, so the line/tranche distinction
-the node exists to draw does not exist — a re-opening and a new issue are the same act. B6: the
+issues each week's paper as its own tranche, so a re-opening has nothing to tap: the line/tranche
+distinction the node exists to draw is absent in the other direction now. B6: the
 sovereign correctly has no call machinery, which is the right answer, and it also has no buyback and
 no switch (F5 ❌), so the issuer has no way at all to manage its own curve. All three fold into
 **§3 step 13-SOV** and the first two into **§3 step 16**'s tap-versus-facility question.
@@ -379,7 +379,7 @@ cover ratio (C4). All three are reads, not mechanisms. **A measurement, for §3 
 ### PRESENT AND NOT WORTH RE-CHECKING
 
 Branch H is the surprise of this mapping: **H1, H2 and H3 are all ✅** and properly wired — the
-central bank chooses its own size per tenor (`plannedPurchasesByTenor`), its fills create reserves
+central bank chooses its own size per tenor (`plannedPurchasesByBond`), its fills create reserves
 through a real wire (`wireCentralBankFills`), and its coupon income nets through to a treasury
 remittance that goes NEGATIVE after a hiking cycle (`central-bank.ts:32`), which is the real
 phenomenon reproduced rather than modelled separately. A1–A1.c are ✅ throughout: taxes are levied on

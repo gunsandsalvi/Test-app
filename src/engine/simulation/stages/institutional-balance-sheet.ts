@@ -13,7 +13,7 @@ import { entityCashOf } from '../../ledger/accounts';
  *
  *  1. **Income.** Holders receive the coupon the issuer pays. Companies have always EXPENSED
  *     their debt interest (stage 08); the receiving side simply did not exist — dollars leaving
- *     one real book and arriving nowhere, the exact "1$ is 1$" hole rule 3 exists to catch.
+ *     one real book and arriving nowhere, the exact "1$ is 1$" hole rule 4 exists to catch.
  *     Corporate bond coupons and loan interest are credited weekly here off the issuer's own
  *     real tranche terms. Sovereign coupons are deliberately NOT credited: the government does
  *     not pay them yet (its interest expense does not exist — /BP5), and crediting the
@@ -32,7 +32,7 @@ import { entityCashOf } from '../../ledger/accounts';
  */
 
 import { institutionProfile } from '../../../domain/institution-profiles';
-import { govBucketKeyOf } from '../../../domain/sovereign-id';
+
 import { bookHeadOf } from '../../../engine2/holdings';
 import { RegionId, InstitutionalEntity, Company, GameState } from '../../../types';
 import { institutionTotalAssetsUSD as totalAssetsRead } from '../../../domain/institutions';
@@ -42,8 +42,6 @@ import { mandatePctOf } from '../../../domain/institutions';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
 import { pendingSettlementUSD } from './settlement';
-import { sovereignCouponByBucket } from '../../../domain/government';
-import { sovBucketKey } from './shared-helpers';
 import { ladderTotalUSD } from '../../../engine2/tranches';
 import { materializeGovLadder } from '../../../engine2/tranches';
 
@@ -126,28 +124,33 @@ export function stagePurchaseBudgetUSD(
 export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
   // The sovereign ladder is a pure function of one region's stack and was being walked
   // once per gov-bond ROW — the same arithmetic once, memoized for the week.
-  const sovCouponByRegion = new Map<string, Record<string, number>>();
+  const sovCouponByRegion = new Map<string, Map<string, number>>();
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     let weeklyIncomeUSD = 0;
     // CAL — SOVEREIGN COUPONS ARE ON THE CALENDAR NOW (`sovereign-calendar.ts`), so they are no
     // longer credited here. Interest accrues to whoever holds the paper that week and the
-    // bucket's coupon date turns the balance into cash, with the TREASURY on the same dates —
+    // bond's coupon date turns the balance into cash, with the TREASURY on the same dates —
     // which is the pass this comment used to say had to happen all at once. It did.
     //
     // What is still reported here is the INCOME, because an income statement is smooth: the
-    // accrual is the entity's earnings for the week whether or not a coupon fell due (rule 9 — an
+    // accrual is the entity's earnings for the week whether or not a coupon fell due (rule 8 — an
     // expense and a payment are different numbers with different periods).
     entity.itemizedHoldings.forEach((h) => {
       if (h.instrumentType !== 'GOV_BOND') return;
       const issuerReg = ctx.updatedRegions[h.issuerRegion];
       if (!issuerReg) return;
-      const bucket = govBucketKeyOf(h.instrumentId, h.issuerRegion);
-      if (!bucket) return;
+      // §3.13-SOV row 3: the coupon is THIS BOND's, off the ladder. It used to be the
+      // face-weighted average of whatever group the id parsed into, so a holder of a 2% rung
+      // was paid its neighbours' coupon.
       let cb = sovCouponByRegion.get(h.issuerRegion);
-      // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
-      if (!cb) { cb = sovereignCouponByBucket(materializeGovLadder(ctx.v2, h.issuerRegion), sovBucketKey); sovCouponByRegion.set(h.issuerRegion, cb); }
-      weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * (cb[bucket] ?? 0)) / 52;
+      if (!cb) {
+        cb = new Map(materializeGovLadder(ctx.v2, h.issuerRegion).map((t) => [t.id, t.couponRate] as const));
+        sovCouponByRegion.set(h.issuerRegion, cb);
+      }
+      const couponRate = cb.get(h.instrumentId);
+      if (couponRate === undefined) return;
+      weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * couponRate) / 52;
     });
     // A week with no income is written as ZERO, not skipped. Returned unchanged, the field kept
     // last week's number for ever and every reader — the pension entitlement above all — credited

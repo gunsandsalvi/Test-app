@@ -70,7 +70,7 @@ export function determineCreditRating(
   // belongs. Stage 08 used to bound leverage to [0, 100] and coverage to [-50, 50] for one
   // reason: EBITDA passes through zero and `debt / EBITDA` explodes. But a clamp on a ratio
   // throws away the very fact that produced it — a firm at "leverage 100" and one at leverage 8
-  // came out of the rater the same — and a bound is not an answer (rule 2: fix it at the root).
+  // came out of the rater the same — and a bound is not an answer (rule 6: fix it at the root).
   // With no earnings the two ratios carry no information, so the rating rests on what is left,
   // which is liquidity: a firm that can cover its debt from cash and its committed line is not
   // yet distressed, and one that cannot is.

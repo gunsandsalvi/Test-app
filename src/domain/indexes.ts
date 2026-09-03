@@ -45,7 +45,7 @@ export interface IndexDefinition {
 /**
  * The share of aggregate market cap that counts as LARGE. The rest is SMALL by construction, so
  * the two tiers partition ALL_CAP exactly. This is a published index METHODOLOGY — a rule an
- * index provider writes down — which is the kind of primitive rule 4 allows, not an observed
+ * index provider writes down — which is the kind of primitive rule 2 allows, not an observed
  * market outcome.
  */
 export const LARGE_CAP_CUMULATIVE_SHARE = 0.70;

@@ -15,7 +15,7 @@
  * a rate leg, which pays what printed; after it for a mark leg, which needs the print the
  * market is about to make), the market reads the STANDING INDEX — one walk of the book per
  * settle, a lookup per question (domain/derivatives/standing-book.ts) — and strikes into the
- * one book. Nothing here switches on the class (rule 17): the market modules under
+ * one book. Nothing here switches on the class (rule 15): the market modules under
  * `derivative-markets/` carry everything that is a class's own, behind their dispatch table.
  */
 

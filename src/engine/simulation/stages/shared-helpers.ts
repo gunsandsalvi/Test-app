@@ -14,7 +14,7 @@ import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
 import { INSTRUMENT_IDS } from '../../columns/intern';
-import { Company, Region, SmePool, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
+import { Company, SmePool, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity, OccupationType } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { SECTOR_OCCUPATION_MIX, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
@@ -23,7 +23,6 @@ import { bankRwaUSD, BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing
 import { heldInShares } from '../../../domain/assets';
 import { dealerDeskParticipantId, dealerDeskTicker } from '../../../domain/dealer-desk';
 
-const FOREIGN_GROWTH_SENSITIVITY = 3.0;
 
 /**
  * The default trigger, defined once. A company defaults the week its cash goes negative while
@@ -196,16 +195,16 @@ export function computeOccupationDemand(companies: Company[], privateSegments: S
   companies.filter(c => c.region === regionId && isActiveCompany(c)).forEach(c => {
     const mix = SECTOR_OCCUPATION_MIX[c.sector];
     if (!mix) { demand.GENERAL += c.employeeCount; return; }
-    Object.keys(mix).forEach((occ) => {
-      demand[occ] += c.employeeCount * ((mix as any)[occ] ?? 0);
+    (Object.keys(mix) as OccupationType[]).forEach((occ) => {
+      demand[occ] += c.employeeCount * (mix[occ] ?? 0);
     });
   });
 
   (privateSegments || []).forEach(seg => {
     const mix = SECTOR_OCCUPATION_MIX[INDUSTRY_REGISTRY[seg.industry].sector as keyof typeof SECTOR_OCCUPATION_MIX];
     if (!mix) { demand.GENERAL += seg.employment; return; }
-    Object.keys(mix).forEach((occ) => {
-      demand[occ] += seg.employment * ((mix as any)[occ] ?? 0);
+    (Object.keys(mix) as OccupationType[]).forEach((occ) => {
+      demand[occ] += seg.employment * (mix[occ] ?? 0);
     });
   });
 
@@ -1095,30 +1094,15 @@ function reportCouponTrace(
 }
 
 /**
- * The sovereign ladder's bucket vocabulary — bills below 2Y, bonds at the four standard
- * points. ONE function owns the mapping from a tranche's tenor to its bucket key: three separate
- * nearest-of-[2,5,10,30] reducers existed before bills did, and any one of them left unconverted
- * would have silently folded a 13-week bill into the two-year bucket.
+ * §3.13-SOV row 3 — the one thing the ladder's TENOR still decides, and the only thing it ever
+ * should have. A sovereign is a bill or a bond, and every other question (its coupon, its
+ * remaining life, who holds it) is asked of the tranche. The bucket vocabulary that used to live
+ * here — `SOV_BILL_BUCKETS`, `SOV_BOND_BUCKET_YEARS`, `sovBucketKey` — snapped every rung onto
+ * one of seven labels and then keyed the holders by the label, which is why no holder of a
+ * government bond could be named. Deleted with row 3.
  */
-export const SOV_BILL_BUCKETS = [
-  { key: 'b13', years: 0.25, weeks: 13 },
-  { key: 'b26', years: 0.5, weeks: 26 },
-  { key: 'b52', years: 1.0, weeks: 52 },
-] as const;
-export const SOV_BOND_BUCKET_YEARS = [2, 5, 10, 30] as const;
 /** A tranche below this tenor is a bill; at or above, a bond. */
 export const SOV_BILL_MAX_TENOR_YEARS = 1.5;
-
-export function sovBucketKey(tenorAtIssuanceYears: number): string {
-  if (tenorAtIssuanceYears < SOV_BILL_MAX_TENOR_YEARS) {
-    const bucket = SOV_BILL_BUCKETS.reduce((best, b) =>
-      Math.abs(b.years - tenorAtIssuanceYears) < Math.abs(best.years - tenorAtIssuanceYears) ? b : best);
-    return bucket.key;
-  }
-  const years = SOV_BOND_BUCKET_YEARS.reduce((best, y) =>
-    Math.abs(y - tenorAtIssuanceYears) < Math.abs(best - tenorAtIssuanceYears) ? y : best);
-  return `t${years}`;
-}
 
 /**
  * The working-capital stock a company's own statements imply, as a share of revenue — the ONE

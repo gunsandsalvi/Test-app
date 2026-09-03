@@ -100,8 +100,8 @@ function RegionHolders({ world, id, nav }: { world: World; id: string; nav: impo
   if (!r) return null;
   const inst = sovereignHoldersOf(world, id);
   const banks = world.state.companies.filter((c) => c.region === id && c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c))
-    .map((c) => ({ holderId: c.id, usd: Object.values(c.bankBalanceSheet!.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0) }));
-  const cb = r.centralBankSheet ? Object.values(r.centralBankSheet.sovereignHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0) : 0;
+    .map((c) => ({ holderId: c.id, usd: Object.values(c.bankBalanceSheet!.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0) }));
+  const cb = r.centralBankSheet ? Object.values(r.centralBankSheet.sovereignHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0) : 0;
   const rows = [...inst.map((h) => ({ ...h, kind: 'institution' })), ...banks.map((h) => ({ ...h, kind: 'bank' })), ...(cb > 0 ? [{ holderId: r.centralBank, usd: cb, kind: 'central bank' }] : [])].sort((a, b) => b.usd - a.usd);
   const total = rows.reduce((a, h) => a + h.usd, 0);
   const outstanding = (r.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0);

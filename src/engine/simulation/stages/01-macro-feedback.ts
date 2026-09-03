@@ -6,7 +6,7 @@
  * macro evolution.
  */
 
-import { GameState, RegionId } from '../../../types';
+import { GameState } from '../../../types';
 import { CREDIT_RECOVERY_RATE } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { REGION_IDS } from '../../../domain/geography';
@@ -53,7 +53,7 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
   const currentlyDistressed = state.companies.filter((c) => !c.isDefaulted && c.creditRating === 'CCC').length;
   ctx.recentDefaultsCount = Math.round(weightedRecentDefaults + currentlyDistressed);
   // G5 — THE CONTAGION COEFFICIENT IS GONE. `recentDefaultsCount x 12` added basis points to a
-  // cleared price by formula (rule 1), and `/500` turned the same count into a systemic stress
+  // cleared price by formula (rule 3), and `/500` turned the same count into a systemic stress
   // factor. Contagion is not a coefficient on a count: it is real losses landing on real books
   // and tightening the capacity those books have left, and that channel now EXISTS — an estate
   // writes its residual off its holders' equity (stages/estate-resolution.ts), which is what a

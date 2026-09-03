@@ -7,7 +7,6 @@ import { institutionTotalAssetsUSD } from '../institutional-balance-sheet';
 
 export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, entityById } = input;
-  let newRevenue = 0;
 
   // HH1b — ONE INSURER, NOT TWO. This branch used to refuse the entity behind it, on the
   // reasoning that `institutionTotalAssetsUSD(input.ctx, instEnt)` was "a macro-level slice meant for
@@ -45,7 +44,7 @@ export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // applied to a different asset base.
   const investmentIncome = instEnt?.lastWeeklyInvestmentIncomeUSD ?? floatAssets * 0.04 / 52;
 
-  newRevenue = comp.insurancePremiumsWrittenUSD;
+  const newRevenue = comp.insurancePremiumsWrittenUSD;
   { const v2r = ensureV2(input.state); revHistPush(v2r, rowOf(v2r, comp.id), newRevenue); }
 
   return {

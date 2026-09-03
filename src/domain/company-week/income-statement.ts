@@ -30,7 +30,7 @@ export interface IncomeStatement {
 
 /**
  * §5-TAXR — THE TAX BASE, at last a real one. A flat rate on (EBIT − interest) priced no
- * decision; three real features of a corporate tax code do, and each is POLICY (rule 19's
+ * decision; three real features of a corporate tax code do, and each is POLICY (rule 2's
  * admissible class):
  *  1. **Accelerated tax depreciation** — double-declining balance on the TAX basis of the
  *     plant (the classic schedule): buying plant shields near-term profit, so tax reaches the

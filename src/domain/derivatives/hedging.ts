@@ -4,7 +4,7 @@
  * decision was written four times with four vocabularies (FX tolerance, futures concession,
  * swap absorbable-loss, CDS carryable). It is one rule with class-local inputs:
  *
- *   1. EXPOSURE — measured off the hedger's OWN books (rule 13; class-local: a sovereign book's
+ *   1. EXPOSURE — measured off the hedger's OWN books (rule 2; class-local: a sovereign book's
  *      repricing, a loan book's single name, next season's commodity spend, an invoice's
  *      currency). The measurement stays with each class's market stage, because it reads that
  *      class's books.

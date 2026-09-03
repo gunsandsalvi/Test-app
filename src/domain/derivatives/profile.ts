@@ -2,7 +2,7 @@
  * DRV — WHAT A DERIVATIVE CLASS IS, AS BEHAVIOR. The one lifecycle
  * (stages/derivative-lifecycle.ts) runs every class through this interface; a class states its
  * legs and nothing else. The same split as `domain/company-week/` and the institution profiles:
- * the machinery may not switch on the class (rule 17) — everything per-class is a profile method
+ * the machinery may not switch on the class (rule 15) — everything per-class is a profile method
  * or a profile fact.
  *
  * Two leg families cover every bilateral derivative this model has, and every one on the
@@ -53,7 +53,7 @@ export interface DerivativeClassProfile {
   /**
    * Potential-future-exposure add-on per dollar of notional — the leverage-ratio charge a desk
    * pays for carrying this class (Basel CEM's per-class table; a regulatory POLICY primitive,
-   * rule 4). The one capacity rule in registry.ts consumes it for every class alike.
+   * rule 2). The one capacity rule in registry.ts consumes it for every class alike.
    */
   pfeAddOnRate: number;
   /** A class whose add-on depends on the CONTRACT (CDS: 5% investment-grade / 10% below, CEM's

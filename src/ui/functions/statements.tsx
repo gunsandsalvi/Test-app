@@ -58,7 +58,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
   const active = tabs.includes(tab) ? tab : tabs[0];
   let body: React.ReactNode;
   if (active === 'bank sheet' && bank) {
-    const sov = Object.values(bank.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+    const sov = Object.values(bank.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     const lines = stateDepositLines(world.state, c.ticker);
     const deposits = lines.householdUSD + lines.corporateUSD + lines.institutionalUSD + lines.smeUSD;
     const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);

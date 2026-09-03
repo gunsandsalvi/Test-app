@@ -16,7 +16,7 @@ fi
 #    file in scripts for this only"): check-atlas.sh, the system atlas's gate. It is a shell gate
 #    over docs/ and not a harness battery, so folding it into harness.ts would put a documentation
 #    check inside the simulation runner. Nothing else joins this list without the same explicit
-#    grant — an exemption I award myself is the quieter version of the rollback rule 20 forbids.
+#    grant — an exemption I award myself is the quieter version of the rollback rule 13 forbids.
 EXTRA=$(ls scripts/ | grep -vE '^(harness\.ts|check-hygiene\.sh|check-atlas\.sh)$' || true)
 if [ -n "$EXTRA" ]; then
   echo "ERROR: scripts/ may contain ONLY harness.ts and check-hygiene.sh. Found:"
@@ -124,7 +124,7 @@ if [ -n "$CASH_STRAY" ]; then
 fi
 
 # §5-FINALIZATION R — EVERY STATED NUMBER HAS AN OWNER. A fractional literal typed into the engine
-# is a claim about the answer with nobody's name on it (rule 19). The registry (domain/stated.ts)
+# is a claim about the answer with nobody's name on it (rule 2). The registry (domain/stated.ts)
 # is where such a number is declared — owner, reason, the measurement that replaces it — and its
 # literals are not counted here because they are owned. THE RATCHET: may fall, never rise; the way
 # to add a fraction is to declare it in the registry. Integers, `toFixed(n)` and comments are not

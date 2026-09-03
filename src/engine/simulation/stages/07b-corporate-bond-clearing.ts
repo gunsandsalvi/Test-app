@@ -40,14 +40,13 @@
  */
 
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
-import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
+import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { ringPush, rowOf, ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, issuerIdOf } from '../../../engine2/tranches';
 import { splitAcrossTranches, primarySliceOf } from './register-split';
 import { primaryTrancheId } from '../../../domain/primary-market';
-import { institutionProfile } from '../../../domain/institution-profiles';
 import { isActiveCompany } from '../../../domain/company';
-import { computeAnnualDefaultProbability, getRatingBucket, distributeRealTargetByWeight, creditRecoveryRate } from './shared-helpers';
+import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
 import {
   computeReservationSpreadBps,
   fullSizeSpreadRangeBpsOf,
@@ -79,11 +78,9 @@ import { reconcileHolderPrincipal } from './holder-paydown';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
-const MAX_VALUE_TILT = 0.4;
 // How much a tightening/loosening real credit-conditions backdrop (reg.bankingSector's own
 // -1..+1 index) shifts what "fair value" means right now — real credit investors price a bond
 // against the current market, not against an idiosyncratic PD estimate in a vacuum.
-const CREDIT_CONDITIONS_FAIR_VALUE_SENSITIVITY_BPS = 150;
 // Bid/ask spread the dealer desk earns on the gross flow it facilitates, credited as real
 // trading revenue to the named banks' own equity (split by bankMarketShare).
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
@@ -93,7 +90,6 @@ const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['corporate bond'];
 const BOOK = 'corporate bond';
 // Real insurers and pension funds overwhelmingly run investment-grade-only mandates in
 // practice — a genuine structural avoidance of high-yield paper, not a soft preference.
-const IG_MANDATE_HY_AVOIDANCE_TILT = -0.7;
 
 // §7.311 — ladder reads on rows (chain order = array order, so every fold is float-identical).
 function fixedDebtUSD(v2: V2World, comp: Company): number {
@@ -121,13 +117,7 @@ function creditDurationYears(v2: V2World, comp: Company): number {
 }
 
 // Credit-book duration preference is the kind registry's `preferredCreditDurationYears` row.
-function preferredDurationYears(entity: InstitutionalEntity): number {
-  return institutionProfile(entity.entityType).preferredCreditDurationYears;
-}
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
 
 /**
  * How attractive THIS entity finds THIS issuer's bonds right now — a real, multi-factor tactical
@@ -195,8 +185,6 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // actually pay for the deal, which is the honest reason for one to fail.
     const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0;
     const liveTradableFloatUSD = (c: Company) => fixedDebtOf(c) + offeringSizeUSD(c);
-    const totalOutstandingUSD =
-      regionCompanies.reduce((s, c) => s + fixedDebtOf(c) + offeringSizeUSD(c), 0) || 1;
 
     const priorOasById = new Map(regionCompanies.map((c) => [c.id, c.oasSpreadBps]));
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({

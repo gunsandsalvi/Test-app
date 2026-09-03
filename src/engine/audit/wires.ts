@@ -32,7 +32,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       const wired = (w.moneyByCurrency?.[cur] ?? 0)
         - (w.moneyPendingByCurrency?.[cur] ?? 0) + (prev?.moneyPendingByCurrency?.[cur] ?? 0);
       const settled = s.grossByCurrency?.[cur] ?? 0;
-      // Float dust on a sum of ~200k legs, not a fraction of it (rule 28).
+      // Float dust on a sum of ~200k legs, not a fraction of it (rule 7).
       if (Math.abs(wired - settled) <= 1e3) return;
       out.push({ family: 'W', check: 'W1 money wires = settlement gross', week, usd: wired - settled, message: `${cur} money wires ${B(wired)} against settlement's gross ${B(settled)} — a payment row with no wire, or a wire no pass settled` });
     });

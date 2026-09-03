@@ -33,7 +33,7 @@ import { institutionProfile } from './institution-profiles';
  * becomes `maxHoldingUSD x overweightMultiple` — a CEILING — and the fill between zero and it is
  * decided tactically by the entity's own reservation against the cleared level. The bound is
  * already a bound. What IS still stated is the seven LEVELS below: they are mandate primitives
- * (rule 19's PREFERENCE category), and deriving them would mean deriving what a pension fund's
+ * (rule 2's PREFERENCE category), and deriving them would mean deriving what a pension fund's
  * trustees will tolerate, which is not a market outcome.
  */
 export const HOME_BIAS_BY_ENTITY_TYPE: Record<InstitutionalEntityType, number> = {
@@ -89,6 +89,6 @@ export function mandateWeightForIssuer(
  * binding is not a constraint.**
  */
 export function mandateAllowsDuration(entityType: InstitutionalEntityType): boolean {
-  // The fact is the kind registry's row (rule 3: one owner); this stays as the named question.
+  // The fact is the kind registry's row (rule 4: one owner); this stays as the named question.
   return institutionProfile(entityType).sovereignDurationMandate;
 }

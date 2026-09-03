@@ -2,11 +2,11 @@
  * §5-PROD — PRODUCTIVITY IS LEARNED, NOT STATED: Wright's law at the firm.
  *
  * `LABOR_PRODUCTIVITY_GROWTH_ANNUAL = 0.012` was a stated, uniform, exogenous drift every firm
- * received identically — the §1.19 shape parameter standing in for the missing mechanism. The
+ * received identically — the §1.2 shape parameter standing in for the missing mechanism. The
  * mechanism is the oldest measured regularity in production economics: unit labour requirements
  * fall by a fixed share PER DOUBLING OF CUMULATIVE OUTPUT (Wright 1936, and every learning-curve
  * study since). That exponent is TECHNOLOGY — what a process physically yields to experience —
- * which is exactly the class of number rule 19 admits as a primitive.
+ * which is exactly the class of number rule 2 admits as a primitive.
  *
  * What this buys over the constant, and why it is §5-PROD's growth engine:
  *  - DISPERSION: a fast-growing firm doubles sooner and learns faster; a shrinking one stops
@@ -26,7 +26,7 @@
  */
 
 /** Wright's law exponent: proportional unit-labour saving per doubling of cumulative output.
- *  A real-world TECHNOLOGY primitive (rule 4 admits it; measured range ~0.1–0.3 across
+ *  A real-world TECHNOLOGY primitive (rule 2 admits it; measured range ~0.1–0.3 across
  *  manufacturing studies; 0.2 is the canonical middle). Replaces the stated aggregate drift on
  *  the §5-DIST-P scoreboard — one primitive out, one in. */
 export const LEARNING_ELASTICITY = 0.2;

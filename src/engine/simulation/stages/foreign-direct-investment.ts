@@ -1,10 +1,10 @@
 /**
  * FOREIGN DIRECT INVESTMENT: a firm builds abroad when exporting there has stopped
- * working, and a SUBSIDIARY IS A COMPANY (rule 19's fewest primitives: the model already has
+ * working, and a SUBSIDIARY IS A COMPANY (rule 2's fewest primitives: the model already has
  * production, labour, books, births, contracts, invoices and FX — MNC adds a LINK and a
  * DECISION, never a second production machinery).
  *
- * THE DECISION (rule 8 — how it actually works): a firm serves market B from home while its
+ * THE DECISION (rule 1 — how it actually works): a firm serves market B from home while its
  * landed cost wins the merit order there; when B's own producers deliver cheaper than A's
  * exports land — sustained for the same measured year established for a position to be
  * structural — the real choice is to produce IN B. The signal is read off the sourcing

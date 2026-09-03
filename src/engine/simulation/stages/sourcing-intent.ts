@@ -56,7 +56,7 @@ export interface LaneBooking {
   /**
    * The most this cargo will pay per tonne on this lane, in the LANE's own money: what sourcing
    * from this origin saves the buyer against its next-best alternative. Zero-mass goods never
-   * book. Named for its currency because mixing two of them silently is rule 9's whole point.
+   * book. Named for its currency because mixing two of them silently is rule 8's whole point.
    */
   maxRatePerTonneLaneMoney: number;
 }

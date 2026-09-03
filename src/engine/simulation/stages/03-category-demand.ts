@@ -72,7 +72,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     // goods market cannot bid for a stimulus the treasury never pays for.
     // SETL-B: THE EMPLOYERS PAY. Household income used to be a derived statistic while the
     // deposits it implied were credited by a savings formula — two independent quantities for one
-    // thing (rule 3). Companies now pay their payroll (stage 08), and the other two employers pay
+    // thing (rule 4). Companies now pay their payroll (stage 08), and the other two employers pay
     // here: the government out of its real account, and the private-sector tier from the boundary
     // until HC gives those segments a ledger of their own. Together these are the economy's wage
     // bill, and household deposits move by them instead of by a rate applied to an estimate.
@@ -89,7 +89,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       }
       // HH: transfers are a PAYMENT. Unemployment benefits and the social programme used to
       // reach household INCOME through the accounting identity while never reaching household
-      // CASH — a one-sided flow (rule 14) that only became visible when income became the sum of
+      // CASH — a one-sided flow (rule 5) that only became visible when income became the sum of
       // what households actually receive.
       const transfersUSD = reg.governmentTransfersWeeklyUSD ?? 0;
       if (transfersUSD > 0) {
@@ -155,7 +155,6 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     const I = newLaggedCorporateDemandBase;
 
     let totalGovWeight = 0;
-    let totalCorpWeight = 0;
     // HH4b: the household pool allocates BY PRICE TIER — each tier of categories draws on the
     // slice of C the cohorts' real spend mixes assign it (the derived staple/standard/luxury
     // shares), normalized within the tier's own buyerMix weights. The mixes are calibrated so
@@ -179,12 +178,11 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         // The government buys capital goods too (commercial_construction carries its single
         // largest weight, 0.45), and the SEED normalizes G over EVERY sub-unit's GOVERNMENT
         // weight. Skipping the capex five here gave the other 32 categories 100% of G while
-        // stage 05's fallback bid unappropriated money for these — §1.3's two representations,
+        // stage 05's fallback bid unappropriated money for these — §1.4's two representations,
         // and the unbounded one won (§7.245).
         totalGovWeight += su.buyerMix.GOVERNMENT;
         if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) return;
         hhWeightByTier[categoryPriceTier(su.unitId)] += su.buyerMix.HOUSEHOLD;
-        totalCorpWeight += su.buyerMix.CORPORATE;
       });
     });
 
@@ -247,7 +245,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           ? (su.buyerMix.HOUSEHOLD / hhWeightByTier[tier]) * C * spendShareByTier[tier]
           : 0;
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
-        // PUB1e: stage 05 bids exactly this, weekly (rule 9 — the period is in the name).
+        // PUB1e: stage 05 bids exactly this, weekly (rule 8 — the period is in the name).
         govBudgetByCategory[su.unitId] = suGovDemand / 52;
         // SUPPLY/CHAIN — WHAT CORPORATES BUY OF A NON-CAPITAL GOOD IS NOT INVESTMENT.
         //
@@ -256,7 +254,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         // bids stage 05 actually places (§7.180). A corporate purchase of professional services or
         // premises is an OPERATING purchase — intermediate demand — and the level must be what
         // the firms will really bid, which stage 05 sizes from each firm's own input intensity.
-        // Same number, one representation (rule 3).
+        // Same number, one representation (rule 4).
         const suCorpDemand = corpInputDemandByCategory[su.unitId] ?? 0;
         // §7.271 — INTERMEDIATE DEMAND HAS ONE AUTHOR, AND IT IS THE SOLVE. A corporate
         // purchase of a non-capital good is an OPERATING input — intermediate demand — and
@@ -286,7 +284,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     // product's real demand is that PLUS what other producers consume of it, and until this solve
     // existed the intermediate half had nowhere to live: firms bid for their inputs in stage 05
     // against a demand level that had no room for those bids (§7.117). Solved from the registry's
-    // own BOM matrix, so it moves when a recipe does and cannot drift from it (rule 3).
+    // own BOM matrix, so it moves when a recipe does and cannot drift from it (rule 4).
     //
     // Capex categories keep their carried-forward level as their FINAL demand here — their final
     // half comes from real per-company capex bids in stage 05, not from this stage — but they are

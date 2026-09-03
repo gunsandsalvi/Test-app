@@ -104,7 +104,7 @@ checked by `scripts/check-atlas.sh`.
 | D2 raised by issuing into a market that must clear | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
 | D2.a the treasury picks size and maturity, the market the price | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
 | **D3 FORBID no central-bank overdraft** | `src/engine/ledger/accounts.ts:waysAndMeansOf` | ❌ |
-| D3.a CB may hold sovereign debt bought in the market | `src/engine/simulation/stages/central-bank-demand.ts:plannedPurchasesByTenor` | ✅ |
+| D3.a CB may hold sovereign debt bought in the market | `src/engine/simulation/stages/central-bank-demand.ts:plannedPurchasesByBond` | ✅ |
 | **D4 issuance managed to cover outlays** | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
 | D4.a a foreseeable maturity wall | `src/engine/simulation/stages/sovereign-calendar.ts:runSovereignCalendarStage` | ⚠️ |
 | **D4.b a cash buffer** | `src/engine/ledger/accounts.ts:treasuryAccountOf` | ❌ |

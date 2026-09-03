@@ -34,13 +34,12 @@ import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { mandatePctOf } from '../../../domain/institutions';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
-import { INDEX_DEFINITIONS, IndexDefinition, MarketIndex } from '../../../domain/indexes';
+import { INDEX_DEFINITIONS, IndexDefinition } from '../../../domain/indexes';
 import { apWeeklyCapacityUSD, basketAssemblyCostRate, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
 import { ItemizedHolding } from '../../../domain/banking';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
-import { householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD } from '../../macro/household-portfolio';
+import { householdEtfHoldingsUSD } from '../../macro/household-portfolio';
 import { BUFFER_TARGET_WEEKS } from '../../macro/household-cohorts';
-import { publicComparableEvMultiple } from './pe-lifecycle';
 import { measuredWeeklyMove, medianOf } from '../../../domain/volatility';
 import { ringFill, rowOf } from '../../../engine2/world';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -233,7 +232,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       hs.pendingDirectEquitySaleUSD = 0;
     } else {
       // The floor is the SAME buffer the saving decision is taken against — it is the same
-      // buffer, so it is the same number (rule 3).
+      // buffer, so it is the same number (rule 4).
       const bufferFloorUSD = (reg.estimatedHouseholdIncomeUSD / 52) * BUFFER_TARGET_WEEKS;
       const depositHeadroomUSD = Math.max(0, householdDepositsOf(ctx.v2, region) - bufferFloorUSD);
       // Sell only the part of the gap the cash cannot meet, and never more than is held.
@@ -638,7 +637,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   //   THE PRIMARY OFFERING is what the APs will create this week, and no AP creates below net
   //   asset value, because creating at a discount is selling a dollar for less than a dollar.
   //   That withdraw level is what holds the top of a discount — a participant's price, not a
-  //   bracket around someone else's (rule 15).
+  //   bracket around someone else's (rule 6).
   //   THE PARTICIPANTS are the investors, and their reservation is the point at which they would
   //   rather go and assemble the index themselves: net asset value plus what the constituent
   //   books charge to buy every name in it. That is what bounds a premium by something real.

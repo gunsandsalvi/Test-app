@@ -28,7 +28,7 @@ import { centralBankAssetsUSD, centralBankLiabilitiesUSD } from '../../../domain
 import { bankReservesOf, treasuryAccountOf, waysAndMeansOf, stateDepositLines } from '../../ledger/accounts';
 import { depositsOf } from '../../../domain/banking';
 
-/** Below this the move is float dust on a sum of billions, not a revaluation (rule 28). */
+/** Below this the move is float dust on a sum of billions, not a revaluation (rule 7). */
 const MIN_MARK = 1e-6;
 
 /**

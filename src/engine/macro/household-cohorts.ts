@@ -67,7 +67,7 @@ export const TIER_OCCUPATION_MIXES: Record<WealthTier, Partial<Record<Occupation
  * DIST — WITHIN ONE OCCUPATION, WHAT A TIER'S EARNERS MAKE, DERIVED.
  *
  * This was `{0.40, 1.05, 3.4, 13.0}` — a stated 32.5x spread between the top and bottom of one
- * occupation, and rule 19's largest surviving shape parameter. §7.172 measured why it could not
+ * occupation, and rule 2's largest surviving shape parameter. §7.172 measured why it could not
  * be derived then: every firm paid the same (p99/p10 of 1.01x), so a tier split of an occupation
  * was degenerate and deleting the table would have flattened the income distribution rather than
  * deriving it. **Both missing mechanisms now exist.** A more productive firm pays more (§7.173)
@@ -232,7 +232,7 @@ export const WEALTH_SPENDDOWN_YEARS = 8;
 /**
  * DIST/MAC — HOW MANY WEEKS OF ITS OWN INCOME A HOUSEHOLD WANTS ON HAND.
  *
- * The one primitive in the saving decision below, and it is a behavioural one (rule 4 allows the
+ * The one primitive in the saving decision below, and it is a behavioural one (rule 2 allows the
  * primitive; it forbids the outcome). A buffer is held in WEEKS OF INCOME because that is what
  * it is for — covering the gap until the next pay cheque, or until the next job — so a richer
  * household wants a proportionally bigger one, and the ratio is what is stable across them.
@@ -484,9 +484,9 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   //
   //     saving = (target buffer − liquid assets) / spend-down horizon
   //
-  // The aggregate savings rate is then `Σ saving / Σ income`: A MEASUREMENT (rule 13). The cap
+  // The aggregate savings rate is then `Σ saving / Σ income`: A MEASUREMENT (rule 2). The cap
   // and the redistribution go with the target, because a rule that cannot ask for more than a
-  // household has needs nothing to stop it (rule 2).
+  // household has needs nothing to stop it (rule 6).
   //
   // WHERE THE POLICY RATE WENT. It used to be a coefficient on the aggregate. It is now the two
   // real things a rate does to a household budget, both already per-tier: it raises DEBT SERVICE

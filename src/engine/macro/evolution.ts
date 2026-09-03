@@ -2,7 +2,7 @@ import { levelPaymentFactor } from '../../domain/pricing';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams } from '../nelsonSiegel';
-import { RegionId, Region, FxPair, Commodity, HouseholdState, Industry, OccupationType, OccupationPool, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
+import { RegionId, Region, FxPair, Commodity, HouseholdState, OccupationType, OccupationPool, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
 import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
 import {
   computeHouseholdDisposableIncomeUSD,
@@ -11,6 +11,7 @@ import {
 import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking';
 import { DepositLines } from '../../domain/banking';
 import { governmentOf } from '../../domain/government-entity';
+import { sovereignTenorResolver } from '../../domain/government';
 
 /** §7.280 — the budget's own red line on the fiscal stance: a treasury whose weekly coupon bill
  *  crosses this share of weekly revenue consolidates whatever the cycle says, and the stimulus a
@@ -24,7 +25,7 @@ import {
   HOUSING_TURNOVER_SEED_RATE_ANNUAL,
 } from '../../domain/banking';
 import { quoteHouseholdMarginBps } from '../simulation/stages/bank-lending';
-import { GOVERNMENT_OCCUPATION_MIX, AVERAGE_HOUSEHOLD_SIZE } from '../../domain/region-macro';
+import { GOVERNMENT_OCCUPATION_MIX, AVERAGE_HOUSEHOLD_SIZE, SmePool } from '../../domain/region-macro';
 import { BufferBand, bufferMonthsOf, joinCreditTiersToBalanceSheets, delinquencyExposureOf } from '../../domain/household-credit';
 import { smePoolLinkedCommodities } from '../../domain/industry-registry';
 import { localToUsd, FxToUsd } from '../../domain/currency';
@@ -39,7 +40,7 @@ import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
 import { splitWageBill } from '../bootstrap/national-accounts';
 import { buildHouseholdCohorts, tierWealthMpc, WEALTH_TIERS } from './household-cohorts';
 import {
-  getRegionDeathRateAnnual, stationaryAgeDistribution, mortalityHazardAnnual, MAX_AGE_YEARS,
+  stationaryAgeDistribution, mortalityHazardAnnual, MAX_AGE_YEARS,
   RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS,
 } from '../bootstrap/population';
 
@@ -63,7 +64,7 @@ const WEALTH_MARGINAL_PROPENSITY_TO_CONSUME = 0.04;
 /**
  * FRM — the opening rating, from the seeded stack's own position through the same two thresholds
  * the weekly review uses (§7.4: seed by the engine's own code). It replaces four ASSIGNED labels
- * (USA AA, UK AA, JPN A, EUR AAA) — real-world outcomes, which rule 4 forbids. Regions that open
+ * (USA AA, UK AA, JPN A, EUR AAA) — real-world outcomes, which rule 2 forbids. Regions that open
  * with identical fiscal positions open at the same rating, and that is correct: nothing about
  * the seed makes one of them a weaker credit than another.
  */
@@ -136,7 +137,7 @@ export function evolveRegionMacro(
   isMeeting: boolean;
   diagnosticString: string;
 } {
-  const { updatedBuffer: newPolicyRateLagBuffer, laggedValue: laggedPolicyRate } = pushAndReadLagged(region.policyRateLagBuffer || [], region.policyRate, 6);
+  const { updatedBuffer: newPolicyRateLagBuffer } = pushAndReadLagged(region.policyRateLagBuffer || [], region.policyRate, 6);
   const { updatedBuffer: newDemandShockLagBuffer, laggedValue: laggedDemandShock } = pushAndReadLagged(region.demandShockLagBuffer || [], globalShock.gdpShock, 4);
   
   const updatedWeather = evolveRegionalWeather(region.id, region.weather, week, allCompanies);
@@ -186,7 +187,7 @@ export function evolveRegionMacro(
 
   // §7.280 (MAC) — THE STANCE READS THE GOVERNMENT'S OWN BUDGET. The old step function moved on
   // a regime LABEL alone (+0.15 in a labelled recession, -0.10 in a hot expansion), and none of
-  // its inputs was the budget position that actually constrains a real stimulus (rule 13, the
+  // its inputs was the budget position that actually constrains a real stimulus (rule 2, the
   // §6.1 outlays row's root: an automatic stabiliser meeting a hot economy just keeps stepping).
   // The cyclical triggers stay — they are the stabiliser half and they are real — but the SIZE
   // of a step is now bounded by fiscal space read off the `Government` object's own ledger:
@@ -228,7 +229,7 @@ export function evolveRegionMacro(
   // react to the most recently published statistic, exactly as a real central bank does.
   const newInflation = region.inflation;
 
-  const newEstimatedNominalGdpUSD = (region as any).lastWeekNominalGdpUSD > 0 ? (region as any).lastWeekNominalGdpUSD : region.estimatedNominalGdpUSD;
+  const newEstimatedNominalGdpUSD = region.lastWeekNominalGdpUSD > 0 ? region.lastWeekNominalGdpUSD : region.estimatedNominalGdpUSD;
 
   // Tax rate is a slow second fiscal lever — austerity nudges it up, stimulus nudges it down, same cadence as fiscalStanceScore
   const taxRateDrift = week % 13 === 0 ? -newFiscalStanceScore * 0.001 : 0;
@@ -333,7 +334,7 @@ export function evolveRegionMacro(
   const newCCI = isFinite(rawCCI) ? Math.max(30, Math.min(170, Number(rawCCI.toFixed(2)))) : 100;
 
   // Population Growth & Net Migration Dynamics (Part AG)
-  // DEM — both clamps gone (rule 2). Population growth was held inside [−3%, +4%] and the
+  // DEM — both clamps gone (rule 6). Population growth was held inside [−3%, +4%] and the
   // migration signal inside ±1%, so a region could neither shrink nor boom however its own
   // fertility, mortality and attractiveness moved — which is the whole quantity this project
   // exists to make vary. A population cannot go negative; that is arithmetic and stays below.
@@ -364,7 +365,7 @@ export function evolveRegionMacro(
   // budget this week.
   const targetGovEmploymentGrowthRate =
     netPopulationGrowthRate + newFiscalStanceScore * GOV_HIRING_RESPONSE_TO_STANCE;
-  const prevGovEmploymentGrowthRate = (region as any).govEmploymentGrowthRate ?? targetGovEmploymentGrowthRate;
+  const prevGovEmploymentGrowthRate = region.govEmploymentGrowthRate ?? targetGovEmploymentGrowthRate;
   const govEmploymentGrowthRate = prevGovEmploymentGrowthRate * 0.85 + targetGovEmploymentGrowthRate * 0.15;
   const newGovernmentEmployment = Math.max(1, Math.round(region.governmentEmployment * (1 + govEmploymentGrowthRate)));
 
@@ -426,14 +427,10 @@ export function evolveRegionMacro(
   // Private-Sector Segments evolution driven by specific demand signals & occupational wage costs
   // HH3: the real book change — this week's derived sum against last week's (both written by
   // the lending pass), not a paydown formula's drift.
-  const rawMortgageGrowthSignal = (prevHS.priorMortgageDebtUSD ?? 0) > 0
-    ? (newMortgageDebtUSD / (prevHS.priorMortgageDebtUSD ?? newMortgageDebtUSD) - 1) * 52
-    : 0;
-  const mortgageGrowthSignal = Number.isFinite(rawMortgageGrowthSignal) ? Math.max(-0.15, Math.min(0.20, rawMortgageGrowthSignal)) : 0;
   // SEG-A/D: the pools are NOT walked here any more. Revenue used to move by
   // `demandSignal x 0.06` and employment by `x 0.05`, both clamped to +/-4%/wk, off a
   // hand-written switch mapping five buckets to a few category growth rates (with
-  // CONSTRUCTION_REALESTATE hardcoded to `return 0`). That is an imposed outcome (rule 13) and
+  // CONSTRUCTION_REALESTATE hardcoded to `return 0`). That is an imposed outcome (rule 2) and
   // it froze the tier's composition at its seed shares forever, because every bucket got the
   // same treatment and nothing ever reallocated between them.
   //
@@ -441,7 +438,7 @@ export function evolveRegionMacro(
   // (SEG-B credits it there), its employment is set by the labor market off that revenue like
   // any named firm's, its margin moves with its own measured costs, and its debt is the derived
   // sum of the banks' pool loans. This stage carries the state forward and owns nothing of it.
-  const newSmePools: any[] = (region.smePools || []).map(seg => ({ ...seg }));
+  const newSmePools: SmePool[] = (region.smePools || []).map(seg => ({ ...seg }));
 
 
 
@@ -452,15 +449,12 @@ export function evolveRegionMacro(
 
   // 3. Net worth
   const newNetWorthUSD = microFeedback.householdDepositsUSD + newEquityHoldingsUSD - totalHouseholdDebtUSD;
-  const netWorthToIncomeRatio = region.estimatedHouseholdIncomeUSD > 0
-    ? newNetWorthUSD / region.estimatedHouseholdIncomeUSD
-    : 1.0;
 
   // 4. Wealth-effect correction in CCI & consumption.
   //
   // Driven by the CHANGE in wealth, not its level. The old form was
   // `(netWorthToIncomeRatio - 1.0) * 0.006` — a LEVEL feeding a GROWTH rate, which is a units
-  // error (rule 9) that stayed invisible while the ratio sat near 1.5 and the term was worth
+  // error (rule 8) that stayed invisible while the ratio sat near 1.5 and the term was worth
   // 0.3%. HH2 put the house on the balance sheet, the ratio went to 4.6x, and the same expression
   // started adding ~1.9 percentage points to real consumption growth every week forever.
   //
@@ -525,7 +519,7 @@ export function evolveRegionMacro(
   const totalEmployedForWages = (Object.keys(newOccupationPools) as OccupationType[])
     .reduce((sum, occ) => sum + newOccupationPools[occ].employed, 0);
   // PUB1c: the wage bill is total compensation; the employer's payroll tax leaves it first.
-  const { grossWagesUSD, employerPayrollTaxUSD } = splitWageBill(totalWageIncomeUSD);
+  const { employerPayrollTaxUSD } = splitWageBill(totalWageIncomeUSD);
   // PUB3: the government's own share of that bill — the employees it really has, at the wages
   // the pools really cleared. Computed once here and read by the budget, the outlays and the
   // household transfer line, so the jobs and the payroll that pays for them cannot disagree.
@@ -570,7 +564,7 @@ export function evolveRegionMacro(
   const annualCapitalReceiptsUSD = {
     // What the banks MEASURABLY paid their household depositors last week, at their own
     // competitive deposit rates (stage 02b sums it). The `deposits x policyRate x 0.6` this replaces
-    // was a second derivation of a flow the banks already compute and post — rule 3, and it
+    // was a second derivation of a flow the banks already compute and post — rule 4, and it
     // disagreed with them by whatever the deposit competition was doing.
     depositInterestUSD: (region.householdDepositInterestWeeklyUSD ?? 0) * 52,
     // The dividends the public float was PAID last week (the register's paying agent pays the
@@ -584,7 +578,7 @@ export function evolveRegionMacro(
   // productivity x LABOR_SHARE_OF_OUTPUT across the occupation pools, capital income as a fixed
   // ratio to wages, tax as a flat effective rate. Three imposed constants deciding what half the
   // economy earns, while the employers who actually pay it were paying a different number
-  // through settlement (rule 3, and the last big one in the household sector).
+  // through settlement (rule 4, and the last big one in the household sector).
   //
   // What replaces it: what households MEASURABLY received last week — every employer's wage
   // payment, the government's transfers, and the interest the banks really paid on their
@@ -642,7 +636,7 @@ export function evolveRegionMacro(
 
   // DIST/MAC — THE SAVINGS RATE, MEASURED. Every tier decided its own saving against its own
   // buffer; this is what those decisions add up to, over the income they were taken out of. It
-  // is an outcome now (rule 13), and nothing normalises the parts to it.
+  // is an outcome now (rule 2), and nothing normalises the parts to it.
   const measuredSavingsUSD = WEALTH_TIERS.reduce((a, t) => a + (cohortResult.tierSavingsUSD[t] ?? 0), 0);
   const newSavingsRate = cohortResult.totalDisposableIncomeUSD > 0
     ? measuredSavingsUSD / cohortResult.totalDisposableIncomeUSD
@@ -755,7 +749,7 @@ export function evolveRegionMacro(
     const newDelinquency = Math.max(0.001,
       tier.delinquencyRatePct * (1 - CREDIT_FILE_CURE_WEEKLY) + arrivalRate);
 
-    // DIST/CRD — THE TIER'S RATE IS QUOTED, NOT DRIFTED (rules 1 and 3).
+    // DIST/CRD — THE TIER'S RATE IS QUOTED, NOT DRIFTED (rules 3 and 4).
     //
     // It was `rate + creditConditionsIndex x k` EVERY WEEK — an accumulator with no anchor, so a
     // sustained credit squeeze compounded a household lending rate to anything at all. It was
@@ -798,7 +792,6 @@ export function evolveRegionMacro(
   // which is not what a central bank does. The balance sheet is now the real sovereign book
   // written by stages/central-bank.ts, and it moves by bidding in 07c/07f.
   const newCbBalance = region.centralBankBalanceSheet;
-  const cbChangePct = 0;
 
   const { sheet: newBankingSector } = evolveBankingSector(
     region.bankingSector,
@@ -812,7 +805,8 @@ export function evolveRegionMacro(
     newUnemployment,
     // The aggregate book's real yield at the real cleared curve — the per-bank truth is
     // recomputed in 02b, which overwrites this aggregate with the sum of named banks.
-    computeSovereignBookAnnualYield(region.bankingSector.sovereignBondHoldingsByTenor, region.zeroRates),
+    computeSovereignBookAnnualYield(region.bankingSector.sovereignBondHoldingsByBond, region.zeroRates,
+      sovereignTenorResolver(region.govDebtTranches, week)),
     region.creditConditionsSpilloverAdjustment ?? 0
   );
 
@@ -840,14 +834,13 @@ export function evolveRegionMacro(
 
   let rateChanged = false;
   let rateDeltaBps = 0;
-  let newInflationDeviationStreak = region.inflationDeviationStreak || 0;
 
   // Policy Lag: Smooth movement toward Taylor Target each week (moves 15% of the way)
   const targetPolicyRate = Math.max(-0.01, Math.min(0.20, region.policyRate + 0.15 * (clampedTaylorTarget - region.policyRate)));
 
   // Update inflation deviation streak
   const isAboveTarget = region.inflation > piStar + 0.01;
-  newInflationDeviationStreak = isAboveTarget ? (region.inflationDeviationStreak || 0) + 1 : Math.max(0, (region.inflationDeviationStreak || 0) - 2);
+  const newInflationDeviationStreak = isAboveTarget ? (region.inflationDeviationStreak || 0) + 1 : Math.max(0, (region.inflationDeviationStreak || 0) - 2);
 
   const isMeeting = (week % 13 === 0);
 
@@ -882,7 +875,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const dotPlot2Y = Number((smoothedTargetRate * 0.35 + (rStar + piStar) * 0.65).toFixed(4));
 
   // The yield curve is NOT set here. It has exactly one owner: the real sovereign auction in
-  // 07c-sovereign-bond-clearing.ts, where named banks and institutions trade real tenor buckets
+  // 07c-sovereign-bond-clearing.ts, where named banks and institutions trade the real bonds
   // against the government's real outstanding stock and the Nelson-Siegel parameters are refit
   // to the yields that actually clear.
   //
@@ -957,17 +950,13 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // on a number that never changed. Units cleared this week x the cleared price is the real
   // weekly supply, against the same week's real demand.
   const resCat = region.categoryDemand?.['residential_construction'];
-  const resDemandUnits = resCat?.totalUnitsDemandedThisWeek ?? 0;
   const resSupplyUnits = resCat?.totalUnitsSuppliedThisWeek ?? 0;
-  const supplyDemandRatio = resDemandUnits > 0
-    ? resSupplyUnits / resDemandUnits
-    : 1.0; // no real demand cleared this week — treat as balanced rather than inventing pressure
   // ---- HSG: THE HOUSE PRICE CLEARS. It was a walked index and every term in it was stated. ----
   //
   // `priceIndex += (1 − supplyDemandRatio) x 0.002 x creditFactor`, bounded to [0.5, 3.0] and
   // multiplied by a 400,000 baseline: a stated speed, a stated credit nudge (±0.02 on one side of
   // a policy-rate threshold), a clamp on the outcome, and a stated level. **A bound is not a
-  // price** (rule 15), and none of it was anybody's decision.
+  // price** (rule 6), and none of it was anybody's decision.
   //
   // A house sells at what the MARGINAL BUYER can pay. Each wealth tier's affordability is its own
   // income against the going mortgage rate — the same `DSTI x income / annuity factor` that sizes
@@ -1035,7 +1024,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   //
   // Now everyone ages 1/52 of a year a week, births enter at age zero, and deaths leave at the
   // Gompertz hazard for their OWN age. The four stage shares become age BANDS of the result — one
-  // representation of who is how old (rule 3) — and life expectancy, retirement duration and the
+  // representation of who is how old (rule 4) — and life expectancy, retirement duration and the
   // length of a working life stop being stated anywhere.
   const prevAges = region.ageDistribution && region.ageDistribution.length === MAX_AGE_YEARS
     ? region.ageDistribution
@@ -1141,7 +1130,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       shareOfIncomeUSD: Math.round(Math.max(1000, cohortResult.tierDisposableUSD[t] ?? updatedWealthDist[t].shareOfIncomeUSD)),
       liquidSavingsUSD: Math.round(liquidUSD),
       investedSavingsUSD: Math.round(investedUSD),
-      // Their SUM, kept as the one number readers that want the whole stock should use (rule 3:
+      // Their SUM, kept as the one number readers that want the whole stock should use (rule 4:
       // it is derived here, never accumulated separately).
       accumulatedSavingsUSD: Math.round((liquidUSD + investedUSD)),
     };
@@ -1189,7 +1178,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     netMigrationRateAnnual: migrationRate,
     nonEmployablePct: newNonEmployablePct,
     governmentEmployment: newGovernmentEmployment,
-    smePools: newSmePools as any,
+    smePools: newSmePools,
     occupationPools: newOccupationPools,
     occupationLaborForceShare: newLaborForceShares,
     estimatedNominalGdpUSD: newEstimatedNominalGdpUSD,
@@ -1350,7 +1339,7 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
   //
   // Demand was `intensityShare x the whole category's output, summed over four regions`; supply
   // was `the entire annual revenue of the two firms tagged with this commodityId`. Two different
-  // bases for the two sides of one market (rule 3), and the gap was invisible while recipes were
+  // bases for the two sides of one market (rule 4), and the gap was invisible while recipes were
   // shallow. CHAIN-D tripled intermediate demand for extraction, refining, chemicals and power,
   // demand moved with it, supply did not, and the input market drained: measured USA week 12,
   // upstream extraction supplying 2,458 units against 20,954 demanded, inventory zero, stage 04

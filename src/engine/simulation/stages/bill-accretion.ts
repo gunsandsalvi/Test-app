@@ -13,49 +13,58 @@
  * same change.
  */
 
-import { govBucketKeyOf } from '../../../domain/sovereign-id';
-import { RegionId } from '../../../types';
+
+import { RegionId, GameState } from '../../../types';
+import { Region } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { isActiveCompany } from '../../../domain/company';
-import { SOV_BILL_BUCKETS } from './shared-helpers';
+import { isDiscountBill } from '../../../domain/government';
+import { materializeGovLadder } from '../../../engine2/tranches';
+import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { markHolding } from '../../ledger/holdings-ledger';
 import { internString } from '../../../engine2/world';
 
-/** Weekly accretion factor for a bill bucket, off the region's own cleared bill curve. */
-function weeklyAccretionRate(reg: any, bucketKey: string): number {
-  const bucket = SOV_BILL_BUCKETS.find((b) => b.key === bucketKey);
-  if (!bucket) return 0;
-  // The cleared short curve is what the market says this paper yields; accreting at anything else
-  // would pay holders a return the auction did not price.
-  const annual = bucket.years <= 0.3
-    ? reg.zeroRates.tenor3M
-    : reg.zeroRates.tenor3M + (reg.zeroRates.tenor2Y - reg.zeroRates.tenor3M) * (bucket.years / 2);
-  return Math.max(-0.5, annual) / 52;
+/**
+ * §3.13-SOV row 3 — THE ACCRETION IS THE BILL'S, AT THE BILL'S OWN REMAINING LIFE.
+  *
+ * A bill pulls to par at the yield the auction cleared for IT. That yield is read off the same
+ * fitted curve 07f priced it on (`billCurrentYieldBps`), at the same remaining tenor, so the
+ * paper accretes at the rate it was sold at. It used to be read off a table of three bucket
+ * labels — and once the books were keyed by bill id, `byTenor['b13']` matched nothing and every
+ * holder's accretion silently became zero.
+ */
+function weeklyAccretionRate(reg: Region, yearsRemaining: number): number {
+  return calculateNelsonSiegelZeroRate(yearsRemaining, reg.yieldCurveParams) / 52;
 }
 
-export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void {
+export function runBillAccretionStage(state: GameState, ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
-    const reg: any = ctx.updatedRegions[regionId];
+    const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
-    const rateByBucket = new Map<string, number>(SOV_BILL_BUCKETS.map((b) => [b.key as string, weeklyAccretionRate(reg, b.key)]));
+    const rateByBill = new Map<string, number>(
+      materializeGovLadder(ctx.v2, regionId)
+        .filter((t) => t.maturityWeek > ctx.nextWeek && isDiscountBill(t.tenorAtIssuanceYears))
+        .map((t) => [t.id, weeklyAccretionRate(reg, Math.max(1 / 52, (t.maturityWeek - state.currentWeek) / 52))])
+    );
+    if (rateByBill.size === 0) return;
 
     // Banks: the position grows and the gain is earnings. Both sides move, so the per-bank
     // balance-sheet identity holds without a cash leg.
     // §7.250 — THE LIVE SHEET, both sides. This stage runs AFTER stage 08, and only stage 08
     // ever applies `companyUpdates.bankBalanceSheet` — so writing the channel here wrote to
     // NOWHERE (the context dies with the week), and reading it first read the PRE-08 sheet,
-    // erasing settlement's intraday deltas from the basis besides. Measured: the accreted b13
-    // was written as 1,218.45M and the week ended at 1,217.28M — the banks' bills have never
+    // erasing settlement's intraday deltas from the basis besides. Measured: the accreted bill
+    // book was written as 1,218.45M and the week ended at 1,217.28M — the banks' bills have never
     // accreted, silently, because both legs dropped together and no identity could break
     // (§7.103's trap, on the write side).
     ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
       if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return c;
       const existing = c.bankBalanceSheet;
-      const byTenor = { ...(existing.sovereignBondHoldingsByTenor || {}) };
+      const byTenor = { ...(existing.sovereignBondHoldingsByBond || {}) };
       let gainUSD = 0;
-      rateByBucket.forEach((rate, key) => {
+      rateByBill.forEach((rate, key) => {
         const heldUSD = Number(byTenor[key]) || 0;
         if (heldUSD <= 0 || rate === 0) return;
         const accretedUSD = heldUSD * rate;
@@ -67,8 +76,8 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
         ...c,
         bankBalanceSheet: {
           ...bookPnL(existing, gainUSD, 'bill accretion', c.ticker),
-          sovereignBondHoldingsByTenor: byTenor,
-          sovereignBondHoldingsUSD: Math.round((Object.values(byTenor) as any[]).reduce((a: number, v: any) => a + (Number(v) || 0), 0)),
+          sovereignBondHoldingsByBond: byTenor,
+          sovereignBondHoldingsUSD: Math.round(Object.values(byTenor).reduce((a: number, v) => a + (Number(v) || 0), 0)),
           // §7.254: recorded so next week's NIM income measure counts the return this book
           // actually earned; the equity leg above is the booking, this line is the reading.
           lastBillAccretionWeeklyUSD: Math.round(gainUSD),
@@ -86,8 +95,8 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
       let touched = false;
       for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
-        const key = govBucketKeyOf(ctx.v2.internedStrings[H.instrRef[r]], regionId);
-        const rate = key ? rateByBucket.get(key) : undefined;
+        // §3.13-SOV row 3: the accretion is the BILL's own.
+        const rate = rateByBill.get(ctx.v2.internedStrings[H.instrRef[r]]);
         if (!rate) continue;
         markHolding(ctx.v2, e.id, r, H.qtyUSD[r] * (1 + rate));
         touched = true;
@@ -99,16 +108,16 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
     // is the loop PUB2a built.
     const cb = reg.centralBankSheet;
     if (cb) {
-      const book = { ...cb.sovereignHoldingsByTenor };
+      const book = { ...cb.sovereignHoldingsByBond };
       let gainUSD = 0;
-      rateByBucket.forEach((rate, key) => {
+      rateByBill.forEach((rate, key) => {
         const heldUSD = Number(book[key]) || 0;
         if (heldUSD <= 0 || rate === 0) return;
         book[key] = heldUSD * (1 + rate);
         gainUSD += heldUSD * rate;
       });
       if (gainUSD > 0) {
-        cb.sovereignHoldingsByTenor = book;
+        cb.sovereignHoldingsByBond = book;
         cb.lastBillAccretionUSD = Math.round(gainUSD);
       } else {
         cb.lastBillAccretionUSD = 0;

@@ -26,8 +26,8 @@ import { categoryPriceTier, householdBudgetReachMultiple, budgetDemandLadder, DE
 import { patienceWeeksOf, riskAversionOf, expectationFromHistory, adaptiveExpectation } from '../../../domain/preferences';
 import { TIER_SPEND_MIX } from '../../macro/household-cohorts';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
-import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
+import { SECTOR_PPE_INTENSITY } from '../constants';
+import { purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
 import { pay, payByIds, internReason, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { channelMarginRate, shelfPriceUSD, DISTRIBUTION_SUBUNIT_ID } from '../../../domain/distribution';
@@ -35,7 +35,7 @@ import { subUnitSpecOf } from '../../../domain/industry-registry';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, fullStaffingCapHeads } from '../../../domain/company';
-import { WeeklyStepContext } from './context';
+import { WeeklyStepContext, CompanyWeekUpdate } from './context';
 import { revHistLen, revHistAt, rowOf, V2World, ensureV2 } from '../../../engine2/world';
 import { deliverGoods, receiveInputLot, settleOutputInventory, setOutputStock, consumeGoods } from '../../ledger/goods-ledger';
 import { contractRows, relinkChain, formContractRow, endOfWeekCompact } from '../../../engine2/contracts';
@@ -140,7 +140,7 @@ function firmIntensitiesWeekly(comp: Company, week: number): Partial<Record<stri
 function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string, week: number): number {
   // step 4: a firm that sells no product still buys — a bank's premises, software and
   // professional services come from its profile's basket. One accessor for both cases, so a firm
-  // cannot be charged for an input in stage 08 that it never bid for here (rule 14).
+  // cannot be charged for an input in stage 08 that it never bid for here (rule 5).
   const intensity = firmIntensitiesWeekly(comp, week)[inputSubUnitId];
   if (!intensity) return 0;
   return (comp.annualRevenue / 52) * intensity;
@@ -194,7 +194,7 @@ function partyOfKey(key: string, regionId: RegionId, lookup: GlobalFirmLookup): 
 // seller), not merged into one blended average, since the whole point is to keep each real
 // purchase's real counterparty and real price distinguishable (see domain/company.ts's
 // InputLot doc comment) rather than collapsing them the moment they're credited.
-function addInputInventory(v2: V2World, update: any, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number, wireNo: number) {
+function addInputInventory(v2: V2World, update: CompanyWeekUpdate, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number, wireNo: number) {
   if (addedUnits <= 0.0001) return;
   // Only material that will be CONSUMED is inventory. A machine delivered is capital; a
   // general operating purchase is used and expensed. Writing all three as lots is what made a
@@ -696,7 +696,7 @@ function settleContracts(
     const customer = customerOf[i] = resolveRef(T.customerRef[r]);
     if (!supplier || !customer) { preStatus[i] = CS_DEAD_MISSING; continue; }
     if (!isActiveCompany(supplier)) {
-      // needUSD gates the customer's constraint write in effects (rule 9: only a production
+      // needUSD gates the customer's constraint write in effects (rule 8: only a production
       // input throttles production.
       const cs = custSlotOf(customer);
       custSlot[i] = cs;
@@ -851,7 +851,7 @@ function buildRegionSupplyPlans(
     // swings in real cleared sales even when underlying demand is stable. A continuous response
     // that scales down smoothly as the inventory/capacity ratio grows converges instead.
     const inventoryToCapacityRatio = currentInvUSD / Math.max(1, warehouseCapacityUSD);
-    // CAP: the 0.3 floor is gone (rule 2). A plant with a full warehouse and nowhere to sell
+    // CAP: the 0.3 floor is gone (rule 6). A plant with a full warehouse and nowhere to sell
     // stops; it does not keep running at three tenths forever. Zero is a real production
     // decision, and it was the one this throttle could not express.
     const productionThrottle = Math.min(1.0, Math.max(0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
@@ -865,7 +865,7 @@ function buildRegionSupplyPlans(
     // service spiral was largely this), while a crash ran the plant ABOVE capacity, which the
     // comment that stood here claimed the capacity term prevented (it multiplied capacity, so
     // it did not). fixed the same wrong-signed supply response in the units; this was the
-    // remaining copy in the utilisation, with a stated ×1.5 no mechanism owns (rule 19).
+    // remaining copy in the utilisation, with a stated ×1.5 no mechanism owns (rule 2).
     //
     // What legitimately decides how hard the plant runs is already here: capacity (the plant),
     // staffing (IND15), the warehouse throttle, and the cost-covering rule below (CAP's own
@@ -897,7 +897,7 @@ function buildRegionSupplyPlans(
     if (!(line.unitsPerNetPpeDollar! > 0)) {
       const openingCapacityUnits =
         ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / referencePriceUSD;
-      // SAME VINTAGE ON BOTH SIDES (rule 9). The line's share belongs INSIDE the
+      // SAME VINTAGE ON BOTH SIDES (rule 8). The line's share belongs INSIDE the
       // anchor: dividing by the opening share here and re-multiplying by the CURRENT share on
       // every read made physical capacity track the line's revenue share week to week — plant
       // that evaporates because its PRICE moved. Measured on the CRE landlords: rental clears
@@ -994,7 +994,7 @@ function buildRegionSupplyPlans(
     //
     // The staffing ratio is the firm's OWN headcount against the headcount THIS plant needs at
     // full staffing — one derivation (domain/company.ts), the same ceiling the labour
-    // market hires against (rule 3). Frozen at the seed headcount, a firm that built plant read
+    // market hires against (rule 4). Frozen at the seed headcount, a firm that built plant read
     // "fully staffed" at its old headcount and doubled output nobody worked for; scaled with
     // net PP&E, more plant needs more people to run it — which is what makes hiring the way a
     // grown firm's output actually grows.
@@ -1043,7 +1043,7 @@ function buildRegionSupplyPlans(
       ? weeklyAvoidableCostUSD / testVolumeUnits
       : Infinity;
     const coversUnitCost = supplierExpectedUnitPriceUSD >= prospectiveUnitCostUSD;
-    // The week's idle record, measured where the test runs and nowhere else (rule 3):
+    // The week's idle record, measured where the test runs and nowhere else (rule 4):
     // stage 08's capacity-retirement rule integrates this into the mothball/scrap stock response.
     if (!coversUnitCost) {
       const up = wk.updateOf(comp);
@@ -1087,7 +1087,7 @@ function buildRegionSupplyPlans(
       t.staffed += staffedShare; t.throttle += productionThrottle; t.opCost += weeklyOperatingCostUSD;
     }
     // The firm's experience accrues on what it STARTS making, measured here where
-    // production is decided and nowhere else (rule 3).
+    // production is decided and nowhere else (rule 4).
     if (targetProductionUnits > 0) {
       const upl = wk.updateOf(comp);
       upl.producedUnitsThisWeek = (upl.producedUnitsThisWeek ?? 0) + targetProductionUnits;
@@ -1132,7 +1132,7 @@ function buildRegionSupplyPlans(
     //
     // The [0.40, 0.98] band on the cost rate goes with it: it existed because the margin it read
     // was a stated number that could be anything, and since IND3 it is the residual of real
-    // costs (rule 2).
+    // costs (rule 6).
     // ONE PD model: the structural distance the
     // credit books price with, not a rating-keyed table beside it.
     const pd = computeAnnualDefaultProbability(v2, comp);
@@ -1235,7 +1235,7 @@ function buildRegionSupplyPlans(
           openOfferUnits: poolOfferUnits,
           // Its own unit cost: a pool earning a 9% margin cannot sell below 91 cents on the
           // dollar of the reference price and stay solvent.
-          // CAP — the half-the-reference floor is gone (rule 2). It existed because `marginPct`
+          // CAP — the half-the-reference floor is gone (rule 6). It existed because `marginPct`
           // could be anything; since IND3 a margin is the residual of real costs, so `1 − margin`
           // IS the pool's unit cost and needs no floor under it. A cost cannot be negative.
           minPriceUSD: referencePriceUSD * Math.max(0, 1 - pool.marginPct),
@@ -1288,7 +1288,7 @@ function buildRegionDemandPlans(
   const totalCustomerRevenueUSD = customers.reduce((s, c) => s + c.annualRevenue, 0) || 1;
 
   customers.forEach(comp => {
-    let demandUSD = 0;
+    let demandUSD: number;
     if (isCapexSupplierCategory) {
       const realCapexUSD = (comp.maintenanceCapex ?? 0) + (comp.growthCapex ?? 0);
       demandUSD = (realCapexUSD / 52) * capexSupplierWeight!;
@@ -1411,7 +1411,7 @@ function buildRegionDemandPlans(
     // factory-gate price was the model paying no one to move the goods.
     const channelMargin = channelMarginRate(subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
     const shelfPrice = shelfPriceUSD(referencePriceUSD, subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
-    // THE BUDGET IS THE MEASURED HOUSEHOLD LEG, NOT A SLICE OF THE DEMAND LEVEL (rule 3).
+    // THE BUDGET IS THE MEASURED HOUSEHOLD LEG, NOT A SLICE OF THE DEMAND LEVEL (rule 4).
     //
     // `demandLevelAnnualUSD × hhShare` carved the household's money out of the category's TOTAL demand
     // a level that carries the corporate leg (firms' nominal revenues × input intensity) and
@@ -1446,7 +1446,7 @@ function buildRegionDemandPlans(
       // It used to bid its whole week's units at one price: the going price times a frozen
       // constant times a chosen per-tier elasticity. A step cannot express a demand curve, so
       // that single number was standing in for a whole schedule — which is why the two honest
-      // derivations of it differed by two orders of magnitude (rule 15).
+      // derivations of it differed by two orders of magnitude (rule 6).
       //
       // The ladder is the curve: saturating at what the household physically has use for, and
       // sloping down because `units = money / price` and the money is finite. Every input is
@@ -1583,7 +1583,7 @@ function runSubUnitMarkets(
   const CT = v2.contracts;
   const { nextWeek } = ctx;
 
-  const isRecipeInputCategory = Object.values(CATEGORY_INPUT_REQUIREMENTS).some(reqs => (reqs as any)?.[subUnitId] !== undefined);
+  const isRecipeInputCategory = Object.values(CATEGORY_INPUT_REQUIREMENTS).some(reqs => reqs?.[subUnitId] !== undefined);
   const capexSupplierWeight = CAPEX_SUPPLIER_WEIGHTS[subUnitId];
   const isCapexSupplierCategory = capexSupplierWeight !== undefined;
   const massTonnes = sourcing.unitMassTonnes[subUnitId] ?? 0;
@@ -1863,7 +1863,7 @@ function runSubUnitMarkets(
       // The BOOK is this pool's goods mix and its goods revenue. The pool's TOTAL revenue is
       // owned by the sme-pools stage, which measures it from every receipt — a pool sells
       // services too, and crediting only its auction sales here made the same number mean two
-      // different things depending on which stage last wrote it (rule 3).
+      // different things depending on which stage last wrote it (rule 4).
       const book = pool.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
       book[subUnitId] = newAnnualizedUSD;
       pool.salesDerivedAnnualRevenueUSDBySubUnit = book;
@@ -1966,7 +1966,7 @@ function runSubUnitMarkets(
         // and the carrier's freight then arrived on its books as `non-auction operating receipts`,
         // also from the boundary. Two anonymous ends of one payment whose parties are both known.
         //
-        // It is also ONE quantity now (rule 3). The carriers' revenue used to be re-derived from
+        // It is also ONE quantity now (rule 4). The carriers' revenue used to be re-derived from
         // `shippedTonnesByLane x rate x share` further down this stage — a second computation of
         // the same freight, in the carrier's money rather than the buyer's, which could not agree
         // with what any buyer was charged. What a carrier earned is what its customers paid it.
@@ -2306,7 +2306,7 @@ function runSubUnitMarkets(
     demandState.exWorksUnitPriceUSD = roundN(results[regionId].clearedPriceUSD, 1e2);
     demandState.unitPriceUSD = roundN(publishedPrice[regionId], 1e2);
     // The category's own price, one entry per week, so a firm's real output growth can
-    // be deflated by the price of what IT sells over the SAME window (rule 9 twice over: the
+    // be deflated by the price of what IT sells over the SAME window (rule 8 twice over: the
     // aggregate CPI is a different population AND a 52-week period against a 12-week growth).
     // 13 entries covers the labour stage's 12-week window.
     // A year of prints: the longest horizon a buyer's expectation reads over.
@@ -2624,7 +2624,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   if (!state.tradeInvoices) state.tradeInvoices = [];
   for (const inv of ctx.tradeInvoicesBooked) state.tradeInvoices.push(inv);
 
-  // DER/rule 3: ONE realised-vol estimator (domain/volatility.ts). The local copy that stood here
+  // DER/rule 4: ONE realised-vol estimator (domain/volatility.ts). The local copy that stood here
   // carried its own 0.16 fallback, so a market with too little history was reported as being at
   // exactly its own baseline — which reads as "no excess vol" whether that is true or unknown.
   // Unknown is now unknown: no history, no component.

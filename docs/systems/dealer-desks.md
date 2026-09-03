@@ -133,7 +133,7 @@ export const DESK_SPREAD_BPS_BY_BOOK: Record<string, number> = {
 
 Nine literals, and its own comment admits what they are: *"the tightest market there is"*,
 *"loan secondary markets trade wider than investment grade"* — real-world observed levels, which
-rule 4 forbids and rule 19 counts as a primitive. They do **two** jobs, and both are the node's
+rule 2 forbids and rule 2 counts as a primitive. They do **two** jobs, and both are the node's
 forbidden shape:
 
 1. **A fee on the mid.** Each book passes the constant into the clearing engine as
@@ -149,7 +149,7 @@ forbidden shape:
 
 **And the fee does not reach the desk that earned it.** `book-settlement.ts:117-125` splits
 `dealer.feeUSD` across `feeDesksForRegion`, which is *every bank in the region pro rata by
-`bankMarketShare`* (`:131`) — an assigned share, which is rule 13's own anti-pattern. A bank whose
+`bankMarketShare`* (`:131`) — an assigned share, which is rule 2's own anti-pattern. A bank whose
 desk took no position at all collects fee income proportional to its size.
 
 **Consequences, in order of size.**

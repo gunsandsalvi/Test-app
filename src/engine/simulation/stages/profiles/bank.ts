@@ -16,13 +16,12 @@ import { facilityBookOf } from '../../../../engine2/tranches';
 
 export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, reg } = input;
-  let newRevenue = 0;
 
   const share = comp.bankMarketShare ?? 0.25;
   const own = comp.bankBalanceSheet;
   const bs = own ?? reg.bankingSector;
   const sovUSD = own
-    ? Object.values(own.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0)
+    ? Object.values(own.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0)
     : reg.bankingSector.sovereignBondHoldingsUSD * share;
   // §5-WIRES D: the credit books are the sheet's rows; a bank with no sheet holds no rows.
   const creditBookUSD = own ? loanBooksOf(own, facilityBookOf(ensureV2(input.state), comp.ticker)) : 0;
@@ -48,7 +47,7 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // banking-sector balance sheet, so anchoring on it made bank revenue climb for years
   // before converging on its true (much larger) NIM-implied scale, blowing through the
   // revenue-growth-ceiling invariant on the way.
-  newRevenue = Math.max(10, comp.annualRevenue * 0.85 + (impliedNimRev * 52) * 0.15);
+  const newRevenue = Math.max(10, comp.annualRevenue * 0.85 + (impliedNimRev * 52) * 0.15);
   { const v2r = ensureV2(input.state); revHistPush(v2r, rowOf(v2r, comp.id), newRevenue); }
 
   // §7.122 step 3 — IND-R4's last stated margin is gone. It was `newEbitdaMargin = 0.40`,

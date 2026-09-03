@@ -7,7 +7,7 @@
  * WHAT THE CARRYING COST IS. A warehouse is not free: stock loses value at its good's own rate
  * every week it sits. That charge is real money and it reaches a real payee — IND16 makes the
  * distribution sector the recipient — so this function reports the cost per sub-unit and the
- * caller settles it. Reporting rather than settling is the split the whole project runs on (§1.3).
+ * caller settles it. Reporting rather than settling is the split the whole project runs on (§1.4).
  *
  * A NOTE ON ALIASING, because it is load-bearing and looks like a bug. The input lots are ALIASED,
  * not copied. Nothing mutates a lot array in place — the drawdown sorts a `.slice()` and REPLACES

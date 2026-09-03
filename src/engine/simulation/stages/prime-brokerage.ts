@@ -25,6 +25,8 @@ import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
+import { materializeGovLadder } from '../../../engine2/tranches';
+import { sovereignTenorResolver } from '../../../domain/government';
 
 /**
  * The haircut a broker takes on each kind of collateral: the most that market's own clearing
@@ -52,11 +54,20 @@ function measuredHaircutsFor(ctx: WeeklyStepContext, regionId: RegionId, reg: Re
     .map((c) => measuredWeeklyMove(ringFill(v2.priceRing, rowOf(v2, c.id), scratch))).filter((v): v is number => v !== undefined);
   const spreadMovesBps = names
     .map((c) => measuredWeeklyBpsMove(ringFill(v2.oasRing, rowOf(v2, c.id), scratch))).filter((v): v is number => v !== undefined);
-  const sov = computeSovereignRepoHaircuts(reg);
-  const sovValues = Object.values(sov).filter((v) => Number.isFinite(v));
-  const sovBlended = sovValues.length ? sovValues.reduce((a, v) => a + v, 0) / sovValues.length : 0;
+  // §3.13-SOV row 3: the broker's SCHEDULE is per asset class, so it needs one sovereign number
+  // — the face-weighted haircut of the region's actual ladder, rather than the average of four
+  // bucket labels or the five-year one standing in for the class.
+  const sovLadder = materializeGovLadder(v2, regionId);
+  const sovHaircutOf = computeSovereignRepoHaircuts(reg, sovereignTenorResolver(sovLadder, ctx.nextWeek));
+  let sovFaceUSD = 0, sovWeightedUSD = 0;
+  sovLadder.forEach((t) => {
+    const h = sovHaircutOf(t.id);
+    if (h === undefined || !(t.principalUSD > 0)) return;
+    sovFaceUSD += t.principalUSD; sovWeightedUSD += t.principalUSD * h;
+  });
+  const sovBlended = sovFaceUSD > 0 ? sovWeightedUSD / sovFaceUSD : 0;
   const equity = 2 * (medianOf(priceMoves) ?? 0);
-  const credit = 2 * ((medianOf(spreadMovesBps) ?? 0) / 10000) * CREDIT_COLLATERAL_DURATION_YEARS + (sov['t5'] ?? sovBlended);
+  const credit = 2 * ((medianOf(spreadMovesBps) ?? 0) / 10000) * CREDIT_COLLATERAL_DURATION_YEARS + sovBlended;
   return { EQUITY: equity, CORP_BOND: credit, LEVERAGED_LOAN: credit, GOV_BOND: sovBlended, DEFAULT: Math.max(equity, credit, sovBlended) };
 }
 

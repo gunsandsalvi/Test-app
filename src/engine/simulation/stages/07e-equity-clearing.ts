@@ -46,7 +46,6 @@ import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
-import { positionKey } from './securities-lending';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';

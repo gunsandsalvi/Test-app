@@ -4,7 +4,7 @@
  * The front end of the curve below 2Y was an extrapolation: `tenor3M` fell out of the
  * Nelson-Siegel fit through four bond points, so the one part of the curve the policy rate acts
  * on most directly was the one part no market ever set. Bills fix that: the 13/26/52-week
- * buckets of the region's own real bill stock (issued by stage 11, ~18% of the ladder) clear in
+ * the region's own real bills (issued by stage 11, ~18% of the ladder) clear in
  * the same double auction as everything else, and the sub-2Y curve is then refit THROUGH the
  * cleared bill yields.
  *
@@ -30,20 +30,20 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
-import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
+
 import { ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf, trancheRowOf } from '../../../engine2/tranches';
 import { splitAcrossTranches, primarySliceOf } from './register-split';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
+import { GameState, RegionId, ItemizedHolding, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
-import { computeAnnualDefaultProbability, creditRecoveryRate, payHoldersAccruedInterest, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
+import { computeAnnualDefaultProbability, creditRecoveryRate, payHoldersAccruedInterest, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetUSD } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
-import { encumberedFaceByBucket } from '../../../domain/repo';
+import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementUSD, institutionSpendableUSD } from './settlement';
@@ -53,7 +53,7 @@ import { wireCentralBankFills } from './central-bank-demand';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
-import { discountBillProceedsUSD, billYieldFromPrice, withdrawUnplacedIssuance } from '../../../domain/government';
+import { discountBillProceedsUSD, billYieldFromPrice, isDiscountBill, withdrawUnplacedIssuance } from '../../../domain/government';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
@@ -96,7 +96,9 @@ const CP_MAX_SHARE_OF_REVENUE = 0.10;
 /** Gaps smaller than this share of revenue are cash-managed, not papered. */
 const CP_MIN_GAP_SHARE_OF_REVENUE = 0.01;
 
-const billInstrumentId = (regionId: RegionId, key: string) => `${regionId}-GOV-${key}`;
+// §3.13-SOV row 3: a bill's instrument id IS the bill's id. It used to be minted as
+// `${regionId}-GOV-${bucketKey}` — a second id space for paper the ladder already named — and the
+// translator that produced it is gone with the id shape.
 
 export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2Mirror = ensureV2(state);
@@ -109,21 +111,28 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
     // ---- Bills ----
     // §3.13-SOV row 2: the ladder comes from the ONE store.
     const liveBillTranches = materializeGovLadder(ctx.v2, regionId).filter(
-      (t) => t.maturityWeek > ctx.nextWeek && isBillBucketKey(sovBucketKey(t.tenorAtIssuanceYears))
+      (t) => t.maturityWeek > ctx.nextWeek && isDiscountBill(t.tenorAtIssuanceYears)
     );
-    const outstandingByBucket = new Map<string, number>();
-    const bucketKeyByTrancheId = new Map<string, string>();
-    liveBillTranches.forEach((t) => {
-      const key = sovBucketKey(t.tenorAtIssuanceYears);
-      outstandingByBucket.set(key, (outstandingByBucket.get(key) ?? 0) + t.principalUSD);
-      bucketKeyByTrancheId.set(t.id, key);
-    });
-
-    const activeBuckets = SOV_BILL_BUCKETS.filter((b) => (outstandingByBucket.get(b.key) ?? 0) > 0);
-    if (activeBuckets.length > 0) {
-      const billBucketKeys = activeBuckets.map((b) => b.key);
+    // §3.13-SOV row 3 — THE BILL AUCTION PRICES BILLS. THERE IS NO BUCKET.
+    // The same removal as the bond book: each bill is its own instrument, with its own remaining
+    // life. A thirteen-week bill issued nine weeks ago is a four-week bill and is priced as one,
+    // where the group priced it as whatever its issue label said.
+    const activeBills = liveBillTranches
+      .filter((t) => t.principalUSD > 0)
+      .map((t) => ({
+        key: t.id,
+        years: Math.max(1 / 52, (t.maturityWeek - state.currentWeek) / 52),
+      }))
+      .filter((b) => b.years > 1 / 52);
+    if (activeBills.length > 0) {
+      const outstandingByBond = new Map<string, number>(
+        liveBillTranches.map((t) => [t.id, t.principalUSD])
+      );
+      const billIdList = activeBills.map((b) => b.key);
+      /** The bills THIS region has live — a row is a bill if its id is one of them. */
+      const billIds = new Set(billIdList);
       const cbOrder = reg.centralBankSheet
-        ? centralBankParticipant(reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k), 'PRICE_LIKE')
+        ? centralBankParticipant(reg.centralBankSheet, billIdList, 'PRICE_LIKE')
         : null;
       // OWN7 — the shrink, stated the way 07c's third carve-out finally stated it: the float is
       // what the participants in THIS book hold BETWEEN THEM, computed off the participant list
@@ -142,17 +151,17 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // The bill keeps its own convention: simple interest, `1/(1+y·t)`, which is how a bill is
       // quoted. `pricing/priceFromYield` compounds — right for a coupon bond, and about 2bp of
       // price away on a 13-week bill, so using it here would re-price every bill by changing its
-      // day-count rather than by clearing it (rule 9).
+      // day-count rather than by clearing it (rule 8).
       const billPriceAtYieldBps = (b: { years: number }, yieldBps: number): number =>
         discountBillProceedsUSD(1, Math.max(0, yieldBps / 10000), b.years);
       const billPriceRange = (b: { years: number }, yBps: number, rangeBps: number): number =>
         Math.max(1e-9, Math.abs(billPriceAtYieldBps(b, yBps) - billPriceAtYieldBps(b, yBps + rangeBps)));
       const billCurrentYieldBps = (b: { years: number }): number =>
         Math.max(1, calculateNelsonSiegelZeroRate(b.years, reg.yieldCurveParams) * 10000);
-      const instruments: ClearingInstrument[] = activeBuckets.map((b) => ({
-        id: billInstrumentId(regionId, b.key),
-        outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
-        tradableFloatUSD: outstandingByBucket.get(b.key) ?? 0,
+      const instruments: ClearingInstrument[] = activeBills.map((b) => ({
+        id: b.key,
+        outstandingUSD: outstandingByBond.get(b.key) ?? 0,
+        tradableFloatUSD: outstandingByBond.get(b.key) ?? 0,
         currentStat: billPriceAtYieldBps(b, billCurrentYieldBps(b)),
         statKind: 'PRICE_LIKE',
         durationYears: b.years,
@@ -164,13 +173,13 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const billStockByRegion: Record<string, number> = {};
       (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
         billStockByRegion[r] = materializeGovLadder(ctx.v2, r)
-          .filter((t) => isBillBucketKey(sovBucketKey(t.tenorAtIssuanceYears)))
+          .filter((t) => isDiscountBill(t.tenorAtIssuanceYears))
           .reduce((a, t) => a + t.principalUSD, 0);
       });
       const regionEntities = ctx.updatedInstitutionalEntities.filter(
         (e) => mandateWeightForIssuer(e.entityType, e.region, regionId, billStockByRegion) > 0
       );
-      const totalBillStockUSD = activeBuckets.reduce((s, b) => s + (outstandingByBucket.get(b.key) ?? 0), 0) || 1;
+      const totalBillStockUSD = activeBills.reduce((s, b) => s + (outstandingByBond.get(b.key) ?? 0), 0) || 1;
       // OWN3: bills and bonds are one HQLA pool, so both books apportion a bank's single
       // appetite over the whole sovereign stock rather than each over its own half.
       const wholeSovStockUSD = materializeGovLadder(ctx.v2, regionId)
@@ -181,7 +190,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       // Banks: the arbitrage anchor. Unbounded size at policy + a few bp — their real constraint
       // is the reserve position S2 built, not a cash budget, exactly as in 07c.
-      const repoHaircuts = computeSovereignRepoHaircuts(reg);
+      // §3.13-SOV row 3: per bond, off the bills this auction is pricing.
+      const repoHaircuts = computeSovereignRepoHaircuts(reg, (id) => activeBills.find((b) => b.key === id)?.years);
       regionBanks.forEach((bank) => {
         const holdings = new Map<string, number>();
         const demand = new Map<string, ParticipantDemand>();
@@ -203,8 +213,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const facilityBookUSD = facilityBookOf(ctx.v2, bank.ticker);
         const settledCashUSD = reservesUSD
           + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
-        // REPO2: the floor is the face of THIS bill bucket actually pledged, not a blended share.
-        const encumberedFace = encumberedFaceByBucket(reg.repoBook ?? [], bank.ticker);
+        // REPO2: the floor is the face of THIS BILL actually pledged, not a blended share.
+        const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.ticker);
         const fundableUSD = Math.min(
           Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
@@ -212,17 +222,17 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         );
         const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD, facilityBookUSD);
         const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD, bankDepositLines(ctx, bank.ticker));
-        activeBuckets.forEach((b) => {
-          const heldUSD = sheet.sovereignBondHoldingsByTenor?.[b.key] ?? 0;
-          holdings.set(billInstrumentId(regionId, b.key), heldUSD);
-          const bucketShare = (outstandingByBucket.get(b.key) ?? 0) / totalBillStockUSD;
-          const bucketShareOfSovStock = (outstandingByBucket.get(b.key) ?? 0) / wholeSovStockUSD;
-          demand.set(billInstrumentId(regionId, b.key), {
+        activeBills.forEach((b) => {
+          const heldUSD = sheet.sovereignBondHoldingsByBond?.[b.key] ?? 0;
+          holdings.set(b.key, heldUSD);
+          const bondShare = (outstandingByBond.get(b.key) ?? 0) / totalBillStockUSD;
+          const bondShareOfSovStock = (outstandingByBond.get(b.key) ?? 0) / wholeSovStockUSD;
+          demand.set(b.key, {
             reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000 + BANK_BILL_PICKUP_BPS),
-            maxHoldingUSD: appetiteUSD * bucketShareOfSovStock,
+            maxHoldingUSD: appetiteUSD * bondShareOfSovStock,
             fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
-            maxNetPurchaseUSD: fundableUSD * bucketShare,
-            minHoldingUSD: Math.max(encumberedFace.get(b.key) ?? 0, liquidityFloorUSD * bucketShareOfSovStock),
+            maxNetPurchaseUSD: fundableUSD * bondShare,
+            minHoldingUSD: Math.max(encumberedFace.get(b.key) ?? 0, liquidityFloorUSD * bondShareOfSovStock),
           });
         });
         participants.push({ id: `BANK-${bank.ticker}`, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
@@ -236,22 +246,22 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const sleeveUSD = institutionTotalAssetsUSD(ctx, entity) * entity.assetAllocationTarget.cashPct * CASH_SLEEVE_BILL_SHARE;
         // SCALE C1: read-only scan of the store's GOV_BOND rows — nothing is claimed here.
         // Which rows this auction actually rewrites is decided at apply time, where the
-        // auctioned-bucket predicate lives (a bucket whose last tranche matured is NOT
+        // auctioned-bill predicate lives (a bill that matured is NOT
         // auctioned this week and its rows must survive).
         ctx.holdingsStore!.scan(entity.id, 'GOV_BOND', (h) => {
           if (h.issuerRegion === regionId) {
-            const key = govBucketKeyOf(h.instrumentId, regionId);
-            if (key && isBillBucketKey(key)) holdings.set(h.instrumentId, (holdings.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+            // §3.13-SOV row 3: it is a bill because the ladder says so, not because its id parses.
+            if (billIds.has(h.instrumentId)) holdings.set(h.instrumentId, (holdings.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
           }
           return false;
         });
-        activeBuckets.forEach((b) => {
-          const bucketShare = (outstandingByBucket.get(b.key) ?? 0) / totalBillStockUSD;
-          demand.set(billInstrumentId(regionId, b.key), {
+        activeBills.forEach((b) => {
+          const bondShare = (outstandingByBond.get(b.key) ?? 0) / totalBillStockUSD;
+          demand.set(b.key, {
             reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000 + INSTITUTIONAL_BILL_TERM_PREMIUM_BPS_PER_YEAR * b.years),
-            maxHoldingUSD: sleeveUSD * bucketShare,
+            maxHoldingUSD: sleeveUSD * bondShare,
             fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
-            maxNetPurchaseUSD: institutionSpendableUSD(ctx, entity) * CASH_SLEEVE_BILL_SHARE * bucketShare,
+            maxNetPurchaseUSD: institutionSpendableUSD(ctx, entity) * CASH_SLEEVE_BILL_SHARE * bondShare,
           });
         });
         participants.push({ id: entity.id, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
@@ -276,31 +286,31 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       );
       const treasuryByTicker = new Map<string, typeof treasuryBidders[number]>();
       treasuryBidders.forEach((comp) => {
-        const heldByBucket = new Map<string, number>();
+        const heldByBond = new Map<string, number>();
         (comp.treasuryHoldings || []).forEach((h) => {
           // §7.241: the old prefix-slice also matched TRANCHE ids, yielding keys like 'B13-41'
           // that failed the lowercase test — so bill tranches held here silently dropped out of
           // the treasurer's sizing and the tranche fallback below was dead code.
-          const key = govBucketKeyOf(h.instrumentId, regionId) ?? bucketKeyByTrancheId.get(h.instrumentId);
-          if (!key || !isBillBucketKey(key)) return;
-          heldByBucket.set(key, (heldByBucket.get(key) ?? 0) + (h.quantityOrNotionalUSD ?? 0));
+          // §3.13-SOV row 3: a row is a bill if its id names one of THIS region's live bills.
+          if (!billIds.has(h.instrumentId)) return;
+          heldByBond.set(h.instrumentId, (heldByBond.get(h.instrumentId) ?? 0) + (h.quantityOrNotionalUSD ?? 0));
         });
         const cashUSD = cashOf(ctx.v2, comp);
         const targetUSD = corporateTreasuryTargetUSD(cashUSD, comp.annualRevenue ?? 0, riskAversionOf(comp.management));
-        const heldUSD = Array.from(heldByBucket.values()).reduce((a, v) => a + v, 0);
+        const heldUSD = Array.from(heldByBond.values()).reduce((a, v) => a + v, 0);
         if (!(targetUSD > 1) && !(heldUSD > 1)) return;
         const budgetUSD = Math.max(0, cashUSD
           + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: comp.ticker }));
         const holdings = new Map<string, number>();
         const demand = new Map<string, ParticipantDemand>();
-        activeBuckets.forEach((b) => {
-          const bucketShare = (outstandingByBucket.get(b.key) ?? 0) / totalBillStockUSD;
-          holdings.set(billInstrumentId(regionId, b.key), heldByBucket.get(b.key) ?? 0);
-          demand.set(billInstrumentId(regionId, b.key), {
+        activeBills.forEach((b) => {
+          const bondShare = (outstandingByBond.get(b.key) ?? 0) / totalBillStockUSD;
+          holdings.set(b.key, heldByBond.get(b.key) ?? 0);
+          demand.set(b.key, {
             reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000),
-            maxHoldingUSD: targetUSD * bucketShare,
+            maxHoldingUSD: targetUSD * bondShare,
             fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
-            maxNetPurchaseUSD: budgetUSD * bucketShare,
+            maxNetPurchaseUSD: budgetUSD * bondShare,
           });
         });
         treasuryByTicker.set(comp.ticker, comp);
@@ -309,7 +319,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       const priorDealerInventory = new Map<string, number>();
       (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => {
-        if (isBillBucketKey(p.tenorKey)) priorDealerInventory.set(billInstrumentId(regionId, p.tenorKey), p.inventoryUSD);
+        if (billIds.has(p.bondId)) priorDealerInventory.set(p.bondId, p.inventoryUSD);
       });
 
       // PUB2b: a maturing bill rolls back into bills, so the CB's book keeps its shape rather
@@ -352,18 +362,18 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // repaid a holder that was not there. A bill auction is exactly this: paper that exists,
       // offered at whatever the week's demand pays, and offered again next week if it does not
       // clear. The central bank's book on a no-order week is a real holding and is NOT on offer.
-      const passiveCbByBucket = new Map<string, number>();
+      const passiveCbByBond = new Map<string, number>();
       if (!cbOrder && reg.centralBankSheet) {
-        Object.entries(reg.centralBankSheet.sovereignHoldingsByTenor || {})
-          .forEach(([key, usd]) => passiveCbByBucket.set(key, Number(usd) || 0));
+        Object.entries(reg.centralBankSheet.sovereignHoldingsByBond || {})
+          .forEach(([key, usd]) => passiveCbByBond.set(key, Number(usd) || 0));
       }
-      activeBuckets.forEach((b) => {
-        const inst = instruments.find((i) => i.id === billInstrumentId(regionId, b.key));
+      activeBills.forEach((b) => {
+        const inst = instruments.find((i) => i.id === b.key);
         if (!inst) return;
         inst.primaryOfferingUSD = Math.max(0,
-          (outstandingByBucket.get(b.key) ?? 0)
+          (outstandingByBond.get(b.key) ?? 0)
           - inst.tradableFloatUSD
-          - (passiveCbByBucket.get(b.key) ?? 0));
+          - (passiveCbByBond.get(b.key) ?? 0));
       });
 
       const result = clearFinancialAsset(instruments, [...participants, ...deskParticipants], priorDealerInventory, {
@@ -388,8 +398,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // leg alone would break the per-bank identity), so the treasury is made whole for the
       // desks' slice and the desks' book carries the old convention until G3a re-prices it.
       const priceFractionById = new Map<string, number>();
-      activeBuckets.forEach((b) => {
-        const id = billInstrumentId(regionId, b.key);
+      activeBills.forEach((b) => {
+        const id = b.key;
         // §3.13-SOV row 4: the auction cleared the PRICE. It is no longer derived from a yield —
         // the yield is derived from it, below, for the curve.
         const clearedPrice = result.newStatById.get(id) ?? instruments.find((i) => i.id === id)?.currentStat ?? 1;
@@ -458,9 +468,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         cbRawFills.forEach((usd, id) => cbFills.set(id, usd - rebateOf(CENTRAL_BANK_PARTICIPANT_ID, id)));
         // Step 13 (W2): the central bank's fills are wires from the house — the paper it bought
         // with the reserves it created.
-        wireCentralBankFills(regionId, reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k), cbFills, 'bill clearing fill');
+        wireCentralBankFills(regionId, reg.centralBankSheet, billIdList, cbFills, 'bill clearing fill');
         const filled = applyCentralBankFills(
-          reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k), cbFills
+          reg.centralBankSheet, billIdList, cbFills
         );
         reg.centralBankSheet.lastOpenMarketPurchasesUSD =
           Math.round(((reg.centralBankSheet.lastOpenMarketPurchasesUSD ?? 0) + filled));
@@ -470,8 +480,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // segment every short-rate consumer reads comes from a market, not an extrapolation.
       // §3.13-SOV row 4: the bills cleared a PRICE, so the curve is fitted through the yields
       // those prices imply — on the bill's own simple-interest convention.
-      const billPoints = activeBuckets.map((b) => {
-        const px = result.newStatById.get(billInstrumentId(regionId, b.key));
+      const billPoints = activeBills.map((b) => {
+        const px = result.newStatById.get(b.key);
         return {
           tenorYears: b.years,
           yield: px === undefined ? reg.zeroRates.tenor3M : billYieldFromPrice(px, b.years),
@@ -485,40 +495,40 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       ];
       reg.yieldCurveParams = fitNelsonSiegelParams([...billPoints, ...bondPoints], reg.yieldCurveParams.lambda);
       if (process.env.BILL_TRACE === '1') {
-        console.log(`  [bill-trace] ${regionId} w${ctx.nextWeek}: ` + activeBuckets.map((b) => {
-          const px = result.newStatById.get(billInstrumentId(regionId, b.key));
+        console.log(`  [bill-trace] ${regionId} w${ctx.nextWeek}: ` + activeBills.map((b) => {
+          const px = result.newStatById.get(b.key);
           return `${b.key} px=${px === undefined ? 'none' : px.toFixed(8)} y=${(billPoints.find((p) => p.tenorYears === b.years)!.yield * 100).toFixed(4)}%`;
         }).join(' | '));
       }
       const cleared13w = billPoints.find((p) => p.tenorYears === 0.25);
       reg.zeroRates = { ...reg.zeroRates, tenor3M: cleared13w ? cleared13w.yield : calculateNelsonSiegelZeroRate(0.25, reg.yieldCurveParams) };
 
-      // Apply bank books (their bill buckets live beside the bond buckets in byTenor).
+      // Apply bank books (their bills live beside their bonds in the one book).
       // The write goes to `companyUpdates`, which is the ONLY bank-sheet write that survives:
       // stage 08 rebuilds `updatedCompanies` from the week-start array and takes each bank's
       // sheet from `companyUpdates`. This stage used to write `updatedCompanies` instead, so
       // every bill fill it cleared for a bank was silently discarded — the fills were priced,
-      // the buckets never moved, and 07c's careful pass-through of the bill buckets was
+      // the positions never moved, and 07c's careful pass-through of the bills was
       // preserving a position nothing was updating.
       regionBanks.forEach((bank) => {
         const fills = result.newParticipantHoldings.get(`BANK-${bank.ticker}`);
         if (!fills) return;
         const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
         if (!existingSheet) return;
-        // Only the buckets this auction actually priced are rewritten; a bucket whose last
-        // tranche matures this week is left standing for stage 11 to redeem for cash.
-        const byTenor: Record<string, number> = { ...(existingSheet.sovereignBondHoldingsByTenor || {}) };
+        // Only the bills this auction actually priced are rewritten; one maturing this week is
+        // left standing for stage 11 to redeem for cash.
+        const byTenor: Record<string, number> = { ...(existingSheet.sovereignBondHoldingsByBond || {}) };
         let faceDeltaUSD = 0;
-        // Step 13 (W2): the bank's bill book moves by wire against the house, bucket by bucket.
+        // Step 13 (W2): the bank's bill book moves by wire against the house, bill by bill.
         const billsBefore = new Map<string, { valueUSD: number }>(), billsAfter = new Map<string, { valueUSD: number }>();
-        activeBuckets.forEach((b) => {
+        activeBills.forEach((b) => {
           // Item 13: the primary slice books at cost — the rebate is the same instruction's
           // booking half (the cash half was adjusted on the participant's net above).
-          const newUSD = (fills.get(billInstrumentId(regionId, b.key)) ?? 0)
-            - rebateOf(`BANK-${bank.ticker}`, billInstrumentId(regionId, b.key));
+          const newUSD = (fills.get(b.key) ?? 0)
+            - rebateOf(`BANK-${bank.ticker}`, b.key);
           faceDeltaUSD += newUSD - (byTenor[b.key] ?? 0);
-          billsBefore.set(billInstrumentId(regionId, b.key), { valueUSD: byTenor[b.key] ?? 0 });
-          billsAfter.set(billInstrumentId(regionId, b.key), { valueUSD: newUSD > 1 ? newUSD : 0 });
+          billsBefore.set(b.key, { valueUSD: byTenor[b.key] ?? 0 });
+          billsAfter.set(b.key, { valueUSD: newUSD > 1 ? newUSD : 0 });
           if (newUSD > 1) byTenor[b.key] = newUSD; else delete byTenor[b.key];
         });
         clearedBookDelta({ kind: 'BANK_SECURITIES', ticker: bank.ticker }, regionId, 'GOV_BOND', billsBefore, billsAfter, () => undefined, 'bill clearing fill');
@@ -530,20 +540,20 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const feeUSD = Math.max(0, -(cashDeltaUSD + faceDeltaUSD));
         updateBankSheet(ctx, bank.ticker, {
           ...bookPnL(existingSheet, -feeUSD, 'bill book fee', bank.ticker),
-          sovereignBondHoldingsByTenor: byTenor,
+          sovereignBondHoldingsByBond: byTenor,
           sovereignBondHoldingsUSD: Math.round(Object.values(byTenor).reduce((s, v) => s + v, 0)),
         });
       });
 
       // Apply institutional books with the engine's cash leg.
       // SCALE C1: claim only what this auction priced — other regions, bonds, and (the subtle
-      // one) bill buckets not in THIS week's auction all stay unclaimed. A bucket leaves the
-      // auction the week its last tranche matures (`maturityWeek > nextWeek` excludes it), and
+      // one) bills not in THIS week's auction all stay unclaimed. A bill leaves the auction the
+      // week it matures (`maturityWeek > nextWeek` excludes it), and
       // rebuilding the book from the auction alone therefore deleted the holder's position in it
       // with no cash leg, leaving stage 11's redemption nothing to pay out on. Measured as the
       // institutional book dropping 5-11% on exactly the weeks the seeded 13/26/52-week
       // programs matured. An entity with no fills is not touched at all.
-      const auctionedIds = new Set(activeBuckets.map((b) => billInstrumentId(regionId, b.key)));
+      const auctionedIds = new Set(activeBills.map((b) => b.key));
       regionEntities.forEach((entity) => {
         const fills = result.newParticipantHoldings.get(entity.id);
         if (!fills) return;
@@ -558,29 +568,22 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       // CASH: the treasuries' own books, rewritten from their fills. The rows are keyed by the
       // BUCKET id every other holder in this book uses — the tranche ids stage 08 used to write
-      // were a second id space for one instrument (rule 3), and 07c had to read both.
+      // were a second id space for one instrument (rule 4), and 07c had to read both.
       treasuryByTicker.forEach((comp, ticker) => {
         const fills = result.newParticipantHoldings.get(treasuryParticipantId(ticker));
         if (!fills) return;
-        const kept = (comp.treasuryHoldings || []).filter((h) => {
-          const key = h.instrumentId.startsWith(`${regionId}-GOV-`)
-            ? h.instrumentId.slice(`${regionId}-GOV-`.length)
-            : bucketKeyByTrancheId.get(h.instrumentId);
-          return !(key && isBillBucketKey(key));
-        });
+        const kept = (comp.treasuryHoldings || []).filter((h) => !billIds.has(h.instrumentId));
         const billRows: ItemizedHolding[] = [];
         fills.forEach((usd, instrumentId) => {
           const bookedUSD = usd - rebateOf(treasuryParticipantId(ticker), instrumentId);
           if (bookedUSD > 1) billRows.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: bookedUSD, units: bookedUSD });
         });
         // Step 13 (W2): the treasury's bill rows move by wire against the house (its rows are
-        // keyed by bucket id, the older tranche-keyed rows read through the same bucket).
+        // keyed by bill id, as every other holder's are).
         const tBefore = new Map<string, { valueUSD: number }>(), tAfter = new Map<string, { valueUSD: number }>();
         (comp.treasuryHoldings || []).forEach((h) => {
-          const key = h.instrumentId.startsWith(`${regionId}-GOV-`) ? h.instrumentId.slice(`${regionId}-GOV-`.length) : bucketKeyByTrancheId.get(h.instrumentId);
-          if (!(key && isBillBucketKey(key))) return;
-          const id = billInstrumentId(regionId, key);
-          tBefore.set(id, { valueUSD: (tBefore.get(id)?.valueUSD ?? 0) + (h.quantityOrNotionalUSD ?? 0) });
+          if (!billIds.has(h.instrumentId)) return;
+          tBefore.set(h.instrumentId, { valueUSD: (tBefore.get(h.instrumentId)?.valueUSD ?? 0) + (h.quantityOrNotionalUSD ?? 0) });
         });
         billRows.forEach((h) => tAfter.set(h.instrumentId, { valueUSD: (tAfter.get(h.instrumentId)?.valueUSD ?? 0) + (h.quantityOrNotionalUSD ?? 0) }));
         clearedBookDelta({ kind: 'COMPANY', ticker }, regionId, 'GOV_BOND', tBefore, tAfter, () => undefined, 'bill clearing fill');
@@ -631,9 +634,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const o = result.primaryOutcomeById.get(inst.id);
           const placedUSD = o && !o.withdrawn ? Math.max(0, o.marketTakeUSD) : 0;
           const unplacedUSD = Math.max(0, (inst.primaryOfferingUSD ?? 0) - placedUSD);
-          const key = activeBuckets.find((b) => billInstrumentId(regionId, b.key) === inst.id)?.key;
-          if (!key || unplacedUSD <= 1) return;
-          const r = withdrawUnplacedIssuance(reg.govDebtTranches, sovBucketKey, key, unplacedUSD);
+          if (unplacedUSD <= 1) return;
+          const r = withdrawUnplacedIssuance(reg.govDebtTranches, inst.id, unplacedUSD);
           reg.govDebtTranches = r.tranches;
           // §3.13-SOV row 2: the store follows the array at the moment the array moves, so the
           // two never disagree mid-week and a reader may take either. Withdrawn paper is face
@@ -644,10 +646,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the
       // same regional array as bonds under their own keys, and the bond rows pass through.
       const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
-      const bondDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !isBillBucketKey(p.tenorKey));
-      const billDealerRows = activeBuckets.map((b) => ({
-        tenorKey: b.key,
-        inventoryUSD: deskViewById.get(billInstrumentId(regionId, b.key)) ?? 0,
+      const bondDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !billIds.has(p.bondId));
+      const billDealerRows = activeBills.map((b) => ({
+        bondId: b.key,
+        inventoryUSD: deskViewById.get(b.key) ?? 0,
       })).filter((r) => Math.abs(r.inventoryUSD) > 1);
       reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: [...bondDealerRows, ...billDealerRows] };
     }
@@ -975,7 +977,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const outcome = cpResult.primaryOutcomeById.get(iss.comp.id);
         const clearedBps = cpResult.newStatById.get(iss.comp.id) ?? 0;
         const placedUSD = outcome && !outcome.withdrawn ? Math.max(0, outcome.marketTakeUSD) : 0;
-        // No floor on the level (rule 15): the paper exists at whatever the auction printed.
+        // No floor on the level (rule 6): the paper exists at whatever the auction printed.
         if (placedUSD > 1) {
           issueTranche(v2Mirror, { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId }, {
             id: `${iss.comp.ticker}-CP-${ctx.nextWeek}`,
@@ -1006,7 +1008,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             // G2: a committed bank line is BANK debt, exactly like the revolver stage 08 draws
             // for a withdrawn refinancing. Unmarked, the identical instrument sat in the
             // syndicated loan market's float on one path and on the house bank's itemized book
-            // on the other — one real thing represented two ways (rule 3).
+            // on the other — one real thing represented two ways (rule 4).
             isBankFacility: true,
             facilityBankTicker: iss.comp.homeBankTicker,
           } as DebtTranche, 'revolver draw: commercial paper roll failed');

@@ -50,7 +50,7 @@ import { institutionProfile } from '../../../domain/institution-profiles';
  * against spread volatility — and that volatility steps with rating. A flat within-IG charge
  * (the first version of this file) made every IG reservation identical and flattened the whole
  * ladder; the fix is the real regulatory structure, not a fitted curve. Magnitudes are
- * structural modelling choices in the range real regimes occupy (rule 4), roughly geometric
+ * structural modelling choices in the range real regimes occupy (rule 2), roughly geometric
  * through investment grade and steepening below it.
  */
 const SPREAD_RISK_CAPITAL_PER_DURATION_YEAR: Record<CreditRating, number> = {

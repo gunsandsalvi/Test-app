@@ -27,7 +27,7 @@ export interface WealthTierData {
    * "Who holds deposits is whose savings accumulated" is §5-COH's own sentence, and it was not
    * true: the deposit split was a stated weight applied to the aggregate every week, so a tier
    * that saved more never got richer and the wealth distribution could not respond to the one
-   * thing that produces it (rule 13). This accumulates the per-tier saving the cohorts already
+   * thing that produces it (rule 2). This accumulates the per-tier saving the cohorts already
    * measure, and the share is its outcome.
    */
   accumulatedSavingsUSD?: number;
@@ -70,7 +70,7 @@ export interface WealthTierData {
 
 /**
  * HH4 — one household cohort: an occupation x wealth-tier cell. ~20 per region. Every dollar
- * figure is an ANNUAL flow (rule 9). The cohorts are the SOURCE for the household cross-section:
+ * figure is an ANNUAL flow (rule 8). The cohorts are the SOURCE for the household cross-section:
  * tier income shares, the savings cross-section, the spend-mix shares and the per-cohort
  * debt-service burden are all derived sums over them, replacing the drift formulas that used to
  * evolve those numbers beside the aggregates they claimed to decompose.
@@ -175,8 +175,8 @@ export interface WeatherAnomaly {
    * the real one.
    *
    * This replaces `commodityImpactPct`, which stated a PRICE impact and was added to the spot's
-   * drift: an event deciding the answer instead of moving a quantity (rule 1). Its two siblings,
-   * `gdpImpactPct` and `inflationImpactPct`, were written at 14 sites and read at none — rule 13
+   * drift: an event deciding the answer instead of moving a quantity (rule 3). Its two siblings,
+   * `gdpImpactPct` and `inflationImpactPct`, were written at 14 sites and read at none — rule 2
    * in its purest form, a weather event stating its own GDP and inflation outcome — and are gone.
    */
   yieldImpactPct: number;
@@ -326,7 +326,7 @@ export interface HouseholdState {
  * parallel structures are the rest of 13-SOV.
  *
  * `tenorAtIssuanceYears` is retained ONLY until the readers move to the store, and it is a second
- * representation of a fact the dates already carry (rule 3). *(CORRECTED: an earlier note here
+ * representation of a fact the dates already carry (rule 4). *(CORRECTED: an earlier note here
  * said it could not be derived because a reopened bucket would change the derived key. That was
  * wrong — each rung derives its own tenor from its own dates, so the key is stable per rung. What
  * was actually true is that the two DISAGREED, on 20 of 260 rungs, because the seed rounded the
@@ -350,7 +350,7 @@ export type GovDebtTranche = DebtTranche & {
  * It replaces `SmePool`, five hardcoded buckets (MANUFACTURING, RETAIL_TRADE, …)
  * that were a parallel taxonomy beside `INDUSTRY_REGISTRY`: they were seeded from three
  * constants each, sold into 7 of 36 sub-units, bought in exactly one place, and could never
- * cover a product line added to the registry — rule 17 failing outright (§5-SEG).
+ * cover a product line added to the registry — rule 15 failing outright (§5-SEG).
  */
 /**
  * DIST — one stratum of an SME pool: a weighted macro-agent, in the particle-in-cell sense.
@@ -366,7 +366,7 @@ export type GovDebtTranche = DebtTranche & {
  * p10 1.50 / p50 3.12 / p90 5.92, and **11.2% of firms sit within 10% of the covenant threshold**.
  * That is the mass a scalar throws away.
  *
- * The pool's own aggregates stay, and are DERIVED from these (rule 3) — nothing reads a node and
+ * The pool's own aggregates stay, and are DERIVED from these (rule 4) — nothing reads a node and
  * a parallel scalar for the same quantity.
  */
 export interface SmePoolStratum {
@@ -388,7 +388,7 @@ export interface SmePool {
    * SEGMENT to GOVERNMENT payment (stage 11), replacing the payer-less revenue statistic. */
   accruedTaxUSD?: number;
   /** The DERIVED SUM of the SME_POOL loans the region's banks hold against this pool — one
-   * representation (rule 3); bank-lending.ts and 02b own it. */
+   * representation (rule 4); bank-lending.ts and 02b own it. */
   debtUSD: number;
   /** §7.241 — the principal-weighted margin (bps over policy) of those SAME loans, derived
    * beside `debtUSD` by 02b from the banks' real quoted margins. The pool's debt service used to
@@ -417,7 +417,7 @@ export interface SmePool {
    * strata rather than read off the pool's mean.
    *
    * Measured in `sme-pools.ts`, where the strata and the distress function already live, and
-   * read by `labor-market.ts` — one representation of one number (rule 3). It exists because the
+   * read by `labor-market.ts` — one representation of one number (rule 4). It exists because the
    * SAME distress rule was being applied at two different resolutions: `cash < 0 → shed staff`
    * ran PER FIRM for the named tier and against the pool's TOTAL for segments, so either every
    * firm in a pool had distress layoffs or none did.
@@ -468,7 +468,7 @@ export interface TenureStratum {
 /**
  * DIST 1(b) — what a year of experience adds to a worker's productivity, and therefore its wage.
  *
- * A TECHNOLOGY primitive (rule 19): how fast a person gets better at a job is a fact about the
+ * A TECHNOLOGY primitive (rule 2): how fast a person gets better at a job is a fact about the
  * job, not an outcome of anything else the model runs. One number, and the entire wage
  * cross-section within an occupation is derived from it plus real turnover.
  */
@@ -477,7 +477,7 @@ export const RETURN_TO_EXPERIENCE_ANNUAL = 0.02;
 /**
  * DIST 1(b) — how finely the experience cross-section is cut, and how long a working life runs.
  *
- * `TENURE_COHORTS` is a RESOLUTION parameter (rule 19): it says how the distribution is
+ * `TENURE_COHORTS` is a RESOLUTION parameter (rule 2): it says how the distribution is
  * discretised and the answer must not depend on it (verified §7.175).
  *
  * `WORKING_LIFE_YEARS` is GONE: it was a placeholder for the span the cold start spreads tenure
@@ -491,7 +491,7 @@ export interface OccupationPool {
   employed: number;
   /**
    * DIST 1(b) — the occupation's EXPERIENCE cross-section. `wageIndex` below is its first moment
-   * and stays the number every existing reader wants (rule 3); this is what it is the mean OF.
+   * and stays the number every existing reader wants (rule 4); this is what it is the mean OF.
    */
   tenureStrata?: TenureStratum[];
   wageIndex: number;
@@ -586,7 +586,7 @@ export const QUIT_ELASTICITY_TO_RELATIVE_WAGE = 1.8;
 /**
  * RENT-SHARING — the share of a firm's surplus per worker that reaches the worker's wage.
  *
- * **A BARGAINING primitive** (rule 19's PREFERENCE/POLICY category): how a surplus is split
+ * **A BARGAINING primitive** (rule 2's PREFERENCE/POLICY category): how a surplus is split
  * between the firm and the people who made it is not derivable from anything else in the model —
  * it is what a wage negotiation IS. One number, and it retires eighteen.
  *
@@ -704,8 +704,8 @@ export interface Region {
   /**
    * REPO1 — this region's live secured-funding book: every open contract, with its lender, its
    * borrower, the rate it was struck at, when it matures and the specific paper pledged. Stored
-   * ONCE with both parties named, which is what makes the position two-sided (rule 14) without
-   * being two copies of one thing (rule 3). The sheets' `repoLentUSD`, `repoBorrowedUSD`,
+   * ONCE with both parties named, which is what makes the position two-sided (rule 5) without
+   * being two copies of one thing (rule 4). The sheets' `repoLentUSD`, `repoBorrowedUSD`,
    * `srfBorrowingUSD` and encumbrance are all derived from it (domain/repo.ts).
    */
   repoBook?: RepoContract[];
@@ -916,7 +916,7 @@ export interface Region {
    * DEM — THE AGE STRUCTURE: population share by single year of age, index = age in years.
    *
    * `lifeCycleDistribution` below is now a VIEW of this — its four stage shares are age bands —
-   * so there is one representation of who is how old (rule 3). It replaces four shares walked by
+   * so there is one representation of who is how old (rule 4). It replaces four shares walked by
    * drift constants and renormalised, which implied a 33-year retirement and a 133-year working
    * life (§7.169) and could therefore carry no life-cycle at all.
    */

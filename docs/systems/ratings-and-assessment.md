@@ -66,7 +66,7 @@ Written 2026-09-03 from the domain, code shut.
 - **E3** FORBID — **no assessment that is always right.** If a rating never misprices, C1's forced
   sales never surprise anyone and A4 is deleted
 - **E4** VERIFY — the distribution of ratings across issuers is a **read** of their states, never
-  a target distribution the issuers were fitted to (rule 4)
+  a target distribution the issuers were fitted to (rule 2)
 
 ---
 

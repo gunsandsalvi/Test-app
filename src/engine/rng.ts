@@ -77,7 +77,7 @@ export function randomInt(n: number): number {
  * by 2.0% and killed a different firm, because `insurerProfile`'s loss ratio is the 40th draw for
  * the 40th company and the 2,456th for the same company read backwards.
  *
- * A stream position is a RESOLUTION artefact (§1.19) and it was setting real outcomes. So a loop
+ * A stream position is a RESOLUTION artefact (§1.2) and it was setting real outcomes. So a loop
  * over entities opens a scope per entity instead: the stream is re-seeded from the entity's OWN
  * identity, the week, and the world's seed, so a firm draws the same number wherever it sits in
  * the loop, on whichever core, in a roster of any size. That is what makes the loop parallel —

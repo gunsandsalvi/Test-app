@@ -77,9 +77,7 @@ export function calculateBlackScholesGreeks(
   const exp_rT = Math.exp(-r * T);
   const pdf_d1 = normalPdf(d1);
 
-  let price = 0;
-  let delta = 0;
-  let rho = 0;
+  let price: number, delta: number, rho: number;
 
   if (type === 'CALL') {
     price = S * exp_qT * normalCdf(d1) - K * exp_rT * normalCdf(d2);
@@ -97,7 +95,7 @@ export function calculateBlackScholesGreeks(
 
   // Annual Theta, then converted to 1-week theta (/ 52)
   const term1 = -(S * exp_qT * pdf_d1 * vol) / (2 * sqrtT);
-  let thetaAnnual = 0;
+  let thetaAnnual: number;
   if (type === 'CALL') {
     thetaAnnual = term1 - r * K * exp_rT * normalCdf(d2) + q * S * exp_qT * normalCdf(d1);
   } else {

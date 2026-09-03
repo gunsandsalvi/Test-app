@@ -57,7 +57,7 @@ Written 2026-09-03 from the domain, code shut.
 
 ### D. THE RECORD
 - **D1** REASON — a **history** that is a read of what happened, not a separate log that can drift
-  (rule 3)
+  (rule 4)
 - **D2** REASON — **performance is computed from real positions and real prices**, so it can be
   bad
 - **D3** VERIFY — anything shown must be reproducible from the state; a number on the surface with
@@ -66,7 +66,7 @@ Written 2026-09-03 from the domain, code shut.
 ### E. WHAT MUST NOT HAPPEN
 - **E1** FORBID — **no display-only number.** If it is worth showing it is worth deriving, and if
   it cannot be derived it must not be shown
-- **E2** FORBID — **no scripted narrative.** A sequence of events written in advance is rule 4's
+- **E2** FORBID — **no scripted narrative.** A sequence of events written in advance is rule 2's
   defect at the level of the whole world
 - **E3** FORBID — **no surface that changes the model.** Observing must not move anything; if
   looking at a market changes it, every measurement in this atlas is contaminated
@@ -129,7 +129,7 @@ That matters because of what it would do if it were called. Three violations, in
 - **C2 / C2.a.** `trade.ts:31` is `const updatedCash = state.portfolio.cashUSD −
   (executionDetails?.spreadCostUSD ?? 0)`. The player pays **the spread and nothing else.** Buying
   a billion of bonds debits a few basis points of it; the notional never leaves the account. The
-  means are not required, which is exactly C2.a's forbidden actor. Worse for rule 3 ("1$ is 1$"),
+  means are not required, which is exactly C2.a's forbidden actor. Worse for rule 4 ("1$ is 1$"),
   the desk's side IS charged the notional — `adjustBankReserves(v2, bank.ticker,
   −inventoryDeltaUSD + incomeUSD)` at `:98` — so the bank pays for paper the buyer did not pay for,
   and the difference is money created at the ticket.
@@ -224,7 +224,7 @@ derivation (called from `11-fiscal:781`) and writes claims the state does not su
 - `stage08-back.ts:1943-1951` picks one of three fixed `guidanceSnippet` strings by surprise sign
   and `newsGenerator:44` puts it in the headline as management's guidance.
 
-Every one of these is a duplicate of a story the derivation already tells from the state — rule 3,
+Every one of these is a duplicate of a story the derivation already tells from the state — rule 4,
 and the stated version is the wrong one. Not in §3; **step 15b (News slice 2)** is the natural home
 and is about developing stories, not this. **Becomes a step, and it is a delete**: retire
 `newsGenerator.ts` into the derivation (the rate-decision and weather items are the two it still

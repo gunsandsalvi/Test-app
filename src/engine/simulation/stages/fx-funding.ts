@@ -30,7 +30,7 @@
  *
  * Runs at the head of every settlement pass, off the persistent balances (what the party actually
  * holds coming in) and the pass's own due rows (what it is about to owe), so the purchase settles
- * in the same pass as the payment that forced it — rule 14, both legs one pass.
+ * in the same pass as the payment that forced it — rule 5, both legs one pass.
  */
 
 import { CurrencyCode, CURRENCY_CODES, RegionId, currencyOf } from '../../../domain/geography';
@@ -44,7 +44,7 @@ import { PaymentJournal, pay, rowDue } from './settlement';
 
 /** One quote, shared with every other FX charge in the model (`domain/dealer-desk.ts`). */
 const FX_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK.fx;
-/** Below this a shortfall is float dust on a netted position, not a trade (rule 28). */
+/** Below this a shortfall is float dust on a netted position, not a trade (rule 7). */
 const MIN_TRADE = 1e-6;
 
 /** The desks a region's conversions go through: its banks, pro rata by market share. */

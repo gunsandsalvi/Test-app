@@ -23,9 +23,9 @@ Written 2026-09-03 from the domain, code shut.
 - **A4** REASON — it is **recallable and it terminates**: the security comes back, the collateral
   goes back
 - **A5** REASON — the borrower pays a **fee**, and the fee is a price
-  - A5.a it clears (rule 1): scarce paper is expensive to borrow, abundant paper is cheap
+  - A5.a it clears (rule 3): scarce paper is expensive to borrow, abundant paper is cheap
   - A5.b when the collateral is cash, the price is expressed as a **rebate** on that cash instead,
-    and the two forms are the same number seen from two sides (rule 3)
+    and the two forms are the same number seen from two sides (rule 4)
 
 ### B. WHY EACH SIDE IS THERE
 - **B1** REASON — the **borrower needs the security**: to deliver a short, to cover a fail, to
@@ -46,7 +46,7 @@ Written 2026-09-03 from the domain, code shut.
 - **C3** REASON — **cash collateral is reinvested** by the lender, and that reinvestment is a
   position with its own risk — this is where a lending programme actually loses money
 - **C4** FORBID — **no collateral that is not held.** Posted collateral leaves the poster's free
-  balance; it cannot be counted as available by both sides (rule 3)
+  balance; it cannot be counted as available by both sides (rule 4)
 - **C5** REASON — **rehypothecation**, where permitted, means the same security backs a chain of
   obligations — and the chain must be **traceable**, because it is how a single default reaches
   parties that never traded with the defaulter

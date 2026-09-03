@@ -4,7 +4,7 @@
  * OAS is the BASIS) stays documented at the market stage (07h); this module is the CONTRACT:
  * premium weekly, par-less-recovery on a credit event, terminated.
  *
- * strike: the spread struck, in bps of notional per year (rule 9). referenceId: the reference
+ * strike: the spread struck, in bps of notional per year (rule 8). referenceId: the reference
  * COMPANY id — the same key the bond book prices. termKey: ''.
  */
 
@@ -19,7 +19,7 @@ export const CDS_TENOR_WEEKS = 5 * 52;
 
 /**
  * The large-exposure limit: how much of its own capital a bank will carry against ONE name
- * before it has to lay the rest off. A real regulatory primitive (rule 4 allows those; the
+ * before it has to lay the rest off. A real regulatory primitive (rule 2 allows those; the
  * leverage floor and risk weights sit beside it). It turns 09-concentration's measurement into
  * a decision: exposure above this is not a preference to hedge, it is a position the bank is
  * not allowed to keep.

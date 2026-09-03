@@ -10,7 +10,7 @@
  * final GameState returned to the caller.
  */
 
-import { GameState, RegionId, Portfolio } from '../../../types';
+import { GameState, Portfolio } from '../../../types';
 import { WeeklyStepContext } from './context';
 
 export function runNewsAndTurnSummaryStage(state: GameState, ctx: WeeklyStepContext): GameState {

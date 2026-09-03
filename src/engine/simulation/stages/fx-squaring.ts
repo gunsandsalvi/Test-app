@@ -30,7 +30,7 @@ import { PartyRef } from '../../ledger/party';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
 
-/** Below this the position is float dust on a netted book, not a trade (rule 28). */
+/** Below this the position is float dust on a netted book, not a trade (rule 7). */
 const MIN_TRADE = 1e-6;
 
 /** A bank's short of one money, as a positive number; zero when it is long or flat. */

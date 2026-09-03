@@ -101,7 +101,7 @@ checked by `scripts/check-atlas.sh`.
 | **B3.a FORBID the policy rate is never a market's cleared rate** | `src/engine/simulation/stages/repo-clearing.ts:parkUnlentSleevesAtTheWindow` | ⚠️ |
 | B4 VERIFY the market rate tracks policy, and the gap is information | `src/engine/audit/prices.ts:repo` | ⚠️ |
 | C1 it buys and sells sovereign paper, in a size it chooses | `src/domain/central-bank.ts:openMarketPolicy` | ✅ |
-| C1.a the size is policy, never an auction's weakness | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:plannedPurchasesByTenor` | ✅ |
+| C1.a the size is policy, never an auction's weakness | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:plannedPurchasesByBond` | ✅ |
 | C1.b FORBID not a buyer of last resort in the primary market | `src/engine/simulation/stages/central-bank-demand.ts:centralBankParticipant` | ✅ |
 | C2 a purchase creates reserves; a sale destroys them | `src/engine/simulation/stages/central-bank-demand.ts:applyCentralBankFills` | ⚠️ |
 | C2.a it pays with money it creates, so there is no debit | `src/engine/simulation/stages/central-bank-demand.ts:applyCentralBankFills` | ✅ |
@@ -149,7 +149,7 @@ Note what this is NOT: `runRegionalRepoSession`'s standing-facility seat IS a pr
 collateralised (`unencumberedBorrowingCapacityUSD` bounds the borrower's size), priced (`srfBps -
 SRF_SEAT_STEP_BPS`, a posted rate with an elastic quantity), and a bank out of eligible paper simply
 does not appear as a borrower. **The model has a disciplined facility and an undisciplined one, and
-the undisciplined one runs later** — which is rule 3's defect and exactly what 20-LLR names as the
+the undisciplined one runs later** — which is rule 4's defect and exactly what 20-LLR names as the
 escape hatch from the disciplined one. **Already §3 step 20-LLR.**
 
 ### ❌ E2 — THE TREASURY HAS AN AUTOMATIC OVERDRAFT HERE, ON THIS SHEET

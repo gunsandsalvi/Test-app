@@ -24,7 +24,7 @@ export interface CentralBank {
   fxReservesByRegion?: Record<string, number>;
   region: RegionId;
   /** Assets: the real sovereign book, by tenor bucket. Clears in 07c like any other holder. */
-  sovereignHoldingsByTenor: Record<string, number>;
+  sovereignHoldingsByBond: Record<string, number>;
   /** Asset: the unsecured loans to banks drawn at the funding close (the lender of
    *  last resort). Equals the sum of the banks' `centralBankLoanUSD`. */
   loansToBanksUSD: number;
@@ -90,7 +90,7 @@ export interface CentralBank {
    * 07f, so its policy is a QUANTITY the auction must price against everyone else's demand —
    * not a premium added to a curve.
    */
-  plannedPurchasesByTenor: Record<string, number>;
+  plannedPurchasesByBond: Record<string, number>;
   /** Share of last week's redemptions put back to work. Below 1 is QT; the runoff is real supply. */
   reinvestmentShare: number;
   /** What the auctions actually filled last week — the order is an intention, the fill is the fact. */
@@ -113,7 +113,7 @@ export const TGA_TARGET_WEEKS_OF_SPENDING = 10;
 
 /** Total CB assets: the sovereign book. */
 export function centralBankSovereignBookUSD(cb: CentralBank): number {
-  return Object.values(cb.sovereignHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+  return Object.values(cb.sovereignHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
 }
 
 /** Foreign currency this central bank actually holds, in USD. */

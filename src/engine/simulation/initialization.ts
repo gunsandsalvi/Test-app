@@ -102,7 +102,6 @@ import { allocationTargetFor } from '../../domain/institution-profiles';
 import { ensureManagements } from './stages/management-review';
 import { advanceWeeklyStep } from './core';
 import { refreshRegionalHoldingsView, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './stages/holdings-view';
-import { sovBucketKey } from './stages/shared-helpers';
 import { setSimulationSeed, getRngState, setRngState, DEFAULT_SIMULATION_SEED } from '../rng';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
@@ -190,13 +189,11 @@ export function seedRegionCategoryDemand(
 
     let totalHhWeight = 0;
     let totalGovWeight = 0;
-    let totalCorpWeight = 0;
 
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         totalHhWeight += su.buyerMix.HOUSEHOLD;
         totalGovWeight += su.buyerMix.GOVERNMENT;
-        totalCorpWeight += su.buyerMix.CORPORATE;
       });
     });
 
@@ -272,7 +269,7 @@ export function seedRegionCategoryDemand(
     //
     // It closes in ONE pass, because the coupling is one-directional: a firm's revenue, PP&E and
     // therefore its capex are all set before any line is dealt, so `I` does not move when the
-    // lines move. The deal draws no RNG, so nothing is relabelled (rule 10).
+    // lines move. The deal draws no RNG, so nothing is relabelled (rule 11).
     // §7.227 — and BEFORE the deal, because the deal spreads each firm's revenue across the
     // sub-units its sector makes: get the sector totals right first, or the deal distributes the
     // wrong pot correctly.
@@ -280,8 +277,8 @@ export function seedRegionCategoryDemand(
     // proportion to those sub-units' own demand — the same mix rule stage 05 uses when a pool
     // decides where to put its capacity.
     const smeRevenueBySubUnit = new Map<string, number>();
-    (reg.smePools ?? []).forEach((pool: { industry: string; annualRevenueUSD?: number }) => {
-      const spec = (INDUSTRY_REGISTRY as any)[pool.industry];
+    (reg.smePools ?? []).forEach((pool) => {
+      const spec = INDUSTRY_REGISTRY[pool.industry];
       const subUnits: { unitId: string }[] = spec?.subUnits ?? [];
       const demandOf = (id: string) => Number(reg.categoryDemand[id]?.demandLevelAnnualUSD) || 0;
       const totalDemandUSD = subUnits.reduce((a, su) => a + demandOf(su.unitId), 0);
@@ -318,7 +315,7 @@ export function seedRegionCategoryDemand(
  *
  * **The RNG is rewound before every pass**, so the universe that survives is bit-for-bit the one
  * a single generation against the converged vector would have produced. Without that the
- * iteration would consume the stream and relabel the world (rule 10); with it, the extra passes
+ * iteration would consume the stream and relabel the world (rule 11); with it, the extra passes
  * are invisible to everything downstream.
  */
 const SEED_INVESTMENT_TOLERANCE = 0.01;
@@ -567,7 +564,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const totalMarketCap = regionCompanies.reduce((s, c) => s + marketCapOf(c), 0);
     // FRM: the ratio is measured now, and it is seeded from the stack macro/initialization built
     // — so this reads the same number rather than the walked field it used to.
-    const totalSovDebt = reg.debtToGdpPctBottomUp * reg.derivedNominalGdpUSD;
 
     reg.institutionalSector.equityHoldingsUSD = Math.round((INSTITUTIONAL_OPENING_BOOK_SHARE.equity * totalMarketCap));
     // OWN6: the sovereign pool is the RESIDUAL, set after the bank pass below once the central
@@ -682,40 +678,35 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       outstandingUSD: gt.principalUSD
     }));
 
-    // Keyed by the same tenor-bucket ids the real sovereign-bond clearing engine
-    // (07c-sovereign-bond-clearing.ts) uses (`${region}-GOV-t2/t5/t10/t30`), not per-tranche —
-    // individual gov debt tranches roll off and reissue quarterly, so a per-tranche key here
-    // would suffer the exact same silent reset-to-zero problem the corporate-bond seed had.
-    // Keyed by sovBucketKey — bills (b13/b26/b52, WS5) and bonds (t2..t30) alike, so the seed
-    // covers the same seven buckets the weekly engines clear (07f clears the bills, 07c the
-    // bonds) and no bucket opens with a phantom gap.
-    const sovBucketOutstandingUSD = new Map<string, number>();
-    govDebtTranches.forEach(gt => {
-      const key = sovBucketKey(gt.tenorAtIssuanceYears);
-      sovBucketOutstandingUSD.set(key, (sovBucketOutstandingUSD.get(key) ?? 0) + gt.principalUSD);
-    });
-    const totalSovBucketedUSD = Array.from(sovBucketOutstandingUSD.values()).reduce((s, v) => s + v, 0) || 1;
+    // §3.13-SOV row 3: the seed opens holdings in BONDS, the same ids 07c and 07f clear. It used
+    // to open them in tenor buckets — `${regionId}-GOV-${bucketKey}` — an id naming a group, so no
+    // seeded holder could be asked which bond it held and the seed and the auctions spoke two id
+    // spaces for one instrument. A holder's share of each bond is that bond's share of the stock.
+    const sovOutstandingByBond = new Map<string, number>(
+      govDebtTranches.filter((t) => t.principalUSD > 0).map((t) => [t.id, t.principalUSD])
+    );
+    const totalSovOutstandingUSD = Array.from(sovOutstandingByBond.values()).reduce((s, v) => s + v, 0) || 1;
     const attributeSovBondHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
-      Array.from(sovBucketOutstandingUSD.entries())
-        .filter(([, bucketUSD]) => shareUSD * (bucketUSD / totalSovBucketedUSD) > 1)
-        .map(([key, bucketUSD]) => ({
-          instrumentId: `${regionId}-GOV-${key}`,
+      Array.from(sovOutstandingByBond.entries())
+        .filter(([, bondUSD]) => shareUSD * (bondUSD / totalSovOutstandingUSD) > 1)
+        .map(([bondId, bondUSD]) => ({
+          instrumentId: bondId,
           instrumentType: 'GOV_BOND' as const,
           issuerRegion: regionId,
-          quantityOrNotionalUSD: shareUSD * (bucketUSD / totalSovBucketedUSD), units: shareUSD * (bucketUSD / totalSovBucketedUSD),
+          quantityOrNotionalUSD: shareUSD * (bondUSD / totalSovOutstandingUSD), units: shareUSD * (bondUSD / totalSovOutstandingUSD),
         }));
 
-    // Seed each named bank's real sovereign book across the same tenor buckets the weekly
+    // Seed each named bank's real sovereign book across the same bonds the weekly
     // auction clears, with the same outstanding-weighted split across tenors.
     //
     // This was missing: banks carried a scalar `sovereignBondHoldingsUSD` but an EMPTY
-    // `sovereignBondHoldingsByTenor`, and 07c reads the buckets. So every bank opened ~$147B
+    // `sovereignBondHoldingsByBond`, and 07c reads that book. So every bank opened ~$147B
     // below its own target in a $670B market and bought into it every single week, which the
     // auction could only express as a monotonic slide in yields — the whole banking sector
     // permanently on the bid. Two representations of one book, and the engine was reading the
     // empty one. Seed shape must match engine shape.
     const regionBanksForSov = regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet);
-    if (regionBanksForSov.length > 0 && totalSovBucketedUSD > 1) {
+    if (regionBanksForSov.length > 0 && totalSovOutstandingUSD > 1) {
       // OWN6: a bank opens with the sovereign book its OWN EQUITY supports under the leverage
       // floor, not with `sovBondOwnership.bankShare x the market`. Its other assets are already
       // on the sheet at this point and its funding is derived from the asset side below, so
@@ -727,8 +718,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         [b.ticker, leverageHeadroomUSD(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.ticker))]));
       const totalHeadroomUSD = Array.from(headroomByBank.values()).reduce((a, v) => a + v, 0);
       const takenByOthersUSD = (reg.institutionalSector.sovBondHoldingsUSD || 0)
-        + totalSovBucketedUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
-      const availableToBanksUSD = Math.max(0, totalSovBucketedUSD - takenByOthersUSD);
+        + totalSovOutstandingUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
+      const availableToBanksUSD = Math.max(0, totalSovOutstandingUSD - takenByOthersUSD);
       const bankSovTotalUSD = Math.min(totalHeadroomUSD, availableToBanksUSD);
       const perBankTargets = new Map(regionBanksForSov.map(b => [
         b.ticker,
@@ -736,14 +727,14 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       ]));
       regionBanksForSov.forEach(bank => {
         const targetUSD = perBankTargets.get(bank.ticker) ?? 0;
-        const byTenor: Record<string, number> = {};
-        sovBucketOutstandingUSD.forEach((bucketUSD_, key) => {
-          const bucketUSD = targetUSD * (bucketUSD_ / totalSovBucketedUSD);
-          if (bucketUSD > 1) byTenor[key] = bucketUSD;
+        const byBond: Record<string, number> = {};
+        sovOutstandingByBond.forEach((bondFaceUSD, bondId) => {
+          const heldUSD = targetUSD * (bondFaceUSD / totalSovOutstandingUSD);
+          if (heldUSD > 1) byBond[bondId] = heldUSD;
         });
-        bank.bankBalanceSheet!.sovereignBondHoldingsByTenor = byTenor;
+        bank.bankBalanceSheet!.sovereignBondHoldingsByBond = byBond;
         bank.bankBalanceSheet!.sovereignBondHoldingsUSD = Number(
-          Object.values(byTenor).reduce((sum, v) => sum + v, 0).toFixed(0)
+          Object.values(byBond).reduce((sum, v) => sum + v, 0).toFixed(0)
         );
         // §7.4, applied to the FUNDING side this time. This sovereign book is seeded from the
         // market (the bank share of the real outstanding stock — the S2 fix), but the deposit
@@ -767,7 +758,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // re-projected here so week 0 reads the same books week 1 will.
       const aggByTenor: Record<string, number> = {};
       regionBanksForSov.forEach(b => {
-        Object.entries(b.bankBalanceSheet!.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => {
+        Object.entries(b.bankBalanceSheet!.sovereignBondHoldingsByBond || {}).forEach(([k, v]) => {
           aggByTenor[k] = (aggByTenor[k] ?? 0) + v;
         });
       });
@@ -775,7 +766,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         Math.round(regionBanksForSov.reduce((sum, b) => sum + f(b.bankBalanceSheet!), 0));
       reg.bankingSector = {
         ...reg.bankingSector,
-        sovereignBondHoldingsByTenor: aggByTenor,
+        sovereignBondHoldingsByBond: aggByTenor,
         sovereignBondHoldingsUSD: sumBank(bs => bs.sovereignBondHoldingsUSD),
         bankEquityUSD: sumBank(bs => bs.bankEquityUSD),
       };
@@ -783,8 +774,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // institutions'. Every bond now has a holder, which is what stops the float minting claims
       // and stops a redemption paying somebody who is not there.
       reg.institutionalSector.sovBondHoldingsUSD = Math.round(Math.max(0,
-        totalSovBucketedUSD
-        - totalSovBucketedUSD * CENTRAL_BANK_SOVEREIGN_SHARE
+        totalSovOutstandingUSD
+        - totalSovOutstandingUSD * CENTRAL_BANK_SOVEREIGN_SHARE
         - reg.bankingSector.sovereignBondHoldingsUSD));
     }
 
@@ -1031,7 +1022,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // The same effective rate the macro bootstrap uses, so the seed's after-tax shape matches
     // what stage 08 will produce from week 1.
     // TAXR: an institution is taxed on its earnings like any other company, so it opens on the
-    // same rate rather than on a second copy of the number (rule 3).
+    // same rate rather than on a second copy of the number (rule 4).
     const INSTITUTIONAL_EFFECTIVE_TAX_RATE = EFFECTIVE_TAX_RATE;
     // ---- HH1b: seed an institution at the size it actually manages (§7.4, seed shape = engine
     // shape). The Company shell and the InstitutionalEntity are the SAME firm, and their two
@@ -1157,7 +1148,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // A bank's opening revenue IS what its opening balance sheet earns.
     regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet).forEach((c) => {
       const sheet = c.bankBalanceSheet!;
-      const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
+      const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {})
         .reduce((a, v) => a + (Number(v) || 0), 0);
       const earningAssetsUSD = loanBooksOf(sheet, facilityBookOf(seedV2, c.ticker)) + sovUSD;
       const nimRevenueUSD = earningAssetsUSD * reg.bankingSector.netInterestMarginPct;
@@ -1591,7 +1582,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // (lesson §7.4), no cash moves (recognising an existing stock, not a purchase), and S11's
   // weekly mark carries the enlarged books from week 1.
   (Object.keys(regions) as RegionId[]).forEach(regionId => {
-    const reg = regions[regionId];
     const firms = privateFirmsByRegion.get(regionId) ?? [];
     const regionEntities = institutionalEntities.filter(e => e.region === regionId);
     // OWN6 / §7.4: the seed must place exactly the instrument the weekly books clear. 07b

@@ -25,7 +25,7 @@
  */
 
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
-import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
+import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_FACILITY, issuerIdOf } from '../../../engine2/tranches';
 import { splitAcrossTranches, primarySliceOf } from './register-split';
@@ -40,7 +40,6 @@ import {
   entityRequiredReturn,
 } from './asset-allocation';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
-import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { institutionUnsettledLessCollateralUSD, institutionSpendableUSD } from './settlement';
@@ -60,8 +59,6 @@ import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/clas
 import { REGION_IDS } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
-const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
-const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
 // Senior-secured first-lien loans trade at a real, structural discount to the same issuer's
 // unsecured bond spread — collateral and seniority mean less loss given default.
 const SENIOR_LIEN_DISCOUNT = 0.85;
@@ -183,8 +180,6 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0;
     const liveTradableFloatUSD = (c: Company) => floatingDebtOf(c) + offeringSizeUSD(c);
 
-    const totalOutstandingUSD =
-      regionCompanies.reduce((s, c) => s + floatingDebtOf(c) + offeringSizeUSD(c), 0) || 1;
 
     const priorDmById = new Map(regionCompanies.map((c) => [c.id, c.leveragedLoan?.discountMarginBps ?? 0]));
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({

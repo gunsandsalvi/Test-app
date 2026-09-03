@@ -5,7 +5,7 @@ import { toNumeraire } from '../../domain/currency';
 import { currencyOfId } from '../../engine2/world';
 import { runNewsDerivationStage } from './stages/news-derivation';
 import { rollDamperStreaks, setDamperStreaks } from './stages/financial-clearing-engine';
-import { GameState, RegionId } from '../../types';
+import { GameState } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
 import { runOverdraftSweep } from './stages/overdraft-sweep';
@@ -46,7 +46,7 @@ import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { auditCompanyStore, syncCompanyField } from '../../engine2/company-store';
 import { drainSeedRings } from '../../engine2/world';
 import { runPeLifecycleForRegion, settlePeLifecycleDeals, runFirmBirthsForRegion } from './stages/pe-lifecycle';
-import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } from './stages/shared-helpers';
+import { applyPendingCorporateActionSettlements } from './stages/shared-helpers';
 import { runIndexCalculationStage } from './stages/index-calculation';
 import { runEtfFlowsStage } from './stages/etf-flows';
 import { runHouseholdBalanceSheetStage } from './stages/household-balance-sheet';
@@ -154,7 +154,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     ensureLaddersSynced(v2, state.companies);
     // The REGISTER opens the same way. A holding's issuer is the party its instrument names: a
     // firm for equity and corporate paper (the id IS the company's), the treasury for a sovereign
-    // bucket, the fund itself for its own shares.
+    // tranche, the fund itself for its own shares.
     const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
     const issuerOfHolding = (h: ItemizedHolding): PartyRef => {
       // The registry says which kinds are sovereign; this does not switch on the kind itself.

@@ -1,6 +1,6 @@
 /**
  * DRV — THE MARKET DISPATCH TABLE: one market module per derivative class, behind the same
- * registry the contract profiles sit behind (rule 17). The one stage (../derivatives.ts) runs
+ * registry the contract profiles sit behind (rule 15). The one stage (../derivatives.ts) runs
  * whatever is named here; the table is compile-loud until every class the registry knows has
  * a market. Adding a derivative class = its profile (domain/derivatives/classes/), its registry
  * line, its market module here, and its line in this table.

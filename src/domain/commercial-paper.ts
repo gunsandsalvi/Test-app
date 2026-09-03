@@ -9,7 +9,7 @@
  *
  *     cpRate = cleared 13-week bill + the issuer's short-horizon expected loss + 15bp
  *
- * and three things followed from that, each of them something rule 1 forbids everywhere else:
+ * and three things followed from that, each of them something rule 3 forbids everywhere else:
  *
  *  - **The size was the issuer's alone.** A treasurer computed its working-capital gap and the
  *    paper appeared at the formula rate. No buyer was ever asked whether it wanted that much of
@@ -54,7 +54,7 @@ import { CreditRating } from './company';
 /**
  * The most of ONE issuer's paper a cash fund will hold, as a share of its book.
  *
- * A real primitive of the kind rule 4 allows — the diversification limit money funds run under
+ * A real primitive of the kind rule 2 allows — the diversification limit money funds run under
  * (Rule 2a-7 in the US, comparable elsewhere) — and it does the work the rating gate used to do,
  * as a size rather than as a veto.
  */

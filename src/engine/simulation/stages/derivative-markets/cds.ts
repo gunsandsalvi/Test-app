@@ -192,7 +192,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       const clearedBps = result.newStatById.get(instrumentId);
       if (clearedBps === undefined) return;
       // THE PRICE. `comp.cdsSpreadBps` was `oas + a random draw`, clamped to [10, 5000]; it is
-      // what this book cleared at, with no bound on either end (rule 15).
+      // what this book cleared at, with no bound on either end (rule 6).
       issuer.cdsSpreadBps = Number(clearedBps.toFixed(1));
       // §5-CLOSE P2: the week this print was struck — a name with no protection book this week
       // carries last print, which is a quote, not a price, and the basis test reads only prices.

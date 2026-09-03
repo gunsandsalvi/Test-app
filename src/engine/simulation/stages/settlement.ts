@@ -16,11 +16,11 @@
  * can now feel. Real systems net multilateral positions and settle the residual; this settles
  * weekly, which is the engine's clock.
  *
- * **The shape (rule 17).** Stages do not move money. They RECORD AN INSTRUCTION — payer, payee,
+ * **The shape (rule 15).** Stages do not move money. They RECORD AN INSTRUCTION — payer, payee,
  * amount, reason — and this stage executes all of them. A new kind of payment is one instruction
  * and no new plumbing. An instruction whose counterparty is not modelled yet names the
  * `UNMODELED` sector explicitly, so a boundary is a line with a size and an owner rather than
- * money quietly appearing (rule 13).
+ * money quietly appearing (rule 2).
  *
  * **The gate.** Money is conserved by construction here: every instruction debits one account and
  * credits another; the central bank's liabilities only move BETWEEN buckets (bank reserves ↔ the
@@ -405,7 +405,7 @@ export interface SettlementReport {
   /** SEG-D — every pool flow this week, keyed `<region>:<industry>` then by the payment's own
    *  reason, signed from the pool's side. This is the pool's INCOME STATEMENT, and it is free:
    *  every pool flow is already a payment passing through here, so a new kind of pool flow shows
-   *  up in its P&L without anything being instrumented (rule 17). */
+   *  up in its P&L without anything being instrumented (rule 15). */
   smePoolFlowsByPool: Map<string, Map<string, number>>;
   /** Payments to/from a bank on its own account — income and expense, so equity moves too. */
   bankEquityDeltaByBank: Map<string, number>;
@@ -538,7 +538,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const journal = ctx.paymentJournal;
   // §3.13c-FX: before anything applies, everyone who must pay in a money it does not hold buys
   // it — from a desk, at the cleared rate, paying the pip. Its rows join this pass's, so the
-  // purchase and the payment that forced it settle together (rule 14).
+  // purchase and the payment that forced it settle together (rule 5).
   fundForeignCurrencyShortfalls(ctx, journal, settlementWeek(), partyRegionOf(ctx));
   // §3.13c-FX-2: and the desks offset each other's client flow, so only the NET imbalance is
   // left on anybody's book. Reads the positions the last pass left, so it follows the buying.

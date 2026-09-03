@@ -38,12 +38,12 @@ export const centralbank = defineObject<Region>({
       { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRate, 2), value: (r) => r.obj.policyRate },
       { key: 'target', label: 'taylor', render: (r) => pctLevel(r.obj.taylorTargetRate, 2), value: (r) => r.obj.taylorTargetRate },
       { key: 'infl', label: 'inflation', render: (r) => pctLevel(r.obj.inflation), value: (r) => r.obj.inflation },
-      { key: 'book', label: 'sov book', render: (r) => money(Object.values(r.obj.centralBankSheet?.sovereignHoldingsByTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0)), value: (r) => Object.values(r.obj.centralBankSheet?.sovereignHoldingsByTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0) },
+      { key: 'book', label: 'sov book', render: (r) => money(Object.values(r.obj.centralBankSheet?.sovereignHoldingsByBond ?? {}).reduce((a, v) => a + (Number(v) || 0), 0)), value: (r) => Object.values(r.obj.centralBankSheet?.sovereignHoldingsByBond ?? {}).reduce((a, v) => a + (Number(v) || 0), 0) },
     ],
   },
   overview({ world, ref, obj: r, nav }) {
     const cb = r.centralBankSheet;
-    const book = Object.values(cb?.sovereignHoldingsByTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0);
+    const book = Object.values(cb?.sovereignHoldingsByBond ?? {}).reduce((a, v) => a + (Number(v) || 0), 0);
     const policy = tapeSeries(world, `region:${ref.id}:policy`).values;
     const banks = world.state.companies.filter((c) => c.region === ref.id && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet);
     const atWindow = banks.filter((b) => (b.bankBalanceSheet!.srfBorrowingUSD ?? 0) > 1e6);
@@ -57,7 +57,7 @@ export const centralbank = defineObject<Region>({
           <Stat label="inflation" value={pctLevel(r.inflation)} sub={`target ${pctLevel(r.targetInflation)} · expected ${pctLevel(r.expectedInflation)}`} neg={r.inflation > r.targetInflation * 2} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
-          <KV k="sovereign book" hint="by tenor" v={money(book)} onTap={() => nav.go('all', { path: 'centralBankSheet.sovereignHoldingsByTenor' })} />
+          <KV k="sovereign book" hint="by tenor" v={money(book)} onTap={() => nav.go('all', { path: 'centralBankSheet.sovereignHoldingsByBond' })} />
           <KV k="bank reserves" hint="the banks' deposits here" v={money(reserves)} />
           <KV k="treasury account" v={money(treasuryAccountOf(ensureV2(world.state), r.id as RegionId))} />
           <KV k="currency in circulation" v={money(cb?.currencyInCirculationUSD)} />

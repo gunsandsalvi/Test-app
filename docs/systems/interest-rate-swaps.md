@@ -22,7 +22,7 @@ Written 2026-09-03 from the domain, code shut.
     **net** moves
   - A1.c **D7 price** — the **fixed rate that makes the swap worth zero at inception**, cleared
   - A1.d **D2 notional** — never exchanged, which is why a swap is not a loan
-- **A2** REASON — **two legs with their own periodicity and accrual convention** (rule 9), and
+- **A2** REASON — **two legs with their own periodicity and accrual convention** (rule 8), and
   they need not match — that mismatch is real and it is part of the price
 - **A3** REASON — the floating leg **fixes** on a stated date against the observed reference, and
   the fixing is a real observation, not a forecast
@@ -45,7 +45,7 @@ Written 2026-09-03 from the domain, code shut.
 - **C1** REASON — swaps exist at **many tenors**, and the set of cleared fixed rates **is** a
   curve
   - C1.a the curve is a **read of cleared prices**, never a fitted object that then prices the
-    swaps (rule 1, and `indices.md` A3's circularity)
+    swaps (rule 3, and `indices.md` A3's circularity)
 - **C2** REASON — a **forward rate is derived** from the curve, and it is what the market thinks,
   not what will happen
 - **C3** REASON — the **swap curve and the sovereign curve are different curves**
@@ -209,7 +209,7 @@ Both legs pay weekly and divide by 52: `irs.ts:40` is
 frequency, no floating-leg frequency, no day count, and no accrual. The node's point is that the
 mismatch between the two legs is **real and part of the price**; here there is one leg computed as
 a difference, so a basis swap, a quarterly-versus-semi-annual mismatch and a stub period are all
-unrepresentable, and rule 9's convention question has no answer to give.
+unrepresentable, and rule 8's convention question has no answer to give.
 
 **Becomes a §3 step** — small, and shared with `../instruments/derivative.md` D6.a, which records
 the same absence for every class.

@@ -90,7 +90,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   // is a trade in the EUR/JPY book, not two dollar legs that happen to net. ----
   // §7.307 holdings flip: row walk on the mirror (current here — every writer up-stage syncs).
   const HFX = ctx.v2.holdings;
-  ctx.updatedInstitutionalEntities.forEach((e: any) => {
+  ctx.updatedInstitutionalEntities.forEach((e) => {
     const heldNow: Record<string, number> = {};
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = HFX.next[r]) {
       const issuer = ctx.v2.internedStrings[HFX.regionRef[r]];
@@ -109,7 +109,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   // ---- §3.13c-FX-2 — THE DESKS' OWN BOOKS ARE THE TRADE FLOW, and they are REAL positions.
   //
   // This was `ctx.bilateralTradeWeeklyUSD[exporter][importer]` — a derived aggregate standing in
-  // for orders nobody placed, and a second representation (rule 3) of a conversion the ledger now
+  // for orders nobody placed, and a second representation (rule 4) of a conversion the ledger now
   // performs for real: every cross-border payment converts through a named desk at a named price
   // (`fx-funding.ts`), the desks offset each other's client flow (`fx-squaring.ts`), and what is
   // LEFT on their books is the net imbalance the market has to price. That residual is this flow.
@@ -140,7 +140,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   // per desk, the share of the market-making residual each one warehouses below. ----
   let arbitrageCapacityUSD = 0;
   const deskCapacityByTicker = new Map<string, number>();
-  ctx.updatedCompanies.forEach((c: any) => {
+  ctx.updatedCompanies.forEach((c) => {
     const sheet = c.bankBalanceSheet;
     if (!sheet) return;
     // DRV: the desk's remaining derivative budget is ONE number across every class it writes.
@@ -224,7 +224,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
 
     const participants: ClearingParticipant[] = [];
 
-    ctx.updatedInstitutionalEntities.forEach((e: any) => {
+    ctx.updatedInstitutionalEntities.forEach((e) => {
       // HF1: the elastic side of an FX market is a GLOBAL MACRO book. Every hedge fund used to
       // be in here, which meant an equity long-short fund was taking a view on the yen.
       if (!(hedgeFundStrategyProfile(e)?.runsFxDirectional ?? false)) return;
@@ -315,7 +315,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       ?? ctx.updatedRegions[fx.quote]?.crossCurrencyBasisBps?.[fx.base];
     const basisFrac = Math.max(1, clearedBasis ?? DEALER_QUOTE_WIDTH_BPS) / 10000;
     deskCapacityByTicker.forEach((capUSD, ticker) => {
-      const bank: any = ctx.updatedCompanies.find((c: any) => c.ticker === ticker);
+      const bank = ctx.updatedCompanies.find((c) => c.ticker === ticker);
       const book = bank?.bankBalanceSheet?.fxDealerBook;
       const grossUSD = Math.max(0, Number(book?.grossNotionalUSD) || 0);
       const utilization = Math.min(1, grossUSD / Math.max(1, grossUSD + capUSD));
@@ -423,7 +423,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   // someone. The book is NOTIONAL risk, so no cash leg is invented here; the pip the desks should
   // earn on client flow needs those clients' conversions to stop happening at mid elsewhere (§6).
   if (deskFillByTicker.size > 0) {
-    ctx.updatedCompanies = ctx.updatedCompanies.map((c: any) => {
+    ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
       const delta = deskFillByTicker.get(c.ticker);
       // §7.250 — THE LIVE SHEET, both directions. This stage runs AFTER stage 08: reading the
       // channel first read the PRE-08 snapshot (erasing settlement's intraday legs from the
@@ -435,7 +435,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       (Object.keys(delta) as RegionId[]).forEach(r => {
         nextNet[r] = (Number(nextNet[r]) || 0) + delta[r]!;
       });
-      const grossUSD = Object.values(nextNet).reduce((a: number, v: any) => a + Math.abs(Number(v) || 0), 0);
+      const grossUSD = Object.values(nextNet).reduce((a: number, v) => a + Math.abs(Number(v) || 0), 0);
       const nextSheet = {
         ...sheet,
         fxDealerBook: { ...sheet.fxDealerBook, netNotionalByRegion: nextNet, grossNotionalUSD: grossUSD },
@@ -458,7 +458,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
 
   // Record what the market did, including what it could NOT clear.
   REGIONS.filter((r) => r !== 'USA').forEach((r) => {
-    const reg: any = ctx.updatedRegions[r];
+    const reg = ctx.updatedRegions[r];
     if (!reg) return;
     const key = ctx.updatedFxPairs.some(p => p.base === r && p.quote === 'USA')
       ? pairKey(r, 'USA') : pairKey('USA', r);
@@ -472,7 +472,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
 
 export function recordForeignHoldingsSnapshot(ctx: WeeklyStepContext): void {
   const H = ctx.v2.holdings;
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e: any) => {
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     const byRegion: Record<string, number> = {};
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
       const issuer = ctx.v2.internedStrings[H.regionRef[r]];

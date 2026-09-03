@@ -1,8 +1,8 @@
 /**
- * Financial-statement profiles (BP1c) — rule 17's behavior half.
+ * Financial-statement profiles (BP1c) — rule 15's behavior half.
  *
  * How a firm's weekly P&L is built varies by WHAT KIND of firm it is, and that variation used to
- * be a four-arm `if (financialStatementProfile === ...)` chain inside stage 08. Under rule 17 a
+ * be a four-arm `if (financialStatementProfile === ...)` chain inside stage 08. Under rule 15 a
  * stage may not switch on a kind: it keys the kind once and calls the profile. Adding a profile —
  * a new lender type, a different revenue recognition, a fund with its own fee mechanics — is a
  * new module plus one registry line, with no stage edited.

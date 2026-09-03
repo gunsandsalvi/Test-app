@@ -1,11 +1,11 @@
 /**
- * THE industry registry (BP1a) — rule 17's data half.
+ * THE industry registry (BP1a) — rule 15's data half.
  *
  * One entry here is a product line: its label, who buys it, what it physically is, how its
  * capex and commodity linkages run, and — from day one, at today's implicit values — the dials
  * IND will turn (storability, carrying cost, production lead time, revenue mechanism). Adding a
  * good to the economy is adding ONE entry; no stage is edited, because stages never switch on an
- * industry — they ask this registry (rule 17).
+ * industry — they ask this registry (rule 15).
  *
  * The legacy tables (`INDUSTRY_SUBUNITS`, `SUBUNIT_PHYSICAL`, `CATEGORY_INPUT_REQUIREMENTS`,
  * `CAPEX_SUPPLIER_WEIGHTS`, `CAPEX_CATEGORY_PRIVATE_SEGMENT`, `PRIVATE_SEGMENT_SUPPLY_CATEGORIES`,
@@ -65,7 +65,7 @@ export interface SubUnitSpec {
    * makes anything. IND1 already separated ordering from delivery; this is the second half, and
    * it is why PP&E and the capacity it adds arrive AFTER the demand that justified them — the
    * mechanism of every capacity cycle. Capital-goods categories only; a technological primitive
-   * like the production lead above (rule 4).
+   * like the production lead above (rule 2).
    */
   commissioningLeadWeeks?: number;
   /**
@@ -77,7 +77,7 @@ export interface SubUnitSpec {
    * winter, gifts in December, a summer building season.
    *
    * Two numbers each — how far output or demand swings around its own average, and the week it
-   * peaks — so nothing here is a data series (rule 4 allows the primitive). Absent = flat, which
+   * peaks — so nothing here is a data series (rule 2 allows the primitive). Absent = flat, which
    * is most goods and what every good was before this.
    */
   seasonality?: {
@@ -93,7 +93,7 @@ export interface SubUnitSpec {
    *
    * The field existed with every value at 0 and no reader, so production was instantaneous for
    * a fab and a shipyard alike. It is a TECHNOLOGICAL primitive — a process takes as long as it
-   * takes (rule 4 allows the primitive) — and it is what makes a supply response LATE, which is
+   * takes (rule 2 allows the primitive) — and it is what makes a supply response LATE, which is
    * the mechanism behind every capacity cycle: demand arrives, output does not, price moves
    * instead. 0 means made on demand (services, software, electricity).
    */
@@ -108,7 +108,7 @@ export interface SubUnitSpec {
    * basket is built on these weights, so the price index inherited it.
    *
    * The absolute scale is a free choice — it only sets what one unit means — so what is stated
-   * here is RELATIVE frequency, which is a real technological and behavioural primitive (rule 4
+   * here is RELATIVE frequency, which is a real technological and behavioural primitive (rule 2
    * allows the primitive; it forbids the equilibrium). Food is bought constantly, a vehicle
    * rarely, an airliner almost never. Absent = the corporate-only goods below, which no household
    * buys directly.
@@ -130,7 +130,7 @@ export interface SubUnitSpec {
    * building buys steel and cement, and none of those statements is about a sector.
    *
    * Each coefficient is a TECHNOLOGICAL primitive — what the process physically takes — in the
-   * same sense as IND5's energy intensities (rule 4 allows the primitive; it forbids the
+   * same sense as IND5's energy intensities (rule 2 allows the primitive; it forbids the
    * outcome). **The aggregate intermediate share is therefore an OUTCOME of these, never a
    * target to hit**, and no coefficient here was chosen to move it.
    *
@@ -148,7 +148,7 @@ export interface IndustrySpec {
    * tier. A structural fact about how an industry is organised, and it differs enormously —
    * construction and professional services are SME-dominated because the efficient scale is a
    * crew or a practice, while semiconductors and aerospace are not because the efficient scale
-   * is a fab or an assembly line. Stated per industry (rule 4 allows a real-world primitive;
+   * is a fab or an assembly line. Stated per industry (rule 2 allows a real-world primitive;
    * it is not an equilibrium), and it is the ONLY size input the SME tier takes: a pool's
    * opening revenue is its industry's real demand times this, so the tier's composition is an
    * outcome of where demand actually is rather than five hardcoded GDP shares.
@@ -156,7 +156,7 @@ export interface IndustrySpec {
   smeShareOfActivity: number;
   /**
    * How an industry FUNDS itself and what it pays out. Two structural facts, both
-   * primitives in rule 4's sense (a relationship between an industry's assets and its balance
+   * primitives in rule 2's sense (a relationship between an industry's assets and its balance
    * sheet, not any real firm's observed capital structure).
    *
    * `fixedRateTilt` multiplies the rating-based fixed/floating split: long-lived assets are
@@ -697,7 +697,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         // NO HOUSEHOLD SHARE. A household does not buy distribution as a good — it pays
         // for it inside the price of everything else it buys, which is what a channel margin IS
         // (domain/distribution.ts). Leaving the 0.04 here as well would have sold this sector's
-        // work to households twice, once in this book and once in every other one (rule 3), and
+        // work to households twice, once in this book and once in every other one (rule 4), and
         // both numbers would have looked like real revenue with a real payer.
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.125, CORPORATE: 0.875 },
         deliveryMode: 'IN_PLACE',
@@ -883,7 +883,7 @@ export const PROFILE_INPUT_BASKET: Record<string, Record<string, number>> = {
  * The one accessor for "what does this firm consume per dollar it earns" — its products' BOMs
  * if it makes anything, its profile's basket if it does not. Stage 05 bids from it, stage 08
  * charges it, and `shared-helpers` builds supply relationships from it, so a firm cannot be a
- * buyer in one place and not in another (rule 3).
+ * buyer in one place and not in another (rule 4).
  */
 /**
  * The basket is a pure function of the firm's product lines, and it was rebuilt from the
@@ -983,7 +983,7 @@ export function industryRecipeIntensity(industry: Industry): number {
  * silently overwriting the first after the carve.
  *
  * The SME productivity gap is not stated here and should not be: it is an OUTCOME of the pools'
- * own measured P&L (rule 13, and says so).
+ * own measured P&L (rule 2, and says so).
  */
 export function smePoolEmployment(industry: Industry, annualRevenueUSD: number, productivityPerWorkerUSD: number): number {
   const valueAddedUSD = annualRevenueUSD * (1 - industryRecipeIntensity(industry));
@@ -1077,7 +1077,7 @@ export function subUnitsByProducingSector(): Record<ProducingSector, { industry:
 
 /**
  * What a year of warehouse costs per tonne held: rent, handling, insurance. The one stated
- * primitive here — a real-world cost, not a real-world outcome (rule 4) — and everything below
+ * primitive here — a real-world cost, not a real-world outcome (rule 2) — and everything below
  * derives from it plus the physics each registry entry already carries.
  */
 export const WAREHOUSE_USD_PER_TONNE_YEAR = 40;
@@ -1195,7 +1195,7 @@ export function purchaseKindOf(unitId: string): PurchaseKind {
 /**
  * Every industry that has an SME tier: all of them, in registry order. This is the SEG tier's
  * whole roster — there is no second list to maintain, so an industry added to the registry has
- * a pool in every region the moment it exists (rule 17). It replaces `Industry`, five
+ * a pool in every region the moment it exists (rule 15). It replaces `Industry`, five
  * hardcoded buckets that covered 7 of 36 sub-units and could never grow with the registry.
  */
 export const SME_POOL_INDUSTRIES: Industry[] = Object.keys(INDUSTRY_REGISTRY) as Industry[];
@@ -1212,7 +1212,7 @@ export function smePoolSubUnits(industry: Industry): SubUnitSpec[] {
  * CHAIN-D — a pool produces every sub-unit its industry does, and those now have genuinely
  * different bills of materials, so one industry recipe no longer describes the pool. The weights
  * are the pool's own measured per-sub-unit receipts (`salesDerivedAnnualRevenueUSDBySubUnit`),
- * which makes its input mix an OUTCOME of its real sales mix (rule 13); with no sales yet, at
+ * which makes its input mix an OUTCOME of its real sales mix (rule 2); with no sales yet, at
  * the seed, it falls back to an equal split across what it can produce.
  */
 export function smePoolRecipeInputs(
@@ -1253,7 +1253,7 @@ export function industryOfSubUnit(unitId: string): Industry | undefined {
 }
 
 
-/** The one accessor for an industry's funding and payout posture (rule 17). */
+/** The one accessor for an industry's funding and payout posture (rule 15). */
 export function financingProfileOf(industry: Industry): IndustrySpec['financingProfile'] {
   return INDUSTRY_REGISTRY[industry].financingProfile;
 }
@@ -1273,7 +1273,7 @@ export function financingProfileOf(industry: Industry): IndustrySpec['financingP
  *
  * What this replaces is `LABOR_SHARE_OF_OUTPUT = 0.62`, a stated share that set every
  * occupation's base wage — the anchor under household income, the labour market, every payroll
- * and the freight market's crew cost. It is rule 19's clearest surviving case: a claim about the
+ * and the freight market's crew cost. It is rule 2's clearest surviving case: a claim about the
  * answer, in the one place the answer is most load-bearing.
  *
  * The weighting across sectors is each sector's own share of the economy's OUTPUT, from the

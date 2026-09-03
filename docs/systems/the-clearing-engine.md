@@ -38,7 +38,7 @@ Written 2026-09-03 from the domain, code shut.
   schedule is "whatever is left, at whatever price". The central bank is a participant with a
   policy reason and a stated facility (`the-central-bank.md` D), never a residual absorber
 - **B5** FORBID — **the mechanism does not add demand to make itself clear.** If it did, the
-  price it produces is a fixed point of its own patch, and rule 1 is satisfied in letter only
+  price it produces is a fixed point of its own patch, and rule 3 is satisfied in letter only
 
 ### C. THE CLEARING
 - **C1** REASON — the mechanism finds the price where **posted supply meets posted demand**
@@ -57,9 +57,9 @@ Written 2026-09-03 from the domain, code shut.
 ### D. WHAT COMES OUT
 - **D1** REASON — a **price**, in a stated unit, for a stated instrument, at a stated time
   - D1.a price is the primitive; yield, spread, OAS, discount margin are **derived from it**
-    (rule 1), and never the other way round
+    (rule 3), and never the other way round
 - **D2** REASON — a set of **trades**, each with two named sides and a quantity
-- **D3** REASON — the trades hit the **register and the accounts** in the same pass (rule 14,
+- **D3** REASON — the trades hit the **register and the accounts** in the same pass (rule 5,
   `the-register.md` C3)
 - **D4** REASON — the price becomes the **mark** for everyone holding that instrument, and the
   revaluation is real money to somebody
@@ -96,7 +96,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 two or more parties with different reasons | `src/engine/simulation/stages/financial-clearing-engine.ts:ClearingParticipant` | ✅ |
 | A1.a the differences are the market | `src/engine/simulation/stages/financial-clearing-engine.ts:anyCeilingAboveHolding` | ✅ |
 | A2 each participant posts a schedule, not a point | `src/engine/simulation/stages/financial-clearing-engine.ts:ParticipantDemand` | ✅ |
-| A2.a a single number cannot answer "and if it were cheaper?" | `src/engine/simulation/stages/financial-clearing-engine.ts:demandAtStat` | ✅ |
+| A2.a a single number cannot answer "and if it were cheaper?" | `src/engine/simulation/stages/financial-clearing-engine.ts:setDemand` | ✅ |
 | A3 the schedule comes from the participant's own state | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
 | **A4 FORBID no price-taker of a price not yet produced** | `src/engine/simulation/stages/etf-demand.ts:indexFundDemand` | ⚠️ |
 | B1 the participants are named parties with balance sheets | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
@@ -142,7 +142,7 @@ price-INSENSITIVE are still SIZE-bounded, by a quantity decided outside the auct
 bank posts `reservationStat: ±NO_RESERVATION_STAT` (the sign is the book's kind — §3.13-SOV row 4
 made it so, since in price space always-in-the-money is a HIGH reservation) with
 `maxNetPurchaseUSD: orderUSD`, where
-`orderUSD` is `plannedPurchasesByTenor` (`central-bank-demand.ts:41,48`) — a policy quantity struck
+`orderUSD` is `plannedPurchasesByBond` (`central-bank-demand.ts:41,48`) — a policy quantity struck
 before the book opens and unable to respond to weak demand; an index fund the same with
 `maxNetPurchaseUSD: availableCashUSD` (`etf-demand.ts:37-51`). Neither size is a residual.
 

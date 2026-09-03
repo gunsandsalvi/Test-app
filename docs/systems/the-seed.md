@@ -32,7 +32,7 @@ Written 2026-09-03 from the domain, code shut.
   (`currency-and-fx.md` B)
 - **B4** REASON — each has a **size**, and the sizes are dispersed: a sector of equals never
   produces a market (`the-clearing-engine.md` A1.a)
-- **B5** FORBID — **no observed real-world ratio is copied in** (rule 4). A share, a spread, a
+- **B5** FORBID — **no observed real-world ratio is copied in** (rule 2). A share, a spread, a
   leverage ratio taken from data is an answer written down where a mechanism should be
 
 ### C. WHAT THEY HOLD
@@ -43,7 +43,7 @@ Written 2026-09-03 from the domain, code shut.
   bond seeded at issue is a world with no maturity wall for its whole tenor
   - C3.a and a **maturity profile that is spread**, or every roll arrives in the same week
 - **C4** REASON — prices at week zero are **the first clearing's inputs**, not permanent marks
-  - C4.a a seeded price that never clears is rule 1's defect, seeded
+  - C4.a a seeded price that never clears is rule 3's defect, seeded
 - **C5** VERIFY — the week-zero balance sheet of each **sector** is a read of its members, never
   a target the members were fitted to
 
@@ -92,7 +92,7 @@ checked by `scripts/check-atlas.sh`.
 | **C3 instruments have terms and a REMAINING LIFE** | `src/engine/companyGenerator.ts:debtLadderShape` | ❌ |
 | **C3.a a maturity profile that is spread** | `src/engine/macro/initialization.ts:GOV_DEBT_TENOR_WEIGHTS` | ⚠️ |
 | C4 prices at week zero are the first clearing's inputs | `src/engine/bootstrap/yield-curves.ts:getRegionYieldCurveParams` | ⚠️ |
-| **C4.a a seeded price that never clears is rule 1's defect, seeded** | `src/engine/bootstrap/commodities-and-fx.ts:getInitialFxRate` | ⚠️ |
+| **C4.a a seeded price that never clears is rule 3's defect, seeded** | `src/engine/bootstrap/commodities-and-fx.ts:getInitialFxRate` | ⚠️ |
 | C5 VERIFY the sector sheet is a read of its members | `src/engine/simulation/stages/holdings-view.ts:refreshRegionalHoldingsView` | ✅ |
 | D1 the stocks are consistent with the flows that will run | `src/engine/simulation/initialization.ts:solveSeedInvestmentFixedPoint` | ⚠️ |
 | D1.a otherwise week one is a shock nothing recovers from | `src/engine/simulation/burn-in.ts:probeSteadyState` | ⚠️ |
@@ -165,7 +165,7 @@ each bucket mid-life (`originationWeek: -tenorWeeks/2`, `maturityWeek: +tenorWee
 
 **Becomes a §3 step.** Small to write (a draw over remaining life, per tranche), large in effect:
 it is a world relabel, every credit number moves, and it will make things look worse before better
-(rule 12).
+(rule 11).
 
 ### ❌ E1 / ⚠️ C4 / C4.a — THE SPREAD CURVE, THE YIELD CURVE AND THE FX RATE ARE ALL SEEDED ANSWERS
 
@@ -213,7 +213,7 @@ declare a number with its kind, its owner and the measurement that will replace 
 fractional literals at a budget of **1377**. So B5 is `❌` on substance and the instrument that
 would make it `⚠️` is two orders of magnitude behind the code.
 
-**Already §3 rule 19 / step 26's territory** for the literals generally; the SEED's share of them
+**Already §3 rule 2 / step 26's territory** for the literals generally; the SEED's share of them
 is not separately named. Recorded here as the number: 1377 against 11.
 
 ### ⚠️ A1 / D1 — THE GOODS SIDE OF THE STOCK IS NOT SEEDED AT ALL

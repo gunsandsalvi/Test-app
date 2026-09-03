@@ -4,7 +4,7 @@
  * This table exists because `CATEGORY_TRADABILITY` did not deserve to. That table gave each
  * category an observed trade share, which is a real-world EQUILIBRIUM — a result of a history
  * this simulation does not have — so anything built on it could never say what gets traded or
- * why (rule 4's sharper half). Software is not traded *because* it is tradable. It is traded
+ * why (rule 2's sharper half). Software is not traded *because* it is tradable. It is traded
  * because moving a dollar of it costs nothing and takes no time, while a dollar of gravel costs
  * more than the gravel. **Tradability is an outcome; what belongs in a table is the physics.**
  *

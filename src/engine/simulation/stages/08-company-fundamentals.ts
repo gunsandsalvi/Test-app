@@ -18,7 +18,7 @@ import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } f
 import { openCorporateSweepBooks, settleCorporateSweepBooks } from './money-market-fund';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
 import { leadBankAllocator } from './dealer-desks';
-import { WeeklyStepContext } from './context';
+import { WeeklyStepContext, EarningsReport } from './context';
 import { PaymentJournal, newPaymentJournal, journalPush, journalAppendRow, applyPendingLeg } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
@@ -80,7 +80,7 @@ const S08_PROF = typeof process !== 'undefined' && process.env?.S08_PROF === '1'
 
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
   const __p0 = S08_PROF ? performance.now() : 0;
-  const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, systemicStressFactorGlobal } = ctx;
+  const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, systemicStressFactorGlobal } = ctx;
   let refinanceNews: NewsItem[] = [];
   const retainCashLedger = process.env.CASH_LEDGER === '1';
   bypassTraceByLabel.clear();
@@ -247,7 +247,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   interface CompanyShardAccumulators {
     defaulted: string[];
     ratings: WeeklyStepContext['ratingChanges'];
-    earnings: unknown[];
+    earnings: EarningsReport[];
     offerings: PrimaryOffering[];
     news: NewsItem[];
     taxAccrued: Record<string, number>;

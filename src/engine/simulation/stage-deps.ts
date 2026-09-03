@@ -38,7 +38,7 @@ export const DELIBERATE_PIPELINE_FIELDS: Record<string, string> = {
   updatedRegions: 'same working-copy pipeline; 01-macro-feedback deliberately reads LAST week (02-region-macro re-derives)',
   updatedFxPairs: 'working copy; 06 quotes off the prior fix, fx-clearing sets the new one',
   updatedMarketIndexes: 'working copy; 07b/07d/07e price off the prior index level, index-calculation re-marks after',
-  paymentJournal: 'append-only accumulator: stages append all week, settlement-close applies — appending IS the design (rule 17)',
+  paymentJournal: 'append-only accumulator: stages append all week, settlement-close applies — appending IS the design (rule 15)',
   holdingsStore: 'SCALE C1 epoch store: built, read through by the clearing stages, written back at holdings-writeback',
   holdingsTable: 'register store, same build/consume/write-back epoch shape as holdingsStore',
   primaryOfferingsWorking: 'the 07x books consume the offerings stage 08 replenished LAST week — a deliberate one-week primary pipeline',

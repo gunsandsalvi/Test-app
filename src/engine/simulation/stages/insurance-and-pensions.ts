@@ -30,7 +30,7 @@
  * transfer real risk.
  */
 
-import { GameState, RegionId, Company, InstitutionalEntity } from '../../../types';
+import { GameState, Company } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
@@ -47,7 +47,7 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
  * `disposable x the retired share of the population`, the rate at which the working
  * population must set aside income to support the population that is not working — and it was
  * being accumulated into the household's own liquid stock while a flat 9% of the sector's income
- * went into the pension funds beside it. **Two representations of one motive** (rule 3), and the
+ * went into the pension funds beside it. **Two representations of one motive** (rule 4), and the
  * stated one was the larger.
  *
  * The stage now collects the measured flow. A cohort squeezed out of saving contributes nothing,
@@ -91,7 +91,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     // charge — an insurer's operating cost is now its REAL wage bill and its real input basket,
     // charged by the profile caller like every other firm's — and this cash leg was left behind.
     // So the same expense was taken twice: once as real staff and premises, once as a flat fifth
-    // of premiums (rule 3). What an insurer spends running itself leaves through the payments
+    // of premiums (rule 4). What an insurer spends running itself leaves through the payments
     // that actually pay for it.
 
     // ---- Split the pool by what each sector has to lose. ----
@@ -184,7 +184,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     // AND THE DRAWDOWN IS THE RETIREE'S OWN REMAINING LIFE, not a stated 5%.
     //
     // `PENSION_BENEFIT_RATE_ANNUAL = 0.05` asserted a twenty-year retirement and could not change
-    // when the population aged — the exact shape rule 19 forbids. A fund pays its entitlement out
+    // when the population aged — the exact shape rule 2 forbids. A fund pays its entitlement out
     // over the years its members actually have, which the Gompertz hazard now says.
     const drawdownYears = remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS);
     const weeklyBenefitsUSD = (entitlementsUSD / drawdownYears) / 52;
@@ -210,7 +210,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
         // It used to be `totalAssets − equityCapital`, with equity fixed at 12% of assets at the
         // seed and NEVER UPDATED — so a fund's obligation to households was whatever kept that
         // ratio true forever, and households' claims were an accounting residual of the fund's own
-        // asset growth (rule 13). What a pension fund owes is what was paid in, less what was paid
+        // asset growth (rule 2). What a pension fund owes is what was paid in, less what was paid
         // out, plus what the money earned on the way.
         // Contributions in, benefits out. What the money EARNS on the way is credited in one
         // place for every kind whose beneficiaries are households (the household sheet), so a

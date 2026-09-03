@@ -18,7 +18,7 @@
  * ticker and company name in this model already is.
  *
  * **A yield.** An event stated a `commodityImpactPct` — a price impact, added to the commodity's
- * drift — which is an event deciding the answer (rule 1). It now cuts the affected commodity's
+ * drift — which is an event deciding the answer (rule 3). It now cuts the affected commodity's
  * SUPPLY, and the commodity book prices the shortage, input costs rise through the recipes, and
  * the measured index reports it. Its two dead siblings, `gdpImpactPct` and `inflationImpactPct`
  * — written at fourteen sites, read at none — are deleted.
@@ -85,7 +85,7 @@ export function regionExposure(regionId: RegionId, companies: Company[]): Region
   };
 }
 
-/** A generated locality name for the region, so no real place is named (rule 4). */
+/** A generated locality name for the region, so no real place is named (rule 2). */
 function localityName(regionId: RegionId, seed: number): string {
   const forms = ['Interior', 'Coastal Belt', 'Uplands', 'Basin', 'Delta', 'Northern Reach'];
   return `${regionId} ${forms[Math.abs(Math.floor(seed)) % forms.length]}`;

@@ -78,7 +78,7 @@ test('the plant grows by what was COMMISSIONED, not what was ordered', () => {
 test('§7.288: growth capex is bounded by the money the firm actually commands', () => {
   // The desire can be unbounded (a deep shortage, a high q); the BID cannot exceed the year's
   // free cash flow after maintenance plus the cash pile above the treasurer's own operating
-  // buffer — both existing mechanisms, no stated leverage factor (rule 19). Debt- or
+  // buffer — both existing mechanisms, no stated leverage factor (rule 2). Debt- or
   // equity-funded expansion raises the money FIRST; the proceeds land as cash and widen the
   // next week's cap by exactly what was raised.
   const greedy = planCapitalProgramme(healthy({

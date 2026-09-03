@@ -74,7 +74,7 @@ export function firstCallWeek(tranche: DebtTranche): number {
 
 /** Present value per dollar of par of a fixed-coupon stream, annual compounding. The arithmetic
  *  is `domain/pricing`'s; the `max(1e-6, rate)` floor this used to carry is gone with it — the
- *  annuity takes its own zero-rate limit exactly, and a negative rate is a real rate (rule 2). */
+ *  annuity takes its own zero-rate limit exactly, and a negative rate is a real rate (rule 6). */
 function presentValuePerDollar(couponRate: number, years: number, discountRate: number, redemptionPerDollar: number): number {
   return presentValuePerFace({
     couponPerPeriod: couponRate, periods: Math.max(0, years),

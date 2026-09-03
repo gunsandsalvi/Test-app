@@ -43,7 +43,7 @@ export const IRS_PROFILE: DerivativeClassProfile = {
   markToMarketUSDToA: () => null,
   eventTermination: () => null,
   // Replacement value: the remaining weekly nets at TODAY's par — the same leg arithmetic the
-  // live contract pays, summed to maturity, so close-out and carry can never disagree (§1.3).
+  // live contract pays, summed to maturity, so close-out and carry can never disagree (§1.4).
   closeOutUSDToB: (c, m) => {
     const par = m.parRateAnnual(c.regionId, c.termKey);
     if (!Number.isFinite(par)) return 0;

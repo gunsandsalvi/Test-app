@@ -34,7 +34,7 @@ export interface SupplyContract {
   /**
    * IND11 — UNITS OWED AND NOT DELIVERED. The seller's backlog and the buyer's claim are the
    * same number because they are the same obligation, and this object is bilateral: one
-   * representation, not two that can disagree (rule 3). Undelivered demand used to evaporate.
+   * representation, not two that can disagree (rule 4). Undelivered demand used to evaporate.
    */
   backlogUnits?: number;
   /** IND11 — consecutive weeks this supplier has under-delivered: the non-performance clock. */
@@ -101,7 +101,7 @@ export interface CategoryDemandState {
    *  05 sizes the household's bid ladder from THIS, never from `demandLevelAnnualUSD × hhShare` — the
    *  demand level carries the corporate leg (nominal firm revenues) and the Leontief
    *  intermediate half, so a budget carved from it scales with other buyers' prices instead of
-   *  with household income. That was a second representation of one budget (rule 3), and the
+   *  with household income. That was a second representation of one budget (rule 4), and the
    *  unanchored one: in any category with persistent excess demand it ratchets the household's
    *  reservation up with the price it itself set — measured as the EUR electricity runaway
    *  (price ×119 in ten weeks while unit shortage IMPROVED). A budget is a level in money. */

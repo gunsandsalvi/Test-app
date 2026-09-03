@@ -10,7 +10,7 @@
  * readers flip one file at a time. The authority flip (writers → columns, objects → views) is
  * Stage II.4 and does not start until the readers are on rows.
  *
- * Lanes are SharedArrayBuffer-backed (§1.24) so the pool ships nothing when sharding lands;
+ * Lanes are SharedArrayBuffer-backed (§1.18) so the pool ships nothing when sharding lands;
  * growth copies (§7.309's wipe). NaN = the field was undefined (the exact `??` replay
  * convention every prior seam used); optional booleans carry 2 = undefined.
  */

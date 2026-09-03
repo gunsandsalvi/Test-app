@@ -32,7 +32,7 @@ export interface PrimeBrokerageLine {
   drawnUSD: number;
   /** The share of posted collateral the broker will not lend against, this week. */
   haircutRate: number;
-  /** Annualised financing rate (rule 9), struck at the broker's own cost of money. */
+  /** Annualised financing rate (rule 8), struck at the broker's own cost of money. */
   rateAnnual: number;
   struckWeek: number;
 }

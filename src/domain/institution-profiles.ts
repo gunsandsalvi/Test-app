@@ -47,7 +47,7 @@ export interface InstitutionProfile {
   readonly subInvestmentGradeSizeFactor: number;
   /** Writes CDS protection: an unfunded long is exactly the trade a credit book wants. */
   readonly sellsCdsProtection: boolean;
-  /** The kind's policy allocation (rule 5: a long-term guide, never the week's trade). A hedge
+  /** The kind's policy allocation (rule 2: a long-term guide, never the week's trade). A hedge
    *  fund's is its STRATEGY's (below); corpBondPct + loanPct is the kind's corporate-credit
    *  appetite. A money fund's whole book is the cash sleeve; an ETF's target is its index and
    *  these weights are never read for it; a PE fund holds companies, not securities. */
@@ -92,7 +92,7 @@ export const institutionProfile = (t: InstitutionalEntityType): InstitutionProfi
 /**
  * §7.347 — THE HEDGE-FUND STRATEGY REGISTRY. A strategy IS a book plus what it does with it;
  * the four things a stage used to ask with `hedgeFundStrategy === '…'` are facts here. Only the
- * four weights are stated primitives (rule 19's PREFERENCE kind, like every other kind's
+ * four weights are stated primitives (rule 2's PREFERENCE kind, like every other kind's
  * mandate); the flags say which markets the book shows up in.
  */
 export interface HedgeFundStrategyProfile {

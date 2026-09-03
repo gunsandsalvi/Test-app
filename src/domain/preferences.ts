@@ -4,7 +4,7 @@
  * Every deciding entity followed the same rules with the same constants, so every entity hit
  * the same threshold in the same week: the same cut, the same capex freeze, the same bid rung,
  * all at once. Aggregates that should be averages over a population were cliffs (§7.344). What
- * a population of managements really differs in — under rule 19 — is only the two PREFERENCE
+ * a population of managements really differs in — under rule 2 — is only the two PREFERENCE
  * primitives: how far ahead it looks (time preference) and how much a bad outcome weighs
  * against a good one (risk aversion). Everything else about a decision is the entity's own
  * measured circumstances, read off its own books.

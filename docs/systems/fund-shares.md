@@ -26,7 +26,7 @@ Written 2026-09-03 from the domain, code shut.
 
 ### B. NET ASSET VALUE
 - **B1** REASON — **NAV = (assets at market − liabilities) / shares outstanding**, a read, every
-  time, never a stored series (rule 3)
+  time, never a stored series (rule 4)
 - **B2** REASON — the assets are marked at **cleared prices** (`the-clearing-engine.md` D4)
   - B2.a so a stale price makes a stale NAV, and somebody transacts on it — that is a real
     transfer between holders, not a rounding

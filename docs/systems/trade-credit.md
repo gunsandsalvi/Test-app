@@ -14,7 +14,7 @@ Written 2026-09-03 from the domain, code shut.
 
 ### A. WHAT IT IS
 - **A1** REASON — a **sale delivered now and paid later**: the seller has a **receivable**, the
-  buyer a **payable**, and they are the same obligation from two sides (rule 3)
+  buyer a **payable**, and they are the same obligation from two sides (rule 4)
 - **A2** REASON — both sit on real balance sheets (`firm-fundamentals.md` C1, C2)
 - **A3** REASON — it has **terms**: how long, and often a discount for paying early — which makes
   the discount an **implicit interest rate** and therefore a price
@@ -192,7 +192,7 @@ families, not just to the standing reads.
 ### ⚠️ A2 — THE REPORTED BALANCE SHEET DOES NOT SHOW THE REAL INVOICE BOOK
 
 `companyGenerator.ts:231-233` puts every firm's receivables at 4.8% of revenue and payables at 3.2%,
-for ever. The real book is `state.tradeInvoices`. Two representations of one quantity (rule 3), and
+for ever. The real book is `state.tradeInvoices`. Two representations of one quantity (rule 4), and
 the stated one is what the player sees and what `changeInWorkingCapital` is computed from. Recorded
 in full in `firm-fundamentals.md` C1's diff; **the same §3 step** closes both.
 

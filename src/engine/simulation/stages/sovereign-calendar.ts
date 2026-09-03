@@ -1,32 +1,32 @@
 /**
  * CAL, second half — THE SOVEREIGN CALENDAR. Interest on government paper accrues to whoever
- * holds it that week, and the bucket's coupon date turns each holder's accrued balance into cash.
+ * holds it that week, and the bond's own coupon date turns each holder's accrued balance into cash.
  *
  * **Why this is one pass and not three.** The corporate half (§7.194) put holders on the coupon
  * dates and the issuer on the same dates in the same change, because interest earned continuously
  * and paid discretely is a RECEIVABLE in between and both sides have to see it. The sovereign
  * half was deferred on the grounds that half of it measured worse than none — which is true, and
- * which rule 12 already answers: build the whole thing before measuring. The whole thing is three
+ * which rule 11 already answers: build the whole thing before measuring. The whole thing is three
  * legs that must move together:
  *
  *   - the **treasury's expense**, which was smooth while the holders were about to become lumpy;
  *   - the **institutions'** credit, which the register already knows how to accrue;
  *   - the **banks'** credit — and this is the piece that made it awkward, because **a bank is not
- *     on the institutional register.** It holds sovereigns directly, per tenor bucket, on its own
+ *     on the institutional register.** It holds sovereigns directly, bond by bond, on its own
  *     balance sheet. So the accrual cannot be keyed by institution id; it is keyed by PARTY.
  *
- * One ledger, keyed `<region>|<bucket>|<partyKey>`, and it is the ONLY writer of the receivable
+ * One ledger, keyed `<region>|<bondId>|<partyKey>`, and it is the ONLY writer of the receivable
  * on either book — the bank's `sovereignAccruedCouponUSD` and the treasury's
  * `sovereignCouponPayableUSD` are the same balance seen from two sides. That is what makes them
  * incapable of drifting: the treasury pays exactly the sum of what its holders accrued.
  *
  * **The P&L stays smooth on both sides and only CASH is lumpy** — the same result the corporate
- * half reached (rule 9: an expense and a payment are different numbers with different periods).
+ * half reached (rule 8: an expense and a payment are different numbers with different periods).
  *
  * **Who is deliberately NOT on the calendar, and why.**
  *   - **Bills.** A discount bill pays no coupon at all; its whole return is accretion to par at
- *     redemption, which PUB3d already settles in the redemption leg. `sovereignCouponByBucket`
- *     excludes them, so the bill buckets simply never accrue here. This is also why the corporate
+ *     redemption, which PUB3d already settles in the redemption leg. `sovereignCouponByBond`
+ *     excludes them, so a bill simply never accrues here. This is also why the corporate
  *     treasuries are absent: short paper is all they hold.
  *   - **The central bank.** It earns its coupons and remits the profit to the treasury in the
  *     same week, on the same two accounts (the TGA and its own liability). Putting that round
@@ -37,26 +37,25 @@
  *     coupon reaches a holder of record on its date or is not paid.
  */
 
-import { govBucketKeyOf } from '../../../domain/sovereign-id';
+
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { PartyRef, pay, partyKey, partyFromKey } from './settlement';
-import { sovereignCouponByBucket, sovereignCouponDueShare } from '../../../domain/government';
-import { sovBucketKey } from './shared-helpers';
+import { sovereignCouponByBond, sovereignCouponDueShare } from '../../../domain/government';
 import { isActiveCompany } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { materializeGovLadder } from '../../../engine2/tranches';
 
-/** `<region>|<bucket>|<partyKey>` — the receivable one holder has against one bucket. */
-const accrualKey = (regionId: RegionId, bucket: string, party: PartyRef) =>
-  `${regionId}|${bucket}|${partyKey(party)}`;
+/** `<region>|<bondId>|<partyKey>` — the receivable one holder has against one bond. */
+const accrualKey = (regionId: RegionId, bondId: string, party: PartyRef) =>
+  `${regionId}|${bondId}|${partyKey(party)}`;
 
 
 /**
- * Accrue this week's sovereign interest to every holder of record, then pay out the buckets whose
+ * Accrue this week's sovereign interest to every holder of record, then pay out the bonds whose
  * coupon falls due. Runs after every book that trades sovereigns has cleared and before the
  * fiscal stage, so the register it walks is the one the week ended with and the treasury's own
  * interest line is struck against the same holdings.
@@ -70,15 +69,16 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
     // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
-    const couponByBucket = sovereignCouponByBucket(materializeGovLadder(ctx.v2, regionId), sovBucketKey);
+    const ladder = materializeGovLadder(ctx.v2, regionId);
+    const couponByBond = sovereignCouponByBond(ladder);
 
-    /** One holder's week of interest on one bucket, at that bucket's own weighted-average coupon. */
-    const accrue = (bucket: string, party: PartyRef, notionalUSD: number): number => {
-      const coupon = couponByBucket[bucket] ?? 0;
+    /** One holder's week of interest on one bond, at that bond's own coupon. */
+    const accrue = (bondId: string, party: PartyRef, notionalUSD: number): number => {
+      const coupon = couponByBond[bondId] ?? 0;
       if (!(coupon > 0) || !(notionalUSD > 0)) return 0;
       const weeklyUSD = (notionalUSD * coupon) / 52;
       if (!(weeklyUSD > 0)) return 0;
-      const k = accrualKey(regionId, bucket, party);
+      const k = accrualKey(regionId, bondId, party);
       accrued.set(k, (accrued.get(k) ?? 0) + weeklyUSD);
       return weeklyUSD;
     };
@@ -93,9 +93,9 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
       if (entity.isDefaulted) return;
       for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
-        const bucketKey = govBucketKeyOf(ctx.v2.internedStrings[H.instrRef[r]], regionId);
-        if (!bucketKey) continue;
-        accrue(bucketKey, { kind: 'INSTITUTION', id: entity.id }, H.qtyUSD[r]);
+        // §3.13-SOV row 3: the coupon accrues to the BOND the row names.
+        const bondId = ctx.v2.internedStrings[H.instrRef[r]];
+        accrue(bondId, { kind: 'INSTITUTION', id: entity.id }, H.qtyUSD[r]);
       }
     });
 
@@ -104,26 +104,27 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
     ctx.updatedCompanies.forEach((c) => {
       if (!c.isBankEntity || !c.bankBalanceSheet || c.region !== regionId || !isActiveCompany(c)) return;
       let earnedUSD = 0;
-      Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}).forEach(([bucket, usd]) => {
-        earnedUSD += accrue(bucket, { kind: 'BANK_SECURITIES', ticker: c.ticker }, Number(usd) || 0);
+      Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, usd]) => {
+        earnedUSD += accrue(bondId, { kind: 'BANK_SECURITIES', ticker: c.ticker }, Number(usd) || 0);
       });
       if (earnedUSD > 0) bankEarnedUSD.set(c.ticker, (bankEarnedUSD.get(c.ticker) ?? 0) + earnedUSD);
     });
 
-    // ---- 3. THE COUPON DATES. A bucket whose date falls this week turns every holder's accrued
+    // ---- 3. THE COUPON DATES. A bond whose date falls this week turns every holder's accrued
     // balance into cash — including a holder that has since sold out, because it earned it while
     // it held the paper. The treasury pays exactly the sum, so neither side can drift. ----
-    const dueBuckets = new Set(
-      Object.keys(couponByBucket).filter((b) => sovereignCouponDueShare(b, ctx.nextWeek) > 0)
+    const dueBonds = new Set(
+      ladder.filter((b) => couponByBond[b.id] > 0 && sovereignCouponDueShare(b, ctx.nextWeek) > 0)
+        .map((b) => b.id)
     );
     let paidUSD = 0;
-    if (dueBuckets.size > 0) {
+    if (dueBonds.size > 0) {
       const cleared: string[] = [];
       accrued.forEach((amountUSD, k) => {
         const firstBar = k.indexOf('|');
         if (k.slice(0, firstBar) !== regionId) return;
         const secondBar = k.indexOf('|', firstBar + 1);
-        if (!dueBuckets.has(k.slice(firstBar + 1, secondBar)) || !(amountUSD > 0)) return;
+        if (!dueBonds.has(k.slice(firstBar + 1, secondBar)) || !(amountUSD > 0)) return;
         const payee = partyFromKey(k.slice(secondBar + 1));
         if (!payee) return;
         // A BANK is paid as BANK_SECURITIES rather than BANK: the coupon is not income arriving

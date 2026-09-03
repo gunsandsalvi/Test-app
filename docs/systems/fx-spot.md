@@ -162,7 +162,7 @@ witness.
 ### ⚠️ C6 — A CAP ON THE WEEKLY MOVE
 
 `fx-market.ts:MAX_WEEKLY_FX_MOVE_PCT` bounds how far a rate may travel in a week. A bound is not a
-price (rule 15) and rule 2 says no bounds of any kind; if a week's flow implies a bigger move, the
+price (rule 6) and rule 6 says no bounds of any kind; if a week's flow implies a bigger move, the
 bound is the mechanism that is missing — most likely the elastic participants' size. It belongs to
 §3 step 18's inventory of bounds to delete and is recorded there, with this tree as the reason the
 deletion must be paired with sizing the elastic side.

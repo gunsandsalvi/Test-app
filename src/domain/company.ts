@@ -316,7 +316,7 @@ export interface Company {
   baselineNetPpeUSD?: number;
   /** §7.246 — the two measured cost lines of the most recent completed company week, persisted so
    *  stage 05's offer floor can decompose `(annualRevenue − ebitda)` into wages + real inputs +
-   *  residual instead of dividing a TRAILING total by CURRENT staffed output. Both weekly (rule 9). */
+   *  residual instead of dividing a TRAILING total by CURRENT staffed output. Both weekly (rule 8). */
   payrollWeeklyUSD?: number;
   realInputConsumptionCostWeeklyUSD?: number;
   ebitda: number;
@@ -628,7 +628,7 @@ export function isActiveCompany(c: Company): boolean { return !c.isDefaulted && 
 
 /**
  * §7.269 — THE FULL-STAFFING CEILING SCALES WITH THE PLANT, and this is its ONE derivation
- * (rule 3: stage 05's `staffedShare` denominator and the labour market's hiring cap are the
+ * (rule 4: stage 05's `staffedShare` denominator and the labour market's hiring cap are the
  * same physical statement — what headcount runs this plant at full).
  *
  * It was `baselineEmployeeCount`, FROZEN AT THE SEED, in both places: a firm that built plant
@@ -736,7 +736,7 @@ export function getWipUSD(comp: Company, subUnitId?: string): number {
  * not on a snapshot: one quarter at 40% is a good quarter, three years at 40% is a position.
  *
  * The threshold and the window are policy primitives — what a competition regime chooses to act
- * on — in the same sense as a tax rate or a capital ratio (rule 4 allows the primitive; it forbids
+ * on — in the same sense as a tax rate or a capital ratio (rule 2 allows the primitive; it forbids
  * importing any real authority's actual case history).
  */
 export const ANTITRUST_SHARE_THRESHOLD = 0.45;
@@ -790,7 +790,7 @@ export function tranchePaymentDue(t: DebtTranche, week: number): { due: boolean;
  * It has one owner because it is one statement. `sme-pools.ts` had it privately as
  * `MARGIN_MEASUREMENT_WEIGHT` for exactly the same purpose on exactly the same quantity — a
  * pool's measured receipts and margin — and a named firm's revenue is the same measurement of
- * the same auction (rule 3).
+ * the same auction (rule 4).
  */
 export const RECEIPTS_MEASUREMENT_WEIGHT = 0.08;
 

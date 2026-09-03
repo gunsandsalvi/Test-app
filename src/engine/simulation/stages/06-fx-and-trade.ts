@@ -11,7 +11,7 @@
  * replaced was `exportShareCapture` — a clamped formula that handed an exporter a share of the
  * importer's aggregate demand on a competitiveness-and-FX score, credited to firms separately in
  * stage 08. That was a second, independent way for a company to make a sale beside the auction
- * already selling its output: two mechanisms for one real thing (rule 3).
+ * already selling its output: two mechanisms for one real thing (rule 4).
  */
 
 import { GameState, RegionId, FxPair } from '../../../types';
@@ -76,7 +76,7 @@ export function runFxAndTradeStage(state: GameState, ctx: WeeklyStepContext): vo
     // ANNUALISED, because that is the periodicity every consumer of these fields already reads
     // them at — the GDP identity's net-exports component in stage 11, and fx-clearing's own
     // `/52` back to a weekly flow. The measurement underneath is a real week of settled
-    // cross-border sales; the x52 is the run-rate, and it is named as such (rule 9).
+    // cross-border sales; the x52 is the run-rate, and it is named as such (rule 8).
     reg.exportsUSD = exportsWeeklyUSD * 52;
     reg.importsUSD = importsWeeklyUSD * 52;
     reg.tradeBalance = reg.exportsUSD - reg.importsUSD;

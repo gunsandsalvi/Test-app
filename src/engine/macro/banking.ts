@@ -74,7 +74,7 @@ export function bankCashBufferRatioOf(bank: { management?: import('../../domain/
 }
 /**
  * The Basel leverage-ratio floor: equity against UNWEIGHTED total assets. A posted regulatory
- * minimum (rule 1's administered-number standing), and the one constraint that sees a
+ * minimum (rule 3's administered-number standing), and the one constraint that sees a
  * sovereign book at all — risk weights are zero on sovereigns, which is exactly why the real
  * framework added a leverage floor after risk-weighted capital let bond carry grow without
  * limit. Measured before it existed here: over 260 weeks banks levered the repo carry into
@@ -88,7 +88,7 @@ export const BASEL_MIN_LEVERAGE_RATIO = 0.03;
 
 /** Unweighted total assets — the leverage ratio's denominator. */
 export function bankTotalAssetsUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
-  const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+  const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
   // G3a: the desks' inventory is an asset the bank OWNS and finances, and a cash security
   // consumes the leverage ratio one-for-one. Before the desks had owners it consumed nothing,
   // which is precisely what let a book with no capital behind it absorb any imbalance.
@@ -111,14 +111,14 @@ export function leverageHeadroomUSD(sheet: BankingSector, cashUSD: number, facil
  *
  * What they replace: 07c set every bank's sovereign target to
  * `sovBondOwnership.bankShare x the whole market`, distributed across banks by deposits, and
- * 07f capped each bill bucket at the same share times the bank's slice. A bank's book was
+ * 07f capped each bill at the same share times the bank's slice. A bank's book was
  * therefore decided by a number describing the banking SECTOR, not by anything the bank owned.
  * The comment there recorded the reason the aggregate was imposed — letting each bank take
  * `deposits x a ratio` implied the sector wanting several times the entire market — and that
  * reason was right about the formula and wrong about the fix: a liquidity requirement is not a
  * share of deposits, it is a share of the deposits that could RUN, met by reserves first.
  *
- * Runoff rates and a coverage ratio of 1 are posted regulatory primitives (rule 4 permits a
+ * Runoff rates and a coverage ratio of 1 are posted regulatory primitives (rule 2 permits a
  * primitive; it is the 22% equilibrium that it forbids).
  */
 export const RETAIL_DEPOSIT_RUNOFF_RATE = 0.10;
@@ -167,26 +167,27 @@ export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector, cashUSD: 
  * bound real rather than notional.
  */
 export function sovereignBookCapacityUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
-  const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
+  const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
   return Math.max(0, sovUSD) + leverageHeadroomUSD(sheet, cashUSD, facilityBookUSD);
 }
 
-const TENOR_BUCKET_YEARS: Record<string, number> = {
-  b13: 0.25, b26: 0.5, b52: 1, t2: 2, t5: 5, t10: 10, t30: 30,
-};
-
 /**
- * The annualised yield the bank's OWN sovereign book earns at the REAL cleared curve — each
- * tenor bucket at the market yield for its own maturity, linearly interpolated between the
- * cleared points for the buckets between them. This replaces `whole book × the 10Y yield`,
- * which read neither the real book composition nor the real front end. Carry-at-market-yield
- * is an approximation of coupon income on a near-par book; BP5 replaces it with the real
- * coupons the government actually pays.
+ * The annualised yield the bank's OWN sovereign book earns at the REAL cleared curve: each line
+ * at the market yield for ITS OWN remaining maturity, interpolated between the cleared points
+ * either side. Replaces `whole book × the 10Y yield`, which read neither the book's composition
+ * nor the real front end. Carry-at-market-yield approximates coupon income on a near-par book;
+ * BP5 replaces it with the coupons the government actually pays.
+ *
+ * §3.13-SOV row 3: the book is keyed by BOND, so a line's tenor comes from the bond itself. It
+ * used to read a table of seven tenor labels, which once the keys became bond ids would have
+ * silently valued every holding as a five-year. The caller supplies the resolver because only it
+ * can see the ladder.
  */
 export function computeSovereignBookAnnualYield(
-  byTenor: Record<string, number> | undefined,
-  zeroRates: { tenor3M: number; tenor2Y: number; tenor5Y: number; tenor10Y: number; tenor30Y: number }
+  byBond: Record<string, number> | undefined,
+  zeroRates: { tenor3M: number; tenor2Y: number; tenor5Y: number; tenor10Y: number; tenor30Y: number },
+  tenorYearsOf: (bondId: string) => number | undefined
 ): number {
   const points: [number, number][] = [
     [0.25, zeroRates.tenor3M], [2, zeroRates.tenor2Y], [5, zeroRates.tenor5Y],
@@ -203,11 +204,14 @@ export function computeSovereignBookAnnualYield(
     return points[points.length - 1][1];
   };
   let bookUSD = 0; let incomeUSD = 0;
-  Object.entries(byTenor || {}).forEach(([key, usd]) => {
+  Object.entries(byBond || {}).forEach(([bondId, usd]) => {
     const v = Number(usd) || 0;
     if (v <= 0) return;
+    const years = tenorYearsOf(bondId);
+    // A line whose bond cannot be found is not valued at a guessed tenor — it is not valued.
+    if (years === undefined) return;
     bookUSD += v;
-    incomeUSD += v * yieldAt(TENOR_BUCKET_YEARS[key] ?? 5);
+    incomeUSD += v * yieldAt(years);
   });
   return bookUSD > 0 ? incomeUSD / bookUSD : 0;
 }
@@ -327,7 +331,7 @@ export function evolveBankingSector(
   // SETL-B: the savings inflow is NO LONGER credited here. Households are paid real wages by
   // real employers and pay for real goods, and both move their deposits through settlement — so
   // adding a rate-times-estimate on top was the second of two independent quantities for one
-  // balance (rule 3). §7.248: the money fund's diversion is a payment instruction now too
+  // balance (rule 4). §7.248: the money fund's diversion is a payment instruction now too
   // (HOUSEHOLD → the fund), so its bank leg arrives through the pending-settlement parameter
   // next week like every other post-bank-pass household flow — subtracting it here as well
   // would move it twice. `householdMmfDiversionUSD` survives only as the funding-pressure
@@ -419,7 +423,7 @@ export function evolveBankingSector(
     + itemizedLoanInterestWeeklyUSD + householdLoanInterestWeeklyUSD + sovereignCouponWeeklyUSD
     + settlementPaidInterestWeeklyUSD;
   // CAL: the income statement is smooth and the CASH is lumpy — a coupon is earned every week and
-  // paid on the bucket's date, and rule 9 says those are different numbers with different periods.
+  // paid on the bond's date, and rule 8 says those are different numbers with different periods.
   // So the coupon stays in the income line above (it is genuinely this week's earnings, and the
   // NIM below is an income measure) while the money it will become arrives on the date.
   // `sovereign-calendar.ts` posts BOTH of its legs — the receivable and the equity it earns — off
@@ -477,7 +481,7 @@ export function evolveBankingSector(
 
   // ---- 7. Statistics — readings of the ledger, never drivers of it. The NIM damping factor
   // that clamped loan yields whenever the margin exceeded 5% is deleted (a clamp on a price,
-  // rule 2): if the margin is wrong, its inputs are wrong, and those are G2's to make real. ----
+  // rule 6): if the margin is wrong, its inputs are wrong, and those are G2's to make real. ----
   const totalAssetsUSD = businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD + survivingRepoLentUSD;
   const netInterestMarginPct = totalAssetsUSD > 0
     ? ((weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD - corporateDepositInterestUSD) * 52) / totalAssetsUSD
@@ -563,7 +567,7 @@ export function evolveBankingSector(
     // guess at it (the money fund read `policyRate x 0.45` — a second copy of a retired number).
     depositRateAnnual: Number(depositRate.toFixed(6)),
     corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],
-    sovereignBondHoldingsByTenor: prevBanking.sovereignBondHoldingsByTenor || {},
+    sovereignBondHoldingsByBond: prevBanking.sovereignBondHoldingsByBond || {},
     // CAL: carried, never written here — the calendar owns this balance on both books.
     sovereignAccruedCouponUSD: prevBanking.sovereignAccruedCouponUSD ?? 0,
     sovBondDealerInventory: prevBanking.sovBondDealerInventory || [],

@@ -128,7 +128,7 @@ export function reconcileHolderPrincipal(args: {
         const payer = payerOf(p.instrumentId);
         if (payer) {
           // The desk's principal comes back as reserves against the position it loses — an
-          // asset swap on the securities account, exactly like a sale (rule 14).
+          // asset swap on the securities account, exactly like a sale (rule 5).
           pay(ctx, { payer, payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker }, amount: paidUSD, currency: currencyOf(args.regionId), reason });
           // Step 13 (W2): the paper paid down leaves the desk by wire, to the house (the ladder's
           // own retirement wire met it there; the register's share is wired at its write-back).

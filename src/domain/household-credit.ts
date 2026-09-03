@@ -7,7 +7,7 @@
  * — it is what a credit file does — but the RATE at which households went delinquent was four
  * stated multipliers (1.5 / 0.8 / 0.3 / 0.1 on the region's stress), and the debt each tier
  * carried was the region's whole household debt split by HEAD COUNT, so a subprime household and
- * a super-prime one owed exactly the same amount. Both are claims about the answer (rule 13), and
+ * a super-prime one owed exactly the same amount. Both are claims about the answer (rule 2), and
  * both had a measurement sitting one file away: COH1 gave every wealth tier a LIQUID stock and a
  * debt stock of its own.
  *
@@ -43,7 +43,7 @@ export interface PopulationNode {
  * This is the general form of "two partitions of one population go on ONE AXIS rather than being
  * mapped to each other". It is used twice: to give a CREDIT tier the balance sheets of the
  * households in its band of the buffer ranking, and to give a WEALTH tier the wages of the
- * workers in its band of the earnings ranking. One operation, one implementation (rule 3).
+ * workers in its band of the earnings ranking. One operation, one implementation (rule 4).
  *
  * `nodes` may arrive in any order — they are sorted here, ascending, because the axis is the
  * value and nothing else. `bandShares` must be ordered lowest band first.
@@ -101,7 +101,7 @@ export interface BufferBand {
 /**
  * How many months of its own spending a tier could cover from its liquid stock. Income stands in
  * for spending because a household's outgoings are what its income funds, and both are annual on
- * the same cross-section (rule 9).
+ * the same cross-section (rule 8).
  */
 export function bufferMonthsOf(tier: {
   liquidSavingsUSD?: number; shareOfIncomeUSD?: number;

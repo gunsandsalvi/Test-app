@@ -18,7 +18,7 @@ Written 2026-09-03 from the domain, code shut.
 - **A2** REASON — issued by a **named issuer** — a central bank — whose liability it is
   (`the-central-bank.md` B)
 - **A3** REASON — it is a **property of every amount**: every balance, price, coupon, payment and
-  contract carries one (rule 9)
+  contract carries one (rule 8)
   - A3.a a function that takes an amount takes its currency with it, or it is a function over a
     domain it cannot type-check
 - **A4** FORBID — **no implicit currency.** An amount whose currency is inferred from where it was
@@ -41,11 +41,11 @@ Written 2026-09-03 from the domain, code shut.
 
 ### C. WHAT A RATE IS
 - **C1** REASON — the **price of one currency in another**, and it is a price like any other:
-  cleared, not assigned (rule 1)
+  cleared, not assigned (rule 3)
 - **C2** REASON — it is **directional and consistent**: rate(A→B) = 1 / rate(B→A) exactly
 - **C3** REASON — it is **transitive**: A→B→C and A→C agree, or there is an arbitrage and somebody
   must be taking it
-  - C3.a which means the rates are **one object**, not a table of independent pairs (rule 3)
+  - C3.a which means the rates are **one object**, not a table of independent pairs (rule 4)
 - **C4** REASON — a **numéraire** exists for reporting and aggregation only
   - C4.a FORBID — the numéraire is **not where value lives.** Storing every balance in the
     numéraire and converting on read destroys the currency position, which is the thing that
@@ -140,7 +140,7 @@ cleared CROSS rates reach `v2.fx` nowhere. Every actual conversion — `currency
 `fx-funding`, in settlement, in every valuation — computes `rateOf(from) / rateOf(to)`, a pure
 triangulation through the numéraire.
 
-So there are **two representations of the EUR/GBP rate** (rule 3): the one the market cleared, and
+So there are **two representations of the EUR/GBP rate** (rule 4): the one the market cleared, and
 the ratio the ledger uses. They agree only to the extent the desks arbitraged them, which the
 header is explicit they may fail to do — and where they disagree, the difference is money paid at
 one rate and valued at another. Worse, the defeat is silent and total: **the USD is still the
@@ -149,7 +149,7 @@ XB6 was built to remove. The market half of the fix landed and the ledger half n
 
 C3 stays `⚠️` and not `❌` because the invariant C3 asks for does hold in the ledger — trivially,
 by triangulating. What is missing is that it holds for the wrong reason, and it discards a cleared
-price to do it (rule 1's mirror image: a price that cleared and is used by nothing).
+price to do it (rule 3's mirror image: a price that cleared and is used by nothing).
 
 Not a §3 step today. **Becomes one**, and it is small: `publishFxRates` must carry the cross prints
 into a rate object the ledger can express a cross in, and `convert` must read them.
@@ -159,7 +159,7 @@ into a rate object the ledger can express a cross in, and `convert` must read th
 `evolution.ts:evolveFxPair` no longer moves the rate — `fx-clearing` does — but it still moves
 `basisSpreadBps` by `(rDomestic − rForeign) * 20 + noise` every week. The cross-currency basis is a
 real price paid by whoever needs a currency more (`fx-forwards-and-xcs.md` B3), and here it is an
-interest differential times a constant plus a random walk: rule 4's defect, one field over from
+interest differential times a constant plus a random walk: rule 2's defect, one field over from
 where it was found last time. It belongs to `fx-forwards-and-xcs.md`'s diff and is recorded there
 as the same finding.
 

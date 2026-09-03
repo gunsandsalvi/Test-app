@@ -109,7 +109,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       // physical, so the desks bring supply into it — sized by what their derivative budget can
       // still carry (DRV: one budget across every class, registry.ts), and present only while the
       // bound is actually breached on the print they can see. That is what holds the curve's top:
-      // a participant's price, not a bracket (rule 15).
+      // a participant's price, not a bracket (rule 6).
       const carryBound = costOfCarryPrice({ spotPrice: spot, financingRateAnnual, storageCostAnnual, tenorYears });
       // The print this contract last cleared at is the published curve point; spot before one.
       const published = tenorMonths === 1 ? comm.futures1M : tenorMonths === 3 ? comm.futures3M : comm.futures6M;

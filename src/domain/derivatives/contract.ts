@@ -9,7 +9,7 @@
  *
  * Now: one contract, one book (`GameState.derivativesBook`), one lifecycle
  * (stages/derivative-lifecycle.ts). Everything class-specific is BEHAVIOR and lives in a
- * `DerivativeClassProfile` under `classes/` behind the registry (rule 17): adding a derivative
+ * `DerivativeClassProfile` under `classes/` behind the registry (rule 15): adding a derivative
  * class is one profile module and one registry line, never a new struct, book, or settle loop.
  */
 
@@ -18,7 +18,7 @@ import { RegionId } from '../geography';
 /**
  * The subset of the ledger's parties that can stand on a bilateral derivative. The arms are
  * structurally the ledger's own `PartyRef` arms of the same kind, so a party passes to `pay()`
- * directly — one encoding of who owes whom (§1.3).
+ * directly — one encoding of who owes whom (§1.4).
  */
 export type DerivativeParty =
   | { kind: 'COMPANY'; ticker: string }
@@ -45,7 +45,7 @@ export interface DerivativeContract {
   /**
    * What the contract was struck at, in the class's own stat — the same number its market
    * clears: annual decimal rate (IRS), spread bps (CDS), price per unit (futures), home-per-
-   * foreign rate (FX). The profile is the only reader, so the unit cannot silently mix (§1.9).
+   * foreign rate (FX). The profile is the only reader, so the unit cannot silently mix (§1.8).
    */
   strike: number;
   /** What the contract is ON: issuer id (CDS), commodity id (futures), foreign region (FX). */

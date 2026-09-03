@@ -1,7 +1,7 @@
 import { stashOpeningCash, stashSeedHouseholdLine } from '../ledger/accounts';
 import { govBondTrancheId } from '../../domain/sovereign-id';
 import { SEED_BUSINESS_LOAN_BOOK_TO_GDP, SEED_CONSUMER_LOAN_BOOK_TO_GDP } from '../../domain/stated';
-import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
+import { calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { openingSovereignRating } from './evolution';
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, SmePool, Industry, GovDebtTranche } from '../../types';
@@ -12,9 +12,8 @@ import { governmentPayrollWeeklyUSD, governmentObligationsWeeklyUSD } from '../.
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
 import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, totalOutputFromFinalDemand, smePoolEmployment } from '../../domain/industry-registry';
 import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT, seedPoolLeverageStrata, SME_POOL_STRATA_COUNT } from '../bootstrap/firms';
-import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { generate52WeekHistory } from './utils';
-import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
+import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS, CategoryDemandState } from '../../domain/market-microstructure';
 import { INITIAL_WEATHER } from './weather';
 import {
   getRegionPopulation, getRegionProductivityPerCapitaUSD, getRegionBirthRateAnnual, getRegionDeathRateAnnual,
@@ -124,7 +123,7 @@ export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncome
  * DEM — the four stage shares are BANDS of the seed's own stationary age structure now, not four
  * stated numbers (§7.181). The structure follows from the Gompertz hazard and the region's own
  * birth rate, so a region whose fertility the demographic transition put low opens OLDER — which
- * is the difference between regions arriving as an outcome instead of a table (rule 4).
+ * is the difference between regions arriving as an outcome instead of a table (rule 2).
  */
 export function createLifeCycleDistribution(birthRateAnnual = 0.0125): Record<LifeCycleStage, LifeCycleStageData> {
   const ages = stationaryAgeDistribution(birthRateAnnual);
@@ -146,20 +145,18 @@ export function createInitialCategoryDemand(
   estimatedNominalGdp: number,
   population: number,
   firmCount: number
-): Record<string, any> {
+): Record<string, CategoryDemandState> {
   const C = estimatedHouseholdIncome * 0.94;
   const G = estimatedNominalGdp * 0.35;
   const I = estimatedNominalGdp * 0.15;
 
   let totalHhWeight = 0;
   let totalGovWeight = 0;
-  let totalCorpWeight = 0;
 
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
     subUnits.forEach(su => {
       totalHhWeight += su.buyerMix.HOUSEHOLD;
       totalGovWeight += su.buyerMix.GOVERNMENT;
-      totalCorpWeight += su.buyerMix.CORPORATE;
     });
   });
 
@@ -184,7 +181,7 @@ export function createInitialCategoryDemand(
   });
   const totalOutput = totalOutputFromFinalDemand(finalDemand);
 
-  const cd: Record<string, any> = {};
+  const cd: Record<string, CategoryDemandState> = {};
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
     subUnits.forEach(su => {
       const demandLevelAnnualUSD = totalOutput[su.unitId] ?? finalDemand[su.unitId];
@@ -215,7 +212,7 @@ function generateCreditTierBooks(creditCardDebtUSD: number, otherConsumerLoanDeb
 /**
  * IDX / RULE 4 — the institution and country NAMES are generated from the region code, the way
  * every ticker and company name in this model already is. What stood here was 'Federal Reserve',
- * 'Bank of England', 'Bank of Japan', 'European Central Bank' and four real countries: rule 4
+ * 'Bank of England', 'Bank of Japan', 'European Central Bank' and four real countries: rule 2
  * names real tickers and company names first, and "not numeric data" does not exempt a brand.
  *
  * The CURRENCY CODE and SYMBOL stay. They are identifiers the whole model keys on — `FxPair`,
@@ -250,10 +247,10 @@ const NET_MIGRATION_RATE_ANNUAL = 0.0;
  *  pool's real book weekly, so this sets the opening spread and never the debt itself. */
 const SME_SEED_LEVERAGE_MULTIPLE = 2.7;
 /**
- * TAXR — the corporate tax rate each region OPENS at: POLICY primitives (rule 19's admissible
+ * TAXR — the corporate tax rate each region OPENS at: POLICY primitives (rule 2's admissible
  * class — a statutory choice a legislature made, not a fitted number). Combined statutory
  * corporate rates, national plus local: US federal 21% + state average; Japan's national +
- * enterprise taxes at the high end; the UK's 25% headline at the low end. One owner (rule 3):
+ * enterprise taxes at the high end; the UK's 25% headline at the low end. One owner (rule 4):
  * every corporate tax number in the model reads `region.effectiveTaxRate`, which starts here
  * and which each region's own fiscal stance then moves — so the differential is real policy
  * variation that MNC subsidiaries (taxed where they are booked) now actually face.
@@ -397,7 +394,7 @@ function buildRegion(regionId: RegionId): Region {
     // separately made an odd tenor a week longer than it claimed — a 13-week bill seeded at
     // origination −7 and maturity +7 is a 14-week bill, and `(maturity − origination) / 52` then
     // disagreed with the `tenorAtIssuanceYears` beside it on 20 of 260 rungs. Two representations
-    // of one fact, disagreeing (rule 3); with one rounding they agree exactly, which is what lets
+    // of one fact, disagreeing (rule 4); with one rounding they agree exactly, which is what lets
     // the stored tenor be deleted rather than reconciled.
     originationWeek: -Math.floor(tenorWeeks / 2),
     maturityWeek: tenorWeeks - Math.floor(tenorWeeks / 2),
@@ -498,7 +495,7 @@ function buildRegion(regionId: RegionId): Region {
     srfBorrowingUSD: 0,
     onRrpLendingUSD: 0,
     corpBondDealerInventory: [],
-    sovereignBondHoldingsByTenor: {},
+    sovereignBondHoldingsByBond: {},
     sovBondDealerInventory: [],
     loanDealerInventory: [],
     // WS6: overnight positions are struck weekly and mature at the next session, so a cold
@@ -624,9 +621,10 @@ function buildRegion(regionId: RegionId): Region {
     // reserves are the banks' own cash and are not stored here — one representation.
     centralBankSheet: {
       region: regionId,
-      sovereignHoldingsByTenor: govDebtTranches.reduce((acc, t) => {
-        const k = sovBucketKey(t.tenorAtIssuanceYears);
-        acc[k] = (acc[k] ?? 0) + t.principalUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
+      // §3.13-SOV row 3: the central bank's book names the BONDS it holds. It used to name
+      // groups, so its position could be summed and never asked "which bond".
+      sovereignHoldingsByBond: govDebtTranches.reduce((acc, t) => {
+        acc[t.id] = (acc[t.id] ?? 0) + t.principalUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
         return acc;
       }, {} as Record<string, number>),
       // §5-WIRES A3.5: the treasury's account opens at its operating balance — stashed here,
@@ -640,7 +638,7 @@ function buildRegion(regionId: RegionId): Region {
       standingFacilityLentUSD: 0,
       lastRemittanceUSD: 0,
       // PUB2b: no order outstanding at birth — the first week's redemptions set the first one.
-      plannedPurchasesByTenor: {},
+      plannedPurchasesByBond: {},
       reinvestmentShare: 1,
       lastOpenMarketPurchasesUSD: 0,
       lastOrderPlacedUSD: 0,
@@ -697,7 +695,7 @@ function buildRegion(regionId: RegionId): Region {
     historicalZeroCurves: [{ week: 1, ...zeroRates }],
     wealthDistribution: seedWealthDistribution,
     housingMarket: createHousingMarket(regionId, estimatedHouseholdIncomeUSD, totalPopulation),
-    // DEM — the age structure the stage shares above are bands OF (rule 3).
+    // DEM — the age structure the stage shares above are bands OF (rule 4).
     ageDistribution: stationaryAgeDistribution(getRegionBirthRateAnnual(regionId)),
     lifeCycleDistribution: seedLifeCycle,
   };
@@ -715,7 +713,7 @@ function buildRegion(regionId: RegionId): Region {
   // Employment is VALUE ADDED OVER PRODUCTIVITY, the same rule the named tiers use
   // (companyGenerator.ts and bootstrap/private-firms.ts). It used to be
   // `totalEmployed x SME_TIER_EMPLOYMENT_SHARE` split across pools by revenue — an IMPOSED
-  // employment share (rule 13), and the last of the three tiers to state its headcount rather
+  // employment share (rule 2), and the last of the three tiers to state its headcount rather
   // than derive it. A pool's revenue is gross output like anyone else's, so its value added is
   // what is left after the inputs its industry consumes, and its headcount is that over output
   // per worker. One rule for all three tiers means a change to it cannot land in one and miss
@@ -740,7 +738,7 @@ function buildRegion(regionId: RegionId): Region {
         annualRevenueUSD,
         marginPct: Number((sectorBaselineMarginPct(sector) * (1 - SME_MARGIN_DISCOUNT)).toFixed(4)),
         // No lender yet: the seed migration (bank-lending.ts) itemizes what the banks can
-        // actually carry onto real loans and writes this back as their derived sum (rule 3).
+        // actually carry onto real loans and writes this back as their derived sum (rule 4).
         debtUSD: 0,
         defaultRateAnnualPct: 0.02,
         // DIST — the pool's leverage cross-section, struck from the same rule the named tier

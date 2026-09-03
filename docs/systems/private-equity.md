@@ -50,7 +50,7 @@ Written 2026-09-03 from the domain, code shut.
 - **C5** REASON — the holding has a **value that is not a market price**: no clearing, so it is a
   mark
   - C5.a FORBID — **an unlisted mark is not a cleared price**, and it must never be treated as one
-    by the holder's own accounts (rule 1's boundary: the honest answer is "marked, not cleared")
+    by the holder's own accounts (rule 3's boundary: the honest answer is "marked, not cleared")
 
 ### D. THE EXIT
 - **D1** REASON — it **sells**: to another fund, to a corporate buyer (`m-and-a.md`), or to the

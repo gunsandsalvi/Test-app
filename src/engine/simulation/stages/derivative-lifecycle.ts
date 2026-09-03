@@ -6,12 +6,12 @@
  * measuring who needs the hedge and clearing it — and strike into the book through
  * `strikeDerivatives`; what they ask of the standing book they ask the index (`standingBookOf`).
  *
- * What runs here for every class, written once (rule 17 — nothing below switches on the class):
+ * What runs here for every class, written once (rule 15 — nothing below switches on the class):
  *  1. EVENT termination the profile detects (a credit event, a reference that stopped existing)
  *     — final leg, contract gone.
  *  2. MATURITY — the final leg (rate classes: the last period; mark classes: the mark at its
  *     settlement print), contract gone.
- *  3. COUNTERPARTY DEATH — the close-out that no book had (rule 14/G5): a defaulted party's
+ *  3. COUNTERPARTY DEATH — the close-out that no book had (rule 5/G5): a defaulted party's
  *     contracts settle at replacement value through its account (the estate's account IS the
  *     debtor's); a party that has simply ceased to exist ends the contract flat.
  *  4. LIVE legs — the periodic leg and/or the mark DELTA (the change since last settled,

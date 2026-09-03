@@ -62,7 +62,7 @@ export interface ClearingInstrument {
    * (the harness's streak, read back off `lastWeekDamperBoundIds`). The damper is discrete-time
    * SMOOTHING: a one-week bind is noise it should absorb, a ten-week bind is a level it is
    * hiding (§6.1's row). The cap widens by (1 + streak), so a trend converges geometrically
-   * and the print can never be the damper for long. A RESOLUTION rule (rule 19): the answer it
+   * and the print can never be the damper for long. A RESOLUTION rule (rule 2): the answer it
    * converges to is the schedules', whatever the cap.
    */
   damperBindStreak?: number;
@@ -285,27 +285,6 @@ export interface ClearingResult {
  * what its money can actually buy this week (holdings it already has plus its real budget).
  * The cap is a constant in the level, so total demand stays monotonic and bisection stays exact.
  */
-function demandAtStat(
-  demand: ParticipantDemand,
-  stat: number,
-  statKind: ClearingInstrument['statKind'],
-  previousHoldingUSD: number
-): number {
-  const range = Math.max(1e-6, demand.fullSizeStatRange);
-  // A yield-like statistic gets more attractive as it RISES; a price-like one as it FALLS.
-  const distanceIntoTheMoney = statKind === 'YIELD_LIKE'
-    ? stat - demand.reservationStat
-    : demand.reservationStat - stat;
-  const fraction = Math.max(0, Math.min(1, distanceIntoTheMoney / range));
-  const wantedUSD = demand.maxHoldingUSD * fraction;
-  const affordableUSD = demand.maxNetPurchaseUSD === undefined
-    ? Infinity
-    : previousHoldingUSD + Math.max(0, demand.maxNetPurchaseUSD);
-  // The mandated core is held at any level, but a mandate cannot conjure money: it is bounded by
-  // what the participant can actually afford to hold.
-  const mandatedCoreUSD = Math.min(demand.minHoldingUSD ?? 0, affordableUSD);
-  return Math.max(mandatedCoreUSD, Math.min(wantedUSD, affordableUSD));
-}
 
 /**
  * Solves for the level at which the participants collectively want exactly the tradable float.
@@ -354,19 +333,6 @@ function growColumns(n: number) {
   colCore = g(colCore);
 }
 
-function pushPreparedDemand(demand: ParticipantDemand, previousHoldingUSD: number) {
-  growColumns(colCount + 1);
-  const range = Math.max(1e-6, demand.fullSizeStatRange);
-  const affordableUSD = demand.maxNetPurchaseUSD === undefined
-    ? Infinity
-    : previousHoldingUSD + Math.max(0, demand.maxNetPurchaseUSD);
-  colReservation[colCount] = demand.reservationStat;
-  colRange[colCount] = range;
-  colMaxHolding[colCount] = demand.maxHoldingUSD;
-  colAffordable[colCount] = affordableUSD;
-  colCore[colCount] = Math.min(demand.minHoldingUSD ?? 0, affordableUSD);
-  colCount++;
-}
 
 /**
  * Indices 0..n-1 sorted ascending by (keys[i], i) — a TOTAL order (the index tiebreak makes
@@ -419,7 +385,7 @@ function solveClearingStat(
   // not only faster but more honest: the bisection returned a 60-step approximation to the
   // crossing, and the approximation error was part of the world. Swapping it is a WORLD RELABEL —
   // every cleared level shifts in its last decimals, the same class of change as an RNG-stream
-  // relabel (rule 10) — recorded in the plan at the commit that introduced it.
+  // relabel (rule 11) — recorded in the plan at the commit that introduced it.
   const uLo = isYieldLike ? bracketLow : -bracketHigh;
   const uHi = isYieldLike ? bracketHigh : -bracketLow;
   const toStat = (u: number) => (isYieldLike ? u : -u);
@@ -560,7 +526,7 @@ export function packedClearingBytes(n: number, pCount: number): number {
  * The week's damper streaks by RAW instrument id (the harness tag's `book:id±` with the book
  * stripped), set once a week by core.ts off `GameState.damperBindStreakById` so every adapter
  * widens without each one being taught the lookup. An id two books share takes the wider
- * streak for a week — a cap, never a level (§1.15).
+ * streak for a week — a cap, never a level (§1.6).
  */
 let damperStreakByRawId = new Map<string, number>();
 

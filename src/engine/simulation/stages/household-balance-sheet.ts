@@ -105,7 +105,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       const idx = etfShares.findIndex((x) => x.fundId === fund.id);
       const heldShares = idx >= 0 ? etfShares[idx].shares : 0;
       // The price the transaction EXECUTED at (etf-flows), not a NAV re-derived from a
-      // book whose cash leg has not applied yet — one transaction, one price (rule 3).
+      // book whose cash leg has not applied yet — one transaction, one price (rule 4).
       const navPerShare = executed?.navPerShare ?? fundNavPerShare(fund);
       if (!(navPerShare > 0)) return;
       // A household cannot sell more than it holds; the executed leg is trimmed, not the books.
@@ -172,7 +172,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // own sentence is "who holds deposits is whose savings accumulated", and it was
       // not true: `W.deposits` applied a fixed share of the aggregate every week, so a tier that
       // saved more never got richer and the wealth distribution could not respond to the one
-      // thing that produces it (rule 13). Each tier now carries the stock its own saving built,
+      // thing that produces it (rule 2). Each tier now carries the stock its own saving built,
       // and the split is that stock's share of the total.
       //
       // The stated weights remain the OPENING CONDITION only, used until the accumulation has
@@ -206,7 +206,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       //
       // Equity-like and private business share a driver deliberately: both are appetite for risky
       // illiquid ownership, and the model measures ONE such appetite. Two tables with one cause is
-      // one derivation, not two (rule 3).
+      // one derivation, not two (rule 4).
       //...and the INVESTED stock is what backs them. It is the saving that was actually put
       // away, split by the same appetite that decided to put it there — so the two halves of the
       // balance sheet are now two stocks rather than one wearing two hats.

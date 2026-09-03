@@ -16,15 +16,15 @@ import { V2World } from '../../engine2/world';
  *     central bank at birth (the coupon returns as remittance, net of interest on reserves).
  *  3. **Every sovereign bond has a holder.** The stock outstanding is what the named holders —
  *     the central bank, the banks, the institutions, corporate treasuries, the desks — actually
- *     carry, bucket by bucket; a coupon is never paid to nobody.
+ *     carry, bond by bond; a coupon is never paid to nobody.
  */
 
 import { Company, InstitutionalEntity, Region, RegionId } from '../../types';
 import { BankingSector } from '../../domain/banking';
 import { bankTotalAssetsUSD } from '../macro/banking';
 import { centralBankFxReservesUSD, centralBankAssetsUSD } from '../../domain/central-bank';
-import { govBucketKeyOf } from '../../domain/sovereign-id';
-import { sovBucketKey } from '../simulation/stages/shared-helpers';
+
+import { holdingClassOf } from '../../domain/assets';
 import { weeklyInterestExpenseUSD } from '../../domain/government';
 import { facilityBookOf } from '../../engine2/tranches';
 
@@ -80,40 +80,42 @@ export function closeSeedMoney(
     const reservesUSD = banks.reduce((a, b) => a + openingCashOf(b.bankBalanceSheet!), 0);
     cb.currencyInCirculationUSD = 0;
     const targetBookUSD = Math.max(0, reservesUSD + treasuryAccountOf(v2, regionId) - centralBankFxReservesUSD(cb));
-    const currentBookUSD = sumByTenor(cb.sovereignHoldingsByTenor);
+    const currentBookUSD = sumByTenor(cb.sovereignHoldingsByBond);
     const weights = new Map<string, number>();
-    (reg.govDebtTranches ?? []).forEach((t) => { const k = sovBucketKey(t.tenorAtIssuanceYears); weights.set(k, (weights.get(k) ?? 0) + t.principalUSD); });
+    // §3.13-SOV row 3: weighted by BOND, so the fallback book below names bonds like every
+    // other holder's does.
+    (reg.govDebtTranches ?? []).forEach((t) => { weights.set(t.id, (weights.get(t.id) ?? 0) + t.principalUSD); });
     const weightTotal = [...weights.values()].reduce((a, v) => a + v, 0) || 1;
     const scaled: Record<string, number> = {};
     if (currentBookUSD > 0) {
-      Object.entries(cb.sovereignHoldingsByTenor ?? {}).forEach(([k, v]) => { scaled[k] = Math.round((Number(v) || 0) * (targetBookUSD / currentBookUSD)); });
+      Object.entries(cb.sovereignHoldingsByBond ?? {}).forEach(([k, v]) => { scaled[k] = Math.round((Number(v) || 0) * (targetBookUSD / currentBookUSD)); });
     } else {
       weights.forEach((w, k) => { scaled[k] = Math.round(targetBookUSD * (w / weightTotal)); });
     }
-    cb.sovereignHoldingsByTenor = scaled;
+    cb.sovereignHoldingsByBond = scaled;
 
-    // ---- 3. The stock outstanding is what the named holders hold, bucket by bucket. ----
-    const heldByBucket = new Map<string, number>();
-    const add = (k: string | undefined, usd: number) => { if (k && usd > 0) heldByBucket.set(k, (heldByBucket.get(k) ?? 0) + usd); };
-    Object.entries(cb.sovereignHoldingsByTenor).forEach(([k, v]) => add(k, Number(v) || 0));
-    banks.forEach((b) => Object.entries(b.bankBalanceSheet!.sovereignBondHoldingsByTenor ?? {}).forEach(([k, v]) => add(k, Number(v) || 0)));
+    // ---- 3. The stock outstanding is what the named holders hold, BOND BY BOND. ----
+    // §3.13-SOV row 3: every holder's key is the bond's id, so this reconciles per bond instead
+    // of per tenor bucket. Bucket-wise it could only scale a rung by its GROUP's held share,
+    // which spread one bond's shortfall across every other bond of a similar tenor.
+    const heldByBond = new Map<string, number>();
+    const add = (id: string | undefined, usd: number) => { if (id && usd > 0) heldByBond.set(id, (heldByBond.get(id) ?? 0) + usd); };
+    Object.entries(cb.sovereignHoldingsByBond).forEach(([id, v]) => add(id, Number(v) || 0));
+    banks.forEach((b) => Object.entries(b.bankBalanceSheet!.sovereignBondHoldingsByBond ?? {}).forEach(([id, v]) => add(id, Number(v) || 0)));
     institutionalEntities.forEach((e) => {
       if (e.isDefaulted) return;
-      (e.itemizedHoldings ?? []).forEach((h) => { if (h.instrumentType === 'GOV_BOND' && h.issuerRegion === regionId) add(govBucketKeyOf(h.instrumentId, regionId), h.quantityOrNotionalUSD ?? 0); });
+      (e.itemizedHoldings ?? []).forEach((h) => { if (holdingClassOf(h.instrumentType) === 'SOVEREIGN' && h.issuerRegion === regionId) add(h.instrumentId, h.quantityOrNotionalUSD ?? 0); });
     });
     companies.forEach((c) => {
       ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; instrumentId: string; quantityOrNotionalUSD?: number }[] }).treasuryHoldings ?? [])
-        .forEach((h) => { if (h.instrumentType === 'GOV_BOND' && h.issuerRegion === regionId) add(govBucketKeyOf(h.instrumentId, regionId), h.quantityOrNotionalUSD ?? 0); });
+        .forEach((h) => { if (holdingClassOf(h.instrumentType) === 'SOVEREIGN' && h.issuerRegion === regionId) add(h.instrumentId, h.quantityOrNotionalUSD ?? 0); });
     });
-    (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => add(p.tenorKey, p.inventoryUSD));
-    const outstandingByBucket = new Map<string, number>();
-    (reg.govDebtTranches ?? []).forEach((t) => { const k = sovBucketKey(t.tenorAtIssuanceYears); outstandingByBucket.set(k, (outstandingByBucket.get(k) ?? 0) + t.principalUSD); });
-    reg.govDebtTranches = (reg.govDebtTranches ?? []).map((t) => {
-      const k = sovBucketKey(t.tenorAtIssuanceYears);
-      const out = outstandingByBucket.get(k) ?? 0;
-      const held = heldByBucket.get(k) ?? 0;
-      return { ...t, principalUSD: Math.round(out > 0 ? t.principalUSD * (held / out) : 0) };
-    });
+    (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => add(p.bondId, p.inventoryUSD));
+    reg.govDebtTranches = (reg.govDebtTranches ?? []).map((t) => ({
+      ...t,
+      // The outstanding of a bond IS what its holders hold. No group, no share of a bucket.
+      principalUSD: Math.round(heldByBond.get(t.id) ?? 0),
+    }));
     reg.governmentInterestWeeklyUSD = Math.round(weeklyInterestExpenseUSD(reg.govDebtTranches));
     reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb, waysAndMeansOf(v2, regionId), currencyOf(regionId), v2.fx));
   });

@@ -782,7 +782,7 @@ export function runFirmBirthsForRegion(
   // ENTRY GOES WHERE THE EXPECTED PROFIT OF ENTERING IS: unserved demand TIMES the
   // margin earned serving it. The pool-vs-named ratio was the demand half alone, so entrants
   // chased size regardless of profitability; the pool's own measured margin is the other half,
-  // and their PRODUCT needs no coefficient (rule 19). This is what makes category margins
+  // and their PRODUCT needs no coefficient (rule 2). This is what makes category margins
   // mean-revert through entry instead of by assertion.
   // And it goes to EVERY pool where entering pays this quarter, not the one that pays
   // most: one firm per quarter per region was no supply response at all (a 0.4%-of-pool entrant
@@ -858,7 +858,7 @@ export function runFirmBirthsForRegion(
   if (born.length === 0) return [];
   // Every firm banks somewhere. A company born without a house bank held its cash outside the
   // banking system entirely — its balance never reached any bank's funding, so the money existed
-  // on the firm and nowhere else (rule 3's "1$ is 1$"). Measured: 12 unbanked firms at seed
+  // on the firm and nowhere else (rule 4's "1$ is 1$"). Measured: 12 unbanked firms at seed
   // growing with every birth cohort. The relationship is chosen the same way the seed chooses
   // it, so a born firm enters the world banked like every other.
   const banksForRelationship = mandateAllocator(ctx.updatedCompanies

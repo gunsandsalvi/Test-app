@@ -39,11 +39,11 @@ export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, 
   target.householdLoans = [];
   acquirer.primeBrokerageLoansUSD = (acquirer.primeBrokerageLoansUSD ?? 0) + (target.primeBrokerageLoansUSD ?? 0); target.primeBrokerageLoansUSD = 0;
   // The securities books.
-  const tenors = { ...(acquirer.sovereignBondHoldingsByTenor || {}) };
-  Object.entries(target.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => { tenors[k] = (tenors[k] ?? 0) + (Number(v) || 0); });
-  acquirer.sovereignBondHoldingsByTenor = tenors;
+  const tenors = { ...(acquirer.sovereignBondHoldingsByBond || {}) };
+  Object.entries(target.sovereignBondHoldingsByBond || {}).forEach(([k, v]) => { tenors[k] = (tenors[k] ?? 0) + (Number(v) || 0); });
+  acquirer.sovereignBondHoldingsByBond = tenors;
   acquirer.sovereignBondHoldingsUSD = Object.values(tenors).reduce((a, v) => a + v, 0);
-  target.sovereignBondHoldingsByTenor = {}; target.sovereignBondHoldingsUSD = 0;
+  target.sovereignBondHoldingsByBond = {}; target.sovereignBondHoldingsUSD = 0;
   acquirer.sovereignAccruedCouponUSD = (acquirer.sovereignAccruedCouponUSD ?? 0) + (target.sovereignAccruedCouponUSD ?? 0); target.sovereignAccruedCouponUSD = 0;
   acquirer.dealerDeskInventory = mergeDesks(acquirer.dealerDeskInventory, target.dealerDeskInventory);
   target.dealerDeskInventory = undefined;

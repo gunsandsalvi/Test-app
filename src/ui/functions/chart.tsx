@@ -1,7 +1,7 @@
 /**
  * AU · chart — history for any series the object carries: the engine's rings where it keeps
  * them, the UI's tape where it does not. One SVG line, month labels, a date scrubber; the
- * change windows are month on month and year on year (§1.9), level where history is short.
+ * change windows are month on month and year on year (§1.8), level where history is short.
  */
 
 import { useState } from 'react';

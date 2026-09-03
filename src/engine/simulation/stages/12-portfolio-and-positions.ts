@@ -21,7 +21,6 @@ import { calculateCompositeIndices } from '../../macro/indices';
 import { WeeklyStepContext } from './context';
 import { realizedAnnualVol } from '../../../domain/volatility';
 import { regionIndexOf } from '../../macro/indices';
-import { ladderTotalUSD } from '../../../engine2/tranches';
 
 const priceScratch12: number[] = [];
 
@@ -38,7 +37,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
     v2
   );
 
-  let closedCount = 0;
 
   const usdPolicyRate = updatedRegions.USA.policyRate;
   ctx.weeklyInterestIncomeUSD = Math.max(0, state.portfolio.cashUSD) * (usdPolicyRate / 52);
@@ -115,7 +113,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             // stage writes ONE of the two lines, for the same reason.
             ctx.weeklyRealizedPnL += unrealizedPnL;
             pos.isClosed = true;
-            closedCount++;
 
             ctx.newsItems.push({
               id: `redemption-${pos.id}-${nextWeek}`,
@@ -132,7 +129,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           }
 
           const remainingTenorYears = Math.max(0.01, (TS.maturityWeek[trRow] - nextWeek) / 52);
-          const totalCorpBondPrincipalOutstanding = updatedCompanies.filter(c => c.region === pos.region).reduce((s, c) => s + ladderTotalUSD(ctx.v2, c.id), 0);
           // S6: the position marks off the CLEARED stat, full stop. The deleted block here
           // re-adjusted the already-cleared OAS by an ownership-derived premium — a second
           // price-setter duplicating (and disagreeing with) the real auction in 07b.
@@ -220,7 +216,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         // Check sovereign bond maturity
         if (nextWeek >= maturityWeek) {
           pos.isClosed = true;
-          closedCount++;
           // S9: same margin-book rule as the corporate maturity above — the redemption pays par
           // contractually, but what settles to the player's cash is the P&L against entry, not
           // face value they never funded (and which stage 13 would then double by also adding
@@ -251,14 +246,14 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           pos.notional,
           pos.fixedRate || 0.04,
           remainingTenorYears,
-          pos.direction as any,
+          pos.direction as 'PAY_FIXED' | 'RECEIVE_FIXED',
           sovParams
         );
         currentPrice = irsPricing.currentParRate;
         unrealizedPnL = irsPricing.npv * fxRateToUsd;
         dv01 = irsPricing.dv01 * fxRateToUsd;
 
-        const carryEst = calculateExpectedCarry('IRS', pos.direction as any, pos.notional * fxRateToUsd, {
+        const carryEst = calculateExpectedCarry('IRS', pos.direction, pos.notional * fxRateToUsd, {
           policyRate: updatedRegions[pos.region].policyRate,
           fixedRate: pos.fixedRate || 0.04,
           floatingRate: updatedRegions[pos.region].policyRate
@@ -272,7 +267,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         // Check IRS maturity
         if (nextWeek >= maturityWeek) {
           pos.isClosed = true;
-          closedCount++;
           ctx.weeklyRealizedPnL += unrealizedPnL;
           ctx.newsItems.push({
             id: `irs-matured-${pos.id}-${nextWeek}`,
@@ -302,7 +296,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             pos.entryPrice,
             comp.oasSpreadBps,
             remainingTenorYears,
-            pos.direction as any,
+            pos.direction as 'BUY_PROTECTION' | 'SELL_PROTECTION',
             sovParams,
             comp.recoveryRate,
             comp.isDefaulted
@@ -310,7 +304,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           currentPrice = cdsPricing.currentCdsSpreadBps;
           unrealizedPnL = cdsPricing.npv * fxRateToUsd;
 
-          const carryEst = calculateExpectedCarry('CDS', pos.direction as any, pos.notional * fxRateToUsd, {
+          const carryEst = calculateExpectedCarry('CDS', pos.direction, pos.notional * fxRateToUsd, {
             policyRate: updatedRegions[pos.region].policyRate,
             cdsSpreadBps: pos.entryPrice
           });
@@ -323,11 +317,9 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           // Check CDS maturity or default settlement
           if (!isActiveCompany(comp)) {
             pos.isClosed = true;
-            closedCount++;
             ctx.weeklyRealizedPnL += unrealizedPnL;
           } else if (nextWeek >= maturityWeek) {
             pos.isClosed = true;
-            closedCount++;
             ctx.weeklyRealizedPnL += unrealizedPnL;
             ctx.newsItems.push({
               id: `cds-expired-${pos.id}-${nextWeek}`,
@@ -408,7 +400,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         const tYears = remainingWeeks / 52;
         // DER — THE OPTION IS REPRICED AT THE NAME'S OWN VOLATILITY. `pos.impliedVol || 0.3` put a
         // stated 30% on every option whose row did not carry one, so a Black-Scholes price
-        // computed from it was a stated price (rule 1) and no name could be riskier than another.
+        // computed from it was a stated price (rule 3) and no name could be riskier than another.
         // Until there is an options BOOK to imply a vol from, the honest input is the one the
         // model measures: this underlying's own realised vol. A name too new to estimate one
         // falls back to its region's index, which is estimable — no constant anywhere in the
@@ -474,7 +466,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             pos.entryPrice,
             fxPair.basisSpreadBps,
             remainingTenorYears,
-            pos.direction as any
+            pos.direction as 'LONG' | 'SHORT'
           );
           currentPrice = fxPair.basisSpreadBps;
           unrealizedPnL = xcsPricing.npvUSD;
@@ -492,7 +484,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
 
           if (nextWeek >= maturityWeek) {
             pos.isClosed = true;
-            closedCount++;
             ctx.weeklyRealizedPnL += unrealizedPnL;
             ctx.newsItems.push({
               id: `xcs-matured-${pos.id}-${nextWeek}`,

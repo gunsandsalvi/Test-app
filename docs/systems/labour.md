@@ -15,7 +15,7 @@ Written 2026-09-03 from the domain, code shut.
 
 ### A. WHAT IS TRADED
 - **A1** REASON — **hours of a person's time**, supplied by a named household to a named firm
-- **A2** REASON — the price is the **wage**, per unit of time, in a currency (rule 9)
+- **A2** REASON — the price is the **wage**, per unit of time, in a currency (rule 8)
 - **A3** REASON — labour is **heterogeneous**: skill, sector, region — and a job in one is not a
   job in another
   - A3.a which is why unemployment and vacancies can be high **at the same time**, and a single

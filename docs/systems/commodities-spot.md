@@ -15,7 +15,7 @@ Written 2026-09-03 from the domain, code shut.
 
 ### A. WHAT A COMMODITY IS
 - **A1** REASON — a **standardised, fungible unit** — a grade, at a location, in a quantity unit
-  (rule 9)
+  (rule 8)
   - A1.a **location is part of the identity**: the same grade in two places is two prices, and
     the difference is transport (`freight-and-logistics.md`)
 - **A2** REASON — it is **produced by named producers** and **consumed by named consumers**
@@ -71,7 +71,7 @@ Written 2026-09-03 from the domain, code shut.
 - **F1** FORBID — **no consumption without production or inventory.** Units cannot be conjured
 - **F2** FORBID — **no negative inventory**, ever, anywhere
 - **F3** FORBID — **no price from a written path.** A commodity price series applied to the world
-  is rule 4's defect and removes every mechanism above
+  is rule 2's defect and removes every mechanism above
 
 ---
 
@@ -135,7 +135,7 @@ takes the step:
 - **The clamp is load-bearing and it is C4's answer.** `±0.04` per week caps how fast the price can
   respond no matter how large the imbalance, which is the direct negation of C4 ("with both sides
   inelastic, small imbalances should produce large price moves"). A bound where a mechanism
-  belongs (rule 15), and it comes out with the auction.
+  belongs (rule 6), and it comes out with the auction.
 - **The elasticities are the demand and supply curves, written down.** `demandElasticity = −0.7`
   and `supplyElasticity = 0.5` (`evolution.ts:1389-1390`) applied to a price ratio *are* the
   schedules B1.a says must be a consequence of the cost distribution. When the auction arrives,

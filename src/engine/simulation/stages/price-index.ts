@@ -150,7 +150,7 @@ export function computeCpiLevel(region: Region, basket: CpiBasket, excludeFoodAn
  * inflation series for the whole first year, and it did not sit quietly in a display: it fed the
  * Taylor rule, the labour deflator's cost-of-living pass-through and the news, all of which
  * treated it as a measurement of this economy. A central bank that has hit its target is also
- * precisely the real-world outcome rule 4 forbids importing.
+ * precisely the real-world outcome rule 2 forbids importing.
  *
  * The history now begins where the world does, with the opening level and nothing before it. The
  * year-over-year figure is absent until fifty-three real weeks exist (`11-fiscal`'s guard already

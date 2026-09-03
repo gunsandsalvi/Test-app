@@ -18,6 +18,8 @@ import {
   InstitutionalEntity, NewsItem, RegionId,
 } from '../../../types';
 import { isActiveCompany, isPubliclyListed, CreditRating } from '../../../domain/company';
+import { DiagnosticsLog, EarningsReport } from '../../../domain/events';
+export type { EarningsReport };
 
 /**
  * The hand-off record for one company, written by the stages that measure a flow and read by the
@@ -118,11 +120,12 @@ export interface WeeklyStepContext {
   prevActivePrivateFirms: Company[];
   recentIPOs: { ticker: string; name: string; category: string; week: number }[];
   recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[];
-  diagnosticLogs: any[];
+  diagnosticLogs: DiagnosticsLog[];
   newsItems: NewsItem[];
   rateChanges: { region: RegionId; deltaBps: number }[];
   ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[];
-  earningsReportedThisTurn: any[];
+  /** What each firm reported this week — written by stage 08's kernel, read by the news stage. */
+  earningsReportedThisTurn: EarningsReport[];
   defaultedTickers: string[];
   /** §6 damper diagnostic: instrument ids whose print was held away from its solve this week,
    * accumulated across every clearing stage; lands on GameState.lastWeekDamperBoundIds so the
@@ -266,7 +269,7 @@ export interface WeeklyStepContext {
    * XB3a — who bought from whom this week, in USD: `[exporter][importer]`. Set by stage 05 from
    * the world book's own fills (a lot whose two sides sit in different regions IS an export) and
    * published as each region's trade position by stage 06. WEEKLY, unlike the annualised
-   * `Region.exportsUSD` it feeds — rule 9.
+   * `Region.exportsUSD` it feeds — rule 8.
    */
   bilateralTradeWeeklyUSD: Record<RegionId, Record<RegionId, number>>;
   /** XB3a-3 — where each region intends to source each good this week, set by the sourcing-intent

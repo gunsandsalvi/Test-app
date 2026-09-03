@@ -9,11 +9,11 @@
  * buys `facilities_and_logistics` **as a good**, out of its own buyer-mix share, in that good's
  * own book — so the distribution service was already sold, priced and paid for, once. Putting a
  * channel margin on top of every other good would have credited the same sector for the same work
- * TWICE (rule 3), and neither number would have looked wrong: both are real revenue with a real
+ * TWICE (rule 4), and neither number would have looked wrong: both are real revenue with a real
  * payer. **So this is a REFACTOR.** The household's distribution spend MOVES out of that book and
  * onto the goods it is actually spent distributing.
  *
- * **The margin is an outcome of the good's own physics, not a rate per category** (rule 13). A
+ * **The margin is an outcome of the good's own physics, not a rate per category** (rule 2). A
  * channel holds stock, and what holding it costs is the only thing the margin can be:
  *
  *  - **How much cover it holds** is bounded from above by the good itself. It cannot stock past
@@ -60,7 +60,7 @@ export function channelMarginRate(subUnitId: string, shortRateAnnual: number): n
 }
 
 /**
- * IND16 — WHAT A HOUSEHOLD PAYS, and the ONE definition of it (§1.3).
+ * IND16 — WHAT A HOUSEHOLD PAYS, and the ONE definition of it (§1.4).
  *
  * Stage 05 writes this onto each category's demand state every week. The price index needs the
  * same number for a week the engine has not run yet — the seed — and reading the LANDED price

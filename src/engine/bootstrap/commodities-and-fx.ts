@@ -24,14 +24,14 @@ export interface GeneratedCommodityDef {
   unit: string;
   /**
    * NAT1 — what it costs to win one TONNE of the raw material: to dig, pump or harvest it and
-   * make it saleable, in generic currency units. A technology primitive (rule 4 permits one);
+   * make it saleable, in generic currency units. A technology primitive (rule 2 permits one);
    * it says nothing about what the stuff sells for.
    */
   extractionCostPerTonne: number;
   /**
    * NAT1 — how many PRICED UNITS come out of a tonne of what was won: ore grade for a metal,
    * barrels per tonne for a crude, mmbtu per tonne for gas, bushels per tonne for a crop. A
-   * physical fact about the resource, which is what rule 4 means by a primitive.
+   * physical fact about the resource, which is what rule 2 means by a primitive.
    */
   unitsPerTonne: number;
   convenienceYield: number;
@@ -45,7 +45,7 @@ export interface GeneratedCommodityDef {
  * review showed what they multiplied out to: crude $76.00/bbl, gas $3.00/mmbtu, gold $2,730/oz,
  * silver $32.20/oz, copper $4.48/lb, wheat $6.00/bu, corn $4.32/bu, soybeans $10.50/bu — every
  * one of them the observed market price, with `scarcityIndex` back-solved out of the other two
- * factors to produce it. That is rule 4 exactly: a real-world OUTCOME imported as an input. And
+ * factors to produce it. That is rule 2 exactly: a real-world OUTCOME imported as an input. And
  * the import was not even faithful — heavy crude seeded ABOVE light, where real heavy grades
  * trade at a discount, because nothing physical was constraining the numbers.
  *

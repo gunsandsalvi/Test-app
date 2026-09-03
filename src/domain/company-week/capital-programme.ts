@@ -13,7 +13,7 @@
  *
  * WHAT IT DELIBERATELY DOES NOT DO: raise the debt. A debt-funded bridge is a real tranche on a
  * real bank's book, and issuing it is the ledger's business, not this function's. It reports the
- * amount and the caller issues it — one writer per fact (§1.3).
+ * amount and the caller issues it — one writer per fact (§1.4).
  */
 
 import { TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../company';
@@ -148,7 +148,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   const qCapexEffect = (tobinsQ - 1) * 0.2;
   const competitivenessCapexEffect = i.avgCompetitiveness * 0.15;
   // A firm under real payout pressure DOES cut growth investment to zero. Investment cannot be
-  // negative; that is the only bound (rule 2).
+  // negative; that is the only bound (rule 6).
   const growthCapexAllocationShare = Math.max(0, 1 - payoutPressure * 0.75);
   // A FIRM EXPANDS WHEN THE MARKET IT SELLS INTO CANNOT BE MET. Every other term here is about
   // the firm's finances and none about whether it can fill the orders in front of it.
@@ -163,7 +163,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   // firms bid 317B/yr of capex against 42B of depreciation (7.5x), draining the world's
   // capital-goods supply at 2x prices while USA firms below replacement couldn't fill.
   // The cap is the money the firm actually commands, from mechanisms the model already has
-  // and NOTHING stated here (rule 19): the year's free cash flow after maintenance, plus the
+  // and NOTHING stated here (rule 2): the year's free cash flow after maintenance, plus the
   // cash pile above the treasurer's own operating buffer — the same buffer 07f's bill sleeve
   // is sized against, one owner. Debt- or equity-funded expansion arrives the way it really
   // does: the firm RAISES the money first (the financing decision and the primary market),

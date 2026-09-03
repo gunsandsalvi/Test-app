@@ -103,7 +103,7 @@ export function priceFromSpreadBps(terms: PaperTerms, curve: ZeroCurve, spreadBp
  * The spread a price implies, solved by bisection over the range the clearing engine itself
  * quotes. Price falls monotonically in spread, so a bisection converges and cannot land on the
  * wrong root. Returns the bracket end when the price is outside what any spread can produce —
- * the caller decides whether that is a print or an untraded book (rule 1).
+ * the caller decides whether that is a print or an untraded book (rule 3).
  */
 export function spreadBpsFromPrice(terms: PaperTerms, curve: ZeroCurve, price: number): number {
   let lo = -2000, hi = 100000;
@@ -153,7 +153,7 @@ export function priceFromYield(terms: PaperTerms, annualYield: number): number {
  * The yield a price implies, by bisection. Price falls monotonically in yield, so it converges and
  * cannot land on the wrong root. The bracket is wide enough to contain any rate this world can
  * produce; hitting an end means the price is outside what any yield explains, and the CALLER
- * decides whether that is a print or an untraded book (rule 1, and §3.21's bracket rule — an end
+ * decides whether that is a print or an untraded book (rule 3, and §3.21's bracket rule — an end
  * of the search is not a market's answer).
  */
 export function yieldFromPrice(terms: PaperTerms, price: number): number {

@@ -18,9 +18,9 @@
  * invariants harness, produced by nothing but the participants' schedules.
  *
  * Every quantity here is derived, not posted (discipline — the administered rates are
- * rule 1's single sanctioned exception):
- *  the HAIRCUT per collateral bucket is the lender's real protection: the repricing the
- *    bucket's own cleared yield could plausibly suffer before the collateral could be sold —
+ * rule 3's single sanctioned exception):
+ *  the HAIRCUT on each bond is the lender's real protection: the repricing that bond's own
+ *    cleared yield could plausibly suffer before the collateral could be sold —
  *    duration × two standard deviations of its own observed weekly yield changes
  *    (historicalZeroCurves). It tightens borrowing capacity exactly when the curve turns
  *    volatile, which a posted percentage cannot do.
@@ -41,12 +41,14 @@
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 import { currencyOf } from '../../../domain/geography';
-import { RegionId, Region, InstitutionalEntity } from '../../../types';
-import { overPledgedByBucket } from '../../../domain/collateral';
+import { RegionId, Region } from '../../../types';
+import { overPledgedByBond } from '../../../domain/collateral';
+import { sovereignTenorResolver } from '../../../domain/government';
+import { materializeGovLadder } from '../../../engine2/tranches';
 import { BankingSector } from '../../../domain/banking';
 import {
-  RepoContract, RepoPledge, RepoParty, repoPartyKey, repoInterestToMaturityUSD,
-  repoBorrowedUSD, repoLentUSD, srfBorrowedUSD, encumberedFaceByBucket,
+  RepoContract, RepoPledge, RepoParty, repoInterestToMaturityUSD,
+  repoBorrowedUSD, repoLentUSD, srfBorrowedUSD, encumberedFaceByBond,
 } from '../../../domain/repo';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay, PartyRef, pendingSettlementUSD, institutionSpendableUSD } from './settlement';
@@ -56,68 +58,102 @@ import {
 } from './financial-clearing-engine';
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 
-/** The codebase's duration convention for the sovereign buckets (07c uses bucket years as the
- * instrument's durationYears; kept identical here so the two never disagree). */
-const BUCKET_DURATION_YEARS: Record<string, number> = {
-  b13: 0.25, b26: 0.5, b52: 1, t2: 2, t5: 5, t10: 10, t30: 30,
-};
-const BUCKET_TENOR_FIELD: Record<string, 'tenor3M' | 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y'> = {
-  b13: 'tenor3M', b26: 'tenor3M', b52: 'tenor2Y', t2: 'tenor2Y', t5: 'tenor5Y', t10: 'tenor10Y', t30: 'tenor30Y',
-};
+/** The zero curve's own points, at the tenors they are quoted for — a curve HAS points, and this
+ *  is the one place that says where they sit. Not a grouping of holdings: nothing is keyed by it. */
+const CURVE_POINT_YEARS: [('tenor3M' | 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y'), number][] = [
+  ['tenor3M', 0.25], ['tenor2Y', 2], ['tenor5Y', 5], ['tenor10Y', 10], ['tenor30Y', 30],
+];
 
 /**
- * Derived per-bucket GC haircuts: duration × the bucket's own observed weekly yield
- * repricing risk (2σ of weekly changes in ITS tenor's cleared yield). With too little history
+ * Derived GC haircuts: duration × the observed weekly yield repricing risk at that tenor
+ * (2σ of weekly changes in the nearest curve point's cleared yield). With too little history
  * to estimate a standard deviation (a genuinely mathematical bound — σ needs at least two
  * observations), the engine's own minimum weekly repricing allowance stands in: the smallest
  * move the clearing damper will always permit is the smallest move a lender must assume.
  */
-export function computeSovereignRepoHaircuts(reg: Region): Record<string, number> {
+/**
+ * §3.13-SOV row 3 — A HAIRCUT IS THE BOND'S, BECAUSE DURATION IS THE BOND'S.
+ *
+ * The haircut has always been `duration x the weekly repricing volatility at that tenor` — a real
+ * mechanism. It was keyed by tenor bucket only because the duration came from a bucket table, and
+ * every reader then wrote `haircuts[key] ?? haircuts.t5 ?? 0.05`: a key it could not find got
+ * the FIVE-YEAR haircut, and failing that a flat 5%. With holdings keyed by bond, that fallback
+ * would have quietly given a thirty-year bond a five-year haircut on every pledge.
+ *
+ * It returns a function of the bond now, and a bond that is not on the ladder returns undefined —
+ * the caller skips it rather than pledging it at a guessed value.
+ */
+export function computeSovereignRepoHaircuts(
+  reg: Region,
+  tenorYearsOf: (bondId: string) => number | undefined
+): (bondId: string) => number | undefined {
   const hist = reg.historicalZeroCurves || [];
-  const haircuts: Record<string, number> = {};
-  Object.entries(BUCKET_DURATION_YEARS).forEach(([key, durationYears]) => {
-    const field = BUCKET_TENOR_FIELD[key];
+  /** The weekly repricing volatility at a tenor, from the nearest curve point's own history. */
+  const repricingBpsAt = (years: number): number => {
+    const field = nearestCurvePoint(years);
     const series = hist.map((h) => h[field]).filter((v) => Number.isFinite(v));
     const diffsBps: number[] = [];
     for (let i = 1; i < series.length; i++) diffsBps.push((series[i] - series[i - 1]) * 10000);
-    let repricingBps = YIELD_LIKE_MIN_WEEKLY_MOVE_BPS;
-    if (diffsBps.length >= 2) {
-      const mean = diffsBps.reduce((a, b) => a + b, 0) / diffsBps.length;
-      const variance = diffsBps.reduce((a, b) => a + (b - mean) * (b - mean), 0) / (diffsBps.length - 1);
-      repricingBps = Math.max(YIELD_LIKE_MIN_WEEKLY_MOVE_BPS, 2 * Math.sqrt(variance));
-    }
-    haircuts[key] = Math.min(1, durationYears * (repricingBps / 10000));
-  });
-  return haircuts;
+    if (diffsBps.length < 2) return YIELD_LIKE_MIN_WEEKLY_MOVE_BPS;
+    const mean = diffsBps.reduce((a, b) => a + b, 0) / diffsBps.length;
+    const variance = diffsBps.reduce((a, b) => a + (b - mean) * (b - mean), 0) / (diffsBps.length - 1);
+    return Math.max(YIELD_LIKE_MIN_WEEKLY_MOVE_BPS, 2 * Math.sqrt(variance));
+  };
+  const cache = new Map<string, number>();
+  return (bondId: string) => {
+    const cached = cache.get(bondId);
+    if (cached !== undefined) return cached;
+    const years = tenorYearsOf(bondId);
+    if (years === undefined) return undefined;
+    // Duration is the bond's own remaining life; a long bond is a worse pledge than a short one
+    // because it moves more, which is what a haircut is FOR.
+    const h = Math.min(1, years * (repricingBpsAt(years) / 10000));
+    cache.set(bondId, h);
+    return h;
+  };
+}
+
+/** Which curve point's history best describes a tenor's week-to-week move. */
+function nearestCurvePoint(years: number): 'tenor3M' | 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y' {
+  let best = CURVE_POINT_YEARS[0][0], bestGap = Infinity;
+  for (const [field, at] of CURVE_POINT_YEARS) {
+    const gap = Math.abs(at - years);
+    if (gap < bestGap) { bestGap = gap; best = field; }
+  }
+  return best;
 }
 
 /** A bank's total repo-able collateral value net of haircuts, and its face total. */
 export function collateralCapacityUSD(
   sheet: BankingSector,
-  haircuts: Record<string, number>
+  haircutOf: (bondId: string) => number | undefined
 ): { faceUSD: number; capacityUSD: number } {
   let faceUSD = 0; let capacityUSD = 0;
-  Object.entries(sheet.sovereignBondHoldingsByTenor || {}).forEach(([key, v]) => {
+  Object.entries(sheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, v]) => {
     const usd = Number(v) || 0;
     if (usd <= 0) return;
+    // §3.13-SOV row 3: a bond whose haircut cannot be computed is not pledgeable collateral.
+    // It is not pledged at a guessed one.
+    const haircut = haircutOf(bondId);
+    if (haircut === undefined) return;
     faceUSD += usd;
-    capacityUSD += usd * (1 - (haircuts[key] ?? haircuts.t5 ?? 0.05));
+    capacityUSD += usd * (1 - haircut);
   });
   return { faceUSD, capacityUSD };
 }
 
 /**
- * What this bank could still raise, bucket by bucket, against paper it has not already
+ * What this bank could still raise, bond by bond, against paper it has not already
  * pledged. Encumbrance is now a property of the specific paper (domain/repo.ts), so pledging
  * thirty-year bonds no longer withholds the two-year book from the auction that prices it, and
- * the cash a pledge raises is that bucket's own haircut rather than a blended average.
+ * the cash a pledge raises is that bond's own haircut rather than a blended average.
  */
-export function unencumberedByBucket(
+export function unencumberedByBond(
   sheet: BankingSector,
   encumberedFace: Map<string, number>
 ): Map<string, number> {
   const free = new Map<string, number>();
-  Object.entries(sheet.sovereignBondHoldingsByTenor || {}).forEach(([key, v]) => {
+  Object.entries(sheet.sovereignBondHoldingsByBond || {}).forEach(([key, v]) => {
     const freeUSD = Math.max(0, (Number(v) || 0) - (encumberedFace.get(key) ?? 0));
     if (freeUSD > 0) free.set(key, freeUSD);
   });
@@ -132,19 +168,21 @@ export function unencumberedByBucket(
  */
 export function unencumberedBorrowingCapacityUSD(
   sheet: BankingSector,
-  haircuts: Record<string, number>,
-  /** What this bank has already pledged, by bucket. Omitted falls back to the sheet's
+  haircutOf: (bondId: string) => number | undefined,
+  /** What this bank has already pledged, by bond. Omitted falls back to the sheet's
    *  derived scalar, for the callers that have no book to hand. */
   encumberedFace?: Map<string, number>
 ): number {
   if (encumberedFace) {
     let capacityUSD = 0;
-    unencumberedByBucket(sheet, encumberedFace).forEach((freeUSD, key) => {
-      capacityUSD += freeUSD * (1 - (haircuts[key] ?? haircuts.t5 ?? 0.05));
+    unencumberedByBond(sheet, encumberedFace).forEach((freeUSD, bondId) => {
+      const haircut = haircutOf(bondId);
+      if (haircut === undefined) return;
+      capacityUSD += freeUSD * (1 - haircut);
     });
     return Math.max(0, capacityUSD);
   }
-  const { faceUSD, capacityUSD } = collateralCapacityUSD(sheet, haircuts);
+  const { faceUSD, capacityUSD } = collateralCapacityUSD(sheet, haircutOf);
   if (faceUSD <= 0) return 0;
   const encumberedFaceUSD = Math.min(faceUSD, sheet.repoEncumberedCollateralUSD ?? 0);
   const unencumberedShare = (faceUSD - encumberedFaceUSD) / faceUSD;
@@ -164,21 +202,26 @@ export function unencumberedBorrowingCapacityUSD(
  */
 export function selectCollateral(
   free: Map<string, number>,
-  haircuts: Record<string, number>,
+  haircutOf: (bondId: string) => number | undefined,
   targetCashUSD: number
 ): { pledges: RepoPledge[]; raisedUSD: number } {
-  const buckets = Array.from(free.entries())
-    .sort((a, b) => (BUCKET_DURATION_YEARS[b[0]] ?? 0) - (BUCKET_DURATION_YEARS[a[0]] ?? 0));
+  // Longest paper first: a bank pledges what it least wants to sell and keeps its short, liquid
+  // paper free. The haircut is `duration × repricing volatility`, monotone in duration within a
+  // region, so it IS that ordering — no second table of tenors to disagree with the first.
+  const free_ = Array.from(free.entries())
+    .sort((a, b) => (haircutOf(b[0]) ?? 0) - (haircutOf(a[0]) ?? 0));
   const pledges: RepoPledge[] = [];
   let raisedUSD = 0;
-  for (const [bucketKey, freeFaceUSD] of buckets) {
+  for (const [bondId, freeFaceUSD] of free_) {
+    const perDollarHaircut = haircutOf(bondId);
+    if (perDollarHaircut === undefined) continue;
     if (raisedUSD >= targetCashUSD - 1) break;
-    const perDollar = 1 - (haircuts[bucketKey] ?? haircuts.t5 ?? 0.05);
+    const perDollar = 1 - perDollarHaircut;
     if (perDollar <= 0) continue;
     const wantedFaceUSD = (targetCashUSD - raisedUSD) / perDollar;
     const faceUSD = Math.min(freeFaceUSD, wantedFaceUSD);
     if (faceUSD <= 0) continue;
-    pledges.push({ bucketKey, faceUSD });
+    pledges.push({ bondId, faceUSD });
     raisedUSD += faceUSD * perDollar;
   }
   return { pledges, raisedUSD };
@@ -242,7 +285,8 @@ export function runRegionalRepoSession(
   const corridorWidthBps = Math.max(1, srfBps - rrpBps);
   const onInstrumentId = repoInstrumentId(regionId);
   const termInstrumentId = repoTermInstrumentId(regionId);
-  const haircuts = computeSovereignRepoHaircuts(reg);
+  // §3.13-SOV row 3: haircuts are per BOND, off this region's ladder.
+  const haircuts = computeSovereignRepoHaircuts(reg, sovereignTenorResolver(materializeGovLadder(ctx.v2, regionId), ctx.nextWeek));
 
   // ---- REPO1: last week's contracts. What matured has settled (bank legs inside
   // evolveBankingSector, institutional legs below); what has not matured is still outstanding
@@ -276,7 +320,7 @@ export function runRegionalRepoSession(
 
   // What each bank still has pledged against contracts that did NOT mature.
   const encumberedByTicker = new Map<string, Map<string, number>>();
-  banks.forEach((b) => encumberedByTicker.set(b.ticker, encumberedFaceByBucket(carriedBook, b.ticker)));
+  banks.forEach((b) => encumberedByTicker.set(b.ticker, encumberedFaceByBond(carriedBook, b.ticker)));
 
   // ---- Borrowers: real shortfall to the buffer, bounded by unencumbered collateral. ----
   // The need splits by how long it has already lasted. Money a bank has needed every
@@ -342,7 +386,7 @@ export function runRegionalRepoSession(
         srfBorrowingUSD: Math.round(srfBorrowedUSD(book, bank.ticker)),
         repoLentUSD: Math.round(repoLentUSD(book, { kind: 'BANK', ticker: bank.ticker })),
         repoEncumberedCollateralUSD: Number(
-          Array.from(encumberedFaceByBucket(book, bank.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
+          Array.from(encumberedFaceByBond(book, bank.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
         ),
       });
     });
@@ -423,7 +467,7 @@ export function runRegionalRepoSession(
     });
     if (args.withWindow) {
       // The standing repo facility: a posted rate with unlimited quantity response — a real seat
-      // in the book (rule 1's administered exception), which is what makes the ceiling a market
+      // in the book (rule 3's administered exception), which is what makes the ceiling a market
       // outcome instead of a clamp. A perfectly elastic window stands at FULL size exactly AT its
       // posted rate, so the one-basis-point numerical step that represents the vertical schedule
       // sits just BELOW it — a seat whose step straddled the posted rate cleared up to 1bp above
@@ -527,11 +571,11 @@ export function runRegionalRepoSession(
       lentByParty.forEach((lentUSD, pid) => {
         const shareUSD = wantUSD * (lentUSD / totalLentUSD);
         if (shareUSD <= 1) return;
-        const free = unencumberedByBucket(sheet, worked);
+        const free = unencumberedByBond(sheet, worked);
         const { pledges, raisedUSD } = selectCollateral(free, haircuts, shareUSD);
         if (raisedUSD <= 1) return;
         const principalUSD = Math.min(shareUSD, raisedUSD);
-        pledges.forEach((pl) => worked.set(pl.bucketKey, (worked.get(pl.bucketKey) ?? 0) + pl.faceUSD));
+        pledges.forEach((pl) => worked.set(pl.bondId, (worked.get(pl.bondId) ?? 0) + pl.faceUSD));
         const lender: RepoParty = pid === CB_SRF_SEAT_ID
           ? { kind: 'CENTRAL_BANK' }
           : pid.startsWith('BANK-')
@@ -546,7 +590,7 @@ export function runRegionalRepoSession(
           rateAnnual,
           struckWeek: week,
           maturityWeek: week + termWeeks,
-          collateral: pledges.map((pl) => ({ bucketKey: pl.bucketKey, faceUSD: Math.round(pl.faceUSD) })),
+          collateral: pledges.map((pl) => ({ bondId: pl.bondId, faceUSD: Math.round(pl.faceUSD) })),
         });
         struckUSD += principalUSD;
       });
@@ -686,7 +730,7 @@ function returnParkedCash(ctx: WeeklyStepContext, regionId: RegionId): void {
 
 /**
  * A MARGIN CALL ON THE COLLATERAL. A pledge is a claim on specific paper, and the auctions
- * that price that paper run after the repo session: a bank whose bucket is rationed down can end
+ * that price that paper run after the repo session: a bank whose pledge is rationed down can end
  * the week holding less of it than it pledged. The floor 07c and 07f post is what should stop
  * that, and it does when the book is deep enough to honour every mandated core — but the engine
  * rations cores pro rata when the float cannot cover them, and a rationed bank is one that had to
@@ -711,13 +755,13 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       // 1-dollar tolerance and the harness used 1e6, so a bank could be a million dollars
       // over-pledged, pass this reconcile, and fail the check in the same week — which is most of
       // why row survived two attempts at it.
-      const pledged = encumberedFaceByBucket(book, ticker);
-      const shortfallByBucket = overPledgedByBucket({
-        pledgedByBucket: pledged,
-        heldByBucket: new Map(Object.entries(sheet.sovereignBondHoldingsByTenor ?? {})
+      const pledged = encumberedFaceByBond(book, ticker);
+      const shortfallByBond = overPledgedByBond({
+        pledgedByBond: pledged,
+        heldByBond: new Map(Object.entries(sheet.sovereignBondHoldingsByBond ?? {})
           .map(([k, v]) => [k, Number(v) || 0])),
       });
-      if (shortfallByBucket.size === 0) return;
+      if (shortfallByBond.size === 0) return;
 
       let repaidUSD = 0;
       book.forEach((c) => {
@@ -726,9 +770,9 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
         let pledgedFaceUSD = 0;
         c.collateral = c.collateral.map((p) => {
           pledgedFaceUSD += p.faceUSD;
-          const shortfall = shortfallByBucket.get(p.bucketKey) ?? 0;
+          const shortfall = shortfallByBond.get(p.bondId) ?? 0;
           if (shortfall <= 0) return p;
-          const totalPledged = pledged.get(p.bucketKey) ?? 1;
+          const totalPledged = pledged.get(p.bondId) ?? 1;
           const takeUSD = Math.min(p.faceUSD, shortfall * (p.faceUSD / totalPledged));
           releasedFaceUSD += takeUSD;
           return { ...p, faceUSD: p.faceUSD - takeUSD };
@@ -755,7 +799,7 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
         repoBorrowedUSD: Math.round((repoBorrowedUSD(book, ticker) - srfBorrowedUSD(book, ticker))),
         srfBorrowingUSD: Math.round(srfBorrowedUSD(book, ticker)),
         repoEncumberedCollateralUSD: Number(
-          Array.from(encumberedFaceByBucket(book, ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
+          Array.from(encumberedFaceByBond(book, ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
         ),
       });
     });

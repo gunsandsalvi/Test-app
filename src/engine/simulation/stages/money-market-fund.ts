@@ -30,12 +30,12 @@ import { entityCashOf } from '../../ledger/accounts';
  */
 
 import { pay } from './settlement';
-import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
+import { isDiscountBill } from '../../../domain/government';
+import { holdingClassOf } from '../../../domain/assets';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { Company, InstitutionalEntity, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { computeSovereignBookAnnualYield, ON_RRP_SPREAD_BPS } from '../../macro/banking';
-import { CASH_SLEEVE_OVERNIGHT_SHARE } from './repo-clearing';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
@@ -56,20 +56,30 @@ export function findRegionMmf(entities: InstitutionalEntity[], regionId: RegionI
  * fund quotes the floor its first dollar would earn (the RRP), net of fee — the honest opening
  * quote, and the reason the market can bootstrap itself when that beats the deposit rate.
  */
-export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashUSD: number, reg: Region): number {
+export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashUSD: number, reg: Region, week: number): number {
   const rrpRateAnnual = Math.max(0, reg.policyRate - ON_RRP_SPREAD_BPS / 10000);
   const repoRateAnnual = reg.repoRateAnnual ?? rrpRateAnnual;
 
+  // §3.13-SOV row 3: a holding is a bill because the LADDER says the bond it names is one —
+  // short at issue (`isDiscountBill`). It used to be decided by parsing a bucket key out of the
+  // instrument id, which stopped resolving the moment holdings named bonds, and would have left
+  // the fund holding bills it could not see and earning nothing on them.
+  const billTenorById = new Map(
+    (reg.govDebtTranches ?? [])
+      .filter((t) => isDiscountBill(t.tenorAtIssuanceYears) && t.principalUSD > 0)
+      .map((t) => [t.id, Math.max(1 / 52, (t.maturityWeek - week) / 52)] as const)
+  );
   const billByTenor: Record<string, number> = {};
   let billUSD = 0;
   entity.itemizedHoldings.forEach((h) => {
-    if (h.instrumentType !== 'GOV_BOND') return;
-    const key = govBucketKeyOf(h.instrumentId, h.issuerRegion);
-    if (!key || !isBillBucketKey(key)) return;
-    billByTenor[key] = (billByTenor[key] ?? 0) + h.quantityOrNotionalUSD;
+    if (holdingClassOf(h.instrumentType) !== 'SOVEREIGN') return;
+    if (!billTenorById.has(h.instrumentId)) return;
+    billByTenor[h.instrumentId] = (billByTenor[h.instrumentId] ?? 0) + h.quantityOrNotionalUSD;
     billUSD += h.quantityOrNotionalUSD;
   });
-  const billYieldAnnual = billUSD > 0 ? computeSovereignBookAnnualYield(billByTenor, reg.zeroRates) : 0;
+  const billYieldAnnual = billUSD > 0
+    ? computeSovereignBookAnnualYield(billByTenor, reg.zeroRates, (id) => billTenorById.get(id))
+    : 0;
 
   const repoLentUSD = entity.repoLentUSD ?? 0;
   // What is parked at the reverse repo window earns the floor; the cash still on the account
@@ -133,7 +143,7 @@ export function divertHouseholdSavingsToMmf(
 export function refreshMmfQuotes(regionId: RegionId, reg: Region, ctx: WeeklyStepContext): void {
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.region !== regionId || e.entityType !== 'MONEY_MARKET_FUND' || e.isDefaulted) return e;
-    return { ...e, mmfNetYieldAnnual: Number(quoteMmfNetYieldAnnual(e, entityCashOf(ctx.v2, e), reg).toFixed(6)) };
+    return { ...e, mmfNetYieldAnnual: Number(quoteMmfNetYieldAnnual(e, entityCashOf(ctx.v2, e), reg, ctx.nextWeek).toFixed(6)) };
   });
 }
 
@@ -226,7 +236,7 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   const feePayerByRegion = new Map<RegionId, string>();
   // WHO THE NEW SHARES ARE ISSUED TO. This paid the yield by growing
   // `mmfSharesOutstandingUSD` and credited NO holder, so the fund's liability rose every week
-  // while every holder's asset stood still: a one-sided flow (rule 14), measured at 2.5% of the
+  // while every holder's asset stood still: a one-sided flow (rule 5), measured at 2.5% of the
   // fund and compounding (41.39B outstanding against 40.34B held by week 6). The module's own
   // note says it closed an assets-versus-shares divergence — it closed it on the fund's side and
   // opened the same hole on the holders'.
@@ -242,7 +252,7 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     const feeUSD = (bookUSD * MMF_FEE_ANNUAL) / 52;
     // A STABLE-NAV FUND DISTRIBUTES WHAT IT EARNED, NOT WHAT IT QUOTED.
     // This paid `bookUSD × mmfNetYieldAnnual`, a QUOTE, while the assets earned their realized
-    // income — two derivations of one number (rule 3), and the share liability outran the book
+    // income — two derivations of one number (rule 4), and the share liability outran the book
     // by the gap, compounding (: 47 NAV-departure violations, book 2-3% under shares).
     // The $1-NAV identity is its own measure: the book's excess over the share liability, net
     // of the fee instruction below (whose cash leaves at the close), IS the undistributed

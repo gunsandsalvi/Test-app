@@ -1,5 +1,5 @@
 /**
- * DRV — THE DERIVATIVE REGISTRY: the dispatch table the lifecycle runs on (rule 17), and the
+ * DRV — THE DERIVATIVE REGISTRY: the dispatch table the lifecycle runs on (rule 15), and the
  * ONE desk-capacity rule for every class.
  *
  * Adding a derivative class: write its profile module under `classes/`, add the member to

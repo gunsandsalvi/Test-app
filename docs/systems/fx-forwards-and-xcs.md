@@ -196,7 +196,7 @@ single largest reason anyone trades an FX forward — is absent from the instrum
 
 **Becomes a §3 step.** Medium. The pieces exist (both policy rates, a cleared spot, a cleared
 basis, a working auction); what is missing is that the auction should print the forward *rate* and
-the basis should be read out of it against parity — which is B2.a's direction and rule 1's.
+the basis should be read out of it against parity — which is B2.a's direction and rule 3's.
 
 ### ❌ C1 / C1.a / C3 — THE CROSS-CURRENCY SWAP DOES NOT EXIST
 

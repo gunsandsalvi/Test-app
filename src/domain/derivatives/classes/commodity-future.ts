@@ -8,7 +8,7 @@
  * strike: the price struck, per unit. units: the physical size. referenceId: the commodity id.
  * termKey: '1M'|'3M'|'6M'.
  *
- * THE DEFECT THE REBUILD CLOSED (rule 14's class): the old book re-marked carried positions to
+ * THE DEFECT THE REBUILD CLOSED (rule 5's class): the old book re-marked carried positions to
  * each week's print WITHOUT a cash leg, and its settle pass marked non-expiring positions at
  * their own last mark — so weekly variation margin was structurally ZERO and only the delivery
  * week's single move ever paid. A long that gained 50/unit over a contract's life and gave it
@@ -25,7 +25,7 @@ export const futuresTermKey = (tenorMonths: number): string => `${tenorMonths}M`
 
 /**
  * The physical cost of holding a commodity for a year, as a fraction of its value — tankage,
- * warehousing, spoilage. A property of the SUBSTANCE, not of any price (rule 4 admits a
+ * warehousing, spoilage. A property of the SUBSTANCE, not of any price (rule 2 admits a
  * physical primitive): energy boils off, metal sits in a shed, grain rots.
  */
 export const PHYSICAL_STORAGE_COST_ANNUAL: Record<'Energy' | 'Metals' | 'Agriculture', number> = {

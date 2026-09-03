@@ -7,7 +7,6 @@ import { institutionTotalAssetsUSD } from '../institutional-balance-sheet';
 
 export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, state, entityById } = input;
-  let newRevenue = 0;
 
   const instEnt = entityById.get(managedEntityIdsOf(comp)[0]);
   // One balance sheet, one representation (S11): where a real InstitutionalEntity backs this
@@ -23,7 +22,7 @@ export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) 
   comp.managementFeeRate = comp.managementFeeRate ?? (0.005 + random() * 0.005);
 
   const weeklyFees = comp.aumUSD * comp.managementFeeRate / 52;
-  newRevenue = Math.max(10, weeklyFees * 52);
+  const newRevenue = Math.max(10, weeklyFees * 52);
   // §7.122 step 3: the stated 0.35 margin is gone. A manager's costs are its people and its
   // technology, both common and both real, and it has no third cost of its own — which is why
   // its basket is the lightest in the registry and its margin the highest.

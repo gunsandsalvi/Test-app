@@ -6,7 +6,7 @@
  * vol component stage 05 computes off the composite index, the pair sigma the FX book's
  * speculators scale into, and the vol an option is repriced at — and the third was not measured
  * at all: `pos.impliedVol || 0.3` put a stated 30% on any option whose position row did not carry
- * one. A price computed from a stated vol is a stated price (rule 1), and a fallback that never
+ * one. A price computed from a stated vol is a stated price (rule 3), and a fallback that never
  * changes cannot say that this name is riskier than that one.
  *
  * This is the estimator, with NO fallback baked in: too little history returns `undefined`, and

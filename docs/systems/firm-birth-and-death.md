@@ -64,7 +64,7 @@ Written 2026-09-03 from the domain, code shut.
   the estate or the successor (`the-register.md` F2, `the-audit.md` B6)
 - **D6** VERIFY — Σ(recoveries) + Σ(losses) = the firm's assets at realisation, exactly. Money is
   not destroyed by a default; it is transferred and revalued
-  - D6.a a residual left on a dead party is a defect (rule 13), and it must be found and paid
+  - D6.a a residual left on a dead party is a defect (rule 2), and it must be found and paid
     away in every currency the party held (`currency-and-fx.md` B2)
 
 ### E. WHAT MUST NOT HAPPEN
@@ -198,7 +198,7 @@ equity rows and no facility rows, so it has no claims at all. It is `isDefaulted
 `isActiveCompany` and every aggregate; stage 08 skips its cash walk; its account balance, its plant
 and its input lots stay where they are, owned by a party that no longer trades.
 
-That is rule 13's residual on a dead party, and it is the one D6.a asks to be found and paid away.
+That is rule 2's residual on a dead party, and it is the one D6.a asks to be found and paid away.
 It is small in money and exact in kind. The rest of the resolution machinery is genuinely good — the
 debtor's own account IS the estate's account, the waterfall pays out of it, `writeOffResidual` sweeps
 every row of the dead issuer whether or not it carried a claim, and the ladder is extinguished — so
@@ -215,7 +215,7 @@ present-value haircut rather than what a buyer would pay, the allocation is by b
 than by willingness, and a week with no peer able to pay **scraps** the slice. D1 says "sold to named
 buyers at cleared prices"; the buyers are named and the price is not cleared.
 
-This is rule 1's shape and the reason it matters here is D2.a: recovery is only "what the assets
+This is rule 3's shape and the reason it matters here is D2.a: recovery is only "what the assets
 fetched" if what they fetched was struck by somebody. **Becomes a §3 step**, and it is naturally the
 same one as `m-and-a.md` B2 (a distressed sale and a takeover are the same auction).
 

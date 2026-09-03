@@ -18,7 +18,7 @@ Written 2026-09-03 from the domain, code shut.
   (`../instruments/derivative.md` D1), so the two sides remain exposed to each other for years
 - **A2** REASON — that exposure has to be **managed**, and how it is managed is this system
 - **A3** REASON — the same obligation appears **twice**, as an asset and a liability, and the two
-  must be the same number read from two sides (rule 3)
+  must be the same number read from two sides (rule 4)
 - **A4** VERIFY — Σ marks = 0 across all parties, per contract and in aggregate
   (`../instruments/derivative.md` D1.b)
 

@@ -52,7 +52,7 @@ export function dividendDecision(i: {
 /**
  * A LOSS-MAKING COMPANY PAYS NOTHING, and this is the assertion that keeps it that way: with net
  * income at or below zero the sustainable figure is zero, so the minimum is zero however generous
- * the declared yield. No clamp is needed and none is used (§1.2) — it falls out of sizing the
+ * the declared yield. No clamp is needed and none is used (§1.6) — it falls out of sizing the
  * payout on earnings rather than on capitalisation.
  */
 export function sustainableDividendWeeklyUSD(netIncomeUSD: number, maxPayoutRatio: number): number {

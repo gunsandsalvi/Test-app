@@ -1,15 +1,8 @@
 import { Company, CreditRating, NewsItem, Region, RegionId, TradeableInstrument } from '../types';
+import { EarningsReport } from '../domain/events';
 
-export interface EarningsReportEvent {
-  ticker: string;
-  name: string;
-  actualEps: number;
-  consensusEps: number;
-  surprisePct: number;
-  guidanceSnippet: string;
-  sector: string;
-  region: RegionId;
-}
+/** Rule 4: the row is `domain/events.ts:EarningsReport`. This name is kept for its callers. */
+export type EarningsReportEvent = EarningsReport;
 
 /**
  * The sentiment plumbing is gone entirely: `sectorSentimentShocks` and `NewsItem.sentimentDelta`
@@ -68,7 +61,7 @@ export function generateWeeklyNews(
       category: 'EARNINGS',
       impactBadge: isBeat ? '[EARNINGS BEAT]' : isMiss ? '[EARNINGS MISS]' : '[EARNINGS IN-LINE]',
       impactRegion: er.region,
-      impactSector: er.sector as any,
+      impactSector: er.sector,
       affectedTicker: er.ticker,
       urgent: Math.abs(surprisePctVal) > 0.10,
       tradeShortcut,
@@ -79,12 +72,9 @@ export function generateWeeklyNews(
   rateChanges.forEach((rc) => {
     const reg = regions[rc.region];
     const isHike = rc.deltaBps > 0;
-    const isCut = rc.deltaBps < 0;
     const isHold = rc.deltaBps === 0;
     
-    let title = '';
-    let desc = '';
-    let impactBadge = '';
+    let title: string, desc: string, impactBadge: string;
     
     if (isHold) {
       title = `[CENTRAL BANK] ${reg.centralBank} holds policy rate unchanged at ${(reg.policyRate * 100).toFixed(2)}%`;
@@ -193,7 +183,7 @@ export function generateWeeklyNews(
       const w = r.weather;
       // The shortcut quotes the REAL affected commodity at its REAL current spot — the old
       // version hardcoded two prices (2.85/78.50) that were fabrications the moment week 1
-      // moved the market (rule 4).
+      // moved the market (rule 2).
       const affected = commodities.find((c) => c.id === w.affectedCommodityId);
       const tradeShortcut: TradeableInstrument | undefined = affected ? {
         assetType: 'COMMODITY',
@@ -222,7 +212,7 @@ export function generateWeeklyNews(
 
   // The old block here fabricated filler headlines when the week produced fewer than three
   // real events — canned stories with real-world references (OPEC+, Cushing, Bank of Japan)
-  // and five tickers that exist in no run (rule 4). A quiet news week is information; invented
+  // and five tickers that exist in no run (rule 2). A quiet news week is information; invented
   // news is a lie. Deleted with G8's plumbing.
 
   return { newsItems: news };

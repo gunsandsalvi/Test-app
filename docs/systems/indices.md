@@ -1,7 +1,7 @@
 # SYSTEM: INDICES
 
 A number computed from prices that already exist. An index is not a market and has no independent
-value: it is a read (rule 3). It matters because things are priced, benchmarked, mandated and
+value: it is a read (rule 4). It matters because things are priced, benchmarked, mandated and
 settled against it, so a wrong index is wrong in every one of those places at once.
 
 Node types, per `README.md`: **REASON**, **VERIFY**, **FORBID**.
@@ -19,7 +19,7 @@ Written 2026-09-03 from the domain, code shut.
 - **A3** FORBID — **an index is never an input to its own constituents.** If a constituent's price
   is derived from the index, the index measures itself and the circularity is invisible in every
   output
-- **A4** REASON — it has a **unit and a base**: a level is meaningless without them (rule 9)
+- **A4** REASON — it has a **unit and a base**: a level is meaningless without them (rule 8)
 
 ### B. CONSTRUCTION
 - **B1** REASON — **weights come from something real**: market capitalisation, amount outstanding,
@@ -31,7 +31,7 @@ Written 2026-09-03 from the domain, code shut.
 - **B3** REASON — **corporate actions** are handled explicitly — a split changes shares and price
   together and must not change the level (`the-register.md` E4)
 - **B4** VERIFY — the index return over a period equals the weighted return of its constituents
-  over that period, to float dust (rule 28)
+  over that period, to float dust (rule 7)
 
 ### C. WHAT IT IS USED FOR
 - **C1** REASON — a **benchmark**: a manager's performance is measured against it, and that
@@ -48,7 +48,7 @@ Written 2026-09-03 from the domain, code shut.
 - **D1** REASON — an **equity index** per region (`equity.md`)
 - **D2** REASON — a **credit index**: an average spread or price over a defined bond set
   (`corporate-credit.md`), which is a derived read of derived reads and must be built from prices
-  first (rule 1)
+  first (rule 3)
 - **D3** REASON — a **rate benchmark**: the reference short rate that floating instruments fix on
   (`money-market.md`)
   - D3.a it must be a read of **actual transactions**, because everything that references it pays
@@ -201,7 +201,7 @@ same holders' constituents. The loop is real: constituent price → index → be
 constituent reservation price → cleared constituent price.
 
 Marked `⚠️` and not `❌` deliberately. It is a one-week-lagged covariance, not a level feedback,
-and it is what CAPM actually does, which rule 8 favours. What makes it a finding rather than
+and it is what CAPM actually does, which rule 1 favours. What makes it a finding rather than
 fidelity is the first paragraph of this diff: for the first fifty-two weeks the covariance is
 struck against `generate52WeekHistory`'s random walk, so A3's circularity is not even closed on a
 real index — it is closed on an invented one. **It closes when D1/E1 does**, and needs no step of

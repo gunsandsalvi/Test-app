@@ -9,7 +9,7 @@ import { poolCashOf } from '../../ledger/accounts';
  *
  * What this replaces: revenue that walked by `demandSignal x 0.06`, employment by
  * `x 0.05`, both clamped to +/-4% a week, off a hand-written map from five buckets to a few
- * category growth rates. That is an outcome imposed by formula (rule 13), and because every
+ * category growth rates. That is an outcome imposed by formula (rule 2), and because every
  * bucket got the same treatment and nothing reallocated between them, the tier's composition
  * could never change. Here a pool that sells more earns more, hires more and invests more; one
  * whose costs outrun its receipts runs its cash down and sheds staff — the same cash-exhaustion
@@ -127,7 +127,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // is preserved exactly, so this changes no aggregate — it changes what the aggregate can
       // RESPOND to.
       //
-      // The `[0.002, 0.25]` band goes with it (rule 2). It existed to bound a formula read at a
+      // The `[0.002, 0.25]` band goes with it (rule 6). It existed to bound a formula read at a
       // point; a weighted sum of a bounded per-stratum function needs no second bound.
       const strata = pool.strata && pool.strata.length > 0
         ? pool.strata
@@ -136,7 +136,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       const strataMean = strata.reduce((a, st) => a + st.weight * st.leverageMultiple, 0);
       // Re-centre on the pool's CURRENT leverage each week: the shape is the cross-section's, the
       // level is the pool's own book. Without this the strata would drift away from the debt they
-      // are supposed to describe (rule 3).
+      // are supposed to describe (rule 4).
       const recentre = strataMean > 0 ? meanLeverage / strataMean : 0;
       const coverageOf = (lev: number) => {
         const debtService = lev * recentre * annualEarningsUSD * poolDebtRateAnnual;
@@ -152,7 +152,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // evenly across a pool: what a firm has left is what its earnings leave after ITS OWN debt
       // service, so the strata that pay the most interest hold the least — which is why they are
       // the ones that fail. The pool's cash is allocated on exactly that residual, so it is a
-      // distribution of the pool's own money and not a second stock (rule 3).
+      // distribution of the pool's own money and not a second stock (rule 4).
       const residualOf = (lev: number) => Math.max(0, 1 - lev * recentre * poolDebtRateAnnual);
       const meanResidual = strata.reduce((a, st) => a + st.weight * residualOf(st.leverageMultiple), 0);
       const cashStressIntegral = meanResidual > 0
@@ -170,7 +170,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       //
       // A default wrote the bank's loan down (bank-lending.ts) and left the FIRM in the pool:
       // a pool could default 5% a year forever and its cross-section never changed. That is a
-      // one-sided flow (rule 14) — the lender lost the money and nobody stopped existing.
+      // one-sided flow (rule 5) — the lender lost the money and nobody stopped existing.
       //
       // Firms do not fail at random: the ones that fail are the ones that could not service
       // their debt, so the exiting weight is drawn from the strata in proportion to their OWN
@@ -190,7 +190,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
         // DIST — the same integral, published for the employment side. A firm that cannot cover
         // its debt service is the firm that sheds staff, and that is a property of the STRATA,
         // not of the pool's average. Bounded at 1 because it is a SHARE OF FIRMS — a definitional
-        // bound, not a behavioural one (rule 2): `distressOf` sums a coverage term and a cash
+        // bound, not a behavioural one (rule 6): `distressOf` sums a coverage term and a cash
         // term, so it can exceed 1 for a stratum failing on both, and no more of a pool than all
         // of it can be in trouble.
         pool.distressedFirmShare = Number(Math.max(0, Math.min(1, totalDistress)).toFixed(4));
@@ -202,7 +202,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
             // exiting_i = rate × (wᵢdᵢ / Σwⱼdⱼ), which sums to exactly the published exit rate.
             // The old form multiplied by `strata.length`, so a pool cut into 10 strata
             // shed firm-weight twice as fast as one cut into 5 at the SAME default rate — a
-            // RESOLUTION parameter setting an economic flow, rule 19's invariance test failed.
+            // RESOLUTION parameter setting an economic flow, rule 2's invariance test failed.
             const exiting = weeklyExitRate * (st.weight * distressOf(st.leverageMultiple) / totalDistress);
             const leaving = Math.min(st.weight, Math.max(0, exiting));
             reinjectedWeight += leaving;

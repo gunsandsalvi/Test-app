@@ -68,7 +68,7 @@ void _seedOrderComplete;
 
 /**
  * Shipping distance in nautical miles over the routes freight actually takes. A physical fact,
- * which is the kind of primitive rule 4 allows — unlike a trade share, which is a result.
+ * which is the kind of primitive rule 2 allows — unlike a trade share, which is a result.
  *
  * The diagonal is a region's own average domestic haul and is deliberately NOT zero: zero would
  * hand every domestic seller a free advantage, an assumption dressed as geography.

@@ -32,10 +32,10 @@ Node types, per `README.md`: **REASON**, **VERIFY**, **FORBID**.
 - **D5** REASON — a **CURRENCY** per leg, and the legs need not share one
   (`../systems/currency-and-fx.md` A3)
 - **D6** REASON — **A TERM**: a start, an end, and payment dates in between
-  - D6.a with a **periodicity and accrual convention** on any periodic leg (rule 9)
+  - D6.a with a **periodicity and accrual convention** on any periodic leg (rule 8)
 - **D7** REASON — a **PRICE AT INCEPTION**: the rate, spread or strike at which the two sides
   agree to enter
-  - D7.a it is **cleared** from what the two sides were willing to do (rule 1), never solved for
+  - D7.a it is **cleared** from what the two sides were willing to do (rule 3), never solved for
   - D7.b many derivatives are struck **at par** — zero value at inception — and then the price IS
     the fixed rate or spread that makes it so. That is still a cleared price, and it must come out
     of a mechanism rather than out of the valuation formula run backwards
@@ -63,7 +63,7 @@ Node types, per `README.md`: **REASON**, **VERIFY**, **FORBID**.
   periodic payments — is real and comes out of a real account
 - FORBID — **it is not a substitute for the underlying market.** If the derivative's price is
   computed from a model and the cash market's price is computed from the derivative, neither has
-  been cleared and rule 1 is broken in a loop
+  been cleared and rule 3 is broken in a loop
 
 ---
 
@@ -187,7 +187,7 @@ a region, not a currency per leg. An FX forward's two currencies exist only insi
 is paid in the holder's home money, so a two-currency instrument (`fx-forwards-and-xcs.md` C1's
 cross-currency swap) cannot be represented at all. Every periodic leg is `/52` — `irs.ts:44`,
 `cds.ts:52` — so both legs of a swap share one weekly period and no accrual convention exists
-(rule 9); `interest-rate-swaps.md` A2's mismatch, which is *part of the price*, has nowhere to
+(rule 8); `interest-rate-swaps.md` A2's mismatch, which is *part of the price*, has nowhere to
 live. **Becomes a §3 step**, and it is a prerequisite for 17b's XCS.
 
 ### ⚠️ D2.a — THE NOTIONAL *IS* THE EXPOSURE, THROUGH A FLAT RATE
@@ -197,7 +197,7 @@ The only measure of derivative exposure in the model is
 per-class constant (`irs.ts` 0.005, `fx-forward.ts` 0.02, `cds.ts`/`commodity-future.ts` 0.10,
 with CDS's one investment-grade split). The mark never enters it. So the node's two things are not
 conflated — but only because one of them (current exposure) does not exist: what the desk budget
-charges is notional × a stated number, which is Basel's own CEM shape and is admitted by rule 4.
+charges is notional × a stated number, which is Basel's own CEM shape and is admitted by rule 2.
 Recorded as diverging rather than absent; it closes with step 17's risk-based margin.
 
 ### ⚠️ N3 / D3.a — TWO PLACES WHERE THE DERIVATIVE AND THE CASH MARKET PRICE EACH OTHER

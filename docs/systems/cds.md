@@ -26,7 +26,7 @@ Written 2026-09-03 from the domain, code shut.
 - **A2** REASON — the **premium leg is a real periodic payment**, in cash, in the contract's
   currency, and it stops on the event
 - **A3** REASON — the **protection leg is contingent**, and its value is the probability-weighted
-  loss — which is a **read from the cleared spread**, never the input to it (rule 1)
+  loss — which is a **read from the cleared spread**, never the input to it (rule 3)
 - **A4** REASON — the **reference entity must exist in this world** and be capable of defaulting
   (`corporate-credit.md`, `sovereign-credit.md`, `firm-birth-and-death.md`)
   - A4.a FORBID — no protection on an entity nobody can observe failing
@@ -49,12 +49,12 @@ Written 2026-09-03 from the domain, code shut.
 - **C1** REASON — the **spread clears** from the two sides' schedules
   (`the-clearing-engine.md`)
 - **C2** REASON — the **implied default probability and expected recovery are derived** from the
-  spread and the term structure — never the other way round (rule 1, `../instruments/bond.md` N7.b)
+  spread and the term structure — never the other way round (rule 3, `../instruments/bond.md` N7.b)
 - **C3** VERIFY — the CDS spread and the cash bond's spread over the risk-free curve should be
   close, because both are compensation for the same credit
   - C3.a the difference is the **basis**, and it is a **consequence** — of funding cost,
     deliverability, and who can trade which. It is measured, never set
-  - C3.b a persistently large basis is a finding about one of the two markets, and rule 12 says
+  - C3.b a persistently large basis is a finding about one of the two markets, and rule 11 says
     not to judge it mid-project — but it must be visible
 - **C4** VERIFY — worse credit should trade wider, as a consequence of what participants post
 

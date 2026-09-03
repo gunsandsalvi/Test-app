@@ -7,7 +7,7 @@
  * two-thousand-line function.
  */
 
-import { RegionId } from '../../types';
+import { RegionId, Industry } from '../../types';
 import { defect } from '../../domain/defect';
 
 export type PartyRef =
@@ -21,7 +21,7 @@ export type PartyRef =
    *  an ordinary payment. (The loan asset stays owned by bank-lending.ts — one writer.) */
   | { kind: 'BANK_CREDIT'; ticker: string }
   /** SETL6 — a bank settling its OWN securities trade. Reserves move and equity does NOT: the
-   *  security is the other leg and the clearing stage books it in the same pass (rule 14).
+   *  security is the other leg and the clearing stage books it in the same pass (rule 5).
    *  `BANK` above is the income case, where nothing else arrives and equity is the other side. */
   | { kind: 'BANK_SECURITIES'; ticker: string }
   /** SETL6 — the central counterparty a cleared book settles through. Every participant, the
@@ -112,7 +112,7 @@ export function partyFromKey(key: string): PartyRef | undefined {
     case 'SEGMENT': {
       const at = rest.indexOf(':');
       return at < 0 ? undefined
-        : { kind: 'SEGMENT', region: rest.slice(0, at) as any, industry: rest.slice(at + 1) as any };
+        : { kind: 'SEGMENT', region: rest.slice(0, at) as RegionId, industry: rest.slice(at + 1) as Industry };
     }
     case 'GOVERNMENT': case 'CENTRAL_BANK': case 'HOUSEHOLD': case 'CLEARING_HOUSE':
       return { kind, region: rest } as PartyRef;

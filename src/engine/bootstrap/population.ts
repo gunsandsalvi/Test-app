@@ -47,7 +47,7 @@ export function getRegionProductivityPerCapitaUSD(regionId: RegionId): number {
  * supply, housing turnover, pension outflows) moved in lockstep. Real regions differ in KIND, not
  * scale.
  *
- * But rule 4 forbids the obvious fix. "Japan shrinks and ages, the USA grows by migration" is a
+ * But rule 2 forbids the obvious fix. "Japan shrinks and ages, the USA grows by migration" is a
  * real-world OUTCOME, and a table of it would assume the answer. What is a legitimate primitive is
  * the mechanism behind it: **the demographic transition** — fertility falls as income per head
  * rises, one of the most robust regularities there is, and a relationship rather than a country's
@@ -81,7 +81,7 @@ export function getRegionDeathRateAnnual(retiredShareOfPopulation: number): numb
  * DEM — MORTALITY RISES EXPONENTIALLY WITH AGE (Gompertz), which is the one demographic fact a
  * real age structure needs and the model did not have.
  *
- * Two BIOLOGICAL primitives (rule 19's technology category): the hazard at age zero and how fast
+ * Two BIOLOGICAL primitives (rule 2's technology category): the hazard at age zero and how fast
  * it doubles. Everything demographic then falls out of them and the birth rate — life expectancy,
  * how long retirement lasts, how long a working life runs — instead of being stated separately
  * and inconsistently.
@@ -125,7 +125,7 @@ export const MAX_AGE_YEARS = 100;
 /**
  * DEM — the age at which people stop working, in this model.
  *
- * A POLICY primitive (rule 19's third category): a retirement age is legislated, not derived.
+ * A POLICY primitive (rule 2's third category): a retirement age is legislated, not derived.
  * It is the ONE number that turns the age structure into a working/retired split, replacing four
  * drifting stage shares and their drift constants.
  */

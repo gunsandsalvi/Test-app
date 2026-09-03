@@ -90,7 +90,7 @@ export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType,
   // equity risk premium — not this week's policy rate. A base wage is an anchor; the cyclical
   // movement is the labour market's, carried by each occupation's `wageIndex` from what
   // employers actually offer. Putting the policy rate here as well would be a second cyclical
-  // channel on the same quantity (rule 3).
+  // channel on the same quantity (rule 4).
   const averageWage = productivity * derivedLabourShareOfValueAdded({
     ppeIntensityBySector: SECTOR_PPE_INTENSITY,
     usefulLifeYearsBySector: SECTOR_PPE_USEFUL_LIFE_YEARS,

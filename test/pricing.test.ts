@@ -86,7 +86,7 @@ test('every asset kind declares what its quantity is counted in', () => {
 });
 
 test('a sovereign prices off ONE yield, and the inverse returns the yield it came from', () => {
-  // §3.13-SOV row 4: the sovereign book clears a yield today; rule 1 says it must clear a PRICE
+  // §3.13-SOV row 4: the sovereign book clears a yield today; rule 3 says it must clear a PRICE
   // and derive the yield. These are the two directions that swap costs.
   const terms = { annualCouponRate: 0.04, periodWeeks: 26, weeksToMaturity: 10 * 52 };
   let last = Infinity;
@@ -103,7 +103,7 @@ test('a bond yielding its own coupon is worth par ONLY when the coupon is annual
   // coupon period matches the yield's compounding. `priceFromYield` discounts at an ANNUAL
   // EFFECTIVE yield, so a 4% coupon paid twice a year is genuinely worth more than one paid once,
   // and the bond trades ABOVE par against a 4% yield. That premium is real, not error: it is
-  // rule 9 in the price, and asserting par at every frequency would be asserting the convention
+  // rule 8 in the price, and asserting par at every frequency would be asserting the convention
   // away. Measured: 30y at 26-week coupons is 1.006849, at 13-week 1.010290.
   for (const weeks of [52, 5 * 52, 30 * 52]) {
     const annual = priceFromYield({ annualCouponRate: 0.04, periodWeeks: 52, weeksToMaturity: weeks }, 0.04);

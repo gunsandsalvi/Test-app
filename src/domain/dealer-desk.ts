@@ -7,7 +7,7 @@
  * P&L split by `bankMarketShare`. No bank decided to carry the position, no bank's capital
  * constrained it, and — once the cleared books settled through a clearing house (SETL6) — its
  * cash counterparty was the boundary, because a desk with no owner has no reserves to pay with.
- * Two rules at once: rule 3 (one real thing with two representations) and rule 13 (ownership is
+ * Two rules at once: rule 4 (one real thing with two representations) and rule 2 (ownership is
  * an outcome, not an assignment).
  *
  * What it is instead. A desk is an ORDINARY PARTICIPANT in its book's auction, one per named

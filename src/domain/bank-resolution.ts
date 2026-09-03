@@ -40,7 +40,7 @@ export function isBankUnderPca(sheet: BankingSector, facilityBookUSD: number): b
 
 /** Every asset on the sheet, cash included — the one asset side the identity counts. */
 export function bankSheetAssetsUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
-  const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
+  const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
   return loanBooksOf(sheet, facilityBookUSD) + sovUSD + cashUSD
     + (sheet.repoLentUSD ?? 0) + (sheet.onRrpLendingUSD ?? 0)
@@ -123,7 +123,7 @@ export function chooseAssumingBank<T extends { sheet: BankingSector; facilityBoo
 }
 
 /** Two household pools of one kind become one: the mortgage book by its vintages (the principal
- *  IS their sum — rule 3), the floating books by principal with their terms blended. */
+ *  IS their sum — rule 4), the floating books by principal with their terms blended. */
 export function mergeHouseholdPool(mine: HouseholdLoanPool, theirs: HouseholdLoanPool): HouseholdLoanPool {
   const total = mine.principalUSD + theirs.principalUSD;
   const blend = (a: number | undefined, b: number | undefined) => (

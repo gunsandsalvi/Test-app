@@ -54,13 +54,13 @@ a live damper and is in fact a dead export — see A8/A1), so verify before you 
 
 **MAJOR**
 - `src/domain/fx-market.ts:112` `MAX_WEEKLY_FX_MOVE_PCT = 8` — the source comment says it binds 9-28 weeks
-  per pair over 60 and that "the rate being published is the damper, not a clearing level" (rule 15,
+  per pair over 60 and that "the rate being published is the damper, not a clearing level" (rule 6,
   named there for the third time). §6.1 was emptied on the promise that every damper became a
   FINALIZATION step, but step 23 lists only equity small-cap, corp bond, stock loan and CP. **The FX
   damper is in no step.** Fix: add it to step 23 (or its own step) with the oversized one-way float as the target.
 - `src/engine2/stage08-back.ts:1948-1958` — next-quarter "3-dealer forecasts" are `actualEps × (1 + sec.growthRate/4)`
   scaled by hard-coded 0.96 / 1.08 / 0.98 / 1.02 / 1.06, and the consensus is their mean. Three fabricated
-  analysts, an imposed dispersion, and (§1.23) a forecast with no falsification test — while §5-BRAINS
+  analysts, an imposed dispersion, and (§1.17) a forecast with no falsification test — while §5-BRAINS
   now gives every deciding entity real preferences. Rule 13 + 19 + 1.23.
 - `src/engine/pricing.ts:38-45` `SECTOR_GROWTH_AND_VOL` — per-sector growth rates and vols (Tech .12/.28,
   Energy .04/.32, ...) are real-world equilibria, and `sec.growthRate` is read LIVE every quarter in the
@@ -72,7 +72,7 @@ a live damper and is in fact a dead export — see A8/A1), so verify before you 
   cohorts' own income and employment experience, not a walked index.
 - `src/engine/macro/evolution.ts:830-855` — the Taylor rule clamps the output gap to ±0.10, the inflation gap
   to ±0.10, the target to [ELB, 0.20] and the policy rate to [-0.01, 0.20] twice over. The administered
-  rate is rule 1's one allowed posted rate, but the bounds are rule 2 clamps on a mechanism's output.
+  rate is rule 3's one allowed posted rate, but the bounds are rule 6 clamps on a mechanism's output.
 - `src/engine/macro/evolution.ts:230` — the effective tax rate is clamped to [0.10, 0.50] with a `0.25`
   NaN fallback; the drift is `-stance × 0.001` per quarter. Rule 2 + an undeclared shape.
 - `src/engine/macro/evolution.ts:1008-1016` — the housing block's comment says the 400,000 stated level was
@@ -89,7 +89,7 @@ a live damper and is in fact a dead export — see A8/A1), so verify before you 
   The values are stale (the rate is derived in `bootstrap/yield-curves.ts:36` from productivity + target) AND
   the comment is a table of real-world neutral rates sitting in a committed artifact. Rule 4 + 11.
 - `src/engine/macro/initialization.ts:258-266` — `CORPORATE_TAX_RATE_BY_REGION` is defended as POLICY (fair,
-  rule 4 admits a tax rate), but the comment justifies each number by the real-world jurisdiction it copies
+  rule 2 admits a tax rate), but the comment justifies each number by the real-world jurisdiction it copies
   ("US federal 21% + state average", "the UK's 25% headline"). The per-region DIFFERENTIAL is the
   real-world equilibrium, not the rate. Same file:307-315 `GOV_DEBT_TENOR_WEIGHTS`, justified by
   "the real treasury mix runs 15-25% bills".
@@ -105,7 +105,7 @@ a live damper and is in fact a dead export — see A8/A1), so verify before you 
 
 **MINOR**
 - `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:128` and `07c-sovereign-bond-clearing.ts:165`
-  each define a private `clamp()` helper — duplicated, and the name is the thing rule 2 forbids (07c:184
+  each define a private `clamp()` helper — duplicated, and the name is the thing rule 6 forbids (07c:184
   uses it for `MAX_INFLATION_TILT`). Assigned to the credit reviewer to judge on merit.
 - `scripts/harness.ts` holds 120 of the tree's 180 `any` annotations; `src/engine/companyGenerator.ts` 9.
 - `src/engine/macro/evolution.ts:224` — `(region as any).lastWeekNominalGdpUSD` twice: a field read through
@@ -124,7 +124,7 @@ a live damper and is in fact a dead export — see A8/A1), so verify before you 
   copied spread table; it is used at seed and as an index fallback only. Rule 4 clean.
 - Regulatory constants (`BASEL_MIN_LEVERAGE_RATIO`, `LIQUIDITY_COVERAGE_RATIO`, the runoff rates,
   `SPREAD_RISK_CAPITAL_PER_DURATION_YEAR`, `MORTGAGE_DSTI_LIMIT`, the payroll/consumption tax rates,
-  `UNEMPLOYMENT_REPLACEMENT_RATE`) are the class rule 4 explicitly ADMITS. Not findings; still undeclared.
+  `UNEMPLOYMENT_REPLACEMENT_RATE`) are the class rule 2 explicitly ADMITS. Not findings; still undeclared.
 - Zero `Math.random()` in the engine; zero TODO/FIXME/HACK/XXX in the tree; only 3 non-null assertions.
 - Baseline gates at HEAD 79c239b: `tsc` 0 errors, ESLint 347/354, hygiene pass, 125/125 tests.
 
@@ -212,11 +212,11 @@ The chain, read end to end:
 The same skip costs every fixed/floating tranche its FINAL coupon whenever the term is a whole number
 of payment periods (`due = since % periodWeeks === 0` lands on the maturity week).
 
-**Size, from the existing week-13 dump (no new run — §1.25):** 2,052 live CP tranches, **44.19B** of face,
+**Size, from the existing week-13 dump (no new run — §1.11):** 2,052 live CP tranches, **44.19B** of face,
 coupons 3.91%–9.79%, **1.845B/year = 35.5M/week** accrued to holders and never settled — about **0.46B
 of holder claims over the 13-week reference**, against a W2 dust line the watchlist tracks at ≤0.03B.
 The issuer's P&L is symmetric here (the front walk skips the same week, `front-core.ts:561`), so the
-defect is an unsettled holder claim rather than a mint — but it is a one-sided flow (rule 14) of real size,
+defect is an unsettled holder claim rather than a mint — but it is a one-sided flow (rule 5) of real size,
 and it is the largest single defect this sweep found.
 
 ### A2 — The ledgers, the audit, the column stores
@@ -247,7 +247,7 @@ Files: `src/engine/ledger/{accounts,wire,holdings-ledger,tranche-ledger,goods-le
 
 - `src/engine/audit/prices.ts:39,49,126` — P1/P2/X2 only fire when the breach rate exceeds `n*0.05`, `n*0.1`, `n*0.25`. Up to 5% of issuers may price a senior claim wider than a junior one, and a quarter of goods may differ >2.5× across regions in one currency, with the scoreboard clean. An undeclared pass quota on a structural identity. Rule/lens: 1.19, 1.15. Fix: declare the quota or report the level every week.
 
-- `src/engine/audit/accounts.ts:194` — F3 "world exports = world imports" allows a 5% gap. Exports and imports are the two legs of the same trades (rule 1.14): the identity is exact, and a 5% band hides a one-sided leg worth 5% of world trade. Rule/lens: 1.14, 1.19. Fix: tighten to float dust on the gross.
+- `src/engine/audit/accounts.ts:194` — F3 "world exports = world imports" allows a 5% gap. Exports and imports are the two legs of the same trades (rule 3.14): the identity is exact, and a 5% band hides a one-sided leg worth 5% of world trade. Rule/lens: 1.14, 1.19. Fix: tighten to float dust on the gross.
 
 - `src/engine/audit/prices.ts:33-35` — P1 compares `cpSpread = (cp.couponRate − policyRate)*1e4` and `facility.floatingMarginBps` (spreads over the **policy rate**) against `c.oasSpreadBps` (a spread over the **curve**). Different bases, so the seniority ordering is tested on incommensurable numbers; wherever the curve is not flat at policy, the inversion count is an artefact. Rule/lens: logic / 1.9. Fix: put all four on one base before comparing.
 
@@ -259,7 +259,7 @@ Files: `src/engine/ledger/{accounts,wire,holdings-ledger,tranche-ledger,goods-le
 
 - `src/engine/columns/company-table.ts:202` — `cols[f][i] = typeof v === 'number' && isFinite(v) ? v : 0;` — a NaN or Infinity in any mirrored field is silently replaced by 0 on the way in and written back as 0 on the way out. The harness's NaN-purity check can never see it. Rule/lens: GUARD, silent fallback. Fix: `defect()` on a non-finite value.
 
-- `src/engine/audit/snapshot.ts:249-258` (`ladderUSDByKey`) and `src/engine/audit/ownership.ts:23-26` (o1) sum **`c.debtTranches`, the object mirror**, while `src/engine/ledger/tranche-ledger.ts` writes and `audit/ownership.ts:142` (o6) reads **`v2.tranches`, the column ledger**. W3 ("wires reproduce the ladders") therefore compares the wires the column ledger emitted against the object mirror's total: the two disconnected representations of one real thing that rule 3 names as the anti-pattern. If the mirror drifts, W3 lights up for a defect that is not in the ledger, and O1/O6 disagree by construction. Rule/lens: 1.3. Fix: W3 and O1 read the tranche rows, as O6 does.
+- `src/engine/audit/snapshot.ts:249-258` (`ladderUSDByKey`) and `src/engine/audit/ownership.ts:23-26` (o1) sum **`c.debtTranches`, the object mirror**, while `src/engine/ledger/tranche-ledger.ts` writes and `audit/ownership.ts:142` (o6) reads **`v2.tranches`, the column ledger**. W3 ("wires reproduce the ladders") therefore compares the wires the column ledger emitted against the object mirror's total: the two disconnected representations of one real thing that rule 4 names as the anti-pattern. If the mirror drifts, W3 lights up for a defect that is not in the ledger, and O1/O6 disagree by construction. Rule/lens: 1.3. Fix: W3 and O1 read the tranche rows, as O6 does.
 
 - `src/engine/ledger/accounts.ts:405-414` — `buildAccountMirror` builds the household/pool per-bank rows only over `regionBanks = banks.filter(b => b.region === region && !b.isDefaulted)`. A sector row at a bank that defaults this week is **not in the pass store**, so `landSectorRows` (l.533-538) never writes it back and the balance sitting there is frozen — invisible to the pass, still counted by `sectorCashOf`. It thaws only if `moveSectorRowsToBank` happens to run. Rule/lens: 1.13 (a balance with no live counterparty). Fix: open a row for every bank the party actually holds at, live or not, and resolve it explicitly.
 
@@ -289,9 +289,9 @@ Files: `src/engine/ledger/{accounts,wire,holdings-ledger,tranche-ledger,goods-le
 - **[13c-site]** `tranche-ledger.ts:65,75,133` — `issueTranche`, `retireTranche` and `moveFacilityLender` all wire `priceUSD: 1` against `principalUSD`. A facility moved to an assuming bank moves at face regardless of its mark.
 - **[13c-site]** `audit/snapshot.ts:239` — `sovereignOutstandingUSD` sums `principalUSD` (face) and is compared elsewhere against holdings measured in value.
 - `accounts.ts:449-456` (`leg`/`side`) — verified two-sided and correct: a `BANK_CREDIT` drawdown to a borrower at the SAME bank moves the reserve row −a then +a (no reserves move, endogenous money); to a borrower at another bank it moves reserves from lender to payee bank. `RESERVES` and `VOID` rows sit at `AT_CENTRAL_BANK`/`AT_NOWHERE` so no second leg is double-counted. `centralBankIssuanceUSD` and `clearingHouseResidualUSD` are read off the VOID rows with the right signs.
-- `accounts.ts:410,419` — a household/pool payment is split across banks by **market share**, not by where the party's money actually sits, so one bank's row can go negative while the party is in credit. Documented as deliberate ("the split the pools' legs always had"), but it is an imposed share standing in for a real "which account do I pay from" decision (rule 1.13). Flagging for the lead, not counted above.
-- Copy-on-grow (rule 1.24) is present on **every** growth path I read: `wire.ts:81-88`, `accounts.ts:47-51` (`growPersistent`), `accounts.ts:319-326` (`grow`), `columns/table.ts:96-108` (`Table.grow`, preserves row ids), `arena.ts:179-189` (copies, but invalidates outstanding views — see MAJOR). `holdings-table.ts:152,210` reallocate `byType` without copying, which is safe because it is fully rewritten immediately after.
-- SAB-backing (rule 1.24): `columns/table.ts:125-128` allocates a `SharedArrayBuffer` where the runtime offers one. `WireJournal` (`wire.ts:60`) and `AccountStore` (`accounts.ts:327`) are plain typed arrays, not SAB-backed — they were built under §5-WIRES rather than §4.C, so this may be out of 1.24's scope; naming it so the lead can decide.
+- `accounts.ts:410,419` — a household/pool payment is split across banks by **market share**, not by where the party's money actually sits, so one bank's row can go negative while the party is in credit. Documented as deliberate ("the split the pools' legs always had"), but it is an imposed share standing in for a real "which account do I pay from" decision (rule 3.13). Flagging for the lead, not counted above.
+- Copy-on-grow (rule 3.24) is present on **every** growth path I read: `wire.ts:81-88`, `accounts.ts:47-51` (`growPersistent`), `accounts.ts:319-326` (`grow`), `columns/table.ts:96-108` (`Table.grow`, preserves row ids), `arena.ts:179-189` (copies, but invalidates outstanding views — see MAJOR). `holdings-table.ts:152,210` reallocate `byType` without copying, which is safe because it is fully rewritten immediately after.
+- SAB-backing (rule 3.24): `columns/table.ts:125-128` allocates a `SharedArrayBuffer` where the runtime offers one. `WireJournal` (`wire.ts:60`) and `AccountStore` (`accounts.ts:327`) are plain typed arrays, not SAB-backed — they were built under §5-WIRES rather than §4.C, so this may be out of 1.24's scope; naming it so the lead can decide.
 - `wire.ts:95-100` — `wirePush` rejects non-positive/non-finite quantity, non-finite or negative price, and a wire from a party to itself. The NaN/negative gate on asset moves is real and throws at the write site.
 - `party.ts:56-61` — the compile-loud `PARTY_KINDS` completeness check is real and does what it claims.
 - `party.ts:87` — `partyRefById.push(p)` stores the caller's object; `partyOf(id)` hands that same reference back. A caller mutating a `PartyRef` after interning would change every later read. No such mutation found today.
@@ -315,13 +315,13 @@ src/engine/simulation/stage-deps.ts.
   instrument check. `finalize()` then keeps `rowIds[i]` for unclaimed `i` (`:283`) and FREES
   `rowIds[i]` for claimed `i` (`:287`). A one-row desync between the object book and the chain
   therefore keeps and frees the WRONG register rows — ownership silently rewritten. The only
-  guard is `HOLDINGS_SYNC_CHECK=1`, which runs at week END, after the damage. Lens: bug / rule 3.
+  guard is `HOLDINGS_SYNC_CHECK=1`, which runs at week END, after the damage. Lens: bug / rule 4.
   Fix: assert `rowIds.length === rows.length` (and instrRef === instrumentId) at build, `defect()` on mismatch.
 - `engine2/holdings.ts:313-317` — `pruneEmptyRows` keeps a row only when `H.qtyUSD[r] > 1`: it
   tests DOLLARS and destroys SHARES. An EQUITY row whose mark fell under $1 (or any row mid-week
   before its re-mark) is unlinked with its `shares` intact, and the holder's position ceases to
   exist. `closeEmptyPositions` (`ledger/holdings-ledger.ts:212`) is called on the WHOLE book of a
-  holder at `stages/estate-resolution.ts:257`, not on the estate's instrument. Rule 3 / rule 13.
+  holder at `stages/estate-resolution.ts:257`, not on the estate's instrument. Rule 3 / rule 2.
   Fix: prune on `qtyUSD === 0 && (isNaN(shares) || shares === 0)`, never on a dollar threshold.
 - `stages/holdings-view.ts:209-210` — `reg.institutionalSector.sectorEquityUSD =
   Math.round(view.institutionalTotalAssetsUSD)`: the sector's EQUITY is set to its total ASSETS.
@@ -344,7 +344,7 @@ src/engine/simulation/stage-deps.ts.
 - `engine2/tranches.ts:355` — `marginBps: Number.isNaN(S.floatingMarginBps[r]) ? 350 : ...`. A
   bare 350bp facility spread, not declared in `domain/stated.ts`, standing in for a price a
   market should clear; and it is a silent fallback that hides a facility written with no margin.
-  Rule 19 / rule 1. Fix: carry the originated margin on the row; `defect()` if absent.
+  Rule 19 / rule 3. Fix: carry the originated margin on the row; `defect()` if absent.
 - `engine2/tranches.ts:365` vs `:374` — `facilityRowsOf` filters `principalUSD > 0.01`,
   `facilityBookOf` does not. The bank's facility BOOK total therefore does not equal the sum of
   the facility rows the same bank is shown. Fix: one predicate, used by both.
@@ -359,11 +359,11 @@ src/engine/simulation/stage-deps.ts.
 - `engine2/back-pool.ts:176` posts `lanes: args.lanes` and `engine2/stage08-lanes.ts:127`
   allocates them as plain `new Float64Array(n)` — so the ENTIRE BackLanes struct is structured-
   CLONED to each of up to 16 workers every week. That is precisely §7.326's "the clone transport
-  ate the win", and rule 1.24. `setSharedLanes` is called in only one place
+  ate the win", and rule 3.24. `setSharedLanes` is called in only one place
   (`stage08-front.ts:139`), gated on `FRONT_WORKERS`, so `BACK_WORKERS=n` alone never gets shared
   memory. Fix: allocate BackLanes through `shared-lanes.ts` and set the mode from
   `backWorkerCount() >= 2 || frontWorkerCount() >= 2`.
-- `engine2/world.ts:38-46` declares the §1.24 SAB deviation for `revRing`/`priceRing` only; the
+- `engine2/world.ts:38-46` declares the §1.18 SAB deviation for `revRing`/`priceRing` only; the
   lot, contract, tranche, holding and accounts stores (`lots.ts:81`, `contracts.ts:70`,
   `tranches.ts:104`, `holdings.ts:78`, `world.ts:66`) are all plain-ArrayBuffer with copy-on-grow
   and carry no such note. Only `company-store.ts:95-99` is actually SAB-backed. Rule 1.24 wants
@@ -394,7 +394,7 @@ src/engine/simulation/stage-deps.ts.
 - `engine2/state.ts:31-208` — `WorldState`, `allocWorld`, `snapshotWorld`, `restoreWorld`,
   `SECTORS`, `SECTOR_INDEX`, `OCCS`, `NOCC`, `NREGIONS`, `F_ACTIVE…F_INSTITUTION` have ZERO
   importers anywhere in `src`, `test` or `scripts` (only `SUBUNITS`/`SUBUNIT_INDEX`/`NSUB` are
-  used). ~180 lines describing a SECOND, unreachable columnar world beside `world.ts` — rule 3's
+  used). ~180 lines describing a SECOND, unreachable columnar world beside `world.ts` — rule 4's
   anti-pattern in dormant form, and it would be the first thing a future reader ports to.
   Fix: delete everything but the three sub-unit exports.
 - `stages/register-index.ts:33-127` — `RegisterIndex`, `buildRegisterIndex`, `typeSlice`,
@@ -612,7 +612,7 @@ income-statement,labor-demand,capital-programme}.ts` (1120).
 
 - `src/engine2/stage08-back.ts:1834-1849` — the `DELEVER_EXPENSIVE_DEBT` path retires drawn
   FACILITIES (`facilityRepaidUSD` accumulated then `void`-ed at :1846) with the cash posted
-  `settle:false` at :1849. A declared gap with an owner ("Owner: G2"), but rule 13 also asks for a
+  `settle:false` at :1849. A declared gap with an owner ("Owner: G2"), but rule 2 also asks for a
   size and a scheduled closing slice, and neither is named here. Rule/lens: 1.13, 1.14.
   Fix: same `BANK_CREDIT` leg the prepay path at :1717 already uses, or record the size.
 
@@ -654,7 +654,7 @@ income-statement,labor-demand,capital-programme}.ts` (1120).
   priceScratch` are module-level mutable state read and written from the kernel; safe only because
   the post phase is main-thread today.
 
-**UNDECLARED SHAPE CONSTANTS (rule 19 — none of these is in `src/domain/stated.ts`)**
+**UNDECLARED SHAPE CONSTANTS (rule 2 — none of these is in `src/domain/stated.ts`)**
 - `stage08-back.ts:76` 0.6 payout default; `:87` `CAPACITY_CATCHUP_SHARE_ANNUAL = 0.35`; `:73`
   `STANDARD_CORP_TENOR_YEARS = 5`; `:264` bridge margin `oas × 1.1`; `:233/318/881` 0.45;
   `:250-252` 0.6/0.4 prior-capex split; `:974` div-yield 0.998/0.002, 0.4/1.2/1.0, ×2.5, 0.9/0.1;
@@ -674,7 +674,7 @@ income-statement,labor-demand,capital-programme}.ts` (1120).
   docstring ("the drift the constant asserted"), still live in `seedCumulativeUnits` and therefore
   in every firm's opening learning position; not declared.
 
-**CAPS AND FLOORS (rule 2), beyond those above**
+**CAPS AND FLOORS (rule 6), beyond those above**
 `front-core.ts:742` `newRevenue = Math.max(10, …)`; `:688` tobin's-q clamp; `stage08-back.ts:1961`
 head floor 10; `:2033` book value floor 0.5; `:2044` `sharesOutstanding` floor 1.0; `:970`
 `min(1, payoutRatio)`; `capital-programme.ts:147` q clamp.
@@ -764,7 +764,7 @@ head floor 10; `:2033` book value floor 0.5; `:2044` `sharesOutstanding` floor 1
 - `register-split.ts:62` — `out.push({ instrumentId: issuerId, usd: leftUSD })`: the split falls back to an **issuer id** when the issuer has no live tranche of that kind. Reached from `07b:531`, `07d:494` and `07f:911`. Known 13b territory, but it is live and the `SPLIT_TRACE` guard above it says the authors expect it to fire.
 - `07f:731-746` — the desks' CP inventory rows are keyed by `iss.comp.id` (an issuer id) and repaid by the issuer-wide `survivingShare`, while the institutions two blocks below (`07f:750-760`) are repaid per matured tranche. The one remaining issuer-keyed CP holder.
 - `07f:930-945` — CP places at par (`principalUSD: placedUSD`) with an annual `couponRate` on 13-week paper, while bills in the same stage got the full discount treatment (07f:379-450). Different conventions for the two short-debt books. [13c-site]
-- `07b:271` / `07d:466` — `comp.oasSpreadBps` and `leveragedLoan.pricePar` are derived from the cleared stat, not set independently — checked, rule 1 clean. `pricePar` measures against `quotedMarginBps` (origination), which is the right anchor for a discount margin.
+- `07b:271` / `07d:466` — `comp.oasSpreadBps` and `leveragedLoan.pricePar` are derived from the cleared stat, not set independently — checked, rule 3 clean. `pricePar` measures against `quotedMarginBps` (origination), which is the right anchor for a discount margin.
 - statKind orientation — checked end to end: `demandAtU` (engine:427-437), the event construction (447-467) and the settle pass (806-808) all use the same oriented `u`, and every book in this area is YIELD_LIKE, so a higher stat is a lower price everywhere. No sign error.
 - `unsoldStaysWithHolder` (engine:853-863) rations BOTH sides pro rata and forces `dealerInventory` to 0 (engine:885-887); all five books in this area set it true, so there is no unnamed dealer residual on any of them. Correct.
 - The primary money identity in `primary-settlement.ts` (buyers −take via the CCP, issuer +gross−fee, lead +fee −residual) sums to zero — checked line by line; the only defect is the duplicated asset wire above.
@@ -779,7 +779,7 @@ head floor 10; `:2033` book value floor 0.5; `:2044` `sharesOutstanding` floor 1
   `weeklyRealizedPnL += unrealizedPnL` AND `weeklyRealizedCashUSD += unrealizedPnL`, and
   `13-news-and-turn-summary.ts:25` sums BOTH into cash. The same P&L is paid twice. The corp/sov branches
   (`:123`, `:239`) already fixed exactly this and their comment names it ("money from nowhere, twice over");
-  the derivative branches were never converted. Lens: bug / rule 3. Fix: drop the `weeklyRealizedCashUSD` line
+  the derivative branches were never converted. Lens: bug / rule 4. Fix: drop the `weeklyRealizedCashUSD` line
   in the IRS, CDS and XCS branches.
 - `src/engine/simulation/stages/pe-lifecycle.ts:680-683` — on an IPO the sponsor is written a
   `peSponsorPct: 0.70` and simultaneously removed from `peFund.portfolioCompanyIds`. `sponsorPortfolioUSD`
@@ -895,11 +895,11 @@ head floor 10; `:2033` book value floor 0.5; `:2044` `sharesOutstanding` floor 1
   INSTITUTIONAL_CAPITAL_RATIO=0.12; `institution-profiles.ts:90-97` every kind's `targets`, `sovereignCoreShare`,
   `preferredCreditDurationYears`, `subInvestmentGradeSizeFactor` and `convictionMultiple: 4.0`;
   `indexes.ts:52` LARGE_CAP_CUMULATIVE_SHARE=0.70; `pe-lifecycle.ts:100,102,111,113,124` LBO_MAX_LEVERAGE=6.0,
-  MIN_HOLD_WEEKS=78, PE_FUND_LIFE_WEEKS=10×52, RECAP_DM_THRESHOLD_BPS=450 (a real-world spread level, rule 4),
+  MIN_HOLD_WEEKS=78, PE_FUND_LIFE_WEEKS=10×52, RECAP_DM_THRESHOLD_BPS=450 (a real-world spread level, rule 2),
   IPO_PREMIUM_OVER_ENTRY=1.15, plus `:308` recap = 50% of headroom, `:355` IPO = 25% of shares, `:772`
   newborn = 0.4% of pool and `:790` leverage 2.5.
 - `src/domain/institution-profiles.ts:69,77` — `insurerHurdle` and `pensionHurdle` end in
-  `Math.max(0.02, Math.min(0.30, …))`. A derived hurdle is clamped to a stated band: rule 2 ("never clamp the
+  `Math.max(0.02, Math.min(0.30, …))`. A derived hurdle is clamped to a stated band: rule 6 ("never clamp the
   symptom"), and the clamp hides exactly the case the derivation exists to expose (an insurer underwriting at a
   heavy loss, a badly underfunded scheme). Fix: remove the bracket and let the number be a finding.
 - `src/engine/simulation/stages/asset-allocation.ts:230` — `computeDistressedReservationSpreadBps` hard-reads
@@ -1061,7 +1061,7 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
   balance by walking the journal because `pendingNetById` misses everything the paying agent journals
   (`journalPayment` does not touch the running net). So `pendingSettlementUSD` — read by repo-clearing's
   surplus/shortfall, `institutionSpendableUSD`, the PB close sweep and every bid sizer — is short by the
-  week's dividends, coupons and redemptions. Two representations of one running net (rule 3). Fix: have
+  week's dividends, coupons and redemptions. Two representations of one running net (rule 4). Fix: have
   `journalPayment` update the net, or make the agent use `pay`.
 - `src/engine/simulation/stages/bank-funding-close.ts:39` + `bank-lending.ts:915,925` — the LOLR draw is
   sized against `householdDepositsAt × bankCashBufferRatioOf` (2% of HOUSEHOLD deposits only) while
@@ -1080,14 +1080,14 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
   logic, accounting. Fix: net the week's provisions into the payout base.
 - `src/engine/macro/banking.ts:437` vs `02b:494` — the CB loan is charged at `policy + own OAS` in the NIM
   and net-income statistic but PAID at `policy + SRF_SPREAD + CENTRAL_BANK_LOAN_PENALTY_BPS`. One
-  liability, two prices, and the mis-measured one drives the dividend (rule 3).
+  liability, two prices, and the mis-measured one drives the dividend (rule 4).
 - `src/engine/simulation/stages/sme-pools.ts:43` — the pools' entire income statement is read from
   `ctx.lastSettlementReport` immediately after the INTRADAY pass. `lastSettlementReport` is rebuilt from
   scratch every week (context.ts restores only `paymentJournal`), so every pool flow settled in the close
   and funding cycles is never counted — margin, revenue, capex and the measured default rate all run on
   part of the week. Same shape for `household-balance-sheet.ts:52`. Rule/lens: bug, 3.
 - `src/engine/simulation/stages/sme-pools.ts:100` — `pool.capexUSD = min(annualRevenue × 0.05,
-  investableUSD × 52)`: a cash STOCK annualised and compared with an annual flow (rule 9, stock-as-flow).
+  investableUSD × 52)`: a cash STOCK annualised and compared with an annual flow (rule 8, stock-as-flow).
   `:95` calls all operating cost the "weekly wage bill" and sizes the 6-week buffer off it.
 - `src/engine/simulation/stages/sme-pools.ts:150` — `defaultRateAnnualPct = 0.015 + coverageDistress×0.04
   + cashStressIntegral×0.06`: the pool's default rate — which prices every SME loan in the model — is a
@@ -1096,7 +1096,7 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
   50/50 cash/stock mix: the takeover premium and the consideration structure are posted, not negotiated or
   cleared (rules 1/13/19). `:287-288` then deletes 15% of the target's revenue and 25% of its headcount on
   the merger week with no counterparty — the workers are not laid off through the labour market and the
-  revenue leaves no book (rule 14).
+  revenue leaves no book (rule 5).
 - `src/engine/simulation/stages/bank-lending.ts:~800` (CREDIT_CARD reprice) — `quoteHouseholdMarginBps` is
   called WITHOUT `requiredReturnAnnual`, so the card book silently prices off the fallback
   `BANK_TARGET_ROE` while the CONSUMER_TERM branch (:~845) passes `bankHurdle`. Copy-paste drift: two banks
@@ -1110,7 +1110,7 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
   broker lends against it unprotected". Rule 2 floor with a real consequence.
 - `src/engine/simulation/stages/overdraft-sweep.ts:158` — the SME facility a pool's overdraft becomes is
   written at a HARDCODED `marginBps: 350` (`:50` has the same literal as a fallback), while the identical
-  conversion in 02b prices it through `facilityMarginBpsFor`. Unpriced credit + rule 3.
+  conversion in 02b prices it through `facilityMarginBpsFor`. Unpriced credit + rule 4.
 - `src/engine/simulation/stages/overdraft-sweep.ts` (all three legs) — no lender here tests capacity: the
   house bank, the prime broker and the region's banks (split by an imposed `bankMarketShare`) fund every
   overdraft in full. Rules 13/14.
@@ -1120,8 +1120,8 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
 - `src/domain/central-bank.ts:131,160,180` — `CENTRAL_BANK_SOVEREIGN_SHARE = 0.15` is both the seed share
   AND the level QT normalises the book back to; `QE_MAX_PACE_ANNUAL_SHARE_OF_STOCK = 0.10` is justified in
   its own comment by the Fed's observed peak purchase pace, and `CENTRAL_BANK_MAX_STOCK_SHARE = 0.50` by
-  the Bank of Japan's actual JGB holding. Real-world OUTCOMES imported as bounds (rule 4) and used as caps
-  (rule 2) — the brief's own example of what rule 4 forbids.
+  the Bank of Japan's actual JGB holding. Real-world OUTCOMES imported as bounds (rule 2) and used as caps
+  (rule 6) — the brief's own example of what rule 2 forbids.
 - `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:574-576,622-630` — the treasury's funding
   MIX is posted: `billShareTarget = max(0.15, min(0.25, 0.18 + costLean))`, bill programme split
   `[0.4,0.35,0.25]`, bond weights `{t2:.30,t5:.30,t10:.25,t30:.15}` with `steepnessAdjustment × 3` and
@@ -1137,12 +1137,12 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
 - `src/engine/simulation/stages/shared-helpers.ts:290-311` — `attributeItemizedHoldings` fills the seed's
   institutional book greedily, largest issue first, with a hard "no single sector holds more than 40% of
   any one issue" cap (`initialization.ts:795-796`). An ownership distribution imposed at the cold start
-  (rules 4/13), and a cap (rule 2).
+  (rules 4/13), and a cap (rule 6).
 - `src/engine/simulation/stages/shared-helpers.ts:130-133` — the PD's ladder read falls back to `0.05`
   coupon / `200` bps margin as bare literals and uses a hardcoded `0.05` as the policy rate for every
   floating tranche. Those two fallbacks ARE declared (`stated.ts` TRANCHE_DEFAULT_COUPON /
   TRANCHE_DEFAULT_MARGIN_BPS, owner `engine2/front-core.ts`) — this file re-states them instead of
-  importing them (rule 3), and the 5% policy proxy is a third invented number.
+  importing them (rule 4), and the 5% policy proxy is a third invented number.
 - `src/domain/bank-pricing.ts:50,96` — every loan quote is floored (`Math.max(25, …)`, `Math.max(50, …)`
   bps). A floor standing in for a price (rules 2/15).
 - `src/domain/bank-resolution.ts:98` — `wholesaleHaircutUSD = 0` unconditionally, so the loss order the
@@ -1172,7 +1172,7 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
 - `estate-resolution.ts:531` — the opening `receivablesUSD = annualRevenue × WORKING_CAPITAL_SHARE × 0.6`
   is overwritten from the real invoice book at `:189` in the same pass: a dead formula with a magic 0.6.
 - `estate-resolution.ts:441` — `e.equityCapitalUSD = Math.max(0, …)` floors an institution's capital at
-  zero, hiding insolvency (rule 2). `domain/estate.ts:33` — the `COMPANY` claim holder is never constructed.
+  zero, hiding insolvency (rule 6). `domain/estate.ts:33` — the `COMPANY` claim holder is never constructed.
 - `domain/government.ts:246` — `sovereignCouponDueShare`'s doc says "NOT WIRED YET, DELIBERATELY, AND THIS
   IS THE CONDITION"; `sovereign-calendar.ts:127` wires it. Stale, and it names a condition already met.
 - `domain/banking.ts:322-334` — the "RULE 1, OPEN … Owner: HSG" block for
@@ -1191,7 +1191,7 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
   while `ledger/payment-category.ts` exists to answer exactly that.
 - `repo-clearing.ts:520` — `sheetByTicker.get(ticker)!` / `encumberedWorking.get(ticker)!` non-null
   assertions inside `strike`.
-- Undeclared shape constants in these files (none in `domain/stated.ts`, rule 19): SME_WEEKLY_DEMAND_TAKEUP
+- Undeclared shape constants in these files (none in `domain/stated.ts`, rule 2): SME_WEEKLY_DEMAND_TAKEUP
   0.01, SME_SERVICEABLE_LEVERAGE 3.0, the smePoolAnnualPd band [0.002,0.25], the household appetite
   `1 + (cci−100)/100 × 0.5 − (policy−neutral) × 4` clamped to [0,2], vBurden [0.25,4], bookLtv min 2,
   `bankShare || 0.25` (bank-lending); consumerAnnualLossRate's base `max(.005,min(.12,max(0,u−.03)×1.2))`,
@@ -1221,7 +1221,7 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
   and `projectBooks`; the direct account calls I found (`adjustSectorRow`, `adjustBankReserves`,
   `moveSectorRowsToBank`, `moveBankReserves`) are ledger operations with both legs in the same pass.
 - The SRF's quantity response IS real (repo-clearing.ts:400-415: a seat with `maxHoldingUSD = needUSD` at
-  `srfBps − 1`, taking the residual) — rule 1's exception is satisfied on the SRF side. Only the RRP side
+  `srfBps − 1`, taking the residual) — rule 3's exception is satisfied on the SRF side. Only the RRP side
   is not (CRITICAL above).
 - Bill economics: bills are issued at face and repaid at the ACCRETED holding, so the treasury does bear
   the full accretion cost and the holders' weekly accretion (`bill-accretion.ts`) is not money from
@@ -1232,7 +1232,7 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
   fires late and the assuming bank is under-capitalised for what it takes; consistent with the (also
   partial) RWA base used for origination headroom, so it is one definition, not two.
 - `assumeBankBooks` does move the whole sheet both ways and `bank-resolution.ts:180` throws if anything is
-  left on the shell — rule 14 is honoured for every line except the CB loan named above.
+  left on the shell — rule 5 is honoured for every line except the CB loan named above.
 - The estate waterfall respects absolute priority (SECURED → UNSECURED → EQUITY, pro rata within a class,
   `distribute:355-380`) and never overdraws the debtor's account.
 - [13c-site] `estate-resolution.ts:497-520` — estate claims are opened at the holder row's `qtyUSD`
@@ -1241,7 +1241,7 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
 - [13c-site] `sovereign-calendar.ts:100-115` — the institutions' coupon accrues on `H.qtyUSD[r]`, the
   banks' on the sheet's tenor book; both are value, not face.
 - [13c-site] `repo-clearing.ts:96-108` — collateral capacity and haircuts are applied to
-  `sovereignBondHoldingsByTenor` USD, treated as face throughout (`encumberedFaceByBucket`, the
+  `sovereignBondHoldingsByBond` USD, treated as face throughout (`encumberedFaceByBond`, the
   over-pledge check). A pledge is a claim on FACE.
 - [13c-site] `11-fiscal.ts:270-300` — redemption pays each holder `heldUSD × redeemedFraction`, i.e. the
   marked/accreted holding rather than the maturing face; `lastUnsoldMaturedUSD` is then face minus a value.
@@ -1256,19 +1256,19 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
 ### A8 — The real economy, labour, goods, FX, commodities, indices
 
 **RAW NOTES (to be sorted)**
-- `src/engine/simulation/stages/05-unit-bidding.ts:660` — dead-supplier contract sets `custUp.inputSupplyConstraintFactor = min(x, 0.70)`: a bare 0.70 shape constant (undeclared, rule 19) standing in for "how much a lost supplier throttles you".
+- `src/engine/simulation/stages/05-unit-bidding.ts:660` — dead-supplier contract sets `custUp.inputSupplyConstraintFactor = min(x, 0.70)`: a bare 0.70 shape constant (undeclared, rule 2) standing in for "how much a lost supplier throttles you".
 - `05-unit-bidding.ts:118` CONTRACTED_DEMAND_SHARE=0.6, :150 PROGRESS_PAYMENT_SHARE=0.30, :139 SUPPLIER_MIN_SOURCING_WEIGHT=0.05 — self-documented as rule-4/13 open items (owner named) — check stated.ts declaration.
 - `05-unit-bidding.ts:597` `T.priceUSD[r] = Number((...).toFixed(4))` inside the portable "pure arithmetic" core — string round-trip contradicts the roundN relabel at :59.
 - `05-unit-bidding.ts:626` fillRate<0.95 threshold — undeclared shape constant.
 
 **05-unit-bidding.ts (2655 lines, read in full)**
-- :2427 `if (random() >= 0.15) return;` — 15%/wk contract-formation hazard, undeclared (rule 19).
-- :2434-2437 supplierPowerFactor `0.5+(share-0.25)*0.5`, customerBargainingPower `(rel>1?0.6:0.4)`, price `*(1-(cbp-0.3)*0.05)`, `duration = 12+rand*40` — a stack of invented bargaining constants; the contract price is a FORMULA off the published print, not a cleared/negotiated outcome (rule 1/13/19).
-- :2452-2455 SECOND PD MODEL: `impliedPd = 1/(1+exp(interestCoverage*0.8 - leverage*0.4))`, `costOfCapital = 0.05 + impliedPd*0.60`, `contractPrice *= 1+coc*0.20` — directly contradicts the ":1180 ONE PD model (§6.1's three-PD-models row)" comment which uses computeAnnualDefaultProbability. rule 3 (two representations) + stale comment.
-- :1182-1183 `expectedLoss = pd*0.60; costOfCapital = 0.05 + expectedLoss` — LGD 0.60 and a flat 5% cost of capital invented in the goods stage while the model clears real rates/curves (rule 1/19). Duplicated verbatim at :2453.
+- :2427 `if (random() >= 0.15) return;` — 15%/wk contract-formation hazard, undeclared (rule 2).
+- :2434-2437 supplierPowerFactor `0.5+(share-0.25)*0.5`, customerBargainingPower `(rel>1?0.6:0.4)`, price `*(1-(cbp-0.3)*0.05)`, `duration = 12+rand*40` — a stack of invented bargaining constants; the contract price is a FORMULA off the published print, not a cleared/negotiated outcome (rule 3/13/19).
+- :2452-2455 SECOND PD MODEL: `impliedPd = 1/(1+exp(interestCoverage*0.8 - leverage*0.4))`, `costOfCapital = 0.05 + impliedPd*0.60`, `contractPrice *= 1+coc*0.20` — directly contradicts the ":1180 ONE PD model (§6.1's three-PD-models row)" comment which uses computeAnnualDefaultProbability. rule 4 (two representations) + stale comment.
+- :1182-1183 `expectedLoss = pd*0.60; costOfCapital = 0.05 + expectedLoss` — LGD 0.60 and a flat 5% cost of capital invented in the goods stage while the model clears real rates/curves (rule 3/19). Duplicated verbatim at :2453.
 - :1198 `marginPremium = costOfCapital * 1.5` — 1.5 undeclared.
 - :841 `warehouseCapacityUSD = comp.annualRevenue * 0.15`; :851 throttle slope `*0.7`; :896 `SECTOR_PPE_INTENSITY[sector] ?? 0.5`; :898 acc-dep fallback `*0.45` — undeclared shapes.
-- :1602-1611 `if (subUnitId === 'passenger_vehicles')` — the stage switches on ONE product id and hardcodes a durable-stock model (scrappage 0.12/yr, stock multiple 3.5, target share 0.10, adjustment 0.05). Rule 17 (a stage may not switch on industry/product) + rule 19. Second site at :2247.
+- :1602-1611 `if (subUnitId === 'passenger_vehicles')` — the stage switches on ONE product id and hardcodes a durable-stock model (scrappage 0.12/yr, stock multiple 3.5, target share 0.10, adjustment 0.05). Rule 17 (a stage may not switch on industry/product) + rule 2. Second site at :2247.
 - :906 `if (subUnitId === 'commercial_rental_services' && CRE_SUPPLY_X)` and :2593 `CRE_MARKET_LIVE=0 && subUnit.unitId==='commercial_rental_services'` — the same rule-17 switch, env-gated.
 - :1319 `cashConstrainedQtyModifier = cashRatio < 0.02*riskAversion ? 0.70 : 1.0` — bang-bang capital rationing, 0.02 and 0.70 undeclared.
 - :1626 `smoothedUnitPriceUSD = basis*0.75 + anchor*0.25` — undeclared EWMA weight, and it feeds the produce/idle decision.
@@ -1276,62 +1276,62 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
 - :626 `fillRate < 0.95` short-week test — undeclared threshold (twice, :735).
 - :2648-2652 `baselineVol = 0.16` and `regimeVolPremium = Recession?0.08:Slowdown?0.03:0` — the comment at :2637 says the local 0.16 fallback was deleted; it is still here. Also a switch on the USA regime only: `marketVolComponent` (used world-wide) is a function of the USA composite alone.
 - :597 `T.priceUSD[r] = Number((...).toFixed(4))` inside the "portable pure arithmetic" core — string round-trip; the file's own :59 roundN relabel exists to avoid exactly this.
-- CURRENCY UNITS: :1747 `convertLocal(clearedPriceUSD, origin, buyer, fx)` then :1943 `payByIds(..., l.units*exWorksBuyerMoney, R_EXWORKS)` — the ledger's `amountUSD` is fed BUYER-LOCAL money throughout the goods auction (comment at :1979 admits "keeps today's buyer-money convention"). Every `...USD` field in this stage (clearedPriceUSD, salesUSD, purchasesUSD, invoicedUSD, sellerTotalUSD) is region-local money. rule 9 ("a field named USD is not a share" / periodicity+unit), and it makes cross-region sums (bilateralTradeWeeklyUSD is correctly converted; the pay legs are not) inconsistent.
+- CURRENCY UNITS: :1747 `convertLocal(clearedPriceUSD, origin, buyer, fx)` then :1943 `payByIds(..., l.units*exWorksBuyerMoney, R_EXWORKS)` — the ledger's `amountUSD` is fed BUYER-LOCAL money throughout the goods auction (comment at :1979 admits "keeps today's buyer-money convention"). Every `...USD` field in this stage (clearedPriceUSD, salesUSD, purchasesUSD, invoicedUSD, sellerTotalUSD) is region-local money. rule 8 ("a field named USD is not a share" / periodicity+unit), and it makes cross-region sums (bilateralTradeWeeklyUSD is correctly converted; the pay legs are not) inconsistent.
 - RULE 14 (both legs same pass, same pairing): the household/government/segment GOODS leg moves lot-by-lot with its real seller (:2213 `deliverGoods(partyOfKey(l.sellerKey...))`), but the CASH leg for those same buyers is spread PRO RATA across every seller in the book by revenue share (:2201-2210 `sale.amount/sellerTotalUSD`). The two legs of one trade use different counterparties; a household pays a seller it never bought from.
 - :2149 `hhUsdAll = hhUnitsAll * book.clearedPriceUSD` vs `aggregateUSD = sellerTotal - corporate - segment`: the household's implied payment is a residual, not what its own fills cost; if the residual and the claim disagree the difference is silently redistributed.
 - :2244 government spend converted with `convertLocal(spendOriginMoney, origin, regionId)` while the gov CASH leg at :2216 pays the raw origin-money amount — same number, two units.
 
 **01/02/03/04/06/07**
-- 02-region-macro.ts:43 `bottomUpUnemploymentDelta = -employmentChangePct * 0.1` — a stock (unemployment rate) moved by a flow (% change in employment) times an invented 0.1; no labour force in the denominator. rule 19 + stock-vs-flow.
-- 02:48 `baselineExpectedCapEx = baseGdp*0.03/52` — a 3%-of-GDP capex norm is a real-world equilibrium (rule 4) and undeclared (19). :50 `boundedGdpContribution` is named "bounded" and is not bounded (dead/misleading name).
+- 02-region-macro.ts:43 `bottomUpUnemploymentDelta = -employmentChangePct * 0.1` — a stock (unemployment rate) moved by a flow (% change in employment) times an invented 0.1; no labour force in the denominator. rule 2 + stock-vs-flow.
+- 02:48 `baselineExpectedCapEx = baseGdp*0.03/52` — a 3%-of-GDP capex norm is a real-world equilibrium (rule 2) and undeclared (19). :50 `boundedGdpContribution` is named "bounded" and is not bounded (dead/misleading name).
 - 02:22-23 `globalInflationShock=(random()-0.5)*0.0008`, `globalGdpShock=*0.001` — undeclared, period unnamed.
-- 02:29-32 four `if (regionId === 'USA'/'EUR'/'UK'/'JPN')` lines picking the composite — a stage switching on region identity instead of a registry lookup (rule 17 in spirit); adding a region is 4+ edits.
+- 02:29-32 four `if (regionId === 'USA'/'EUR'/'UK'/'JPN')` lines picking the composite — a stage switching on region identity instead of a registry lookup (rule 15 in spirit); adding a region is 4+ edits.
 - 02:135 `creditConditionsSpilloverAdjustment = (globalStanceAvg - stanceOf(r)) * 0.05` — invented transmission coefficient.
 - 01-macro-feedback.ts:63 `Math.min(1, ...)` clamps systemic stress; :56 `creditRating === 'CCC'` literal cohort test.
 - 03-category-demand.ts:270-272 smoothing 0.1/0.05/0.08 selected by `buyerMix.HOUSEHOLD > 0.5` / `GOVERNMENT > 0.5` — undeclared shape constants chosen by a threshold switch.
-- 03:141 `laggedCorporateDemandBase*0.95 + raw*0.05`; :296 `crowdingIntensity = clamp((supplyGrowth*8 - growthAnnual),0,1)` (magic 8 + a clamp, rule 2); :313/:317 `newLevel*0.10` inventory seed.
-- 03:293 `rawGrowthAnnual = ((newLevel/prevLevel)-1)*52` — a weekly ratio linearly annualised and stored as `demandGrowthAnnual` (rule 9: ×52 is not compounding, and the reader treats it as an annual rate).
-- 04-input-output.ts:129 `targetPriceIndex = 1 + (clearingRatio-1)*0.4`, :130 `newPriceIndex = old*0.85 + target*0.15` — a PRICE INDEX SET BY FORMULA from a demand/supply ratio, with three invented coefficients (rule 1, rule 15). This `upstreamScarcityIndex`/`inputCostPressure` is a SECOND, disconnected representation of the input price that stage 05 actually clears (rule 3).
-- 04:120 `inventoryHoldingDecayRate = (0.015 + glut*0.35)/52` — invented obsolescence; :123 supply is `weeklySupplyUnits*spotPrice` rationed to a region by its share of global bids — an imposed allocation, not a clearing (rule 13).
-- 04 has NO cash leg anywhere: inventory is consumed and a price index moves with nobody paying anyone (rule 14).
+- 03:141 `laggedCorporateDemandBase*0.95 + raw*0.05`; :296 `crowdingIntensity = clamp((supplyGrowth*8 - growthAnnual),0,1)` (magic 8 + a clamp, rule 6); :313/:317 `newLevel*0.10` inventory seed.
+- 03:293 `rawGrowthAnnual = ((newLevel/prevLevel)-1)*52` — a weekly ratio linearly annualised and stored as `demandGrowthAnnual` (rule 8: ×52 is not compounding, and the reader treats it as an annual rate).
+- 04-input-output.ts:129 `targetPriceIndex = 1 + (clearingRatio-1)*0.4`, :130 `newPriceIndex = old*0.85 + target*0.15` — a PRICE INDEX SET BY FORMULA from a demand/supply ratio, with three invented coefficients (rule 3, rule 6). This `upstreamScarcityIndex`/`inputCostPressure` is a SECOND, disconnected representation of the input price that stage 05 actually clears (rule 4).
+- 04:120 `inventoryHoldingDecayRate = (0.015 + glut*0.35)/52` — invented obsolescence; :123 supply is `weeklySupplyUnits*spotPrice` rationed to a region by its share of global bids — an imposed allocation, not a clearing (rule 2).
+- 04 has NO cash leg anywhere: inventory is consumed and a price index moves with nobody paying anyone (rule 5).
 - 04:145 `supplier.inventoryLevelUSD` is a third inventory beside the goods ledger's real stock and stage 03's seed.
-- 07-commodities.ts (16 lines) does NOT supersede `macro/evolution.ts:1424-1427`; it is a thin wrapper and evolution.ts is the ONLY writer of `spotPrice`. But that writer is `spot*exp(drift*0.4 + clamp(±0.04,(ratio-1)*0.12))` with `Math.max(0.5, …)` — the commodity spot is a DRIFT FORMULA with a hard floor and a hard clamp, not a cleared price (rule 1, rule 2, rule 15). The cleared thing beside it is the futures curve (07i), so spot and the curve are two disconnected representations.
-- evolution.ts:1444 `inventoryLevelPct = clamp(0,100, pct + (random()-0.5)*3 - yieldLoss*40)` — a physical stock moved by noise and clamped (rule 13/2).
+- 07-commodities.ts (16 lines) does NOT supersede `macro/evolution.ts:1424-1427`; it is a thin wrapper and evolution.ts is the ONLY writer of `spotPrice`. But that writer is `spot*exp(drift*0.4 + clamp(±0.04,(ratio-1)*0.12))` with `Math.max(0.5, …)` — the commodity spot is a DRIFT FORMULA with a hard floor and a hard clamp, not a cleared price (rule 3, rule 6, rule 6). The cleared thing beside it is the futures curve (07i), so spot and the curve are two disconnected representations.
+- evolution.ts:1444 `inventoryLevelPct = clamp(0,100, pct + (random()-0.5)*3 - yieldLoss*40)` — a physical stock moved by noise and clamped (rule 2/2).
 - 07-commodities.ts:14 passes `updatedRegions.USA.gdpGrowth` and `USA.zeroRates.tenor3M` into every commodity: the world commodity price is driven by one region's growth (`demandShock = globalGrowth*0.8`, evolution.ts:1400).
 - 06-fx-and-trade.ts:59-60 `exportsUSD = weekly*52` — correctly named annualised run-rate; fine.
 
 **labor-market.ts (854 lines)**
-- :585-596 THE WAGE DOES NOT BUY LABOUR. `fillRatioByOcc[occ] = hires/vacancies` is one number per occupation and `filledFor()` applies it to every employer identically — a firm's `offeredWageIndex` has ZERO effect on how many of its vacancies fill. The comment at :578 ("the constraint HH6 lets it answer by paying more") is false: paying more only lowers quits (:262). Labour is rationed pro rata by posted vacancies, not cleared on price (rule 1/15).
-- :592 `Math.max(1, Math.round(comp.employeeCount + hired - layoffs - quits))` — a hard floor of one employee per firm; a firm can never shed to zero (rule 2).
-- :502 `supplyForOcc = totalLaborForce * shares[occ]` (fallback `?? 0.2` twice, :503/:806) — occupational labour supply is an imposed fixed share with NO mobility between occupations, so an occupational shortage can never be relieved (rule 13/19).
-- :186 `inflationAnnual = reg.inflation ?? 0.02` — a 2% fallback is a real-world equilibrium (rule 4).
-- :318 `realRevenueUSD = comp.annualRevenue / Math.max(0.05, outputPriceVsBaselineOf(...))` — 0.05 floor (rule 2).
-- No cash leg anywhere for the labour flows: layoffs cost nothing (the header at :23 claims "severance and notice are real frictions" — no severance is ever paid), hires cost nothing, and only the wage BILL is paid elsewhere (rule 14 / stale comment).
-- The whole mechanism runs on ~13 bare exported constants in `domain/region-macro.ts:489-621` (LABOR_PRODUCTIVITY_GROWTH_ANNUAL 0.012, VACANCY_WITHDRAWAL_RATE_WEEKLY 0.10, WAGE_PUSH… 0.10, COST_OF_LIVING_PASS_THROUGH 0.6, WAGE_PULL… 0.45, MARKET_WAGE_CATCHUP_SPEED_WEEKLY 0.15, RENT_SHARE_TO_LABOUR 0.12, NEUTRAL_LABOR_TIGHTNESS 0.95, MATCHING_ELASTICITY 0.5, HIRING_ADJUSTMENT_SPEED_MULTIPLE 1.1, LAYOFF_SPEED_MULTIPLE 0.6, DISTRESS_LAYOFF_SPEED 0.10) — none declared via `stated()` (rule 19). These ARE the labour market's answer.
+- :585-596 THE WAGE DOES NOT BUY LABOUR. `fillRatioByOcc[occ] = hires/vacancies` is one number per occupation and `filledFor()` applies it to every employer identically — a firm's `offeredWageIndex` has ZERO effect on how many of its vacancies fill. The comment at :578 ("the constraint HH6 lets it answer by paying more") is false: paying more only lowers quits (:262). Labour is rationed pro rata by posted vacancies, not cleared on price (rule 3/15).
+- :592 `Math.max(1, Math.round(comp.employeeCount + hired - layoffs - quits))` — a hard floor of one employee per firm; a firm can never shed to zero (rule 6).
+- :502 `supplyForOcc = totalLaborForce * shares[occ]` (fallback `?? 0.2` twice, :503/:806) — occupational labour supply is an imposed fixed share with NO mobility between occupations, so an occupational shortage can never be relieved (rule 2/19).
+- :186 `inflationAnnual = reg.inflation ?? 0.02` — a 2% fallback is a real-world equilibrium (rule 2).
+- :318 `realRevenueUSD = comp.annualRevenue / Math.max(0.05, outputPriceVsBaselineOf(...))` — 0.05 floor (rule 6).
+- No cash leg anywhere for the labour flows: layoffs cost nothing (the header at :23 claims "severance and notice are real frictions" — no severance is ever paid), hires cost nothing, and only the wage BILL is paid elsewhere (rule 5 / stale comment).
+- The whole mechanism runs on ~13 bare exported constants in `domain/region-macro.ts:489-621` (LABOR_PRODUCTIVITY_GROWTH_ANNUAL 0.012, VACANCY_WITHDRAWAL_RATE_WEEKLY 0.10, WAGE_PUSH… 0.10, COST_OF_LIVING_PASS_THROUGH 0.6, WAGE_PULL… 0.45, MARKET_WAGE_CATCHUP_SPEED_WEEKLY 0.15, RENT_SHARE_TO_LABOUR 0.12, NEUTRAL_LABOR_TIGHTNESS 0.95, MATCHING_ELASTICITY 0.5, HIRING_ADJUSTMENT_SPEED_MULTIPLE 1.1, LAYOFF_SPEED_MULTIPLE 0.6, DISTRESS_LAYOFF_SPEED 0.10) — none declared via `stated()` (rule 2). These ARE the labour market's answer.
 - :760 `reg.governmentEmployment` enters the employment stock but never posts a vacancy or a layoff — government headcount is exogenous and constant (defensible as POLICY, flagged only because it silently anchors u).
 - NOTES-fine: seekers = supply − employedBefore + separations is a correct gross-flow stock; `unemploymentRate` is a pure identity off the real stock (the old 50% cap is genuinely gone); the vacancy>laborForce `throw` at :845 is a real guard, not a clamp.
 
 **The goods auction core (double-auction.ts, followed to confirm 05's price)**
 - `double-auction.ts:116` `if (guard++ > 10000) break;` — the discovery walk advances one index per iteration, so a book with more than ~10,000 orders (household ladders: cohorts x rungs, plus every corporate rung x 4 origins) SILENTLY stops clearing partway: clearedPrice and clearedQuantity are struck on a truncated book, with no defect and no trace.
-- `double-auction.ts:126` `clearedPrice = (bid.maxPrice + offer.minPrice)/2` — the print is the MIDPOINT of the marginal buyer's reservation and the marginal seller's floor. In a saturated (short) market the clearing point is the marginal buyer's reservation; averaging it with the seller's cost floor parks half the print on a bound (rule 15) and makes every price a fixed blend of the two sides' bounds regardless of which side is constrained.
+- `double-auction.ts:126` `clearedPrice = (bid.maxPrice + offer.minPrice)/2` — the print is the MIDPOINT of the marginal buyer's reservation and the marginal seller's floor. In a saturated (short) market the clearing point is the marginal buyer's reservation; averaging it with the seller's cost floor parks half the print on a bound (rule 6) and makes every price a fixed blend of the two sides' bounds regardless of which side is constrained.
 
 **Other files**
-- price-index.ts:150-155 `seedCpiHistory` fabricates 53 weeks of CPI compounding at the inflation TARGET; 11-fiscal:86-93 reads `cpiHistory[0]` for YoY from week 1, so `reg.inflation` is a fabricated YoY for the first 52 weeks — and it feeds the Taylor rule, the labour deflator and the news. Rule 9 names this exactly ("a missing change is information, a fabricated one is a lie") and rule 4 (a CB that hit its target is a real-world outcome).
-- price-index.ts:71 `FOOD_AND_ENERGY_SUBUNITS` is a hardcoded set of sub-unit ids outside the registry (rule 17).
+- price-index.ts:150-155 `seedCpiHistory` fabricates 53 weeks of CPI compounding at the inflation TARGET; 11-fiscal:86-93 reads `cpiHistory[0]` for YoY from week 1, so `reg.inflation` is a fabricated YoY for the first 52 weeks — and it feeds the Taylor rule, the labour deflator and the news. Rule 9 names this exactly ("a missing change is information, a fabricated one is a lie") and rule 2 (a CB that hit its target is a real-world outcome).
+- price-index.ts:71 `FOOD_AND_ENERGY_SUBUNITS` is a hardcoded set of sub-unit ids outside the registry (rule 15).
 - macro/indices.ts:66 `if (firms.length === 0) return baseIndex;` — the function returns a fractional CHANGE everywhere else (:105 `prevUS * (1 + usChange)`), so an empty region or sector multiplies its index by ~1001 in one week. Latent, and fires the first time a sector empties.
-- macro/indices.ts:175 `generate52WeekHistory(val, 0.015)` fabricates a year of history for EVERY index at inception (rule 9).
+- macro/indices.ts:175 `generate52WeekHistory(val, 0.015)` fabricates a year of history for EVERY index at inception (rule 8).
 - macro/indices.ts:230-236 the PMI: `50 + 50*tanh(g*4)`, `tanh(g*52*3)`, `tanh(g*52*5)` — three invented scalings, and it is computed from USA firms/regions only while being published as a global composite.
 - macro/indices.ts:257 comment contains a Cyrillic word ("a name's риск premium").
-- weather.ts:180-184 `yieldScale` 0.35/0.20/0.30/0.25, :156 hazard `Math.min(0.5, totalWeight*0.4)`, :171 `intensity = min(1, |season|*(0.4+random()))`, :123 `2 + floor(random()*4)` — all undeclared shape constants (rule 19).
-- weather.ts:196 documents `yieldImpactPct` as "a share of THIS REGION's supply", but `macro/evolution.ts:1416-1421` sums it across regions and applies it to the GLOBAL `supplyUnits`, clamped at 0.9: a drought in one region cuts world supply by the full share. Producer and consumer of the field disagree (rule 3) + a clamp (rule 2).
+- weather.ts:180-184 `yieldScale` 0.35/0.20/0.30/0.25, :156 hazard `Math.min(0.5, totalWeight*0.4)`, :171 `intensity = min(1, |season|*(0.4+random()))`, :123 `2 + floor(random()*4)` — all undeclared shape constants (rule 2).
+- weather.ts:196 documents `yieldImpactPct` as "a share of THIS REGION's supply", but `macro/evolution.ts:1416-1421` sums it across regions and applies it to the GLOBAL `supplyUnits`, clamped at 0.9: a drought in one region cuts world supply by the full share. Producer and consumer of the field disagree (rule 4) + a clamp (rule 6).
 - fx-market.ts:112 `MAX_WEEKLY_FX_MOVE_PCT = 8` is a DEAD export — no use site anywhere in the tree (only two comments). Its 15-line doc describes a damper binding 38 of 40 weeks that no longer exists; fx-clearing.ts has no such bound. Delete it or the doc misleads the next reader.
 - fx-clearing.ts:104 `Math.abs(deltaUSD) < 1e5` — an undeclared $100k dust threshold on the cross-border securities FX leg.
 - fx-market.ts:99 `CENTRAL_BANK_FX_INTERVENTION_SHARE = 0.10` undeclared.
-- freight-clearing.ts:210/:239/:246 `laneFillRatio`, `shippedShareByLaneSubUnit`, `laneCapacityTonnes`, `laneBookedTonnes`, `carrierFuelBurnedTonnes` are computed every week and READ BY NOTHING in the live engine (only the seed reads revenue/tonnes). The header claims "so the goods auction sources only what can arrive": it does not. Freight capacity never rations goods — 05 ships and pays freight on every lot regardless — and `profiles/carrier.ts:41` then clamps `utilization` at 1, hiding the physical overshoot (rule 2, rule 13).
-- profiles/carrier.ts:44-55 `annualFuel` is booked as a cost with NO purchase: a carrier's `productLines` is `[]` (bootstrap/carriers.ts:358) and `PROFILE_INPUT_BASKET` (industry-registry.ts:863) has NO `CARRIER` row, so `firmInputIntensities` returns {} and a carrier bids for NOTHING in stage 05. The world fleet's bunker demand never reaches the refined_products market and nobody is paid for the fuel (rule 14). It also has no premises, software or maintenance basket at all, unlike BANK/INSURER/ASSET_MANAGER.
-- foreign-direct-investment.ts:145-150 the parent's capitalisation `pay()` crosses a border with NO FX conversion, while the file header claims it goes "through the same FX path every cross-border payment takes" (rule 9 + stale comment). :133 `annualRevenueUSD: revenueUSD` imposes the subsidiary's revenue rather than letting it be produced (rule 13); :136 `Math.max(0.02, margin)` floor.
-- sourcing-intent.ts:246 `regions[r]?.policyRate ?? 0.045` — a 4.5% fallback (rule 4).
-- trade-invoice.ts:78 `Math.max(1, Math.floor(weeks))` — a seller that can fund no credit still extends one week (rule 2, minor).
+- freight-clearing.ts:210/:239/:246 `laneFillRatio`, `shippedShareByLaneSubUnit`, `laneCapacityTonnes`, `laneBookedTonnes`, `carrierFuelBurnedTonnes` are computed every week and READ BY NOTHING in the live engine (only the seed reads revenue/tonnes). The header claims "so the goods auction sources only what can arrive": it does not. Freight capacity never rations goods — 05 ships and pays freight on every lot regardless — and `profiles/carrier.ts:41` then clamps `utilization` at 1, hiding the physical overshoot (rule 6, rule 2).
+- profiles/carrier.ts:44-55 `annualFuel` is booked as a cost with NO purchase: a carrier's `productLines` is `[]` (bootstrap/carriers.ts:358) and `PROFILE_INPUT_BASKET` (industry-registry.ts:863) has NO `CARRIER` row, so `firmInputIntensities` returns {} and a carrier bids for NOTHING in stage 05. The world fleet's bunker demand never reaches the refined_products market and nobody is paid for the fuel (rule 5). It also has no premises, software or maintenance basket at all, unlike BANK/INSURER/ASSET_MANAGER.
+- foreign-direct-investment.ts:145-150 the parent's capitalisation `pay()` crosses a border with NO FX conversion, while the file header claims it goes "through the same FX path every cross-border payment takes" (rule 8 + stale comment). :133 `annualRevenueUSD: revenueUSD` imposes the subsidiary's revenue rather than letting it be produced (rule 2); :136 `Math.max(0.02, margin)` floor.
+- sourcing-intent.ts:246 `regions[r]?.policyRate ?? 0.045` — a 4.5% fallback (rule 2).
+- trade-invoice.ts:78 `Math.max(1, Math.floor(weeks))` — a seller that can fund no credit still extends one week (rule 6, minor).
 - cross-border.ts:41-49 `HOME_BIAS_BY_ENTITY_TYPE` — seven stated levels, self-documented as rule-19 PREFERENCE but not declared in `domain/stated.ts`.
 - 09-concentration-risk.ts:25 `CONCENTRATION_FLAG_THRESHOLD = 0.40` undeclared (disclosure convention, low severity).
 - news-derivation.ts:311 reports `after.inflation` as "annualised inflation" — for 52 weeks that is the fabricated YoY above.
@@ -1353,8 +1353,8 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
   profile's own doc says "the seller pays par less what the workout ACTUALLY recovers (G5, §7.192)",
   but the provider wired in is `recoveryRate: (r) => creditRecoveryRate(region(r))` — the region's
   blended prior/realised rate. Meanwhile `estate-resolution.ts` runs a real per-issuer waterfall
-  whose recovery is computable. Two representations of one quantity (rule 3), and the protection
-  buyer's payout is an imposed number rather than the outcome (rule 13). It also removes the thing
+  whose recovery is computable. Two representations of one quantity (rule 4), and the protection
+  buyer's payout is an imposed number rather than the outcome (rule 2). It also removes the thing
   that makes CDS interesting: basis risk between the hedge and the actual claim. Fix: settle the
   event against the estate's realised recovery on THAT issuer (defer to the workout, as a real
   auction does), and keep the regional rate only as the pre-default mark.
@@ -1380,7 +1380,7 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
   every class on one balance sheet, charged on BOTH sides of a contract, consumed in pipeline order,
   and `deskNotionalCapacityUSD` genuinely reaches zero — "a desk at zero is why a hedge can be
   unavailable at any price, which no formula-priced hedge can express". Finite capacity with a named
-  counterparty, exactly as rule 14 asks.
+  counterparty, exactly as rule 5 asks.
 - Rule 9 is clean across the classes: every periodic leg divides an annual figure by 52 at the point
   of use (`irs.ts:44`, `cds.ts:52`), and the identifiers name their period (`strike` documented as
   "bps of notional per year", `PHYSICAL_STORAGE_COST_ANNUAL`).
@@ -1388,10 +1388,10 @@ ledger/accounts.ts, stages/bill-accretion.ts, domain/stated.ts, stages/context.t
   re-marked carried positions with NO cash leg, so weekly variation margin was structurally zero for
   the book's whole life. The fix (cumulative-value-settled-as-delta) is the right shape.
 - `PHYSICAL_STORAGE_COST_ANNUAL` (`commodity-future.ts:33-37`) and `CDS_TENOR_WEEKS` / `FX_FORWARD_TENOR_WEEKS`
-  are TECHNOLOGY and market-convention primitives — rule 4 admits both. `LARGE_EXPOSURE_LIMIT_OF_CAPITAL`
+  are TECHNOLOGY and market-convention primitives — rule 2 admits both. `LARGE_EXPOSURE_LIMIT_OF_CAPITAL`
   is a regulatory primitive and turns 09-concentration's measurement into a decision. Correct.
 - `equityHedgeRatioFor` (`fx-forward.ts:32-38`) dispatches through the institution and strategy
-  registries rather than switching on entity type — rule 17 satisfied.
+  registries rather than switching on entity type — rule 15 satisfied.
 
 ### A10 — Domain modules and the company generator
 
@@ -1456,7 +1456,7 @@ labor-and-wages, close-seed, commodities-and-fx, category-demand}.ts.
   comment names "2-and-20" outright. Real-world equilibria (fee levels, loss ratio, AUM multiples),
   none declared in stated.ts. Rule 4/19. Same number again at
   `profiles/insurer.ts:35` (`lossRatio = 0.70 ± 0.10`) and disagreeing at
-  `profiles/asset-manager.ts:23` (`0.005 + U*0.005` — a THIRD fee rate for the same firms, rule 3).
+  `profiles/asset-manager.ts:23` (`0.005 + U*0.005` — a THIRD fee rate for the same firms, rule 4).
 - `src/engine/companyGenerator.ts:400-418` — the sector→ProductCategory map is written out TWICE,
   verbatim, as an if-chain, and `Financials`/`Banks` map to `'SoftwareDigitalServices'`, so insurers,
   asset managers and pension funds size their opening revenue off SOFTWARE demand. Rule 17 (a switch
@@ -1500,15 +1500,15 @@ labor-and-wages, close-seed, commodities-and-fx, category-demand}.ts.
   clamped to `[0.02, 0.30]`. Rule 2 (a bound standing in for the mechanism). `:81`
   `subInvestmentGradeSizeFactor: 2.0` for ASSET_MANAGER is justified in its own comment by the price
   print it prevents ("every name cleared at saturation") — a constant sized to close a number
-  (rule 18/19), undeclared.
+  (rule 11/19), undeclared.
 - `src/engine/simulation/stages/profiles/asset-manager.ts:19-22` — `flows = (random() - 0.4) * 0.01`
   is a BIASED weekly AUM flow (+0.1%/wk ≈ +5.3%/yr) arriving from no counterparty, applied whenever
   no `InstitutionalEntity` backs the shell; the fallback AUM is `annualRevenue * 50`. Rule 14 (a
-  one-sided flow) / rule 1. `:17` also picks the composite index by a region if-chain that silently
+  one-sided flow) / rule 3. `:17` also picks the composite index by a region if-chain that silently
   falls through to JPN for any unlisted region.
 - `src/engine/companyGenerator.ts:38-59` `getCategoryDemandSeedUSD` — a 14-arm switch on category
   with hand-set shares of `income*0.95 / *0.18 / *0.08`. Rule 17 (a switch on industry outside the
-  registry) + rule 19 (14 undeclared SHAPE constants). The function's own successor
+  registry) + rule 2 (14 undeclared SHAPE constants). The function's own successor
   (`producingSectorNamedTierDemandUSD:84-100`) already reads the registry; this one is still live at
   `:424`. Fix: delete it in favour of the registry-derived demand vector.
 - `src/engine/bootstrap/labor-and-wages.ts:38-44` `BASELINE_OCCUPATION_LABOR_FORCE_SHARE`
@@ -1529,7 +1529,7 @@ labor-and-wages, close-seed, commodities-and-fx, category-demand}.ts.
   `:699` `seniorBondYield = 0.05 + oas/1e4`; `:189` fallback interest `oas/1e4 + 0.03`.
 - `companyGenerator.ts:191` `taxExpense` uses a literal `0.21` while `CORPORATE_TAX_RATE_BY_REGION`
   is imported and used 300 lines later (`:491`) — the §5-TAXR one-owner fix missed this site.
-- `companyGenerator.ts:200` `driverScale` clamps the COGS drivers to 90% of COGS (rule 2);
+- `companyGenerator.ts:200` `driverScale` clamps the COGS drivers to 90% of COGS (rule 6);
   `:1100` the IPF ratio is clamped to `[0.25, 4]`; `industry-registry.ts:1298` clamps recipe
   intensity to 0.95.
 - `companyGenerator.ts:557-565` dealer consensus is `eps × 0.97/1.01/1.06` — fabricated coverage.
@@ -1546,7 +1546,7 @@ labor-and-wages, close-seed, commodities-and-fx, category-demand}.ts.
   `InstitutionalEntityType`. `companyGenerator.ts:693` casts past it.
 - `domain/market-microstructure.ts:139-144` `crowdingIntensity: 0.1` and `inventoryLevelUSD =
   demandLevelAnnualUSD * 0.10` — an ANNUAL flow × 0.1 opening as a STOCK (≈5 weeks of demand);
-  no period in the derivation (rule 9).
+  no period in the derivation (rule 8).
 - `bootstrap/firms.ts:82,97` name/ticker generation falls back to `'XXXX'` and a numeric suffix after
   100/200 attempts — two firms would then share an id (`${region}_XXXX`).
 - Undeclared SHAPE/RESOLUTION constants found in these files, none in `domain/stated.ts`:
@@ -1561,7 +1561,7 @@ labor-and-wages, close-seed, commodities-and-fx, category-demand}.ts.
   Rule-19 classification: TECHNOLOGY/POLICY (fine) — the registry's recipes, value densities,
   shelf lives, lead weeks, seasonality, `WAREHOUSE_USD_PER_TONNE_YEAR`, `maxPayoutRatio`,
   `ANTITRUST_*`, `RETIREMENT_AGE_YEARS`, `WORKFORCE_ENTRY_AGE_YEARS`, the Gompertz pair,
-  `SHIP_FINANCE_LOAN_TO_VALUE`, the institution `targets` (rule 5), `COMMODITY_QUANTITY_UNIT`,
+  `SHIP_FINANCE_LOAN_TO_VALUE`, the institution `targets` (rule 2), `COMMODITY_QUANTITY_UNIT`,
   `extractionCostPerTonne`/`unitsPerTonne`. PREFERENCE (fine) — the four in `preferences.ts`
   (declared). RESOLUTION (fine, invariance untested) — `targetCount 200`, `SECTOR_FIRM_COUNT`,
   `BANKS_PER_REGION 4`, `INSURERS_PER_REGION 3`, `CARRIERS_PER_REGION 3`,
@@ -1676,7 +1676,7 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 - `src/ui/objects/commodity.tsx:37` — `pctLevel(r.obj.change1W, 1)` renders as a percentage a field
   that `engine/macro/evolution.ts:1429` writes as `newSpot - comm.spotPrice`, an **absolute USD
   price move**. A $2.00 move on a $78 commodity prints "200.0%". A USD field displayed as a share
-  (rule 9, §7.165). Same defect for FX: `objects/fx.tsx:29` and the "1 week" Stat, over
+  (rule 8, §7.165). Same defect for FX: `objects/fx.tsx:29` and the "1 week" Stat, over
   `fx-clearing.ts:382`'s `Number((rate - fx.rate).toFixed(4))`.
 - `src/ui/objects/commodity.tsx:39,50` — `pctLevel(inventoryLevelPct, 0)` multiplies by 100 a field
   `evolution.ts:1443` clamps to `[0,100]` and seeds at 48: the stock column reads "4800%". It is the
@@ -1689,7 +1689,7 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 - `src/ui/functions/macro.tsx:63` — "current account, of gdp" renders `r.currentAccountPctGdp`,
   which is written **once, as `0`, at `engine/macro/initialization.ts:580` and never again**. The
   dashboard reports a permanent 0.0% current account for regions that have real exports and
-  imports. A fabricated number for a quantity nothing computes (rule 9/13).
+  imports. A fabricated number for a quantity nothing computes (rule 8/13).
 - `src/ui/functions/all.tsx:46` — `RATE_KEY.test(k) && Math.abs(v) <= 5 ? pct(v, 2) : …`: the `all`
   view GUESSES the unit by magnitude. This is precisely the defect §7.241 killed when it made
   `formatPercent`'s `isDecimal` required ("a display helper that guesses units is a unit-confusion
@@ -1704,12 +1704,12 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
   browser path.
 - `src/ui/world.ts:236` — `bankLinesTo` returns a hardcoded `status: 'PERFORMING'` for every
   facility row. A defaulted borrower's bank line is displayed as performing; the field is a
-  constant wearing a state's name (rule 3/13).
+  constant wearing a state's name (rule 4/13).
 - `src/engine/newsGenerator.ts:139` — the default headline states outcomes as literal text:
   "interest coverage below 0.8x" and "Senior bond recovery established at 40%, equity shares
   cancelled". The coverage floor is a per-firm parameter (`isInDefault({coverageFloor})`, pinned at
   1.0 in `test/credit-standing.test.ts`) and the recovery is `CREDIT_RECOVERY_RATE`; neither is read.
-  A displayed number that is a sentence rather than the print (rule 1/3).
+  A displayed number that is a sentence rather than the print (rule 3/3).
 
 **MINOR**
 - `harness.ts:846-853` — `checkOwnershipConservation` tests four conditions of which only two are
@@ -1727,7 +1727,7 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
   fossil of generated prose.
 - `package.json:26` — `@google/genai` is a dependency with no import anywhere in `src/` (grep for
   gemini/genai/apiKey returns nothing). Dead LLM SDK in the shipped dependency set; adjacent to
-  rule 16 even though no model identifier is committed (checked: none in src/, index.html,
+  rule 14 even though no model identifier is committed (checked: none in src/, index.html,
   workflows).
 - `src/ui/calendar.ts:47` — `WEEKS_PER_MONTH = 4` (28 days) drives every "m/m", while
   `formatSpan` uses `52/12` (30.4 days) for the same word. One file, two months.
@@ -1743,7 +1743,7 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
   while the harness's DRV battery counts "live" that way; a matured contract still on the book
   shows in the UI as an open one.
 - `src/engine/newsGenerator.ts:150` — `RATING_LADDER` is a local copy of the rating order
-  (rule 17: the ladder is registry data). `impactSector: er.sector as any` at :74.
+  (rule 15: the ladder is registry data). `impactSector: er.sector as any` at :74.
 - `scripts/check-hygiene.sh` — two consecutive sections both numbered `# 4.`; the CASH_STRAY rule
   is a hand-maintained list of variable names (`c|comp|company|…`), so `firms[i].cash` or any
   other identifier escapes it. Declared as a heuristic, but it is the only guard left after A4.
@@ -1752,7 +1752,7 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
   invariant (the other tests in the file are real).
 - `test/inventory.test.ts:66` and `:79` pin CLAMPS as invariants ("carrying cost never drives a
   stock value negative"; `fulfillmentRatio(50,10) === 1`). Rule 2 allows a mathematical floor, but
-  the first one silently destroys the unpaid carrying charge (a one-sided flow, rule 14) and the
+  the first one silently destroys the unpaid carrying charge (a one-sided flow, rule 5) and the
   test locks it in.
 
 **NOTES (checked, fine or explained)**
@@ -1762,7 +1762,7 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 - The EPS check is scoped to newly-appearing tickers only, so the whole seed population is never
   EPS-checked; the comment declares this, so it is a scope not a bug.
 - `recordTape` pads missing series with NaN and `changePct` refuses a NaN/0 base, so the UI's
-  m/m·y/y genuinely show "short"/level where history is short (rule 9 satisfied — chart.tsx:88-92,
+  m/m·y/y genuinely show "short"/level where history is short (rule 8 satisfied — chart.tsx:88-92,
   common.tsx:30).
 - `formatPercent`'s `isDecimal` contract is correct; the problem is that nothing calls it.
 - `vite.config.ts` `define: {'process.env': {}}` really does read every engine flag as off; the

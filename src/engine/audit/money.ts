@@ -127,7 +127,7 @@ function m5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   banksOf(state).forEach((b) => {
     const bs = b.bankBalanceSheet!;
-    const sov = sum(Object.values(bs.sovereignBondHoldingsByTenor ?? {}), (v) => Number(v) || 0);
+    const sov = sum(Object.values(bs.sovereignBondHoldingsByBond ?? {}), (v) => Number(v) || 0);
     const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryUSD));
     const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.ticker)) + sov + bankReservesOf(ensureV2(state), b.ticker) + (bs.repoLentUSD ?? 0) + (bs.sovereignAccruedCouponUSD ?? 0) + desks + (bs.primeBrokerageLoansUSD ?? 0);
     const liabilities = depositsOf(bs, stateDepositLines(state, b.ticker)) + (bs.centralBankLoanUSD ?? 0) + (bs.repoBorrowedUSD ?? 0) + (bs.srfBorrowingUSD ?? 0);
@@ -229,7 +229,7 @@ function m8(state: GameState, week: number): AuditFinding[] {
     expectedUSD += pos * (after - before);
   });
   const gap = rv.bookedUSD - expectedUSD;
-  // Float dust on a sum of this many rows, not a fraction of it (rule 28).
+  // Float dust on a sum of this many rows, not a fraction of it (rule 7).
   if (Math.abs(gap) > 1e4) {
     out.push({ family: 'M', check: 'M8 the FX revaluation is the rate move on the open position', week, usd: gap,
       message: `revaluation booked ${B(rv.bookedUSD)} against ${B(expectedUSD)} implied by every account row and the week's rate move — ${B(gap)} of foreign position revalued twice or by nobody` });

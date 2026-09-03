@@ -47,7 +47,7 @@ const CARRIERS_PER_REGION = 3;
 /**
  * What a lender advances against a hull. Ship finance is asset-based and this is the standard
  * advance rate against a vessel — a real lending primitive, of the same kind as the haircuts and
- * regulatory ratios rule 4 allows.
+ * regulatory ratios rule 2 allows.
  */
 const SHIP_FINANCE_LOAN_TO_VALUE = 0.55;
 

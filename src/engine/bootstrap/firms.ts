@@ -110,7 +110,7 @@ const FIRM_CONCENTRATION_DECAY = SEED_FIRM_CONCENTRATION_DECAY;
  * SEG — how much thinner an SME pool's margin is than the named tier's in the same sector.
  * Small firms really do earn less per dollar of revenue: less purchasing power over inputs, no
  * scale in overhead, weaker pricing power. One number for the model, applied to the sector
- * margin below rather than a second margin table (rule 3 — one primitive per real quantity).
+ * margin below rather than a second margin table (rule 4 — one primitive per real quantity).
  */
 export const SME_MARGIN_DISCOUNT = 0.35;
 
@@ -188,7 +188,7 @@ export const MIN_COVENANT_TAKEUP = 0.15;
  *
  * The strata are then scaled so their weighted mean is the pool's OWN measured leverage, which
  * keeps the aggregate exactly where it was: this adds a cross-section, it does not restate the
- * debt (rule 3).
+ * debt (rule 4).
  */
 export function seedPoolLeverageStrata(meanLeverageMultiple: number, strataCount: number): { weight: number; leverageMultiple: number }[] {
   if (!(strataCount > 0) || !(meanLeverageMultiple > 0)) return [];
@@ -364,7 +364,7 @@ export function generateFirmSeeds(
   // OWN5: a bank's opening share of its region is its own size on the SAME firm-size curve
   // every other sector is generated from, normalised across the cohort. It replaces a private
   // table, `0.35 x 0.72^rank`, which used a second concentration decay and summed to 0.914 —
-  // so 8.6% of every regional banking aggregate was carved out to no bank at all (rule 13).
+  // so 8.6% of every regional banking aggregate was carved out to no bank at all (rule 2).
   // From week 1 the share is not this number at all: it is measured off the deposits each bank
   // actually holds (02b).
   const bankScaleSum = Array.from({ length: BANKS_PER_REGION },

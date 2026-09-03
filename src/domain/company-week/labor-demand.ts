@@ -28,7 +28,7 @@ export interface FillRow { weight: number; demanded: number; supplied: number }
 /**
  * §7.249 — the price of what THIS employer sells, annualized over the SAME window as the nominal
  * growth it deflates. Own-price over own-window has neither of the region-CPI form's seams (a
- * different population and a different period — rule 9 twice over).
+ * different population and a different period — rule 8 twice over).
  */
 export function ownPriceGrowthAnnual(
   rows: PriceGrowthRow[], windowWeeks: number, fallbackInflationAnnual: number
@@ -76,7 +76,7 @@ export function demandPullFromFill(rows: FillRow[]): number {
 }
 
 /**
- * §7.345 — THE DEFLATOR CARRIES THE SAME LAG AS WHAT IT DEFLATES (rule 9). The revenue a growth
+ * §7.345 — THE DEFLATOR CARRIES THE SAME LAG AS WHAT IT DEFLATES (rule 8). The revenue a growth
  * signal reads is an EMA of receipts (`RECEIPTS_MEASUREMENT_WEIGHT`); the price it was deflated
  * by was the instant print. A one-month repricing (the seed's coverage gap clearing at
  * budget/supply) therefore read as a real collapse for the whole window — and the layoffs it

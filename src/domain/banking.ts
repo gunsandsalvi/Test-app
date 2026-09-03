@@ -126,11 +126,11 @@ export interface BankingSector {
   // engine (07c-sovereign-bond-clearing.ts) treat "the banking sector" as a real participant in
   // the tenor-point auction rather than one scalar total with no maturity composition.
   // sovereignBondHoldingsUSD stays the derived sum of these buckets.
-  sovereignBondHoldingsByTenor: Record<string, number>;
+  sovereignBondHoldingsByBond: Record<string, number>;
   // Real dealer inventory for the sovereign-bond clearing auction, by tenor bucket — the same
   // shared-regional-dealer-desk role banks play for corporate bonds (corpBondDealerInventory),
-  // distinct from banks' own real investment-portfolio holdings above (sovereignBondHoldingsByTenor).
-  sovBondDealerInventory: { tenorKey: string; inventoryUSD: number }[];
+  // distinct from banks' own real investment-portfolio holdings above (sovereignBondHoldingsByBond).
+  sovBondDealerInventory: { bondId: string; inventoryUSD: number }[];
   // Same shared-regional-dealer-desk role for leveraged loans. See 07d-leveraged-loan-clearing.ts.
   loanDealerInventory: { companyId: string; inventoryUSD: number }[];
   /**
@@ -261,7 +261,7 @@ export interface MortgageVintage {
 export interface HouseholdLoanPool {
   kind: HouseholdLoanKind;
   /**
-   * MORTGAGE: the SUM of `vintages` — a measurement of them, not a second stock (rule 3).
+   * MORTGAGE: the SUM of `vintages` — a measurement of them, not a second stock (rule 4).
    * Every other kind: the pool's own principal.
    */
   principalUSD: number;

@@ -219,7 +219,7 @@ financial account, because there is nothing to check.
 only fire on a NaN. B4 asks for something stronger — party to party, unit for unit — which would be
 a real check against the fills.
 
-While here: the tolerance is `exports * 0.05`, a **5% band**, which is rule 28's forbidden shape
+While here: the tolerance is `exports * 0.05`, a **5% band**, which is rule 7's forbidden shape
 (*"a tolerance is float dust, never a percentage"*) in the audit itself. A check that permits a 5%
 discrepancy between world exports and world imports would not notice a whole region's trade going
 missing. Small, and it belongs with **§3 step 27** (the audit's tolerances); recorded here because

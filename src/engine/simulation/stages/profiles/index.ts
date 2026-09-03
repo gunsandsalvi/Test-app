@@ -1,4 +1,4 @@
-/** The profile registry — one line per kind (rule 17). */
+/** The profile registry — one line per kind (rule 15). */
 
 import { ProfileModule } from './types';
 import { FinancialStatementProfile } from '../../../../domain/company';

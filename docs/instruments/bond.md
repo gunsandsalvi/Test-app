@@ -70,7 +70,7 @@ Node types, per `README.md`: **REASON**, **VERIFY**, **FORBID**.
 **The consequence for §3.13-SOV.** "The same construction as a normal bond" is right about N1–N10
 and N14 and wrong about N11–N13.a: a sovereign that inherits a `seniority` field which must never
 vary, and a covenant slot that must stay empty, has two fields whose only correct value is a
-constant — which rule 3 calls a second representation and rule 19 calls a primitive that should
+constant — which rule 4 calls a second representation and rule 2 calls a primitive that should
 not exist. The right shape is the contract above, with each type answering N11–N13 its own way.
 
 ---
@@ -103,7 +103,7 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 | **N7.b · corp FORBID the price is never derived from the spread** | `src/domain/pricing/bond.ts:priceFromSpreadBps` | ❌ |
 | **N7.b · sov FORBID the price is never derived from the yield** | `src/domain/government.ts:discountBillProceedsUSD` | ❌ |
 | N8 · corp a HOLDER OF RECORD: who owns how many units | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
-| **N8 · sov a HOLDER OF RECORD: who owns how many units** | `src/domain/banking.ts:sovereignBondHoldingsByTenor` | ❌ |
+| **N8 · sov a HOLDER OF RECORD: who owns how many units** | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ❌ |
 | N8.a · corp VERIFY Σ units held = units issued | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | N8.a · sov VERIFY Σ units held = units issued | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | N9 · corp TRANSFERABILITY | `src/engine/ledger/holdings-ledger.ts:transferHolding` | ✅ |
@@ -125,7 +125,7 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 | **N13.a · corp a RANKING of that claim** | `src/domain/estate.ts:CLAIM_SENIORITY` | ⚠️ |
 | N13.a · sov a RANKING (answer: pari passu, always) | `src/domain/region-macro.ts:GovDebtTranche` | ✅ |
 | **N14 · corp an IDENTITY a market would use** | `src/ui/objects/tranche.tsx:tranche` | ❌ |
-| **N14 · sov an IDENTITY a market would use** | `src/domain/sovereign-id.ts:govBucketId` | ❌ |
+| **N14 · sov an IDENTITY a market would use** | `src/domain/sovereign-id.ts:govBondTrancheId` | ❌ |
 
 ---
 
@@ -135,7 +135,7 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 
 The contract's own thesis is confirmed and sharpened: the two types differ correctly at N11, N13
 and N13.a — the sovereign genuinely has no call machinery and no seniority field, which is the
-right answer and rule 3's — and they fail IDENTICALLY at N7, N7.b and N14, which is where the
+right answer and rule 4's — and they fail IDENTICALLY at N7, N7.b and N14, which is where the
 model's real defect lives.
 
 ### ❌ N7 / N7.b BOTH TYPES — THE ONE CHARACTERISTIC NEITHER TYPE HAS
@@ -159,14 +159,13 @@ the reference model that says so for both types at once.
 
 ### ❌ N8 · sov — A HOLDER OF RECORD OF WHAT?
 
-**KNOWN(13-SOV, row 3.)** `banking.ts:129`'s `sovereignBondHoldingsByTenor: Record<string, number>`
-is dollars against a tenor key. There is no instrument in it, so N8's question ("who owns how many
-units") cannot be asked: a bank owns `t10: 4.2e9` and no bond. The institutions' side is one step
-better and still not an instrument — their register rows carry `GOV_BOND` against
-`sovereign-id.ts:govBucketId`, which is `USA|t10`, a bucket. **N10 · sov is the same defect at the
-other end**: `11-fiscal:200-225` redeems a maturing tranche by shrinking every holder's bucket
-pro-rata, because there is no way to find who held the bond that matured; and N8.a · sov reconciles
-bucket sums, which is why `auditOwnership` can pass while nobody can say who owns anything.
+**KNOWN(13-SOV, row 3.)** `banking.ts:129`'s `sovereignBondHoldingsByBond: Record<string, number>`
+was dollars against a tenor key. There was no instrument in it, so N8's question ("who owns how
+many units") could not be asked: a bank owned `t10: 4.2e9` and no bond, and `11-fiscal` redeemed a
+maturing tranche by shrinking every holder's bucket pro-rata because there was no way to find who
+held the bond that matured. **§3.13-SOV row 3 closed all of it**: every store keys by the tranche
+id, `audit/ownership.ts:o11` refuses a position naming an id no ladder carries, and `o3` no longer
+exempts sovereigns from the check that a register row names a live instrument.
 
 ### ❌ N12 / N13 · sov — THE SOVEREIGN CANNOT FAIL, AND NOTHING SAYS SO
 
@@ -183,7 +182,7 @@ written down at all.
 ### ❌ N14 BOTH TYPES — THE DISPLAY NAME IS THE INTERNAL ID
 
 **KNOWN(14).** `ui/objects/tranche.tsx:60` heads a tranche with `t.id` — `KRLN-T3`, or
-`KRLN-CP-47`. The sovereign side is `govBucketId`'s `USA|t10`. Rule 27 wants `KRLN 4.75% 2031`,
+`KRLN-CP-47`. The sovereign side is `govBondTrancheId`'s `USA-GOV-10Y-41`. Rule 9 wants `KRLN 4.75% 2031`,
 `KRLN L+350 2029`, and issuer + tenor for a sovereign. Both types have every ingredient on the
 instrument already; nothing composes them.
 
@@ -199,10 +198,10 @@ this class ("the contracts with no denomination"); the two bond types belong on 
 
 A bill and a bond are different instruments (`sovereign-credit.md` B1), and here they are one type
 separated by `isDiscountBill(t.tenorAtIssuanceYears) → tenor < 1.5`. Everything downstream then
-carries the test: `weeklyInterestExpenseUSD` filters bills out, `sovereignCouponByBucket` filters
+carries the test: `weeklyInterestExpenseUSD` filters bills out, `sovereignCouponByBond` filters
 them out, `bill-accretion.ts` exists to give them the return the coupon path does not. N6 · sov is
 the same shape one level down — `sovereignCouponDueShare` hard-codes `PAYMENTS_PER_YEAR = 2` for
-every bucket and derives the payment week from a **hash of the bucket key**, and each holder accrues
+every bond (it now counts the payment week from the bond's own issue date), and each holder accrues
 at the bucket's PRINCIPAL-WEIGHTED AVERAGE coupon rather than at its own bond's. Rule 9 says the
 periodicity is part of the number; here it is part of the bucket. Folds into **§3 step 13-SOV**,
 whose conversion deletes the bucket and makes the bill a `DebtTranche` with `N5.c` in its own row.

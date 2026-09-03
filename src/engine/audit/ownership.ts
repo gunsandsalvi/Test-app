@@ -46,7 +46,7 @@ function o1(state: GameState, week: number): AuditFinding[] {
     if (c.mergerAcquired) return;
     ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; quantityOrNotionalUSD?: number }[] }).treasuryHoldings ?? []).forEach(add);
     const bs = c.bankBalanceSheet; if (!bs || c.isDefaulted) return;
-    held[c.region].sov += sum(Object.values(bs.sovereignBondHoldingsByTenor ?? {}), (v) => Number(v) || 0);
+    held[c.region].sov += sum(Object.values(bs.sovereignBondHoldingsByBond ?? {}), (v) => Number(v) || 0);
     (bs.dealerDeskInventory?.['commercial paper'] ?? []).forEach((p) => { held[c.region].cp += p.inventoryUSD; });
   });
   REGION_IDS.forEach((r) => {
@@ -54,7 +54,7 @@ function o1(state: GameState, week: number): AuditFinding[] {
     (reg.bankingSector.corpBondDealerInventory ?? []).forEach((p) => { held[r].corp += p.inventoryUSD; });
     (reg.bankingSector.loanDealerInventory ?? []).forEach((p) => { held[r].loan += p.inventoryUSD; });
     (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => { held[r].sov += p.inventoryUSD; });
-    held[r].sov += sum(Object.values(reg.centralBankSheet?.sovereignHoldingsByTenor ?? {}), (v) => Number(v) || 0);
+    held[r].sov += sum(Object.values(reg.centralBankSheet?.sovereignHoldingsByBond ?? {}), (v) => Number(v) || 0);
     void regionById;
     (['corp', 'loan', 'sov', 'cp'] as const).forEach((k) => {
       const h = held[r][k], o = outstanding[r][k];
@@ -93,7 +93,11 @@ function o3(state: GameState, week: number): AuditFinding[] {
     if (e.isDefaulted) { if (e.itemizedHoldings.length) deadHolders++; return; }
     e.itemizedHoldings.forEach((h) => {
       const v = h.quantityOrNotionalUSD ?? 0;
-      if (h.instrumentType === 'GOV_BOND') return;
+      // §3.13-SOV row 3: a sovereign row names a bond on a GOVERNMENT's ladder, and this check
+      // resolves an issuer against `state.companies`, where no government sits. O11 owns those
+      // rows and holds them to the same standard against the government ladders. This used to be
+      // a bare `instrumentType === 'GOV_BOND'` carve-out with nothing behind it.
+      if (holdingClassOf(h.instrumentType) === 'SOVEREIGN') return;
       const c = live.get(issuerIdOf(v2o3, h.instrumentId));
       // 13b: a tranche's row is live only while the tranche is (retired paper on a book is an orphan).
       if (c && isTrancheId(v2o3, h.instrumentId) && trancheRowOf(v2o3, h.instrumentId) === undefined) { orphan++; orphanUSD += v; return; }
@@ -180,7 +184,7 @@ function o6(state: GameState, week: number): AuditFinding[] {
  * die. Measured here every week for every issuer, it is a number instead of a landmine.
  * The tolerance is float dust on the sum actually accumulated — the claims are added one row at a
  * time, so it scales with the count of rows and the size of the face, never with a percentage
- * (rule 28).
+ * (rule 7).
  */
 function o7(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
@@ -219,14 +223,14 @@ function o7(state: GameState, week: number): AuditFinding[] {
 }
 
 /**
- * O8 — ONE THING, ONE KEY (rule 3, and the keying policy in §3 step 12).
+ * O8 — ONE THING, ONE KEY (rule 4, and the keying policy in §3 step 12).
  *
  * THE POLICY, stated once so a check can test it:
  *   · a COMPANY is its `id`; its `ticker` is a display name and a party address, never a key
  *     into a store;
  *   · an INSTITUTION is its `id`;
  *   · a PIECE OF PAPER is the instrument it is — a TRANCHE id for credit, the company id for
- *     equity, the bucket id for a sovereign, the fund's id for a fund share;
+ *     equity, the TRANCHE id for a sovereign too, the fund's id for a fund share;
  *   · a GOOD is its sub-unit id, a CONTRACT its own id, and what a contract is ON is keyed the
  *     way that thing is keyed above.
  *
@@ -274,15 +278,17 @@ function o8(state: GameState, week: number): AuditFinding[] {
 
   // 3. Every register row's instrument id resolves in exactly one of the spaces the policy allows.
   let unresolvable = 0, unresolvableUSD = 0;
-  const govBucket = /-GOV-/;
+  // §3.13-SOV row 3: sovereign ids are TRANCHE ids in the same store, so `isTrancheId` answers
+  // for them. The `/-GOV-/` escape hatch that used to sit here passed any id merely SHAPED like
+  // government paper — the one id space this check could not actually check.
   state.institutionalEntities.forEach((e) => {
     materializeBook(v2, e.id).forEach((h) => {
       const id = h.instrumentId;
-      const known = isTrancheId(v2, id) || companyIds.has(id) || entityIds.has(id) || govBucket.test(id);
+      const known = isTrancheId(v2, id) || companyIds.has(id) || entityIds.has(id);
       if (!known) { unresolvable++; unresolvableUSD += h.quantityOrNotionalUSD ?? 0; }
     });
   });
-  if (unresolvable > 0) out.push({ family: 'O', check: 'O8 one thing, one key: register rows', week, usd: unresolvableUSD, message: `${unresolvable} register rows worth ${B(unresolvableUSD)} name an id that is no tranche, company, fund or sovereign bucket — a key that resolves in no store` });
+  if (unresolvable > 0) out.push({ family: 'O', check: 'O8 one thing, one key: register rows', week, usd: unresolvableUSD, message: `${unresolvable} register rows worth ${B(unresolvableUSD)} name an id that is no tranche, company or fund — a key that resolves in no store` });
   return out;
 }
 
@@ -409,56 +415,55 @@ function o10(state: GameState, week: number): AuditFinding[] {
 }
 
 /**
- * O11 — §3.13-SOV row 3. WHO HOLDS A GOVERNMENT BOND IS ANSWERED IN FOUR PLACES, AND NONE OF THEM
- * NAMES A BOND.
+ * O11 — §3.13-SOV row 3. EVERY SOVEREIGN HOLDING NAMES A BOND.
  *
  * A corporate bond's holder is a register row naming a TRANCHE, and `O6`/`O7`/`O8` hold that to
- * account. A government bond's holder is one of four separate stores, each keyed by a TENOR
- * BUCKET — `bankBalanceSheet.sovereignBondHoldingsByTenor`, `centralBankSheet
- * .sovereignHoldingsByTenor`, `bankingSector.sovBondDealerInventory`, and the institutional
- * register's `GOV_BOND` rows on a bucket id. A bucket is not an instrument: it has no issue date,
- * no coupon of its own and no maturity, so **you cannot ask who holds a given government bond**.
+ * account. A government bond's holder used to be one of four stores keyed by a TENOR BUCKET —
+ * banks', the central bank's, the desks' and the institutional register's — and a bucket is not an
+ * instrument: no issue date, no coupon of its own, no maturity. **You could not ask who held a
+ * given government bond**, and the clearest evidence it was a hole rather than a style sat in this
+ * file: `o3` opened with `if (h.instrumentType === 'GOV_BOND') return;`, carving out exactly the
+ * asset class that had no instrument to be checked against.
  *
- * The clearest evidence that this is a hole rather than a style is in the audit itself: `o3`, the
- * check that every register row names a live instrument, opens with
- * `if (h.instrumentType === 'GOV_BOND') return;`. The integrity check carves out exactly the asset
- * class that has no instrument to be checked against.
- *
- * This measures the size of what row 3 has to move. It goes green when a sovereign holding is a
- * row naming a tranche, in the same store as every other holding.
+ * Now every store keys by bond id, so this check is the invariant rather than the measurement: a
+ * holding whose id is on no ladder is a claim on paper that does not exist. It counts all four
+ * stores, because the whole point of row 3 is that they speak ONE id space.
  */
 function o11(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
-  let bankUSD = 0, cbUSD = 0, deskUSD = 0, registerUSD = 0;
-  let registerRows = 0, trancheNamed = 0;
+  const live = new Set<string>();
+  REGION_IDS.forEach((r) => materializeGovLadder(v2, r).forEach((tr) => live.add(tr.id)));
+  let strayUSD = 0, strayRows = 0;
+  const examples: string[] = [];
+  const check = (id: string, usd: number, where: string) => {
+    if (!(usd > 0) || live.has(id)) return;
+    strayUSD += usd; strayRows++;
+    if (examples.length < 3) examples.push(`${where} ${id} ${B(usd)}`);
+  };
   state.companies.forEach((c) => {
-    if (!isActiveCompany(c)) return;
-    const sheet = c.bankBalanceSheet;
-    if (!sheet) return;
-    Object.values(sheet.sovereignBondHoldingsByTenor ?? {}).forEach((v) => { bankUSD += Math.max(0, Number(v) || 0); });
+    if (!isActiveCompany(c) || !c.bankBalanceSheet) return;
+    Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond ?? {})
+      .forEach(([id, v]) => check(id, Number(v) || 0, `bank ${c.ticker}`));
   });
   REGION_IDS.forEach((r) => {
-    const cb = state.regions[r]?.centralBankSheet;
-    Object.values(cb?.sovereignHoldingsByTenor ?? {}).forEach((v) => { cbUSD += Math.max(0, Number(v) || 0); });
-    (state.regions[r]?.bankingSector?.sovBondDealerInventory ?? []).forEach((p) => { deskUSD += Math.max(0, p.inventoryUSD || 0); });
+    Object.entries(state.regions[r]?.centralBankSheet?.sovereignHoldingsByBond ?? {})
+      .forEach(([id, v]) => check(id, Number(v) || 0, `CB ${r}`));
+    (state.regions[r]?.bankingSector?.sovBondDealerInventory ?? [])
+      .forEach((pos) => check(pos.bondId, Math.abs(pos.inventoryUSD || 0), `desk ${r}`));
   });
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
+    // The registry says which kinds are sovereign; asking it rather than naming one also catches
+    // SOV_BOND, which is the same instrument under the model's other name for it.
     materializeBook(v2, e.id).forEach((h) => {
-      // The registry says which kinds are sovereign; asking it rather than naming one also
-      // catches SOV_BOND, which is the same instrument under the model's other name for it.
       if (holdingClassOf(h.instrumentType) !== 'SOVEREIGN') return;
-      registerRows++;
-      registerUSD += Math.max(0, h.quantityOrNotionalUSD ?? 0);
-      if (isTrancheId(v2, h.instrumentId)) trancheNamed++;
+      check(h.instrumentId, h.quantityOrNotionalUSD ?? 0, `register ${e.id}`);
     });
   });
-  const totalUSD = bankUSD + cbUSD + deskUSD + registerUSD;
-  const stores = [bankUSD > 0, cbUSD > 0, deskUSD > 0, registerUSD > 0].filter(Boolean).length;
-  if (totalUSD > 1e6 && trancheNamed < registerRows) {
-    out.push({ family: 'O', check: 'O11 a sovereign holding names a bond', week, usd: totalUSD,
-      message: `${B(totalUSD)} of government paper is held across ${stores} separate stores keyed by TENOR BUCKET — banks ${B(bankUSD)}, central banks ${B(cbUSD)}, desks ${B(deskUSD)}, register ${B(registerUSD)} over ${registerRows} rows of which ${trancheNamed} name a tranche — so nobody can be asked who holds a given government bond (and o3 exempts GOV_BOND for exactly this reason)` });
+  if (strayRows > 0) {
+    out.push({ family: 'O', check: 'O11 a sovereign holding names a bond', week, usd: strayUSD,
+      message: `${strayRows} sovereign positions worth ${B(strayUSD)} name an id no government ladder carries (${examples.join(' | ')}) — a claim on paper that does not exist` });
   }
   return out;
 }

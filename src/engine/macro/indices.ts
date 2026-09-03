@@ -77,7 +77,7 @@ const getCapWeightedAvgPrice = (firms: Company[]) => {
     // IDX: no bound. An index is the cap-weighted move of its own constituents, whatever that
     // is — a STATISTIC, not a price and not a level. The +/-15%/wk clamp that stood here only
     // hid equity runaway inside the published number while the constituents themselves ran,
-    // which is the one thing a published index must never do (rule 2).
+    // which is the one thing a published index must never do (rule 6).
     return avgChange;
   };
 
@@ -214,7 +214,7 @@ const getCapWeightedAvgPrice = (firms: Company[]) => {
 
 function calculatePmiComposite(regions: Record<RegionId, Region>, companies: Company[]): { headline: number; demandComponent: number; capexComponent: number; employmentComponent: number } {
   const usaCompanies = companies.filter(c => c.region === 'USA' && isActiveCompany(c));
-  const avgCategoryDemandGrowth = Object.values(regions.USA.categoryDemand).reduce((s: number, d: any) => s + d.demandGrowthAnnual, 0) / Math.max(1, Object.keys(regions.USA.categoryDemand).length);
+  const avgCategoryDemandGrowth = Object.values(regions.USA.categoryDemand).reduce((s: number, d) => s + d.demandGrowthAnnual, 0) / Math.max(1, Object.keys(regions.USA.categoryDemand).length);
   const avgCapexGrowth = usaCompanies.length ? usaCompanies.reduce((s, c) => s + (c.capex - (c.previousCapex ?? c.capex)) / Math.max(1, c.previousCapex ?? c.capex), 0) / usaCompanies.length : 0;
   const avgHeadcountGrowth = usaCompanies.length ? usaCompanies.reduce((s, c) => s + (c.employeeCount - c.previousEmployeeCount) / Math.max(1, c.previousEmployeeCount), 0) / usaCompanies.length : 0;
 

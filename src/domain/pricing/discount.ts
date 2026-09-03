@@ -13,7 +13,7 @@
  * belongs in the same commit as step 13's sovereign pricing rather than ahead of it.
  *
  * Rates are ANNUAL DECIMALS unless the argument says otherwise, and a period rate is the rate for
- * ONE period (rule 9: periodicity is part of the number).
+ * ONE period (rule 8: periodicity is part of the number).
  */
 
 /** What one unit of money at `periods` from now is worth today, at `ratePerPeriod`. */

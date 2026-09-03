@@ -23,9 +23,9 @@ Written 2026-09-03 from the domain, code shut.
   - A1.c **N13.a seniority** — senior unsecured, ranking with the issuer's other senior debt
   - A1.d **N11 early termination** — none. It is too short to be worth an option
 - **A2** REASON — its **price** is what it clears at, and the yield is derived from price and days
-  to maturity (rule 1)
+  to maturity (rule 3)
   - A2.a on a stated day-count and quoting convention, because at this tenor the convention is a
-    material part of the number (rule 9)
+    material part of the number (rule 8)
 - **A3** REASON — there are **types by issuer**: the state (bills), a bank (CD), a firm (CP), and
   the type is the credit
 
@@ -68,7 +68,7 @@ Written 2026-09-03 from the domain, code shut.
 - **E1** FORBID — **no automatic roll.** Paper that always rolls at a written rate is not debt; it
   is a permanent liability with a coupon, and it removes the only risk the instrument has
 - **E2** FORBID — **no price without a market.** A discount computed from a curve nobody traded is
-  rule 1's defect at the short end
+  rule 3's defect at the short end
 - **E3** FORBID — **no negative outstanding**, and no maturity that passes without cash moving
 
 ---
@@ -86,7 +86,7 @@ Two instruments answer this tree and they answer it differently, so a row that s
 |---|---|---|
 | A1 it satisfies the bond contract | `src/domain/company.ts:isCommercialPaper` | ⚠️ |
 | A1.a coupon: none — issued at a **discount**, redeems at par | `src/domain/government.ts:discountBillProceedsUSD` | ⚠️ |
-| A1.b maturity under a year | `src/engine/simulation/stages/shared-helpers.ts:SOV_BILL_BUCKETS` | ✅ |
+| A1.b maturity under a year | `src/engine/simulation/stages/shared-helpers.ts:SOV_BILL_MAX_TENOR_YEARS` | ✅ |
 | A1.c senior unsecured, ranking with other senior debt | `src/domain/estate.ts:CLAIM_SENIORITY` | ✅ |
 | A1.d optionality: none — too short to be worth an option | `src/domain/call-protection.ts:callProtectionForIssue` | ✅ |
 | **A2 its PRICE is what it clears at; the yield is derived** | — | ❌ |
@@ -117,7 +117,7 @@ Two instruments answer this tree and they answer it differently, so a row that s
 ## 3. THE DIFF
 
 **27 nodes: 12 ✅, 12 ⚠️, 3 ❌.** The best-mapped of the four credit trees, and for a reason worth
-recording: **`07f` is the youngest book and the only one written after rule 1 was stated**, so its
+recording: **`07f` is the youngest book and the only one written after rule 3 was stated**, so its
 issuer side, its buyer side and its failure path are all real. What it inherits from the rest of
 the model is the same one defect — the thing that clears is a yield.
 

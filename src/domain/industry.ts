@@ -1,5 +1,5 @@
 /** The industry taxonomy's public types, plus the household price tier and its bid premium.
- *  The DATA all lives in `industry-registry.ts` — these are views onto it (rule 17). */
+ *  The DATA all lives in `industry-registry.ts` — these are views onto it (rule 15). */
 
 import { VIEW_CATEGORY_PRICE_TIER, VIEW_INDUSTRY_SUBUNITS } from './industry-registry';
 
@@ -24,7 +24,7 @@ export type BuyerType = 'HOUSEHOLD' | 'GOVERNMENT' | 'CORPORATE';
  * discretionary swing of the top ones. Categories with no household buyer never read this.
  */
 export type HouseholdPriceTier = 'STAPLE' | 'STANDARD' | 'LUXURY';
-// BP1a: derived from the industry registry — the registry is the single owner (rule 17).
+// BP1a: derived from the industry registry — the registry is the single owner (rule 15).
 export const CATEGORY_PRICE_TIER: Record<string, HouseholdPriceTier> = VIEW_CATEGORY_PRICE_TIER;
 export const categoryPriceTier = (unitId: string): HouseholdPriceTier =>
   CATEGORY_PRICE_TIER[unitId] ?? 'STANDARD';
@@ -36,7 +36,7 @@ export const categoryPriceTier = (unitId: string): HouseholdPriceTier =>
  * {2.5, 1.0, 0.35} (chosen elasticities), setting what a household pays above the going price in
  * every consumer category, every week. Two invented numbers in the stage that prices consumption.
  *
- * **The real defect underneath was the SHAPE, not the numbers** (rule 15). A household bid was one
+ * **The real defect underneath was the SHAPE, not the numbers** (rule 6). A household bid was one
  * step — a quantity at a ceiling — and a step cannot express a demand curve, so any single number
  * put in that ceiling stands in for a whole schedule. That is why the two honest derivations of it
  * differ by two orders of magnitude: one is the reservation for the FIRST unit and the other for
@@ -50,7 +50,7 @@ export const categoryPriceTier = (unitId: string): HouseholdPriceTier =>
  * already spends. Both shares are measured, weekly, by the cohorts
  * (`householdState.stapleSpendShare` and the two beside it).
  *
- * **This is a multiple of the BUDGET and never of a price** (rule 9, and §7.209 paid for the
+ * **This is a multiple of the BUDGET and never of a price** (rule 8, and §7.209 paid for the
  * distinction). Bounding the bid at `last week's price x this` looks equivalent and is not: the
  * reference moves with the price the bid itself sets, so the ceiling climbs at whatever rate it
  * just caused and there is nothing in the loop to stop it. A budget is a level in money. When a
@@ -80,7 +80,7 @@ export function householdBudgetReachMultiple(
 }
 
 /**
- * How many rungs the ladder is cut into. A RESOLUTION parameter (rule 19): more rungs approximate
+ * How many rungs the ladder is cut into. A RESOLUTION parameter (rule 2): more rungs approximate
  * the same curve more finely and the answer must not depend on it. It does not — the rungs are cut
  * on the QUANTITY axis, so what a given clearing price fills is the curve's own value there.
  */
@@ -133,7 +133,7 @@ export function budgetDemandLadder(args: {
   // `money / quantity` curve is unbounded as the quantity goes to zero, so the highest price the
   // ladder POSTS would be `rungs x the going price`, and in a market whose supply is short the top
   // of the demand curve IS the clearing price. A resolution parameter must not move the answer
-  // (rule 19), and that one moved it linearly.
+  // (rule 2), and that one moved it linearly.
   // §7.343 — THE CURVE UNDER THE CAP IS THE BUDGET'S OWN HYPERBOLA. The truncation above made
   // the ladder FLAT: `reachable / (step·i)` never falls below `reachable / maxUnits` inside the
   // want, so every rung posted the whole-want reservation and demand was one inelastic block at

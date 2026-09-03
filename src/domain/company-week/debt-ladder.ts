@@ -6,7 +6,7 @@ import { annuityFactor } from '../pricing';
  * is worth making, how much of it the firm can afford, and which paper is coming due. What stays
  * in the stage is the DOING: mutating tranches, posting cash, reaching holders through the
  * register. That split is the whole point — the decisions are testable and the effects have one
- * writer (§1.3).
+ * writer (§1.4).
  *
  * THE RULE THIS EXISTS TO PROTECT. An issuer used to call at PAR, for free, the moment rates moved
  * 1% its way — **an option no lender writes.** The real test is not "is the coupon above the

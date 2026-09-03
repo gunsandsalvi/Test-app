@@ -31,24 +31,25 @@ const NO_RESERVATION_STAT = 1e9;
  * The CB's participant for one book, or null when it has no order this week — so a passive
  * central bank costs the auction nothing.
  *
- * `bucketKeys` are the buckets THIS auction prices (bonds in 07c, bills in 07f); the CB's
+ * `bondIds` are the instruments THIS auction prices (bonds in 07c, bills in 07f); the CB's
  * holdings in the other book pass through untouched, per the clearing-stage ownership rule.
+ * §3.13-SOV row 3: the CB's book is keyed by the same bond ids every other holder's is, so there
+ * is no key to translate — the `instrumentIdFor` mapper both callers passed was the identity.
  */
 export function centralBankParticipant(
   cb: CentralBank,
-  bucketKeys: string[],
-  instrumentIdFor: (bucketKey: string) => string,
+  bondIds: string[],
   statKind: 'YIELD_LIKE' | 'PRICE_LIKE' = 'YIELD_LIKE'
 ): { participant: ClearingParticipant; orderedUSD: number } | null {
   const holdings = new Map<string, number>();
   const demand = new Map<string, ParticipantDemand>();
   let orderedUSD = 0;
-  bucketKeys.forEach((key) => {
-    const heldUSD = Number(cb.sovereignHoldingsByTenor?.[key]) || 0;
-    const orderUSD = Math.max(0, Number(cb.plannedPurchasesByTenor?.[key]) || 0);
+  bondIds.forEach((key) => {
+    const heldUSD = Number(cb.sovereignHoldingsByBond?.[key]) || 0;
+    const orderUSD = Math.max(0, Number(cb.plannedPurchasesByBond?.[key]) || 0);
     orderedUSD += orderUSD;
-    holdings.set(instrumentIdFor(key), heldUSD);
-    demand.set(instrumentIdFor(key), {
+    holdings.set(key, heldUSD);
+    demand.set(key, {
       reservationStat: statKind === 'PRICE_LIKE' ? NO_RESERVATION_STAT : -NO_RESERVATION_STAT,
       maxHoldingUSD: heldUSD + orderUSD,
       // Full size at once: any positive range would make it price-sensitive.
@@ -67,17 +68,17 @@ export function centralBankParticipant(
 }
 
 /** §5-FINALIZATION step 13 (W2): the CB's fills as wires from the clearing house — the paper it
- *  bought with the reserves it created; the buckets this auction priced, before against after. */
+ *  bought with the reserves it created; the bonds this auction priced, before against after. */
 export function wireCentralBankFills(
-  regionId: RegionId, cb: CentralBank, bucketKeys: string[], instrumentIdFor: (bucketKey: string) => string,
+  regionId: RegionId, cb: CentralBank, bondIds: string[],
   newHoldings: Map<string, number>, reason: string
 ): void {
   const before = new Map<string, { valueUSD: number }>(), after = new Map<string, { valueUSD: number }>();
-  bucketKeys.forEach((key) => {
-    const id = instrumentIdFor(key);
+  bondIds.forEach((key) => {
+    const id = key;
     const filledUSD = newHoldings.get(id);
     if (filledUSD === undefined) return;
-    before.set(id, { valueUSD: Number(cb.sovereignHoldingsByTenor?.[key]) || 0 });
+    before.set(id, { valueUSD: Number(cb.sovereignHoldingsByBond?.[key]) || 0 });
     after.set(id, { valueUSD: filledUSD });
   });
   clearedBookDelta({ kind: 'CENTRAL_BANK', region: regionId }, regionId, 'GOV_BOND', before, after, () => undefined, reason);
@@ -89,18 +90,17 @@ export function wireCentralBankFills(
  */
 export function applyCentralBankFills(
   cb: CentralBank,
-  bucketKeys: string[],
-  instrumentIdFor: (bucketKey: string) => string,
+  bondIds: string[],
   newHoldings: Map<string, number>
 ): number {
   let purchasedUSD = 0;
-  const book = { ...cb.sovereignHoldingsByTenor };
-  bucketKeys.forEach((key) => {
-    const filledUSD = newHoldings.get(instrumentIdFor(key));
+  const book = { ...cb.sovereignHoldingsByBond };
+  bondIds.forEach((key) => {
+    const filledUSD = newHoldings.get(key);
     if (filledUSD === undefined) return;
     purchasedUSD += filledUSD - (Number(book[key]) || 0);
     book[key] = filledUSD;
   });
-  cb.sovereignHoldingsByTenor = book;
+  cb.sovereignHoldingsByBond = book;
   return purchasedUSD;
 }

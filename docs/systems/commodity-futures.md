@@ -220,11 +220,11 @@ all three.
 
 Worth stating as a good result first. C1.a asks that contango be bounded above *by what it costs to
 buy, store and finance, because past that B4 arbitrages it* — and the code does it the right way
-round (rule 15): `runCommodityFuturesMarket:117-131` brings bank desks into the auction **as
+round (rule 6): `runCommodityFuturesMarket:117-131` brings bank desks into the auction **as
 sellers, only while `priorPrint > carryBound`**, sized by their remaining derivative budget, and
 the macro funds' reservation is `carryBound` itself. The top of the curve is a participant's
 schedule, not a bracket. `costOfCarryPrice` and `PHYSICAL_STORAGE_COST_ANNUAL` (a physical property
-of the substance, rule 4) make C1 `✅`.
+of the substance, rule 2) make C1 `✅`.
 
 **What diverges is that the arbitrageur never buys the physical.** The desk sells the future and
 that is all: it takes no commodity into inventory, pays no storage, finances nothing, and its

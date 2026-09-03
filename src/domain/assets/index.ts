@@ -94,7 +94,7 @@ export const hasCreditRisk = (type: AssetType): boolean => ASSET_REGISTRY[type].
  * §5-STRUCT step 4 — AND THE OTHER THREE TAXONOMIES.
  *
  * `AssetType` is not the only name this model has for "what kind of instrument is this". There are
- * four, for one real thing (§1.3):
+ * four, for one real thing (§1.4):
  *
  *   `AssetType`                              11 members, named, in `domain/instruments.ts`
  *   `ItemizedHolding.instrumentType`          7 members, ANONYMOUS inline union in `domain/banking.ts`

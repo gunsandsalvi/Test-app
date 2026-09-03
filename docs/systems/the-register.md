@@ -17,11 +17,11 @@ Written 2026-09-03 from the domain, code shut.
   - A1.a the holder is a party that exists in the world and can be paid
   - A1.b the instrument is one the issuer actually issued, in the size it issued
   - A1.c the quantity is in the instrument's **own unit** — face, shares, units, contracts — and
-    the unit travels with the number (rule 9)
+    the unit travels with the number (rule 8)
 - **A2** REASON — a holding is a **claim on a named issuer**, not a token
   - A2.a everything the instrument pays, it pays to whoever the register says holds it, then
 - **A3** FORBID — **no holding without a holder.** A residual position on nobody is a defect
-  (rule 13), not a rounding line
+  (rule 2), not a rounding line
 - **A4** FORBID — **no holding without an issuer.** A claim on a party that never issued it is
   money invented in the ownership dimension
 
@@ -30,15 +30,15 @@ Written 2026-09-03 from the domain, code shut.
   by an issuance, a buyback, an amortisation or a maturity
 - **B2** VERIFY — **Σ holdings = issued amount**, per instrument, always
   - B2.a a shortfall means somebody's claim vanished; a surplus means somebody's was invented
-  - B2.b the tolerance is float dust, never a fraction of the issue (rule 28)
+  - B2.b the tolerance is float dust, never a fraction of the issue (rule 7)
 - **B3** REASON — the issuer's **liability** is the same number read from the other side, never a
-  second stored copy (rule 3)
+  second stored copy (rule 4)
 - **B4** REASON — an instrument **ceases** — matures, is redeemed, defaults into a recovery — and
   when it does every holding in it resolves to something else, named
 
 ### C. TRANSFER
 - **C1** REASON — ownership changes only by a **transfer with two named sides**: seller loses
-  exactly what buyer gains (rule 14, both legs in one pass)
+  exactly what buyer gains (rule 5, both legs in one pass)
 - **C2** REASON — a transfer has a **cause**: a trade, a maturity, a corporate action, a default
   - C2.a and a **price**, if it is a trade, which is the print the market sees (`the-clearing-engine.md` E)
 - **C3** REASON — the securities leg and the cash leg are the **same event**
@@ -179,7 +179,7 @@ larger where it lands (the tax base, the P&L split).
 `audit/ownership.ts:59` fires O1 only when `|held − outstanding| > max(5e7, outstanding × 0.02)`,
 with `AUDIT_BOOKS_TOLERANCE = 0.02` declared as a RESOLUTION in `domain/stated.ts:114-119`. O6 is
 the same shape at `max(1e7, issued × 0.02)`. B2.b names this exactly: *"the tolerance is float
-dust, never a fraction of the issue (rule 28)"*. On a corporate book of hundreds of billions, 2%
+dust, never a fraction of the issue (rule 7)"*. On a corporate book of hundreds of billions, 2%
 is tens of billions of paper that may be held by nobody or claimed twice, per region per kind, and
 the check will not say so.
 
@@ -211,8 +211,9 @@ week as the ladder changes. D2.a's warning ("a reconstruction drifts") is litera
 fallback at `register-split.ts:63` books the position under the ISSUER's id when no tranche of the
 kind is live, which §3 step 12's tail already measures at 0.42B on 219 positions.
 
-Sovereigns are worse in the same direction: the holding is a tenor BUCKET (`sovBucketKey`), so
-every gilt of the same tenor is one instrument and F1.a is false by construction there.
+Sovereigns were worse in the same direction — the holding was a tenor BUCKET, so every gilt of the
+same tenor was one instrument and F1.a was false by construction. §3.13-SOV row 3 closed it: a
+sovereign holding is a row naming a tranche, in the same store and the same id space as the rest.
 
 **Already §3 step 13 / 13d** (per-tranche clearing retires the split) and **§3 step 12** (the
 issuer-key tail).

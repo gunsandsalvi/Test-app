@@ -182,7 +182,7 @@ function p5(state: GameState, week: number): AuditFinding[] {
 }
 
 /**
- * P6 — ONE CURVE, ONE ANSWER (rule 3, and step 25 owns the fix).
+ * P6 — ONE CURVE, ONE ANSWER (rule 4, and step 25 owns the fix).
  *
  * A region carries its yield curve TWICE: `zeroRates` — the five tenors the books strike and
  * every consumer reads — and `yieldCurveParams`, the Nelson-Siegel fit that `stage08-back` prices
@@ -232,7 +232,7 @@ export function auditPrices(state: GameState, week: number): AuditFinding[] {
  * This is P5's twin, and the same defect one asset class over: it measures the ladder's face
  * against what those same rungs are worth discounted at the curve the auction itself just
  * cleared. Nothing here is a second opinion about the price — the yield IS the book's own
- * output. If the two disagree, the model is holding one instrument at two values (rule 3), and
+ * output. If the two disagree, the model is holding one instrument at two values (rule 4), and
  * the gap is the size of what row 4 has to close.
  *
  * It cannot go green by tuning. It went from "there is no price" to "there is a price and nobody

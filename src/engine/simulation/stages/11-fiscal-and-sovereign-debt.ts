@@ -10,18 +10,16 @@
 import { treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
 import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
 import { materializeGovLadder } from '../../../engine2/tranches';
-import { govBucketKeyOf, govBillTrancheId, govBondTrancheId, isBillBucketKey } from '../../../domain/sovereign-id';
+import { govBillTrancheId, govBondTrancheId } from '../../../domain/sovereign-id';
 import { GameState, RegionId, GovDebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { generateWeeklyNews } from '../../newsGenerator';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
-import { sovBucketKey } from './shared-helpers';
 import {
   weeklyInterestExpenseUSD, decomposeGovernmentSpending, governmentOutlaysUSD,
-  weeklyBillDiscountAccrualUSD,
-} from '../../../domain/government';
+  weeklyBillDiscountAccrualUSD, isDiscountBill } from '../../../domain/government';
 import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
@@ -30,7 +28,7 @@ import { retireHolding } from '../../ledger/holdings-ledger';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { encumberedFaceByBucket, repoBorrowedUSD, srfBorrowedUSD } from '../../../domain/repo';
+import { encumberedFaceByBond, repoBorrowedUSD, srfBorrowedUSD } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -204,36 +202,26 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // rest of clearing settlement (see the work order's cash-settlement item).
     /** PUB2b: what the central bank's own book was repaid this week, by bucket — the size of
      * next week's reinvestment order. */
-    const cbRedeemedByBucket = new Map<string, number>();
+    const cbRedeemedByBond = new Map<string, number>();
     // CASH: what the treasury actually paid out to NAMED holders this week. The rest of the
     // maturity is owed to holders this model does not name, and is posted to the boundary below
     // rather than leaving the account with nothing recording where it went.
     let redemptionPaidUSD = 0;
     if (maturedPrincipalUSD > 0) {
-      // sovBucketKey covers bills and bonds alike (WS5): a maturing 13-week bill redeems out of
-      // its holders' b13 positions, never out of the two-year bucket a nearest-of-[2,5,10,30]
-      // mapping would have silently folded it into.
-      const maturedByBucket = new Map<string, number>();
-      maturedTranches.forEach(t => {
-        const key = sovBucketKey(t.tenorAtIssuanceYears);
-        maturedByBucket.set(key, (maturedByBucket.get(key) ?? 0) + t.principalUSD);
-      });
-      const preMaturityByBucket = new Map<string, number>();
-      materializeGovLadder(ctx.v2, regionId).forEach(t => {
-        const key = sovBucketKey(t.tenorAtIssuanceYears);
-        preMaturityByBucket.set(key, (preMaturityByBucket.get(key) ?? 0) + t.principalUSD);
-      });
-      const redeemedFractionByBucket = new Map<string, number>();
-      maturedByBucket.forEach((maturedUSD, key) => {
-        const preUSD = preMaturityByBucket.get(key) ?? 0;
-        if (preUSD > 0) redeemedFractionByBucket.set(key, Math.min(1, maturedUSD / preUSD));
-      });
+      // §3.13-SOV row 3: A BOND EITHER MATURED OR IT DID NOT. The redemption used to be a
+      // FRACTION per tenor bucket — matured face over the bucket's face — applied to every
+      // holder's position in that bucket, so a holder of a bond that had NOT matured had part of
+      // it redeemed because a different bond of similar tenor had. Now the id says which paper
+      // came due, and the fraction is 1 for that bond and 0 for every other.
+      const redeemedFractionByBond = new Map<string, number>(
+        maturedTranches.filter((t) => t.principalUSD > 0).map((t) => [t.id, 1] as const)
+      );
 
       // §7.247 — THE PLEDGE FOLLOWS THE PAPER ON THE BOOK ITSELF, AT THE MATURITY SITE.
       //
       // The comment below has stated the right rule since PUB2b, and what it updated was the
       // SCALAR (`repoEncumberedCollateralUSD × survivingShare`) while the repoBook's per-bucket
-      // pledges survived — §1.3's two representations, with the reconcile and the check both
+      // pledges survived — §1.4's two representations, with the reconcile and the check both
       // reading the BOOK. The stage-order reconcile then trimmed each week's pledge to LAST
       // week's holding, so a bill-pledging bank printed over-pledged by exactly one week's
       // maturities, forever (measured: WMQC b13 pledged 1.577B against 1.510B held, the two
@@ -242,14 +230,14 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // secures is called pro rata — unwound out of the redemption proceeds the borrower is
       // paid this same pass, settling at the close like the redemption itself.
       const collateralCalledByBorrower = new Map<string, number>();
-      if (redeemedFractionByBucket.size > 0) {
+      if (redeemedFractionByBond.size > 0) {
         (reg.repoBook ?? []).forEach((ct) => {
           if (ct.principalUSD <= 0 || ct.collateral.length === 0) return;
           let releasedFaceUSD = 0;
           let pledgedFaceUSD = 0;
           ct.collateral = ct.collateral.map((p) => {
             pledgedFaceUSD += p.faceUSD;
-            const fraction = redeemedFractionByBucket.get(p.bucketKey) ?? 0;
+            const fraction = redeemedFractionByBond.get(p.bondId) ?? 0;
             if (fraction <= 0) return p;
             const takeUSD = p.faceUSD * fraction;
             releasedFaceUSD += takeUSD;
@@ -274,11 +262,11 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
       ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
         if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
-        const byTenor = c.bankBalanceSheet.sovereignBondHoldingsByTenor || {};
+        const byTenor = c.bankBalanceSheet.sovereignBondHoldingsByBond || {};
         let redeemedUSD = 0;
         const newByTenor: Record<string, number> = {};
         Object.entries(byTenor).forEach(([key, heldUSD]) => {
-          const fraction = redeemedFractionByBucket.get(key) ?? 0;
+          const fraction = redeemedFractionByBond.get(key) ?? 0;
           redeemedUSD += heldUSD * fraction;
           newByTenor[key] = heldUSD * (1 - fraction);
         });
@@ -299,18 +287,18 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         }
         // Collateral that matured is collateral that no longer exists, so the repo it secured
         // released it above — on the book, where the reconcile and the check read. The scalars
-        // are recomputed FROM the book (rule 3: one owner), not scaled beside it.
+        // are recomputed FROM the book (rule 4: one owner), not scaled beside it.
         const book = reg.repoBook ?? [];
         return {
           ...c,
           bankBalanceSheet: {
             ...c.bankBalanceSheet,
-            sovereignBondHoldingsByTenor: newByTenor,
+            sovereignBondHoldingsByBond: newByTenor,
             sovereignBondHoldingsUSD: Math.round(Object.values(newByTenor).reduce((sum, v) => sum + v, 0)),
             repoBorrowedUSD: Math.round(repoBorrowedUSD(book, c.ticker) - srfBorrowedUSD(book, c.ticker)),
             srfBorrowingUSD: Math.round(srfBorrowedUSD(book, c.ticker)),
             repoEncumberedCollateralUSD: Number(
-              Array.from(encumberedFaceByBucket(book, c.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
+              Array.from(encumberedFaceByBond(book, c.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
             ),
           },
         };
@@ -331,8 +319,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           const rows = inv[book];
           if (!rows) return;
           newInv[book] = rows.map(r => {
-            const key = govBucketKeyOf(r.instrumentId, regionId);
-            const fraction = (key ? redeemedFractionByBucket.get(key) : 0) ?? 0;
+            const fraction = redeemedFractionByBond.get(r.instrumentId) ?? 0;
             if (fraction <= 0) return r;
             redeemedUSD += r.inventoryUSD * fraction;
             return { ...r, inventoryUSD: r.inventoryUSD * (1 - fraction) };
@@ -360,8 +347,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         if (!held || held.length === 0) return c;
         let redeemedUSD = 0;
         const newHeld = held.map(h => {
-          const key = govBucketKeyOf(h.instrumentId, regionId);
-          const fraction = (key ? redeemedFractionByBucket.get(key) : 0) ?? 0;
+          const fraction = redeemedFractionByBond.get(h.instrumentId) ?? 0;
           if (fraction <= 0) return h;
           redeemedUSD += h.quantityOrNotionalUSD * fraction;
           return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 - fraction) };
@@ -392,13 +378,13 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       if (cbSheet) {
         const remaining: Record<string, number> = {};
         let cbRedeemedUSD = 0;
-        Object.entries(cbSheet.sovereignHoldingsByTenor || {}).forEach(([key, held]) => {
+        Object.entries(cbSheet.sovereignHoldingsByBond || {}).forEach(([key, held]) => {
           const heldUSD = Number(held) || 0;
-          const redeemedUSD = heldUSD * (redeemedFractionByBucket.get(key) ?? 0);
-          if (redeemedUSD > 0) { cbRedeemedByBucket.set(key, redeemedUSD); cbRedeemedUSD += redeemedUSD; }
+          const redeemedUSD = heldUSD * (redeemedFractionByBond.get(key) ?? 0);
+          if (redeemedUSD > 0) { cbRedeemedByBond.set(key, redeemedUSD); cbRedeemedUSD += redeemedUSD; }
           remaining[key] = heldUSD - redeemedUSD;
         });
-        cbSheet.sovereignHoldingsByTenor = remaining;
+        cbSheet.sovereignHoldingsByBond = remaining;
         if (cbRedeemedUSD > 0) {
           pay(ctx, {
             payer: { kind: 'GOVERNMENT', region: regionId },
@@ -426,8 +412,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = Hsov.next[r]) {
           if (Hsov.typeRef[r] !== govBondRefS || Hsov.regionRef[r] !== regionRefS) continue;
           const id = ctx.v2.internedStrings[Hsov.instrRef[r]];
-          const key = govBucketKeyOf(id, regionId);
-          const fraction = (key ? redeemedFractionByBucket.get(key) : 0) ?? 0;
+          const fraction = redeemedFractionByBond.get(id) ?? 0;
           if (fraction <= 0) continue;
           redeem.push({ id, usd: Hsov.qtyUSD[r] * fraction });
         }
@@ -455,7 +440,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // week (a bill program is a perpetual roll); maturing BONDS join the quarterly bond calendar
     // as before. New deficit splits by a real treasury rule below.
     const maturedBillPrincipalUSD = maturedTranches
-      .filter(t => isBillBucketKey(sovBucketKey(t.tenorAtIssuanceYears)))
+      .filter(t => isDiscountBill(t.tenorAtIssuanceYears))
       .reduce((s2, t) => s2 + t.principalUSD, 0);
     const maturedBondPrincipalUSD = maturedPrincipalUSD - maturedBillPrincipalUSD;
 
@@ -588,7 +573,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // market's answer comes back through 07f's cleared bill yields next week.
     const totalStockUSD = liveTranches.reduce((s2, t) => s2 + t.principalUSD, 0) || 1;
     const billStockUSD = liveTranches
-      .filter(t => isBillBucketKey(sovBucketKey(t.tenorAtIssuanceYears)))
+      .filter(t => isDiscountBill(t.tenorAtIssuanceYears))
       .reduce((s2, t) => s2 + t.principalUSD, 0);
     const billShareOfStock = billStockUSD / totalStockUSD;
     const costLean = Math.max(-0.05, Math.min(0.05, (reg.zeroRates.tenor2Y - reg.zeroRates.tenor3M) * 2));
@@ -731,7 +716,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // places costs the treasury nothing when it rolls off. The remainder here is therefore a
     // MEASURE OF UNDERSUBSCRIPTION at the front of the ladder, not a payment.
     {
-      const cbRedeemedUSD = Array.from(cbRedeemedByBucket.values()).reduce((a, v) => a + v, 0);
+      const cbRedeemedUSD = Array.from(cbRedeemedByBond.values()).reduce((a, v) => a + v, 0);
       reg.lastUnsoldMaturedUSD = Math.round(
         Math.max(0, maturedPrincipalUSD - redemptionPaidUSD - cbRedeemedUSD));
     }
@@ -762,15 +747,15 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // bills — so the book keeps its shape instead of drifting up the curve. New QE money is
       // spread across the book's existing shape for the same reason.
       const orders: Record<string, number> = {};
-      cbRedeemedByBucket.forEach((redeemedUSD, key) => {
+      cbRedeemedByBond.forEach((redeemedUSD, key) => {
         orders[key] = redeemedUSD * reinvestmentShare;
       });
       if (netPurchaseUSD > 0 && bookUSD > 0) {
-        Object.entries(cb.sovereignHoldingsByTenor).forEach(([key, held]) => {
+        Object.entries(cb.sovereignHoldingsByBond).forEach(([key, held]) => {
           orders[key] = (orders[key] ?? 0) + netPurchaseUSD * ((Number(held) || 0) / bookUSD);
         });
       }
-      cb.plannedPurchasesByTenor = orders;
+      cb.plannedPurchasesByBond = orders;
       cb.reinvestmentShare = Number(reinvestmentShare.toFixed(4));
     }
     const debtToGdpPctBottomUp = newDerivedNominalGdpUSD > 0 ? totalGovDebtUSD / newDerivedNominalGdpUSD : (reg.debtToGdpPctBottomUp || 0);

@@ -9,25 +9,15 @@
 import { GovDebtTranche } from './region-macro';
 
 /**
- * Weighted-average coupon per tenor bucket. Holders own buckets, not individual tranches
- * (07c clears the curve at seven points), so this is the rate a bucket's holders are paid at.
+ * The coupon each sovereign bond pays, by bond id. A holder owns a BOND, not a group of them
+ * (§3.13-SOV row 3), so this is a projection of the ladder and not an average of anything.
  */
-export function sovereignCouponByBucket(
-  tranches: GovDebtTranche[] | undefined,
-  bucketKey: (tenorYears: number) => string
-): Record<string, number> {
-  const principal: Record<string, number> = {};
-  const weighted: Record<string, number> = {};
+export function sovereignCouponByBond(tranches: GovDebtTranche[] | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
   (tranches ?? []).forEach((t) => {
     // PUB3d: bills pay no coupon — their holders earn accretion instead (see accreteDiscountBills).
     if (isDiscountBill(t.tenorAtIssuanceYears)) return;
-    const k = bucketKey(t.tenorAtIssuanceYears);
-    principal[k] = (principal[k] ?? 0) + t.principalUSD;
-    weighted[k] = (weighted[k] ?? 0) + t.principalUSD * (t.couponRate ?? 0);
-  });
-  const out: Record<string, number> = {};
-  Object.keys(principal).forEach((k) => {
-    out[k] = principal[k] > 0 ? weighted[k] / principal[k] : 0;
+    out[t.id] = t.couponRate ?? 0;
   });
   return out;
 }
@@ -79,8 +69,55 @@ export function discountBillProceedsUSD(faceUSD: number, annualYield: number, te
  * right for a coupon bond and wrong here — the two differ by about 2bp of price on a 13-week bill
  * at 5%, and swapping one for the other would silently re-price every bill by changing its
  * day-count. That is a different change from making the price the primitive, so the bill keeps
- * its own convention and gets its own inverse (rule 9: the convention is part of the number).
+ * its own convention and gets its own inverse (rule 8: the convention is part of the number).
  */
+/**
+ * §3.13-SOV row 3 — A BOND'S REMAINING TENOR, BY ID. The sovereign books are keyed by bond now,
+ * and anything that needs to value a line needs to know how long that particular bond has left.
+ * Built from the ladder the caller already holds, so nothing has to guess a tenor from a label.
+ * A bond that is not on the ladder returns undefined, and the caller decides — never a default
+ * tenor, which is how "value everything as a five-year" gets in.
+ */
+/**
+ * §3.13-SOV row 3 — WHAT THE LADDER KNOWS ABOUT A BOND, BY ID.
+ *
+ * Everything that used to be answered by parsing a TENOR BUCKET out of an instrument id is
+ * answered here from the ladder itself: is this id one of ours, is it a bill, how long has it
+ * left. Parsing an id for meaning is what let one holding be a group to one reader and a bond to
+ * another; the ladder is the single place that knows.
+ */
+export interface SovereignLadderIndex {
+  /** Is this id a live bond or bill of this region? */
+  has(instrumentId: string): boolean;
+  /** Is it a BILL — short at issue, returning its discount (`bond.md` N5.c)? */
+  isBill(instrumentId: string): boolean;
+  /** Years of life LEFT, or undefined when the id is not on this ladder. Never a default. */
+  tenorYears(instrumentId: string): number | undefined;
+}
+
+export function sovereignLadderIndex(
+  tranches: readonly { id: string; maturityWeek: number; tenorAtIssuanceYears: number; principalUSD: number }[] | undefined,
+  week: number
+): SovereignLadderIndex {
+  const live = new Map((tranches ?? []).filter((t) => t.principalUSD > 0).map((t) => [t.id, t] as const));
+  return {
+    has: (id) => live.has(id),
+    isBill: (id) => { const t = live.get(id); return t !== undefined && isDiscountBill(t.tenorAtIssuanceYears); },
+    tenorYears: (id) => { const t = live.get(id); return t === undefined ? undefined : Math.max(1 / 52, (t.maturityWeek - week) / 52); },
+  };
+}
+
+export function sovereignTenorResolver(
+  tranches: readonly { id: string; maturityWeek: number }[] | undefined,
+  week: number
+): (bondId: string) => number | undefined {
+  const byId = new Map((tranches ?? []).map((t) => [t.id, t.maturityWeek]));
+  return (bondId: string) => {
+    const maturity = byId.get(bondId);
+    return maturity === undefined ? undefined : Math.max(1 / 52, (maturity - week) / 52);
+  };
+}
+
 export function billYieldFromPrice(priceFraction: number, tenorYears: number): number {
   if (!(priceFraction > 0) || !(tenorYears > 0)) return 0;
   return (1 / priceFraction - 1) / tenorYears;
@@ -265,11 +302,11 @@ export const PROCUREMENT_PER_PAYROLL_DOLLAR = 1.07;
 export const GOV_HIRING_RESPONSE_TO_STANCE = 0.0004;
 
 /**
- * CAL — the share of a bucket's ANNUAL coupon that is actually due this week.
+ * CAL — the share of a BOND's annual coupon that is actually due this week.
  *
- * Government paper pays semi-annually, and the four tenors do not pay in the same week: each
- * bucket's cycle is anchored by its own key, so a region's debt service is lumpy across the year
- * the way a real treasury's is. Zero in most weeks, half a year's coupon in two of them.
+ * Government paper pays semi-annually from its own issue date, so the rungs of a ladder do not
+ * pay in the same week and a region's debt service is lumpy across the year the way a real
+ * treasury's is. Zero in most weeks, half a year's coupon in two of them.
  *
  * NOT WIRED YET, DELIBERATELY, AND THIS IS THE CONDITION. Both sides have to move together:
  * `weeklyInterestExpenseUSD` is the government's own smooth accrual, and putting the HOLDERS on
@@ -278,41 +315,32 @@ export const GOV_HIRING_RESPONSE_TO_STANCE = 0.0004;
  * boundary line swinging on coupon weeks. One change to that function and both readers of it,
  * in the same pass, and this is ready for them.
  */
-export function sovereignCouponDueShare(bucketKey: string, week: number): number {
+export function sovereignCouponDueShare(tranche: { originationWeek: number }, week: number): number {
   const PAYMENTS_PER_YEAR = 2;
   const periodWeeks = Math.round(52 / PAYMENTS_PER_YEAR);
-  // The bucket's own anchor: its key decides which weeks of the cycle are its coupon dates, so
-  // the tenors pay on different weeks rather than all at once.
-  let hash = 0;
-  for (let i = 0; i < bucketKey.length; i++) hash = ((hash << 5) - hash + bucketKey.charCodeAt(i)) | 0;
-  const anchor = Math.abs(hash) % periodWeeks;
-  return (week - anchor) % periodWeeks === 0 ? 1 / PAYMENTS_PER_YEAR : 0;
+  // A bond's coupon dates are counted from the day it was ISSUED — the real schedule, and the
+  // reason the ladder's rungs pay on different weeks rather than all at once. This used to hash
+  // the tenor-bucket label, which had no issue date to count from.
+  return (week - tranche.originationWeek) % periodWeeks === 0 ? 1 / PAYMENTS_PER_YEAR : 0;
 }
 
 /**
  * §5-CLOSE O1 — PAPER NOBODY BOUGHT IS NOT DEBT. A tranche joins the ladder at its full size and
  * the auction places what the week's demand takes; what it cannot place used to stay on the ladder
  * as principal owed to nobody (measured: JPN 9% of the stock, "paper with no owner"). After the
- * auction the unplaced amount is WITHDRAWN from the youngest tranches of the bucket, and the
+ * auction the unplaced amount is WITHDRAWN from the bond that was offered, and the
  * treasury's need rolls forward to the next issuance — the deficit is not funded until someone
  * funds it. Returns the ladder and what was withdrawn.
  */
 export function withdrawUnplacedIssuance(
   tranches: import('./region-macro').GovDebtTranche[],
-  bucketKeyOf: (tenorAtIssuanceYears: number) => string,
-  bucketKey: string,
+  bondId: string,
   unplacedUSD: number
 ): { tranches: import('./region-macro').GovDebtTranche[]; withdrawnUSD: number } {
   if (!(unplacedUSD > 1)) return { tranches, withdrawnUSD: 0 };
-  let left = unplacedUSD;
   const out = tranches.map((t) => ({ ...t }));
-  const inBucket = out.filter((t) => bucketKeyOf(t.tenorAtIssuanceYears) === bucketKey)
-    .sort((a, b) => b.originationWeek - a.originationWeek);
-  for (const t of inBucket) {
-    if (left <= 1) break;
-    const take = Math.min(t.principalUSD, left);
-    t.principalUSD -= take;
-    left -= take;
-  }
-  return { tranches: out.filter((t) => t.principalUSD > 1), withdrawnUSD: unplacedUSD - left };
+  const rung = out.find((t) => t.id === bondId);
+  const withdrawnUSD = rung ? Math.min(rung.principalUSD, unplacedUSD) : 0;
+  if (rung) rung.principalUSD -= withdrawnUSD;
+  return { tranches: out.filter((t) => t.principalUSD > 1), withdrawnUSD };
 }

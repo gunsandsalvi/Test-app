@@ -21,7 +21,7 @@
  */
 
 import { currencyOf } from '../../../domain/geography';
-import { govBucketKeyOf } from '../../../domain/sovereign-id';
+
 import { ensureV2 } from '../../../engine2/world';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
 import { issueTranche } from '../../ledger/tranche-ledger';
@@ -29,8 +29,8 @@ import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
 import { regionalDeskView } from '../../../domain/dealer-desk';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
-import { sovereignCouponByBucket } from '../../../domain/government';
-import { sovBucketKey, payHoldersCash } from './shared-helpers';
+import { sovereignCouponByBond } from '../../../domain/government';
+import { payHoldersCash } from './shared-helpers';
 import {
   evolveBankingSector, computeSovereignBookAnnualYield, savingsToDepositsShare,
 } from '../../macro/banking';
@@ -42,12 +42,13 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
 import { SRF_SPREAD_BPS, bankCashBufferRatioOf } from '../../macro/banking';
-import { cashOf, entityCashOf, poolCashOf, adjustSectorRow, adjustBankReserves, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
+import { cashOf, entityCashOf, adjustSectorRow, adjustBankReserves, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { materializeGovLadder } from '../../../engine2/tranches';
+import { sovereignTenorResolver } from '../../../domain/government';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
-  const scaledBuckets: Record<string, number> = {};
-  Object.entries(bs.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => { scaledBuckets[k] = v * share; });
+  const scaledBook: Record<string, number> = {};
+  Object.entries(bs.sovereignBondHoldingsByBond || {}).forEach(([k, v]) => { scaledBook[k] = v * share; });
   return {
     sovereignBondHoldingsUSD: bs.sovereignBondHoldingsUSD * share,
     bankEquityUSD: bs.bankEquityUSD * share,
@@ -61,7 +62,7 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     srfBorrowingUSD: bs.srfBorrowingUSD * share,
     onRrpLendingUSD: bs.onRrpLendingUSD * share,
     corpBondDealerInventory: [],
-    sovereignBondHoldingsByTenor: scaledBuckets,
+    sovereignBondHoldingsByBond: scaledBook,
     sovBondDealerInventory: [],
     loanDealerInventory: [],
     repoLentUSD: bs.repoLentUSD * share,
@@ -186,8 +187,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // The segment pools' balances, reconciled the same way — each pool's cash sits across
     // the region's banks pro-rata by market share (settlement spreads it identically; this
     // catches share drift and any balance moved outside instructions, with the reserve leg).
-    const segmentCashUSD = (reg.smePools || []).reduce((a, s) => a + Math.max(0, poolCashOf(ctx.v2, regionId, s.industry)), 0);
-    const regionBankShareTotal = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
 
     // The week's real household-credit flows, per bank, for the region roll-up below.
     const householdFlowsByBank = new Map<string, {
@@ -197,7 +196,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     }>();
 
     // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
-    const sovCouponByBucket = sovereignCouponByBucket(materializeGovLadder(ctx.v2, regionId), sovBucketKey);
+    const sovCouponByBond = sovereignCouponByBond(materializeGovLadder(ctx.v2, regionId));
 
     // What each bank owes and is owed on contracts that come due this week.
     const dueThisWeek = maturingAt(reg.repoBook ?? [], ctx.nextWeek);
@@ -274,7 +273,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         // one regional credit cycle diverge.
         reg.unemploymentRate * (0.6 + riskFactor * 0.4),
         // THIS bank's real tenor book at the real cleared curve — not the 10Y on a scalar.
-        computeSovereignBookAnnualYield(prevSheet.sovereignBondHoldingsByTenor, reg.zeroRates),
+        computeSovereignBookAnnualYield(prevSheet.sovereignBondHoldingsByBond, reg.zeroRates,
+          sovereignTenorResolver(materializeGovLadder(ctx.v2, regionId), ctx.nextWeek)),
         reg.creditConditionsSpilloverAdjustment ?? 0,
         // The CONTRACTS due this week mature inside as explicit flows — each at the rate
         // it was struck at and over the term it ran, the standing facility included.
@@ -285,8 +285,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         priorLoanInterestWeeklyUSD - priorSmeInterestWeeklyUSD,
         priorHouseholdInterestWeeklyUSD,
         // Real coupons on this bank's own sovereign book.
-        Object.entries(prevSheet.sovereignBondHoldingsByTenor || {}).reduce(
-          (a, [k, v]) => a + ((Number(v) || 0) * (sovCouponByBucket[k] ?? 0)) / 52, 0
+        Object.entries(prevSheet.sovereignBondHoldingsByBond || {}).reduce(
+          (a, [k, v]) => a + ((Number(v) || 0) * (sovCouponByBond[k] ?? 0)) / 52, 0
         ),
         regionDivertedUSD * share,
         // Slice 5: the rate this bank's deposits must compete with.
@@ -380,7 +380,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     });
 
     // The pool's debt is the DERIVED SUM of the loans the banks actually hold against it
-    // one representation (rule 3). The in-place `debtUSD += granted` during origination only
+    // one representation (rule 4). The in-place `debtUSD += granted` during origination only
     // sequences demand across banks within the pass; this write is the record, and it now
     // carries the loss leg too (write-offs used to shrink the banks' books while the segment's
     // number never noticed).
@@ -518,10 +518,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       onRrpLendingUSD: sumField((s) => s.onRrpLendingUSD),
       // Real per-bank sovereign holdings, summed across named banks — each bank is its own real
       // participant in the sovereign-bond clearing engine (07c-sovereign-bond-clearing.ts).
-      sovereignBondHoldingsByTenor: (() => {
+      sovereignBondHoldingsByBond: (() => {
         const buckets: Record<string, number> = {};
         newSheets.forEach(({ sheet }) => {
-          Object.entries(sheet.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => {
+          Object.entries(sheet.sovereignBondHoldingsByBond || {}).forEach(([k, v]) => {
             buckets[k] = (buckets[k] ?? 0) + v;
           });
         });
@@ -533,8 +533,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // result, and a desk's position is only ever written by the bank that took it.
       corpBondDealerInventory: deskView('corporate bond').map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD })),
       sovBondDealerInventory: [
-        ...deskView('sovereign bond').map(([instrumentId, inventoryUSD]) => ({ tenorKey: govBucketKeyOf(instrumentId, regionId) ?? instrumentId, inventoryUSD })),
-        ...deskView('bill').map(([instrumentId, inventoryUSD]) => ({ tenorKey: govBucketKeyOf(instrumentId, regionId) ?? instrumentId, inventoryUSD })),
+        // §3.13-SOV row 3: the desk row names the BOND (the field is still called bondId).
+        ...deskView('sovereign bond').map(([instrumentId, inventoryUSD]) => ({ bondId: instrumentId, inventoryUSD })),
+        ...deskView('bill').map(([instrumentId, inventoryUSD]) => ({ bondId: instrumentId, inventoryUSD })),
       ],
       loanDealerInventory: deskView('leveraged loan').map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD })),
       // The region's overnight book is the sum of the named banks' real positions. The

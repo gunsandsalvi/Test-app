@@ -48,14 +48,14 @@ Written 2026-09-03 from the domain, code shut.
   - C2.a the tranche boundaries are **stated**, and the loss allocation is a real rule applied to
     real losses
 - **C3** REASON — each tranche has a **price that clears** (`the-clearing-engine.md`), and its
-  yield is derived from that price (rule 1)
+  yield is derived from that price (rule 3)
 - **C4** REASON — the tranches are **held by named holders**, and that is where the loss actually
   lands (`the-register.md` E3)
   - C4.a often the originating bank keeps the bottom, which means the risk did not leave
 - **C5** REASON — the vehicle's **cash flows are the loans' cash flows**: interest and principal
   in, distributed by seniority out
 - **C6** VERIFY — Σ tranche values = the pool's value; Σ losses allocated = Σ losses incurred,
-  exactly. No tranching creates or destroys loss (rule 3)
+  exactly. No tranching creates or destroys loss (rule 4)
 
 ### D. WHY IT MATTERS
 - **D1** REASON — it **moves credit risk from banks to investors**, and the investors are named
@@ -150,7 +150,7 @@ Two consequences that are worse than "a rate instead of an event":
    banks' loan rows (`bank-lending.ts:187`), so writing the loans down by `lossUSD` writes the
    pool's debt down by the same amount. Nobody defaulted, nobody was foreclosed on, no asset was
    sold, no recovery was paid — the pool is simply relieved of its liability by arithmetic, and its
-   own leverage improves as a result. That is a one-sided flow (rule 14) sitting inside the
+   own leverage improves as a result. That is a one-sided flow (rule 5) sitting inside the
    transmission channel A5.a says matters most.
 2. **The recovery is a stated rate, not a realisation.** `creditRecoveryRate(reg)` is used as LGD
    here, where the named tier's recovery is what an estate actually fetched

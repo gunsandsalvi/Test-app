@@ -20,7 +20,8 @@
 import { RegionId } from '../../../../types';
 import { loanBooksOf } from '../../../../domain/banking';
 import { ensureV2 } from '../../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, facilityBookOf } from '../../../../engine2/tranches';
+import { ladderRowsOf, TR_FLOATING, facilityBookOf, materializeGovLadder } from '../../../../engine2/tranches';
+import { sovereignTenorResolver } from '../../../../domain/government';
 import { institutionProfile } from '../../../../domain/institution-profiles';
 import { carriesRateDuration } from '../../../../domain/assets';
 import {
@@ -79,13 +80,29 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
     // A bank's fixed-rate sovereign book is funded by liabilities that reprice with policy. Its
     // capital can absorb a repricing only down to the ratio it must keep; what it cannot absorb
     // is what it hedges, at the tenor its book actually sits in.
+    // §3.13-SOV row 3: the book is keyed by BOND, so what sits at a swap's tenor is the face of
+    // the bonds whose REMAINING life is nearest it. This used to read one of three tenor-bucket
+    // labels straight off the sheet — which, once the keys became bond ids, would have found
+    // nothing and hedged nothing. The swap tenors are real instruments; the bonds are grouped
+    // onto them only to decide which contract covers which risk.
+    const tenorYearsOf = sovereignTenorResolver(materializeGovLadder(ctx.v2, regionId), ctx.nextWeek);
+    const nearestSwapTenor = (years: number): SwapTenorKey => SWAP_TENORS.reduce(
+      (best, k) => (Math.abs(SWAP_TENOR_YEARS[k] - years) < Math.abs(SWAP_TENOR_YEARS[best] - years) ? k : best),
+      SWAP_TENORS[0]
+    );
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const rwaUSD = loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.ticker));
       const absorbableUSD = Math.max(0, sheet.bankEquityUSD - rwaUSD * BANK_WORKING_CAPITAL_RATIO);
+      const bookByTenor = new Map<SwapTenorKey, number>();
+      Object.entries(sheet.sovereignBondHoldingsByBond ?? {}).forEach(([bondId, usd]) => {
+        const years = tenorYearsOf(bondId);
+        if (years === undefined) return;
+        const k = nearestSwapTenor(years);
+        bookByTenor.set(k, (bookByTenor.get(k) ?? 0) + (Number(usd) || 0));
+      });
       SWAP_TENORS.forEach((k) => {
-        const bucketKey = k === 's2' ? 't2' : k === 's5' ? 't5' : 't10';
-        const bookUSD = Number(sheet.sovereignBondHoldingsByTenor?.[bucketKey] ?? 0);
+        const bookUSD = bookByTenor.get(k) ?? 0;
         if (!(bookUSD > 0)) return;
         const lossUSD = repricingLossUSD(bookUSD, SWAP_TENOR_YEARS[k], moveBps);
         if (lossUSD <= absorbableUSD) return;

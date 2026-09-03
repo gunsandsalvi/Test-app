@@ -5,7 +5,7 @@
  * SAME `runClearingKernel` the serial path runs (one module, one arithmetic), posts the shard
  * result back, and rings the doorbell. Node-only; the browser build never imports this file.
  */
-import { parentPort, workerData } from 'worker_threads';
+import { workerData } from 'worker_threads';
 import { runClearingKernel } from './financial-clearing-engine.ts';
 
 interface Job {

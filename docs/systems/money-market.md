@@ -22,7 +22,7 @@ Written 2026-09-03 from the domain, code shut, and revised once against the user
   - A2.a **the buffer is a PREFERENCE derived from its own liabilities' liquidity, not a stated
     ratio** *(user: "A.2.a you choose")*. I choose derived: a bank whose funding is overnight
     household money needs more than one funded by term wholesale, and a single constant applied to
-    every bank is the thing rule 4 forbids and §3.30b already names as the largest stated shape
+    every bank is the thing rule 2 forbids and §3.30b already names as the largest stated shape
     still moving cash. A regulatory floor may sit UNDER the preference; it is not the preference
   - A2.b VERIFY — missing it has a cost the bank can feel, or the buffer is decoration
 - **A3** REASON — **the need is knowable only AFTER the day's flows**
@@ -34,7 +34,7 @@ Written 2026-09-03 from the domain, code shut, and revised once against the user
   Who ends up lending and who ends up borrowing is the OUTCOME** *(user: "B1/B2 again not imposed,
   a consequence")*. Writing "surplus banks lend, deficit banks borrow" as a rule is assigning the
   answer: it licenses code that moves cash from a computed surplus to a computed deficit without
-  anybody quoting a rate, which is rule 1's defect in the funding market
+  anybody quoting a rate, which is rule 3's defect in the funding market
 - **B2** REASON — **unsecured lending prices the borrower's name.** The lender has a view on
   getting it back, and that view is in its schedule
   - B2.a a name the market doubts pays more, **or finds no bid at all** — and refusal is a real
@@ -109,7 +109,7 @@ checked by `scripts/check-atlas.sh`.
 | B3 secured lending prices the collateral | `src/domain/repo.ts:RepoContract` | ✅ |
 | B3.a eligibility is per asset, and something is ineligible | `src/engine/simulation/stages/repo-clearing.ts:collateralCapacityUSD` | ✅ |
 | B3.b haircuts by asset and tenor | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
-| B3.c pledged collateral is encumbered and cannot be pledged twice | `src/domain/collateral.ts:overPledgedByBucket` | ✅ |
+| B3.c pledged collateral is encumbered and cannot be pledged twice | `src/domain/collateral.ts:overPledgedByBond` | ✅ |
 | B4 a rate CLEARS from those schedules meeting | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | B5 non-bank cash is in the same market | `src/engine/simulation/stages/settlement.ts:institutionSpendableUSD` | ✅ |
 | B5.a its alternative is the floor, or bills directly | `src/engine/simulation/stages/money-market-fund.ts:quoteMmfNetYieldAnnual` | ✅ |
@@ -260,7 +260,7 @@ declining acquirer is.
 Stated plainly because the atlas is not only for absences. The haircut is derived, not posted:
 duration × 2σ of the bucket's own observed weekly yield changes, so it tightens when the curve turns
 volatile (`computeSovereignRepoHaircuts`). Encumbrance is a property of the specific paper
-(`encumberedFaceByBucket`), reconciled against holdings by a single shared object with one tolerance
+(`encumberedFaceByBond`), reconciled against holdings by a single shared object with one tolerance
 (`domain/collateral.ts` — one dollar, and the file records why it is not one million), and a pledge
 whose collateral was sold is margin-called (`reconcileRepoPledges`). The collateral chosen is
 longest-first with a real reason (bills are the liquidity buffer and must stay sellable). The rate

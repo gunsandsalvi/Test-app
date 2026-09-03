@@ -52,7 +52,7 @@ export function fieldsOf(bs: BankingSector, cashUSD: number, lines: DepositLines
     centralBankLoanUSD: bs.centralBankLoanUSD ?? 0, bankEquityUSD: bs.bankEquityUSD,
     srfBorrowingUSD: bs.srfBorrowingUSD ?? 0, repoBorrowedUSD: bs.repoBorrowedUSD ?? 0,
     businessLoanBookUSD: businessLoanBookOf(bs, facilityBookUSD), consumerLoanBookUSD: consumerLoanBookOf(bs),
-    sovHoldingsUSD: Object.values(bs.sovereignBondHoldingsByTenor || {})
+    sovHoldingsUSD: Object.values(bs.sovereignBondHoldingsByBond || {})
       .reduce((a: number, v) => a + (Number(v) || 0), 0),
     cashReservesUSD: cashUSD, repoLentUSD: bs.repoLentUSD ?? 0,
     onRrpLendingUSD: bs.onRrpLendingUSD ?? 0,
@@ -64,7 +64,7 @@ export function fieldsOf(bs: BankingSector, cashUSD: number, lines: DepositLines
 }
 
 export function residualOf(bs: BankingSector, cashUSD: number, lines: DepositLines, facilityBookUSD: number, signedDesk = false): number {
-  const sovUSD = Object.values(bs.sovereignBondHoldingsByTenor || {})
+  const sovUSD = Object.values(bs.sovereignBondHoldingsByBond || {})
     .reduce((a: number, v) => a + (Number(v) || 0), 0);
   return (
     lines.householdUSD + lines.corporateUSD + lines.institutionalUSD

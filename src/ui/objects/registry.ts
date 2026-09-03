@@ -1,5 +1,5 @@
 /**
- * AU — an OBJECT TYPE IS ONE MODULE (rule 17 for the UI). A module says how to find one of its
+ * AU — an OBJECT TYPE IS ONE MODULE (rule 15 for the UI). A module says how to find one of its
  * kind, how to name it, what to search it by, how to list its peers, which series it carries,
  * and what its overview looks like. The shell and the functions read this contract and nothing
  * else; adding a kind of thing is one file and one line in `objects/index.ts`.

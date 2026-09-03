@@ -47,7 +47,7 @@ export interface PrivateFirmSeed {
  * 70 ms and the rest is orchestration over the object graph, so the only remaining lever with a
  * multiplier is HOW MUCH GRAPH there is.
  *
- * **This is a resolution parameter and rule 19's invariance test applies to it** — the model's
+ * **This is a resolution parameter and rule 2's invariance test applies to it** — the model's
  * answers must not depend on the roster size, and the scoreboard for that is §5-DIST-P. A run at
  * anything but 1 is a DIFFERENT WORLD, not a faster version of the same one: different firms,
  * different seeds consumed, no same-seed comparison with a full run. Use it to iterate; validate
@@ -109,7 +109,7 @@ export function generatePrivateFirmSeeds(
       const revenueUSD = tierRevenueUSD * (raw / rawSum);
       // A named firm earns its sector's own margin — the SME discount applies to the POOL it
       // is carved out of, not to the named tier being carved.
-      const margin = sectorBaselineMarginPct(INDUSTRY_REGISTRY[seg.industry].sector as any);
+      const margin = sectorBaselineMarginPct(INDUSTRY_REGISTRY[seg.industry].sector);
       // Sponsor-style concentrates in the middle of the size distribution (real LBOs do — the
       // largest private firms are founder/family empires, the smallest are below sponsor size).
       const sizeRank = i / Math.max(1, n - 1); // 0 = largest (quantile order), 1 = smallest
