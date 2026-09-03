@@ -139,7 +139,9 @@ the node is a FORBID and the code cannot volunteer it.
 **No participant's schedule is "whatever is left, at whatever price."** Every schedule is a
 `ParticipantDemand` with a reservation level and a size, and the two participants that are
 price-INSENSITIVE are still SIZE-bounded, by a quantity decided outside the auction: the central
-bank posts `reservationStat: -NO_RESERVATION_YIELD_BPS` with `maxNetPurchaseUSD: orderUSD`, where
+bank posts `reservationStat: ±NO_RESERVATION_STAT` (the sign is the book's kind — §3.13-SOV row 4
+made it so, since in price space always-in-the-money is a HIGH reservation) with
+`maxNetPurchaseUSD: orderUSD`, where
 `orderUSD` is `plannedPurchasesByTenor` (`central-bank-demand.ts:41,48`) — a policy quantity struck
 before the book opens and unable to respond to weak demand; an index fund the same with
 `maxNetPurchaseUSD: availableCashUSD` (`etf-demand.ts:37-51`). Neither size is a residual.

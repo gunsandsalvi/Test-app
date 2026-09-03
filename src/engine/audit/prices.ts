@@ -229,10 +229,9 @@ export function auditPrices(state: GameState, week: number): AuditFinding[] {
 /**
  * P8 — §3.13-SOV row 4. THE SOVEREIGN BOOK IS CARRIED AT PAR AND IS NOT WORTH PAR.
  *
- * The sovereign is the one book in this model that clears a YIELD rather than a price
- * (`assets/index.ts` declares it `YIELD_LIKE`; `financial-clearing-engine` then values every
- * sovereign fill at `unitValueUSD = 1`). So a government bond changes hands at FACE whatever its
- * coupon and whatever the curve says, and every holder carries it at face for its whole life.
+ * The sovereign now CLEARS a price and settles at it — both books, bonds and bills (§9.13-SOV
+ * row 4). What has not moved is the CARRYING value: a holder still books the paper at face, so a
+ * bond bought at 97 sits on the books at 100 and the difference is a gain nobody recorded.
  *
  * This is P5's twin, and the same defect one asset class over: it measures the ladder's face
  * against what those same rungs are worth discounted at the curve the auction itself just
@@ -240,7 +239,9 @@ export function auditPrices(state: GameState, week: number): AuditFinding[] {
  * output. If the two disagree, the model is holding one instrument at two values (rule 3), and
  * the gap is the size of what row 4 has to close.
  *
- * It cannot go green by tuning. It goes green when the sovereign clears a price.
+ * It cannot go green by tuning. It went from "there is no price" to "there is a price and nobody
+ * marks to it" when row 4 landed, and it goes green when the register carries the mark — which is
+ * step 13's item 4, the stored value, and is the same defect the equity row has.
  */
 function p8(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
@@ -268,7 +269,7 @@ function p8(state: GameState, week: number): AuditFinding[] {
   const gapUSD = faceUSD - impliedUSD;
   if (rungs > 0 && Math.abs(gapUSD) > 1e6) {
     out.push({ family: 'P', check: 'P8 the sovereign book is carried at par', week, usd: gapUSD,
-      message: `${rungs} sovereign rungs on ${B(faceUSD)} of face are carried at face against ${B(impliedUSD)} implied by the curve this book itself cleared — a ${B(gapUSD)} gap (${byRegion.join(' | ')}); the sovereign clears a YIELD and settles at par, so it has no price to be marked at` });
+      message: `${rungs} sovereign rungs on ${B(faceUSD)} of face are carried at face against ${B(impliedUSD)} implied by the curve this book itself cleared — a ${B(gapUSD)} gap (${byRegion.join(' | ')}); the auction prices it now, and the register still carries it at par` });
   }
   return out;
 }

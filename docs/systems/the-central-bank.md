@@ -105,7 +105,7 @@ checked by `scripts/check-atlas.sh`.
 | C1.b FORBID not a buyer of last resort in the primary market | `src/engine/simulation/stages/central-bank-demand.ts:centralBankParticipant` | ✅ |
 | C2 a purchase creates reserves; a sale destroys them | `src/engine/simulation/stages/central-bank-demand.ts:applyCentralBankFills` | ⚠️ |
 | C2.a it pays with money it creates, so there is no debit | `src/engine/simulation/stages/central-bank-demand.ts:applyCentralBankFills` | ✅ |
-| C3 a price-taker: it posts a quantity, not a level | `src/engine/simulation/stages/central-bank-demand.ts:NO_RESERVATION_YIELD_BPS` | ✅ |
+| C3 a price-taker: it posts a quantity, not a level | `src/engine/simulation/stages/central-bank-demand.ts:NO_RESERVATION_STAT` | ✅ |
 | C4 reinvestment is a separate decision; the difference is QT | `src/domain/central-bank.ts:reinvestmentShare` | ✅ |
 | D1 the standing facility lends against collateral at a stated rate | `src/engine/macro/banking.ts:SRF_SPREAD_BPS` | ✅ |
 | D2 eligibility and haircuts are ITS choice, a policy instrument | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ⚠️ |

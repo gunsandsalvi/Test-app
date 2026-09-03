@@ -53,7 +53,7 @@ import { wireCentralBankFills } from './central-bank-demand';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
-import { discountBillProceedsUSD, withdrawUnplacedIssuance } from '../../../domain/government';
+import { discountBillProceedsUSD, billYieldFromPrice, withdrawUnplacedIssuance } from '../../../domain/government';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
@@ -123,7 +123,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
     if (activeBuckets.length > 0) {
       const billBucketKeys = activeBuckets.map((b) => b.key);
       const cbOrder = reg.centralBankSheet
-        ? centralBankParticipant(reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k))
+        ? centralBankParticipant(reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k), 'PRICE_LIKE')
         : null;
       // OWN7 — the shrink, stated the way 07c's third carve-out finally stated it: the float is
       // what the participants in THIS book hold BETWEEN THEM, computed off the participant list
@@ -133,12 +133,28 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // out of the participant sum for free: the central bank on a no-order week is not a
       // participant, the corporate treasuries that park cash in short paper never bid, and the
       // share no book holds at all has nobody to decrement. Set below, once the desks exist.
+      // §3.13-SOV row 4 — A BILL CLEARS A PRICE TOO. A bill is a bond that pays no coupon and
+      // returns its discount (`../instruments/bond.md` N5.c), so "it clears a yield and settles at
+      // par" is the same defect here as on the bond book — and this stage already knew it, which
+      // is why it computed a discount price from the cleared yield and REBATED the difference
+      // below. That rebate exists only because the price was not the thing being cleared.
+      //
+      // The bill keeps its own convention: simple interest, `1/(1+y·t)`, which is how a bill is
+      // quoted. `pricing/priceFromYield` compounds — right for a coupon bond, and about 2bp of
+      // price away on a 13-week bill, so using it here would re-price every bill by changing its
+      // day-count rather than by clearing it (rule 9).
+      const billPriceAtYieldBps = (b: { years: number }, yieldBps: number): number =>
+        discountBillProceedsUSD(1, Math.max(0, yieldBps / 10000), b.years);
+      const billPriceRange = (b: { years: number }, yBps: number, rangeBps: number): number =>
+        Math.max(1e-9, Math.abs(billPriceAtYieldBps(b, yBps) - billPriceAtYieldBps(b, yBps + rangeBps)));
+      const billCurrentYieldBps = (b: { years: number }): number =>
+        Math.max(1, calculateNelsonSiegelZeroRate(b.years, reg.yieldCurveParams) * 10000);
       const instruments: ClearingInstrument[] = activeBuckets.map((b) => ({
         id: billInstrumentId(regionId, b.key),
         outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
         tradableFloatUSD: outstandingByBucket.get(b.key) ?? 0,
-        currentStat: Math.max(1, calculateNelsonSiegelZeroRate(b.years, reg.yieldCurveParams) * 10000),
-        statKind: 'YIELD_LIKE',
+        currentStat: billPriceAtYieldBps(b, billCurrentYieldBps(b)),
+        statKind: 'PRICE_LIKE',
         durationYears: b.years,
       }));
 
@@ -202,9 +218,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const bucketShare = (outstandingByBucket.get(b.key) ?? 0) / totalBillStockUSD;
           const bucketShareOfSovStock = (outstandingByBucket.get(b.key) ?? 0) / wholeSovStockUSD;
           demand.set(billInstrumentId(regionId, b.key), {
-            reservationStat: reg.policyRate * 10000 + BANK_BILL_PICKUP_BPS,
+            reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000 + BANK_BILL_PICKUP_BPS),
             maxHoldingUSD: appetiteUSD * bucketShareOfSovStock,
-            fullSizeStatRange: BILL_FULL_SIZE_YIELD_RANGE_BPS,
+            fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
             maxNetPurchaseUSD: fundableUSD * bucketShare,
             minHoldingUSD: Math.max(encumberedFace.get(b.key) ?? 0, liquidityFloorUSD * bucketShareOfSovStock),
           });
@@ -232,9 +248,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         activeBuckets.forEach((b) => {
           const bucketShare = (outstandingByBucket.get(b.key) ?? 0) / totalBillStockUSD;
           demand.set(billInstrumentId(regionId, b.key), {
-            reservationStat: reg.policyRate * 10000 + INSTITUTIONAL_BILL_TERM_PREMIUM_BPS_PER_YEAR * b.years,
+            reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000 + INSTITUTIONAL_BILL_TERM_PREMIUM_BPS_PER_YEAR * b.years),
             maxHoldingUSD: sleeveUSD * bucketShare,
-            fullSizeStatRange: BILL_FULL_SIZE_YIELD_RANGE_BPS,
+            fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
             maxNetPurchaseUSD: institutionSpendableUSD(ctx, entity) * CASH_SLEEVE_BILL_SHARE * bucketShare,
           });
         });
@@ -281,9 +297,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const bucketShare = (outstandingByBucket.get(b.key) ?? 0) / totalBillStockUSD;
           holdings.set(billInstrumentId(regionId, b.key), heldByBucket.get(b.key) ?? 0);
           demand.set(billInstrumentId(regionId, b.key), {
-            reservationStat: reg.policyRate * 10000,
+            reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000),
             maxHoldingUSD: targetUSD * bucketShare,
-            fullSizeStatRange: BILL_FULL_SIZE_YIELD_RANGE_BPS,
+            fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
             maxNetPurchaseUSD: budgetUSD * bucketShare,
           });
         });
@@ -374,8 +390,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const priceFractionById = new Map<string, number>();
       activeBuckets.forEach((b) => {
         const id = billInstrumentId(regionId, b.key);
-        const yieldAnnual = (result.newStatById.get(id) ?? instruments.find((i) => i.id === id)?.currentStat ?? 0) / 10000;
-        priceFractionById.set(id, discountBillProceedsUSD(1, Math.max(0, yieldAnnual), b.years));
+        // §3.13-SOV row 4: the auction cleared the PRICE. It is no longer derived from a yield —
+        // the yield is derived from it, below, for the curve.
+        const clearedPrice = result.newStatById.get(id) ?? instruments.find((i) => i.id === id)?.currentStat ?? 1;
+        priceFractionById.set(id, clearedPrice);
       });
       const rebateByParticipant = new Map<string, Map<string, number>>();
       // Step 13 (W2): what the register buyers' rows carry below face, per instrument — the
@@ -450,10 +468,15 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       // Refit the curve through BOTH the cleared bills and 07c's cleared bonds, so the sub-2Y
       // segment every short-rate consumer reads comes from a market, not an extrapolation.
-      const billPoints = activeBuckets.map((b) => ({
-        tenorYears: b.years,
-        yield: (result.newStatById.get(billInstrumentId(regionId, b.key)) ?? reg.zeroRates.tenor3M * 10000) / 10000,
-      }));
+      // §3.13-SOV row 4: the bills cleared a PRICE, so the curve is fitted through the yields
+      // those prices imply — on the bill's own simple-interest convention.
+      const billPoints = activeBuckets.map((b) => {
+        const px = result.newStatById.get(billInstrumentId(regionId, b.key));
+        return {
+          tenorYears: b.years,
+          yield: px === undefined ? reg.zeroRates.tenor3M : billYieldFromPrice(px, b.years),
+        };
+      });
       const bondPoints = [
         { tenorYears: 2, yield: reg.zeroRates.tenor2Y },
         { tenorYears: 5, yield: reg.zeroRates.tenor5Y },
@@ -461,6 +484,12 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         { tenorYears: 30, yield: reg.zeroRates.tenor30Y },
       ];
       reg.yieldCurveParams = fitNelsonSiegelParams([...billPoints, ...bondPoints], reg.yieldCurveParams.lambda);
+      if (process.env.BILL_TRACE === '1') {
+        console.log(`  [bill-trace] ${regionId} w${ctx.nextWeek}: ` + activeBuckets.map((b) => {
+          const px = result.newStatById.get(billInstrumentId(regionId, b.key));
+          return `${b.key} px=${px === undefined ? 'none' : px.toFixed(8)} y=${(billPoints.find((p) => p.tenorYears === b.years)!.yield * 100).toFixed(4)}%`;
+        }).join(' | '));
+      }
       const cleared13w = billPoints.find((p) => p.tenorYears === 0.25);
       reg.zeroRates = { ...reg.zeroRates, tenor3M: cleared13w ? cleared13w.yield : calculateNelsonSiegelZeroRate(0.25, reg.yieldCurveParams) };
 

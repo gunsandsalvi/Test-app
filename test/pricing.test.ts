@@ -9,6 +9,7 @@ import {
   zeroRateAt, priceFromSpreadBps, spreadBpsFromPrice, priceFromYield, yieldFromPrice, ZeroCurve,
 } from '../src/domain/pricing';
 import { ASSET_REGISTRY } from '../src/domain/assets';
+import { discountBillProceedsUSD, billYieldFromPrice } from '../src/domain/government';
 
 const FLAT: ZeroCurve = { tenor3M: 0.04, tenor2Y: 0.04, tenor5Y: 0.04, tenor10Y: 0.04, tenor30Y: 0.04 };
 
@@ -121,4 +122,20 @@ test('a zero-coupon bill is worth its discounted face and nothing more', () => {
   assert.ok(p < 1, 'a discount bill is worth less than face');
   assert.ok(Math.abs(p - discountFactor(0.05, 13 / 52)) < 1e-12, 'and exactly its discount factor');
   assert.ok(Math.abs(yieldFromPrice(bill, p) - 0.05) < 1e-6, 'round trip');
+});
+
+test('a bill round trips on SIMPLE interest, which is not what a coupon bond uses', () => {
+  // §3.13-SOV row 4: a bill is quoted money-market style, 1/(1+y*t). Asserting it here stops the
+  // two conventions being swapped for each other by someone who sees two functions that both
+  // turn a yield into a price.
+  for (const years of [0.25, 0.5, 1]) {
+    for (const y of [0, 0.02, 0.05, 0.10]) {
+      const p = discountBillProceedsUSD(1, y, years);
+      assert.ok(Math.abs(billYieldFromPrice(p, years) - y) < 1e-12, `bill round trip at ${y}, ${years}y`);
+    }
+  }
+  // And they are genuinely different numbers, so neither can stand in for the other.
+  const simple = discountBillProceedsUSD(1, 0.05, 0.25);
+  const compound = priceFromYield({ annualCouponRate: 0, periodWeeks: 13, weeksToMaturity: 13 }, 0.05);
+  assert.ok(Math.abs(simple - compound) > 1e-5, 'simple and compound differ on a 13-week bill');
 });

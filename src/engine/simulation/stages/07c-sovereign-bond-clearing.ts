@@ -47,6 +47,13 @@ import { bankReservesOf, bankDepositLines, householdDepositsAt } from '../../led
 import { govBucketId, govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS, sovBucketKey } from './shared-helpers';
+import { sovereignCouponByBucket } from '../../../domain/government';
+import { priceFromYield, yieldFromPrice, PaperTerms } from '../../../domain/pricing';
+
+/** A sovereign bond pays twice a year, which is the schedule its price is discounted over.
+ *  Stated once so the convention is one fact and not a number repeated at three call sites
+ *  (rule 9: the periodicity is part of the number). */
+const SOVEREIGN_COUPON_PERIOD_WEEKS = 26;
 import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { withdrawUnplacedIssuance } from '../../../domain/government';
@@ -218,7 +225,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // with no reservation level — policy is a quantity this auction prices, not a premium.
     // Read BEFORE the float below, because whether it bids decides whether its book is for sale.
     const cbOrder = reg.centralBankSheet
-      ? centralBankParticipant(reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k))
+      ? centralBankParticipant(reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k), 'PRICE_LIKE')
       : null;
 
     // OWN7 — the missing shrink. The float is what the participants in THIS book can hold
@@ -313,6 +320,34 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       (outstandingByBucket.get(b.key) ?? 0) - (realHoldingsByBucket.get(b.key) ?? 0))));
 
     const totalOutstandingUSD = activeBuckets.reduce((s, b) => s + (outstandingByBucket.get(b.key) ?? 0), 0) || 1;
+
+    // §3.13-SOV row 4 — THE SOVEREIGN CLEARS A PRICE.
+    //
+    // It cleared a YIELD, and `financial-clearing-engine` values a YIELD_LIKE fill at
+    // `unitValueUSD = 1` — so a government bond changed hands at FACE whatever its coupon and
+    // whatever the curve said, and every holder carried it at face for its whole life. `P8`
+    // sized that at 57.34B on 1.88T. Rule 1 says the price is the primitive and the yield is
+    // derived from it; `../instruments/bond.md` N7.b says the same in the instrument's terms.
+    //
+    // Nothing about anyone's REASON changes. A sovereign buyer's reservation genuinely is a
+    // yield — its alternative is the policy rate — so it still computes one, and then states it
+    // as the price that yield implies on the bucket's own cash flows. What changes is what the
+    // auction solves for, and therefore what a fill is worth.
+    //
+    // The bucket's coupon is the face-weighted coupon of the rungs in it, from the one store.
+    const bucketCoupon = sovereignCouponByBucket(materializeGovLadder(ctx.v2, regionId), sovBucketKey);
+    const termsOfBucket = (b: { key: string; years: number }): PaperTerms => ({
+      annualCouponRate: bucketCoupon[b.key] ?? reg.zeroRates[TENOR_BUCKETS.find((t) => t.key === b.key)!.zeroRateField],
+      periodWeeks: SOVEREIGN_COUPON_PERIOD_WEEKS,
+      weeksToMaturity: Math.max(1, Math.round(b.years * 52)),
+    });
+    /** A reservation stated in yield, restated as the price that yield implies. */
+    const priceAtYieldBps = (b: { key: string; years: number }, yieldBps: number): number =>
+      priceFromYield(termsOfBucket(b), yieldBps / 10000);
+    /** A willingness-to-move stated in yield, restated as the price move it implies at the
+     *  bucket's current level. Duration does the conversion, which is what duration IS. */
+    const priceRangeOfYieldRange = (b: { key: string; years: number }, yBps: number, rangeBps: number): number =>
+      Math.max(1e-9, Math.abs(priceAtYieldBps(b, yBps) - priceAtYieldBps(b, yBps + rangeBps)));
     const historyLen = reg.historicalZeroCurves?.length ?? 0;
 
     const instruments: ClearingInstrument[] = activeBuckets.map((b) => {
@@ -330,8 +365,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           - (unheldByBucket.get(b.key) ?? 0)),
         // PUB: the treasury's own offering — every dollar of this bucket no book holds yet.
         primaryOfferingUSD: unheldByBucket.get(b.key) ?? 0,
-        currentStat: currentYieldDecimal * 10000, // bps
-        statKind: 'YIELD_LIKE',
+        currentStat: priceAtYieldBps(b, currentYieldDecimal * 10000), // price per unit of face
+        statKind: 'PRICE_LIKE',
         durationYears: b.years,
         // No floor or ceiling — nominal sovereign yields have gone genuinely negative in real
         // markets; the actual bound is whatever real demand versus supply clears to.
@@ -408,11 +443,12 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           // requirement plus the hedge's cost. Under CIP that is exactly the policy-rate
           // difference — which makes cross-border demand chase the spread over the LOCAL short
           // rate rather than the headline yield.
-          reservationStat: computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS)
+          reservationStat: priceAtYieldBps(b,
+            computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS)
             + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
-                ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate)),
+                ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate))),
           maxHoldingUSD: entityTarget * bucketShareOfMarket * maxOverweightMultipleOf(entity),
-          fullSizeStatRange: SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS,
+          fullSizeStatRange: priceRangeOfYieldRange(b, reg.zeroRates[b.zeroRateField] * 10000, SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
           maxNetPurchaseUSD: classBudgetUSD * bucketShareOfMarket,
           // Liability-driven core: an insurer's claim reserves and a pension fund's benefit
           // promises still exist when yields look poor, and something has to match them.
@@ -471,9 +507,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;
         const bucketShareOfSovStock = (outstandingByBucket.get(b.key) ?? 0) / wholeSovStockUSD;
         demandByInstrumentId.set(id, {
-          reservationStat: reg.policyRate * 10000 + durationPremiumBps(b.years, BANK_PREFERRED_TENOR_YEARS),
+          reservationStat: priceAtYieldBps(b, reg.policyRate * 10000 + durationPremiumBps(b.years, BANK_PREFERRED_TENOR_YEARS)),
           maxHoldingUSD: appetiteUSD * bucketShareOfSovStock,
-          fullSizeStatRange: SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS,
+          fullSizeStatRange: priceRangeOfYieldRange(b, reg.zeroRates[b.zeroRateField] * 10000, SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
           maxNetPurchaseUSD: fundableUSD * bucketShareOfMarket,
           // Two floors, whichever binds: collateral already pledged overnight cannot be sold,
           // and a bank cannot sell below the liquidity its reserves do not already cover.
@@ -514,7 +550,12 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // on these real points.
     const observedPoints = activeBuckets.map((b) => ({
       tenorYears: b.years,
-      yield: (result.newStatById.get(bucketInstrumentId(regionId, b.key)) ?? reg.zeroRates[b.zeroRateField] * 10000) / 10000,
+      // §3.13-SOV row 4: the auction cleared a PRICE; the yield is read off it. That is the
+      // direction rule 1 requires, and the curve below is fitted through what the market paid.
+      yield: (() => {
+        const px = result.newStatById.get(bucketInstrumentId(regionId, b.key));
+        return px === undefined ? reg.zeroRates[b.zeroRateField] : yieldFromPrice(termsOfBucket(b), px);
+      })(),
     }));
     const fittedParams = fitNelsonSiegelParams(observedPoints, reg.yieldCurveParams.lambda);
     const newZeroRates = { ...reg.zeroRates };

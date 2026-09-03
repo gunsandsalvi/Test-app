@@ -1445,6 +1445,49 @@ was measured wrong. Treat a row there as a lead with a file:line, not a fact.
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
 
+**13-SOV ROW 4 — THE SOVEREIGN CLEARS A PRICE. BOTH BOOKS.**
+
+Bonds (07c) and bills (07f) both cleared a YIELD, and `financial-clearing-engine` values a
+YIELD_LIKE fill at `unitValueUSD = 1` — so a government bond changed hands at FACE whatever its
+coupon and whatever the curve said. Rule 1 says the price is the primitive; `bond.md` N7.b says it
+in the instrument's terms. **Bills are not an exception and were nearly left as one:** a bill is a
+bond that pays no coupon and returns its discount (N5.c), so "clears a yield, settles at par" is
+the same defect there, and 07f already half-knew it — it computed a discount price from the
+cleared yield and REBATED the difference, machinery that exists only because the price was not the
+thing being cleared.
+
+Nothing about anyone's REASON changed. A sovereign buyer's reservation genuinely is a yield — its
+alternative is the policy rate — so it still computes one and then states it as the price that
+yield implies on the bucket's own cash flows. What changed is what the auction solves for, and
+therefore what a fill is worth.
+
+**Each instrument keeps its own convention** (rule 9). A bond discounts its coupon schedule at an
+annual effective yield (`pricing:priceFromYield`); a bill is quoted simple, `1/(1+y·t)`
+(`government:discountBillProceedsUSD`, and its new exact inverse `billYieldFromPrice`). They differ
+by about 2bp of price on a 13-week bill, so using one for the other would have re-priced every bill
+by changing its day-count rather than by clearing it. A test pins both and asserts they are
+genuinely different numbers, so neither can quietly stand in for the other.
+
+Also kind-aware now: `centralBankParticipant`'s "no reservation". Its demand is a quantity, not a
+view — but WHICH SIGN means "always" depends on the book, and getting it backwards does not fail
+loudly, it just silently removes the central bank's policy quantity from the auction.
+
+**MEASURED: 70 violations in 24 families, unchanged.** The curve is fitted through what the market
+paid, and it moves: USA 3M 3.91–3.93%, 2Y 4.54%, 10Y 4.44%, 30Y 5.09%.
+
+**AND IT FOUND A PINNED RATE, WHICH HAD TO BE FIXED FIRST** (its own commit, §9 above). With the
+bill book converted, the 13-week print sat at exactly 0.99030000 every week while the 26- and
+52-week prints moved. Cause: `solveClearingStat`'s result went through `toFixed(4)`, an ABSOLUTE
+1e-4 grid — 1e-4 of a basis point on a bps-quoted book, and a whole basis point of PRICE on a
+price-quoted one, which on a 13-week bill is four basis points of yield, more than the weekly move.
+Ten significant figures instead. It is a world relabel, and it also removed `M8`'s FX finding: the
+FX book is PRICE_LIKE with rates near 1, so the same grid had been quantising every exchange rate
+to a pip.
+
+**What P8 now measures has changed with it**, and its message says so: the auction prices the
+sovereign, and the REGISTER still carries it at face — 54.63B on 1886.42B. That is step 13's item
+4, the stored value, and it is the same defect the equity row has.
+
 **13-SOV ROW 4 — SIZED BEFORE IT IS BUILT: THE SOVEREIGN BOOK IS 57.34B AWAY FROM PAR.**
 
 The sovereign is the one book in this model that clears a YIELD rather than a price

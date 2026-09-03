@@ -18,8 +18,14 @@ import { clearedBookDelta } from '../../ledger/holdings-ledger';
 
 export const CENTRAL_BANK_PARTICIPANT_ID = 'CENTRAL-BANK';
 
-/** No level at which it stops buying — the order is a quantity. */
-const NO_RESERVATION_YIELD_BPS = 1e9;
+/** No level at which it stops buying — the order is a quantity, not a view.
+ *
+ *  §3.13-SOV row 4: WHICH SIGN MEANS "ALWAYS" DEPENDS ON THE BOOK. A YIELD_LIKE book's demand
+ *  rises with the statistic, so buying at any level is a reservation at MINUS this; a PRICE_LIKE
+ *  book's demand falls with it, so the same intent is PLUS this. Getting it backwards does not
+ *  fail loudly — the central bank simply never fills, and its policy quantity silently leaves the
+ *  auction. */
+const NO_RESERVATION_STAT = 1e9;
 
 /**
  * The CB's participant for one book, or null when it has no order this week — so a passive
@@ -31,7 +37,8 @@ const NO_RESERVATION_YIELD_BPS = 1e9;
 export function centralBankParticipant(
   cb: CentralBank,
   bucketKeys: string[],
-  instrumentIdFor: (bucketKey: string) => string
+  instrumentIdFor: (bucketKey: string) => string,
+  statKind: 'YIELD_LIKE' | 'PRICE_LIKE' = 'YIELD_LIKE'
 ): { participant: ClearingParticipant; orderedUSD: number } | null {
   const holdings = new Map<string, number>();
   const demand = new Map<string, ParticipantDemand>();
@@ -42,7 +49,7 @@ export function centralBankParticipant(
     orderedUSD += orderUSD;
     holdings.set(instrumentIdFor(key), heldUSD);
     demand.set(instrumentIdFor(key), {
-      reservationStat: -NO_RESERVATION_YIELD_BPS,
+      reservationStat: statKind === 'PRICE_LIKE' ? NO_RESERVATION_STAT : -NO_RESERVATION_STAT,
       maxHoldingUSD: heldUSD + orderUSD,
       // Full size at once: any positive range would make it price-sensitive.
       fullSizeStatRange: 1e-6,

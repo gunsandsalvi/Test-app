@@ -72,6 +72,21 @@ export function discountBillProceedsUSD(faceUSD: number, annualYield: number, te
 }
 
 /**
+ * §3.13-SOV row 4 — THE YIELD A BILL'S PRICE IMPLIES. The exact inverse of the line above.
+ *
+ * A bill is quoted on SIMPLE interest, not compounded: that is the money-market convention and it
+ * is what `discountBillProceedsUSD` has always used. `pricing/yieldFromPrice` compounds, which is
+ * right for a coupon bond and wrong here — the two differ by about 2bp of price on a 13-week bill
+ * at 5%, and swapping one for the other would silently re-price every bill by changing its
+ * day-count. That is a different change from making the price the primitive, so the bill keeps
+ * its own convention and gets its own inverse (rule 9: the convention is part of the number).
+ */
+export function billYieldFromPrice(priceFraction: number, tenorYears: number): number {
+  if (!(priceFraction > 0) || !(tenorYears > 0)) return 0;
+  return (1 / priceFraction - 1) / tenorYears;
+}
+
+/**
  * The discount accruing on the bill stack this week — a STATISTIC, never a debit.
  *
  * `weeklyInterestExpenseUSD` is now cash-basis: it is the coupon the government actually pays,
