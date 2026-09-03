@@ -13,8 +13,8 @@
  *     settlement print), contract gone.
  *  3. COUNTERPARTY DEATH — the close-out that no book had (rule 14/G5): a defaulted party's
  *     contracts settle at replacement value through its account (the estate's account IS the
- *     debtor's, §7.286); a party that has simply ceased to exist ends the contract flat.
- *  4. LIVE legs — the periodic leg and/or the mark DELTA (§7.241: the change since last settled,
+ *     debtor's); a party that has simply ceased to exist ends the contract flat.
+ *  4. LIVE legs — the periodic leg and/or the mark DELTA (the change since last settled,
  *     never the whole mark), `settledMarkUSD` advanced.
  */
 
@@ -46,7 +46,7 @@ export function strikeDerivatives(ctx: WeeklyStepContext, state: GameState, stru
 }
 
 /**
- * THE STANDING BOOK, INDEXED (§7.382): what every market asks of the live book — a party's
+ * THE STANDING BOOK, INDEXED: what every market asks of the live book — a party's
  * cover on one side of one class, a party's PFE charge — answered from ONE walk. The index is
  * the book array's: a contract leaves only when the lifecycle (or a resolution's re-key)
  * REPLACES the array, which is when the next call rebuilds; a strike appends and the index
@@ -146,7 +146,7 @@ function payToB(ctx: WeeklyStepContext, c: DerivativeContract, usdToB: number, r
 }
 
 /**
- * §5-FINALIZATION step 8 — A PARTY'S DEATH CLOSES OUT EVERY CONTRACT IT STANDS ON, the week it
+ * A PARTY'S DEATH CLOSES OUT EVERY CONTRACT IT STANDS ON, the week it
  * dies: the settle's DEFAULTED branch, for every class at once, paid through the estate's
  * account (a claim on it or a payment from it, like any other). Before this a class whose market
  * had already run that week carried the dead party's contracts to its next settle, and the
@@ -172,6 +172,29 @@ export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameSt
   }
   if (closed > 0) ctx.derivativesBook = kept;
   return closed;
+}
+
+/**
+ * THE MARGIN GOES BACK WHEN THE CONTRACT DOES. Initial margin is the A side's own cash, held by
+ * the B side for as long as the contract lives, so a contract that matures, terminates on an
+ * event or is closed out has no margin left to require.
+ *
+ * Nothing ever released it. The tree had exactly ONE margin payment — the posting — and no second
+ * one anywhere, so every dollar a client ever posted stayed with the desk for good and the desk's
+ * margin liability only ever grew. It was found by following the wires behind M6: the money stock
+ * moved by the week's margin with no creator that could explain it.
+ */
+function releaseInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract, view: DerivativeLifecycleView): void {
+  const marginUSD = initialMarginUSD(c);
+  // Held on the desk's own securities account, which is where the posting put it; a party that
+  // has ceased to exist has nowhere to receive it, the same rule the close-out legs follow.
+  if (!(marginUSD > MIN_LEG_USD) || c.b.kind !== 'BANK' || view.partyState(c.a) === 'GONE') return;
+  pay(ctx, {
+    payer: { kind: 'BANK_SECURITIES', ticker: c.b.ticker },
+    payee: c.a,
+    amountUSD: marginUSD,
+    reason: 'initial margin returned',
+  });
 }
 
 /**
@@ -202,12 +225,13 @@ export function settleDerivativeClass(
     if (c.classId !== classId) { kept.push(c); continue; }
 
     const event = profile.eventTermination(c, view);
-    if (event) { payToB(ctx, c, event.usdToB, event.reason, net); continue; }
+    if (event) { payToB(ctx, c, event.usdToB, event.reason, net); releaseInitialMargin(ctx, c, view); continue; }
 
     if (c.maturityWeek <= view.week) {
       const leg = profile.periodicLegUSDToB(c, view);
       if (leg) payToB(ctx, c, leg.usdToB, leg.reason, net);
       settleMark(c, profile.markReasonFinal ?? 'derivative settled');
+      releaseInitialMargin(ctx, c, view);
       continue;
     }
 
@@ -222,6 +246,7 @@ export function settleDerivativeClass(
         if (markUSD !== null) payToB(ctx, c, -(markUSD - (c.settledMarkUSD ?? 0)), 'derivative close-out', net);
         else payToB(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net);
       }
+      releaseInitialMargin(ctx, c, view);
       continue;
     }
 

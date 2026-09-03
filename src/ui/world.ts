@@ -9,7 +9,7 @@
 import { GameState, Company, InstitutionalEntity, Region, RegionId } from '../types';
 import { loanBooksOf } from '../domain/banking';
 import { entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../engine/ledger/accounts';
-import { depositsOf } from '../domain/banking';
+import { spendableDepositsOf } from '../domain/banking';
 import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/world';
 import { bookHeadOf } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
@@ -123,7 +123,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     const s = c.bankBalanceSheet;
     put(`bank:${c.id}:capital ratio`, s.bankCapitalRatio);
     put(`bank:${c.id}:nim`, s.netInterestMarginPct);
-    put(`bank:${c.id}:deposits`, depositsOf(s, stateDepositLines(state, c.ticker)) - (s.clientMarginUSD ?? 0));
+    put(`bank:${c.id}:deposits`, spendableDepositsOf(s, stateDepositLines(state, c.ticker)));
     put(`bank:${c.id}:reserves`, bankReservesOf(ensureV2(state), c.ticker));
     put(`bank:${c.id}:central bank loan`, s.centralBankLoanUSD ?? 0);
     put(`bank:${c.id}:loans`, loanBooksOf(s, facilityBookOf(ensureV2(state), c.ticker)));

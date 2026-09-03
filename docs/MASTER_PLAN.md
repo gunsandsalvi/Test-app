@@ -17,9 +17,10 @@ There is deliberately no section 7 in this file, so the citation can never be mi
   is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
   that names anything but §3's first line; one was written, it disagreed with §3's order, and two
   steps were skipped behind it.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 11c —
-  **134 violations in 33 families**, "the money that is not anyone's" **0.00B across 1 line**
-  (M7's dust, 6 rows worth nothing). Read the number off the run, not off this line.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 11d —
+  **134 violations in 33 families**, "the money that is not anyone's" **0.00B across 1 line**.
+  **The money family is down to one check** (M7's dust, worth 0.00B): M1–M6 all print nothing.
+  Read the number off the run, not off this line.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
@@ -187,36 +188,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11d. **A creator is missing from M6's list.** UK, week 8 of 16, **2.55B unexplained** against a
-    406B stock — a 0.63% breach of a 0.5% tolerance, so it is marginal, and it is the money
-    family's only sized line. The two big terms it sits between are cross-border +27.82B and the
-    banks' own account −21.25B.
-    **Four hypotheses are DISPROVED — do not re-derive them** (§9.11d):
-    (a) the reverse-repo book disagreeing with its lenders — a new M2 check proves it does not;
-    (b) a bank tally reaching no region — every tally is now placed, and the unplaced total is
-    reported rather than dropped; it is zero;
-    (c) the ACTIVE-bank filter dropping a bank that still holds deposits — measured, 4 of 4 banks
-    and an identical stock, and M6 now says so whenever the two reads differ;
-    (d) the clearing house's legs being booked as official settlement — they ARE the bulk of the
-    cross-border total (UK week 8: hub −72.8B against real cross-region flows of −4.7B), but they
-    track a real movement of deposits between regions through the hub, so the attribution is not
-    wrong on its face.
-    (e) `regionOfParty` keying a leg by DOMICILE while the deposits move at the party's BANK —
-    dead too, statically: every `homeBankTicker` is picked from the party's own region
-    (`initialization.ts:748,1299,1585`) and `chooseAssumingBank` keeps it there, so the two
-    regions are never different. No run needed to kill it.
-    (f) the clearing house holding margin ACROSS a settlement pass — dead: M2's clearing-house
-    residual is clean every week, so the hub ends every pass holding nothing.
-    (g) a hub leg against a `BANK_SECURITIES` desk being double-counted, once as cross-border and
-    once in the banks' own account — **written down, then talked out of on the arithmetic**: a desk
-    paying out of its own account would have created deposits had the money stayed home, and the
-    cross-border term is what says it did not. The two terms are the correct decomposition, not a
-    double count. Worth a run to confirm, not worth assuming.
-    **No cheap lead is left.** Take it with the instrument, not a hypothesis: `XBORDER_TRACE=1`
-    plus a per-term week-on-week decomposition of M6 for UK across weeks 7 and 8, the way §9.11c
-    was found. The breach is 0.63% against a 0.5% tolerance in ONE week of sixteen, so it is
-    small — but a tolerance is not an answer and the money family is otherwise clean.
-    Start at `settlement.ts:557` with `XBORDER_TRACE=1`.
 11e. **The seed's unwired positions.** The world's week-0 register, ladders and plant open by
     assignment, not by wire. They should open by wires from a SEED party that closes at week 0 —
     the seed is an event after all — and the W family can then prove week 0 too, which today it
@@ -588,7 +559,8 @@ move into registries; lookups stay (rule 17).
 ## 6. WATCHLIST — measure, do not fix
 | Metric | Why |
 |---|---|
-| The money family (M1–M7) and "the money that is not anyone's" | At HEAD: **0.00B unowned on one line** — M7's 6 dust rows, worth nothing, in one week of sixteen. M1, M2, M3, M4 and M5 print nothing. Step 11d owns the one sized money line left (M6, once, 2.55B). A new line here is a defect at its site. |
+| The money family (M1–M7) and "the money that is not anyone's" | At HEAD: **0.00B unowned on one line** — M7's 11 dust rows, worth nothing, in one week of sixteen. **M1 through M6 all print nothing.** A new line here is a defect at its site, not a tolerance to widen. |
+| O4's two dust facilities | 2 facilities worth 0.00B naming a lender with no sheet, one week of sixteen, arrived on §9.11d's re-path. Dust; re-measure before treating it as open. |
 | The 1e-8 week-1 drift (§7.370) | Three firms differ at the eighth digit at week 1; 13% price gap by week 13. Bisect by file, ONE dump per step. Watch it to zero; never widen a tolerance for it. |
 | The state-growth drift (§7.335, §7.380) | Weekly cost +45% over weeks 5→80 on two independent device runs, all stages inflating proportionally. First suspect: the contract book's row growth. |
 | TGA over a quarter; occupational mismatch; top-down vs bottom-up household income; the private tier that sells nothing; loan-book Spearman noise | Watch the TGA's LEVEL not its shape; mismatch is composition outrunning retraining; `estimatedHouseholdIncomeUSD` is still the anchor; ~300 seeded private firms per region carry `productLines: []`; Spearman 0.26–0.76 at 23–32 names — re-measure as the universe grows. |
@@ -2369,6 +2341,53 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**11d (part 2). The margin a client posts and never gets back.** (`PENDING`) Six hypotheses had
+died (part 1, below) and the seventh was retracted before it cost a run. What found it was the
+user's question: **can the individual wires not be followed to see what appears or goes missing?**
+They can, and the answer was one line away.
+
+`depositsOf` — the money stock's own definition — is four deposit classes PLUS
+`bankBalanceSheet.clientMarginUSD`. Every other term in it is an account ROW; that one is a field
+on the SHEET, so it moves without any settled row moving and no tally can see it. Putting the
+region's week-on-week move of that single field into M6's message: **the client-margin line moved
+2.55B — the gap to the dollar, first time of asking.**
+
+Behind it were three defects in one mechanism:
+
+**1. The margin is never returned.** `initialMarginUSD`'s own doc says it is "the A side's cash,
+held by the B side". The tree contained exactly ONE margin payment — the posting, at
+`fx-forward.ts:362` — and no second one anywhere. A contract matured, terminated on an event or
+was closed out and the client's cash stayed with the desk for good. Every FX forward is written at
+a 2% initial margin, so this ran every week of every run the model has ever done.
+`releaseInitialMargin` now pays it back from the desk's securities account, on all three paths a
+contract leaves the book by, to the party that posted it (a party that has ceased to exist has
+nowhere to receive it — the same rule the close-out legs already follow).
+
+**2. The sheet's line only ever grew.** `clientMarginUSD` ACCUMULATED each week's new margin and
+nothing subtracted from it, while `initialMarginHeldUSD` beside it was summed from the live book —
+two representations of one quantity (rule 3), one of which could only diverge upward. The sheet's
+line is now a read of the live book.
+
+**3. Encumbered collateral was counted as money.** Even with 1 and 2 fixed the identity does not
+close: a client posting margin moves its deposit down and the desk's SECURITIES account up, which
+every tally reads as the BANK absorbing the money, while the margin line put it straight back into
+the stock — the same dollars on both sides. Posted margin is a bank liability and belongs in
+`depositsOf` for the balance-sheet identity, but it is not money: the client cannot pay anyone with
+it. `spendableDepositsOf` names that once and is used by M6, the audit snapshot and the UI — which
+was already subtracting it inline, the tell that nobody thought it was a deposit either.
+
+Measured (SHOCKS=0 WEEKS=16): **134 in 33, unchanged in total, but M6 goes CLEAN** and the money
+family is down to ONE check — M7's 11 dust rows worth 0.00B. **M5 staying clean is the proof the
+release fires:** had the cash stayed on the securities account while the liability line fell to the
+live book's value, assets would have exceeded liabilities on every dealer bank. A new O4 line
+arrives in its place, 2 facilities worth 0.00B in one week — dust, and a re-path, not a leak; it is
+on the watchlist.
+
+**The lesson: a money stock with a term that is not an account row cannot be audited.** Six
+hypotheses and three runs went into the aggregates; the answer came from asking which part of the
+stock had no wire behind it. When an identity will not close, look for the term that settlement
+never touches.
 
 **11d (part 1). Two silent drops closed, four hypotheses killed.** (`PENDING`) M6 stays open; what
 this commit did was make it answerable. `core.ts`'s `byRegion` keyed the per-bank tallies off

@@ -428,6 +428,20 @@ export const MORTGAGE_MIN_LOSS_SEVERITY = 0.05;
 export const depositsOf = (s: BankingSector, lines: DepositLines): number =>
   lines.householdUSD + lines.corporateUSD + lines.institutionalUSD + lines.smeUSD + (s.clientMarginUSD ?? 0);
 
+/**
+ * THE MONEY STOCK'S SHARE of a bank's deposits: what its customers can actually SPEND.
+ *
+ * Posted margin is the client's money and the bank's liability, so `depositsOf` counts it and the
+ * balance-sheet identity needs it there. It is NOT money: it is encumbered collateral the client
+ * cannot pay anyone with, and the cash behind it sits on the desk's own securities account, which
+ * every settlement tally reads as the bank's own. Counting it as money therefore put the same
+ * dollars on both sides of the identity — the stock did not move when a client posted margin,
+ * while the tallies said the bank had absorbed it, and the difference was the money family's last
+ * unexplained line.
+ */
+export const spendableDepositsOf = (s: BankingSector, lines: DepositLines): number =>
+  depositsOf(s, lines) - (s.clientMarginUSD ?? 0);
+
 /** §5-WIRES A3.6c — A BANK'S DEPOSIT LINES, READ OFF THE LEDGER. The four classes are the
  *  depositors' accounts at the bank: the household sector's row, the pools' rows, and the
  *  firms' and institutions' accounts whose house bank it is (`depositLinesAt`, ledger/accounts.ts).

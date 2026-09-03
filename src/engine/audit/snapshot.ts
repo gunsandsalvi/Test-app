@@ -5,7 +5,7 @@
  */
 import { stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { GameState, RegionId } from '../../types';
-import { loanBooksOf, depositsOf } from '../../domain/banking';
+import { loanBooksOf, spendableDepositsOf } from '../../domain/banking';
 import { REGION_IDS } from '../../domain/geography';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 import { isActiveCompany } from '../../domain/company';
@@ -21,6 +21,9 @@ export interface RegionSnapshot {
   centralBankAssetsUSD: number;
   sovereignOutstandingUSD: number;
   bankDepositsUSD: number;
+  /** The part of those deposits that is client margin — a line on the bank's SHEET rather than a
+   *  row in the account store, so it moves without any settled row moving. */
+  clientMarginUSD: number;
   bankLoansUSD: number;
 }
 export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number> };
@@ -37,8 +40,10 @@ export function snapshotOf(state: GameState): AuditSnapshot {
       waysAndMeansUSD: waysAndMeansOf(ensureV2(state), r),
       centralBankAssetsUSD: centralBankAssetsUSD(cb, waysAndMeansOf(ensureV2(state), r)),
       sovereignOutstandingUSD: (reg.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0),
-      // §7.373: the SAME read M6 takes at week end — every deposit class, the margin line included.
-      bankDepositsUSD: banks.reduce((a, b) => a + depositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker)), 0),
+      // The SAME read M6 takes at week end — every deposit class BUT the margin line, which is
+      // a bank liability and not spendable money (`spendableDepositsOf`).
+      bankDepositsUSD: banks.reduce((a, b) => a + spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker)), 0),
+      clientMarginUSD: banks.reduce((a, b) => a + (b.bankBalanceSheet!.clientMarginUSD ?? 0), 0),
       bankLoansUSD: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!, facilityBookOf(ensureV2(state), b.ticker)), 0),
     };
   });

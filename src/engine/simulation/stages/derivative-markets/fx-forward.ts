@@ -1,5 +1,5 @@
 /**
- * XB2/DER — the FX forward MARKET: the hedge as a real position, struck against the book it
+ * The FX forward MARKET: the hedge as a real position, struck against the book it
  * covers, with a bank on the other side, at a cross-currency basis that CLEARS. The contract
  * itself — the weekly mark, maturity, close-out — is the FX_FORWARD profile under
  * domain/derivatives/classes/fx-forward.ts, run by the one lifecycle. This market keeps what is
@@ -48,7 +48,7 @@ import { facilityBookOf } from '../../../../engine2/tranches';
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
 
 /** What this entity holds in each foreign region, split by how much of it its mandate hedges. */
-// §7.307 holdings flip: row walk on the mirror (this market runs after the write-back).
+// Row walk on the mirror (this market runs after the write-back).
 function hedgeableExposureByRegion(v2: V2World, entity: InstitutionalEntity): Map<RegionId, number> {
   const out = new Map<RegionId, number>();
   const H = v2.holdings;
@@ -81,7 +81,7 @@ function entityHedgeToleranceBps(entity: InstitutionalEntity, annualFxSigma: num
 /**
  * DER5 — A CORPORATE'S TRANSACTION FX EXPOSURE, measured off its own invoices: it has delivered
  * goods and is waiting to be paid in somebody else's money, or owes in it, and between delivery
- * and payment the cash that eventually moves is a currency's worth away (XB3a-5's invoice).
+ * and payment the cash that eventually moves is a currency's worth away.
  * The exposure is the outstanding invoice, in the currency it is denominated in, for whichever
  * party is not invoicing in its own money; both sides can be exposed to different currencies.
  */
@@ -295,7 +295,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         durationYears: 0,
       };
       // Undamped: both sides are genuinely elastic here, so the level is the market's, and a
-      // damper would be the only thing that could print instead of it (§6's doctrine).
+      // damper would be the only thing that could print instead of it.
       const result = clearFinancialAsset([instrument], participants, new Map(), { dealerSpreadBps: 0});
       const basisBps = Math.max(0, result.newStatById.get(instrumentId) ?? 0);
       clearedBasisBps.set(key, basisBps);
@@ -307,7 +307,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         byRegion.set(issuer, filledUSD);
       });
     });
-    // Published so the spot desks can quote off a real price next week, and so §6 can watch it.
+    // Published so the spot desks can quote off a real price next week, and so it can be watched.
     const reg = ctx.updatedRegions[holderRegion];
     if (reg) {
       const byIssuer: Record<string, number> = {};
@@ -318,7 +318,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
 
   // ---- STRIKE. Each holder re-hedges to the book that actually exists — as far as a dealer will
   // write it, at the cleared basis, posting the class's initial margin from a budget that nets
-  // what its own week has already committed (§4.0 Tier 1 item 6: checking raw cash spent the same
+  // what its own week has already committed (checking raw cash spent the same
   // dollars twice and dug the fund's overdraft by exactly the margin's size). ----
   const struck: DerivativeContract[] = [];
   const strikeFor = (
@@ -387,7 +387,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   });
   strikeDerivatives(ctx, state, struck);
 
-  // XB2f: the desk offers its WHOLE net position to the FX market — it does not decide how much
+  // The desk offers its WHOLE net position to the FX market — it does not decide how much
   // it can work. What the market absorbs at the cleared rate is settled in stages/fx-clearing.ts,
   // and what nobody takes stays here as inventory. The banks' side: the mark legs arrived through
   // the ledger against the named clients that sent them; what is written here is the margin that
@@ -403,12 +403,17 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     // writing the result back silently reverted every balance-sheet line settlement had moved
     // since — measured at exactly the week's SME origination, -160.5M on the largest dealer in
     // week 1, on 11 banks, growing every week.
+    // THE LINE IS A READ OF THE LIVE BOOK, not a running total. It used to ACCUMULATE each
+    // week's new margin and nothing ever subtracted from it, so a desk's margin liability grew
+    // for ever while the contracts behind it matured away — two representations of one quantity,
+    // and the one on the sheet could only diverge. `initialMarginHeldUSD` is summed from the
+    // contracts that are actually live, this week's strikes included, so it cannot disagree.
     const nextSheet = {
       ...sheet,
-      clientMarginUSD: (sheet.clientMarginUSD ?? 0) + desk.marginReceivedUSD,
+      clientMarginUSD: desk.book.initialMarginHeldUSD,
       fxDealerBook: desk.book,
     };
-    // §7.250: the company IS the write; the channel copy in `companyUpdates` was dead post-08.
+    // The company IS the write; the channel copy in `companyUpdates` was dead post-08.
     return { ...bank, bankBalanceSheet: nextSheet };
   });
 }
