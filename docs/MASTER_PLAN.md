@@ -244,80 +244,91 @@ do not reorder.
     is step 13. **One holdout on the convention:** `engine/nelsonSiegel.ts` discounts continuously
     (`exp(-z·t)`) where everything else compounds discretely. Unify it in the same commit as 13's
     sovereign pricing — moving it alone re-prices every sovereign for no gain.
-13. **EVERY ASSET TRADES ON PRICE** (user, 2026-09-03: *"every asset is measured in units (be it
-    par value, or number of shares, etc), every asset has a price attached to it as the cleared
-    price. Every asset trades on price. DMs and OASs and all else is a measure derived. When I
-    trade a loan the price is the thing that is decided (I value the loan based on the DM but I
-    trade it on price)."*) This is rule 1 restated, and the earlier drafts of this step had the
-    causation BACKWARDS — they treated the spread as the cleared thing and derived a price from
-    it (§9.13 part 3 is the failure). **The spread is a statistic. The price is the trade.**
+13. **EVERY ASSET TRADES ON PRICE — AND THE STRUCTURE HAS TO CHANGE, NOT THE CREDIT BOOKS**
+    (user, 2026-09-03: *"every asset is measured in units (be it par value, or number of shares,
+    etc), every asset has a price attached to it as the cleared price. Every asset trades on
+    price. DMs and OASs and all else is a measure derived… This needs to apply to everything that
+    has a price that differs from the units it represents, not only financial assets… it shouldn't
+    be byte identical, there should be issues coming out of these changes."*)
 
-    **THE MODEL, four lines:**
-    · an asset is a QUANTITY of UNITS — par for credit, shares for equity, tonnes for a
-      commodity, contracts for a future;
-    · an instrument has ONE cleared price a week, and its auction is what produces it;
-    · **value = units × price**, derived at every read, never stored beside the units;
-    · OAS, DM and yield are DERIVED from the cleared price by inverting the paper's own cash
-      flows. A participant VALUES with a spread and BIDS a price — which is why
-      `domain/pricing` needs both directions and why each belongs on a different side of the
-      auction.
+    **THE SURVEY — how every owned thing is stored today.** Read this before proposing anything;
+    two earlier drafts of this step failed by treating it as a credit-book problem.
 
-    **WHERE IT IS BROKEN, precisely.** `financial-clearing-engine.ts:956` reads
-    `unitValueUSD = statKind === 'PRICE_LIKE' ? clearedStat : 1` — a YIELD_LIKE book's unit is
-    worth ONE, always. `assets/index.ts:45-47` declares CORP_BOND and LEVERAGED_LOAN
-    `SPREAD_LIKE` and SOV_BOND `YIELD_LIKE`. Those two facts ARE "credit trades at par"; everything
-    else downstream is a consequence.
+    | What is owned | Stored as | Units | Price | Value |
+    |---|---|---|---|---|
+    | Equity | row `quantityShares` + `quantityOrNotionalUSD`; `comp.stockPrice` | yes | **yes** | stored too |
+    | Corporate bond / loan / CP | row `quantityOrNotionalUSD` | no | no | yes |
+    | Sovereign | `sovereignBondHoldingsByTenor: Record<tenor, USD>` | no | no | yes |
+    | Finished goods | `{ unitsHeld, valueUSD }` | yes | **discarded** | yes |
+    | Work in progress | `{ units, valueUSD }[]` | yes | no | yes |
+    | Input lots | `units` + `unitPriceUSD` | yes | **cost** | derived |
+    | Goods in transit | `units` + `landedCostPerUnit` | yes | **cost** | derived |
+    | Dealer inventory | `{ inventoryUSD, units? }` | optional | no | yes |
+    | Plant | `grossPPEUSD` − `accumulatedDepreciationUSD` | **no** | no | yes |
+    | Housing | `housingStockUSD` | **no** | no | yes |
+    | Category inventory | `categoryDemand[c].inventoryLevelUSD` | no | no | yes |
 
-    **THE ORDER, and it is the order that matters** — §9.13 part 3 failed by changing what a
-    number MEANS while two subsystems still disagreed about it:
-    1. **Units, while units still equal value.** Give every credit row its `units` (par) and make
-       every writer maintain it. Price is pinned at 1, so units == value by construction and a
-       check can PROVE it: nothing can break, because the two numbers are the same. This is the
-       step §9.13 part 3 skipped, and the leak it found (`creditRow` adds to value and not to
-       face) is the whole reason it must come first.
-    2. **One price per instrument, seeded at par.** A cleared-price store, written only by an
-       auction, read by everything. Seeded at 1.00 so week one is byte-identical.
-    3. **The books clear in PRICE.** Flip the credit and sovereign books to `PRICE_LIKE`. Each
-       participant turns its spread view into a reservation PRICE with `priceFromSpreadBps` —
-       that is the "I value it on DM" half — and the engine clears a price like every other book.
-       `unitValueUSD` then needs no ternary: it is the cleared price, and the cash leg becomes
-       units × price for free.
-    4. **The statistic is derived after the clear.** `spreadBpsFromPrice` inverts the cleared
-       price into the OAS or DM and publishes it (`comp.oasSpreadBps`, `leveragedLoan
-       .discountMarginBps`). `07b:271`'s spread stops being an input and becomes a report.
-    5. **Value is derived everywhere, and the identities split by unit.** An OWNERSHIP check
-       compares UNITS to UNITS and never touches price (`O1`, `O6`, `O7`, `W3`); a MONEY check
-       compares VALUE (`M5`, `F1`, the sheets). That split is what §9.13 part 3 got wrong: it
-       marked the value and left the ownership checks comparing a mark to a face.
-    6. **Delete what the price replaces.** `holdings-ledger.ts:46`'s `priceUSD = 1`;
-       `12-portfolio:141`'s round trip and `carryCalculator.ts` (step 26 owns them);
-       `index-calculation.ts`'s own discounting — each becomes a read of the cleared price.
+    **EQUITY IS THE ONLY ASSET IN THE MODEL THAT STORES A PRICE.** Everywhere else the price is
+    computed and thrown away (`goods-ledger.ts:123` — `setOutputStock` takes a `unitPriceUSD`,
+    multiplies by it, and keeps only the product, so next week nothing can re-mark that stock
+    because the price is gone), or assumed to be 1 (credit, sovereign), or a historical COST
+    (lots, consignments), or absent entirely (plant, housing).
 
-    **What is already built and correct** (§9.12b, §9.13 parts 1–3): `domain/pricing` with both
-    directions and the term structure; `engine/credit-price.ts` as the one adapter;
-    `markCreditBook` in the ledger; the `faceUSD` column, which becomes `units`. What was wrong
-    was only the direction, and step 3 above is where it turns round.
+    **THAT IS THE DEFECT, and it is structural.** Value is a stored FIELD in ten of eleven
+    classes. A stored value cannot be re-marked, because the number that produced it no longer
+    exists — so "what is this worth" is answered by whatever happened to be true when it was
+    written: a cost, a par, a stale mark. Every identity that compares two subsystems is then
+    comparing two different vintages of that answer, and wherever units and value are stored
+    SIDE BY SIDE they drift (which is exactly what killed §9.13 part 3).
 
-    **ONE NAME FOR ONE PIECE OF PAPER travels with this.** The register keys credit by TRANCHE and
-    the desks now do too (§9.12), but `O8` still counts a 0.42B tail where the split names an
-    issuer with no live tranche of the kind. A position in paper that does not exist should be
-    nothing, not a row under another name.
+    **THE STRUCTURE IT SHOULD BE:**
+    · a POSITION is `(asset, units)` — nothing else;
+    · an asset has ONE cleared price a week, in a price store, written only by its market;
+    · **value is a FUNCTION, `units × price(asset)`, never a field**;
+    · MONEY is the single degenerate case: its price is 1 by definition. That is what "a dollar is
+      a dollar" means, and it is the only place a hard-coded 1 is allowed;
+    · an asset genuinely not traded is carried at COST, and *carried at cost* is a DECLARED
+      property in the asset registry — a fact about the asset, not an accident of nobody having
+      written it a market.
 
-    **AND IT OWNS 11f: the register holds paper no ladder carries.** `O7` measures it every week —
-    ~55 tranches over-claimed in a typical week, and since step 12 put the desks on the tranche
-    key `O1` and `O6` see it too. `register-split.ts:65` spreads a holder's whole ISSUER-level
-    position across that issuer's live tranches pro rata by face with no cap, which is right when
-    holders in aggregate hold what was issued and faithfully distributes the excess when they do
-    not. The split is the messenger; the sender is that **the book clears at issuer level while
-    the paper exists at tranche level** (`07b:530` iterates `regionCompanies`, one instrument per
-    COMPANY). Clearing per tranche in price space closes both at once. Two hypotheses are spent
-    and must not be repeated: (a) incomplete claims — DISPROVED, the visitors claim by issuer so
-    for an instrument it is all or none; (b) the issuer/tranche oscillation — DISPROVED AND
-    MEASURED, keeping an untouched position's rows verbatim made O7 WORSE (105 tranches and 0.10B
-    against 55 and 0.01B) and moved W2 not at all.
-    `holdings-ledger.ts:46-49` is the wire-layer site. Other sites inventoried in the audit:
-    `07f:930` (CP at par with an annual coupon on 13-week paper), `12-portfolio:110`,
-    `institutional-balance-sheet.ts:192`.
+    **WHAT THIS FORCES — the depth the credit-only reading was missing:**
+    1. **Plant and housing have no units at all.** They cannot be priced until it is decided what
+       a unit of plant IS. That is step 26's "one asset or a stack of dated vintages" question,
+       and it stops being a cleanup: it is load-bearing and unavoidable here.
+    2. **Lots and consignments carry COST where the model wants price.** Inventory held at the
+       cleared price, against inventory bought at cost, is a real holding gain or loss that this
+       model never books. That is a NEW MECHANISM, not a refactor.
+    3. **The goods auction already computes the price it needs and discards it.** It has to be
+       stored per `region|subUnit|week` — the cheapest half of the whole step.
+    4. **The equity row's stored value has to go**, or it drifts exactly as face did.
+    5. **Sovereign holdings are a `Record<tenor, USD>` with no instrument in them** — there is
+       nothing to attach a price TO. They have to become positions in bucket instruments first.
+    6. **The clearing engine's `unitValueUSD = statKind === 'PRICE_LIKE' ? clearedStat : 1`**
+       (`financial-clearing-engine.ts:956`) is the financial half's one line, with
+       `assets/index.ts:45-47` declaring the credit books `SPREAD_LIKE` and the sovereign book
+       `YIELD_LIKE`. A participant VALUES on its spread and BIDS a price:
+       `priceFromSpreadBps` moves to the participant's side, `spreadBpsFromPrice` to after the
+       clear, and the OAS at `07b:271` stops being an input and becomes a report.
+
+    **IT MUST NOT BE BYTE-IDENTICAL.** The moment value becomes units × cleared price, every
+    balance sheet in the model moves, because today's stored values are costs, pars and stale
+    marks. Bank capital moves, ratios move, NAVs move, and identities that have been quietly
+    comparing a cost to a mark start failing. **That failure is the finding.** Seeding at par to
+    keep week 1 unchanged — which an earlier draft of this step proposed — preserves the defect
+    and proves nothing. The measurement to keep is `P5`'s sizing (≈140B on the credit book alone)
+    and its equivalents for goods, plant and housing once they have prices at all.
+
+    **ORDER.** Not "units first, then price" — that was the credit-only reading. Per CLASS, in
+    increasing order of what must be invented: goods (price exists, just discarded) → credit and
+    sovereign (price must be cleared instead of a spread) → inventory at cost versus price (the
+    new holding-gain mechanism) → plant and housing (units must be defined before anything else
+    is possible). Each class is its own commit and each is expected to move the numbers.
+
+    **AND IT OWNS 11f.** `O7` reports ~55 tranches a week claimed beyond their face because
+    `register-split.ts:65` spreads an ISSUER-level position across tranches with no cap, while
+    `07b:530` clears one instrument per COMPANY. Clearing per tranche in price space closes it.
+    Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
+    DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
 13b. **Coupon accruals are dated wires.** `pendingHolderAccrualUSD` is a side map beside the
     paper. It should be a dated wire that RE-KEYS with the paper when the paper moves, landing on
     the per-tranche register — the same treatment every other claim now gets. Step 13 keeps
