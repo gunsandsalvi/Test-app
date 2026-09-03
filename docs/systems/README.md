@@ -86,18 +86,18 @@ could be wholly absent.** That is why banks are three and derivatives are five.
 | 13 | [fund shares (ETF, MMF)](./fund-shares.md) | ✅ | — | — |
 | 14 | [securities lending](./securities-lending.md) | ✅ | — | — |
 | 15 | [prime brokerage](./prime-brokerage.md) | ✅ | — | — |
-| 16 | the derivative layer | — | — | — |
-| 17 | CDS | — | — | — |
-| 18 | interest-rate swaps | — | — | — |
-| 19 | FX forwards and XCS | — | — | — |
-| 20 | commodity futures | — | — | — |
+| 16 | [the derivative layer](./the-derivative-layer.md) | ✅ | — | — |
+| 17 | [CDS](./cds.md) | ✅ | — | — |
+| 18 | [interest-rate swaps](./interest-rate-swaps.md) | ✅ | — | — |
+| 19 | [FX forwards and XCS](./fx-forwards-and-xcs.md) | ✅ | — | — |
+| 20 | [commodity futures](./commodity-futures.md) | ✅ | — | — |
 | 21 | [commodities spot](./commodities-spot.md) | ✅ | — | — |
 | 22 | [indices](./indices.md) | ✅ | — | — |
 | | **FINANCIAL INSTITUTIONS** | | | |
 | 23 | [banks — lending](./banks-lending.md) | ✅ | — | — |
 | 24 | [banks — funding and liquidity](./banks-funding-and-liquidity.md) | ✅ | — | — |
 | 25 | [banks — capital and resolution](./banks-capital-and-resolution.md) | ✅ | — | — |
-| 26 | dealer desks | — | — | — |
+| 26 | [dealer desks](./dealer-desks.md) | ✅ | — | — |
 | 27 | insurers and pensions | — | — | — |
 | 28 | hedge funds | — | — | — |
 | 29 | private equity | — | — | — |
@@ -123,7 +123,10 @@ could be wholly absent.** That is why banks are three and derivatives are five.
 | 45 | news and the player surface | — | — | — |
 
 **Instrument contracts** live in [`../instruments/`](../instruments/): a tree whose subject is an
-instrument cites one rather than restating it. [`bond.md`](../instruments/bond.md) is the first.
+instrument cites one rather than restating it. There are two:
+[`bond.md`](../instruments/bond.md) (fourteen characteristics, cited by both credit trees and
+short-term debt) and [`derivative.md`](../instruments/derivative.md) (twelve, cited by CDS, IRS,
+FX forwards/XCS and commodity futures).
 
 Progress is also measured mechanically: `UNMAPPED` lists every source file not yet in a tree, and
 `check-atlas.sh` prints the count on every commit.
