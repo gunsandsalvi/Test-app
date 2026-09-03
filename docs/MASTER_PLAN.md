@@ -12,19 +12,19 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `b1111d7` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
+- HEAD `e3f598a` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
   earlier one; the session that owns it may push nowhere else.)
-- **Next step: §3 step 7**, then 8, 9, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 8**, then 9, 10, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `b1111d7` —
-  **92 violations in 25 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `e3f598a` —
+  **107 violations in 29 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
 - **Recording a step:** delete the step from §3 and write its record in §9 — what changed, why,
   and the measured numbers, for a reader who was not here. A lesson that a FUTURE step could
   trip over goes in §5 as well; nothing else does.
-- Gates at HEAD: `tsc` 0, ESLint 347/354, hygiene pass, 125 tests.
+- Gates at HEAD: `tsc` 0, ESLint 348/354, hygiene pass, 125 tests.
 
 **Where this list came from (2026-09-02): a line-by-line audit of ~230 files / ~55k lines**, which
 found ~380 defects. Every material one is a step in §3 at its file:line (or, once done, in §9),
@@ -185,15 +185,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-7. **The treasury's own books.** `government-entity.ts:65-68` returns coupon + bill-discount accrual
-   while `government.ts:74-84` states in terms that this is the double count — bills are ~21% of the
-   stack, stage 11 uses coupon only, and the inflated figure is what `evolution.ts:197-201` tests
-   against the fiscal red line, biasing every region toward consolidation. One decomposition.
-   Same step: `repo-clearing.ts:610-637` pays ON RRP interest on a position booked nowhere while the
-   dollar stays spendable — rule 1's exception needs a real position on both sheets, or the RRP goes;
-   and the LOLR's raise buffer (2% of household deposits) and repay buffer (`stressedOutflow × LCR`)
-   are two definitions of one number, so the loan ratchets and never repays (`bank-funding-close.ts:39`,
-   `bank-lending.ts:915,925`).
 8. **The register's remaining holes.** `12-portfolio:276,328,333,499` adds derivative maturity P&L
    to BOTH the realized-P&L and realized-cash lines and `13-news:25` sums both; `etf-flows.ts:682`
    sets `maxHolding = max(shares, shares+want)` so no ETF holder can ever sell (a one-sided book);
@@ -378,6 +369,14 @@ do not reorder.
     constant is TECHNOLOGY, PREFERENCE or POLICY (keep, declared) or SHAPE/OUTCOME (declare with an
     owner and a scheduled death, or derive it now). The scoreboard is the registry's count and it may
     never rise.
+30b. **The overnight sleeve is a decision, not a half.** `repo-clearing.ts:320` offers
+    `institutionSpendableUSD × CASH_SLEEVE_OVERNIGHT_SHARE (0.5)` to the overnight market for
+    EVERY institution — an insurer, a pension fund and a money fund alike — and since step 7 that
+    share decides how much real money leaves the banking system for the central bank's window
+    every week. It is the largest single stated shape still moving cash. The sleeve is a liquidity
+    decision: what an entity must be able to pay this week, from its own commitments and its own
+    preferences, not a flat half of the balance. Named cost at HEAD: bank NIM compression (X1
+    9/16 weeks, a EUR NIM-out-of-band line).
 31. **The real-world equilibria die.** `macro/initialization.ts:318` (`HOUSEHOLD_DEBT_RATIOS`, whose
     own comment reads "RULE 4: observed household balance-sheet ratios"), `:287-296`
     (`BANK_BALANCE_SHEET_RATIOS`, including a central-bank balance sheet at 44% of GDP — rule 4 names
@@ -2369,3 +2368,24 @@ identically zero, so the loss order it documented was dead code and its equity l
 so the field, the line and the news sentence quoting it are gone. Measured (SHOCKS=0 WEEKS=16):
 **92 in 25, unchanged — no bank is resolved in the reference run**, so this one is verified by
 the pure-function tests (rewritten to the new shape) and by reading, not by the run.
+
+**7. The treasury's own books.** (`e3f598a`) (i) `Government.interestWeeklyUSD()` returned the
+coupon PLUS the bills' discount accrual, which `government.ts` states in terms is the double
+count — bills are ~21% of the stack, stage 11 always used the coupon alone, and the inflated
+figure is what the fiscal red line tests a region against. The accrual term is gone. (ii) **The
+reverse repo window is now a real position.** It paid the administered rate on a balance booked
+nowhere, so the same dollar earned the floor and stayed spendable; the money-market session now
+decides the size, a `reverse-repo-draw` stage takes it at the close — before the settlement and
+funding closes, so banks losing the deposits can square up — and the next session returns it with
+interest at the rate it was struck at. The central bank carries `reverseRepoBorrowedUSD` (M1
+counts it), the institution carries `rrpLentUSD` (in its book, not its purchase capacity), and
+every reader of `repoLentUSD` reads it too. (iii) The LOLR's raise and repay read ONE buffer:
+the draw was sized against 2% of household deposits while the repayment released cash only above
+the LCR's HQLA requirement — which the sovereign book also satisfies — so the loan ratcheted and
+was never repaid. Measured (SHOCKS=0 WEEKS=16): **92 violations in 25 families → 107 in 29**,
+money clean, unowned 0.00B, no fund overdrawn. **The rise is named:** the non-banks' idle cash
+genuinely leaves the banking system now, so bank NIM compresses (X1 4/16 → 9/16 weeks, a EUR
+NIM-out-of-band line appears) and the credit books clear on smaller budgets. That drain is the
+correction of a real double count — the same deposits were counted as parked at the central bank
+AND available in the banking system — and its SIZE is decided by `CASH_SLEEVE_OVERNIGHT_SHARE =
+0.5`, now step 30b. P1's breaching issuers fell 1096 → 815 on the way.
