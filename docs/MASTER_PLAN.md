@@ -702,7 +702,12 @@ do not reorder.
 
 
 
-21. **A bracket can never be a print.** `financial-clearing-engine.ts:453` returns the numerical
+21. **A bracket can never be a print.** *(MEASURED — see **21-BRACKET** above: 67 tight and 139
+    wide prints over the 16-week reference, growing monotonically, with no damper between them and
+    the books. The saturation retreat added since this step was written handles a book whose
+    demand cannot ABSORB the float; it cannot handle one with NO demand, which is the 139, because
+    there is no level to retreat to.)*
+    `financial-clearing-engine.ts` returns the numerical
     bracket as the cleared price whenever level-independent demand at the extreme exceeds the float
     — which the central bank (`central-bank-demand.ts:45`) and every index fund (`etf-demand.ts:43`)
     routinely produce — giving −2000 bps for a YIELD_LIKE book; `:487` gives 100,000 bps at the other
