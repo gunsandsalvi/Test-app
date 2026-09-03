@@ -599,7 +599,7 @@ do not reorder.
     - CDS spread against the cash bond's OAS — the basis, `P2`, failing 7 weeks of 16 at HEAD;
     - a future against spot plus carry — `X2`, failing 2 of 16;
     - one good's price across regions in one currency — `X2`'s wedge, 1 of 16;
-    - an ETF's price against its own NAV — the premium, named in step 33's unmeasured reads;
+    - an ETF's price against its own NAV — the premium, named in step 38's unmeasured reads;
     - the swap spread (IRS against the govie curve) and the cross-currency basis (`fx-forward`'s
       CIP basis), both already computed;
     - seniority across one issuer's capital structure — `P1`, failing 16 of 16.
@@ -965,9 +965,39 @@ do not reorder.
     hardcodes capex and linkage ids with `!`, so a new capital good silently misses its view;
     `assets/index.ts:173` tests `'MMF_SHARE'`, absent from the `HoldingType` this module owns.
 
-### PART VII — MEASURE ONCE (rule 12)
+### PART VII — THE ATLAS IS MAPPED (the absences come out)
 
-33. **The long run.** Only when 1–32 are done: `WEEKS=60 SHOCKS=1` (`npm run verify`), the batteries,
+37. **MAP ALL 45 TREES ONTO THE CODE.** The required side is finished — 45 of 45 written from the
+    domain with the code shut, committed before any mapping, which is what makes an uncited node a
+    FINDING rather than an unwritten tree (§9, THE SYSTEM ATLAS). What is left is the other two
+    thirds of the method: **the mapping** (one `path/to/file.ts:symbolName` citation per node) and
+    **the diff** (what is MISSING, what DIVERGES, what is present but in the WRONG PLACE). Every
+    node that ends with no citation is a finding, and each finding either becomes a step here or
+    is recorded in the tree as OUT OF SCOPE with the reason — those are different answers and the
+    file must say which (`docs/systems/README.md`).
+
+    **The pilot already proved the yield.** Corporate credit alone produced steps 33–36: seniority
+    priced but never honoured, a credit event that can only ever be a missed payment, no
+    restructuring at all, one rating held by nobody. Four absences, none of which any sweep had
+    ever reported, from ONE tree of forty-five.
+
+    **Order.** Credit's own mapping is marked STALE and is re-walked first, against the depth-3
+    node ids it now has. Then the trees whose systems the code most plausibly HAS — the register,
+    the clearing engine, money and settlement, the banks, goods, equity — because a citation that
+    fails to resolve there is the strongest kind of finding. The trees whose systems the code may
+    not have at all (the derivative contract's twelve, trade credit, freight, housing, ratings)
+    come last, and a wholly uncited tree is itself the report.
+
+    **The gate already holds the citations honest**: `scripts/check-atlas.sh` fails when a cited
+    `file:symbol` stops resolving, and when a `core.ts` stage or a file under `src` appears in
+    neither a tree nor `docs/systems/UNMAPPED` — so `UNMAPPED` shrinks as this step proceeds and
+    the count is printed on every commit (today: 34 citations, 295 files accounted for). Rule 25's
+    harness applies per commit as usual; a mapping commit changes no code and gates on §4's static
+    half.
+
+### PART VIII — MEASURE ONCE (rule 12)
+
+38. **The long run.** Only when 1–37 are done: `WEEKS=60 SHOCKS=1` (`npm run verify`), the batteries,
     the burn-in convergence gate. Then the standing measurements: the 1e-8 week-1 drift bisected one
     dump per step; the level and the unemployment ratchet; the state-growth drift on device; UK/EUR
     bank margins and the mint drift (the NIM measure with the sovereign-book accretion, and the
@@ -986,38 +1016,6 @@ do not reorder.
     (rule 18).
 
 ### PARKED BY THE USER — not steps, and not to be started without being asked
-
-**THE SYSTEM ATLAS** (user, 2026-09-03, ASKED FOR AND NOT YET AUTHORISED: *"find and classify
-every system there is in this model; for each system, build the logical tree that they run
-through; translate these trees to what they represent (from code to model); verify what is missing
-or what diverges from reality or intent and save these logic trees somewhere… I'm asking this
-specifically because I've asked to do multiple full sweeps of the code and never once it was
-reported the credit didn't have a price or FX didn't exist. These trees will be saved down and
-updated with every change of the code."*)
-
-**Why the sweeps missed those two.** A sweep reads code and asks whether it is correct. An
-ABSENCE has no line number to be read at. Every file in this tree does something plausible and is
-heavily commented; nothing in the credit stage says "and there is no price" — it clears a discount
-margin, coherently, and the missing price is invisible unless you arrive with the expectation that
-every asset trades on one. FX was found the same way: not by reading code but by the user asking
-why everything was called USD. **A sweep finds defects; only a reference model finds absences.**
-
-**The one design decision that decides whether this works.** If the trees are derived FROM the
-code they reproduce the code's blind spots exactly, look complete, and find nothing — a tree built
-by reading `07d-leveraged-loan-clearing.ts` would have a "clear the DM" node and no "price" node,
-because the file has none. The required tree must therefore be written from the DOMAIN with the
-code shut, and the code mapped onto it afterwards. The empty nodes are the finding.
-
-Scope, measured: 68,788 lines over 295 files, 76 stages, 72 domain modules; roughly 40–50 systems
-at a useful granularity. Not a one-pass job.
-
-**What keeps it from rotting** — the requirement that it be updated with every code change is the
-part most likely to fail, and this repo has three dead documents proving it (a `CLAUDE.md` that
-described sections that no longer existed, an `ARCHITECTURE.md` referenced from code and never
-written, 699 markers pointing at a deleted section). So the code side of every tree is a
-MACHINE-VERIFIED citation (`file:symbol`) and a gate fails when one stops resolving or when a
-stage in `core.ts` appears in no tree; the domain side is prose and is reviewed by the user, which
-is the cheapest thing there is to review — a list of "this must exist" claims, not code.
 
 Two whole projects stand half-built outside this list because the user parked them. They are
 recorded here so that "§3 is the only list" stays true and neither is discovered a third time.
@@ -1061,7 +1059,7 @@ truncate on the phone, and a screen with nothing to show says why.
 | `PROFILE=1 WEEKS=4 npx tsx scripts/harness.ts` | ~30 s | a profile is not a run; allowed any time |
 | `WEEKS=2 SHOCKS=0 VERBOSE=1 npx tsx scripts/harness.ts` | ~50 s | the probe before the one run, for a settlement-touching step |
 | `WEEKS=13 SHOCKS=0 VERBOSE=1 NODE_OPTIONS=--max-semi-space-size=64 npx tsx scripts/harness.ts` | ~5 min | **THE ONE RUN per commit** (rule 25) |
-| `WEEKS=60 SHOCKS=1` (`npm run verify`) | ~25 min+ | **END OF PROJECT ONLY** (rule 12; step 33) |
+| `WEEKS=60 SHOCKS=1` (`npm run verify`) | ~25 min+ | **END OF PROJECT ONLY** (rule 12; step 38) |
 
 `--max-semi-space-size=64` is worth 7.5%; past ~14 weeks add `--max-old-space-size=10240` (16 weeks
 OOMs without it). `UNIVERSE_SCALE<1` is iteration speed only — the rule-19 invariance test FAILS on
@@ -1155,6 +1153,83 @@ was measured wrong. Treat a row there as a lead with a file:line, not a fact.
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**THE SYSTEM ATLAS — THE REQUIRED SIDE, 45 OF 45.** Authorised by the user 2026-09-03 (*"Do the
+pilot. I like the idea of forcing it to be updated"* → *"Proceed with the other systems"* → *"move
+instrument contracts to their own directory, and finish the whole set of trees"*), so it is no
+longer PARKED; what remains of it is §3 step 37, the mapping.
+
+**Why it exists, in the user's words:** *"I've asked to do multiple full sweeps of the code and
+never once it was reported the credit didn't have a price or FX didn't exist."* The reason is
+structural, not effort. **A sweep reads code and asks whether it is correct, and an absence has no
+line number to be read at.** Every file in this repo does something plausible and is heavily
+commented; nothing in the credit stage says "and there is no price" — it clears a discount margin,
+coherently, and the missing price is invisible unless you arrive already expecting one. FX was
+found the same way: not by reading code, but by the user asking why everything was called USD.
+**A sweep finds defects; only a reference model finds absences.**
+
+**The one decision that decides whether it works, and it is an ordering decision.** A tree derived
+FROM the code reproduces the code's blind spots exactly, looks complete, and finds nothing: a
+credit tree built by reading `07d-leveraged-loan-clearing.ts` would have a "clear the DM" node and
+no "price" node, because the file has none. So every required tree is written from the DOMAIN with
+the code shut and **committed before any mapping** — the git history is the proof — and the empty
+nodes are the finding.
+
+**What is in the repo now.** `docs/systems/` — a README carrying the method, the rules and the
+45-row status table, and **45 required trees**, all depth 3. `docs/instruments/` — the instrument
+CONTRACTS, which are not systems: `bond.md` (fourteen characteristics, cited by both credit trees
+and short-term debt) and `derivative.md` (twelve, cited by CDS, IRS, FX forwards/XCS and commodity
+futures). A tree whose subject is an instrument cites a contract and states only where its type
+answers a node differently — which is what keeps "this type answers N5 differently" distinct from
+"nobody ever answered N5", the whole point of the exercise.
+
+**The node-type rule, and it came from the user** (*"not imposed, a consequence (just apply this
+comment everywhere)"*). **NOTHING IN A TREE IS IMPOSED. A node states a REASON, never an
+OUTCOME.** "Surplus banks lend and deficit banks borrow" is not a requirement, it is what happens;
+the requirement is that each bank posts a schedule out of its own position, cost and constraints,
+and who ends up on which side is the RESULT. A tree written in outcomes reads as complete and then
+licenses code that assigns the outcome directly — rule 1's defect wearing the atlas's clothes. So
+every node is marked as one of three, and a node that is none of them does not belong:
+- **REASON** — "it has a cost of funds and a position it wants": checkable, and cannot be
+  short-circuited by writing the answer down.
+- **VERIFY** — "worse credit trades wider": a thing to MEASURE, never to enforce. A verify node
+  that fails is a finding about the mechanism, not a licence to clamp the number.
+- **FORBID** — "there is no central-bank overdraft for the treasury": a requirement that something
+  be ABSENT. **These are the nodes a code-derived tree can never contain, because the code cannot
+  show you what it should not have.** They are where this method earns its keep, and the ones this
+  week's work produced include: no buyer of last resort by construction and no mechanism adding
+  demand to make itself clear (the clearing engine); no conversion at the ledger boundary and no
+  numéraire as the place value lives (currency — both of them defects actually found and fixed in
+  §13c-FX, written down afterwards as requirements); no exogenous default event; no fixed recovery
+  rate; no rating derived from the price; no representative SME and no representative household;
+  no instantaneous costless transport; no sale that settles instantly by construction; no fund
+  that cannot fail.
+
+**What keeps it from rotting** — the part most likely to fail, and this repo has three dead
+documents proving it (a `CLAUDE.md` describing sections that no longer existed, an
+`ARCHITECTURE.md` referenced from code and never written, 699 markers pointing at a deleted
+section). The code side of every node is a MACHINE-VERIFIED citation. `scripts/check-atlas.sh`
+(the one new file in `scripts/`, by the user's explicit grant, recorded in the hygiene allowlist)
+runs inside `check-hygiene.sh` and so gates every commit. It does two checks: **RESOLUTION** —
+every `path:symbol` in every tree resolves, in `docs/systems/*.md` and `docs/instruments/*.md`
+alike; and **COVERAGE** — every stage `core.ts` runs and every file under `src` appears in a tree
+or in `docs/systems/UNMAPPED`. Today it prints: 34 citations resolve, 295 source files accounted
+for. `UNMAPPED` shrinks as step 37 proceeds, and the count is on every commit.
+
+**The pilot's yield, which is the argument for step 37.** Corporate credit alone produced §3 steps
+33–36: seniority priced into every spread and never honoured in a waterfall, a credit event that
+can only ever be a missed payment, no restructuring anywhere in the codebase, one rating held by
+nobody. Four absences from ONE tree of forty-five, none of which any previous sweep reported.
+
+**Scale, measured:** 68,788 lines over 295 files, 76 stages, 72 domain modules. The 45 systems are
+grouped INFRASTRUCTURE (6), MARKETS (16), FINANCIAL INSTITUTIONS (7), PUBLIC SECTOR (2), FIRMS (5),
+THE REAL ECONOMY (6), CROSS-CUTTING (3); granularity rule, stated in the README so the count can be
+argued with: **a system is something with its own required tree — its own instrument, actor or
+mechanism that could be wholly absent.** That is why banks are three trees and derivatives are five.
+
+**Also fixed here:** two §3 steps both numbered 33 (the atlas pilot's findings collided with the
+long run), so the long run is now 38 and its precondition reads 1–37; the parts renumbered so the
+new mapping part is VII and MEASURE ONCE is VIII, which keeps the long run last where it belongs.
 
 **13c-FX-2 — THE DESKS SQUARE WITH EACH OTHER, AND THE TRADE AGGREGATE IS DELETED.** Two halves.
 

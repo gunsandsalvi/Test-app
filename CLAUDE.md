@@ -19,3 +19,21 @@ It is the single source of truth for this repo. Its sections, as they actually a
 - **§9 THE LOG** — what is done, why, and the measured numbers.
 
 There is no §7, and there is no second rules file. Anything worth keeping goes in the plan.
+
+## Then `docs/systems/README.md` — the atlas.
+
+Not rules and not a work list: the **reference model**. 45 required trees saying what must exist
+for each system to be a system, written from the domain with the code shut, plus the instrument
+contracts in `docs/instruments/`. It is the only thing in this repo that can find an ABSENCE — a
+sweep reads code and asks whether it is correct, and a missing price has no line number to be read
+at (that is why credit had no price and FX did not exist through several full sweeps).
+
+Two things it demands of you:
+
+- **Read the tree for a system before changing that system.** Its FORBID nodes are the ones the
+  code cannot tell you about.
+- **Update the tree in the same commit as the code.** `scripts/check-atlas.sh` runs inside
+  `check-hygiene.sh` and fails when a cited `file:symbol` stops resolving or a source file appears
+  in no tree — but it cannot tell you a node has become wrong, so that part is on you.
+
+The plan still governs: the atlas's findings become §3 steps, and mapping it is §3 step 37.
