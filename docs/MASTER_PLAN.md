@@ -188,17 +188,19 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11e. **The seed's unwired positions — the two that are left.** The LADDERS open by wire and the
-    GOODS start empty, so W3 and W4 both prove week 1 now (§9.11e). Two remain, each its own commit:
-    (a) **the register** — `initialization.ts:794,918,1005` build `itemizedHoldings` arrays
-    directly and the store is mirrored from them, so no holding has a wire. Wire them and add
-    `holdings` to the audit's empty opening snapshot;
-    (c) **plant** — `grossPPEUSD` is assigned at the seed and at every birth, and there is no
-    asset kind for it (`ASSET_KINDS` has `HOUSE`, not plant). It needs the kind before it can
-    have a wire.
-    The pattern is set by 11e's first two slices: claim the chain empty, issue by wire, then let
-    the audit's opening snapshot carry that key so week 1 is held to week 2's standard. Check
-    first whether the thing is seeded at all — the goods were not, and that slice was one line.
+11e. **The seed's unwired positions — plant, and the check that would prove the register.** The
+    ladders and the register now open by wire and the goods were never seeded at all, so W3 and
+    W4 both prove week 1 (§9.11e). Two remain:
+    (a) **plant.** `grossPPEUSD` is assigned at the seed and at every birth, and there is no asset
+    kind for it — `ASSET_KINDS` has `HOUSE`, not plant. It needs the kind before it can have a
+    wire, which makes it the largest of the three and the one with a real design question:
+    is a firm's plant one asset or a stack of dated capital goods (`capexUnderConstruction`
+    already carries the latter shape).
+    (b) **W5, the register's replay.** The seed's holdings are wired now, but nothing CHECKS that
+    a holder's book is the replay of its wires — there is no register key in the audit snapshot
+    and no W5. Build it in QUANTITY, not USD: shares for equity, face for paper. A value-based key
+    would break every week on the marks, which is exactly why W3 works on ladder FACE and W4 on
+    goods UNITS. The `WireSummary` needs a `holderNetByKey` beside its `issuerNetUSDByKey`.
 
 ### PART II — THE INSTRUMENTS ARE REAL
 
@@ -2406,6 +2408,28 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**11e (part 3). The register opens by wire too.** (`PENDING`) `ensureBooksSynced` mirrored
+`itemizedHoldings` straight into rows, so the world's opening holdings existed because an array
+said so — the issuers' side of the same gap `seedLadder` had. `seedBook` claims the chain empty
+and ISSUES each opening position through `issueHolding`, the same call a primary settlement or an
+ETF creation uses, with the issuer the instrument itself names: the firm for equity and corporate
+paper (the instrument id IS the company's id), the treasury for a sovereign bucket, the fund for
+its own shares.
+
+Two details worth keeping. `ensureBooksSynced` STAYS as the read-side catch-up — `holdings-view`
+calls it three times from paths where no wire journal is active, so the wires could not live
+inside it; the seed runs first in core and leaves it a no-op. And rows MERGE by (type, instrument)
+on the way in where the mirror made one row per array entry, which is lossless: it is what
+`consolidateRegister` does to the register at the close of every week anyway.
+
+The hygiene gate earned its keep on this one. The first version asked
+`h.instrumentType === 'GOV_BOND'`, and the asset-switch ratchet refused it at 55 against a budget
+of 54 — the registry answers that question (`holdingClassOf(...) === 'SOVEREIGN'`), which is both
+shorter and right for a kind nobody has added yet.
+
+Measured (SHOCKS=0 WEEKS=16): **134 in 33, violation set identical line for line** — the third
+slice in a row that costs nothing and buys provenance.
 
 **11e (part 2). The goods were never seeded at all.** (`PENDING`) The step listed the opening
 goods pipeline as unwired. It is not: no firm is generated holding finished stock

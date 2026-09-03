@@ -17,7 +17,7 @@
  */
 import { V2World, internString } from '../../engine2/world';
 import {
-  HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows,
+  HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows,
 } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
 import { PartyRef } from './party';
@@ -161,6 +161,36 @@ export function issueHolding(v2: V2World, issuer: PartyRef, holder: PartyRef, sp
   const toId = holderIdOf(holder);
   if (toId) creditRow(v2, toId, spec);
   return n;
+}
+
+/**
+ * A SEEDED HOLDER'S BOOK OPENS BY WIRE, like every other position it will ever take.
+ *
+ * The register was mirrored from `itemizedHoldings` straight into rows, so the world's opening
+ * holdings existed because an array said so — the same gap `seedLadder` had on the issuers' side.
+ * Each opening position is now ISSUED by its own issuer to the holder, through the same call a
+ * primary settlement or an ETF creation uses, so the book is the replay of its wires from week 1.
+ *
+ * The chain is claimed empty first, so this cannot double a book. Rows MERGE by (type,
+ * instrument) on the way in, which is what `consolidateRegister` does to the register at the
+ * close of every week anyway — two entries for one instrument were always one position.
+ */
+export function seedBook(
+  v2: V2World, holder: PartyRef, book: ItemizedHolding[] | undefined,
+  issuerOf: (h: ItemizedHolding) => PartyRef
+): void {
+  const holderId = holderIdOf(holder);
+  if (!holderId) return;
+  syncBookRows(v2, holderId, []);
+  for (const h of book ?? []) {
+    issueHolding(v2, issuerOf(h), holder, {
+      instrumentType: h.instrumentType,
+      instrumentId: h.instrumentId,
+      issuerRegion: h.issuerRegion,
+      valueUSD: h.quantityOrNotionalUSD ?? 0,
+      shares: h.quantityShares,
+    }, 'seed: book opened');
+  }
 }
 
 /** A holder's paper returns to the issuer: a redemption, a buyback, a write-off. */

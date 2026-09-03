@@ -64,6 +64,10 @@ import './stages/clearing-worker-pool';
 import { ensureV2 } from '../../engine2/world';
 import {  assertLaddersInSync, materializeLadder, facilityBookOf, ensureLaddersSynced } from '../../engine2/tranches';
 import { seedLadder } from '../ledger/tranche-ledger';
+import { seedBook } from '../ledger/holdings-ledger';
+import type { ItemizedHolding } from '../../domain/banking';
+import type { PartyRef } from '../ledger/party';
+import { holdingClassOf } from '../../domain/assets';
 import { ensureBooksSynced, assertBooksInSync, materializeBook, clearDirtyBooks } from '../../engine2/holdings';
 import './stages/native-kernels';
 import { runFreightClearingStage } from './stages/freight-clearing';
@@ -117,12 +121,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // one, and a run replayed from the same seed is identical week for week (engine/rng.ts).
   setRngState(state.rngState);
   {
-    // The register's catch-up: the seed and any unhooked creation path (fund births, estate
-    // spawns) get their books mirrored before the week reads anything.
-    const v2 = ensureV2(state);
-    ensureBooksSynced(v2, state.institutionalEntities ?? []);
-    // The same catch-up for managements: any entity that entered the world by any path without
-    // one gets its two primitives drawn here, once, from its own stream.
+    // Any entity that entered the world by any path without a management gets its two
+    // primitives drawn here, once, from its own stream.
     ensureManagements(state.companies, state.institutionalEntities ?? [], state.currentWeek);
   }
   const baseCtx = createInitialContext(state);
@@ -149,6 +149,20 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       if (!v2.tranches.synced.has(c.id)) seedLadder(v2, { id: c.id, ticker: c.ticker, region: c.region }, c.debtTranches);
     }
     ensureLaddersSynced(v2, state.companies);
+    // The REGISTER opens the same way. A holding's issuer is the party its instrument names: a
+    // firm for equity and corporate paper (the id IS the company's), the treasury for a sovereign
+    // bucket, the fund itself for its own shares.
+    const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
+    const issuerOfHolding = (h: ItemizedHolding): PartyRef => {
+      // The registry says which kinds are sovereign; this does not switch on the kind itself.
+      if (holdingClassOf(h.instrumentType) === 'SOVEREIGN') return { kind: 'GOVERNMENT', region: h.issuerRegion };
+      const ticker = tickerById.get(h.instrumentId);
+      return ticker ? { kind: 'COMPANY', ticker } : { kind: 'INSTITUTION', id: h.instrumentId };
+    };
+    for (const e of state.institutionalEntities ?? []) {
+      if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
+    }
+    ensureBooksSynced(v2, state.institutionalEntities ?? []);
   }
   const cbTrace = centralBankIdentityTraceEnabled() ? new CentralBankIdentityTrace() : undefined;
   cbTrace?.begin(state, baseCtx);

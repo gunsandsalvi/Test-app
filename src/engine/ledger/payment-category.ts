@@ -63,7 +63,7 @@ const RULES: ReadonlyArray<readonly [RegExp, PaymentCategory]> = [
 
   // -- Securities: clearing legs, primary, funds, collateral, derivatives; §5-WIRES W2 the asset
   // wires share the reason table (desk fills, the paying agent's pro-rata actions) --
-  [/clearing|primary|proceeds|placement|desk fill|commercial paper placed|paper (placed|retired) pro rata|shares (placed|retired) by the issuer|shares (cancelled|issued)|security payment|holder of record|etf |shares created|money fund|dealer inventory|stock loan|collateral|variation margin|initial margin|close-out|derivative settled|futures|CDS|cash slice|tender|ISSUE_CHEAP_DEBT|DELEVER_EXPENSIVE_DEBT|accretive call|seed: ladder opened/, 'SECURITIES'],
+  [/clearing|primary|proceeds|placement|desk fill|commercial paper placed|paper (placed|retired) pro rata|shares (placed|retired) by the issuer|shares (cancelled|issued)|security payment|holder of record|etf |shares created|money fund|dealer inventory|stock loan|collateral|variation margin|initial margin|close-out|derivative settled|futures|CDS|cash slice|tender|ISSUE_CHEAP_DEBT|DELEVER_EXPENSIVE_DEBT|accretive call|seed: (ladder|book) opened/, 'SECURITIES'],
 
   // -- Goods, services, and the operating boundary --
   [/goods|contract|freight|procurement|invoice|opex|operating receipts|carrying cost|delivery|consign|damages|settled (purchases|sales)|household purchase|inventory/, 'GOODS_AND_SERVICES'],
