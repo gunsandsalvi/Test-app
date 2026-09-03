@@ -148,6 +148,31 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       const gross = Math.abs(delta) + Math.abs(wired) + (now[kind] ?? 0);
       if (Math.abs(delta - wired) > Math.max(1e-3, gross * 1e-9)) gaps.push([kind, delta - wired]);
     });
+    if (gaps.length > 0 && process.env.W5_TRACE === '1' && prev.registerQtyByHolder) {
+      // WHICH BOOK. One number per asset kind cannot name a cause; the per-holder decomposition
+      // can, the way LADDER_TRACE gives W3 its per-issuer one.
+      const nowH: Record<string, number> = {};
+      registerQtyByKind(state, nowH);
+      const netH = w.registerNetQtyByHolder ?? {};
+      // The per-holder net is kept for EVERY asset kind; the register's own read counts only the
+      // share-held ones. Comparing them whole made every book that ever touched a bond look
+      // billions off, so the decomposition is filtered to the kinds W5 actually checks.
+      const checkedKinds = new Set([...Object.keys(now), ...Object.keys(prev.registerQtyByKind!)]);
+      const rows: [string, number][] = [];
+      new Set([...Object.keys(nowH), ...Object.keys(prev.registerQtyByHolder), ...Object.keys(netH)]).forEach((hk) => {
+        if (!checkedKinds.has(hk.slice(hk.indexOf('|') + 1))) return;
+        const d = (nowH[hk] ?? 0) - (prev.registerQtyByHolder![hk] ?? 0) - (netH[hk] ?? 0);
+        if (Math.abs(d) > 1e-3) rows.push([hk, d]);
+      });
+      rows.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+      const byId = new Map((state.institutionalEntities ?? []).map((e) => [e.id, e]));
+      const sumGaps = rows.reduce((a, [, d]) => a + d, 0);
+      const grossGaps = rows.reduce((a, [, d]) => a + Math.abs(d), 0);
+      console.log(`  [w5-trace] w${week}: ${rows.length} books off their wires, net ${sumGaps.toFixed(1)} vs the kind-level ${gaps.map(([k, g]) => `${k} ${g.toFixed(1)}`).join(',')}, gross ${grossGaps.toFixed(0)} — ` + rows.slice(0, 6).map(([hk, d]) => {
+        const id = hk.split('|')[0]; const e = byId.get(id);
+        return `${e ? `${e.entityType}:${e.ticker ?? id}` : `GONE:${id}`} ${d.toFixed(1)}`;
+      }).join(' | '));
+    }
     if (gaps.length > 0) {
       const worst = gaps.reduce((a, b) => (Math.abs(b[1]) > Math.abs(a[1]) ? b : a));
       out.push({ family: 'W', check: 'W5 wires reproduce the register', week, usd: gaps.reduce((a, [, g]) => a + Math.abs(g), 0), message: `${gaps.length} asset kinds' register holdings moved by other than their wires (${gaps.map(([k, g]) => `${k} ${g.toFixed(3)}`).slice(0, 4).join(' | ')}) — a position booked without a wire, or a wire no book took; worst ${worst[0]}` });

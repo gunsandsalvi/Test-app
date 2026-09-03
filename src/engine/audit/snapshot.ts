@@ -32,10 +32,10 @@ export interface RegionSnapshot {
   clientMarginUSD: number;
   bankLoansUSD: number;
 }
-export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number>; /** W5: register shares held per asset kind */ registerQtyByKind?: Record<string, number> };
+export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number>; /** W5: register shares held per asset kind */ registerQtyByKind?: Record<string, number>; /** W5_TRACE=1: per `holderId|kind` */ registerQtyByHolder?: Record<string, number> };
 
 export function snapshotOf(state: GameState): AuditSnapshot {
-  const out: AuditSnapshot = { moneyPendingUSD: state.lastWires?.moneyPendingUSD ?? 0, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined, goodsUnitsByKey: goodsUnitsByKey(state), registerQtyByKind: registerQtyByKind(state) };
+  const out: AuditSnapshot = { moneyPendingUSD: state.lastWires?.moneyPendingUSD ?? 0, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined, goodsUnitsByKey: goodsUnitsByKey(state), registerQtyByKind: registerQtyByKind(state), registerQtyByHolder: process.env.W5_TRACE === '1' ? registerQtyByHolder(state) : undefined };
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
@@ -89,7 +89,7 @@ export function ladderUSDByTicker(state: GameState): Record<string, number> {
  * (a PE fund interest is held in shares but wires as a CONTRACT, so its wire and its row would
  * not meet). The notional kinds join when step 13 gives a holding a face separate from its value.
  */
-export function registerQtyByKind(state: GameState): Record<string, number> {
+export function registerQtyByKind(state: GameState, byHolder?: Record<string, number>): Record<string, number> {
   const out: Record<string, number> = {};
   const v2 = state.v2 as V2World | undefined;
   if (!v2) return out;
@@ -99,9 +99,17 @@ export function registerQtyByKind(state: GameState): Record<string, number> {
       const q = h.quantityShares;
       if (q === undefined || Number.isNaN(q) || q === 0) continue;
       out[h.instrumentType] = (out[h.instrumentType] ?? 0) + q;
+      if (byHolder) { const hk = `${e.id}|${h.instrumentType}`; byHolder[hk] = (byHolder[hk] ?? 0) + q; }
     }
   }
   return out;
+}
+
+/** W5_TRACE=1: the same register, per `holderId|kind` — which BOOK moved off its wires. */
+export function registerQtyByHolder(state: GameState): Record<string, number> {
+  const byHolder: Record<string, number> = {};
+  registerQtyByKind(state, byHolder);
+  return byHolder;
 }
 
 /** §5-WIRES W4: every unit of goods in the world, per `region|subUnit` — a firm's finished stock and

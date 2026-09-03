@@ -162,6 +162,8 @@ export interface WireSummary {
    *  TO one credits the register and a wire FROM one debits it; a wire between two other parties
    *  never touches it. The register's change must equal this. */
   registerNetQtyByKind: Record<string, number>;
+  /** W5_TRACE=1 only: the same net per `holderId|kind` — which BOOK moved off its wires. */
+  registerNetQtyByHolder?: Record<string, number>;
   /** §5-WIRES W4: the week's transformations per `region|subUnit`. */
   goodsFlowByKey: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>;
   goodsOutUnitsByKey?: Record<string, number>;
@@ -180,6 +182,8 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
   const issuerNetUSDByTicker: Record<string, number> | undefined = trace ? {} : undefined;
   const goodsNetUnitsByKey: Record<string, number> = {};
   const registerNetQtyByKind: Record<string, number> = {};
+  const w5Trace = typeof process !== 'undefined' && process.env?.W5_TRACE === '1';
+  const registerNetQtyByHolder: Record<string, number> | undefined = w5Trace ? {} : undefined;
   const goodsTrace = typeof process !== 'undefined' && process.env?.GOODS_TRACE === '1';
   const goodsOutUnitsByKey: Record<string, number> | undefined = goodsTrace ? {} : undefined;
   const goodsInUnitsByKey: Record<string, number> | undefined = goodsTrace ? {} : undefined;
@@ -220,8 +224,14 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
     // kinds (a seeded institution carries its company's id), so an id match on ordinary equity
     // would silently drop a real holder's leg.
     const selfIssued = isVehicleClaim(k) ? assetText(j.assetRef[i]) : undefined;
-    if (to.kind === 'INSTITUTION' && to.id !== selfIssued) registerNetQtyByKind[k] = (registerNetQtyByKind[k] ?? 0) + j.quantity[i];
-    if (from.kind === 'INSTITUTION' && from.id !== selfIssued) registerNetQtyByKind[k] = (registerNetQtyByKind[k] ?? 0) - j.quantity[i];
+    if (to.kind === 'INSTITUTION' && to.id !== selfIssued) {
+      registerNetQtyByKind[k] = (registerNetQtyByKind[k] ?? 0) + j.quantity[i];
+      if (registerNetQtyByHolder) { const hk = `${to.id}|${k}`; registerNetQtyByHolder[hk] = (registerNetQtyByHolder[hk] ?? 0) + j.quantity[i]; }
+    }
+    if (from.kind === 'INSTITUTION' && from.id !== selfIssued) {
+      registerNetQtyByKind[k] = (registerNetQtyByKind[k] ?? 0) - j.quantity[i];
+      if (registerNetQtyByHolder) { const hk = `${from.id}|${k}`; registerNetQtyByHolder[hk] = (registerNetQtyByHolder[hk] ?? 0) - j.quantity[i]; }
+    }
     if (to.kind === 'CLEARING_HOUSE') { const key = `${to.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) + valueUSD; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) + valueUSD; } }
     if (from.kind === 'CLEARING_HOUSE') { const key = `${from.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) - valueUSD; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) - valueUSD; } }
     if (regionOfIssuer) {
@@ -229,5 +239,5 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
       if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueUSD; if (issuerNetUSDByTicker) { const tk = `${to.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueUSD; } } }
     }
   }
-  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
+  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
 }

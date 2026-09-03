@@ -28,6 +28,7 @@ import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { entityRequiredReturn, maxOverweightMultipleOf, fullSizeSpreadRangeBpsOf } from './asset-allocation';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
+import { wireHoldingMove } from '../../ledger/holdings-ledger';
 import { realizedAnnualVol } from '../../../domain/volatility';
 import { FULL_SIZE_PRICE_DISCOUNT } from './07e-equity-clearing';
 import { medianOf } from '../../../domain/volatility';
@@ -85,6 +86,16 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       sharesByEntity.get(entityId)?.get(companyId) ?? 0;
     /** Move shares on the ledger AND in this stage's view of it, so both stay one fact. */
     const deliver = (fromId: string, toId: string, companyId: string, shares: number, price: number) => {
+      // THE DELIVERY IS AN INSTRUCTION. Both sides used to be written straight onto the store
+      // with no wire, so shares moved between two books with nothing naming the move — the one
+      // path in the tree that still did. The rows are the store's to write inside its window, so
+      // the wire is emitted beside them rather than through `transferHolding`, which would write
+      // them a second time.
+      wireHoldingMove(
+        { kind: 'INSTITUTION', id: fromId }, { kind: 'INSTITUTION', id: toId },
+        { instrumentType: 'EQUITY', instrumentId: companyId, issuerRegion: regionId, valueUSD: shares * price, shares },
+        'stock loan: shares delivered'
+      );
       store.addShares(fromId, 'EQUITY', companyId, regionId, -shares, price);
       store.addShares(toId, 'EQUITY', companyId, regionId, shares, price);
       const from = sharesByEntity.get(fromId);
@@ -433,6 +444,14 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
         const borrowedShares = d.shares * fillShare;
         if (borrowedShares <= 0.0001) return;
         newLendingByLender.forEach((lenderShares, lenderId) => {
+          // A FUND CANNOT BORROW ITS OWN SHARES. It already holds them, and the demand was
+          // spread across every lender including the borrower itself: a self-loan posted
+          // collateral to itself, paid itself a fee, and delivered shares from a book to the
+          // same book. The delivery cancelled silently until it became a wire and the ledger
+          // refused a move from a party to itself. Its own share of the pool is simply not
+          // available to it — the borrower fills less rather than more, because re-spreading
+          // that slice over the other lenders would let one of them lend what it does not have.
+          if (lenderId === d.fundId) return;
           const shares = borrowedShares * (lenderShares / totalNewShares);
           if (shares <= 0.0001) return;
           const collateralUSD = shares * c.stockPrice;

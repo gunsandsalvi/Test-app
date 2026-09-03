@@ -135,6 +135,19 @@ Standing user directives. Not suggestions.
     maturity; a loan is issuer + margin + maturity; a bill is issuer + tenor. An internal id is fine
     as an id — it is never the display name.
 
+28. **A TOLERANCE IS FLOAT DUST, NEVER A PERCENTAGE** (user, 2026-09-03: "tolerances shouldn't be
+    based on %, it should only allow machine number discrepancies. If 1000 disappears without a
+    reason something is wrong"). An identity either holds or it does not. The only thing a check
+    may forgive is the error the FLOATING-POINT ARITHMETIC ITSELF introduced — which is derived,
+    not chosen: about `n × eps × Σ|terms|` for a sum of n terms, so it is bounded by the size and
+    the COUNT of what was added, and it is many orders of magnitude below anything the model
+    trades. A percentage band is a business judgement wearing a numerical costume: it says a
+    thousand dollars may go missing if the book is large enough, and rule 3 says a dollar is a
+    dollar whatever it sits next to. **A check that only passes with a percentage band is
+    reporting a defect, and the band is hiding it.** The corollary for a NEW check: set the
+    tolerance from the arithmetic, watch it fail, and fix what it names — never widen it (rule 20
+    forbids the rollback and this forbids the quieter version of it).
+
 ## 2. THE MAP
 
 **Weekly pipeline** `src/engine/simulation/core.ts` — builds one shared `WeeklyStepContext`
@@ -190,15 +203,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11e. **The seed's unwired positions — plant is the last one.** The ladders, the register and the
-    goods all open by wire or were never seeded, and W3, W4 and W5 hold week 1 to week 2's
-    standard (§9.11e). What is left is **plant**: `grossPPEUSD` is assigned at the seed and at
-    every birth and there is no asset kind for it — `ASSET_KINDS` carries `HOUSE`, not plant. It
-    needs the kind before it can have a wire, and with the kind comes a real design question:
-    is a firm's plant ONE asset or a stack of dated capital goods? `capexUnderConstruction`
-    already carries the second shape, and step 26's two disagreeing depreciation schedules
-    (`front-core.ts:750` vs `capital-programme.ts:190`) are the same question asked from the
-    other end. Answer it once, for both.
 11f. **The register gains equity shares no wire delivered.** W5, built in 11e, reports it in
     **8 weeks of 16 and the sign is always the same: the register grows by MORE than its wires**.
     Tiny at first — 8,252 shares in week 6, 7,607 in week 7 — then it jumps to 9.5M in week 8 and
@@ -210,6 +214,17 @@ do not reorder.
     today and the next thing it needs is the per-holder decomposition, the way `LADDER_TRACE`
     gives W3 its per-issuer one.
 
+11e. **The seed's unwired positions — plant is the last one.** *(Deliberately after 11f: that is
+    a live leak and this is provenance, and this one is blocked on a design question it shares
+    with step 26 — answer it once, for both.)* The ladders, the register and the
+    goods all open by wire or were never seeded, and W3, W4 and W5 hold week 1 to week 2's
+    standard (§9.11e). What is left is **plant**: `grossPPEUSD` is assigned at the seed and at
+    every birth and there is no asset kind for it — `ASSET_KINDS` carries `HOUSE`, not plant. It
+    needs the kind before it can have a wire, and with the kind comes a real design question:
+    is a firm's plant ONE asset or a stack of dated capital goods? `capexUnderConstruction`
+    already carries the second shape, and step 26's two disagreeing depreciation schedules
+    (`front-core.ts:750` vs `capital-programme.ts:190`) are the same question asked from the
+    other end. Answer it once, for both.
 ### PART II — THE INSTRUMENTS ARE REAL
 
 13. **Face, and price × face** (the "credit always trades at par" defect). The tranche row carries
@@ -418,7 +433,14 @@ do not reorder.
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-27. **The audit measures what it claims.** `audit/index.ts:45` omits `'W'` from the scoreboard, so
+27. **The audit measures what it claims — and its tolerances are float dust (rule 28).** The
+    percentage bands are an inventory of their own and every one of them can hide a real number:
+    `estate-resolution.ts:591` forgives `1e-6 × face` on a register-versus-ladder identity (0.6M on
+    a 528M tranche is 1000× that and it is a real over-issuance — §9.11f); `money.ts` M1 forgives
+    `assets × 1e-4`, M5 `assets × 2e-3`, M6 `moneyBefore × 0.005`; `ownership.ts` O6 forgives
+    `max(1e7, issued × AUDIT_BOOKS_TOLERANCE)`; `accounts.ts:194` allows 5% on an exact two-legged
+    identity. Each becomes an ABSOLUTE dust bound derived from the sum actually performed, and
+    whatever then fires is a step. The rest of this step: `audit/index.ts:45` omits `'W'` from the scoreboard, so
     the wires family — W1 money-wires = gross, W3 ladders, W4 "no unit sold that did not exist" —
     has no summary line (its findings do reach the violation count: 12 of last run's 82).
     `ownership.ts:70` compares `stockPrice × sharesOutstanding` against `marketCapOf`, defined as

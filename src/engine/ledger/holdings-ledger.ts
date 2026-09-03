@@ -133,6 +133,18 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   }
 }
 
+/**
+ * THE INSTRUCTION ALONE, for a mover that writes the rows itself.
+ *
+ * Inside the clearing store's window the working copy owns the rows, so a stage that delivers
+ * there cannot go through `transferHolding` without writing them twice. It still owes the wire:
+ * a stock loan's delivery moved shares between two books with `addShares` on each side and no
+ * instruction at all, which W5 saw as ~40 books a week off their wires.
+ */
+export function wireHoldingMove(from: PartyRef, to: PartyRef, spec: HoldingSpec, reason: string): number {
+  return wireHolding(from, to, spec, reason);
+}
+
 function wireHolding(from: PartyRef, to: PartyRef, spec: HoldingSpec, reason: string): number {
   const { quantity, priceUSD } = priceOf(spec);
   return wire({ from, to, kind: kindOfType(spec.instrumentType), asset: spec.instrumentId, quantity, priceUSD, reason }, internReason);
