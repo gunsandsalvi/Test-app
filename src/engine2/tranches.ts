@@ -428,6 +428,28 @@ export function issuerIdOf(v2: V2World, instrumentId: string): string {
   return iss !== undefined && iss >= 0 ? v2.internedStrings[iss] : instrumentId;
 }
 /** 13b: a tranche id that has been written to the store at some point — live or retired. */
+/**
+ * CAL — A TRANCHE'S PAYMENT SCHEDULE, off the store's row, in ONE place.
+ *
+ * Both the front seam and the back pass resolved `paymentsPerYear` and `paymentAnchorWeek` from
+ * their own `?? default` spellings, which is two representations of one rule (rule 4) — and both
+ * spelled the anchor's default as ZERO, so every bond in the model paid on the same global cycle
+ * regardless of when it was issued. The defaults are the domain's
+ * (`company.ts:trancheePaymentsPerYear`, `tranchePaymentAnchorWeek`): semi-annual for a fixed
+ * bond, quarterly for a floater, once at maturity for CP, counted from the issue week.
+ */
+export function trancheScheduleOf(S: ReadonlyTrancheStore, r: number): { periodWeeks: number; anchorWeek: number } {
+  const isCP = (S.flags[r] & TR_CP) !== 0;
+  const floating = (S.flags[r] & TR_FLOATING) !== 0;
+  const perYear = !Number.isNaN(S.paymentsPerYear[r])
+    ? Math.max(1, S.paymentsPerYear[r])
+    : (isCP ? 1 : floating ? 4 : 2);
+  return {
+    periodWeeks: Math.max(1, Math.round(52 / perYear)),
+    anchorWeek: (Number.isNaN(S.paymentAnchorWeek[r]) ? S.originationWeek[r] : S.paymentAnchorWeek[r]) | 0,
+  };
+}
+
 export const isTrancheId = (v2: V2World, instrumentId: string): boolean => {
   const ref = v2.internedIdByString.get(instrumentId);
   return ref !== undefined && v2.tranches.issuerRefByIdRef.has(ref);

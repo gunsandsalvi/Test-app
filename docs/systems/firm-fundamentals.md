@@ -102,7 +102,7 @@ checked by `scripts/check-atlas.sh`.
 | C4 working capital is a real use of cash | `src/domain/trade-invoice.ts:paymentTermWeeks` | ✅ |
 | C4.a profit and cash are different numbers | `src/engine2/stage08-back.ts:makeCashPoster` | ✅ |
 | D1 it pays out of a balance that can hit zero | `src/engine/ledger/accounts.ts:cashOf` | ✅ |
-| D2 debt service is a fixed claim ahead of owners | `src/domain/company.ts:tranchePaymentDue` | ✅ |
+| D2 debt service is a fixed claim ahead of owners | `src/engine2/front-core.ts:trancheWeekAccrual` | ✅ |
 | D3 coverage is a read, and lenders look at it | `src/domain/company-week/credit-standing.ts:creditMetrics` | ✅ |
 | **D4 it can fail two ways, and they are different** | `src/domain/company-week/credit-standing.ts:isInDefault` | ⚠️ |
 | D5 when it cannot pay it defaults | `src/domain/company-week/credit-standing.ts:isInDefault` | ✅ |

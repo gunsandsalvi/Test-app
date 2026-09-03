@@ -50,6 +50,66 @@ import { internString } from '../../../engine2/world';
 import { materializeGovLadder } from '../../../engine2/tranches';
 
 /** `<region>|<bondId>|<partyKey>` — the receivable one holder has against one bond. */
+
+/**
+ * THE HOLDER WALK, shared by the week and the seed. Every holder of record of a region's
+ * sovereigns accrues `notional × coupon × weeks / 52` on the bond it actually holds: the
+ * institutions off the register, the banks off their own books (the leg that could not be keyed
+ * by institution id, and the reason this ledger is party-keyed at all). The central bank is
+ * deliberately absent — see the header — and the corporate treasuries hold only short paper.
+ *
+ * `weeksOf` is what separates the two callers: the weekly stage passes 1, and the seed passes the
+ * weeks each bond has run since its own last coupon date, so an aged ladder opens at what it has
+ * genuinely accrued rather than at zero (§3.37-SEED / atlas the-seed D2).
+ *
+ * Returns what each BANK earned, for the caller to post as its equity leg.
+ */
+export function accrueSovereignHolders(
+  ctx: {
+    v2: WeeklyStepContext['v2'];
+    updatedInstitutionalEntities: WeeklyStepContext['updatedInstitutionalEntities'];
+    updatedCompanies: WeeklyStepContext['updatedCompanies'];
+    sovereignAccruedInterestUSD: Map<string, number>;
+  },
+  regionId: RegionId,
+  couponByBond: Record<string, number>,
+  weeksOf: (bondId: string) => number,
+): Map<string, number> {
+  const accrued = ctx.sovereignAccruedInterestUSD;
+  const bankEarnedUSD = new Map<string, number>();
+  const accrue = (bondId: string, party: PartyRef, notionalUSD: number): number => {
+    const coupon = couponByBond[bondId] ?? 0;
+    const weeks = weeksOf(bondId);
+    if (!(coupon > 0) || !(notionalUSD > 0) || !(weeks > 0)) return 0;
+    const usd = (notionalUSD * coupon * weeks) / 52;
+    if (!(usd > 0)) return 0;
+    const k = accrualKey(regionId, bondId, party);
+    accrued.set(k, (accrued.get(k) ?? 0) + usd);
+    return usd;
+  };
+  // §7.307 holdings flip: row walk — a non-GOV_BOND or foreign row costs two int compares.
+  const H = ctx.v2.holdings;
+  const govBondRef = internString(ctx.v2, 'GOV_BOND');
+  const regionRef = internString(ctx.v2, regionId);
+  ctx.updatedInstitutionalEntities.forEach((entity) => {
+    if (entity.isDefaulted) return;
+    for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
+      if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
+      // §3.13-SOV row 3: the coupon accrues to the BOND the row names.
+      accrue(ctx.v2.internedStrings[H.instrRef[r]], { kind: 'INSTITUTION', id: entity.id }, H.qtyUSD[r]);
+    }
+  });
+  ctx.updatedCompanies.forEach((c) => {
+    if (!c.isBankEntity || !c.bankBalanceSheet || c.region !== regionId || !isActiveCompany(c)) return;
+    let earnedUSD = 0;
+    Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, usd]) => {
+      earnedUSD += accrue(bondId, { kind: 'BANK_SECURITIES', ticker: c.ticker }, Number(usd) || 0);
+    });
+    if (earnedUSD > 0) bankEarnedUSD.set(c.ticker, earnedUSD);
+  });
+  return bankEarnedUSD;
+}
+
 const accrualKey = (regionId: RegionId, bondId: string, party: PartyRef) =>
   `${regionId}|${bondId}|${partyKey(party)}`;
 
@@ -71,44 +131,11 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
     // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
     const ladder = materializeGovLadder(ctx.v2, regionId);
     const couponByBond = sovereignCouponByBond(ladder);
-
-    /** One holder's week of interest on one bond, at that bond's own coupon. */
-    const accrue = (bondId: string, party: PartyRef, notionalUSD: number): number => {
-      const coupon = couponByBond[bondId] ?? 0;
-      if (!(coupon > 0) || !(notionalUSD > 0)) return 0;
-      const weeklyUSD = (notionalUSD * coupon) / 52;
-      if (!(weeklyUSD > 0)) return 0;
-      const k = accrualKey(regionId, bondId, party);
-      accrued.set(k, (accrued.get(k) ?? 0) + weeklyUSD);
-      return weeklyUSD;
-    };
-
-    // ---- 1. The institutions, off the register. Their cash arrives on the date; the income
-    // statement is struck in institutional-balance-sheet.ts, where it stays smooth. ----
-    // §7.307 holdings flip: row walk — a non-GOV_BOND or foreign row costs two int compares.
-    const H = ctx.v2.holdings;
-    const govBondRef = internString(ctx.v2, 'GOV_BOND');
-    const regionRef = internString(ctx.v2, regionId);
-    ctx.updatedInstitutionalEntities.forEach((entity) => {
-      if (entity.isDefaulted) return;
-      for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
-        if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
-        // §3.13-SOV row 3: the coupon accrues to the BOND the row names.
-        const bondId = ctx.v2.internedStrings[H.instrRef[r]];
-        accrue(bondId, { kind: 'INSTITUTION', id: entity.id }, H.qtyUSD[r]);
-      }
-    });
-
-    // ---- 2. The banks, off their own per-tenor books. This is the leg that could not be keyed
-    // by institution id, and the reason the ledger is party-keyed at all. ----
-    ctx.updatedCompanies.forEach((c) => {
-      if (!c.isBankEntity || !c.bankBalanceSheet || c.region !== regionId || !isActiveCompany(c)) return;
-      let earnedUSD = 0;
-      Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, usd]) => {
-        earnedUSD += accrue(bondId, { kind: 'BANK_SECURITIES', ticker: c.ticker }, Number(usd) || 0);
-      });
-      if (earnedUSD > 0) bankEarnedUSD.set(c.ticker, (bankEarnedUSD.get(c.ticker) ?? 0) + earnedUSD);
-    });
+    // ---- 1 and 2. The holders of record — institutions on the register, banks on their own
+    // books — accrue this week. One week each; the seed calls the same walk with the weeks each
+    // bond has actually run since its last coupon date. ----
+    accrueSovereignHolders(ctx, regionId, couponByBond, () => 1)
+      .forEach((usd, ticker) => bankEarnedUSD.set(ticker, (bankEarnedUSD.get(ticker) ?? 0) + usd));
 
     // ---- 3. THE COUPON DATES. A bond whose date falls this week turns every holder's accrued
     // balance into cash — including a holder that has since sold out, because it earned it while

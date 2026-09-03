@@ -768,16 +768,23 @@ export function trancheePaymentsPerYear(t: DebtTranche): number {
   return t.rateType === 'FIXED' ? 2 : 4;
 }
 
-/** Whether this tranche's cash payment falls in this week, and how many weeks it covers. */
-export function tranchePaymentDue(t: DebtTranche, week: number): { due: boolean; weeksCovered: number } {
-  const perYear = trancheePaymentsPerYear(t);
-  const periodWeeks = Math.max(1, Math.round(52 / perYear));
-  if (t.isCommercialPaper) {
-    return { due: t.maturityWeek === week, weeksCovered: periodWeeks };
-  }
-  const anchor = t.paymentAnchorWeek ?? 0;
-  const since = week - anchor;
-  return { due: since > 0 && since % periodWeeks === 0, weeksCovered: periodWeeks };
+/**
+ * CAL / §3.37-SEED — A TRANCHE'S COUPON DATES ARE COUNTED FROM ITS OWN ISSUE.
+ *
+ * `paymentAnchorWeek` is optional and NOTHING has ever set it — not the seed, not any of the six
+ * runtime issuance sites — so every reader fell back to `?? 0` and **every bond in the model paid
+ * on the same global cycle anchored at week zero**. A bond issued forty weeks before the world
+ * opened and one issued three weeks before it paid in the same weeks, and neither paid on a date
+ * that had anything to do with its own life. It is also what made the opening accrual wrong: with
+ * the anchor at zero a mid-life rung's first coupon covered only the weeks since the world opened,
+ * not the weeks since its last real payment date (atlas the-seed D2).
+ *
+ * The default is the ORIGINATION WEEK, which is the date a real bond's schedule is struck from.
+ * The field stays for paper that genuinely re-anchors (a re-opening taps an existing line's
+ * dates); it is no longer the only thing standing between a tranche and a schedule.
+ */
+export function tranchePaymentAnchorWeek(t: { paymentAnchorWeek?: number; originationWeek: number }): number {
+  return t.paymentAnchorWeek ?? t.originationWeek;
 }
 
 /**

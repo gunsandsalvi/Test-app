@@ -38,7 +38,7 @@ import { CogsCostDrivers } from '../engine/companyGenerator';
 import { industrialIncome } from '../domain/company-week/income-statement';
 import { fulfillmentRatio } from '../domain/company-week/inventory';
 import { revHistPush, V2World, rowOf } from './world';
-import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
+import { ladderRowsOf, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
 import { LotViews, LotStore, consumeFifoOnViews } from './lots';
 import { SUBUNITS, SUBUNIT_INDEX, NSUB } from './state';
 import { getBaseAnnualWageUSD } from '../engine/bootstrap/labor-and-wages';
@@ -168,7 +168,7 @@ export interface FrontSeam {
   trIsCP: Uint8Array;
   trMatWeek: Int32Array;
   trPeriodWeeks: Int32Array;    // max(1, round(52/perYear)) resolved
-  trAnchorWeek: Int32Array;     // ?? 0
+  trAnchorWeek: Int32Array;     // ?? originationWeek (domain/company.ts:tranchePaymentAnchorWeek)
 
   // product lines CSR
   plStart: Int32Array;          // n+1
@@ -443,10 +443,9 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
         S.trIsFacility[atTr] = fl & TR_FACILITY ? 1 : 0;
         S.trIsCP[atTr] = fl & TR_CP ? 1 : 0;
         S.trMatWeek[atTr] = TS.maturityWeek[tr] | 0;
-        const perYear = !Number.isNaN(TS.paymentsPerYear[tr]) ? Math.max(1, TS.paymentsPerYear[tr])
-          : ((fl & TR_CP) ? 1 : (!floating ? 2 : 4));
-        S.trPeriodWeeks[atTr] = Math.max(1, Math.round(52 / perYear));
-        S.trAnchorWeek[atTr] = (Number.isNaN(TS.paymentAnchorWeek[tr]) ? 0 : TS.paymentAnchorWeek[tr]) | 0;
+        const sched = trancheScheduleOf(TS, tr);
+        S.trPeriodWeeks[atTr] = sched.periodWeeks;
+        S.trAnchorWeek[atTr] = sched.anchorWeek;
         atTr++;
       }
     }

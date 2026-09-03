@@ -243,34 +243,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-**These two come first, and they are the atlas's** (§9, step 37). Neither builds a mechanism;
-both make the instrument able to see. Everything below is verified against a harness that has
-never audited its own opening state, and the three identities in 37-ZEROSUM are each the cheapest
-possible detector for a defect this project found by reading code instead.
-
-37-SEED. **THE OPENING WORLD.** *(Parts 1–3 DONE — §9.37-SEED. The audit runs at week 0, the seed
-    opens its own ladders and register by wire, and corporate ladders are seeded mid-life so the
-    rollover channel exists. What is left is one bullet and two findings.)*
-    · the opening spread curve, yield curve and FX rate are seeded ANSWERS (the-seed E1), and the
-      accrual ledgers open empty for paper seeded mid-life (D2) — a mid-life bond's first coupon
-      is short by up to half a period, and its seeded coupon is today's policy rate plus today's
-      rating spread rather than the rate that prevailed when it was issued. Both are the same
-      omission: the seed has no history to have issued INTO. Self-consistent, so it leaks nothing;
-      a level error, and one that gets larger the more of the ladder is aged.
-    **And the two the week-0 audit put on the board**, both real and neither owned by another
-    step:
-    · `F1` — 685 firms file a cash line that is not their balance (−78.80B);
-    · `O7` — 409 tranches claimed beyond their face, **$439.28 in total, about $1.07 each.**
-      *(CORRECTED: an earlier note here said O7 had no dust tolerance and was firing on
-      representation error. It has one, and it is right —* `1e-9 × max(face, claimed) × rows`,
-      *absolute and scaling with the sum actually performed, exactly as rule 7 asks. The
-      excesses are ABOVE it and are therefore real: at these magnitudes a dollar is some four
-      billion ulps, not a rounding.* The cause is the seed allocating each holder's slice with
-      its own rounding, so the slices sum to slightly more than the face — a claim on paper that
-      does not exist, which is rule 2 at a small size. It dies with step 13, which replaces the
-      allocation with a per-tranche clear; it is NOT step 27's, and the earlier note filing it
-      there was wrong too.)*
-
 12. **ONE THING, ONE KEY** (user, 2026-09-03). *(Mostly done — §9.12. What is left is the tail.)*
     **THE POLICY, stated once so a check can test it:**
     · a COMPANY is its `id`; its `ticker` is a display name and a party address, never a key into
@@ -304,6 +276,13 @@ possible detector for a defect this project found by reading code instead.
     (`exp(-z·t)`) where everything else compounds discretely. Unify it in the same commit as 13's
     sovereign pricing — moving it alone re-prices every sovereign for no gain.
 13. **EVERY ASSET TRADES ON PRICE — AND THE STRUCTURE HAS TO CHANGE, NOT THE CREDIT BOOKS**
+    *(37-SEED handed this step two findings it already owns. **(a)** the seed's spread table is the
+    permanent CASH FLOW of every bond the world opened with — `RATING_OAS_SPREADS` sets
+    `oasSpreadBps`, and `generateDebtTranches` derives every coupon and loan margin from the same
+    table, so a cleared spread in week one moves the print and never the coupon. It has nowhere
+    else to go until a clear produces the spread (atlas the-seed E1). **(b)** `O7`, 409 tranches
+    claimed beyond their face by $439.28 — the seed rounds each holder's slice on its own, so the
+    slices sum past the face. Both die when the allocation becomes a per-tranche clear.)*
     (user, 2026-09-03: *"every asset is measured in units (be it par value, or number of shares,
     etc), every asset has a price attached to it as the cleared price. Every asset trades on
     price. DMs and OASs and all else is a measure derived… This needs to apply to everything that
@@ -1423,6 +1402,21 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**37-SEED — the opening world, closed.** `F1`: `scaleFirmSize` resized a firm's revenue, shares,
+plant, ladder and account and left its FILED STATEMENTS at the parent's or the pre-lift figure, so
+**685 firms opened the world filing somebody else's balance sheet, 78.80B net**. They scale with the
+firm now; a clone also deep-copies its snapshots, which it had been SHARING with its parent.
+`D2`: the accrual ledgers opened empty against aged ladders. The cause was one line under it —
+`paymentAnchorWeek` is optional and nothing had ever set it, so every reader fell back to `?? 0` and
+**every bond in the model paid on one global cycle anchored at week zero**, whatever its issue date.
+The anchor defaults to the ORIGINATION week (`tranchePaymentAnchorWeek`, resolved for the store's
+rows by `trancheScheduleOf` — which also replaces two spellings of the same defaults, front seam and
+back pass), and `seedOpeningAccruals` opens both ledgers at `annual × weeks since this bond's own
+last coupon date / 52`. Neither split is re-implemented: the corporate side hands one opening accrual
+to `applyHolderInterestAccruals`, the sovereign side calls the calendar's own holder walk, extracted
+for the two callers. `tranchePaymentDue`, a second dead implementation of the due test, deleted.
+E1's coupon half and `O7` are step 13's, where the allocation becomes a clear.
 
 **13-SOV — the sovereign becomes an instrument.** Five rows, one commit each.
 - **Row 1, the type.** `GovDebtTranche = DebtTranche & { couponRate; tenorAtIssuanceYears }` — the

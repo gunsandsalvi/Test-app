@@ -63,7 +63,7 @@ const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42 };
 
 import { isActiveCompany, managedEntityIdsOf } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
-import { closeSeedMoney } from '../bootstrap/close-seed';
+import { closeSeedMoney, seedOpeningAccruals } from '../bootstrap/close-seed';
 import { centralBankAssetsUSD, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../domain/central-bank';
 import { reconcileEmploymentView } from './stages/labor-market';
 import { weeklyWageBillUSD } from '../bootstrap/labor-and-wages';
@@ -1704,6 +1704,13 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     });
   }
 
+  // §3.37-SEED / D2: the accrual ledger opens at what the aged ladders have actually accrued —
+  // built here so the state below opens with it rather than empty (the maps stay REQUIRED, §7.274).
+  const openingHolderAccruals = new Map<string, Map<string, number>>();
+  const openingSovereignAccruals = new Map<string, number>();
+  seedOpeningAccruals(regions, companies, institutionalEntities, seedV2, 1,
+    openingHolderAccruals, openingSovereignAccruals);
+
   const state: GameState = {
     currentWeek: 1,
     year: 2026,
@@ -1713,8 +1720,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // §7.274: the workout and accrual ledgers open EMPTY and REQUIRED — a state without them
     // no longer compiles, so no load or construction path can silently reset them again.
     estates: [],
-    holderAccruedInterestUSD: new Map<string, Map<string, number>>(),
-    sovereignAccruedInterestUSD: new Map<string, number>(),
+    holderAccruedInterestUSD: openingHolderAccruals,
+    sovereignAccruedInterestUSD: openingSovereignAccruals,
     unitMassTonnes: seededUnitMassTonnes,
     freightRatePerTonneLaneMoneyByLane: seededFreightRates,
     // Opens empty: no pair has traded yet, so none has revealed its depth.

@@ -26,7 +26,13 @@ import { centralBankFxReservesUSD, centralBankAssetsUSD } from '../../domain/cen
 
 import { holdingClassOf } from '../../domain/assets';
 import { weeklyInterestExpenseUSD } from '../../domain/government';
-import { facilityBookOf } from '../../engine2/tranches';
+import { facilityBookOf, ladderRowsOf, trancheScheduleOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../../engine2/tranches';
+import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../../domain/stated';
+import { accrueHoldersInterest, applyHolderInterestAccruals } from '../simulation/stages/shared-helpers';
+import { accrueSovereignHolders } from '../simulation/stages/sovereign-calendar';
+import { materializeGovLadder } from '../../engine2/tranches';
+import { sovereignCouponByBond } from '../../domain/government';
+import { COUPON_PERIOD_WEEKS } from '../../domain/pricing';
 
 const sumByTenor = (byTenor: Record<string, number> | undefined): number =>
   Object.values(byTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0);
@@ -119,4 +125,84 @@ export function closeSeedMoney(
     reg.governmentInterestWeeklyUSD = Math.round(weeklyInterestExpenseUSD(reg.govDebtTranches));
     reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb, waysAndMeansOf(v2, regionId), currencyOf(regionId), v2.fx));
   });
+}
+
+/**
+ * §3.37-SEED / atlas the-seed D2 — THE ACCRUAL LEDGER OPENS AT WHAT HAS ACCRUED.
+ *
+ * The seed ages every ladder, so a rung opens part-way through its coupon period — and the accrual
+ * ledger opened EMPTY, so its first coupon paid only the weeks since the world began rather than
+ * the weeks since its own last payment date. Self-consistent (the issuer pays the sum of the
+ * accruals, so nothing leaked) and wrong in level: every holder's first coupon was short by up to
+ * half a period, and the treasury's first-year interest with it.
+ *
+ * The amount is DERIVED, not stated: `annual × (weeks since this tranche's last coupon date) / 52`,
+ * off the schedule the store now carries. The SPLIT across holders is not re-implemented here —
+ * `applyHolderInterestAccruals` owns that rule (register share, desk share, holders of record) and
+ * this hands it one opening week's worth of accrual and lets it run with nothing due (rule 4).
+ *
+ * Commercial paper is excluded: it accrues from ISSUE to maturity rather than in periods, and the
+ * seed issues none — the treasury stage does, at the week it issues.
+ */
+export function seedOpeningAccruals(
+  regions: Record<RegionId, Region>,
+  companies: Company[],
+  institutionalEntities: InstitutionalEntity[],
+  v2: V2World,
+  currentWeek: number,
+  holderAccruedInterestUSD: Map<string, Map<string, number>>,
+  sovereignAccruedInterestUSD: Map<string, number>,
+): void {
+  const TS = v2.tranches;
+  const pendingHolderAccrualUSD = new Map<string, number>();
+  companies.forEach((c) => {
+    for (const tr of ladderRowsOf(v2, c.id)) {
+      const fl = TS.flags[tr];
+      // A facility's interest goes to its house bank, not the register; CP has no periods.
+      if (fl & TR_FACILITY || fl & TR_CP) continue;
+      const floating = (fl & TR_FLOATING) !== 0;
+      const annualRate = floating
+        ? (Number.isNaN(TS.floatingMarginBps[tr]) ? TRANCHE_DEFAULT_MARGIN_BPS : TS.floatingMarginBps[tr]) / 10000
+        : (Number.isNaN(TS.couponRate[tr]) ? TRANCHE_DEFAULT_COUPON : TS.couponRate[tr]);
+      // A floater's coupon is policy + margin; at the seed the policy rate is the region's own.
+      const policyRate = floating ? (regions[c.region]?.policyRate ?? 0) : 0;
+      const { periodWeeks, anchorWeek } = trancheScheduleOf(TS, tr);
+      // Weeks elapsed in the CURRENT period. A rung issued this week has accrued nothing.
+      const since = currentWeek - anchorWeek;
+      const elapsedWeeks = since <= 0 ? 0 : since % periodWeeks;
+      if (elapsedWeeks === 0) continue;
+      const annualUSD = TS.principalUSD[tr] * (floating ? policyRate + annualRate : annualRate);
+      const accruedUSD = (annualUSD * elapsedWeeks) / 52;
+      if (!(accruedUSD > 0)) continue;
+      accrueHoldersInterest({ pendingHolderAccrualUSD },
+        v2.internedStrings[TS.idRef[tr]], floating ? 'LEVERAGED_LOAN' : 'CORP_BOND', accruedUSD);
+    }
+  });
+  // The SOVEREIGN side, through the calendar's own holder walk: a seeded bond opens with the
+  // weeks it has run since its last coupon date, counted from its issue week like every other.
+  (Object.keys(regions) as RegionId[]).forEach((regionId) => {
+    const ladder = materializeGovLadder(v2, regionId);
+    const couponByBond = sovereignCouponByBond(ladder);
+    const elapsedByBond = new Map<string, number>();
+    ladder.forEach((b) => {
+      const since = currentWeek - b.originationWeek;
+      elapsedByBond.set(b.id, since <= 0 ? 0 : since % COUPON_PERIOD_WEEKS);
+    });
+    accrueSovereignHolders(
+      { v2, updatedInstitutionalEntities: institutionalEntities, updatedCompanies: companies,
+        sovereignAccruedInterestUSD },
+      regionId, couponByBond, (bondId) => elapsedByBond.get(bondId) ?? 0,
+    );
+  });
+
+  if (pendingHolderAccrualUSD.size === 0) return;
+  applyHolderInterestAccruals({
+    v2,
+    updatedInstitutionalEntities: institutionalEntities,
+    updatedCompanies: companies,
+    pendingHolderAccrualUSD,
+    // Nothing is DUE at the seed: this opens the balance, it does not pay it.
+    pendingHolderAccrualPayout: new Set<string>(),
+    holderAccruedInterestUSD,
+  } as Parameters<typeof applyHolderInterestAccruals>[0]);
 }

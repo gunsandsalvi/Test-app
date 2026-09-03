@@ -96,7 +96,7 @@ checked by `scripts/check-atlas.sh`.
 | C5 VERIFY the sector sheet is a read of its members | `src/engine/simulation/stages/holdings-view.ts:refreshRegionalHoldingsView` | ✅ |
 | D1 the stocks are consistent with the flows that will run | `src/engine/simulation/initialization.ts:solveSeedInvestmentFixedPoint` | ⚠️ |
 | D1.a otherwise week one is a shock nothing recovers from | `src/engine/simulation/burn-in.ts:probeSteadyState` | ⚠️ |
-| D2 anything that accrues starts from a stated accrual position | `src/engine/simulation/initialization.ts:holderAccruedInterestUSD` | ⚠️ |
+| D2 anything that accrues starts from a stated accrual position | `src/engine/bootstrap/close-seed.ts:seedOpeningAccruals` | ✅ |
 | **D3 VERIFY with shocks off, week one should be quiet** | `src/engine/simulation/burn-in.ts:compareToSettled` | ❌ |
 | D4 VERIFY the seed is a fixed point of nothing | `src/engine/simulation/burn-in.ts:SETTLED_WEEKS` | ⚠️ |
 | **E1 FORBID no outcome is seeded** | `src/engine/companyGenerator.ts:RATING_OAS_SPREADS` | ❌ |
@@ -232,22 +232,20 @@ is the correct treatment and shows the shape the goods stocks need.
 **Already §9 11e (part 2), PENDING.** Not a new step; recorded because it is the largest single
 hole in A1 and a reader of this tree should not have to find it in the log.
 
-### ⚠️ D2 — THE ACCRUAL LEDGERS OPEN EMPTY, INCLUDING FOR PAPER SEEDED MID-LIFE
+### ✅ D2 — THE ACCRUAL LEDGERS OPEN AT WHAT HAS ACCRUED (closed, §3.37-SEED)
 
-`initialization.ts:1652-1653` opens `holderAccruedInterestUSD` and `sovereignAccruedInterestUSD` as
-empty maps, deliberately (§7.274 made them REQUIRED so no load path could reset them). But the
-sovereign buckets are seeded half-way through their life (`macro/initialization.ts:396`), so their
-true accrued position at week zero is roughly half a coupon and the model says zero. The first
-coupon then pays only what accrued from week 1.
+They opened as empty maps while the seed ages every ladder, so a rung's first coupon covered only
+the weeks since the world began. Self-consistent — the issuer pays the sum of the accruals, so
+nothing leaked — and wrong in level by up to half a period on every holder's first coupon.
 
-It is self-consistent — the issuer's expense accrues on the same schedule, so nothing leaks — and
-that is why it is `⚠️` and not `❌`. What it costs is the level: every holder's first coupon is
-short by up to half a period, and the treasury's first-year interest outlay is understated by the
-same amount. D2 asks for a *stated* accrual position; zero is stated, and it is the wrong one for
-mid-life paper.
-
-**Becomes a §3 step**, tiny: seed the accrual from `(week − originationWeek) mod couponPeriod`
-where the seed already knows both.
+The cause was one line below it: `paymentAnchorWeek` is optional and **nothing had ever set it**,
+so every reader fell back to `?? 0` and every bond in the model paid on the same global cycle
+anchored at week zero, whatever its issue date. The anchor now defaults to the ORIGINATION week
+(`company.ts:tranchePaymentAnchorWeek`, resolved once for the store's rows by
+`tranches.ts:trancheScheduleOf`), and `close-seed.ts:seedOpeningAccruals` opens both ledgers at
+`annual × weeks since this bond's own last coupon date / 52` — derived, not stated. The split
+across holders is not re-implemented: the corporate side hands one opening accrual to
+`applyHolderInterestAccruals` and the sovereign side calls the calendar's own holder walk.
 
 ### ⚠️ B4 / E2 / D4 — MEASUREMENTS AND SHAPES THAT ARE PRESENT BUT THIN
 

@@ -51,7 +51,7 @@ import { dividendDecision } from '../domain/company-week/distributions';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../engine/equity-valuation';
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
-import { ladderRowsOf, materializeTranche, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
+import { ladderRowsOf, materializeTranche, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
 import { issueTranche, retireTranche, commitLadder } from '../engine/ledger/tranche-ledger';
 import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World } from './world';
 import { totalInputValueUSD } from './lots';
@@ -1125,9 +1125,9 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       const annualRate = floating
         ? (Number.isNaN(TS.floatingMarginBps[tr]) ? TRANCHE_DEFAULT_MARGIN_BPS : TS.floatingMarginBps[tr]) / 10000
         : (Number.isNaN(TS.couponRate[tr]) ? TRANCHE_DEFAULT_COUPON : TS.couponRate[tr]);
-      const perYear = !Number.isNaN(TS.paymentsPerYear[tr]) ? Math.max(1, TS.paymentsPerYear[tr]) : (fl & TR_CP) ? 1 : floating ? 4 : 2;
+      const sched = trancheScheduleOf(TS, tr);
       const acc = trancheWeekAccrual(TS.principalUSD[tr], floating, annualRate, reg.policyRate, (fl & TR_CP) !== 0, TS.maturityWeek[tr],
-        Math.max(1, Math.round(52 / perYear)), (Number.isNaN(TS.paymentAnchorWeek[tr]) ? 0 : TS.paymentAnchorWeek[tr]) | 0, nextWeek);
+        sched.periodWeeks, sched.anchorWeek, nextWeek);
       const kind = (fl & TR_CP) ? 'COMMERCIAL_PAPER' : floating ? 'LEVERAGED_LOAN' : 'CORP_BOND';
       const trancheId = v2.internedStrings[TS.idRef[tr]];
       accrueHoldersInterest(ctx, trancheId, kind, acc.weeklyUSD);

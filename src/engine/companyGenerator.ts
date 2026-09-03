@@ -811,7 +811,11 @@ export function generateInitialCompanies(
         name: newName,
         employeeCount: newEmployeeCount,
 
-        historicalFundamentals: [...parent.historicalFundamentals]
+        // A DEEP copy: the spread copied the ARRAY and shared every snapshot OBJECT with the
+        // parent, so `scaleFirmSize` below would resize the parent's filed statements too — and
+        // any later in-place write to one firm's filing would land on the other's.
+        historicalFundamentals: parent.historicalFundamentals.map(
+          (s) => structuredClone(s) as FundamentalSnapshot)
       };
       stashSeedRing(newCompany, 'price', [...(peekSeedRing(parent, 'price') ?? [])]);
       stashOpeningCash(newCompany, openingCashOf(parent));
@@ -962,6 +966,21 @@ export function normalizeProducingSectorRevenue(
   });
 }
 
+/** A snapshot's fields are USD levels and scale with the firm. These four do not: `week` is a
+ *  date, `eps` is per share (earnings and shares both move), and the two ratios are built from
+ *  two lines that both move. Anything added to a statement is a level and scales for free. */
+const SNAPSHOT_INVARIANT_FIELDS = new Set(['week', 'eps', 'leverage', 'interestCoverage']);
+
+/** Every USD level under one filed statement, scaled; the invariants left alone. */
+function scaleSnapshot(node: Record<string, unknown>, k: number): void {
+  Object.keys(node).forEach((field) => {
+    const v = node[field];
+    if (SNAPSHOT_INVARIANT_FIELDS.has(field)) return;
+    if (typeof v === 'number' && isFinite(v)) node[field] = v * k;
+    else if (v && typeof v === 'object') scaleSnapshot(v as Record<string, unknown>, k);
+  });
+}
+
 /**
  * A FIRM'S SIZE SCALES WHOLE. Three places resize a seeded firm — the roster padding's clone, the
  * thinning lift and the sector normalisation — and each scaled revenue, shares, plant, ladder and
@@ -969,6 +988,12 @@ export function normalizeProducingSectorRevenue(
  * at 30% of its parent carried 100% of its EBITDA, so its implied margin exceeded one and the
  * kernel read exactly that ratio; the same firm's rating, coverage and price were struck against
  * it. Everything proportional to size moves together, here, once.
+ *
+ * **37-SEED / `F1`: the FILED STATEMENTS were the half still left out**, and that is what `F1`
+ * measured at week zero — 685 firms whose balance sheet said one cash and whose ledger account
+ * said another, 78.80B net. The three resizers moved the company and its account and left
+ * `historicalFundamentals` at the parent's or the pre-lift figure, so a firm opened the world
+ * filing somebody else's balance sheet. They scale here now, with the company, in the same pass.
  *
  * `eps` and the margin ratios are deliberately NOT scaled: earnings and shares both move, so the
  * per-share figure and every ratio built from two scaled lines are invariant by construction.
@@ -984,6 +1009,8 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
     'growthCapex', 'currentLiabilities', 'annualInterest', 'technicalReservesUSD', 'aumUSD',
     'insurancePremiumsWrittenUSD', 'insuranceClaimsPaidUSD'].forEach(scale);
   ((c.debtTranches as DebtTranche[] | undefined) ?? []).forEach((t) => { t.principalUSD *= k; });
+  ((c.historicalFundamentals as FundamentalSnapshot[] | undefined) ?? [])
+    .forEach((snap) => scaleSnapshot(snap as unknown as Record<string, unknown>, k));
   stashOpeningCash(c as unknown as Company, openingCashOf(c as unknown as Company) * k);
 }
 
