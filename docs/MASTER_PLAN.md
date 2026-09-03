@@ -12,8 +12,8 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `35fa0ea` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
-  earlier one; the session that owns it may push nowhere else.)
+- HEAD `35fa0ea` on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree
+  clean. (This branch replaces `claude/master-plan-review-j2z20v`.)
 - **Next step: §3 step 10**, then 11, 12, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
 - **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `35fa0ea` —

@@ -16,7 +16,7 @@
  *
  * Production, inventory and the cash ledger are settled ONCE per firm per sub-unit against the
  * sum of its fills in both books. Splitting a firm across two auctions and letting each settle
- * its own inventory would have each write clobber the other (§7.5).
+ * its own inventory would have each write clobber the other.
  */
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
@@ -56,7 +56,7 @@ import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-a
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { cashOf } from '../../ledger/accounts';
 
-/** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
+/** SCALE / DECLARED RELABEL: decimal rounding by arithmetic
  *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
 const roundN = (v: number, pow: number) => Math.round(v * pow) / pow;
 
@@ -80,7 +80,7 @@ const privateSegmentOfferId = (regionId: RegionId, industry: string) => `PRIVATE
 const CONTRACTED_DEMAND_SHARE = 0.6;
 
 /**
- * IND11 — how long a buyer tolerates a supplier that cannot deliver before it terminates.
+ * How long a buyer tolerates a supplier that cannot deliver before it terminates.
  *
  * A quarter. It is a term of the contract rather than a behavioural dial: a cure period is what
  * a supply agreement actually contains, and the alternative — terminating on the first missed
@@ -89,7 +89,7 @@ const CONTRACTED_DEMAND_SHARE = 0.6;
 const CONTRACT_NON_PERFORMANCE_WEEKS = 13;
 
 /**
- * IND11 — a contract at least this long is INDEXED to the market it was struck against.
+ * A contract at least this long is INDEXED to the market it was struck against.
  *
  * A year. Below it the parties live with the price they agreed; above it neither side will wear
  * an open-ended bet on inflation, which is why real long-term supply agreements carry an
@@ -98,7 +98,7 @@ const CONTRACT_NON_PERFORMANCE_WEEKS = 13;
 const CONTRACT_INDEXATION_MIN_WEEKS = 52;
 
 /**
- * IND14 — the floor under a supplier's sourcing weight.
+ * The floor under a supplier's sourcing weight.
  *
  * Not a rescue and not a band on the record itself, which is measured and unbounded: it is the
  * statement that a buyer who has never dealt with a firm cannot know it is unreliable, so
@@ -108,7 +108,7 @@ const CONTRACT_INDEXATION_MIN_WEEKS = 52;
 const SUPPLIER_MIN_SOURCING_WEIGHT = 0.05;
 
 /**
- * IND17 — the share of work in progress that the CUSTOMER funds.
+ * The share of work in progress that the CUSTOMER funds.
  *
  * A contract term, in the same family as the cure period above: long-cycle supply agreements are
  * paid on progress because no supplier will carry a year of someone else's build on its own
@@ -124,7 +124,7 @@ const PROGRESS_PAYMENT_SHARE = 0.30;
 // inventory — bidding to this real, recipe-derived need (instead of a generic revenue-share
 // slice of aggregate corporate demand) is what makes what a company buys here actually match
 // what it consumes there, rather than two independently-sized, unrelated numbers.
-// §7.327 — the intensity record was rebuilt PER LIVE CONTRACT (the settle walk's ~tens of
+// The intensity record was rebuilt PER LIVE CONTRACT (the settle walk's ~tens of
 // thousands of calls a week, growing with the book); one build per firm per week is the same
 // record, because comp.productLines and the profile only change at stage 08's write-back,
 // after this stage has run. Week-stamped so a battery's re-run of a week cannot reuse a clone's
@@ -138,7 +138,7 @@ function firmIntensitiesWeekly(comp: Company, week: number): Partial<Record<stri
   return v;
 }
 function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string, week: number): number {
-  // §7.122 step 4: a firm that sells no product still buys — a bank's premises, software and
+  // step 4: a firm that sells no product still buys — a bank's premises, software and
   // professional services come from its profile's basket. One accessor for both cases, so a firm
   // cannot be charged for an input in stage 08 that it never bid for here (rule 14).
   const intensity = firmIntensitiesWeekly(comp, week)[inputSubUnitId];
@@ -146,9 +146,9 @@ function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string, week: 
   return (comp.annualRevenue / 52) * intensity;
 }
 
-/** SCALE — §7.282's fee-earning desks per region, memoised on the firm array's identity (a new
+/** fee-earning desks per region, memoised on the firm array's identity (a new
  *  week hands a new array, so the memo lapses with it). List order is the firms' own, which is
- *  what keeps the fee pay() sequence and its floats identical to the inline filter's. */
+ *  what keeps the fee pay sequence and its floats identical to the inline filter's. */
 const fxFeeBanksCache = new WeakMap<object, Map<string, { banks: Company[]; totalShare: number }>>();
 function fxFeeBanksOf(firms: Company[], region: RegionId): { banks: Company[]; totalShare: number } {
   let byRegion = fxFeeBanksCache.get(firms);
@@ -166,7 +166,7 @@ function fxFeeBanksOf(firms: Company[], region: RegionId): { banks: Company[]; t
 /**
  * SETL-C: who a settlement key actually is. The goods auction has always known the pairing —
  * which buyer took which seller's lot — and stage 08 only ever saw each side's weekly total, so
- * the payment lost its counterparty on the way (§7.90's category C). This turns a key back into
+ * the payment lost its counterparty on the way. This turns a key back into
  * the party that holds the money.
  */
 function partyOfKey(key: string, regionId: RegionId, lookup: GlobalFirmLookup): PartyRef {
@@ -174,18 +174,18 @@ function partyOfKey(key: string, regionId: RegionId, lookup: GlobalFirmLookup): 
   if (comp) return { kind: 'COMPANY', ticker: comp.ticker };
   if (key.startsWith('HOUSEHOLD')) return { kind: 'HOUSEHOLD', region: regionId };
   if (key.startsWith('GOVERNMENT') || key.startsWith('GOV')) return { kind: 'GOVERNMENT', region: regionId };
-  // SEG2a: a segment key is a real party now — its sales proceeds land on the pool's own book
+  // A segment key is a real party now — its sales proceeds land on the pool's own book
   // instead of the boundary. The key embeds the segment's OWN region (it can sell into another
   // region's book), so parse it rather than trusting the market's origin.
   if (key.startsWith('PRIVATE:')) {
     const [, segRegion, industry] = key.split(':');
     return { kind: 'SEGMENT', region: segRegion as RegionId, industry };
   }
-  // §5-CLOSE: a seller that cannot be paid is a defect at the site that made the key.
+  // A seller that cannot be paid is a defect at the site that made the key.
   return defect(`seller key '${key}' (market region ${regionId}) names no party this model can pay`);
 }
 
-// §5-WIRES W4: a firm's finished stock is written by the goods ledger only (`settleOutputInventory`
+// W4: a firm's finished stock is written by the goods ledger only (`settleOutputInventory`
 // at the week's settlement, `setOutputStock` for the contract deliveries' running balance).
 
 // 1$ is 1$ Phase 2/6: credit a real purchase onto the buyer's persisted input inventory as a
@@ -196,25 +196,25 @@ function partyOfKey(key: string, regionId: RegionId, lookup: GlobalFirmLookup): 
 // InputLot doc comment) rather than collapsing them the moment they're credited.
 function addInputInventory(v2: V2World, update: any, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number, wireNo: number) {
   if (addedUnits <= 0.0001) return;
-  // IND1: only material that will be CONSUMED is inventory. A machine delivered is capital; a
+  // Only material that will be CONSUMED is inventory. A machine delivered is capital; a
   // general operating purchase is used and expensed. Writing all three as lots is what made a
-  // third of the world's purchases immortal (§6's lot leak).
+  // third of the world's purchases immortal.
   const kind = purchaseKindOf(subUnitId);
   if (kind === 'CAPITAL_GOOD') {
-    // IND13 — a capital good that has ARRIVED is not yet plant. It is installed and commissioned
+    // A capital good that has ARRIVED is not yet plant. It is installed and commissioned
     // first, so it lands as construction in progress with the week it enters service on it.
     if (!update.capexUnderConstruction) update.capexUnderConstruction = [];
     update.capexUnderConstruction.push({
       valueUSD: addedValueUSD,
       entersServiceWeek: week + commissioningLeadWeeksOf(subUnitId),
     });
-    // §5-WIRES W4: as GOODS the machine is consumed on receipt — it becomes plant, not stock.
+    // W4: as GOODS the machine is consumed on receipt — it becomes plant, not stock.
     consumeGoods(baseComp.region, subUnitId, addedUnits);
     return;
   }
-  // §5-WIRES W4: an operating purchase is used the week it lands — consumed on receipt.
+  // W4: an operating purchase is used the week it lands — consumed on receipt.
   if (kind === 'OPERATING') { consumeGoods(baseComp.region, subUnitId, addedUnits); return; }
-  // ENGINE V2 (§7.304) — the lot lands on the persistent table, in stage order, which is the
+  // ENGINE V2 — the lot lands on the persistent table, in stage order, which is the
   // same order the copy-on-first-touch week arrays used to carry. No copy, no write-back.
   receiveInputLot(v2, baseComp.id, subUnitId, sellerId, addedUnits, addedValueUSD / addedUnits, week, wireNo);
 }
@@ -223,7 +223,7 @@ function addInputInventory(v2: V2World, update: any, baseComp: Company, subUnitI
 interface WipLot { units: number; valueUSD: number }
 
 /**
- * IND10 — advance one product line's production pipeline by a week.
+ * Advance one product line's production pipeline by a week.
  *
  * A firm STARTS `startedUnits` this week at `startedCostUSD`, and what it has to SELL this week
  * is whatever it started `productionLeadWeeks` ago. Those are two different numbers the moment
@@ -235,7 +235,7 @@ interface WipLot { units: number; valueUSD: number }
  * in steady state — `lead` weeks of work in progress at this week's rate — rather than as one
  * that has just broken ground. The alternative is a year of zero output from every construction
  * firm at week one, which is an opening condition nobody chose and not a statement about
- * production time (§7.4: a stated table survives only until the mechanism has something in it).
+ * production time (a stated table survives only until the mechanism has something in it).
  */
 function advanceProductionPipeline(
   existing: WipLot[] | undefined,
@@ -277,14 +277,14 @@ interface RegionMarketIndex {
   recipeInputBuyersBySubUnit: Map<string, Company[]>;
   /** subUnitId -> the firms that produce it (built from one pass over every firm's lines). */
   suppliersBySubUnit: Map<string, Company[]>;
-  /** SCALE — the producing LINE per (sub-unit, firm), recorded at index build so the supply
-   *  planner stops running a .find over each supplier's lines per market. First line wins,
+  /** The producing LINE per (sub-unit, firm), recorded at index build so the supply
+   *  planner stops running a.find over each supplier's lines per market. First line wins,
    *  exactly as the find it replaces. */
   lineBySupplierBySubUnit: Map<string, Map<Company, NonNullable<Company['productLines']>[number]>>;
   /** Firms with real capex, the customer base for every capital-goods category. */
   capexBuyers: Company[];
-  /** SCALE — the firm's wage bill at current staffing, computed once per firm per week: the
-   *  §7.246 floor decomposition asked weeklyWageBillUSD once per LINE per market, with inputs
+  /** The firm's wage bill at current staffing, computed once per firm per week: the
+   *  floor decomposition asked weeklyWageBillUSD once per LINE per market, with inputs
    *  that cannot change inside the stage (a supplier sits only in its own region's index). */
   currentPayrollByFirm: Map<Company, number>;
 }
@@ -299,7 +299,7 @@ interface RegionMarketIndex {
 interface GlobalFirmLookup {
   byTicker: Map<string, Company>;
   byId: Map<string, Company>;
-  /** SCALE: one probe for a key that may be a ticker OR an id (contracts store either).
+  /** One probe for a key that may be a ticker OR an id (contracts store either).
    * Ids are inserted first and tickers after, so on any collision the ticker wins — exactly
    * the `byTicker.get(k) ?? byId.get(k)` resolution this replaces, at half the probes. */
   byKey: Map<string, Company>;
@@ -341,7 +341,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
       if (!lineByCo) { lineByCo = new Map(); index.lineBySupplierBySubUnit.set(l.subUnitId, lineByCo); }
       if (!lineByCo.has(c)) lineByCo.set(c, l);
     });
-    // §7.122 step 4: registered as a BUYER from its own input basket — its products' recipes if
+    // step 4: registered as a BUYER from its own input basket — its products' recipes if
     // it makes anything, its profile's basket if it does not. Selling and buying were the same
     // field before, so a bank (correctly given no product line by IND-R2) bought nothing either.
     // A firm with two lines needing the same input is one buyer, not two: the need is summed by
@@ -391,12 +391,12 @@ interface SupplyPlan {
   company?: Company;
   industry?: string;
   initialInventoryUnits: number;
-  /** IND10 — what the firm STARTS this week. It becomes sellable `productionLeadWeeks` later. */
+  /** What the firm STARTS this week. It becomes sellable `productionLeadWeeks` later. */
   targetProductionUnits: number;
   targetProductionUSD: number;
-  /** IND10 — what came OUT of the pipeline this week: what it can actually sell. */
+  /** What came OUT of the pipeline this week: what it can actually sell. */
   arrivedProductionUnits: number;
-  /** IND10 — the line's pipeline after this week's advance, to be persisted. */
+  /** The line's pipeline after this week's advance, to be persisted. */
   wipQueue?: WipLot[];
   openOfferUnits: number;
   minPriceUSD: number;
@@ -411,7 +411,7 @@ interface DemandPlan {
   isGovernmentAggregate?: boolean;
   demandUnits: number;
   maxPriceUSD: number;
-  /** §7.343 — a BUDGET-ANCHORED demand curve, cut into rungs of falling reservation: the k-th
+  /** A BUDGET-ANCHORED demand curve, cut into rungs of falling reservation: the k-th
    *  slice of the want is worth budget/(k·step), so the quantity a buyer takes falls as the
    *  price rises and a shortage clears at budget/supply, ONCE. A plan without rungs is one
    *  inelastic bid at `maxPriceUSD` (the contract plans keep that shape). */
@@ -419,11 +419,11 @@ interface DemandPlan {
 }
 
 /**
- * §7.343 — WHAT A BUYER CAN PAY, derived from its own books. Before this, a firm bid last
+ * WHAT A BUYER CAN PAY, derived from its own books. Before this, a firm bid last
  * week's price ±5% (a cash-rich one +15%) and the treasury last week's price +50%, for a FIXED
  * quantity: reservation anchored to the print, not to any budget. In a short market the print
  * went to the cap every week and the cap moved with it — the compounding half of the inflation
- * the price-level work (§7.338) left standing (CPI 100 → 150 in 13 weeks: pharma ×2.4,
+ * the price-level work left standing (CPI 100 → 150 in 13 weeks: pharma ×2.4,
  * defence ×2.1, commercial rent ×2.4, all corporate- or treasury-bought). Now every buyer class
  * is on the one ladder households already used: a budget, a want, and how far above the going
  * price the budget can stretch. For a firm that is its margin cover — an input that is α of its
@@ -552,8 +552,9 @@ const R_HH_GOODS = internReason('household goods purchase');
 const R_CHANNEL = internReason('distribution margin paid to the channel');
 const R_GOV_PROC = internReason('government procurement');
 const R_FX_SPREAD = internReason('fx conversion spread');
+const R_SEGMENT_GOODS = internReason('segment goods purchase');
 
-// §5-SCALE native cores — settleContracts in the §7.304 seam pattern: PRE reads every object
+// native cores — settleContracts in the seam pattern: PRE reads every object
 // once into lanes; CORE is pure arithmetic over lanes and the contract columns (the portable
 // piece: no object, no Map, no payment — mutates the columns exactly as the inline walk did);
 // EFFECTS replays the rows in order emitting the identical payments and update writes. Float
@@ -657,7 +658,7 @@ function settleContracts(
   const rows = contractRows(v2, region, subUnitId);
   const survivors: number[] = [];
   const dead: number[] = [];
-  // SCALE — per-sub-unit registry facts, read once instead of per contract.
+  // Per-sub-unit registry facts, read once instead of per contract.
   const contractLeadWeeks = productionLeadWeeksOf(subUnitId);
   const isCapitalGoodCategory = purchaseKindOf(subUnitId) === 'CAPITAL_GOOD';
   const m = rows.length;
@@ -672,7 +673,7 @@ function settleContracts(
   const supRegPx = new Float64Array(m);
   const slotBySupplier = new Map<Company, number>();
   const slotSuppliers: Company[] = [];
-  // §4.C Stage IV — customers slotted like suppliers: the recipe need is a per-(customer,
+  // Stage IV — customers slotted like suppliers: the recipe need is a per-(customer,
   // sub-unit, week) fact recomputed per CONTRACT (many contracts share a customer), and the
   // effects loop below re-probes updateOf/pidOf per row for the same few parties.
   const custSlotBy = new Map<Company, number>();
@@ -696,7 +697,7 @@ function settleContracts(
     if (!supplier || !customer) { preStatus[i] = CS_DEAD_MISSING; continue; }
     if (!isActiveCompany(supplier)) {
       // needUSD gates the customer's constraint write in effects (rule 9: only a production
-      // input throttles production — §7.301).
+      // input throttles production.
       const cs = custSlotOf(customer);
       custSlot[i] = cs;
       needUSD[i] = needBySlot[cs];
@@ -794,7 +795,7 @@ function settleContracts(
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentL[i];
     if (isCapitalGoodCategory) custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentL[i];
     payByIds(ctx, custPid, supPid, paymentL[i] - appliedL[i], R_DELIVERY);
-    // §5-WIRES W4: the goods move supplier → customer by wire; the lot lands with it.
+    // W4: the goods move supplier → customer by wire; the lot lands with it.
     const deliveryWire = deliverGoods({ kind: 'COMPANY', ticker: supplier.ticker }, { kind: 'COMPANY', ticker: customer.ticker }, subUnitId, actualT[i], actualT[i] > 0 ? paymentL[i] / actualT[i] : 0, 'contract delivery');
     addInputInventory(v2, custUp, customer, subUnitId, supplier.ticker, actualT[i], paymentL[i], nextWeek, deliveryWire);
 
@@ -854,16 +855,16 @@ function buildRegionSupplyPlans(
     // stops; it does not keep running at three tenths forever. Zero is a real production
     // decision, and it was the one this throttle could not express.
     const productionThrottle = Math.min(1.0, Math.max(0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
-    // §7.246 — THE PRICE-RESPONSE FACTOR IS DELETED, and it was §7.28's defect one level up.
+    // THE PRICE-RESPONSE FACTOR IS DELETED, and it was defect one level up.
     //
     // `1 + 1.5 × (smoothedPrice/anchorPrice − 1)` read the LAG RATIO of one price series as a
     // level signal. At rest the two copies agree and the factor is exactly 1, so it decided
     // nothing in equilibrium — but when the price MOVED it acted with the wrong sign in both
     // directions: a spike put the slow copy far below the fast one and cut the plant toward
-    // zero (measured: EUR housing supply ÷24 in one week, INTO 8x excess demand — §7.245's
+    // zero (measured: EUR housing supply ÷24 in one week, INTO 8x excess demand —
     // service spiral was largely this), while a crash ran the plant ABOVE capacity, which the
     // comment that stood here claimed the capacity term prevented (it multiplied capacity, so
-    // it did not). §7.28 fixed the same wrong-signed supply response in the units; this was the
+    // it did not). fixed the same wrong-signed supply response in the units; this was the
     // remaining copy in the utilisation, with a stated ×1.5 no mechanism owns (rule 19).
     //
     // What legitimately decides how hard the plant runs is already here: capacity (the plant),
@@ -875,10 +876,10 @@ function buildRegionSupplyPlans(
     // Production is capacity x utilisation, in UNITS. The previous version sized production in
     // dollars (annualRevenue/52) and divided by the CURRENT price, so a doubling of price halved
     // the units the same plant produced — supply fell as price rose, which is the wrong sign and
-    // closes a positive feedback loop (§7.28). Real capacity is physical: what price changes is
+    // closes a positive feedback loop. Real capacity is physical: what price changes is
     // how hard the plant is run (productionResponseFactor) and whether the warehouse is already
     // full (productionThrottle), never how much the plant can make.
-    // CAP — CAPACITY IS READ OFF PP&E, NOT WALKED (§7.177, restored now its blocker is closed).
+    // CAP — CAPACITY IS READ OFF PP&E, NOT WALKED.
     //
     // It was a RATE applied to its own prior value, which accumulates every error it is ever
     // given and drifts from the capital it is supposed to describe. A plant is not a rate: it is
@@ -896,13 +897,13 @@ function buildRegionSupplyPlans(
     if (!(line.unitsPerNetPpeDollar! > 0)) {
       const openingCapacityUnits =
         ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / referencePriceUSD;
-      // §7.301 — SAME VINTAGE ON BOTH SIDES (rule 9). The line's share belongs INSIDE the
+      // SAME VINTAGE ON BOTH SIDES (rule 9). The line's share belongs INSIDE the
       // anchor: dividing by the opening share here and re-multiplying by the CURRENT share on
       // every read made physical capacity track the line's revenue share week to week — plant
       // that evaporates because its PRICE moved. Measured on the CRE landlords: rental clears
       // unit-elastic (units × price constant), the other lines inflate, the share falls, and
       // capacity followed it 4,492 → 2,300 units in ten weeks while the price DOUBLED — the
-      // §7.132 ratchet in the capacity dimension. The comment above always said the rule:
+      // ratchet in the capacity dimension. The comment above always said the rule:
       // capacity is the ratio times the capital it has NOW — the share re-multiplication was
       // the contradiction. Bit-identical at the anchor week; a line's capacity now moves with
       // the firm's PLANT (IND1/IND13's deliveries), never with its price.
@@ -911,23 +912,23 @@ function buildRegionSupplyPlans(
     line.weeklyCapacityUnits = Math.max(0.0001,
       line.unitsPerNetPpeDollar! * netPPEForCapacityUSD);
     // CRE_SUPPLY_X=<n> — attribution probe only: scales this one category's capacity to test
-    // whether the §7.301 CRE shortage (price ×2 in 20 weeks, fill ~0.7) is the ratchet channel.
+    // whether the CRE shortage (price ×2 in 20 weeks, fill ~0.7) is the ratchet channel.
     if (subUnitId === 'commercial_rental_services' && Number(process.env.CRE_SUPPLY_X) > 0) {
       line.weeklyCapacityUnits *= Number(process.env.CRE_SUPPLY_X);
     }
     const baseMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     const costRate = Math.max(0, 1 - baseMargin);
-    // §7.246 — THE FLOOR'S WAGE COMPONENT IS THE WAGE BILL AT CURRENT STAFFING, NOT A TRAILING
+    // THE FLOOR'S WAGE COMPONENT IS THE WAGE BILL AT CURRENT STAFFING, NOT A TRAILING
     // TOTAL OVER CURRENT OUTPUT.
     //
     // `(annualRevenue − ebitda)/52` is the firm's measured weekly cost — real input lots, the
-    // real wage bill, and the opening-books residual (§7.121) — but it TRAILS (the revenue is
+    // real wage bill, and the opening-books residual — but it TRAILS (the revenue is
     // annualized and the ebitda a week old) while the denominator below is CURRENT staffed
     // output. When the labour market sheds a firm's staff, its staffed units fall the same week
     // and the trailing wage bill inside this numerator does not, so unit cost jumps by
     // 1/staffedShare, the shutdown fires, and supply dies exactly when the price is rising:
-    // measured as §7.245's service spiral (EUR housing floors 39–65 → 904–1,679 in two weeks,
-    // offers → 0, price ×48 in six). The §7.132 ratchet, in the staffing dimension.
+    // measured as service spiral (EUR housing floors 39–65 → 904–1,679 in two weeks,
+    // offers → 0, price ×48 in six). The ratchet, in the staffing dimension.
     //
     // So the basis is decomposed on stage 08's own persisted measurements: the wage component is
     // recomputed at CURRENT headcount and CURRENT wage indexes (same weeklyWageBillUSD owner as
@@ -935,7 +936,7 @@ function buildRegionSupplyPlans(
     // firm consumed, and the residual (rent-like other opex) is what remains of the trailing
     // total. A firm that sheds staff now sheds the wage half of its floor the same week its
     // output falls; the residual concentrating over fewer units is real operating leverage, not
-    // a defect. NOT §7.133's failed form: nothing here is per-head overhead — the residual is a
+    // a defect. NOT failed form: nothing here is per-head overhead — the residual is a
     // dollar level, and only the genuinely staff-shaped cost follows the staff.
     const trailingWeeklyCostUSD = Math.max(0, (comp.annualRevenue - comp.ebitda) / 52);
     let firmWeeklyCostUSD = trailingWeeklyCostUSD;
@@ -958,32 +959,32 @@ function buildRegionSupplyPlans(
       firmAvoidableCostUSD = comp.realInputConsumptionCostWeeklyUSD;
     }
     const weeklyOperatingCostUSD = firmWeeklyCostUSD * (line.revenueShare ?? 1.0);
-    // LVL (§7.338) — THE SHORT-RUN DECISION IS TAKEN ON AVOIDABLE COST.
+    // LVL — THE SHORT-RUN DECISION IS TAKEN ON AVOIDABLE COST.
     //
     // The week's wages are owed whether or not the plant runs (the labour market hires and sheds
-    // on a weekly clock, §7.110 — quantity weekly, price annual); what a firm SAVES by idling is
+    // on a weekly clock, — quantity weekly, price annual); what a firm SAVES by idling is
     // the inputs it would consume. The shutdown test asked whether price covered FULL cost, so
     // one week of dearer inputs against last week's price flipped whole industries off at once
     // (measured: every consumer-software producer in every region idled in the second market
     // week, unit cost 204 → 376 against an expected 325, supply 1.19M → 0.08M, the print ×3 on
     // the sliver) — a bang-bang rule with no hysteresis, exactly what the throttle comment above
     // warns of. A plant runs while the price covers what running it costs; a firm that cannot
-    // cover its wages sheds them (the labour rule) and, persistently, mothballs (§5-DYN). Until
+    // cover its wages sheds them (the labour rule) and, persistently, mothballs. Until
     // stage 08 has measured the decomposition (week 1) the seed's break-even full cost stands.
     const weeklyAvoidableCostUSD = (firmAvoidableCostUSD ?? firmWeeklyCostUSD) * (line.revenueShare ?? 1.0);
 
     // CAP — A FIRM THAT CANNOT COVER UNIT COST STOPS PRODUCING.
     //
-    // This is §5-CAP's own mechanism and the half §7.129 recorded as missing: an investment
+    // This is own mechanism and the half recorded as missing: an investment
     // response without a production-stopping rule is half a control loop. The throttle above
     // answers "is my warehouse full"; nothing answered "does making one more unit lose money".
     // A firm facing a price below what the unit costs it idles the plant — that is what makes a
     // downturn end, because supply leaves until the price recovers, and it is why the clamp CAP0
     // removed had to go first: while EBITDA could not be negative, this could never fire.
     //
-    // Unit cost is the same dollar figure the offer floor uses (§7.130), so a firm never produces
+    // Unit cost is the same dollar figure the offer floor uses, so a firm never produces
     // something it would then refuse to sell.
-    // IND15 — LABOUR CONSTRAINS OUTPUT. Production is what the plant AND the staffed hours allow.
+    // LABOUR CONSTRAINS OUTPUT. Production is what the plant AND the staffed hours allow.
     //
     // Until now it was the plant alone, so a firm that could not hire produced exactly as much as
     // one fully staffed, and the labour market was decorative: vacancies went unfilled with no
@@ -992,13 +993,13 @@ function buildRegionSupplyPlans(
     // statistic.
     //
     // The staffing ratio is the firm's OWN headcount against the headcount THIS plant needs at
-    // full staffing — §7.269's one derivation (domain/company.ts), the same ceiling the labour
+    // full staffing — one derivation (domain/company.ts), the same ceiling the labour
     // market hires against (rule 3). Frozen at the seed headcount, a firm that built plant read
     // "fully staffed" at its old headcount and doubled output nobody worked for; scaled with
     // net PP&E, more plant needs more people to run it — which is what makes hiring the way a
     // grown firm's output actually grows.
     const staffedShare = Math.max(0, (comp.employeeCount ?? 0) / fullStaffingCapHeads(comp));
-    // IND18 — what the plant can make THIS WEEK. A harvest is not a decision: the crop ripens
+    // What the plant can make THIS WEEK. A harvest is not a decision: the crop ripens
     // once a year and no price makes it ripen twice. Averages to 1 over the year, so this moves
     // output around the calendar and never adds any.
     const seasonalPlantFactor = seasonalFactor(subUnitId, week, 'production');
@@ -1006,7 +1007,7 @@ function buildRegionSupplyPlans(
     //
     // The shutdown test below asks whether the price covers what a unit costs to make, and it was
     // being asked at the SEASONAL week's volume against a FULL week's operating cost. Those are
-    // two different periodicities (§1.9). A harvest good in its low season makes 70% of its normal
+    // two different periodicities. A harvest good in its low season makes 70% of its normal
     // output and still pays 100% of its wages, so its "unit cost" printed 1/0.70 = 1.43x the real
     // one, and the seed — which is struck at break-even by construction — flipped straight to the
     // idle branch.
@@ -1024,13 +1025,13 @@ function buildRegionSupplyPlans(
     // on the plant's NORMAL-season volume, which is the basis its costs were struck on; the
     // calendar then says how much of that ripens this week. No clamp, no floor: the comparison
     // simply gets its units right.
-    // §5-DYN — mothballed plant is OFFLINE: its capacity is not there to staff or run until the
+    // Mothballed plant is OFFLINE: its capacity is not there to staff or run until the
     // stock response brings it back (domain/company-week/capital-programme.ts). This is what
     // makes retired capacity's ABSENCE visible in supply, which is the mechanism's whole point.
     const onlineShare = 1 - Math.max(0, Math.min(1, comp.mothballedPpeShare ?? 0));
     const normalSeasonUnits = line.weeklyCapacityUnits! * productionThrottle * onlineShare;
     const staffedNormalSeasonUnits = Math.min(normalSeasonUnits, normalSeasonUnits * staffedShare);
-    // §7.301 — THE MOTHBALL MOVES CAPACITY; IT MUST NOT DECIDE SOLVENCY (§1.9, the same
+    // THE MOTHBALL MOVES CAPACITY; IT MUST NOT DECIDE SOLVENCY (, the same
     // periodicity discipline as the seasonal factor below). Dividing the firm's cost by the
     // MOTHBALL-SHAVED volume made every mothball raise the measured unit cost that idled the
     // plant — a ratchet by construction, measured on the CRE landlords: capacity 4,492 → 2,300
@@ -1042,18 +1043,18 @@ function buildRegionSupplyPlans(
       ? weeklyAvoidableCostUSD / testVolumeUnits
       : Infinity;
     const coversUnitCost = supplierExpectedUnitPriceUSD >= prospectiveUnitCostUSD;
-    // §5-DYN — the week's idle record, measured where the test runs and nowhere else (rule 3):
+    // The week's idle record, measured where the test runs and nowhere else (rule 3):
     // stage 08's capacity-retirement rule integrates this into the mothball/scrap stock response.
     if (!coversUnitCost) {
       const up = wk.updateOf(comp);
       up.idleLineRevenueShare = (up.idleLineRevenueShare ?? 0) + Math.max(0, line.revenueShare ?? 0);
     }
     const uncappedProductionUnits = staffedNormalSeasonUnits * seasonalPlantFactor;
-    // §7.345 — PRODUCE TO SALES, NOT TO THE WAREHOUSE. The throttle above only bites once stock
+    // PRODUCE TO SALES, NOT TO THE WAREHOUSE. The throttle above only bites once stock
     // exceeds the warehouse, so a firm in an oversupplied market ran its plant flat out into
     // seven weeks of unsold goods, paid wages and inputs for all of it, and died of cash (the
     // burn-in's EUR consumer sector). A plant makes what its management EXPECTS to sell — an
-    // adaptive expectation of last week's units sold at its own horizon (§5-BRAINS) — plus the
+    // adaptive expectation of last week's units sold at its own horizon — plus the
     // stock it wants on hand, closed at 1/horizon a week. The stock it wants is the good's own
     // production lead of sales (the weeks it cannot respond in; at least one) — a TECHNOLOGY
     // primitive the registry already carries, no target-inventory constant. No sales record yet
@@ -1085,24 +1086,24 @@ function buildRegionSupplyPlans(
       t.costs.push(prospectiveUnitCostUSD); t.expected = supplierExpectedUnitPriceUSD;
       t.staffed += staffedShare; t.throttle += productionThrottle; t.opCost += weeklyOperatingCostUSD;
     }
-    // §5-PROD — the firm's experience accrues on what it STARTS making, measured here where
+    // The firm's experience accrues on what it STARTS making, measured here where
     // production is decided and nowhere else (rule 3).
     if (targetProductionUnits > 0) {
       const upl = wk.updateOf(comp);
       upl.producedUnitsThisWeek = (upl.producedUnitsThisWeek ?? 0) + targetProductionUnits;
     }
-    // §5-PROD — the plant's STRUCTURAL weekly rate, for the learning curve's seed anchor only.
+    // The plant's STRUCTURAL weekly rate, for the learning curve's seed anchor only.
     // Seeding the anchor off the first nonzero PRODUCED week annualized under-seeded any firm
     // whose first week was throttled, off-season or partly idle — and when its output then
-    // normalized, ln(cum'/cum) read the recovery as years of learning at once: the §7.301
+    // normalized, ln(cum'/cum) read the recovery as years of learning at once: the
     // measured regression (USA u +3.8pts by w30 from this line's absence). Capacity is the
-    // §7.4 shape — a seeded firm has produced for years AT ITS PLANT'S SCALE.
+    // shape — a seeded firm has produced for years AT ITS PLANT'S SCALE.
     {
       const upl = wk.updateOf(comp);
       upl.plantCapacityUnitsThisWeek = (upl.plantCapacityUnitsThisWeek ?? 0) + line.weeklyCapacityUnits!;
     }
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
-    // IND10 — the firm offers what it HAS plus what its plant FINISHED this week, not what it
+    // The firm offers what it HAS plus what its plant FINISHED this week, not what it
     // started. For a good made on demand these are the same number and nothing changes; for a
     // 26-week build the offer is what was begun half a year ago, which is the point.
     const pipeline = advanceProductionPipeline(
@@ -1112,7 +1113,7 @@ function buildRegionSupplyPlans(
       coversUnitCost ? weeklyOperatingCostUSD : 0
     );
     // The caller trims this to what the contracts left behind, once they have settled against
-    // the same stock (§7.148). Here it is simply everything the firm can sell.
+    // the same stock. Here it is simply everything the firm can sell.
     const openOfferUnits = Math.max(0, pipeline.arrivedUnits + currentUnits);
 
     // CAP / RULE 15 — THE SELLER'S FLOOR IS ITS COST IN DOLLARS, NOT A FRACTION OF THE MARKET.
@@ -1121,24 +1122,24 @@ function buildRegionSupplyPlans(
     // defined as a share of the CURRENT market price. So when the price fell, every seller's
     // floor fell with it, which lowered the clearing price, which lowered next week's reference:
     // a downward ratchet with nothing real underneath it. It is why a market with **8x excess
-    // demand still printed a falling price** (§7.127) — the shortage could not stop the fall
+    // demand still printed a falling price** the shortage could not stop the fall
     // because no seller was ever unwilling.
     //
     // A firm's cost is a dollar figure: the wages it pays, the input lots it consumed, the opex
-    // it carries. IND3 made all three real (§7.121), so the floor can be what it actually costs
+    // it carries. IND3 made all three real, so the floor can be what it actually costs
     // to make a unit — and a price below it means the firm does not sell, which is CAP's stated
     // mechanism arriving where it belongs, on the offer.
     //
     // The [0.40, 0.98] band on the cost rate goes with it: it existed because the margin it read
     // was a stated number that could be anything, and since IND3 it is the residual of real
     // costs (rule 2).
-    // ONE PD model (§6.1's "three PD models in stage 05" row): the structural distance the
+    // ONE PD model: the structural distance the
     // credit books price with, not a rating-keyed table beside it.
     const pd = computeAnnualDefaultProbability(v2, comp);
     const expectedLoss = pd * 0.60;
     const costOfCapital = 0.05 + expectedLoss;
 
-    // IND6 — SHARE VERSUS MARGIN, expressed only through the real offer price.
+    // SHARE VERSUS MARGIN, expressed only through the real offer price.
     //
     // Every seller asked cost plus the same premium, so no firm could choose to buy share by
     // pricing keener than its rivals — the one lever that actually moves share in an auction that
@@ -1148,7 +1149,7 @@ function buildRegionSupplyPlans(
     // move the stock; a firm with nothing left holds out for its full premium.
     //
     // The floor beneath it is the contribution-margin bound: at full inventory the premium goes to
-    // zero and the ask is unit cost (§7.130), never below — a firm gives up profit to win share,
+    // zero and the ask is unit cost, never below — a firm gives up profit to win share,
     // not money.
     const inventoryPricePressure = Math.min(1, Math.max(0, inventoryToCapacityRatio));
     const marginPremium = costOfCapital * 1.5;
@@ -1207,9 +1208,9 @@ function buildRegionSupplyPlans(
       const siblings = smePoolSubUnits(owningIndustry);
       const measured = pool.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
       const measuredTotal = siblings.reduce((a, su) => a + Math.max(0, measured[su.unitId] ?? 0), 0);
-      // §5-STRUCT step 3 — the rule lives on the pool (domain/sme-pool.ts), not here. What used to
+      // step 3 — the rule lives on the pool (domain/sme-pool.ts), not here. What used to
       // sit inline gave a sub-unit the pool had never sold into a share of exactly zero, for ever
-      // (§7.229): no offer produces no measurement produces no offer.
+      //no offer produces no measurement produces no offer.
       const mixShare = capacityMixShares(siblings.map((su) => ({
         subUnitId: su.unitId,
         demandLevelAnnualUSD: reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0,
@@ -1225,7 +1226,7 @@ function buildRegionSupplyPlans(
           regionId,
           industry: owningIndustry,
           initialInventoryUnits: 0,
-          // IND10 — a pool's offer is a RATE (its own measured weekly goods revenue), not a
+          // A pool's offer is a RATE (its own measured weekly goods revenue), not a
           // stock drawn down from a warehouse, so there is no production start for a lead time
           // to sit between. Its lag is the measurement's own, one week.
           targetProductionUnits: 0,
@@ -1304,10 +1305,10 @@ function buildRegionDemandPlans(
     if (openBidUnits <= 0.001) return;
 
     const cashRatio = cashOf(v2, comp) / Math.max(1, comp.annualRevenue);
-    // §5-BRAINS — the buyer's own horizon sets what it takes the price to BE: a patient buyer
+    // The buyer's own horizon sets what it takes the price to BE: a patient buyer
     // anchors on the average of the last `patience` prints, an impatient one on last week's.
     // The cap on its ladder is reach × that expectation, so one short week moves a patient
-    // buyer's reservation by a fraction of what it moves an impatient one's (§7.343's ratchet
+    // buyer's reservation by a fraction of what it moves an impatient one's (ratchet
     // had every buyer anchored on the same print).
     const patienceWeeks = patienceWeeksOf(comp.management);
     const riskAversion = riskAversionOf(comp.management);
@@ -1381,9 +1382,9 @@ function buildRegionDemandPlans(
   }
 
   // Government Aggregate Bid — PUB1e: the treasury's OWN weekly budget for this category, set by
-  // stage 03 from the real primary budget net of debt service. §7.245: the fallback that
+  // stage 03 from the real primary budget net of debt service.: the fallback that
   // re-derived it here as a share of the smoothed demand level is DELETED — it was the PUB1e
-  // deletion surviving as a `??` arm (§7.241), it went live for every capex category stage 03
+  // deletion surviving as a `??` arm, it went live for every capex category stage 03
   // dropped from the map, and a bid sized off the demand level has no appropriation behind it.
   // No published budget, no bid: a government cannot spend what nothing appropriated.
   const govBudgetWeeklyUSD = reg.governmentProcurementBudgetByCategory?.[subUnitId] ?? 0;
@@ -1402,10 +1403,10 @@ function buildRegionDemandPlans(
 
   // Household Aggregate Bid
   if (hhShare > 0) {
-    // IND18 — coats in winter, gifts in December. The seasonal swing is on the HOUSEHOLD leg
+    // Coats in winter, gifts in December. The seasonal swing is on the HOUSEHOLD leg
     // because that is where a retail peak lives; a firm's demand for its own inputs follows its
     // own production, which already carries the production side of the same calendar.
-    // IND16: a household's money buys what it buys AT THE SHELF, which is the landed price plus
+    // A household's money buys what it buys AT THE SHELF, which is the landed price plus
     // what the channel charges to hold the stock it is buying out of. Dividing the budget by the
     // factory-gate price was the model paying no one to move the goods.
     const channelMargin = channelMarginRate(subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
@@ -1413,12 +1414,12 @@ function buildRegionDemandPlans(
     // THE BUDGET IS THE MEASURED HOUSEHOLD LEG, NOT A SLICE OF THE DEMAND LEVEL (rule 3).
     //
     // `demandLevelAnnualUSD × hhShare` carved the household's money out of the category's TOTAL demand
-    // — a level that carries the corporate leg (firms' nominal revenues × input intensity) and
+    // a level that carries the corporate leg (firms' nominal revenues × input intensity) and
     // the Leontief intermediate half. In a category with persistent excess demand that closes a
     // loop with nothing real in it: the price rises → the buying industries' nominal revenues
     // rise → the corporate leg re-inflates the demand level → the household is handed a bigger
     // budget and its ladder's reservation climbs → the price rises. Measured as the EUR
-    // electricity runaway (§7.257): price ×119 in ten weeks while the UNIT shortage improved
+    // electricity runaway: price ×119 in ten weeks while the UNIT shortage improved
     // 0.59→0.97 and capacity, staffing and supplier count all held flat — the demand level went
     // 19.9B→1,836B with the household bidding it. Stage 03 owns the household's real money — the
     // cohorts' consumption budgets, allocated by tier — and this ladder is sized from that leg
@@ -1440,7 +1441,7 @@ function buildRegionDemandPlans(
     }
 
     if (hhDemandUnits > 0.001) {
-      // COH4 — THE HOUSEHOLD POSTS A SCHEDULE, NOT A QUANTITY AT A CEILING.
+      // THE HOUSEHOLD POSTS A SCHEDULE, NOT A QUANTITY AT A CEILING.
       //
       // It used to bid its whole week's units at one price: the going price times a frozen
       // constant times a chosen per-tier elasticity. A step cannot express a demand curve, so
@@ -1449,17 +1450,17 @@ function buildRegionDemandPlans(
       //
       // The ladder is the curve: saturating at what the household physically has use for, and
       // sloping down because `units = money / price` and the money is finite. Every input is
-      // measured. **No elasticity, no premium and no price ceiling anywhere** — a household facing
+      // measured. **No elasticity, no premium and no price ceiling anywhere** a household facing
       // a dearer luxury buys less of it, which the curve says on its own.
       //
-      // LVL (§7.338) — THE SLOPE IS THE COHORTS'. One regional ladder is a single step at the
-      // reach-capped price (its rungs all truncate to the whole-want reservation, §7.209), so a
+      // LVL — THE SLOPE IS THE COHORTS'. One regional ladder is a single step at the
+      // reach-capped price (its rungs all truncate to the whole-want reservation, ), so a
       // short staple market jumped straight to the reach multiple with nothing in between — the
       // knife-edge behind the ×1.4-a-week climbs. The region's households are not one buyer: the
       // cohorts DIST built each have their own budget for this tier and their own reach, and
       // the poorest run out of money at a lower price than the richest. Posting one step PER
       // COHORT makes the aggregate a staircase — a demand curve with a measured slope and no
-      // stated elasticity (§7.157: carry the distribution where the decision is nonlinear).
+      // stated elasticity (: carry the distribution where the decision is nonlinear).
       const hs = reg.householdState;
       const tier = categoryPriceTier(subUnitId);
       // What it has use for: the registry's own per-capita consumption intensity, which is the
@@ -1505,7 +1506,7 @@ function buildRegionDemandPlans(
           }),
         });
       }
-      // IND16: this book clears at the FACTORY GATE, so every rung is the factory-gate price the
+      // This book clears at the FACTORY GATE, so every rung is the factory-gate price the
       // household's willingness to pay leaves once the channel has taken its cut.
       slices.forEach((sl) => {
         budgetDemandLadder({
@@ -1526,7 +1527,7 @@ function buildRegionDemandPlans(
     }
   }
 
-  // SEED_RECON=<subUnitId> — the §6.1 seed-undersupply row's hand reconciliation, printed from
+  // SEED_RECON=<subUnitId> — the seed-undersupply row's hand reconciliation, printed from
   // the plans themselves: every demand plan's buyer type and units, against the region's
   // supply, for one category in week 1 — so the ~14% (in units, ~47%) gap names its side.
   if (process.env.SEED_RECON === subUnitId && week <= 2) {
@@ -1564,7 +1565,7 @@ function buildRegionDemandPlans(
  */
 export const s05Phase = { settleRows: 0, plans: 0, settle: 0, settleCore: 0, settlePre: 0, settleEff: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
 const S05_PROF = typeof process !== 'undefined' && process.env?.S05_PROF === '1';
-// One-run diagnostic split INSIDE the buyers walk (§7.315's method: name the term before
+// One-run diagnostic split INSIDE the buyers walk (method: name the term before
 // converting anything). ~3 clock reads per lot — relative shares only, not absolute times.
 const S05B_PROF = typeof process !== 'undefined' && process.env?.S05B_PROF === '1';
 const s05Buyers = { pay: 0, invoice: 0, lots: 0, planRest: 0 };
@@ -1732,7 +1733,7 @@ function runSubUnitMarkets(
   demandPlans.forEach(plan => {
     if (plan.demandUnits <= 0.001) return;
     const shares = originShare(plan.regionId);
-    // §7.343: a plan with rungs is several bids under one key — the book sums a key's fills, so
+    // A plan with rungs is several bids under one key — the book sums a key's fills, so
     // the write-back below still sees one purchase per buyer.
     const rungs = plan.rungs ?? [{ units: plan.demandUnits, maxPriceUSD: plan.maxPriceUSD }];
     Object.keys(shares).forEach(originKey => {
@@ -1820,17 +1821,20 @@ function runSubUnitMarkets(
   });
 
   const __t5 = S05_PROF ? performance.now() : 0;
-  // --- 8. Settle production, inventory and cash ONCE per supplier. A seller books its own money.
+  /** What each seller was actually PAID this week, accumulated from the payment legs themselves
+   *  the corporate buyers' below and the aggregate buyers' after them. It is what becomes the
+   *  seller's revenue, so the statement and the account cannot disagree. */
+  const paidToSellerByKey = new Map<string, number>();
+  // --- 8. Settle production and inventory ONCE per supplier.
   supplyPlans.forEach(plan => {
     const sale = results[plan.regionId].salesByKey.get(plan.key);
     const soldUnits = sale?.quantity ?? 0;
-    const soldValue = sale?.amount ?? 0;
     if (!plan.company) return;
     const comp = plan.company;
     const supUp = wk.updateOf(comp);
     const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier.get(comp) ?? 0;
-    // IND10 — what lands in the warehouse is what the pipeline FINISHED, not what was started.
-    // §5-WIRES W4: the ledger records the production and sets the stock; every unit delivered
+    // What lands in the warehouse is what the pipeline FINISHED, not what was started.
+    // W4: the ledger records the production and sets the stock; every unit delivered
     // (contract or market) left by a wire written where the buyer was known.
     settleOutputInventory(supUp, plan.regionId, subUnitId, plan.initialInventoryUnits, plan.arrivedProductionUnits,
       contractSalesUnitsThisSubUnit, soldUnits, results[plan.regionId].clearedPriceUSD);
@@ -1841,7 +1845,6 @@ function runSubUnitMarkets(
     if (soldUnits > 0) {
       supUp.salesUnits = (supUp.salesUnits ?? 0) + soldUnits;
       (supUp.salesUnitsBySubUnit ??= {})[subUnitId] = (supUp.salesUnitsBySubUnit[subUnitId] ?? 0) + soldUnits;
-      supUp.salesUSD = (supUp.salesUSD ?? 0) + soldValue;
     }
     supUp._targetProductionUSD = (supUp._targetProductionUSD ?? 0) + plan.targetProductionUSD;
   });
@@ -1875,13 +1878,13 @@ function runSubUnitMarkets(
   // skipped before the per-origin walk (bit-exact: they returned with no writes anyway).
   const purchasedKeys = new Set<string>();
   MARKET_REGION_IDS.forEach(origin => results[origin].purchasesByKey.forEach((_, k) => purchasedKeys.add(k)));
-  // SCALE §7.303 — party and reason ids interned once per market instead of two string-map
+  // SCALE — party and reason ids interned once per market instead of two string-map
   // probes per LEG (this walk emits the bulk of the week's ~170k instructions: ex-works,
   // freight, trade credit and the fx pip, per lot).
-  // SCALE (§7.305 step 3) — the pid caches and aggregate ids live on the weekly bundle now:
+  // SCALE — the pid caches and aggregate ids live on the weekly bundle now:
   // they were rebuilt once per MARKET (~200 times a week) for values that are fixed all week.
   const { pidOfSeller, pidOfCarrier, hhPid, govPid } = wk;
-  // §4.C Stage IV — per-(origin, buyer-region) facts hoisted to 4x4 matrices per market: the
+  // Stage IV — per-(origin, buyer-region) facts hoisted to 4x4 matrices per market: the
   // ex-works conversion, the landed per-unit, and the transit arrival week were recomputed per
   // (plan, origin) pair (thousands of pure-function calls per market for 16 distinct values).
   // Same functions, same arguments, same floats.
@@ -1923,7 +1926,7 @@ function runSubUnitMarkets(
       // gets there. Domestic hauls that complete inside the week land immediately, which is what
       // a same-week road delivery is.
       const arrivalWeek = arrivalM.get(origin)!.get(plan.regionId)!;
-      // §7.315's grind: the lane's carrier shares are a per-(origin, buyer-region) fact, probed
+      // grind: the lane's carrier shares are a per-(origin, buyer-region) fact, probed
       // once here instead of once per LOT (~25k probes + key strings a week).
       const laneK = laneKey(origin, plan.regionId);
       let laneCarriers = laneCarrierCache.get(laneK);
@@ -1950,7 +1953,13 @@ function runSubUnitMarkets(
         // freight, which belongs to the carriers — paid on shipped tonnage further down this
         // stage, so it is named here rather than handed to the seller.
         const sellerPid = pidOfSeller(l.sellerKey, origin);
-        payByIds(ctx, buyerPid, sellerPid, l.units * exWorksBuyerMoney, R_EXWORKS);
+        const exWorksPaidUSD = l.units * exWorksBuyerMoney;
+        payByIds(ctx, buyerPid, sellerPid, exWorksPaidUSD, R_EXWORKS);
+        // WHAT A SELLER EARNED IS WHAT ITS BUYERS PAID IT. A cross-border buyer pays in ITS
+        // money and the seller booked the auction's origin-money value of the same lot, so the
+        // revenue on its statement and the cash on its account differed by the exchange rate —
+        // two representations of one sale. Recorded here, from the payment itself.
+        paidToSellerByKey.set(l.sellerKey, (paidToSellerByKey.get(l.sellerKey) ?? 0) + exWorksPaidUSD);
         // XB3a-2/CASH: THE CARRIER IS PAID BY THE BUYER, by name. The carriers have been real
         // companies since XB3a-2 — real fleets, real fuel at the refined-product price, real crew
         // through the labour market, listed equity, a home bank — but this leg paid the boundary
@@ -1968,16 +1977,16 @@ function runSubUnitMarkets(
             const amountUSD = freightUSD * share;
             if (!(amountUSD > 0)) return;
             paidUSD += amountUSD;
-            // §6.1 money-locality: the freight leg is BUYER money, and a carrier serves lanes
+            // money-locality: the freight leg is BUYER money, and a carrier serves lanes
             // whose buyers pay in four different monies — summing them raw made its revenue
             // line a currency salad and its margin an FX artifact. The carrier's income stat
             // accrues in the carrier's OWN money; the payment instruction below keeps today's
-            // buyer-money convention until Money<C> lands at the pay() seam (§5 Tier 4).
+            // buyer-money convention until Money<C> lands at the pay seam.
             ctx.carrierFreightRevenue[carrierTicker] = (ctx.carrierFreightRevenue[carrierTicker] ?? 0)
               + (carrierRegion ? convertLocal(amountUSD, plan.regionId, carrierRegion, sourcing.fxToUsd) : amountUSD);
             payByIds(ctx, buyerPid, carrierPid, amountUSD, R_FREIGHT);
           });
-          // §7.286 — a lane no NAMED carrier serves is still sailed by SOMEBODY: the unnamed
+          // A lane no NAMED carrier serves is still sailed by SOMEBODY: the unnamed
           // small transporters the SME tier exists to represent. The freight pays the origin
           // region's transport pool — a real aggregate with a cash line and a bank, exactly the
           // counterparty the SEGMENT party kind was built for — instead of the boundary. The
@@ -1997,11 +2006,11 @@ function runSubUnitMarkets(
         if (S05B_PROF) s05Buyers.pay += __b1 - __b0;
         const sellerParty = partyOfKey(l.sellerKey, origin, lookup);
         if (arrivalWeek <= nextWeek) {
-          // §5-WIRES W4: a same-week delivery moves seller → buyer by one wire.
+          // W4: a same-week delivery moves seller → buyer by one wire.
           const w = deliverGoods(sellerParty, { kind: 'COMPANY', ticker: comp.ticker }, subUnitId, l.units, perUnit, 'goods sold: delivered');
           addInputInventory(v2, buyerUpdate, comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek, w);
         } else {
-          // §5-WIRES W4: a consignment is HELD BY ITS CARRIER while it moves — the lane's named
+          // W4: a consignment is HELD BY ITS CARRIER while it moves — the lane's named
           // fleets by their shares, the origin's transport pool for the share no fleet serves —
           // and reaches the buyer at arrival (goods-arrival.ts). One consignment per holder.
           let consignedUnits = 0;
@@ -2030,7 +2039,7 @@ function runSubUnitMarkets(
         // aggregate has no cash leg here to defer, so deferring one would invent an exposure.
         const seller = lookup.byTicker.get(l.sellerKey);
         if (!seller) return;
-        // IND12 — DOMESTIC TRADE CREDIT. The whole machinery below — terms set by the buyer's own
+        // DOMESTIC TRADE CREDIT. The whole machinery below — terms set by the buyer's own
         // credit, a receivable on one book and a payable on the other, cash that follows when it
         // falls due, and a write-off when a counterparty dies — was built for XB3a-5 and then
         // gated to CROSS-BORDER sales by this one line. Trade credit outstanding exceeds bank
@@ -2066,7 +2075,7 @@ function runSubUnitMarkets(
         const currency = invoiceCurrencyOf(invoiceRegion);
         const usdPerCurrency = sourcing.fxToUsd(invoiceRegion);
         if (!(usdPerCurrency > 0)) return;
-        // IND12 — the invoice is what the SELLER is owed: ex-works, not landed. The freight in
+        // The invoice is what the SELLER is owed: ex-works, not landed. The freight in
         // `perUnit` belongs to the carrier and was paid to it above, so putting it on the
         // receivable had the seller lending its customer money the carrier had already taken.
         // It is also the amount the ex-works payment leg moves, so the credit extended below
@@ -2104,10 +2113,10 @@ function runSubUnitMarkets(
         // right here and has a name.
         payByIds(ctx, sellerPid, buyerPid, invoicedUSD, R_TRADE_CREDIT);
         if (S05B_PROF) s05Buyers.invoice += performance.now() - __b1;
-        // §7.282 — THE FX SPREAD HAS A PAYER NOW. A cross-border trade converts the buyer's
+        // THE FX SPREAD HAS A PAYER NOW. A cross-border trade converts the buyer's
         // money, and until here every real-economy conversion happened at MID: the desks that
         // make the market and warehouse its residual earned nothing on the flow that is most
-        // of their business (§6.1's row — crediting them a spread WITHOUT a payer would have
+        // of their business (row — crediting them a spread WITHOUT a payer would have
         // printed money). The payer is the converting firm; the pip goes to its home region's
         // banks — the desks whose fxDealerBook carries the other side — pro rata by market
         // share, landing cash + equity through settlement's own BANK leg like every other
@@ -2115,9 +2124,9 @@ function runSubUnitMarkets(
         if (!isDomestic) {
           const fxFeeUSD = invoicedUSD * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
           if (fxFeeUSD > 0.01) {
-            // SCALE — the region's fee-earning desks, memoised on the firm array's identity:
+            // The region's fee-earning desks, memoised on the firm array's identity:
             // this filtered all ~2,500 firms PER CROSS-BORDER INVOICE (same list order kept,
-            // so the pay() sequence and every float are the ones the inline filter produced).
+            // so the pay sequence and every float are the ones the inline filter produced).
             const { banks: buyerBanks, totalShare } = fxFeeBanksOf(ctx.prevActiveFirms, plan.regionId);
             buyerBanks.forEach((b) => {
               const share = totalShare > 0
@@ -2152,103 +2161,85 @@ function runSubUnitMarkets(
   });
 
   const __b2 = S05B_PROF ? performance.now() : 0;
-  // SETL-C: the AGGREGATE buyers pay too. A seller's revenue includes what households and the
-  // government took, and routing only the company buyers' payments left those sellers credited
-  // with revenue nobody had paid. Households and the treasury are real account holders, so each
-  // book's non-corporate fills are paid to its sellers pro rata by what each actually sold.
+  // BOTH LEGS OF ONE TRADE, SAME PAIRING. The goods move lot by lot with the seller that
+  // actually sold them (the wire further down); the cash was spread across every seller in the
+  // book pro rata to what each had sold, so a household paid sellers it never bought from. Worse,
+  // its own bill was a RESIDUAL — the book's total less what the firms and the segments paid —
+  // rather than what its fills cost, so any disagreement between the two was silently
+  // redistributed across the sellers. The auction knows whose lot it was; that seller is paid.
   MARKET_REGION_IDS.forEach(origin => {
     const book = results[origin];
-    const sellerTotalUSD = Array.from(book.salesByKey.values()).reduce((a, v) => a + v.amount, 0);
-    if (!(sellerTotalUSD > 0)) return;
-    let corporatePaidUSD = 0;
-    // SEG2b: the segments pay for what THEY buy (capex bids, recipe inputs), pro rata to the
-    // book's sellers like the other aggregate buyers. Their fills used to sit inside the
-    // household/government remainder below — in `sellerTotalUSD` but in nobody's claim — so the
-    // two real aggregate buyers were billed for the tier's purchases on top of their own.
-    let segmentPaidUSD = 0;
-    const segmentBuysByKey = new Map<string, number>();
-    book.purchasesByKey.forEach((buy, key) => {
-      if (lookup.byKey.get(key)) { corporatePaidUSD += buy.amount; return; }
-      if (key.startsWith('PRIVATE:')) {
-        segmentPaidUSD += buy.amount;
-        segmentBuysByKey.set(key, (segmentBuysByKey.get(key) ?? 0) + buy.amount);
-      }
-    });
-    segmentBuysByKey.forEach((amountUSD, segKey) => {
-      const segParty = partyOfKey(segKey, origin, lookup);
-      book.salesByKey.forEach((sale, sellerKey) => {
-        pay(ctx, {
-          payer: segParty,
-          payee: partyOfKey(sellerKey, origin, lookup),
-          amountUSD: amountUSD * (sale.amount / sellerTotalUSD),
-          reason: 'segment goods purchase',
-        });
+    /** Household spend and the cross-border part of each aggregate's, by buyer region: the
+     *  channel's cut and the FX desks' pip are charged on them once the lots are walked. */
+    const hhSpentByRegion = new Map<RegionId, number>();
+    const hhAbroadByRegion = new Map<RegionId, number>();
+    const govAbroadByRegion = new Map<RegionId, number>();
+    const addTo = (m: Map<RegionId, number>, r: RegionId, usd: number) => m.set(r, (m.get(r) ?? 0) + usd);
+    book.lotsByBuyer.forEach((lots, buyerKey) => {
+      if (lookup.byKey.get(buyerKey)) return; // a firm's lots are paid in the buyer loop above
+      const buyerRegion = buyerRegionOfKey(buyerKey, lookup);
+      if (!buyerRegion) return;
+      const buyerParty = partyOfKey(buyerKey, buyerRegion, lookup);
+      const buyerPid = partyId(buyerParty);
+      const reason = buyerParty.kind === 'HOUSEHOLD' ? R_HH_GOODS
+        : buyerParty.kind === 'GOVERNMENT' ? R_GOV_PROC : R_SEGMENT_GOODS;
+      lots.forEach((l) => {
+        const amountUSD = l.units * book.clearedPriceUSD;
+        if (!(amountUSD > 0)) return;
+        payByIds(ctx, buyerPid, pidOfSeller(l.sellerKey, origin), amountUSD, reason);
+        paidToSellerByKey.set(l.sellerKey, (paidToSellerByKey.get(l.sellerKey) ?? 0) + amountUSD);
+        if (buyerParty.kind === 'HOUSEHOLD') {
+          addTo(hhSpentByRegion, buyerRegion, amountUSD);
+          if (origin !== buyerRegion) addTo(hhAbroadByRegion, buyerRegion, amountUSD);
+        } else if (buyerParty.kind === 'GOVERNMENT' && origin !== buyerRegion) {
+          addTo(govAbroadByRegion, buyerRegion, amountUSD);
+        }
       });
     });
-    const aggregateUSD = Math.max(0, sellerTotalUSD - corporatePaidUSD - segmentPaidUSD);
-    if (!(aggregateUSD > 0)) return;
-    // Split what remains between the two aggregate buyers by what each actually took.
-    const hhUnitsAll = MARKET_REGION_IDS.reduce((a, r) => a + (book.householdFillUnitsByRegion[r] ?? 0), 0);
-    const govUsdAll = MARKET_REGION_IDS.reduce((a, r) => a + (book.governmentSpendUSDByRegion[r] ?? 0), 0);
-    const hhUsdAll = hhUnitsAll * book.clearedPriceUSD;
-    const claimUSD = hhUsdAll + govUsdAll;
-    if (!(claimUSD > 0)) return;
-    // §7.315's grind: a buyer region with no household fill and no government spend contributes
-    // exact zeros to every leg below — payByIds drops them one call at a time; skipping the
-    // region row skips sellers x legs of dead arithmetic. The emitted legs are unchanged.
-    const activeBuyerRegions = MARKET_REGION_IDS.filter(r =>
-      (book.householdFillUnitsByRegion[r] ?? 0) > 0 || (book.governmentSpendUSDByRegion[r] ?? 0) > 0);
-    book.salesByKey.forEach((sale, sellerKey) => {
-      const sellerShare = sale.amount / sellerTotalUSD;
-      activeBuyerRegions.forEach(buyerRegion => {
-        const hhUSD = ((book.householdFillUnitsByRegion[buyerRegion] ?? 0) * book.clearedPriceUSD / claimUSD) * aggregateUSD * sellerShare;
-        const govUSD = ((book.governmentSpendUSDByRegion[buyerRegion] ?? 0) / claimUSD) * aggregateUSD * sellerShare;
-        payByIds(ctx, hhPid.get(buyerRegion)!, pidOfSeller(sellerKey, origin), hhUSD, R_HH_GOODS);
-        // IND16: AND THE CHANNEL'S CUT, paid by the household that bought out of its stock, to
-        // the firms that held it — by name, exactly as the carriers are paid their freight. The
-        // producer received the factory gate above; this is the rest of what the household spent.
-        // A household's distribution spend used to reach this sector as a buyer-mix share of the
-        // logistics book instead, which paid it for the same work in a second place (rule 3).
-        const buyerReg = ctx.updatedRegions[buyerRegion];
-        const channelUSD = hhUSD * channelMarginRate(
-          subUnitId, buyerReg?.zeroRates?.tenor3M ?? buyerReg?.policyRate ?? 0);
-        if (channelUSD > 0) {
-          const shares = ctx.channelShareByRegion[buyerRegion];
-          shares?.forEach((share, distributorTicker) => {
-            const amountUSD = channelUSD * share;
-            if (!(amountUSD > 0)) return;
-            ctx.channelMarginRevenue[distributorTicker] = (ctx.channelMarginRevenue[distributorTicker] ?? 0) + amountUSD;
-            payByIds(ctx, hhPid.get(buyerRegion)!, pidOfCarrier(distributorTicker), amountUSD, R_CHANNEL);
-          });
-          // A region with no distribution firm has no channel to pay and no margin is charged —
-          // nothing goes to the boundary here, because the margin only exists where somebody
-          // earns it.
-        }
-        payByIds(ctx, govPid.get(buyerRegion)!, pidOfSeller(sellerKey, origin), govUSD, R_GOV_PROC);
-        // §7.341 — the FX spread's LAST payers. §7.282 charged the converting FIRM; a household
-        // or a treasury buying abroad converted at mid. Same pip, same desks (the buyer
-        // region's banks, pro rata), paid by the aggregate that converts.
-        if (origin !== buyerRegion) {
-          const hhFeeUSD = hhUSD * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
-          const govFeeUSD = govUSD * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
-          if (hhFeeUSD > 0.01 || govFeeUSD > 0.01) {
-            const { banks: fxBanks, totalShare } = fxFeeBanksOf(ctx.prevActiveFirms, buyerRegion);
-            fxBanks.forEach((b) => {
-              const share = totalShare > 0 ? ((b.bankMarketShare ?? 0) || 1) / totalShare : 0;
-              if (share <= 0) return;
-              const bankPid = partyId({ kind: 'BANK', ticker: b.ticker });
-              if (hhFeeUSD > 0.01) payByIds(ctx, hhPid.get(buyerRegion)!, bankPid, hhFeeUSD * share, R_FX_SPREAD);
-              if (govFeeUSD > 0.01) payByIds(ctx, govPid.get(buyerRegion)!, bankPid, govFeeUSD * share, R_FX_SPREAD);
-            });
-          }
-        }
+    // THE CHANNEL'S CUT, paid by the household that bought out of its stock, to the firms that
+    // held it — by name, exactly as the carriers are paid their freight. The producer received
+    // the factory gate above; this is the rest of what the household spent.
+    hhSpentByRegion.forEach((hhUSD, buyerRegion) => {
+      const buyerReg = ctx.updatedRegions[buyerRegion];
+      const channelUSD = hhUSD * channelMarginRate(
+        subUnitId, buyerReg?.zeroRates?.tenor3M ?? buyerReg?.policyRate ?? 0);
+      if (!(channelUSD > 0)) return;
+      // A region with no distribution firm has no channel to pay and no margin is charged.
+      ctx.channelShareByRegion[buyerRegion]?.forEach((share, distributorTicker) => {
+        const amountUSD = channelUSD * share;
+        if (!(amountUSD > 0)) return;
+        ctx.channelMarginRevenue[distributorTicker] = (ctx.channelMarginRevenue[distributorTicker] ?? 0) + amountUSD;
+        payByIds(ctx, hhPid.get(buyerRegion)!, pidOfCarrier(distributorTicker), amountUSD, R_CHANNEL);
+      });
+    });
+    // The FX spread's LAST payers: a household or a treasury buying abroad converts at the same
+    // pip through the same desks (the buyer region's banks, pro rata) as any converting firm.
+    MARKET_REGION_IDS.forEach((buyerRegion) => {
+      const hhFeeUSD = (hhAbroadByRegion.get(buyerRegion) ?? 0) * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
+      const govFeeUSD = (govAbroadByRegion.get(buyerRegion) ?? 0) * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
+      if (!(hhFeeUSD > 0.01 || govFeeUSD > 0.01)) return;
+      const { banks: fxBanks, totalShare } = fxFeeBanksOf(ctx.prevActiveFirms, buyerRegion);
+      fxBanks.forEach((b) => {
+        const share = totalShare > 0 ? ((b.bankMarketShare ?? 0) || 1) / totalShare : 0;
+        if (share <= 0) return;
+        const bankPid = partyId({ kind: 'BANK', ticker: b.ticker });
+        if (hhFeeUSD > 0.01) payByIds(ctx, hhPid.get(buyerRegion)!, bankPid, hhFeeUSD * share, R_FX_SPREAD);
+        if (govFeeUSD > 0.01) payByIds(ctx, govPid.get(buyerRegion)!, bankPid, govFeeUSD * share, R_FX_SPREAD);
       });
     });
   });
 
+  // The sellers' revenue, read off what they were paid rather than off the auction's own book.
+  paidToSellerByKey.forEach((usd, sellerKey) => {
+    const seller = lookup.byTicker.get(sellerKey);
+    if (!seller || !(usd > 0)) return;
+    const up = wk.updateOf(seller);
+    up.salesUSD = (up.salesUSD ?? 0) + usd;
+  });
+
   const __t7 = S05_PROF ? performance.now() : 0;
   if (S05B_PROF) s05Buyers.planRest += __t7 - __b2;
-  // §5-WIRES W4: what a household, a treasury or a segment pool bought leaves the seller by wire
+  // W4: what a household, a treasury or a segment pool bought leaves the seller by wire
   // too — to a SINK (consumed on receipt), so no stock lands anywhere. Written AFTER the money
   // legs above so every party is interned in the order it always was (the engine's fingerprint
   // reads party ids by first sight).
@@ -2301,7 +2292,7 @@ function runSubUnitMarkets(
     s05Phase.buyers += __t7 - __t6; s05Phase.tail += __t8 - __t7;
   }
   // --- 12. Publish the week's prices and metrics.
-  // SCALE: one pass over the plans instead of a filtered reduce per region — each plan belongs
+  // One pass over the plans instead of a filtered reduce per region — each plan belongs
   // to exactly one region, so every region's total receives the same additions in the same order.
   const demandUnitsByRegion = new Map<RegionId, number>();
   demandPlans.forEach(p => {
@@ -2312,13 +2303,13 @@ function runSubUnitMarkets(
     if (!demandState) return;
     demandState.exWorksUnitPriceUSD = roundN(results[regionId].clearedPriceUSD, 1e2);
     demandState.unitPriceUSD = roundN(publishedPrice[regionId], 1e2);
-    // §7.249 — the category's own price, one entry per week, so a firm's real output growth can
+    // The category's own price, one entry per week, so a firm's real output growth can
     // be deflated by the price of what IT sells over the SAME window (rule 9 twice over: the
     // aggregate CPI is a different population AND a 52-week period against a 12-week growth).
     // 13 entries covers the labour stage's 12-week window.
-    // §5-BRAINS — a year of prints: the longest horizon a buyer's expectation reads over.
+    // A year of prints: the longest horizon a buyer's expectation reads over.
     demandState.priceHistory = [...(demandState.priceHistory ?? []).slice(-51), demandState.unitPriceUSD];
-    // IND16: the third price level, and the one a household actually faces. Ex-works is what the
+    // The third price level, and the one a household actually faces. Ex-works is what the
     // producer received, `unitPriceUSD` is what it cost delivered — what a BUSINESS pays for its
     // inputs — and this is what it costs on a shelf, once the channel's cover is paid for. Three
     // real steps, each with a real payee; recipes and the price indices keep reading the landed
@@ -2377,7 +2368,7 @@ function formContracts(
 
   const candidateSuppliers = supplyPlans.filter(p => p.company && inMoneyOfferKeys.has(p.key));
   if (candidateSuppliers.length === 0) return;
-  // IND14 — RELIABILITY IS PRICED INTO SOURCING. Who a buyer contracts with was a uniform random
+  // RELIABILITY IS PRICED INTO SOURCING. Who a buyer contracts with was a uniform random
   // draw over everyone in the money: a supplier that had failed to deliver for a year was as
   // likely to win the next contract as one that never missed. The merit order already prices
   // landed cost; this is the other half of a real sourcing decision, and IND11's delivery record
@@ -2436,12 +2427,12 @@ function formContracts(
     // quantity. The previous sizing was a hardcoded random ladder (2,000–12,000 units/week
     // regardless of who was buying), which for a five-figure-per-unit input committed a buyer to
     // tens of millions a week it had no use for. Invisible for as long as cash never settled;
-    // the S5 ledger exposed it immediately (§7.24). The buyer locks a share of the weekly need
+    // the S5 ledger exposed it immediately. The buyer locks a share of the weekly need
     // its own bid already expresses, capped by what this supplier actually offered.
     const baseContractUnits = Math.min(bidPlan.demandUnits * CONTRACTED_DEMAND_SHARE, supplierPlan.openOfferUnits);
     if (baseContractUnits <= 0.001) return;
 
-    // IND11 — a long contract is indexed to the price it was struck against; a short one is
+    // A long contract is indexed to the price it was struck against; a short one is
     // not (0 = fixed-price). Which of the two a firm signs is decided here, by the term it wanted.
     formContractRow(
       v2, bidPlan.regionId, subUnitId,
@@ -2465,7 +2456,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   });
   ctx.shippedTonnesByLane = {};
   ctx.carrierFreightRevenue = {};
-  // IND16: who runs the channel in each region, weighted by the size of each firm's own
+  // Who runs the channel in each region, weighted by the size of each firm's own
   // distribution line — the same sector that sells the service, earning the margin households pay
   // inside the shelf price rather than buying-mix revenue it was being paid twice for.
   ctx.channelMarginRevenue = {};
@@ -2503,7 +2494,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     buyerAnnualPdByTicker: new Map(),
   };
 
-  // ENGINE V2 (§7.304) — the contract book lives on the columnar table; the weekly grouping
+  // ENGINE V2 — the contract book lives on the columnar table; the weekly grouping
   // and reassembly passes are gone with the object array they served. Refs resolve to firms
   // once per unique ref per week.
   const refCompCache = new Map<number, Company | undefined>();
@@ -2553,15 +2544,15 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     govPid,
   };
 
-  // §7.222 — each market draws from its OWN stream, not from wherever the shared one has reached.
-  // This does NOT make the loop parallel: §7.222 measured that stage 05 stays order-dependent with
+  // Each market draws from its OWN stream, not from wherever the shared one has reached.
+  // This does NOT make the loop parallel: measured that stage 05 stays order-dependent with
   // the scope in place, because the markets are coupled through each firm's single budget, spent
   // market by market. What the scope fixes is the separate defect it exposed — a market's bid
   // noise was a function of its position in a source file's declaration list.
   //
-  // §4.0 Tier 1 item 18 — THE OPENING ORDER IS ECONOMIC, NOT A FILE'S. The coupling is real (a
+  // THE OPENING ORDER IS ECONOMIC, NOT A FILE'S. The coupling is real (a
   // firm has one wallet); what was arbitrary was that a source file's declaration order decided
-  // which market drew on it first (§7.222: reversing it moved week-1 GDP −0.12% and killed seven
+  // which market drew on it first (: reversing it moved week-1 GDP −0.12% and killed seven
   // firms by week 2). Markets now open UPSTREAM FIRST — descending corporate (intermediate)
   // buyer share, the same direction the week already runs (inputs are priced before the goods
   // made from them; a downstream buyer bids knowing its input costs) — with the unit id as the
@@ -2576,17 +2567,17 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
       return a.unitId < b.unitId ? -1 : a.unitId > b.unitId ? 1 : 0;
     })
     .forEach(subUnit => {
-    // §7.301 — THE CRE MARKET IS GATED, ON MEASUREMENT (the §7.294 pattern: a gate stands or
+    // THE CRE MARKET IS GATED, ON MEASUREMENT (the pattern: a gate stands or
     // falls on what a run shows, and this one closed). The dealt landlords and the registry
-    // entry stand (§7.298's build is intact); the LIVE market alone carried +4.8pts of USA
-    // unemployment and +32 CPI points by week 30 — a §7.245-family service spiral: the market
-    // opens ~26% short (the §6.1 seed-level row — measured INVARIANT to the stated intensity,
+    // entry stand; the LIVE market alone carried +4.8pts of USA
+    // unemployment and +32 CPI points by week 30 — a service spiral: the market
+    // opens ~26% short (the seed-level row — measured INVARIANT to the stated intensity,
     // both sides derive from one level), corporate premises demand is nearly inelastic, supply
     // is buildings and cannot answer inside a year, and the compounding price leaks through
     // the shared industry's wage and revenue signals into the housing categories households
-    // DO buy. REOPENING CONDITION, named: the §6.1 level-row decision re-sizes the market
+    // DO buy. REOPENING CONDITION, named: the level-row decision re-sizes the market
     // (or corporate premises demand gets a real elasticity).
-    // §7.341 — REOPENED. The level row closed at its owner (§7.338: the seed price rule) and
+    // REOPENED. The level row closed at its owner and
     // the re-measurement no longer shows the spiral: 30 weeks live vs gated, USA CPI 159.2 vs
     // 158.9, goods fill 0.763 vs 0.754, u 29.6/28.8/24.6/20.8 vs 28.9/31.2/23.1/25.3. The
     // market is live; CRE_MARKET_LIVE=0 gates it off for an A/B.

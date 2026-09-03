@@ -128,6 +128,31 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
         });
       }
 
+      // VARIATION MARGIN. Collateral secures shares whose price moves, so it is re-marked to the
+      // shares every week and the difference is paid — the borrower tops up when the name rises,
+      // the lender returns the excess when it falls. Struck once at the market value on the day
+      // and never touched again, the collateral drifted away from what it secured and a squeeze
+      // cost nobody anything: the lender's protection eroded exactly as the borrower's position
+      // moved against it, and `stockLoanNetUSD` was an unfunded statistic.
+      const markedUSD = loan.shares * comp.stockPrice;
+      const marginCallUSD = markedUSD - loan.collateralUSD;
+      if (Math.abs(marginCallUSD) > 1) {
+        pay(ctx, marginCallUSD > 0
+          ? {
+            payer: { kind: 'INSTITUTION', id: loan.borrower.id },
+            payee: { kind: 'INSTITUTION', id: loan.lender.id },
+            amountUSD: marginCallUSD,
+            reason: 'stock loan variation margin',
+          }
+          : {
+            payer: { kind: 'INSTITUTION', id: loan.lender.id },
+            payee: { kind: 'INSTITUTION', id: loan.borrower.id },
+            amountUSD: -marginCallUSD,
+            reason: 'stock loan variation margin returned',
+          });
+        loan.collateralUSD = markedUSD;
+      }
+
       // A recalled borrower that has managed to buy the shares back delivers them and is out.
       if (loan.recalledWeek !== undefined) {
         const have = deliverable(loan.borrower.id, loan.instrumentId);
@@ -414,7 +439,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           // The delivery leg: the lender's shares are now in the borrower's hands, and it will
           // sell them in this week's equity auction. The register total is unchanged.
           deliver(lenderId, d.fundId, c.id, shares, c.stockPrice);
-          // ...and the money leg: cash collateral at the market value, which comes back when the
+          //...and the money leg: cash collateral at the market value, which comes back when the
           // shares do. Without it a lender would simply be handing its assets away.
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: d.fundId },

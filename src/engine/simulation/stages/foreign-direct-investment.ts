@@ -1,12 +1,12 @@
 /**
- * §5-MNC — FOREIGN DIRECT INVESTMENT: a firm builds abroad when exporting there has stopped
+ * FOREIGN DIRECT INVESTMENT: a firm builds abroad when exporting there has stopped
  * working, and a SUBSIDIARY IS A COMPANY (rule 19's fewest primitives: the model already has
  * production, labour, books, births, contracts, invoices and FX — MNC adds a LINK and a
  * DECISION, never a second production machinery).
  *
  * THE DECISION (rule 8 — how it actually works): a firm serves market B from home while its
  * landed cost wins the merit order there; when B's own producers deliver cheaper than A's
- * exports land — sustained for the same measured year §7.138 established for a position to be
+ * exports land — sustained for the same measured year established for a position to be
  * structural — the real choice is to produce IN B. The signal is read off the sourcing
  * intent's own merit order (`expectedLandedCostByOrigin`), which is the exact number B's
  * buyers decide with; nothing here re-derives a cost.
@@ -14,7 +14,7 @@
  * THE BIRTH: through the one birth machinery every firm uses. The subsidiary opens at the
  * export flow it exists to replace — the parent's measured share of A→B trade in the goods it
  * sells — with the parent's own margin, no leverage (FDI is equity), and the parent's money:
- * the opening balance is PAID cross-border from the parent's deployable cash (the §7.288
+ * the opening balance is PAID cross-border from the parent's deployable cash (the
  * financing discipline: the money must exist first), through the same FX path every
  * cross-border payment takes. The parent's stake is `parentTicker` + `founderPct: 0`, so the
  * household private-business residual excludes it by construction (OWN4).
@@ -30,12 +30,13 @@ import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
 import { isActiveCompany, ANTITRUST_SUSTAINED_WEEKS } from '../../../domain/company';
 import { REGION_IDS } from '../../../domain/geography';
+import { convertLocal } from '../../../domain/currency';
 import { TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../../../domain/company';
 import { PrivateFirmSeed } from '../../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { cashOf, openingCashOf } from '../../ledger/accounts';
 
-/** A year of losing the merit order is structural — the same measured hold as §7.138. */
+/** A year of losing the merit order is structural — the same measured hold as */
 const FDI_SUSTAINED_WEEKS = ANTITRUST_SUSTAINED_WEEKS;
 
 /** The parent's measured annual export flow into `target`, by sub-unit: the target's own
@@ -85,7 +86,7 @@ export function runForeignDirectInvestment(
     if (comp.isBankEntity || comp.isInstitutionalEntity || comp.parentTicker) return;
     if (!isActiveCompany(comp) || !(comp.productLines?.length)) return;
 
-    // ---- Weekly: the disadvantage counter per foreign market, §7.138's shape — reset on any
+    // ---- Weekly: the disadvantage counter per foreign market, shape — reset on any
     // week the merit order goes the firm's way again, because a position is only structural
     // when it HOLDS. ----
     const counters: Partial<Record<RegionId, number>> = { ...(comp.fdiDisadvantageWeeksByRegion ?? {}) };
@@ -132,11 +133,19 @@ export function runForeignDirectInvestment(
       const sub = babies[0];
 
       // The parent PAYS the opening balance, or the deal does not happen — the same discipline
-      // as a capital call that comes up short (§7.226) and the §7.288 financing cap: FDI spends
+      // as a capital call that comes up short and the financing cap: FDI spends
       // the cash pile above the treasurer's own operating buffer, never money that isn't there.
       const deployableUSD = Math.max(0,
         cashOf(ctx.v2, comp) - comp.annualRevenue * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversionOf(comp.management));
-      const openingCashUSD = Math.min(Math.max(0, openingCashOf(sub)), deployableUSD);
+      // THE TWO SIDES ARE IN DIFFERENT MONEY. The subsidiary's opening balance is denominated in
+      // ITS region's money and the parent's deployable cash in the parent's; compared raw, the
+      // affordability test and the amount paid were both wrong by the exchange rate — and the
+      // file's own header says this goes through the same FX path every cross-border payment
+      // takes. It does now: converted into the payer's money, which is the convention every
+      // cross-border leg in the model uses.
+      const needParentMoneyUSD = convertLocal(
+        Math.max(0, openingCashOf(sub)), sub.region as RegionId, comp.region as RegionId, ctx.getFxToUsd);
+      const openingCashUSD = Math.min(needParentMoneyUSD, deployableUSD);
       if (!(openingCashUSD > 0)) continue;
       sub.parentTicker = comp.ticker;
       // The stake is the PARENT's, not a founder household's: the private-business residual
