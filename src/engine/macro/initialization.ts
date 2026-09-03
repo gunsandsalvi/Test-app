@@ -393,8 +393,14 @@ function buildRegion(regionId: RegionId): Region {
     id: govBondTrancheId(regionId, tenorYears, 'INIT'),
     principalUSD: Math.round((totalGovDebtUSD * weight)),
     couponRate: Number(calculateNelsonSiegelZeroRate(tenorYears, yieldCurveParams).toFixed(4)),
-    originationWeek: -Math.round(tenorWeeks / 2),
-    maturityWeek: Math.round(tenorWeeks / 2),
+    // §3.13-SOV: the two dates are ONE span, so they are rounded ONCE. Rounding each end
+    // separately made an odd tenor a week longer than it claimed — a 13-week bill seeded at
+    // origination −7 and maturity +7 is a 14-week bill, and `(maturity − origination) / 52` then
+    // disagreed with the `tenorAtIssuanceYears` beside it on 20 of 260 rungs. Two representations
+    // of one fact, disagreeing (rule 3); with one rounding they agree exactly, which is what lets
+    // the stored tenor be deleted rather than reconciled.
+    originationWeek: -Math.floor(tenorWeeks / 2),
+    maturityWeek: tenorWeeks - Math.floor(tenorWeeks / 2),
     tenorAtIssuanceYears: tenorYears,
     // §3.13-SOV: a sovereign is a bond. FIXED (`bond.md` N5.a) and SENIOR (N13.a — all sovereign
     // claims rank equally; the answer is stated rather than left absent).
