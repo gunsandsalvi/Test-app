@@ -205,44 +205,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11f. **THE REGISTER HOLDS PAPER NO LADDER CARRIES.** `O7` measures it now, every week for every
-    issuer: **~55 tranches over-claimed in a typical week** (worst seen 105, 0.10B). The size is
-    small per tranche — SICM's week-11 primary is +0.626M on 528.1M of face — but it is
-    systematic, it grows, and it is the same fact three other places report: `W2` (32 findings a
-    run), `W5`'s residue, and `O6`'s held-versus-issued.
-    **The cause, and two hypotheses already spent on it (do not repeat them):**
-    `register-split.ts:65` spreads a holder's WHOLE issuer-level position across that issuer's
-    live tranches pro rata by face, with no cap at any tranche's own face. That is exactly right
-    when holders in aggregate hold what the issuer issued, and it faithfully distributes the
-    excess across every tranche when they do not. So the split is the messenger.
-    The sender is that **the corporate book clears at ISSUER level while the paper exists at
-    TRANCHE level** (`07b:530` iterates `regionCompanies`, one instrument per COMPANY), so nothing
-    in the clearing constrains a holder's issuer position to the ladder's outstanding face.
-    (a) DISPROVED — "the claim is incomplete, a book claims some rows of a position and writes
-    back all of it". The books' visitors claim by ISSUER, so for a given instrument it is all or
-    none.
-    (b) DISPROVED AND MEASURED — "the oscillation is the residue": a position IS re-keyed between
-    tranche-named and issuer-named rows every week (`register-split.ts:62`'s fallback fires 3,620
-    times in 13 weeks). Keeping an untouched position's rows verbatim was implemented and run:
-    **it made O7 WORSE — 105 tranches and 0.10B against 55 and 0.01B** — and moved W2 not at all.
-    Reverted. The oscillation is real and is its own defect, but it is not this one.
-    **Where the fix lives: with step 13 and step 21.** The book must clear the paper that exists,
-    per tranche, against the float that exists — and step 13 must first give the DESKS the same
-    key the register uses, because today 301B of credit inventory sits on the issuer key (`O8`)
-    and cannot be reconciled to any ladder row at all. Until then O7 carries the number.
-    **The estate no longer crashes on it** (§9.11f): one invariant, one reporter.
-
-11e. **The seed's unwired positions — plant is the last one.** *(Deliberately after 11f: that is
-    a live leak and this is provenance, and this one is blocked on a design question it shares
-    with step 26 — answer it once, for both.)* The ladders, the register and the
-    goods all open by wire or were never seeded, and W3, W4 and W5 hold week 1 to week 2's
-    standard (§9.11e). What is left is **plant**: `grossPPEUSD` is assigned at the seed and at
-    every birth and there is no asset kind for it — `ASSET_KINDS` carries `HOUSE`, not plant. It
-    needs the kind before it can have a wire, and with the kind comes a real design question:
-    is a firm's plant ONE asset or a stack of dated capital goods? `capexUnderConstruction`
-    already carries the second shape, and step 26's two disagreeing depreciation schedules
-    (`front-core.ts:750` vs `capital-programme.ts:190`) are the same question asked from the
-    other end. Answer it once, for both.
 12. **ONE THING, ONE KEY** (user, 2026-09-03). *(Mostly done — §9.12. What is left is the tail.)*
     **THE POLICY, stated once so a check can test it:**
     · a COMPANY is its `id`; its `ticker` is a display name and a party address, never a key into
@@ -273,6 +235,18 @@ do not reorder.
     run). An issuer-keyed position also cannot be CHECKED — `O7` compares a claim against the
     ladder row it names, and a position naming a company names no row — so this is upstream of
     11f as well. The desks move to the tranche key with everything else here.
+    **AND IT OWNS 11f: the register holds paper no ladder carries.** `O7` measures it every week —
+    ~55 tranches over-claimed in a typical week, and since step 12 put the desks on the tranche
+    key `O1` and `O6` see it too (5.65B and 9.08B in their worst weeks). `register-split.ts:65`
+    spreads a holder's whole ISSUER-level position across that issuer's live tranches pro rata by
+    face with no cap, which is exactly right when holders in aggregate hold what was issued and
+    faithfully distributes the excess when they do not. The split is the messenger; the sender is
+    that **the book clears at issuer level while the paper exists at tranche level** (`07b:530`
+    iterates `regionCompanies`, one instrument per COMPANY). Two hypotheses are already spent and
+    must not be repeated: (a) incomplete claims — DISPROVED, the visitors claim by issuer so for
+    an instrument it is all or none; (b) the issuer/tranche oscillation — DISPROVED AND MEASURED,
+    keeping an untouched position's rows verbatim made O7 WORSE (105 tranches and 0.10B against
+    55 and 0.01B) and moved W2 not at all.
     The tranche row carries FACE; a holding's value is price × face. Build `domain/bond-pricing.ts` (price from spread, the
     inverse of the OAS/DM the books already clear), give the engine a real `unitValueUSD` for
     YIELD_LIKE books, settle primaries at the cleared price rather than par, mark desks and NAV off
@@ -459,7 +433,13 @@ do not reorder.
     `zeroRates.tenor2Y…30Y` at 07c's cleared values, against 07c's own header claiming sole
     ownership — one real curve in two disagreeing representations, with consumers split between
     them. One owner refits once through all cleared points and derives every field from that fit.
-26. **The remaining formula prices, deleted.** `12-portfolio:141` re-derives a bond price from the
+26. **The remaining formula prices, deleted — and WHAT PLANT IS, decided once.** *(11e's last
+    slice folded in here, deliberately: the seed and every birth assign `grossPPEUSD` with no
+    wire and there is no asset kind for plant — `ASSET_KINDS` carries `HOUSE`, not plant. You
+    cannot wire a thing before deciding what it is, and the shape is exactly what the two
+    disagreeing depreciation schedules below are a symptom of: `capexUnderConstruction` already
+    carries plant as a stack of DATED vintages while the sheet carries it as one number. Decide
+    it once, here, and the wire follows; deciding it twice guarantees they diverge again.)* `12-portfolio:141` re-derives a bond price from the
     cleared OAS through Nelson-Siegel (a round trip that cannot return the cleared price) and splits
     P&L attribution by invented 70/30, 80/20 and 40/60 fractions that reach the user through the turn
     summary; `carryCalculator.ts:56-236` is a whole invented spread/yield world beside the cleared
