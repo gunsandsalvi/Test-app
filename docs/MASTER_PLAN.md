@@ -252,23 +252,20 @@ both make the instrument able to see. Everything below is verified against a har
 never audited its own opening state, and the three identities in 37-ZEROSUM are each the cheapest
 possible detector for a defect this project found by reading code instead.
 
-37-SEED. **THE OPENING WORLD.** *(Parts 1 and 2 DONE — §9.37-SEED. The audit now runs at week 0
-    and the seed opens its own ladders and register by wire, so the world is complete when
-    `createInitialGameState` returns. What is left is the two below.)*
-    · **every corporate bond is issued in week zero** (`companyGenerator.ts` `maturityWeeks`
-      [260,520,780]/[260,520]/[364], `originationWeek: 0`), so no corporate bond matures inside a
-      60-week run and **the rollover channel has been off for the model's whole measurable life**.
-      Seed the ladder mid-life; the sovereign side already does and is the template. Expect it to
-      move numbers: a maturity wall inside the run is a funding event that has never happened;
+37-SEED. **THE OPENING WORLD.** *(Parts 1–3 DONE — §9.37-SEED. The audit runs at week 0, the seed
+    opens its own ladders and register by wire, and corporate ladders are seeded mid-life so the
+    rollover channel exists. What is left is one bullet and two findings.)*
     · the opening spread curve, yield curve and FX rate are seeded ANSWERS (the-seed E1), and the
-      accrual ledgers open empty for paper seeded mid-life (D2) — so the first coupon on a
-      mid-life bond is short by up to half a period. The second half of this lands with the first
-      bullet, since it is the same paper.
-    **And the two the week-0 audit has already put on the board**, both real and neither owned by
-    another step: `F1` — 685 firms file a cash line that is not their balance (−78.80B); `O7` —
-    409 tranches claimed beyond face by float dust, where the check has no dust tolerance at all
-    (rule 28 read the other way round: a tolerance that is ZERO fires on representation error).
-    The second is step 27's shape and is recorded there too.
+      accrual ledgers open empty for paper seeded mid-life (D2) — a mid-life bond's first coupon
+      is short by up to half a period, and its seeded coupon is today's policy rate plus today's
+      rating spread rather than the rate that prevailed when it was issued. Both are the same
+      omission: the seed has no history to have issued INTO. Self-consistent, so it leaks nothing;
+      a level error, and one that gets larger the more of the ladder is aged.
+    **And the two the week-0 audit put on the board**, both real and neither owned by another
+    step: `F1` — 685 firms file a cash line that is not their balance (−78.80B); `O7` — 409
+    tranches claimed beyond face by float dust, where the check has NO dust tolerance at all
+    (rule 28 read the other way round: a tolerance of zero fires on representation error). The
+    second is step 27's shape and is recorded there too.
 
 37-ZEROSUM. **THE INVARIANTS THAT WOULD HAVE CAUGHT THE REST.** Three checks that do not exist, each
     one the cheapest possible detector for a defect this atlas found by reading. (derivative D1.b;
@@ -1441,6 +1438,45 @@ was measured wrong. Treat a row there as a lead with a file:line, not a fact.
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**37-SEED (part 3) — THE ROLLOVER CHANNEL EXISTS, AND TURNING IT ON FOUND IMMORTAL DEBT.**
+
+Every corporate rung opened at `originationWeek: 0` with maturities at 260/520/780 weeks, so **no
+corporate bond matured inside a 60-week run** — the rollover channel, which is the only risk a
+bond has that a perpetual does not, was off for the model's whole measurable life. The sovereign
+side already seeds mid-life and was the template; this goes one better, because putting every rung
+at exactly half-life (what the sovereign does) just moves the wall rather than removing it
+(the-seed C3.a: a profile must be SPREAD, or every roll arrives at once).
+
+Each rung's age is now a hash of its own tranche id, so remaining life lands uniformly in
+[2, tenor]. **A hash, not `random()`, for a measurement reason:** `generateDebtTranches` runs
+inside the seed's stream, so a draw would shift every subsequent seeded number in the world and
+the maturity change could not be told apart from the shift. It is not a real-world ratio (rule 4);
+it is the no-information answer, since nothing in this model says when a given firm issued.
+
+**MEASURED: 3,713 seeded tranches, maturities now min 2 / median 183 / max 775. 189 mature inside
+16 weeks and 625 inside 60, against ZERO before.** Violations 53 → 54 in 4 weeks, which for a
+channel switching on from nothing is the result worth reporting: the maturity, paydown and
+refinancing machinery was already right.
+
+**WHAT IT FOUND — A MATURITY WAS A SINGLE-FRAME EVENT.** With ladders aged, 47 seeded rungs came
+due by week 4. The 29 maturing in weeks 2–4 all retired. **All 18 maturing at week 1 were still on
+the ladder at week 4, and every week after.**
+
+Cause, established by probe rather than inference: `stage08-back.ts` retired on
+`TS.maturityWeek[r] === nextWeek`, an exact equality. The seed sets `currentWeek = 1`, so the
+first weekly step's `nextWeek` is 2 and anything due at week 1 was already in the past the first
+time the engine looked — and an equality test never looks again. Such a rung is **immortal debt**:
+it accrues and pays interest forever and its principal is never repaid.
+
+Fixed at the cause, not at the seed (rule 29). Retirement is now `<= nextWeek` — due OR overdue —
+which is also what a ladder MEANS: a claim does not stop being due because the date passed. An
+issuer that misses the date has defaulted, which is a state this model has (§3.34) and reaches
+through the cash test, never by the claim quietly ceasing to be measured. The seed's floor of two
+weeks' remaining life is kept as well, so the opening world does not contain paper that was
+already due before the engine's first look. After: all 47 retire, none stuck.
+
+Gates: tsc clean, eslint 341 (ratchet), 135 tests, hygiene, build ok.
 
 **37-SEED (parts 1 and 2) — THE SEED IS AUDITED, AND IT FINISHES ITSELF.** The audit ran only
 inside the harness week loop, so no invariant family had ever seen the state the world STARTS in.

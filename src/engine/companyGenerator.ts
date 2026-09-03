@@ -320,14 +320,50 @@ function debtLadderShape(rank: number): { weights: number[]; maturityWeeks: numb
   return { weights: [1.0], maturityWeeks: [364] }; // single blended 7y tranche
 }
 
+/**
+ * §3.37-SEED — HOW FAR THROUGH ITS LIFE A SEEDED RUNG IS. `docs/systems/the-seed.md` C3/C3.a.
+ *
+ * Every corporate rung used to open at `originationWeek: 0` with maturities at 260/520/780 weeks,
+ * so **no corporate bond matured inside a 60-week run** — the rollover channel, which is the only
+ * risk a bond has that a perpetual does not, was off for the model's whole measurable life. The
+ * sovereign side already seeds mid-life (`macro/initialization.ts`, `-tenorWeeks/2`) and is the
+ * template; this goes one better, because putting every rung at exactly half-life just moves the
+ * wall rather than removing it (C3.a: a profile must be SPREAD, or every roll arrives at once).
+ *
+ * The age is a hash of the rung's own id rather than a draw from `random()`, for a measurement
+ * reason: `generateDebtTranches` runs inside the seed's stream, so a draw here would shift every
+ * subsequent seeded number in the world and the maturity change could not be told apart from the
+ * shift. A hash consumes nothing, so the only thing that moves is what this step is about.
+ *
+ * It is not a real-world ratio (rule 4). It is the no-information answer: nothing in this model
+ * says when a given firm issued, so age is uniform over the tenor.
+ */
+function seedAgeFraction(trancheId: string): number {
+  // FNV-1a, 32-bit.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < trancheId.length; i++) {
+    h ^= trancheId.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h / 0x100000000;
+}
+
 export function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating, policyRate: number = 0.045, rank: number = 0): DebtTranche[] {
   const fixedShare = FIXED_SHARE_BY_RATING[initialRating] ?? 0.5;
   const { weights: trancheWeights, maturityWeeks } = debtLadderShape(rank);
   const baseSpreadBps = RATING_OAS_SPREADS[initialRating]?.baseBps ?? 150;
   const basePolicyRate = policyRate;
   let cumulativePrincipalAssigned = 0;
-  return maturityWeeks.map((maturityWeek, i) => {
+  return maturityWeeks.map((tenorWeeks, i) => {
     const principalUSD = debtBase * trancheWeights[i];
+    // §3.37-SEED: the rung is part-way through its life. Remaining life lands uniformly in
+    // [1, tenorWeeks], so a run of any length meets maturities in proportion to its length.
+    const trancheId = `${ticker}-T${i + 1}`;
+    // The seed opens with `currentWeek = 1`, so the first weekly step looks at week 2: a rung left
+    // with one week of life would be due before the engine's first look. Two is the floor.
+    const agedWeeks = Math.min(tenorWeeks - 2, Math.round(tenorWeeks * seedAgeFraction(trancheId)));
+    const originationWeek = -agedWeeks;
+    const maturityWeek = tenorWeeks - agedWeeks;
     // Assign each rung to whichever side of the fixed/floating split its own principal mostly
     // falls in, by testing its MIDPOINT against the target rather than its starting edge.
     //
@@ -347,21 +383,21 @@ export function generateDebtTranches(ticker: string, debtBase: number, initialRa
     cumulativePrincipalAssigned += principalUSD;
     return isFixed
       ? {
-          id: `${ticker}-T${i + 1}`,
+          id: trancheId,
           principalUSD,
           rateType: 'FIXED' as const,
           couponRate: basePolicyRate + baseSpreadBps / 10000,
-          originationWeek: 0,
+          originationWeek,
           maturityWeek,
           seniority: 'SENIOR' as const,
           callProtection: callProtectionForIssue({ rateType: 'FIXED', isInvestmentGrade: isInvestmentGrade(initialRating) }),
         }
       : {
-          id: `${ticker}-T${i + 1}`,
+          id: trancheId,
           principalUSD,
           rateType: 'FLOATING' as const,
           floatingMarginBps: Math.round(baseSpreadBps * 0.85),
-          originationWeek: 0,
+          originationWeek,
           maturityWeek,
           seniority: 'SENIOR' as const,
           callProtection: callProtectionForIssue({ rateType: 'FLOATING', isInvestmentGrade: isInvestmentGrade(initialRating) }),

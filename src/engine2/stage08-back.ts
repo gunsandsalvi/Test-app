@@ -1534,16 +1534,32 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       });
     });
 
-    const maturingRow = rowList.find(r => TS.maturityWeek[r] === nextWeek && !(TS.flags[r] & TR_CP));
+    // §3.37-SEED — DUE OR OVERDUE, not due EXACTLY NOW. This was `=== nextWeek`, an exact
+    // equality, which makes a maturity a single-frame event: a row that is due in a week the
+    // engine does not look at — for ANY reason — is never retired, and becomes immortal debt that
+    // accrues and pays interest forever with no principal ever repaid. That is not a hypothetical.
+    // The seed sets `currentWeek = 1`, so the first weekly step's `nextWeek` is 2 and every rung
+    // maturing at week 1 was already in the past the first time the engine looked. Measured, with
+    // corporate ladders seeded mid-life: of 47 seeded rungs due by week 4, the 29 maturing in
+    // weeks 2–4 all retired and all 18 maturing at week 1 were still on the ladder at week 4 and
+    // every week after. It was invisible until now only because no corporate bond had ever
+    // matured inside a run at all.
+    //
+    // `<=` is also what a ladder MEANS: a claim that is due does not stop being due because the
+    // date passed. A real issuer that misses the date has defaulted, which is a state this model
+    // has (§3.34) and reaches through the cash test — never by the claim quietly ceasing to be
+    // measured.
+    const isDueNow = (r: number): boolean => TS.maturityWeek[r] <= nextWeek && !(TS.flags[r] & TR_CP);
+    const maturingRow = rowList.find(isDueNow);
     const maturingPrincipalUSD = maturingRow !== undefined ? TS.principalUSD[maturingRow] : 0;
     // §5-WIRES W3: every row that matures this week hands its face back to the issuer by wire
     // (the holders are paid by the register's paying agent on the same ladder delta).
     for (const r of rowList) {
-      if (TS.maturityWeek[r] === nextWeek && !(TS.flags[r] & TR_CP) && TS.principalUSD[r] > 0.01) {
+      if (isDueNow(r) && TS.principalUSD[r] > 0.01) {
         retireTranche(v2, issuer, r, TS.principalUSD[r], 'maturing tranche principal repaid');
       }
     }
-    rowList = rowList.filter(r => TS.maturityWeek[r] !== nextWeek || (TS.flags[r] & TR_CP) !== 0);
+    rowList = rowList.filter(r => !isDueNow(r));
     let debtIssuanceThisWeek = 0;
     let debtRepaymentThisWeek = 0;
     const buybacksThisWeek = 0;
