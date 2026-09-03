@@ -2513,12 +2513,18 @@ worth ten — so the floor is unnecessary, and with it goes the quiet lie that a
 
 The new pair `priceFromSpreadBps`/`spreadBpsFromPrice` is step 13's foundation and has no callers
 yet. It is solved rather than approximated: price falls monotonically in spread, so the inverse
-bisects and a price fed back gives the spread it came from. Seven tests pin the properties,
-including the round trip and the zero-rate limits.
+bisects and a price fed back gives the spread it came from. **Every cash flow is discounted at its
+OWN tenor** — the curve's rate where that payment lands, plus the spread, which is what an OAS is
+(one spread over the WHOLE curve, not over a single point on it). The first draft took the
+shortcut and discounted the schedule at one rate; `engine/pricing.ts`'s condemned
+`priceCorporateBond` does the term structure properly, and a replacement that is worse than what
+it replaces is not a replacement. Eight tests pin the properties: the round trip, the zero-rate
+limits, and that a steep curve prices a coupon bond ABOVE a flat one at the same long rate —
+the assertion the shortcut fails.
 
 Measured (SHOCKS=0 WEEKS=16): 197 in 44 → **200 in 44**, the difference being the three floors no
 longer rounding negative and near-zero rates up, plus the P- and X-family re-path that follows
-(X1 improved, 9 weeks → 5). Tests 126 → 133.
+(X1 improved, 9 weeks → 5). Tests 126 → 134.
 
 **12. One thing, one key.** (`PENDING`) Asked whether anything else was miskeyed, the answer had
 to be a sweep rather than an opinion. `O8` now states the policy and tests every arm of it every

@@ -56,6 +56,18 @@ test('paper that pays its coupon at maturity is worth face plus what it accrued,
   assert.ok(priceFromSpreadBps(cp, FLAT, 500) < p, 'and wider is cheaper');
 });
 
+test('a sloped curve is priced along its whole length, not at one point', () => {
+  // The shortcut -- discount everything at the rate where the paper MATURES -- misprices exactly
+  // when the curve has shape, which is the case a curve exists to describe. A steep curve must
+  // price a coupon bond cheaper than a flat curve at the long end would, because the early
+  // coupons are discounted at the LOW short rates and the shortcut never sees them.
+  const steep: ZeroCurve = { tenor3M: 0.01, tenor2Y: 0.02, tenor5Y: 0.05, tenor10Y: 0.05, tenor30Y: 0.05 };
+  const flatLong: ZeroCurve = { tenor3M: 0.05, tenor2Y: 0.05, tenor5Y: 0.05, tenor10Y: 0.05, tenor30Y: 0.05 };
+  const terms = { annualCouponRate: 0.05, periodWeeks: 26, weeksToMaturity: 5 * 52 };
+  assert.ok(priceFromSpreadBps(terms, steep, 0) > priceFromSpreadBps(terms, flatLong, 0),
+    'the steep curve discounts the early coupons less, so the bond is worth more');
+});
+
 test('matured paper is worth its face', () => {
   assert.equal(priceFromSpreadBps({ annualCouponRate: 0.05, periodWeeks: 26, weeksToMaturity: 0 }, FLAT, 300), 1);
 });

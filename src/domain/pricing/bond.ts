@@ -11,7 +11,7 @@
  * cash flows and a curve, which is what makes it testable and what keeps the pricing out of the
  * stages.
  */
-import { discountFactor, presentValuePerFace } from './discount';
+import { discountFactor } from './discount';
 
 /** The cleared zero curve, at the tenors the books actually strike. */
 export interface ZeroCurve {
@@ -67,24 +67,36 @@ function scheduleOf(terms: PaperTerms): { periods: number; periodYears: number; 
 }
 
 /**
- * Price per unit of face at a given spread over the curve. The discount rate is the curve at the
- * paper's own horizon plus the spread — one rate for the whole schedule, which is what an OAS IS
- * (a single spread that reprices the paper against the curve it is quoted over).
+ * Price per unit of face at a given spread over the curve.
+ *
+ * EVERY CASH FLOW IS DISCOUNTED AT ITS OWN TENOR — the curve's rate where that payment lands,
+ * plus the spread. Discounting the whole schedule at one rate is the shortcut, and it misprices
+ * exactly when the curve has shape, which is the case the curve exists to describe. That is what
+ * an OAS is: ONE spread over the WHOLE curve, not a spread over a single point on it.
  */
 export function priceFromSpreadBps(terms: PaperTerms, curve: ZeroCurve, spreadBps: number): number {
   if (!(terms.weeksToMaturity > 0)) return 1;
   const years = terms.weeksToMaturity / 52;
-  const { periods, periodYears, couponPerPeriod } = scheduleOf(terms);
-  const annualRate = zeroRateAt(curve, years) + spreadBps / 10000;
-  // A rate at or below −100% a year has no discount factor; it is not a price, it is a bad input.
-  if (annualRate <= -1) return 0;
-  const ratePerPeriod = Math.pow(1 + annualRate, periodYears) - 1;
+  const { periods, couponPerPeriod } = scheduleOf(terms);
+  const spread = spreadBps / 10000;
+  const dfAt = (t: number): number => {
+    const rate = zeroRateAt(curve, t) + spread;
+    // A rate at or below −100% a year has no discount factor; that is a bad input, not a price.
+    return rate <= -1 ? 0 : discountFactor(rate, t);
+  };
   if (periods === 0) {
-    // Paper that redeems before its next coupon: one payment, face plus what it accrued.
-    const stub = years;
-    return (1 + terms.annualCouponRate * stub) * discountFactor(Math.pow(1 + annualRate, stub) - 1, 1);
+    // Paper that redeems before its next coupon date: one payment, face plus what it accrued.
+    return (1 + terms.annualCouponRate * years) * dfAt(years);
   }
-  return presentValuePerFace({ couponPerPeriod, periods, ratePerPeriod, redemptionPerFace: 1 });
+  // Coupons land on the schedule counting BACK from maturity, so the last one is at maturity.
+  let pv = 0;
+  const periodYears = Math.max(1, terms.periodWeeks) / 52;
+  for (let i = 1; i <= periods; i++) {
+    const t = years - (periods - i) * periodYears;
+    if (t <= 0) continue;
+    pv += couponPerPeriod * dfAt(t);
+  }
+  return pv + dfAt(years);
 }
 
 /**
