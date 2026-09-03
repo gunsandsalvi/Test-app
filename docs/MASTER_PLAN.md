@@ -201,14 +201,18 @@ do not reorder.
     cross-border total (UK week 8: hub −72.8B against real cross-region flows of −4.7B), but they
     track a real movement of deposits between regions through the hub, so the attribution is not
     wrong on its face.
-    **The sharpest lead left, and it is (d)'s other half:** `settlement.ts:506` `regionOfParty`
-    attributes a leg by the PARTY'S DOMICILE, while the deposits actually move at the party's
-    BANK. For a company or an institution those are two different regions whenever its
-    `homeBankTicker` is not in its own region, and then the cross-border leg and the money it is
-    supposed to explain are keyed differently — rule 3, and rule 14's pairing. Test it with
-    `XBORDER_TRACE=1`, which prints the official-settlement leg per region split into hub and real.
-    Second lead: the clearing house holding margin ACROSS a settlement pass, so its legs do not
-    pair inside the week M6 measures.
+    (e) `regionOfParty` keying a leg by DOMICILE while the deposits move at the party's BANK —
+    dead too, statically: every `homeBankTicker` is picked from the party's own region
+    (`initialization.ts:748,1299,1585`) and `chooseAssumingBank` keeps it there, so the two
+    regions are never different. No run needed to kill it.
+    (f) the clearing house holding margin ACROSS a settlement pass — dead: M2's clearing-house
+    residual is clean every week, so the hub ends every pass holding nothing.
+    **The lead left, and it is the one worth taking:** a leg to or from the clearing house whose
+    other side is a `BANK_SECURITIES` desk is counted TWICE — once as cross-border (the hub has no
+    region, so `payerRegion !== payeeRegion` is trivially true) and once in the banks' own account
+    (`bankSecuritiesDeltaByBank`). UK week 8 has both directions of exactly that pairing
+    (+24.9B and −24.7B). The two terms M6's gap sits between are the two that double-count.
+    Start at `settlement.ts:557` with `XBORDER_TRACE=1`.
 11e. **The seed's unwired positions.** The world's week-0 register, ladders and plant open by
     assignment, not by wire. They should open by wires from a SEED party that closes at week 0 —
     the seed is an event after all — and the W family can then prove week 0 too, which today it
@@ -2374,9 +2378,13 @@ Neither turned out to be the cause — both measured zero — and that is the va
 hypotheses are now disproved and recorded in §3's step 11d so nobody spends the afternoon on them
 again.** The one that took longest to kill was the clearing house: its legs really are the bulk of
 the cross-border total (UK week 8, hub −72.8B against real cross-region flows of −4.7B), which
-looks damning until you check that money genuinely does move between regions through the hub. The
-attribution is not wrong on its face; what is still suspect is the OTHER half of that code, which
-keys a leg by the party's domicile while the deposits move at the party's bank.
+looks damning until you check that money genuinely does move between regions through the hub. Two
+more died cheaply afterwards and neither needed a run — the domicile-versus-bank-region suspicion
+(every home bank is picked from the party's own region, so they are never different) and the hub
+holding margin across a pass (M2's clearing-house residual is clean every week). What is left is
+narrower and better: the hub's legs against a bank's own securities desk are counted twice, once
+as cross-border and once in the banks' own account, which are precisely the two terms M6's gap
+sits between.
 
 `XBORDER_TRACE=1` prints the official-settlement leg per region, split hub and real, and stays.
 Measured: **134 in 33, unchanged, and the family scoreboard is byte-identical** — which is what a
