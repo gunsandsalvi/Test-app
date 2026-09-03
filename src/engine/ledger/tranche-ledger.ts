@@ -31,9 +31,23 @@ import { wire, AssetKind } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { defect } from '../../domain/defect';
 
-export interface TrancheIssuer { id: string; ticker: string; region: RegionId }
+/**
+ * §3.13-SOV — WHO OWES THE PAPER, AND WHAT KIND OF PARTY THEY ARE.
+ *
+ * `kind` was not a field and `issuerParty` returned `{ kind: 'COMPANY' }` unconditionally, so the
+ * tranche ledger could not name a GOVERNMENT as an issuer at all — which is one of the reasons
+ * the sovereign got its own store instead of joining this one. A sovereign bond's issuer is the
+ * treasury, and `the-register.md` A2 is explicit that a holding is a claim on a NAMED issuer:
+ * wiring it as a company would be the right instrument owed by the wrong party.
+ *
+ * Behaviour-neutral today — every existing caller is a firm and omits `kind`, which defaults to
+ * COMPANY. What it buys is that the next commit can seed the sovereign ladder into this store
+ * without the wire naming a company that does not exist.
+ */
+export interface TrancheIssuer { id: string; ticker: string; region: RegionId; kind?: 'COMPANY' | 'GOVERNMENT' }
 
-const issuerParty = (i: TrancheIssuer): PartyRef => ({ kind: 'COMPANY', ticker: i.ticker });
+const issuerParty = (i: TrancheIssuer): PartyRef =>
+  i.kind === 'GOVERNMENT' ? { kind: 'GOVERNMENT', region: i.region } : { kind: 'COMPANY', ticker: i.ticker };
 
 /** The kind a row's paper carries, from its flags — the same fact `trancheKindOf` reads off the object. */
 function kindOfRow(v2: V2World, r: number): AssetKind {
