@@ -98,18 +98,18 @@ could be wholly absent.** That is why banks are three and derivatives are five.
 | 24 | [banks — funding and liquidity](./banks-funding-and-liquidity.md) | ✅ | — | — |
 | 25 | [banks — capital and resolution](./banks-capital-and-resolution.md) | ✅ | — | — |
 | 26 | [dealer desks](./dealer-desks.md) | ✅ | — | — |
-| 27 | insurers and pensions | — | — | — |
-| 28 | hedge funds | — | — | — |
-| 29 | private equity | — | — | — |
+| 27 | [insurers and pensions](./insurers-and-pensions.md) | ✅ | — | — |
+| 28 | [hedge funds](./hedge-funds.md) | ✅ | — | — |
+| 29 | [private equity](./private-equity.md) | ✅ | — | — |
 | | **PUBLIC SECTOR** | | | |
 | 30 | [the treasury](./the-treasury.md) | ✅ | — | — |
 | 31 | [the central bank](./the-central-bank.md) | ✅ | — | — |
 | | **FIRMS** | | | |
-| 32 | firm fundamentals | — | — | — |
-| 33 | the capital programme | — | — | — |
-| 34 | firm birth and death | — | — | — |
-| 35 | M&A and corporate control | — | — | — |
-| 36 | trade credit | — | — | — |
+| 32 | [firm fundamentals](./firm-fundamentals.md) | ✅ | — | — |
+| 33 | [the capital programme](./the-capital-programme.md) | ✅ | — | — |
+| 34 | [firm birth and death](./firm-birth-and-death.md) | ✅ | — | — |
+| 35 | [M&A and corporate control](./m-and-a.md) | ✅ | — | — |
+| 36 | [trade credit](./trade-credit.md) | ✅ | — | — |
 | | **THE REAL ECONOMY** | | | |
 | 37 | [goods](./goods.md) | ✅ | — | — |
 | 38 | freight and logistics | — | — | — |
