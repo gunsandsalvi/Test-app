@@ -29,6 +29,7 @@ import { trancheKindOf } from '../../domain/assets';
 import { PartyRef } from './party';
 import { wire, AssetKind } from './wire';
 import { internReason } from '../simulation/stages/settlement';
+import { LADDER_FACE_DUST_USD } from '../../domain/stated';
 import { defect } from '../../domain/defect';
 
 /**
@@ -85,7 +86,7 @@ export function retireTranche(v2: V2World, issuer: TrancheIssuer, r: number, fac
   const S = mutableTranches(v2);
   if (!(faceUSD > 0)) return -1;
   const take = Math.min(faceUSD, S.principalUSD[r]);
-  if (faceUSD > S.principalUSD[r] + 0.01) defect(`tranche ${v2.internedStrings[S.idRef[r]]} retired ${(faceUSD / 1e6).toFixed(3)}M against ${(S.principalUSD[r] / 1e6).toFixed(3)}M of principal`);
+  if (faceUSD > S.principalUSD[r] + LADDER_FACE_DUST_USD) defect(`tranche ${v2.internedStrings[S.idRef[r]]} retired ${(faceUSD / 1e6).toFixed(3)}M against ${(S.principalUSD[r] / 1e6).toFixed(3)}M of principal`);
   const n = wire({ from: holderOfRow(v2, r, issuer.region), to: issuerParty(issuer), kind: kindOfRow(v2, r), asset: v2.internedStrings[S.idRef[r]], quantity: take, priceUSD: 1, reason }, internReason);
   S.principalUSD[r] -= take;
   return n;
@@ -184,20 +185,20 @@ export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromTicke
 export function reconcileLadderByWire(v2: V2World, issuer: TrancheIssuer, ladder: readonly DebtTranche[] | undefined, reason: string): void {
   const S = mutableTranches(v2);
   const want = new Map<string, DebtTranche>();
-  for (const t of ladder ?? []) if (t.principalUSD > 0.01) want.set(t.id, t);
+  for (const t of ladder ?? []) if (t.principalUSD > LADDER_FACE_DUST_USD) want.set(t.id, t);
   // What the store carries now, row by row.
   for (const r of ladderRowsOf(v2, issuer.id)) {
     const id = v2.internedStrings[S.idRef[r]];
     const target = want.get(id);
     const have = S.principalUSD[r];
     if (target === undefined) {
-      if (have > 0.01) retireTranche(v2, issuer, r, have, `${reason}: gone from the ladder`);
+      if (have > LADDER_FACE_DUST_USD) retireTranche(v2, issuer, r, have, `${reason}: gone from the ladder`);
       continue;
     }
     // Present in both: move the face to what the ladder says, in whichever direction.
     const delta = target.principalUSD - have;
-    if (delta < -0.01) retireTranche(v2, issuer, r, -delta, `${reason}: face reduced`);
-    else if (delta > 0.01) {
+    if (delta < -LADDER_FACE_DUST_USD) retireTranche(v2, issuer, r, -delta, `${reason}: face reduced`);
+    else if (delta > LADDER_FACE_DUST_USD) {
       const n = wire({ from: issuerParty(issuer), to: holderOfRow(v2, r, issuer.region), kind: kindOfRow(v2, r), asset: id, quantity: delta, priceUSD: 1, reason: `${reason}: face increased` }, internReason);
       void n;
       S.principalUSD[r] += delta;
@@ -210,5 +211,5 @@ export function reconcileLadderByWire(v2: V2World, issuer: TrancheIssuer, ladder
 
 export function seedLadder(v2: V2World, issuer: TrancheIssuer, ladder: DebtTranche[] | undefined): void {
   syncLadderRows(v2, issuer.id, []);
-  for (const t of ladder ?? []) if (t.principalUSD > 0.01) issueTranche(v2, issuer, t, 'seed: ladder opened');
+  for (const t of ladder ?? []) if (t.principalUSD > LADDER_FACE_DUST_USD) issueTranche(v2, issuer, t, 'seed: ladder opened');
 }

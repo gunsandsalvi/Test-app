@@ -108,6 +108,19 @@ export const TRANCHE_DEFAULT_MARGIN_BPS = stated({
   replacedBy: 'every writer stating the tranche\'s own cleared margin at issue (13d)',
 });
 
+// --- The ladder (engine/ledger/tranche-ledger.ts) — the face below which a rung is not there ---
+/** A tranche's face is money, so the smallest face worth carrying is the smallest unit of money.
+ *  Used wherever the ladder asks "is there any of this left": whether a seeded rung is real,
+ *  whether a retirement over-runs the principal, and whether a reconciliation's delta is a move
+ *  or a rounding. It is an ABSOLUTE dust bound and never a fraction of the face (rule 28) —
+ *  a cent is a cent whether the rung is a million or a billion. */
+export const LADDER_FACE_DUST_USD = stated({
+  id: 'ladder.faceDustUSD', value: 0.01, kind: 'RESOLUTION',
+  owner: 'engine/ledger/tranche-ledger.ts',
+  reason: 'face is money and money has a smallest unit; below it there is no rung to wire',
+  replacedBy: 'none (a resolution choice, and the one rule 28 asks for: absolute, not a percentage)',
+});
+
 // --- The audit (engine/audit/*) — one RESOLUTION tolerance for "these two books agree" ---
 /** The relative gap at which two books that should be equal are read as disagreeing: the
  *  sovereign and corporate held-versus-issued checks, the market-cap identity, an index's weights. */
