@@ -208,6 +208,11 @@ do not reorder.
     on a different basis from the stock it is compared against. Found by step 9b, which did not
     cause it.
 
+11e. **The seed's unwired positions.** The world's week-0 register, ladders and plant open by
+    assignment, not by wire. They should open by wires from a SEED party that closes at week 0 —
+    the seed is an event after all — and the W family can then prove week 0 too, which today it
+    cannot. A newborn firm's plant has the same hole.
+
 ### PART II — THE INSTRUMENTS ARE REAL
 
 13. **Face, and price × face** (the "credit always trades at par" defect). The tranche row carries
@@ -217,6 +222,11 @@ do not reorder.
     it, and keep accrual and estate claims on FACE. `holdings-ledger.ts:46-49` (`priceOf` returns
     `priceUSD = 1`) is the wire-layer site. Sites inventoried in the audit: `07f:930` (CP at par with
     an annual coupon on 13-week paper), `12-portfolio:110`, `institutional-balance-sheet.ts:192`.
+13b. **Coupon accruals are dated wires.** `pendingHolderAccrualUSD` is a side map beside the
+    paper. It should be a dated wire that RE-KEYS with the paper when the paper moves, landing on
+    the per-tranche register — the same treatment every other claim now gets. Step 13 keeps
+    accrual on FACE; this makes the accrual itself an instruction rather than a number in a bag.
+
 14. **Nomenclature** (rule 27). A tranche's display name is issuer + coupon + maturity
     (`KRLN 4.75% 2031`), a loan issuer + margin + maturity (`KRLN L+350 2029`), a bill issuer +
     tenor, a sovereign the same. `ui/objects/tranche.tsx:50` currently labels with the internal id.
@@ -231,11 +241,21 @@ do not reorder.
     `$0.00` / `0.00%` / `100.00% Par`. Unify the two calendars (`formatters.ts:7` vs
     `ui/calendar.ts:5` differ by a year). `statements.tsx:174` calls engine interning in render —
     stop it.
+15b. **News slice 2.** The derivation cites the books and ranks by size; what it still cannot
+    tell is a story that develops. Follow-ups through an estate, an auction that failed or came
+    in under-subscribed, and contract-break streaks. (The fourth item on the original list,
+    damper binds, is moot — step 19 deletes the damper machinery.)
+
 16. **A tap, not a new facility** (user). An issuer that wants more of the same debt REOPENS an
     existing tranche: face is added at the week's clearing price, the proceeds are the price × the
     added face, and holders of record are unaffected. This replaces the proliferation the audit kept
     finding (`overdraft-sweep.ts:158` writes a fresh hardcoded 350bp facility per sweep;
     `tranches.ts:355` has a bare 350 fallback). Requires step 13 (a tap prices off a real price).
+16b. **Insurance is a market, not three price-takers.** A policy moves to the insurer that
+    prices lower, and an insurer's price answers its own losses and its own capital. The three
+    insurers exist; the market between them does not. Verify: premium shares move week to week,
+    and an insurer under a capital action loses book before it loses its licence.
+
 17. **Derivatives are centrally cleared** (user). Today a contract is bilateral (`contract.ts:39-41`,
     parties `a`/`b`) and `initialMarginRate` is 0 for every class — uncollateralised. Novate every
     contract to the region's CCP: each side faces the CCP, initial margin is posted TO it, variation
@@ -245,6 +265,12 @@ do not reorder.
     derivative markets overall" the user asked for. While here: the close-out replacement values are
     undiscounted (`irs.ts:47`, `cds.ts:69`) and a credit event pays a REGIONAL AVERAGE recovery
     (`cds.ts:58` + `derivative-lifecycle.ts:122`) instead of the estate's own workout on that issuer.
+
+17b. **An options class, and the FX swap lines.** Premium is a periodic leg paid once and
+    exercise is an event termination at intrinsic value — two profile methods on the one contract.
+    The real work is its MARKET; until it exists, stage 12's player options stay on the legacy
+    layer instead of the one book, which is the last thing outside it. FX swap lines need an FX
+    funding market first — build the market, then the lines — and that gate has not moved.
 
 ### PART III — NOTHING IS BOUNDED (rule 2)
 
@@ -278,6 +304,20 @@ do not reorder.
     (`estate-resolution.ts:213`) and peers are allocated by a bid, not pro rata to cash; the LOLR and
     every overdraft lender get real capacity (`overdraft-sweep.ts` lends with no headroom test at
     all); occupational supply gets mobility so a shortage can be relieved (`labor-market.ts:502`).
+
+20b. **The interbank unsecured market.** The last boundary line's named successor, and it was
+    never built: surplus banks lend to short ones at policy plus the borrower's own spread, and
+    only what no bank will lend reaches a standing facility. Today a short bank goes straight to
+    the window. Pairs with step 20's lending capacity.
+20c. **A solvent bank answers its own margin.** X1 reports a solvent bank running a negative
+    margin (UK: ORDO, 6 of 16 weeks at HEAD) and the bank does nothing about it. Run off the book,
+    reprice deposits, cut costs — the bank profile's response to its own margin. Step 30b owns the
+    likeliest CAUSE of the compression; this is the bank's reaction to it, which is missing
+    whatever the cause. Measure on the reference before building (rule 12).
+20d. **Management is a state that decides.** `management-review` reviews; it does not decide.
+    Capital-allocation policy (target leverage, payout versus reinvestment), growth-versus-margin
+    orientation, risk appetite, product-line entry and exit, acquisition intent, guidance — each a
+    real decision with a real consequence, replacing a coefficient that stands in for one.
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 1)
 
@@ -315,6 +355,12 @@ do not reorder.
     cost in five books; `front-core.ts:750` vs `capital-programme.ts:190` run two depreciation
     schedules that cannot reconcile.
 
+26b. **Housing clears.** `housingStockUSD`, a median price and an ownership rate are an
+    aggregate marked by formula — dwellings have no owners and no price anyone struck, which
+    rule 1 does not allow and no step currently covers. Households, builders and estates clear
+    dwellings by price; the aggregate becomes a read of units with owners, and houses get their
+    wires.
+
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
 27. **The audit measures what it claims.** `audit/index.ts:45` omits `'W'` from the scoreboard, so
@@ -344,6 +390,12 @@ do not reorder.
     `no-unnecessary-condition` as paid-for rules and configures neither (no `parserOptions.project`)
     — the latter is exactly what would have caught step 28's NaN. Turn them on and pay the ratchet.
 
+28b. **The units sweep, once, at the source.** Rule 9 is a rule with no sweep behind it. Walk
+    every rate, flow and index at the point it is WRITTEN, establish its periodicity and unit, and
+    pin each with a test. Step 15 fixes the unit bugs the audit found at the point they are
+    RENDERED, which is the same class of error caught later. `historicalInflation` and
+    `historicalZeroCurves` carry a one-week lag that belongs at the type.
+
 ### PART VI — THE PRIMITIVES FALL (rule 19)
 
 30. **The registry of every stated number.** `stated.ts` declares 11 values; the tree carries ~301
@@ -359,6 +411,12 @@ do not reorder.
     decision: what an entity must be able to pay this week, from its own commitments and its own
     preferences, not a flat half of the balance. Named cost at HEAD: bank NIM compression (X1
     9/16 weeks, a EUR NIM-out-of-band line).
+30c. **The type level's deferred three, and the security as a union.** The `Money<C>` brand at
+    `pay()` (it lands with the journal's currency column), the `details`-bag discriminated union,
+    and the security as a discriminated union with behaviour extracted from the stages. Each is a
+    representation question, which is why they sit in this part: a union the compiler checks is
+    one representation where a bag of optional fields is many.
+
 31. **The real-world equilibria die.** `macro/initialization.ts:318` (`HOUSEHOLD_DEBT_RATIOS`, whose
     own comment reads "RULE 4: observed household balance-sheet ratios"), `:287-296`
     (`BANK_BALANCE_SHEET_RATIOS`, including a central-bank balance sheet at 44% of GDP — rule 4 names
@@ -370,6 +428,11 @@ do not reorder.
     `bootstrap/national-accounts.ts:73,93`; `labor-and-wages.ts:29,38-44`;
     `industry-registry.ts:1283-1310` (a labour share documented as output-weighted and computed as an
     unweighted mean over 37 sub-units — it sets every base wage).
+31b. **The last three stated costs and bases.** The insurer's claims loss ratio and the card
+    operating cost become measured loss and servicing events; the corporate tax BASE is the
+    statement's own rather than a stated one. Transfer pricing was deferred with a reason — re-read
+    that reason here.
+
 32. **Rule 17's remaining violations.** `05-unit-bidding.ts:1430,1475,2288` switches on the product id
     `passenger_vehicles` with a hardcoded durable-stock model (and `:906` on
     `commercial_rental_services`); `companyGenerator.ts:400-418` maps Financials and Banks to
@@ -383,8 +446,54 @@ do not reorder.
 33. **The long run.** Only when 1–32 are done: `WEEKS=60 SHOCKS=1` (`npm run verify`), the batteries,
     the burn-in convergence gate. Then the standing measurements: the 1e-8 week-1 drift bisected one
     dump per step; the level and the unemployment ratchet; the state-growth drift on device; UK/EUR
-    bank margins; logistics scale. A number that is still wrong here is a missing mechanism named at
-    last, not a tuning target (rule 18).
+    bank margins and the mint drift (the NIM measure with the sovereign-book accretion, and the
+    paydown sweep of claims on issuers that left the book); logistics scale. And the finer reads
+    still owed, which have never been taken:
+    - the equity market's LEVEL (today the float change moves it by construction);
+    - bank NIM against household interest income — a liquid bank whose depositors are not leaving
+      pays zero, which may be the mechanism's own answer or may be a missing payment-services fee;
+    - the derivative layer's verify list: swap spread and CDS-cash basis calm and stressed;
+      contango when inventory is high and backwardation when it is scarce; convergence at expiry;
+      a hedged firm feeling less P&L from a shock it hedged;
+    - the newer books' first prints: stock borrow clears, fee distribution, recall cascades; an ETF
+      premium near zero in a calm week; channel margin a sensible fraction of shelf price.
+
+    A number that is still wrong here is a missing mechanism named at last, not a tuning target
+    (rule 18).
+
+### PARKED BY THE USER — not steps, and not to be started without being asked
+
+Two whole projects stand half-built outside this list because the user parked them. They are
+recorded here so that "§3 is the only list" stays true and neither is discovered a third time.
+Do NOT resume either without the user saying so.
+
+**SCALE — the columnar universe scale-up.** Parked 2026-09-01, mid-Stage-II. **Exact resume
+point: `productLines`** (63 read sites across 18 files; staging is store → dual-write → check →
+readers file by file → declared delete), then `historicalFundamentals` + `dealerConsensus`, then
+the 85 scalars (the object becomes a view; dump-from-columns is a declared re-baseline), then
+III ∥ IV, V, VI (gated on III), VII. Scoreboard at park: 1,558 → 1,305 ms/wk battery-verified on
+the dev box; ~950–1,015 ms/wk on the user's phone with the clearing pool at 6–7 workers. Two
+inputs bear on Stage III's go/no-go: the on-device state-growth drift (§6) and the browser worker
+precedent — the clearing pool's ~20% cut of the 07x sum on device, the campaign's first positive
+parallel measurement anywhere. It also owns the damper's float half (the small-cap equity tail),
+which step 19 must not delete blindly.
+**The lesson it already paid for, which applies to any step here:** in this codebase an object
+structure's cost is its ALLOCATION (views, rebuilds, spreads), not its traversal — a flip that
+deletes traversal but adds materialization can LOSE, so views materialize dirty-only or not at
+all.
+
+**AU — Aurora's remainders, and the game layer.** The object registry is wide (eighteen object
+kinds, twenty-three functions) and reviewed whole; what is left, each its own bounded commit:
+`money` — the payment trace by reason and category, the "a dollar is a dollar" screen (needs the
+journal read by party); `watch` — a grid of `object function` cells refreshed each week (the tape
+already records what it would show); `curves` beyond the sovereign — secured, swap-spread, credit
+by rating, commodity, cross-currency basis; `book` — the derivative book by class; supply
+contracts and invoices as addressable objects. **The game layer stays parked by the user's order
+until they say otherwise.** Steps 14 and 15 are UI work but a different scope (naming,
+searchability, unit bugs) and do not stand in for these.
+**Verification discipline if either resumes:** every function on every kind is walked by the
+Chromium tour at 390×844 and the screenshots read before a commit; a table header must not
+truncate on the phone, and a screen with nothing to show says why.
 
 ## 4. THE GATES
 
@@ -470,10 +579,12 @@ move into registries; lookups stay (rule 17).
 ## 6. WATCHLIST — measure, do not fix
 | Metric | Why |
 |---|---|
-| The money family (M1–M7) and "the money that is not anyone's" | Clean every run until §9.9 (M6 grazing its band, 2.69B against ~2.5B) and §9.11, where the doubled death rate added M1's 0.06B drift and M7's 52 dust rows: **0.06B unowned in total** at HEAD. Steps 11b and 11c own those two; a line here is otherwise a defect at its site. |
+| The money family (M1–M7) and "the money that is not anyone's" | Clean every run until §9.9 and §9.11, where the doubled death rate added M1's drift and M7's dust rows. At HEAD (after §9.9b): **0.10B unowned across 2 lines**. Steps 11c, 11d and 11b own the three open money lines; a line here is otherwise a defect at its site. |
 | The 1e-8 week-1 drift (§7.370) | Three firms differ at the eighth digit at week 1; 13% price gap by week 13. Bisect by file, ONE dump per step. Watch it to zero; never widen a tolerance for it. |
 | The state-growth drift (§7.335, §7.380) | Weekly cost +45% over weeks 5→80 on two independent device runs, all stages inflating proportionally. First suspect: the contract book's row growth. |
 | TGA over a quarter; occupational mismatch; top-down vs bottom-up household income; the private tier that sells nothing; loan-book Spearman noise | Watch the TGA's LEVEL not its shape; mismatch is composition outrunning retraining; `estimatedHouseholdIncomeUSD` is still the anchor; ~300 seeded private firms per region carry `productLines: []`; Spearman 0.26–0.76 at 23–32 names — re-measure as the universe grows. |
+| Sovereign price elasticity to a size-only bidder | The books ARE thin, which is consistent with the equity tail the parked SCALE project owns. Measure; do not tune the depth. |
+| The two credit-ETF dust singles | 0.01B, standing since well before the wires campaign. Likeliest an in-kind slice edge, or pending-settlement timing at a boundary. May already be closed by the wires and no-caps work — re-measure before treating it as open. |
 
 ## 8. THE AUDIT IN FULL — every finding, by area
 
