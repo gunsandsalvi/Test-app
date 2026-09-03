@@ -70,3 +70,99 @@ Written 2026-09-03 from the domain, code shut.
   it and the rates converge, or the inconsistency is a defect — it is never a permanent feature
 - **E4** VERIFY — a party's currency position after the market is exactly what it held plus what
   it traded, and no leg landed converted (`currency-and-fx.md` B3)
+
+---
+
+## 2. THE MAPPING
+
+Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+checked by `scripts/check-atlas.sh`.
+
+| Node | Code | |
+|---|---|---|
+| A1 an exchange of two amounts, both legs settling | `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ✅ |
+| A2 the price is the rate | `src/domain/currency.ts:rateOf` | ✅ |
+| **A3 all pairs, mutually consistent** | `src/engine/bootstrap/commodities-and-fx.ts:GENERATED_FX_PAIR_LEGS` | ⚠️ |
+| B1 a party that owes a money it does not have | `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ✅ |
+| B2 a party with a money it does not want | `src/engine/simulation/stages/fx-squaring.ts:squareInterbankFxPositions` | ✅ |
+| B3 an investor changing its currency mix | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
+| B4 a hedger closing an exposure | `src/domain/derivatives/classes/fx-forward.ts:equityHedgeRatioFor` | ✅ |
+| B5 a dealer, whose reason is spread and inventory | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ✅ |
+| B5.a it is not obliged to take whatever arrives | `src/domain/derivatives/registry.ts:deskNotionalCapacityUSD` | ✅ |
+| B6 the central bank participates with a limit | `src/domain/fx-market.ts:CENTRAL_BANK_FX_INTERVENTION_SHARE` | ✅ |
+| C1 participants post schedules in rate space | `src/engine/simulation/stages/financial-clearing-engine.ts:ParticipantDemand` | ✅ |
+| C2 it clears per pair and consistently across pairs | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
+| C2.a cross-consistency constrains the clearing | `src/domain/fx-market.ts:FX_STAT_KIND` | ✅ |
+| C3 the bid–offer is a consequence | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ⚠️ |
+| C4 imbalance moves the rate | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ✅ |
+| C5 one rate in force for the period | `src/engine2/world.ts:openFxWeek` | ✅ |
+| C6 flat flow ⇒ no drift; one-way flow ⇒ a move | `src/domain/fx-market.ts:MAX_WEEKLY_FX_MOVE_PCT` | ⚠️ |
+| D1 a dealer is left with the other side | `src/domain/dealer-derivatives.ts:FxDealerBook` | ✅ |
+| D2 it can square, and squaring is a trade | `src/engine/simulation/stages/fx-squaring.ts:squareInterbankFxPositions` | ✅ |
+| D3 what it does not square, it carries and revalues | `src/engine/simulation/stages/fx-revaluation.ts:runFxRevaluationStage` | ✅ |
+| D4 it has a limit and stops quoting at it | `src/domain/derivatives/registry.ts:deskNotionalCapacityUSD` | ✅ |
+| D5 Σ dealer + Σ client positions = 0 per currency | `src/engine/simulation/stages/fx-clearing.ts:recordForeignHoldingsSnapshot` | ✅ |
+| E1 FORBID no conversion without a counterparty | `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ✅ |
+| E2 FORBID no rate from a formula | `src/engine/macro/evolution.ts:evolveFxPair` | ⚠️ |
+| **E3 FORBID no free arbitrage left standing** | `src/engine/simulation/stages/06-fx-and-trade.ts:publishFxRates` | ❌ |
+| E4 no leg landed converted | `src/engine/ledger/accounts.ts:applySettledRow` | ✅ |
+
+---
+
+## 3. THE DIFF
+
+**This is the best-built market in the model, and it has one hole, at its exit.**
+
+Six participant classes with real balance sheets, three inelastic and three elastic; every pair
+clearing on its own flow; the central bank bounded by actual reserves; the dealer bounded by the
+same capacity that charges its derivative book. `fx-clearing.ts`'s header states the design and the
+code matches it. Nodes B1–B6, C1–C5, D1–D5 are present as written.
+
+### ❌ E3 / ⚠️ A3 — THE ARBITRAGE HAS NOTHING TO CLOSE, BECAUSE THE CROSSES NEVER LEAVE THE MARKET
+
+The same defect as `currency-and-fx.md` C3, seen from the market's side and worse here, because
+this tree is where the mechanism was deliberately built.
+
+XB6 demoted triangular consistency from an identity to an outcome and gave it an enforcer: *"the
+arbitrageur is a real participant with a real balance sheet — the bank FX desks… whose reservation
+on any pair is the rate the other two legs imply. Nothing enforces the identity; desks do, out of
+their own capital, and being finite they can fail to."* That is exactly node E3, built on purpose.
+
+But `publishFxRates` promotes only EUR/USA, UK/USA and USA/JPN into `v2.fxNext`. The cleared
+EUR/GBP, EUR/JPY and GBP/JPY rates are computed, printed, and then dropped. Everything downstream
+converts by `rateOf(from)/rateOf(to)` — triangulation through the dollar — so:
+
+- **the arbitrage the desks are supposed to enforce has no consequence.** Whether they close the
+  cross or not, every payment settles at the triangulated rate, so a failure to arbitrage costs
+  nobody anything and cannot be measured;
+- **the USD is still the vehicle currency by construction** for every real conversion in the model
+  — the exact defect the header says the redesign removed. It was removed in the auction and left
+  standing one function later;
+- **a EUR/JPY hedge is still structurally two USD legs** at the point where it settles, so the
+  model still cannot say anything about currency dominance.
+
+E3 is `❌` rather than `⚠️`: the requirement is that no free arbitrage stands, and here the
+arbitrage is not merely unclosed, it is unobservable — the divergence between the cleared cross and
+the triangulated cross is never computed anywhere.
+
+**Becomes a §3 step**, jointly with `currency-and-fx.md` C3. It is small and it is at the seam:
+carry the cross prints through `publishFxRates` into the rate object, teach `convert` to prefer a
+cleared cross over a triangulated one, and the difference between them becomes a measurable
+arbitrage the desks are already positioned to take.
+
+### ⚠️ C3 — THE SPREAD IS A CONSTANT PER BOOK
+
+`DESK_SPREAD_BPS_BY_BOOK.fx` is a per-book constant applied to the cleared rate when a client
+converts (`fx-funding.ts`). Node C3, and `dealer-desks.md` C5.a, require the opposite: the
+bid–offer is the OUTPUT of the desk's inventory, funding cost, risk and adverse selection, read off
+what it posted. A constant cannot skew with inventory, cannot widen under stress, and cannot
+refuse. This is `dealer-desks.md`'s finding and is recorded there; noted here as the second
+witness.
+
+### ⚠️ C6 — A CAP ON THE WEEKLY MOVE
+
+`fx-market.ts:MAX_WEEKLY_FX_MOVE_PCT` bounds how far a rate may travel in a week. A bound is not a
+price (rule 15) and rule 2 says no bounds of any kind; if a week's flow implies a bigger move, the
+bound is the mechanism that is missing — most likely the elastic participants' size. It belongs to
+§3 step 18's inventory of bounds to delete and is recorded there, with this tree as the reason the
+deletion must be paired with sizing the elastic side.

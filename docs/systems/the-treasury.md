@@ -77,3 +77,101 @@ Written 2026-09-03 from the domain, code shut.
 - **F3** REASON — interest paid is **income to holders**, most of whom are domestic
 - **F4** VERIFY — the fiscal balance and the private sector's net saving move together, as an
   accounting consequence and not as an enforced identity
+
+---
+
+## 2. THE MAPPING
+
+Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+checked by `scripts/check-atlas.sh`.
+
+| Node | Code | |
+|---|---|---|
+| A1 a named party with an account | `src/domain/government-entity.ts:Government` | ✅ |
+| A1.a pays out of a balance that can run low | `src/engine/ledger/accounts.ts:treasuryNetOf` | ⚠️ |
+| A2 its region's currency | `src/engine/ledger/accounts.ts:treasuryAccountOf` | ✅ |
+| A3 a balance sheet | `src/domain/government-entity.ts:GovernmentFields` | ✅ |
+| A3.a equity negative, still a read | `src/domain/government-entity.ts:FiscalWeek` | ✅ |
+| B1 spends on named things | `src/domain/government.ts:decomposeGovernmentSpending` | ✅ |
+| B2 interest is Σ over its own bonds | `src/domain/government.ts:weeklyInterestExpenseUSD` | ✅ |
+| B3 outlays have causes that vary | `src/domain/government.ts:governmentOutlaysUSD` | ✅ |
+| B4 maturing debt is repaid in cash | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ✅ |
+| C1 taxes on real bases | `src/domain/company-week/income-statement.ts:corporateTax` | ✅ |
+| C1.a paid by named payers from accounts | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ✅ |
+| C2 receipts follow the economy | `src/engine/bootstrap/national-accounts.ts:splitWageBill` | ✅ |
+| C3 receipts are Σ collected, not a rate on an aggregate | `src/engine/simulation/stages/03-category-demand.ts:runCategoryDemandStage` | ✅ |
+| D1 outlays − receipts is what must be raised | `src/domain/government.ts:governmentObligationsWeeklyUSD` | ✅ |
+| D2 raised by issuing into a market that must clear | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
+| D2.a the treasury picks size and maturity, the market the price | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
+| **D3 FORBID no central-bank overdraft** | `src/engine/ledger/accounts.ts:waysAndMeansOf` | ❌ |
+| D3.a CB may hold sovereign debt bought in the market | `src/engine/simulation/stages/central-bank-demand.ts:plannedPurchasesByTenor` | ✅ |
+| **D4 issuance managed to cover outlays** | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
+| D4.a a foreseeable maturity wall | `src/engine/simulation/stages/sovereign-calendar.ts:runSovereignCalendarStage` | ⚠️ |
+| **D4.b a cash buffer** | `src/engine/ledger/accounts.ts:treasuryAccountOf` | ❌ |
+| D5 an auction can fail | `src/domain/government.ts:withdrawUnplacedIssuance` | ✅ |
+| D5.a FORBID no forced buyer | `src/engine/simulation/stages/financial-clearing-engine.ts:ClearingParams` | ✅ |
+| D6 debt outstanding reconciles | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
+| E1 chooses the maturity mix | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ✅ |
+| E2 size and timing against its cash position | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
+| **E3 the cost of its debt is a consequence** | `src/engine/nelsonSiegel.ts:calculateNelsonSiegelZeroRate` | ⚠️ |
+| E4 heavier issuance shows in the clearing price | — | ❌ |
+| F1 spending is somebody's income | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
+| F2 taxes are somebody's outflow | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ✅ |
+| F3 interest paid is income to holders | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
+| F4 the fiscal balance and private saving move together | — | ❌ |
+
+---
+
+## 3. THE DIFF
+
+### ❌ D3 — THE TREASURY HAS A CENTRAL-BANK OVERDRAFT, AND IT IS THE FUNDING MECHANISM
+
+The one node in this tree the user stated in their own words, and the code has its opposite.
+`accounts.ts:waysAndMeansOf` is `max(0, −treasuryNetOf(region))`: the treasury's account at the
+central bank is **one signed row**, and when it goes negative that negative IS a ways-and-means
+advance — an asset of the central bank, carried in `centralBankAssetsUSD`, charged policy-rate
+interest every week by `central-bank.ts:49`. `ui/objects/centralbank.tsx:67` labels it for the
+player: *"the treasury's overdraft here"*.
+
+**It is not a leftover; it is load-bearing.** `11-fiscal:647` sizes the quarterly issue as
+`waysAndMeansOf(v2, regionId) + 13 * marketFundedDeficitUSD` — the advance is the first term. So
+the sequence is: spend freely all quarter into an overdraft, then issue to clear it. That inverts
+D1 (raise it *before* you spend it), makes D4.b's cash buffer unnecessary (D4.b is `❌` for exactly
+this reason — the overdraft IS the buffer), and drains D5 of consequence: `withdrawUnplacedIssuance`
+correctly retires unplaced paper, but a failed auction costs the treasury nothing, because the
+overdraft absorbs whatever the auction did not place and the next calendar week simply asks for
+more. **A treasury that cannot be told no is not funding-constrained**, and every price in
+`sovereign-credit.md` is being set against a borrower with no funding constraint.
+
+Not a §3 step today. **Becomes one.**
+
+### ⚠️ D4 / E2 — ISSUANCE IS A CALENDAR, NOT A PROGRAMME
+
+`11-fiscal:630` gates all issuance on `nextWeek % 13 === 0`. Between those weeks the treasury
+issues nothing whatever it owes, which is what forces D3's overdraft to exist. The size is a
+backward-looking `13 × marketFundedDeficitUSD` plus the accumulated advance: it reads what has
+already been spent, never what is about to fall due. D4 requires the opposite — forward-looking,
+sized against a known maturity profile. The profile is knowable (`sovereign-calendar.ts` walks it),
+so this is an ordering-and-inputs defect, not a missing mechanism.
+
+### ⚠️ E3 — THE COUPON IS SET FROM A FITTED CURVE
+
+`11-fiscal:660` sets a new tranche's `couponRate` to `calculateNelsonSiegelZeroRate(tenorYears,
+reg.yieldCurveParams)` — a curve **fitted**, not read from cleared prices. E3 says the cost of the
+treasury's debt is a consequence of what it issued and at what price; here the price of new debt is
+an output of the same curve object step 25 already names as having two owners, and 13-SOV's row 5.
+It is that step's, and this tree is a second witness to it.
+
+### ❌ E4 / F4 — TWO VERIFY NODES NEVER MEASURED
+
+Nothing reads issuance size against the sovereign clearing price, and nothing reads the fiscal
+balance against private-sector net saving. Both are measurements, not mechanisms — they belong in
+§3 step 38's standing reads, and are recorded there rather than becoming steps of their own.
+
+### ⚠️ A1.a / D6 — READS THAT EXIST BUT ARE NOT THE ONES THE NODE ASKS FOR
+
+`treasuryNetOf` is a real balance and it can run low — but because it may also run negative
+(D3), "low" has no consequence, so the node is diverging rather than present. `auditOwnership`
+checks Σ held = issued for the sovereign books, but the sovereign holding is a tenor BUCKET rather
+than an instrument (13-SOV row 3), so what reconciles is not the debt outstanding node D6 means.
+Both close when D3 and 13-SOV do.

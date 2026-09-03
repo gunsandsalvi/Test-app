@@ -69,3 +69,92 @@ Written 2026-09-03 from the domain, code shut.
   **completeness**, and neither substitutes for the other
 - **E3** VERIFY — a green audit and a tree with MISSING nodes is the normal state of an
   incomplete model, not a contradiction
+
+---
+
+## 2. THE MAPPING
+
+Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+checked by `scripts/check-atlas.sh`.
+
+| Node | Code | |
+|---|---|---|
+| A1 a statement about the state | `src/engine/audit/index.ts:auditWeek` | ✅ |
+| A1.a two independent reads that must agree | `src/engine/audit/types.ts:AuditFinding` | ⚠️ |
+| A2 it names WHO | `src/engine/audit/types.ts:AuditFinding` | ✅ |
+| A2.a a violation with no owner cannot be fixed | `src/engine/audit/money.ts:auditMoney` | ✅ |
+| A3 and HOW MUCH, in a unit | `src/engine/audit/types.ts:AuditFinding` | ⚠️ |
+| **A4 the tolerance is float dust** | `src/engine/audit/ownership.ts:AUDIT_BOOKS_TOLERANCE` | ❌ |
+| A4.a a percentage hides a defect that scales | `src/engine/audit/money.ts:auditMoney` | ❌ |
+| B1 money is conserved | `src/engine/audit/money.ts:auditMoney` | ✅ |
+| B2 ownership is conserved | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
+| B3 prices exist and are cleared | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
+| B4 cross-market consistency | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
+| B5 accounts balance | `src/engine/audit/accounts.ts:auditAccounts` | ✅ |
+| B6 names resolve | `src/engine/audit/names.ts:auditNames` | ✅ |
+| **B7 wires are complete** | `src/engine/audit/wires.ts:auditWires` | ⚠️ |
+| B8 the families are independent | `src/engine/audit/index.ts:auditSummary` | ⚠️ |
+| C1 it runs where the state is meant to be consistent | `src/engine/audit/index.ts:auditWeek` | ✅ |
+| C2 every week | `src/engine/audit/index.ts:auditWeek` | ✅ |
+| C2.a the first week of a violation is evidence | `src/engine/audit/snapshot.ts:snapshotOf` | ✅ |
+| C3 the same invariants every week | `src/engine/audit/index.ts:auditWeek` | ✅ |
+| **C4 FORBID the audit never repairs** | `src/engine/audit/index.ts:auditWeek` | ✅ |
+| D1 a count by family | `src/engine/audit/index.ts:auditSummary` | ⚠️ |
+| D2 the worst instances, with party and size | `src/engine/audit/index.ts:auditSummary` | ✅ |
+| D3 a run is reproducible | `src/engine/audit/snapshot.ts:AuditSnapshot` | ✅ |
+| D4 2 / 4 / 13 / 16 weeks tell different stories | `src/engine/audit/index.ts:auditSummary` | ✅ |
+| E1 FORBID it cannot find an absence | `src/engine/audit/index.ts:auditWeek` | ✅ |
+| E2 the audit measures consistency, the trees completeness | `docs/systems/README.md` | ✅ |
+| E3 a green audit beside MISSING nodes is normal | — | ✅ |
+
+---
+
+## 3. THE DIFF
+
+**The audit is the best-instrumented thing in the repo and this tree finds nothing new about its
+structure.** Seven families, a file per family, a check per function, every finding carrying a
+week, a size and a message that names the party. C1–C4 and E1–E3 are present as written; C4 in
+particular is honoured absolutely — no family mutates state.
+
+Everything below is already a §3 step. This tree's contribution is that it says WHICH NODE each
+step is, so a future reader can tell a known gap from a new one.
+
+### ❌ A4 / A4.a — PERCENTAGE TOLERANCES, AND THE ATLAS AGREES WITH RULE 28
+
+`ownership.ts:59` forgives `max(5e7, o * AUDIT_BOOKS_TOLERANCE)`; `money.ts:135` forgives
+`max(1e7, assets * 2e-3)`. Node A4 is rule 28 restated from the domain side and reaches the same
+verdict independently: a tolerance is the accumulated representation error of the arithmetic that
+produced the number, so it is absolute, and a percentage forgives exactly the defects that scale.
+**Already §3 step 27**, which owns the full inventory. No new step.
+
+### ⚠️ B7 / D1 — THE W FAMILY HAS NO SCOREBOARD LINE
+
+`index.ts:auditSummary` iterates `families = ['M','O','P','X','F','N']`. `auditWires` runs, its
+findings reach the violation count, and the summary has no `--- W · wires ---` section, so W1
+(money-wires = gross), W3 (ladders) and W4 (no unit sold that did not exist) are invisible in the
+one output anyone reads. **Already §3 step 27.** Node B7 is `⚠️` rather than `✅` for this reason
+alone — the checks exist and are correct.
+
+### ⚠️ A1.a / B3 / B4 — CHECKS THAT CANNOT FIRE
+
+`ownership.ts:70` compares `stockPrice × sharesOutstanding` against `marketCapOf`, which is defined
+as exactly that — node A1.a's failure mode written out: **a read of one thing against itself, which
+always passes.** `prices.ts:39,49,126` fire only above 5%/10%/25% breach quotas, so a minority of
+issuers may invert seniority with a clean board. Both are §3 step 27's, and A1.a is the domain-side
+statement of why they are wrong rather than merely weak.
+
+### ⚠️ A3 — THE SIZE IS A NUMBER WITHOUT ITS CURRENCY
+
+`AuditFinding.usd` is a bare number, and its name says USD while the value is whatever money the
+check summed — the same defect as everywhere else in the tree (rule 9, §3 step 13c). It matters
+more here than elsewhere: the scoreboard ADDS finding sizes across regions to produce "the money
+that is not anyone's", which sums four currencies. **Already §3 step 13c**, but this is the one
+place where the rename is not cosmetic, and it is worth doing this call site first.
+
+### ⚠️ B8 — THE FAMILIES OVERLAP AND NOTHING MEASURES IT
+
+Node B8 asks that one defect light one family. Nothing tests that, and the reference run's history
+shows the opposite: the FX defects moved M, F and W together, and 13c-FX's fix cleared the whole M
+family at 16 weeks. That is not a defect in the audit — the families genuinely intersect — but it
+means the violation COUNT is not a count of causes, and reading it as one is how a single ordering
+defect looks like forty. Recorded for §3 step 38's standing reads, not a step.
