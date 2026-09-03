@@ -241,25 +241,18 @@ before starting it (the index is at the head of §8). A finished step is deleted
 recorded in §9, so this list is always exactly what is left. Later parts depend on earlier ones —
 do not reorder.
 
-### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
+### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere) — **CLOSED**
 
-12. **ONE THING, ONE KEY** (user, 2026-09-03). *(Mostly done — §9.12. What is left is the tail.)*
-    **THE POLICY, stated once so a check can test it:**
-    · a COMPANY is its `id`; its `ticker` is a display name and a party address, never a key into
-      a store (`company.id` is `${region}_${ticker}`, so the two are derivable but not equal);
-    · an INSTITUTION is its `id`;
-    · a PIECE OF PAPER is the instrument it IS — a TRANCHE id for credit AND for a sovereign
-      (rule 9: there is no bucket), the company id for equity, the fund's id for a fund share;
-    · a GOOD is its sub-unit id, a CONTRACT its own id, and what a contract is ON is keyed the
-      way that thing is keyed above.
-    `O8` tests every arm of it, every week. **Swept and CLEAN:** contract parties, CDS reference
-    entities, and every register row — each resolves in exactly one space. The miskeying was ONE
-    place, not systemic, and it is now closed to 0.1% (§9.12).
-    **What is left (0.42B on 219 positions):** `register-split.ts:62` names the ISSUER when a firm
-    has no live tranche of the kind, so a desk holding paper of an issuer whose ladder of that
-    kind is momentarily empty still lands on the issuer key. That is the same fallback 11f names,
-    and it dies with step 13 — a position in paper that does not exist should be nothing, not a
-    row under a different name.
+Every step is in §9. What PART II is written against, kept here because `O8` tests it every week:
+
+**THE KEY POLICY** (user, 2026-09-03; step 12, §9.12):
+· a COMPANY is its `id`; its `ticker` is a display name and a party address, never a key into a
+  store (`company.id` is `${region}_${ticker}`, so the two are derivable but not equal);
+· an INSTITUTION is its `id`;
+· a PIECE OF PAPER is the instrument it IS — a TRANCHE id for credit AND for a sovereign (rule 9:
+  there is no bucket), the company id for equity, the fund's id for a fund share;
+· a GOOD is its sub-unit id, a CONTRACT its own id, and what a contract is ON is keyed the way
+  that thing is keyed above.
 
 ### PART II — THE INSTRUMENTS ARE REAL
 
@@ -365,9 +358,16 @@ do not reorder.
     before anything else is possible — step 26 owns that decision). Each class is its own commit
     and each is expected to move the numbers.
 
-    **AND IT OWNS 11f.** `O7` reports ~55 tranches a week claimed beyond their face because
-    `register-split.ts:65` spreads an ISSUER-level position across tranches with no cap, while
-    `07b:530` clears one instrument per COMPANY. Clearing per tranche in price space closes it.
+    **AND IT OWNS 11f AND STEP 12's TAIL** — one file, three findings, one cause: the register is
+    keyed by TRANCHE and the auctions clear by ISSUER, so `register-split.ts` has to invent the
+    mapping. `O7` reports ~55 tranches a week claimed beyond their face because `:65` spreads an
+    ISSUER-level position across tranches with no cap, while `07b:530` clears one instrument per
+    COMPANY. `O8` reports **0.42B on 219 positions** because `:63` falls back to the ISSUER's own
+    id when the ladder of that kind is empty at split time — a position in paper that does not
+    exist, keyed as though it were the issuer. It cannot be deleted before the clear moves: drop
+    the row and the holder's cash leg has no security (rule 5); key it anywhere else and it is the
+    same invention under a new name. Clearing per tranche in price space closes all three, and
+    `register-split.ts` goes with them (its own header says so).
     Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
     DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
 13c. **CURRENCY IS THE OTHER UNIVERSAL CHARACTERISTIC** (user, 2026-09-03: *"Every single asset
@@ -1402,6 +1402,13 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**12 — one thing, one key: the tail is step 13's, not a step of its own.** What was left (`O8`,
+0.42B on 219 positions) is `register-split.ts:63` falling back to the ISSUER's id when the ladder of
+that kind is empty at split time. It cannot be closed before the clear moves to the tranche: drop
+the row and the holder's cash leg has no security (rule 5), key it anywhere else and it is the same
+invention renamed. Recorded on step 13, which already owns the file and the other two findings in
+it. PART I is closed.
 
 **37-SEED — the opening world, closed.** `F1`: `scaleFirmSize` resized a firm's revenue, shares,
 plant, ladder and account and left its FILED STATEMENTS at the parent's or the pre-lift figure, so
