@@ -243,8 +243,15 @@ do not reorder.
     insurers exist; the market between them does not. Verify: premium shares move week to week,
     and an insurer under a capital action loses book before it loses its licence.
 
-17. **Derivatives are centrally cleared** (user). Today a contract is bilateral (`contract.ts:39-41`,
-    parties `a`/`b`) and `initialMarginRate` is 0 for every class — uncollateralised. Novate every
+17. **Derivatives are centrally cleared, and margin is risk-based** (user). Today a contract is
+    bilateral (`contract.ts:39-41`, parties `a`/`b`) and `initialMarginRate` is a flat stated
+    number per class — **0 for CDS, IRS and commodity futures, 0.02 for FX forwards**
+    (`classes/*.ts`), so three of the four classes are uncollateralised and the fourth charges
+    every ticket the same 2% whatever it is. **Margin does not work that way and must not be a
+    stated shape** (user, rule 19): initial margin covers the move a position can make before it
+    can be closed — the reference's own volatility over a close-out horizon, scaled by the
+    portfolio's netting — and variation margin is the mark, daily. Both fall out of quantities
+    this model already clears, so neither needs a number. Novate every
     contract to the region's CCP: each side faces the CCP, initial margin is posted TO it, variation
     flows THROUGH it, and a default is its waterfall (IM → default fund → mutualisation) rather than
     a bilateral close-out. Capacity becomes a clearing-member limit, keeping rule 14. Then the market
@@ -258,6 +265,57 @@ do not reorder.
     The real work is its MARKET; until it exists, stage 12's player options stay on the legacy
     layer instead of the one book, which is the last thing outside it. FX swap lines need an FX
     funding market first — build the market, then the lines — and that gate has not moved.
+
+17c. **Credit protection has ONE buyer and ONE reason** (user). `derivative-markets/cds.ts:60`
+    builds hedge demand from the region's BANKS only, and within a bank only from
+    `facilityRowsOf` — its loan book. So a bank's BOND book is unhedged, and nobody else in the
+    world can buy protection at all. Three demands are missing and each is a real one:
+    (a) the bank's bond and desk exposure to the same names, on the same large-exposure rule;
+    (b) **a non-financial firm's counterparty exposure** — a long-term supply contract or a large
+    receivable is credit risk on a named buyer, and a firm carrying it has every reason to lay it
+    off. The contracts and invoices already exist as objects on the lane; this is the first thing
+    that would price them;
+    (c) an asset manager or credit fund taking a VIEW rather than a hedge — the other side of the
+    market, and the reason a spread is a price rather than a bank's internal transfer.
+17d. **The credit index** (user). `cds.ts:83` builds one instrument per reference entity: there is
+    no index product. A CDX is a fixed basket of names traded as one line, which is how broad
+    credit risk is actually bought and sold, and it is the natural instrument for an asset
+    manager that wants the asset class rather than the name. It also creates the index-versus-
+    single-name basis — a second measurable relationship, and one of 17f's comparables. Needs the
+    contract to carry a basket reference, and a credit event to settle the one name's weight.
+17e. **Futures on government bonds, and the basis trade** (user). `commodity-future.ts` is the
+    only future in the tree. A deliverable govie future plus the cash-futures basis is the largest
+    single source of real repo demand in a real market: the basis trader is long the cash bond,
+    financed in repo, and short the future. **Step 7 made the repo and reverse-repo flows
+    load-bearing for the whole banking system's liquidity, and step 30b is about to make the
+    overnight sleeve a decision — this is the demand side those two are missing.** Requires
+    step 13 (the future prices off a real cash price) and pairs with 17's margin.
+17f. **The relative-value book, and it need not be written strategy by strategy** (user: "is there
+    a programmatic way to do that across asset classes?"). **There is, and the model already holds
+    the list.** Today a hedge fund's strategy is a row of hand-written boolean flags in
+    `HEDGE_FUND_STRATEGY_PROFILES` (`institution-profiles.ts:117`) — `shortsEquity`,
+    `tradesCommodityFutures`, `runsFxDirectional` — one flag per market somebody remembered to
+    add. An arbitrage is not a flag. It is **two prices for the same risk**, and every such pair
+    in this world is ALREADY DECLARED, because the audit measures them:
+    - CDS spread against the cash bond's OAS — the basis, `P2`, failing 7 weeks of 16 at HEAD;
+    - a future against spot plus carry — `X2`, failing 2 of 16;
+    - one good's price across regions in one currency — `X2`'s wedge, 1 of 16;
+    - an ETF's price against its own NAV — the premium, named in step 33's unmeasured reads;
+    - the swap spread (IRS against the govie curve) and the cross-currency basis (`fx-forward`'s
+      CIP basis), both already computed;
+    - seniority across one issuer's capital structure — `P1`, failing 16 of 16.
+    So the mechanism is ONE mechanism: a **registry of comparables** — two priced things and the
+    relationship that should hold between them — and a book that reads the registry, sizes by the
+    deviation, and trades BOTH legs (rule 14). A new asset class joins by declaring its comparable,
+    not by growing a flag. `RELATIVE_VALUE` becomes a fifth strategy, and the four existing ones
+    keep their directional books.
+    **The design constraint that decides whether this is a mechanism or a plug:** the arb book
+    must be CAPITAL-CONSTRAINED and able to LOSE — funded in repo or prime brokerage, posting real
+    margin, forced to cut when it draws down. Limits to arbitrage are why real bases persist. A
+    fund that always closes the gap is a clamp wearing a fund's clothes, which rules 1 and 2
+    forbid, and it would mask exactly the defects P2 and X2 exist to report. **The audit keeps
+    measuring after the funds exist:** a basis that survives a well-capitalised arb book is a
+    finding; one that only survives because nobody could trade it was never a price.
 
 ### PART III — NOTHING IS BOUNDED (rule 2)
 
