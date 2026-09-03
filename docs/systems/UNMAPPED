@@ -1,0 +1,64 @@
+# Stages core.ts runs that no system tree describes yet.
+#
+# check-atlas.sh requires every stage to be either in a tree or listed here, so the atlas cannot
+# quietly fall behind the pipeline: a NEW stage fails the build until somebody decides which
+# system it belongs to. A line here is an admission, not an exemption — the list shrinks as the
+# atlas is built and its length is the honest measure of how far along it is.
+#
+# Written 2026-09-03 with corporate credit as the only mapped system.
+
+fx-revaluation
+01-macro-feedback
+02-region-macro
+02b-bank-diversification
+03-category-demand
+04-input-output
+labor-market
+prime-brokerage
+trade-settlement
+goods-arrival
+sourcing-intent
+freight-clearing
+05-unit-bidding
+06-fx-and-trade
+07-commodities
+institutional-income
+holdings-store
+07c-sovereign-bond-clearing
+07d-leveraged-loan-clearing
+07e-equity-clearing
+07f-short-debt-clearing
+securities-lending
+derivatives
+repo-collateral-reconcile
+holdings-writeback
+08-company-fundamentals
+settlement
+sme-pools
+hc-lifecycle
+insurance-and-pensions
+index-calculation
+etf-flows
+household-balance-sheet
+estate-resolution
+09-concentration-risk
+10-mergers
+management-review
+derivatives-post-settlement
+fx-clearing
+money-fund-income
+bill-accretion
+sovereign-calendar
+11-fiscal-and-sovereign-debt
+labor-reconciliation
+overdraft-sweep
+reverse-repo-draw
+settlement-close
+bank-funding-close
+bank-resolution
+central-bank
+settlement-funding
+12-portfolio-and-positions
+register-consolidation
+news-derivation
+13-news-and-turn-summary

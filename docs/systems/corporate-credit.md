@@ -119,10 +119,131 @@ in §3 of this file, not on the confirmations.
 
 ## 2. THE MAPPING
 
-*(unmapped — this file's first commit is the required tree alone)*
+Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+checked by `scripts/check-atlas.sh`.
+
+| Node | Code | |
+|---|---|---|
+| A1 issuer exists | `src/domain/company.ts:Company` | ✅ |
+| A2 capital structure | `src/domain/company.ts:DebtTranche` | ✅ |
+| A3 service capacity | `src/domain/company-week/capital-programme.ts:weeklyInterestUSD` | ✅ |
+| A4 creditworthiness is an OPINION | `src/domain/company.ts:CreditRating` | ⚠️ |
+| B1 issuance decision | `src/engine/ledger/tranche-ledger.ts:issueTranche` | ✅ |
+| B2 fixed or floating | `src/domain/company.ts:DebtTranche` | ✅ |
+| B3 counted in units | `src/domain/assets/index.ts:countedIn` | ✅ |
+| B4 call regime | `src/domain/call-protection.ts:callProtectionForIssue` | ✅ |
+| B5 covenants | — | ❌ |
+| B6 market identity | `src/ui/objects/tranche.tsx` | ❌ |
+| C1 an underwriter is appointed | `src/engine/simulation/stages/primary-settlement.ts:settlePricedOfferings` | ✅ |
+| C2 a book is built | `src/engine/simulation/stages/financial-clearing-engine.ts:ClearingInstrument` | ✅ |
+| C3 the issue prices | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ⚠️ |
+| C4 the issuer's walk-away | `src/engine/simulation/stages/financial-clearing-engine.ts:ClearingInstrument` | ✅ |
+| C5 allocation | `src/engine/simulation/stages/book-settlement.ts:PrimaryTake` | ✅ |
+| C6 proceeds net of fees | `src/engine/simulation/stages/primary-settlement.ts:settlePricedOfferings` | ✅ |
+| C7 the lead bears the residual | `src/engine/simulation/stages/primary-settlement.ts:settlePricedOfferings` | ✅ |
+| D1 it trades | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:runCorporateBondClearingStage` | ✅ |
+| **D2 a PRICE clears** | — | ❌ |
+| D3 a bounded dealer | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
+| D4 the dealer earns the spread | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ✅ |
+| D5 unsold stays with its holder | `src/engine/simulation/stages/financial-clearing-engine.ts:ClearingParams` | ✅ |
+| D6 two legs, one pass | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
+| D7 accrued interest transfers on a trade | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ❌ |
+| D8 derived measures are derived | `src/domain/pricing/bond.ts:spreadBpsFromPrice` | ⚠️ |
+| E1 a register of holders | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
+| E2 Σ held = issued | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
+| E3 marked at the cleared price | `src/engine/audit/prices.ts:auditPrices` | ❌ |
+| E4 the mark's change is P&L | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` | ⚠️ |
+| E5 an economic reservation | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:runCorporateBondClearingStage` | ✅ |
+| E6 a leveraged holder is funded | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageStage` | ✅ |
+| E7 it consumes regulatory capital | `src/engine/macro/banking.ts:leverageHeadroomUSD` | ⚠️ |
+| E8 it can be pledged at a haircut | `src/domain/repo.ts:encumberedFaceByBucket` | ✅ |
+| E9 the holder's statement | `src/ui/functions/statements.tsx` | ✅ |
+| F1 interest accrues to the holder | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
+| F2 the coupon is paid | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
+| F3 principal is repaid | `src/engine/simulation/stages/holder-paydown.ts:reconcileHolderPrincipal` | ✅ |
+| F4 prepay or call | `src/domain/company-week/debt-ladder.ts:callEconomics` | ✅ |
+| F5 refinancing | `src/engine2/stage08-back.ts:s08k` | ✅ |
+| F6 it matures and ceases to exist | `src/engine/ledger/tranche-ledger.ts:retireTranche` | ✅ |
+| G1 a missed payment is an EVENT | `src/domain/company.ts:Company` | ⚠️ |
+| G2 acceleration | — | ❌ |
+| G3 default | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
+| G4 the estate is realised | `src/domain/estate.ts:estateAssetsUSD` | ✅ |
+| **G5 the waterfall pays by SENIORITY** | `src/domain/estate.ts:CLAIM_SENIORITY` | ⚠️ |
+| G6 the holder books the loss | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
+| G7 restructuring | — | ❌ |
+| G8 a default is information | `src/engine/simulation/stages/context.ts:WeeklyStepContext` | ✅ |
+| H1 the market has a level | `src/engine/simulation/stages/index-calculation.ts:runIndexCalculationStage` | ✅ |
+| H2 the level orders by assessment | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
+| H3 seniority orders within an issuer | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
+| H4 the cash/CDS basis is real | `src/engine2/stage08-back.ts:s08k` | ⚠️ |
 
 ---
 
 ## 3. THE DIFF
 
-*(unmapped)*
+**46 nodes: 32 ✅, 9 ⚠️, 5 ❌.** The rows below are ordered by how much they change, not by branch.
+
+### NEW — not previously named anywhere in the plan
+
+**G5 · SENIORITY IS DECORATIVE, AND IT IS WHY P1 CAN FAIL FOREVER.** `DebtTranche.seniority` is
+`'SENIOR' | 'SUBORDINATED'`, stamped at issuance and priced into the spread. The estate assigns
+recovery seniority by instrument **TYPE** instead — `estate-resolution.ts:547-579`:
+LEVERAGED_LOAN and BANK_FACILITY → `SECURED`, CORP_BOND and COMMERCIAL_PAPER → `UNSECURED`,
+EQUITY → `EQUITY`. **`SUBORDINATED` appears nowhere in the estate machinery.** So a subordinated
+bond and a senior bond of the same issuer recover identically in every state of the world.
+
+That is the CAUSE of a failing audit nobody had connected to it: `P1 seniority orders the spreads`
+breaches on 841–1073 issuers a week, and it can, because holding a subordinated bond is
+economically identical to holding a senior one. There is no feedback that would make it trade
+wider. A seniority that changes the price and not the payout is not a seniority (rule 29 — the
+symptom is P1's count, the cause is that the waterfall never reads the field).
+
+**G7 · THERE IS NO RESTRUCTURING.** Zero occurrences of `restructur` or an exchange offer across
+`src`. Default's only path is liquidation through the estate. Most real corporate defaults are
+negotiated — terms amended, debt exchanged for equity, holders voting — and the choice between
+workout and liquidation is what sets recovery. Here recovery is whatever the assets fetch, always.
+
+**B5 · THERE ARE NO COVENANTS.** `DebtTranche` carries none, and the only occurrences of the word
+are a bank's *lending* heuristic (`bank-lending.ts:12` — "a covenant-style 3x"), which is a sizing
+rule and not a term of any instrument. So an issuer cannot breach anything: the only credit event
+is failure to pay. Covenants are how credit risk is observed BEFORE a default, and G1's ⚠️ is the
+same hole seen from the other side — a missed payment is a state of the firm, not an event any
+holder is notified of.
+
+**G2 · NO ACCELERATION.** A default does not make the principal due. Both `accelerat` hits in the
+tree are tax depreciation.
+
+**A4 · ONE RATING, HELD BY NOBODY.** `Company.creditRating` is a property of the firm, computed in
+`stage08-back.ts:1230`. In a real market an assessment is an OPINION — agencies publish theirs,
+holders run their own models, and the disagreement is a large part of why a book has two sides.
+One universal rating means every participant agrees about credit by construction, which quietly
+removes a source of the demand dispersion the auction needs.
+
+### CONFIRMS what the plan already carries
+
+- **D2 · no cleared price for credit** — §3.13, the step this whole atlas was piloted to test for.
+  Confirmed empty: the credit books clear a SPREAD (`assets/index.ts` declares CORP_BOND and
+  LEVERAGED_LOAN `SPREAD_LIKE`) and no price is stored anywhere.
+- **E3 · the register marks at par** — `P5`, 176B on 605B of face at week 16.
+- **B6 · the display name is the internal id** — §3.14.
+- **D7 · accrued interest does not follow the paper** — §3.13b names the accrual's storage; this
+  is the trade-time consequence, and worth stating in the step: a buyer receives a full coupon it
+  did not earn and the seller loses what it did.
+- **C3/D8 · the bracket is a print, and the derived measure is an input** — §3.21 and §3.21-BRACKET.
+- **H4 · the CDS spread is derived from the OAS** — §3.26, which destroys the basis H4 requires.
+- **H2/H3 · the orderings are audited and failing** — P1/P3, and G5 above is why H3 can.
+
+### PRESENT AND NOT WORTH RE-CHECKING
+
+The primary market is the strongest branch: a lead is appointed, quotes, guarantees the price,
+is left holding the residual in its own desk book, and the four-way settlement sums to zero
+(`primary-settlement.ts:13`). A withdrawn deal settles nothing and never existed. C1–C7 are all ✅
+and this is the part of the credit system that most closely matches what it represents.
+
+### SCOPED OUT, DELIBERATELY
+
+- **E7** is ⚠️ rather than ❌ because banks DO consume capital (`leverageHeadroomUSD`) while
+  institutions post a `maxNetPurchaseUSD` cash budget and no capital charge. Whether a pension
+  fund should have one is a modelling choice, not an omission.
+- **E4** is ⚠️ because `unrealizedPnL` exists for the player's portfolio view; whether an
+  institution's mark change reaches its own income is E3's question and is counted there.

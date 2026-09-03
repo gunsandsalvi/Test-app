@@ -875,6 +875,51 @@ do not reorder.
     RENDERED, which is the same class of error caught later. `historicalInflation` and
     `historicalZeroCurves` carry a one-week lag that belongs at the type.
 
+33. **SENIORITY IS DECORATIVE, AND IT IS WHY `P1` CAN FAIL FOREVER** (found by the atlas pilot,
+    `docs/systems/corporate-credit.md` node G5). `DebtTranche.seniority` is
+    `'SENIOR' | 'SUBORDINATED'`, stamped at issuance and priced into the spread by every
+    participant's view. The estate assigns recovery seniority by instrument **TYPE** instead
+    (`estate-resolution.ts:547-579`): LEVERAGED_LOAN and BANK_FACILITY → `SECURED`, CORP_BOND and
+    COMMERCIAL_PAPER → `UNSECURED`, EQUITY → `EQUITY`. **`SUBORDINATED` appears nowhere in the
+    estate machinery.** A subordinated bond and a senior bond of the same issuer therefore recover
+    identically in every state of the world.
+
+    That is the CAUSE of a failing audit nobody had connected to it: `P1 seniority orders the
+    spreads` breaches on 841–1073 issuers a week, and it CAN, because holding a subordinated bond
+    is economically identical to holding a senior one — there is no state in which the
+    subordination costs the holder anything, so nothing makes it trade wider. A seniority that
+    changes the price and not the payout is not a seniority. Fix the waterfall to read the
+    instrument's own seniority (rule 29: `P1`'s count is the symptom, this is the cause) and
+    `P1` becomes a real measurement instead of a permanent line.
+
+34. **A CREDIT EVENT IS ONLY EVER A MISSED PAYMENT** (atlas nodes B5, G1, G2). Three absences,
+    one shape:
+    · **no covenants.** `DebtTranche` carries none. The only occurrences of the word in `src` are
+      a bank's own lending heuristic (`bank-lending.ts:12`, "a covenant-style 3x") — a sizing
+      rule, not a term of any instrument. An issuer cannot breach anything;
+    · **no acceleration.** A default does not make the principal due. Both `accelerat` hits in the
+      tree are tax depreciation;
+    · **no observable event.** A missed payment is a state of the firm, not something a holder is
+      notified of and acts on.
+    Covenants are how credit risk is observed BEFORE a default, and their absence is why the only
+    credit dynamic this model has is the binary one. This is the mechanism behind `A4`'s
+    divergence too: with nothing to observe between "paying" and "gone", an assessment has
+    nothing to update on but the accounts.
+
+35. **THERE IS NO RESTRUCTURING** (atlas node G7). Zero occurrences of `restructur` or an exchange
+    offer across `src`. Default's only path is liquidation through the estate, and recovery is
+    whatever the assets fetch. Most real corporate defaults are negotiated — terms amended, debt
+    exchanged for equity, holders voting — and the choice between workout and liquidation is a
+    large part of what SETS recovery. Until it exists, `LGD` is a property of the asset sale and
+    not of the credit.
+
+36. **ONE RATING, HELD BY NOBODY** (atlas node A4). `Company.creditRating` is a property of the
+    firm, computed at `stage08-back.ts:1230`. In a real market an assessment is an OPINION:
+    agencies publish theirs, holders run their own, and the disagreement is a large part of why a
+    book has two sides. One universal rating means every participant agrees about credit by
+    construction, which removes a source of the demand dispersion the auction needs — and is a
+    rule-3 shape (one representation of a thing that should have an owner, or several).
+
 ### PART VI — THE PRIMITIVES FALL (rule 19)
 
 30. **The registry of every stated number.** `stated.ts` declares 11 values; the tree carries ~301

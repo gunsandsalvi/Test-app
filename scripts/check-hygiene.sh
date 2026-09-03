@@ -136,4 +136,49 @@ if [ "$FRACTION_COUNT" -gt "$FRACTION_BUDGET" ]; then
   exit 1
 fi
 
+# THE ATLAS GATE (docs/systems/README.md).
+#
+# The atlas is only worth having if it cannot silently stop describing the code — this repo has
+# three dead documents proving how that ends (a CLAUDE.md describing sections that no longer
+# existed, an ARCHITECTURE.md referenced from code and never written, 699 comments pointing at a
+# deleted section). It lives HERE rather than in its own script because check 2 above allows
+# exactly two files in scripts/, and widening a gate to admit my own change is the anti-pattern
+# rule 20 forbids in its quieter form.
+#
+# Two checks, both about DRIFT and neither about content:
+#   RESOLUTION — every `path/file.ts:symbol` citation names a file that exists and a symbol in it,
+#     so a rename that leaves the atlas behind fails the build.
+#   COVERAGE — every stage core.ts runs is in a tree or admitted in docs/systems/UNMAPPED, so a
+#     NEW system cannot ship undescribed. UNMAPPED's length is how far along the atlas is.
+# What it deliberately does NOT check is whether a required tree is right or complete: that is
+# prose, and it is the user's to review.
+ATLAS_TREES=$(ls docs/systems/*.md 2>/dev/null | grep -v 'README\.md$' || true)
+if [ -n "$ATLAS_TREES" ]; then
+  ATLAS_FAIL=0
+  ATLAS_CITES=0
+  while IFS= read -r cite; do
+    [ -z "$cite" ] && continue
+    ATLAS_FILE="${cite%%:*}"
+    ATLAS_SYM="${cite##*:}"
+    ATLAS_CITES=$((ATLAS_CITES + 1))
+    if [ ! -f "$ATLAS_FILE" ]; then
+      echo "ERROR: atlas cites a file that does not exist: $cite"
+      ATLAS_FAIL=1
+    elif ! grep -q "\b${ATLAS_SYM}\b" "$ATLAS_FILE"; then
+      echo "ERROR: atlas cites a symbol not found in its file: $cite"
+      ATLAS_FAIL=1
+    fi
+  done < <(grep -oh '`src/[A-Za-z0-9_./-]*\.tsx\?:[A-Za-z_][A-Za-z0-9_]*`' $ATLAS_TREES | tr -d '`' | sort -u)
+  while IFS= read -r stage; do
+    [ -z "$stage" ] && continue
+    if ! grep -qF "$stage" $ATLAS_TREES docs/systems/UNMAPPED 2>/dev/null; then
+      echo "ERROR: stage '$stage' runs in core.ts and appears in no system tree."
+      echo "Add it to the tree of the system it belongs to, or admit it in docs/systems/UNMAPPED."
+      ATLAS_FAIL=1
+    fi
+  done < <(grep -oE "run\('[a-z0-9-]+'" src/engine/simulation/core.ts | sed "s/run('//;s/'//" | sort -u)
+  if [ "$ATLAS_FAIL" -ne 0 ]; then exit 1; fi
+  echo "Atlas: $ATLAS_CITES citations resolve; every core.ts stage is accounted for."
+fi
+
 echo "Repo hygiene check passed."

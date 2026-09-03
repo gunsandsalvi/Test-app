@@ -38,7 +38,18 @@ no price". A sweep finds defects. Only a reference model finds absences.
 
 | System | Required tree | Mapped | Diff → §3 |
 |---|---|---|---|
-| [corporate credit](./corporate-credit.md) | ✅ | — | — |
+| [corporate credit](./corporate-credit.md) | ✅ 46 nodes | ✅ 32 ✅ / 9 ⚠️ / 5 ❌ | ✅ §3.33–36 |
 
-Everything else is unwritten. The atlas is being built system by system; `MASTER_PLAN.md` §3's
-parked entry carries the scope estimate (roughly 40–50 systems over 68,788 lines).
+Everything else is unwritten, and `UNMAPPED` names the 55 pipeline stages no tree covers yet —
+its length is the honest measure of how far along this is.
+
+**The pilot's verdict.** The method works, on the test that matters. It was NOT whether the tree
+rediscovered "credit has no price" — that was already known, and a tree that only confirms what
+you knew proves nothing. It is whether the tree found nodes nobody had raised. It found four:
+seniority never reaching the recovery waterfall (which turns out to be the CAUSE of a permanently
+failing audit, `P1`), no covenants, no acceleration, and no restructuring. All four came from
+writing the required side first and finding the cell empty — none of them would have been found by
+reading the credit files, because the credit files do not mention them.
+
+The gate bites, and that was tested rather than assumed: renaming a cited symbol fails the build,
+and adding an undescribed stage to `core.ts` fails the build.
