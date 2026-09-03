@@ -12,12 +12,12 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `e3f598a` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
+- HEAD `31755c9` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
   earlier one; the session that owns it may push nowhere else.)
-- **Next step: §3 step 8**, then 9, 10, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 9**, then 10, 11, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `e3f598a` —
-  **107 violations in 29 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `31755c9` —
+  **108 violations in 27 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
@@ -185,15 +185,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-8. **The register's remaining holes.** `12-portfolio:276,328,333,499` adds derivative maturity P&L
-   to BOTH the realized-P&L and realized-cash lines and `13-news:25` sums both; `etf-flows.ts:682`
-   sets `maxHolding = max(shares, shares+want)` so no ETF holder can ever sell (a one-sided book);
-   `etf-flows.ts:499` vs `:727` breaks the NAV identity (pre-flow NAV over post-flow share count);
-   `dealer-desks.ts:220` charges a negative residual to equity and silently discards a positive one;
-   `household-balance-sheet.ts:85-92` freezes every non-pension beneficiary claim at week 1;
-   `holdings-view.ts:209` sets sector equity := total assets (A = L + E cannot hold);
-   `holdings-view.ts:68` counts repo-lent dollars on both sides; `pe-lifecycle.ts:680` hands a
-   sponsor 70% of a company with no sale and no cash.
 9. **One running settlement net.** `settlement.ts:224,244` never adds a dated row to
    `pendingNetById` even in its due week, and `overdraft-sweep.ts:33` re-derives the close balance by
    walking the journal because the paying agent's payments are missing — so `pendingSettlementUSD`
@@ -2389,3 +2380,23 @@ NIM-out-of-band line appears) and the credit books clear on smaller budgets. Tha
 correction of a real double count — the same deposits were counted as parked at the central bank
 AND available in the banking system — and its SIZE is decided by `CASH_SLEEVE_OVERNIGHT_SHARE =
 0.5`, now step 30b. P1's breaching issuers fell 1096 → 815 on the way.
+
+**8. The register's remaining holes.** (`31755c9`) Eight sites where a claim, a price or a
+residual had no owner. `12-portfolio`'s IRS/CDS/XCS maturities added the same P&L to both the
+realized-P&L and realized-cash lines and stage 13 sums both into cash — paid twice; the corp and
+sov branches had already been converted and say why. `etf-flows` floored every participant's
+target at what it held, so no holder could sell and the print was pinned at the reservation
+whenever AP capacity was short. `dealer-desks` charged a negative session residual to equity as a
+"fee" and discarded a positive one; the residual is the desk's trading result and is booked
+signed. The beneficiary claim was set once and kept for every kind but pensions, so an insurer's,
+asset manager's and hedge fund's household claim was frozen at week 1 — it now grows by the
+week's measured investment income in ONE place, and that income no longer keeps last week's
+number in a week with none. `holdings-view` set sector EQUITY to total ASSETS (A = L + E with the
+liabilities left out) and counted overnight cash lent inside sector CASH while it sits in the
+borrower's; both fixed. `householdDirectEquityUSD` subtracted only the register from market cap,
+counting the banks' whole equity desk book as household net worth while 07e computed the same
+residual with the desks out. `pe-lifecycle` wrote a flat 70% sponsor stake on an IPO and dropped
+the company from the fund's portfolio, so the retained stake left the sponsor's assets with no
+sale and, unregistered, was credited to households; the sponsor now keeps what it did not sell as
+real shares and its percentage is a read of them. Measured (SHOCKS=0 WEEKS=16): **107 in 29 →
+108 in 27**, money clean, unowned 0.00B — flat, with eight holes closed.
