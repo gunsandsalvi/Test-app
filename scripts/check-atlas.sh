@@ -11,8 +11,16 @@
 #   RESOLUTION — every `path/file.ts:symbol` citation names a file that exists and a symbol that
 #     appears in it, so a rename that leaves the atlas behind fails the build. (It caught seven
 #     wrong citations on its first run, which is the argument for it.)
-#   COVERAGE — every stage core.ts runs is in a tree or admitted in docs/systems/UNMAPPED, so a
-#     NEW system cannot ship undescribed. UNMAPPED's length is how far along the atlas is.
+#   COVERAGE — every stage core.ts runs, AND every module in src/domain, is in a tree or admitted
+#     in docs/systems/UNMAPPED, so a NEW system cannot ship undescribed. UNMAPPED's length is how
+#     far along the atlas is.
+#
+# The domain half was added on 2026-09-03 because the README claimed it and the script did not:
+# 72 domain modules were unchecked, so a system living entirely in src/domain — a whole set of
+# rules with no stage of its own — could stay invisible to the very instrument built to find
+# absences. Still NOT covered, and stated here rather than left to be discovered: src/engine2 (the
+# column stores), src/engine/ledger, src/engine/macro and src/ui. Extend the same way when a tree
+# needs them.
 #
 # What it deliberately does NOT check is whether a required tree is RIGHT, or complete. That is
 # prose, it is the whole value of the atlas, and it is the user's to review.
@@ -46,7 +54,15 @@ if [ -n "$ATLAS_TREES" ]; then
       ATLAS_FAIL=1
     fi
   done < <(grep -oE "run\('[a-z0-9-]+'" src/engine/simulation/core.ts | sed "s/run('//;s/'//" | sort -u)
+  while IFS= read -r mod; do
+    [ -z "$mod" ] && continue
+    if ! grep -qF "$mod" $ATLAS_TREES docs/systems/UNMAPPED 2>/dev/null; then
+      echo "ERROR: '$mod' exists and appears in no system tree."
+      echo "Add it to the tree of the system it belongs to, or admit it in docs/systems/UNMAPPED."
+      ATLAS_FAIL=1
+    fi
+  done < <(find src/domain -name '*.ts' | sort)
   if [ "$ATLAS_FAIL" -ne 0 ]; then exit 1; fi
-  echo "Atlas: $ATLAS_CITES citations resolve; every core.ts stage is accounted for."
+  echo "Atlas: $ATLAS_CITES citations resolve; every core.ts stage and src/domain module is accounted for."
 fi
 

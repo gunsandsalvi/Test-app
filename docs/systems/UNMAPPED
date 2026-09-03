@@ -5,7 +5,11 @@
 # system it belongs to. A line here is an admission, not an exemption — the list shrinks as the
 # atlas is built and its length is the honest measure of how far along it is.
 #
-# Written 2026-09-03 with corporate credit as the only mapped system.
+# Written 2026-09-03 with corporate credit as the only mapped system. The domain half was added
+# when the gate was extended to src/domain: the README had claimed that coverage and the script
+# had never checked it, so 72 modules were invisible to the instrument built to find absences.
+
+# ---- PIPELINE STAGES core.ts runs ----
 
 fx-revaluation
 01-macro-feedback
@@ -62,3 +66,68 @@ settlement-funding
 register-consolidation
 news-derivation
 13-news-and-turn-summary
+
+# ---- src/domain MODULES ----
+src/domain/bank-pricing.ts
+src/domain/bank-resolution.ts
+src/domain/banking.ts
+src/domain/carrier.ts
+src/domain/central-bank.ts
+src/domain/collateral.ts
+src/domain/commercial-paper.ts
+src/domain/company-week/credit-standing.ts
+src/domain/company-week/distributions.ts
+src/domain/company-week/income-statement.ts
+src/domain/company-week/inventory.ts
+src/domain/company-week/labor-demand.ts
+src/domain/company-week/learning.ts
+src/domain/company-week/payroll.ts
+src/domain/cross-border.ts
+src/domain/currency.ts
+src/domain/dealer-derivatives.ts
+src/domain/defect.ts
+src/domain/derivatives/classes/cds.ts
+src/domain/derivatives/classes/commodity-future.ts
+src/domain/derivatives/classes/fx-forward.ts
+src/domain/derivatives/classes/irs.ts
+src/domain/derivatives/contract.ts
+src/domain/derivatives/hedging.ts
+src/domain/derivatives/profile.ts
+src/domain/derivatives/registry.ts
+src/domain/derivatives/standing-book.ts
+src/domain/distribution.ts
+src/domain/etf.ts
+src/domain/events.ts
+src/domain/fund.ts
+src/domain/fx-market.ts
+src/domain/game-state.ts
+src/domain/geography.ts
+src/domain/goods-physical.ts
+src/domain/government-entity.ts
+src/domain/government.ts
+src/domain/household-credit.ts
+src/domain/index.ts
+src/domain/indexes.ts
+src/domain/industry-registry.ts
+src/domain/industry.ts
+src/domain/institution-profiles.ts
+src/domain/institutions.ts
+src/domain/instruments.ts
+src/domain/invoice-currency.ts
+src/domain/market-microstructure.ts
+src/domain/markets.ts
+src/domain/portfolio.ts
+src/domain/preferences.ts
+src/domain/pricing/discount.ts
+src/domain/pricing/index.ts
+src/domain/pricing/tranche.ts
+src/domain/primary-market.ts
+src/domain/prime-brokerage.ts
+src/domain/region-macro.ts
+src/domain/securities-lending.ts
+src/domain/sme-pool.ts
+src/domain/sovereign-id.ts
+src/domain/stated.ts
+src/domain/trade-invoice.ts
+src/domain/units.ts
+src/domain/volatility.ts

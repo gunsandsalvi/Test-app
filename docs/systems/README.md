@@ -26,8 +26,10 @@ no price". A sweep finds defects. Only a reference model finds absences.
 - **The required tree is written from the domain, and the git history proves it.** Each system's
   required tree is committed with every code cell empty, before any mapping is done.
 - **A citation is machine-checked.** `scripts/check-atlas.sh` fails when a cited file or symbol
-  stops existing, and when a stage in `core.ts` or a module in `src/domain` appears in no tree.
-  It runs in `check-hygiene.sh`, so it gates every commit.
+  stops existing, and when a stage `core.ts` runs or a module in `src/domain` appears in neither a
+  tree nor `UNMAPPED`. It runs inside `check-hygiene.sh`, so it gates every commit. **What it does
+  NOT yet cover, stated here rather than left to be found:** `src/engine2`, `src/engine/ledger`,
+  `src/engine/macro`, `src/ui`. Extend it the same way when a tree needs them.
 - **A node is never deleted to make the tree green.** If the model deliberately does not have
   something, the node stays and says so, with the reason. `MISSING` and `OUT OF SCOPE` are
   different answers and the file must distinguish them.
