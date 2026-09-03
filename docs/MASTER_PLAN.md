@@ -12,12 +12,12 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `35fa0ea` on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree
+- HEAD `8daa2ba` on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree
   clean. (This branch replaces `claude/master-plan-review-j2z20v`.)
-- **Next step: §3 step 10**, then 11, 12, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 11**, then 12, 13, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `35fa0ea` —
-  **115 violations in 33 families**, "the money that is not anyone's" 0.00B, and **M6 grazing its
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `8daa2ba` —
+  **110 violations in 33 families**, "the money that is not anyone's" 0.00B, and **M6 grazing its
   band in 1 week of 16** (2.69B against a 0.5%-of-money tolerance ≈ 2.5B) — the first money line
   in a long while; see §9.9 and §6.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
@@ -195,12 +195,6 @@ do not reorder.
     — stage 02 reads the household week in the week it happened — and then the complete report is
     the natural source. `ctx.priorWeekFlows.householdFlowsByRegion` is already persisted and
     waiting for it.
-10. **Both legs, same money, same counterparty.** `05-unit-bidding.ts:1953` pays a cross-border cash
-    leg in the BUYER's money to a seller whose books are in origin money with no conversion, while
-    `:1838` books origin money; `:2183,2202` move the household/government goods leg lot-by-lot with
-    its real seller but spread the CASH leg pro rata across every seller. `foreign-direct-investment.ts:145`
-    capitalises a foreign subsidiary with no FX conversion at all. `securities-lending.ts:390` strikes
-    collateral once and never re-marks it (no variation margin, so a squeeze costs nobody anything).
 11. **The wild swings, by named cause** (user-reported: ratings, revenues, inflation).
     (a) `companyGenerator.ts:741-790, 827-835, 933-941` — all three revenue-rescale sites scale
     revenue, shares, PP&E, tranches and cash but NOT ebitda/ebit/netIncome/eps/capex, so a clone
@@ -2422,3 +2416,18 @@ weeks stale and breaks M6 — now step 9b. Measured (SHOCKS=0 WEEKS=16): **108 i
 33**, unowned 0.00B, M1/M2/M4/M5/M7 clean, **M6 grazing its band in 1 of 16 weeks** (2.69B
 against ~2.5B): a threshold crossing on a week whose flows moved, and the first thing to bisect
 when step 27 gives M6 a real band.
+
+**10. Both legs, same money, same counterparty.** (`8daa2ba`) A household's, a treasury's or a
+segment pool's goods move lot by lot with the seller that sold them, while the CASH was spread
+across every seller in the book pro rata — so a household paid sellers it never bought from, and
+its own bill was a residual (the book's total less what firms and segments paid) rather than what
+its fills cost, with any disagreement smeared across the sellers. Both legs now walk the same
+lots and the residual arithmetic is gone. A SELLER'S REVENUE IS WHAT ITS BUYERS PAID IT: a
+cross-border buyer pays in its money while the seller booked the auction's origin-money value, so
+statement and account differed by the rate; revenue is now accumulated from the payment legs, the
+discipline the freight leg already states. FDI capitalised a foreign subsidiary with no
+conversion at all — the two sides in different money, compared raw — and now converts, as its own
+header always claimed. Stock-loan collateral is RE-MARKED weekly: struck once and never touched,
+there was no variation margin, a squeeze cost nobody anything and `stockLoanNetUSD` was
+unfunded. Measured (SHOCKS=0 WEEKS=16): **115 in 33 → 110 in 33**, unowned 0.00B; P2 6/16 → 3/16
+weeks, P3 (rating) 16/16 → 14/16, and M6's graze 2.69B → 2.42B.
