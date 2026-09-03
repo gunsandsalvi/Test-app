@@ -12,21 +12,20 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `8daa2ba` on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree
+- HEAD `56dc3ee` on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree
   clean. (This branch replaces `claude/master-plan-review-j2z20v`.)
-- **Next step: §3 step 11**, then 12, 13, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 12**, then 13, 14, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `8daa2ba` —
-  **110 violations in 33 families**, "the money that is not anyone's" 0.00B, and **M6 grazing its
-  band in 1 week of 16** (2.69B against a 0.5%-of-money tolerance ≈ 2.5B) — the first money line
-  in a long while; see §9.9 and §6.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `56dc3ee` —
+  **134 violations in 31 families**, "the money that is not anyone's" **0.06B across 2 lines**
+  (M1's drift and M7's dust), M6 still grazing its band in 1 week of 16. See §9.11 and §6.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
 - **Recording a step:** delete the step from §3 and write its record in §9 — what changed, why,
   and the measured numbers, for a reader who was not here. A lesson that a FUTURE step could
   trip over goes in §5 as well; nothing else does.
-- Gates at HEAD: `tsc` 0, ESLint 348/354, hygiene pass, 125 tests.
+- Gates at HEAD: `tsc` 0, ESLint 348/354, hygiene pass, 126 tests.
 
 **Where this list came from (2026-09-02): a line-by-line audit of ~230 files / ~55k lines**, which
 found ~380 defects. Every material one is a step in §3 at its file:line (or, once done, in §9),
@@ -195,19 +194,18 @@ do not reorder.
     — stage 02 reads the household week in the week it happened — and then the complete report is
     the natural source. `ctx.priorWeekFlows.householdFlowsByRegion` is already persisted and
     waiting for it.
-11. **The wild swings, by named cause** (user-reported: ratings, revenues, inflation).
-    (a) `companyGenerator.ts:741-790, 827-835, 933-941` — all three revenue-rescale sites scale
-    revenue, shares, PP&E, tranches and cash but NOT ebitda/ebit/netIncome/eps/capex, so a clone
-    carries the parent's full EBITDA and margins exceed 1; only banks are repaired.
-    (b) `credit-standing.ts:37,40` — a bank's leverage denominator is `revenue × 0.4` and its
-    coverage is the two-valued step `capRatio < 0.05 ? 0.4 : 3.0`; that step is the spine every bank
-    is rated on, so ratings hop buckets.
-    (c) `macro/indices.ts:66` — returns an index LEVEL where every caller treats the value as a
-    fractional change, so an emptied region or sector multiplies its index by ~1001 in one week.
-    (d) `price-index.ts:150` + `11-fiscal:86` — `seedCpiHistory` fabricates 53 weeks compounding at
-    the inflation TARGET and the YoY reads index 0 from week 1, so year-one inflation is a
-    manufactured number feeding the Taylor rule, the labour deflator and the news (rule 9, rule 4).
-    Report the LEVEL until 53 real weeks exist.
+11b. **A dead firm's money and goods still move.** The doubled default rate step 11 uncovered
+    two paths that only bite when firms actually die. `settlement.ts:517` → `accounts.ts:432`:
+    when EITHER party has no account row `applySettledRow` applies NEITHER leg and the payment
+    simply does not happen, while `report.grossUSD` still counts it — now sized as well as
+    counted, and the answer at HEAD is **52 rows worth 0.01B** in 3 weeks of 16, so it is dust
+    with a name rather than a hole. Fix: open a row for the party, or refuse the instruction at
+    its site. `O5` finds **consignments in transit to or from a firm that is gone** (207 worst,
+    2 weeks of 16): `estate-resolution` scraps them at the CLOSE, which is right for a workout
+    that ends, and nothing scraps them when the estate is still open for years.
+11c. **The central bank's book drifts.** M1 misses by **0.06B on a 208B sheet in 4 weeks of 16**
+    at HEAD, having been clean for the whole project before the death rate rose. Small, real, and
+    the money family's only sized line besides 11b's dust. Bisect from `56dc3ee`.
 12. **Carriers, and the fuel nobody sells.** `bootstrap/carriers.ts:284` seeds `totalDebt` — not a
     field since the ladder became authoritative — so carriers open with ZERO debt while their seed
     interest, coverage, rating, eps and stock price all assume it, and no lender holds it.
@@ -477,7 +475,7 @@ move into registries; lookups stay (rule 17).
 ## 6. WATCHLIST — measure, do not fix
 | Metric | Why |
 |---|---|
-| The money family (M1–M7) and "the money that is not anyone's" | Clean every run until §9.9, which left M6 grazing its band in 1 week of 16 (2.69B against ~2.5B of tolerance) while every other check stays clean and nothing is unowned. Bisect it when step 27 puts a real band on M6; a line here is otherwise a defect at its site. |
+| The money family (M1–M7) and "the money that is not anyone's" | Clean every run until §9.9 (M6 grazing its band, 2.69B against ~2.5B) and §9.11, where the doubled death rate added M1's 0.06B drift and M7's 52 dust rows: **0.06B unowned in total** at HEAD. Steps 11b and 11c own those two; a line here is otherwise a defect at its site. |
 | The 1e-8 week-1 drift (§7.370) | Three firms differ at the eighth digit at week 1; 13% price gap by week 13. Bisect by file, ONE dump per step. Watch it to zero; never widen a tolerance for it. |
 | The state-growth drift (§7.335, §7.380) | Weekly cost +45% over weeks 5→80 on two independent device runs, all stages inflating proportionally. First suspect: the contract book's row growth. |
 | TGA over a quarter; occupational mismatch; top-down vs bottom-up household income; the private tier that sells nothing; loan-book Spearman noise | Watch the TGA's LEVEL not its shape; mismatch is composition outrunning retraining; `estimatedHouseholdIncomeUSD` is still the anchor; ~300 seeded private firms per region carry `productLines: []`; Spearman 0.26–0.76 at 23–32 names — re-measure as the universe grows. |
@@ -2431,3 +2429,28 @@ header always claimed. Stock-loan collateral is RE-MARKED weekly: struck once an
 there was no variation margin, a squeeze cost nobody anything and `stockLoanNetUSD` was
 unfunded. Measured (SHOCKS=0 WEEKS=16): **115 in 33 → 110 in 33**, unowned 0.00B; P2 6/16 → 3/16
 weeks, P3 (rating) 16/16 → 14/16, and M6's graze 2.69B → 2.42B.
+
+**11. The wild swings, by named cause.** (`56dc3ee`) (a) **A firm's size scales whole.** All three
+resize sites — the padding clone, the thinning lift, the sector normalisation — scaled revenue,
+shares, plant, ladder and cash but left the INCOME STATEMENT alone, so a clone at 30% of its
+parent carried 100% of its EBITDA (margin above one) and 0.3× its leverage. One helper now scales
+every size-proportional line at all three; eps and the margin ratios are left alone because two
+scaled lines make an invariant. (b) **A bank is rated on a continuum**: leverage was `revenue ×
+0.4` and coverage took exactly TWO VALUES either side of a 5% capital ratio. Now debt against
+equity, and years of its own expected losses its capital absorbs. Measured against the buffer
+above the regulatory floor first — the default probability's construction — it went NEGATIVE for
+a thin but solvent bank and rated it below a corporate with no earnings; on a ladder shared with
+corporates the whole capital base is the right base. A test pins the continuum. (c) An empty
+index membership returned the BASE LEVEL where callers multiply a fractional change (×1001 in one
+week); it now reports no move. (d) **The fabricated CPI year is gone** — 53 weeks compounding at
+the target, feeding the Taylor rule, the labour deflator and the news as measurement. History
+begins where the world does; until 53 real weeks exist `inflationIsMeasured` is false and the
+LEVEL is reported.
+Two of my own guards fired and both were right: the debit guard's tolerance was keyed to the spec
+rather than the position walked (addReserves' lesson, §9.3), and with that fixed it named
+`keepsRow`'s $1 threshold dropping rows of OTHER instruments during a relink — one predicate now,
+the same one `pruneEmptyRows` uses, and the ETF basket takes one slice per instrument rather than
+per row. Measured (SHOCKS=0 WEEKS=16): **110 in 33 → 134 in 31**. The driver is (a) and it is the
+truth the unscaled EBITDA hid — open estates 41 → 77, active firms 2461 → 2427 — and the A/B came
+free: the harsher bank coverage gave 79 open estates against 77, so (b) is not the driver. The
+deaths expose steps 11b and 11c, both now sized rather than asserted.
