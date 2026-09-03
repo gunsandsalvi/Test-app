@@ -13,9 +13,9 @@ citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
 - HEAD on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 14).
-- **Take the FIRST step in §3 and do not skip.** A finished step leaves §3 for §9. Do not write a
-  "next step" note here naming anything but §3's first line; one was written, it disagreed with
-  §3's order, and two steps were skipped behind it.
+- **Take §3's first open step, finish it, stop** (rule 10 states it in full). Do not write a "next
+  step" note here naming anything but §3's first line; one was written, it disagreed with §3's
+  order, and two steps were skipped behind it.
 - **There is no current violation count and there is not meant to be one** (rule 11). The harness
   is deliberately red: what it prints is the unbuilt half of §3, so a count taken now measures how
   much list is left, not whether a change was good. The reference to judge against is
@@ -106,8 +106,20 @@ Standing user directives. Not suggestions. Eighteen; none of them restates anoth
 
 ### The work
 
-10. **§3 is the only work list and it is worked in order.** A step leaves §3 for §9 when it is done.
-    Anything worth keeping goes in this file: there is no second rules file and no side plan.
+10. **§3 IS THE ONLY WORK LIST, IT IS WORKED STRICTLY IN ORDER, AND ONE STEP AT A TIME**
+    (user, 2026-09-03). Three parts, none of them optional:
+    · **In order.** Take §3's FIRST open step. Not the interesting one, not the one that unblocks
+      something else, not the one a print made look urgent — later parts depend on earlier ones,
+      and a step taken out of order is built against a world that has not arrived yet.
+    · **One at a time.** Finish the step you started — gates green, §3 entry deleted, §9 line
+      written, commit pushed — before opening the next. A step half-done is worse than not
+      started: the next reader cannot tell which half is true.
+    · **A new idea is INSERTED, not appended.** When the user proposes something mid-project, it
+      does not become a note, a side file, or a job for later — it goes into §3 at the position
+      its dependencies put it, which is often BEFORE the step in hand. Say where it landed and
+      why there. If it belongs before the current step, finish the current step first, then take it.
+    A step leaves §3 for §9 when it is done. Anything worth keeping goes in this file: there is no
+    second rules file and no side plan.
 
 11. **Do not measure, evaluate or diagnose mid-project** (user, 2026-09-03: *"I forbid you to do any
     test or run or verification until you finish the plan"*, and *"you're trying to diagnose issues
