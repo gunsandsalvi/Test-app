@@ -17,8 +17,10 @@ There is deliberately no section 7 in this file, so the citation can never be mi
   is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
   that names anything but §3's first line; one was written, it disagreed with §3's order, and two
   steps were skipped behind it.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after O8 —
-  **181 violations in 36 families**, "the money that is not anyone's" **0.00B across 1 line**.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 12 —
+  **197 violations in 44 families**, and **"the money that is not anyone's" is 0.00B across ZERO
+  lines — the money family is clean.** The rise from 181/36 is O1, O6 and O7 becoming able to see
+  300B of desk inventory that named no tranche (§9.12); step 11f owns what they report.
   **The money family is down to one check** (M7's dust, worth 0.00B): M1–M6 all print nothing.
   The rise from 134/33 is W5 and then O7 arriving and reporting real findings (§9.11e, §9.11f) —
   a new check that fires is the instrument working, not a regression. **O7 alone accounts for 15
@@ -241,6 +243,24 @@ do not reorder.
     already carries the second shape, and step 26's two disagreeing depreciation schedules
     (`front-core.ts:750` vs `capital-programme.ts:190`) are the same question asked from the
     other end. Answer it once, for both.
+12. **ONE THING, ONE KEY** (user, 2026-09-03). *(Mostly done — §9.12. What is left is the tail.)*
+    **THE POLICY, stated once so a check can test it:**
+    · a COMPANY is its `id`; its `ticker` is a display name and a party address, never a key into
+      a store (`company.id` is `${region}_${ticker}`, so the two are derivable but not equal);
+    · an INSTITUTION is its `id`;
+    · a PIECE OF PAPER is the instrument it IS — a TRANCHE id for credit, the company id for
+      equity, the bucket id for a sovereign, the fund's id for a fund share;
+    · a GOOD is its sub-unit id, a CONTRACT its own id, and what a contract is ON is keyed the
+      way that thing is keyed above.
+    `O8` tests every arm of it, every week. **Swept and CLEAN:** contract parties, CDS reference
+    entities, and every register row — each resolves in exactly one space. The miskeying was ONE
+    place, not systemic, and it is now closed to 0.1% (§9.12).
+    **What is left (0.42B on 219 positions):** `register-split.ts:62` names the ISSUER when a firm
+    has no live tranche of the kind, so a desk holding paper of an issuer whose ladder of that
+    kind is momentarily empty still lands on the issuer key. That is the same fallback 11f names,
+    and it dies with step 13 — a position in paper that does not exist should be nothing, not a
+    row under a different name.
+
 ### PART II — THE INSTRUMENTS ARE REAL
 
 13. **Face, and price × face — and ONE NAME for one piece of paper** (the "credit always trades at
@@ -2480,6 +2500,37 @@ The history is plain enough: the register was migrated to per-tranche rows and t
 behind. Folded into step 13, which owns the per-tranche world; O8 is the number to drive to zero.
 Measured: 165 in 35 → **181 in 36**, the whole rise being O8 firing every week on a defect that
 was always there.
+
+**12. One thing, one key.** (`PENDING`) Asked whether anything else was miskeyed, the answer had
+to be a sweep rather than an opinion. `O8` now states the policy and tests every arm of it every
+week: a company is its id, an institution is its id, a piece of paper is the instrument it is, a
+good is its sub-unit, a contract is its own id and what it is written ON is keyed the way that
+thing is keyed.
+
+**The sweep came back with exactly one offender.** Contract parties resolve, CDS reference
+entities resolve, and every register row names something that exists — three arms clean. The
+desks were the whole of it, and they were not partly wrong: **12,043 credit positions worth
+365.5B on the issuer key and not one on a tranche**, because a credit book's clearing INSTRUMENT
+is the company (`dealer-desks.ts` keys the book by `inst.id` and 07b's instruments are
+`regionCompanies`), while the register had already migrated to tranches.
+
+The fix separates the two: **the desk STORES the paper's name and the auction READS the issuer's.**
+`clearingKeyOf` maps a stored tranche back to the instrument the book prices; `priorByClearingKey`
+gives the auction the aggregated view it always had; and a credit fill is split across the
+issuer's tranches on the way into the book, by the same face weights the register uses, with a
+short position keeping its sign. Nothing about the clearing changed — only where its result is
+filed.
+
+Measured (SHOCKS=0 WEEKS=16): **365.50B on the wrong key → 0.42B, 20,341 positions now named by
+the paper they are.** And **"the money that is not anyone's" reaches 0.00B across ZERO lines** —
+the money family is completely clean for the first time.
+
+The count went 181 in 36 → **197 in 44**, and the rise is worth stating plainly: `O1`, `O6` and
+`O7` can now SEE the desks. A position naming no tranche could never be compared to a ladder row,
+so 300B of credit inventory sat outside every per-tranche check in the audit. On the right key it
+is measurable, and what it measures is 11f — the register and the desks together hold more of some
+tranches than were issued. That defect did not arrive with this commit; it stopped being
+invisible.
 
 **11f (part 1). O7 — the invariant that only ever fired as a crash, and two dead hypotheses.**
 (`PENDING`) `estate-resolution.ts` carried a `defect()` that killed the run when an estate's

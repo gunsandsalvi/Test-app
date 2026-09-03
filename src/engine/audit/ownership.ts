@@ -212,41 +212,70 @@ function o7(state: GameState, week: number): AuditFinding[] {
 }
 
 /**
- * O8 — ONE PIECE OF PAPER, ONE NAME (rule 3).
+ * O8 — ONE THING, ONE KEY (rule 3, and the keying policy in §3 step 12).
  *
- * A credit position can be keyed two ways in this model: by the TRANCHE it is, or by the COMPANY
- * that issued it. The register settled on tranches (the seed opens issuer-named at
- * `initialization.ts:548` and the books convert it in week 1), but the DEALER DESKS did not —
- * they carry inventory under whatever id the book handed them. Every move between a desk and the
- * register therefore wires a sale of one name against a purchase of another, the two do not
- * cancel to the dollar, and the residue is what `W2` reports as the clearing house being left
- * holding paper.
+ * THE POLICY, stated once so a check can test it:
+ *   · a COMPANY is its `id`; its `ticker` is a display name and a party address, never a key
+ *     into a store;
+ *   · an INSTITUTION is its `id`;
+ *   · a PIECE OF PAPER is the instrument it is — a TRANCHE id for credit, the company id for
+ *     equity, the bucket id for a sovereign, the fund's id for a fund share;
+ *   · a GOOD is its sub-unit id, a CONTRACT its own id, and what a contract is ON is keyed the
+ *     way that thing is keyed above.
  *
- * An issuer-keyed position also cannot be checked: `O7` compares a claim against the ladder row
- * it names, and a position naming a company names no row. This counts what is still on the wrong
- * key, so step 13 has a number to drive to zero.
+ * Every arm below is a place the policy is broken, counted rather than argued about. The desks
+ * are the large one: the register keys credit by tranche and the desks key the same paper by the
+ * issuer, because a credit book's clearing INSTRUMENT is the company (`dealer-desks.ts:104` keys
+ * the book by `inst.id`, and 07b's instruments are `regionCompanies`). That is step 13's to
+ * close; the rest are here to prove they are not also broken.
  */
 function o8(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
+  const companyIds = new Set(state.companies.map((c) => c.id));
+  const tickers = new Set(state.companies.map((c) => c.ticker));
+  const entityIds = new Set(state.institutionalEntities.map((e) => e.id));
+
+  // 1. The desks' credit books against the register's key.
   const CREDIT_BOOKS = ['corporate bond', 'leveraged loan', 'commercial paper'];
   let issuerKeyed = 0, issuerKeyedUSD = 0, trancheKeyed = 0, trancheKeyedUSD = 0;
-  const worst: [string, number][] = [];
   state.companies.forEach((b) => {
     const inv = b.bankBalanceSheet?.dealerDeskInventory;
     if (!inv || !isActiveCompany(b)) return;
-    CREDIT_BOOKS.forEach((book) => {
-      (inv[book] ?? []).forEach((p) => {
-        if (isTrancheId(v2, p.instrumentId)) { trancheKeyed++; trancheKeyedUSD += p.inventoryUSD; return; }
-        issuerKeyed++; issuerKeyedUSD += p.inventoryUSD;
-        if (Math.abs(p.inventoryUSD) > 0) worst.push([`${b.ticker}/${p.instrumentId}`, p.inventoryUSD]);
-      });
-    });
+    CREDIT_BOOKS.forEach((book) => (inv[book] ?? []).forEach((p) => {
+      if (isTrancheId(v2, p.instrumentId)) { trancheKeyed++; trancheKeyedUSD += p.inventoryUSD; }
+      else { issuerKeyed++; issuerKeyedUSD += p.inventoryUSD; }
+    }));
   });
   if (issuerKeyed > 0) {
-    worst.sort((a, b2) => Math.abs(b2[1]) - Math.abs(a[1] === undefined ? 0 : a[1]));
-    out.push({ family: 'O', check: 'O8 one piece of paper, one name', week, usd: issuerKeyedUSD, message: `${issuerKeyed} desk positions worth ${B(issuerKeyedUSD)} are keyed by ISSUER, not by the paper (${trancheKeyed} worth ${B(trancheKeyedUSD)} name a tranche) — the register keys the same holdings by tranche, so every desk-to-register move wires two different names for one asset` });
+    out.push({ family: 'O', check: 'O8 one thing, one key: the desks', week, usd: issuerKeyedUSD, message: `${issuerKeyed} desk credit positions worth ${B(issuerKeyedUSD)} are keyed by ISSUER where the register keys the same paper by TRANCHE (${trancheKeyed} worth ${B(trancheKeyedUSD)} name a tranche) — every desk-to-register move wires two names for one asset` });
   }
+
+  // 2. A contract's parties and its reference resolve in the space each is supposed to be in.
+  let deadParty = 0, deadRef = 0;
+  (state.derivativesBook ?? []).forEach((c) => {
+    ([c.a, c.b] as { kind: string; ticker?: string; id?: string }[]).forEach((p) => {
+      const ok = p.kind === 'INSTITUTION' ? entityIds.has(p.id!) : tickers.has(p.ticker!);
+      if (!ok) deadParty++;
+    });
+    // A CDS names the issuer it is written on by COMPANY ID; the futures and FX classes name a
+    // commodity or a region, which are their own spaces and are not company keys.
+    if (c.classId === 'CDS' && !companyIds.has(c.referenceId)) deadRef++;
+  });
+  if (deadParty > 0) out.push({ family: 'O', check: 'O8 one thing, one key: contract parties', week, usd: deadParty, message: `${deadParty} contract party references resolve to nothing — a ticker used where an id belongs, or the other way round` });
+  if (deadRef > 0) out.push({ family: 'O', check: 'O8 one thing, one key: contract references', week, usd: deadRef, message: `${deadRef} CDS name a reference entity that is no company id — the credit is written on a key that resolves in no store` });
+
+  // 3. Every register row's instrument id resolves in exactly one of the spaces the policy allows.
+  let unresolvable = 0, unresolvableUSD = 0;
+  const govBucket = /-GOV-/;
+  state.institutionalEntities.forEach((e) => {
+    materializeBook(v2, e.id).forEach((h) => {
+      const id = h.instrumentId;
+      const known = isTrancheId(v2, id) || companyIds.has(id) || entityIds.has(id) || govBucket.test(id);
+      if (!known) { unresolvable++; unresolvableUSD += h.quantityOrNotionalUSD ?? 0; }
+    });
+  });
+  if (unresolvable > 0) out.push({ family: 'O', check: 'O8 one thing, one key: register rows', week, usd: unresolvableUSD, message: `${unresolvable} register rows worth ${B(unresolvableUSD)} name an id that is no tranche, company, fund or sovereign bucket — a key that resolves in no store` });
   return out;
 }
 
