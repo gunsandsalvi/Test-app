@@ -5,7 +5,8 @@
  * specialty profiles, or the generic demand/margin/production model), maintenance and growth
  * capex, credit rating and OAS spread, debt refinancing/prepayment, quarterly earnings,
  * equity price (holder-class rebalancing flow), buybacks, and the resulting balance sheet.
- * The single largest and most interdependent stage — see ARCHITECTURE.md.
+ * The single largest and most interdependent stage. (The `ARCHITECTURE.md` this line used to
+ * point at does not exist in this tree; `docs/MASTER_PLAN.md` §2 is the map.)
  */
 
 import {
