@@ -20,8 +20,8 @@ Written 2026-09-03 from the domain, code shut.
   - A1.a **N5 coupon** — usually none: it is issued at a **discount** and redeems at par, and the
     discount is the whole return
   - A1.b **N4 maturity** — under a year, typically weeks to months
-  - A1.c **N11 seniority** — senior unsecured, ranking with the issuer's other senior debt
-  - A1.d **N13 optionality** — none. It is too short to be worth an option
+  - A1.c **N13.a seniority** — senior unsecured, ranking with the issuer's other senior debt
+  - A1.d **N11 early termination** — none. It is too short to be worth an option
 - **A2** REASON — its **price** is what it clears at, and the yield is derived from price and days
   to maturity (rule 1)
   - A2.a on a stated day-count and quoting convention, because at this tenor the convention is a
@@ -251,7 +251,15 @@ construction, because the roll goes through the auction and the auction can say 
 `domain/commercial-paper.ts`'s header is worth reading as the model of how a formula price gets
 retired: it names the three things the formula made impossible, and all three now work.
 
-**One cross-reference slip in the required tree, recorded and not fixed** (rule: never edit §1):
-A1.c is labelled "N11 seniority" and A1.d "N13 optionality", but in `../instruments/bond.md` N11 is
-the early-termination regime and N13 is the claim on failure — the numbers are swapped relative to
-their labels. Both nodes are mapped by their WORDS, which are unambiguous.
+**One cross-reference slip in the required tree, since corrected.** A1.c was labelled "N11
+seniority" and A1.d "N13 optionality", where `../instruments/bond.md` has N11 as the
+early-termination regime and N13.a as the ranking — the two numbers were swapped against their own
+labels. The labels have been repointed (A1.c → N13.a, A1.d → N11).
+
+This is the one edit to a §1 that the atlas's rules permit, and it is worth being explicit about
+why. The rule is that **a node is never deleted or weakened to make the tree green** — the required
+side must not be edited to fit what the mapping found. Fixing a citation that pointed at the wrong
+number in a sibling file changes nothing about what either node REQUIRES: both were mapped by their
+words, which were never ambiguous, and both keep the same mark. A wrong cross-reference left in
+place would send the next reader to the wrong contract node, which is the failure mode this whole
+atlas exists to prevent.

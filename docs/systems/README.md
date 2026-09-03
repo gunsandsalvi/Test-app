@@ -67,65 +67,77 @@ answered N" is the whole point of the atlas.
 **a system is something with its own required tree — its own instrument, actor or mechanism that
 could be wholly absent.** That is why banks are three and derivatives are five.
 
-**45 of 45 required trees written (2026-09-03); 1 of 45 mapped.** The required side is now
-complete, which is what makes the mapping meaningful: a node with no citation is a finding, and
-until every system had a required side, an uncited node could always have been an unwritten tree
-instead. Mapping is the next phase, and it is where the findings come out.
+**45 of 45 required trees written and 45 of 45 mapped (2026-09-03), plus both instrument
+contracts.** The required side was written first and committed first, which is what makes the
+mapping mean anything: a node with no citation is a FINDING, and until every system had a required
+side, an uncited node could always have been an unwritten tree instead.
+
+Roughly **1,400 nodes** now carry a mark — `✅` present · `⚠️` present but diverging · `❌` absent —
+and **910 machine-checked citations** resolve on every commit. The findings are in each file's
+§3 THE DIFF, and the ones that became work are in `MASTER_PLAN.md` §3; the ones that were already
+known are marked with the step that owns them, so a reader can tell a new gap from an old one.
+
+**What the marks are worth reading for.** A `❌` on a FORBID node is the strongest result this
+method produces, because no sweep can find one: the code cannot show you what it should not have.
+A `✅` on a FORBID node is worth as much and is easy to overlook — several were verified and hold
+(no buyer of last resort in any auction; no netting across counterparties; no short without a
+borrow; unemployment as a read of real headcounts), and those are the load-bearing things a future
+change must not quietly break.
 
 | # | System | Tree | Mapped | Diff |
 |---|---|---|---|---|
 | | **INFRASTRUCTURE** | | | |
-| 1 | [money and settlement](./money-and-settlement.md) | ✅ | — | — |
-| 2 | [the register](./the-register.md) | ✅ | — | — |
-| 3 | [the clearing engine](./the-clearing-engine.md) | ✅ | — | — |
-| 4 | [the audit](./the-audit.md) | ✅ | — | — |
-| 5 | [the seed](./the-seed.md) | ✅ | — | — |
-| 6 | [currency and FX rates](./currency-and-fx.md) | ✅ | — | — |
+| 1 | [money and settlement](./money-and-settlement.md) | ✅ | ✅ | ✅ |
+| 2 | [the register](./the-register.md) | ✅ | ✅ | ✅ |
+| 3 | [the clearing engine](./the-clearing-engine.md) | ✅ | ✅ | ✅ |
+| 4 | [the audit](./the-audit.md) | ✅ | ✅ | ✅ |
+| 5 | [the seed](./the-seed.md) | ✅ | ✅ | ✅ |
+| 6 | [currency and FX rates](./currency-and-fx.md) | ✅ | ✅ | ✅ |
 | | **MARKETS** | | | |
-| 7 | [corporate credit](./corporate-credit.md) | ✅ d3 | ⚠️ stale | ✅ |
-| 8 | [sovereign credit](./sovereign-credit.md) | ✅ | — | — |
-| 9 | [short-term debt](./short-term-debt.md) | ✅ | — | — |
-| 10 | [equity](./equity.md) | ✅ | — | — |
-| 11 | [the money market](./money-market.md) | ✅ | — | — |
-| 12 | [FX spot](./fx-spot.md) | ✅ | — | — |
-| 13 | [fund shares (ETF, MMF)](./fund-shares.md) | ✅ | — | — |
-| 14 | [securities lending](./securities-lending.md) | ✅ | — | — |
-| 15 | [prime brokerage](./prime-brokerage.md) | ✅ | — | — |
-| 16 | [the derivative layer](./the-derivative-layer.md) | ✅ | — | — |
-| 17 | [CDS](./cds.md) | ✅ | — | — |
-| 18 | [interest-rate swaps](./interest-rate-swaps.md) | ✅ | — | — |
-| 19 | [FX forwards and XCS](./fx-forwards-and-xcs.md) | ✅ | — | — |
-| 20 | [commodity futures](./commodity-futures.md) | ✅ | — | — |
-| 21 | [commodities spot](./commodities-spot.md) | ✅ | — | — |
-| 22 | [indices](./indices.md) | ✅ | — | — |
+| 7 | [corporate credit](./corporate-credit.md) | ✅ d3 | ✅ | ✅ |
+| 8 | [sovereign credit](./sovereign-credit.md) | ✅ | ✅ | ✅ |
+| 9 | [short-term debt](./short-term-debt.md) | ✅ | ✅ | ✅ |
+| 10 | [equity](./equity.md) | ✅ | ✅ | ✅ |
+| 11 | [the money market](./money-market.md) | ✅ | ✅ | ✅ |
+| 12 | [FX spot](./fx-spot.md) | ✅ | ✅ | ✅ |
+| 13 | [fund shares (ETF, MMF)](./fund-shares.md) | ✅ | ✅ | ✅ |
+| 14 | [securities lending](./securities-lending.md) | ✅ | ✅ | ✅ |
+| 15 | [prime brokerage](./prime-brokerage.md) | ✅ | ✅ | ✅ |
+| 16 | [the derivative layer](./the-derivative-layer.md) | ✅ | ✅ | ✅ |
+| 17 | [CDS](./cds.md) | ✅ | ✅ | ✅ |
+| 18 | [interest-rate swaps](./interest-rate-swaps.md) | ✅ | ✅ | ✅ |
+| 19 | [FX forwards and XCS](./fx-forwards-and-xcs.md) | ✅ | ✅ | ✅ |
+| 20 | [commodity futures](./commodity-futures.md) | ✅ | ✅ | ✅ |
+| 21 | [commodities spot](./commodities-spot.md) | ✅ | ✅ | ✅ |
+| 22 | [indices](./indices.md) | ✅ | ✅ | ✅ |
 | | **FINANCIAL INSTITUTIONS** | | | |
-| 23 | [banks — lending](./banks-lending.md) | ✅ | — | — |
-| 24 | [banks — funding and liquidity](./banks-funding-and-liquidity.md) | ✅ | — | — |
-| 25 | [banks — capital and resolution](./banks-capital-and-resolution.md) | ✅ | — | — |
-| 26 | [dealer desks](./dealer-desks.md) | ✅ | — | — |
-| 27 | [insurers and pensions](./insurers-and-pensions.md) | ✅ | — | — |
-| 28 | [hedge funds](./hedge-funds.md) | ✅ | — | — |
-| 29 | [private equity](./private-equity.md) | ✅ | — | — |
+| 23 | [banks — lending](./banks-lending.md) | ✅ | ✅ | ✅ |
+| 24 | [banks — funding and liquidity](./banks-funding-and-liquidity.md) | ✅ | ✅ | ✅ |
+| 25 | [banks — capital and resolution](./banks-capital-and-resolution.md) | ✅ | ✅ | ✅ |
+| 26 | [dealer desks](./dealer-desks.md) | ✅ | ✅ | ✅ |
+| 27 | [insurers and pensions](./insurers-and-pensions.md) | ✅ | ✅ | ✅ |
+| 28 | [hedge funds](./hedge-funds.md) | ✅ | ✅ | ✅ |
+| 29 | [private equity](./private-equity.md) | ✅ | ✅ | ✅ |
 | | **PUBLIC SECTOR** | | | |
-| 30 | [the treasury](./the-treasury.md) | ✅ | — | — |
-| 31 | [the central bank](./the-central-bank.md) | ✅ | — | — |
+| 30 | [the treasury](./the-treasury.md) | ✅ | ✅ | ✅ |
+| 31 | [the central bank](./the-central-bank.md) | ✅ | ✅ | ✅ |
 | | **FIRMS** | | | |
-| 32 | [firm fundamentals](./firm-fundamentals.md) | ✅ | — | — |
-| 33 | [the capital programme](./the-capital-programme.md) | ✅ | — | — |
-| 34 | [firm birth and death](./firm-birth-and-death.md) | ✅ | — | — |
-| 35 | [M&A and corporate control](./m-and-a.md) | ✅ | — | — |
-| 36 | [trade credit](./trade-credit.md) | ✅ | — | — |
+| 32 | [firm fundamentals](./firm-fundamentals.md) | ✅ | ✅ | ✅ |
+| 33 | [the capital programme](./the-capital-programme.md) | ✅ | ✅ | ✅ |
+| 34 | [firm birth and death](./firm-birth-and-death.md) | ✅ | ✅ | ✅ |
+| 35 | [M&A and corporate control](./m-and-a.md) | ✅ | ✅ | ✅ |
+| 36 | [trade credit](./trade-credit.md) | ✅ | ✅ | ✅ |
 | | **THE REAL ECONOMY** | | | |
-| 37 | [goods](./goods.md) | ✅ | — | — |
-| 38 | [freight and logistics](./freight-and-logistics.md) | ✅ | — | — |
-| 39 | [labour](./labour.md) | ✅ | — | — |
-| 40 | [housing](./housing.md) | ✅ | — | — |
-| 41 | [households](./households.md) | ✅ | — | — |
-| 42 | [SME pools](./sme-pools.md) | ✅ | — | — |
+| 37 | [goods](./goods.md) | ✅ | ✅ | ✅ |
+| 38 | [freight and logistics](./freight-and-logistics.md) | ✅ | ✅ | ✅ |
+| 39 | [labour](./labour.md) | ✅ | ✅ | ✅ |
+| 40 | [housing](./housing.md) | ✅ | ✅ | ✅ |
+| 41 | [households](./households.md) | ✅ | ✅ | ✅ |
+| 42 | [SME pools](./sme-pools.md) | ✅ | ✅ | ✅ |
 | | **CROSS-CUTTING** | | | |
-| 43 | [cross-border](./cross-border.md) | ✅ | — | — |
-| 44 | [ratings and assessment](./ratings-and-assessment.md) | ✅ | — | — |
-| 45 | [news and the player surface](./news-and-the-player-surface.md) | ✅ | — | — |
+| 43 | [cross-border](./cross-border.md) | ✅ | ✅ | ✅ |
+| 44 | [ratings and assessment](./ratings-and-assessment.md) | ✅ | ✅ | ✅ |
+| 45 | [news and the player surface](./news-and-the-player-surface.md) | ✅ | ✅ | ✅ |
 
 **Instrument contracts** live in [`../instruments/`](../instruments/): a tree whose subject is an
 instrument cites one rather than restating it. There are two:
