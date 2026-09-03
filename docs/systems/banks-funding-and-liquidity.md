@@ -73,3 +73,168 @@ Written 2026-09-03 from the domain, code shut.
 - **F2** REASON — its **reserve balance**, as a read of its account
 - **F3** VERIFY — assets = liabilities + equity, in the bank's own money, every week
 - **F4** REASON — a **liquidity metric** somebody outside can see (E2.a's input)
+
+---
+
+## 2. THE MAPPING
+
+Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+checked by `scripts/check-atlas.sh`.
+
+| Node | Code | |
+|---|---|---|
+| A1 deposits, and not one thing | `src/domain/banking.ts:DepositLines` | ✅ |
+| A1.a retail/household, sticky and insured to a limit | `src/engine/ledger/accounts.ts:householdDepositsAt` | ⚠️ |
+| A1.b corporate, operational | `src/engine/ledger/accounts.ts:corporateDepositsAt` | ✅ |
+| A1.c institutional/wholesale, rate-sensitive | `src/engine/ledger/accounts.ts:institutionalDepositsAt` | ⚠️ |
+| A1.d VERIFY stickiness differs by class | `src/engine/macro/banking.ts:stressedOutflowUSD` | ⚠️ |
+| A2 wholesale borrowing — interbank, repo, CP | `src/domain/repo.ts:repoBorrowedUSD` | ⚠️ |
+| A2.a short, and it rolls | `src/domain/repo.ts:maturingAt` | ✅ |
+| A3 capital: equity and subordinated debt | `src/domain/banking.ts:bankEquityUSD` | ⚠️ |
+| A4 the central bank, on the corridor's terms | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ⚠️ |
+| A5 each source has a price; the mix is a decision | `src/engine/macro/banking.ts:evolveBankingSector` | ⚠️ |
+| B1 pays a rate on each source, to a real holder | `src/engine/simulation/stages/02b-bank-diversification.ts:runBankDiversificationStage` | ✅ |
+| B1.a a deposit rate the bank sets | `src/engine/macro/banking.ts:depositRate` | ✅ |
+| B1.a depositors respond to it | `src/engine/simulation/stages/money-market-fund.ts:divertHouseholdSavingsToMmf` | ⚠️ |
+| B1.b a wholesale rate the market sets | `src/engine/simulation/stages/repo-clearing.ts:runRegionalRepoSession` | ⚠️ |
+| **B2 a blended cost of funds, read across the mix** | — | ❌ |
+| **B2.a which feeds the loan price** | `src/domain/bank-pricing.ts:quoteLoanMarginBps` | ❌ |
+| B3 net interest margin, and it can be negative | `src/engine/macro/banking.ts:netInterestMarginPct` | ✅ |
+| C1 liquid assets: reserves and pledgeable securities | `src/engine/macro/banking.ts:liquidityDrivenSovereignFloorUSD` | ✅ |
+| C1.a they differ by haircut and depth | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
+| C2 held against what could leave | `src/engine/macro/banking.ts:stressedOutflowUSD` | ✅ |
+| **C2.a a buffer PREFERENCE derived from its own liabilities** | `src/engine/macro/banking.ts:bankCashBufferRatioOf` | ⚠️ |
+| C3 maturity transformation is the business | `src/domain/banking.ts:MORTGAGE_TERM_WEEKS` | ✅ |
+| C3.a VERIFY the gap is measurable | — | ❌ |
+| C4 VERIFY the position is the residue of everyone's week | `src/engine/simulation/stages/settlement.ts:runSettlementStage` | ✅ |
+| D1 borrows in the market, secured or unsecured | `src/engine/simulation/stages/repo-clearing.ts:runRegionalRepoSession` | ⚠️ |
+| D2 sells or pledges liquid assets | `src/engine/simulation/stages/repo-clearing.ts:selectCollateral` | ✅ |
+| D3 bids up for deposits | `src/engine/macro/banking.ts:liquidityShortfallShare` | ✅ |
+| **D4 shrinks its assets: it stops lending** | `src/engine/simulation/stages/bank-lending.ts:runBankWeeklyLending` | ❌ |
+| D4.a which transmits into the credit book | — | ❌ |
+| D5 draws the facility, collateralised, at a penalty | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ⚠️ |
+| **D6 it can FAIL TO FUND ITSELF** | `src/domain/bank-resolution.ts:isBankUnderPca` | ❌ |
+| **D6.a FORBID no unbounded, uncollateralised, unpriced line** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanUSD` | ❌ |
+| **E1 depositors can leave; A1.c leaves fastest** | — | ❌ |
+| **E2 they leave because they observe something** | — | ❌ |
+| E2.a and what they observe is observable | `src/ui/objects/company.tsx:bankCapitalRatio` | ✅ |
+| E3 leaving forces D2 and D4 | — | ❌ |
+| E3.a VERIFY the loop is self-reinforcing | — | ❌ |
+| E4 deposit insurance breaks it for retail, not wholesale | `src/domain/bank-resolution.ts:bankAssumedLiabilitiesUSD` | ⚠️ |
+| E4.a which is why a run is wholesale first | — | ❌ |
+| E5 a run at one bank is information about others | — | ❌ |
+| F1 deposit lines by class, as reads of who banks there | `src/engine/ledger/accounts.ts:bankDepositLines` | ✅ |
+| F2 the reserve balance, as a read of its account | `src/engine/ledger/accounts.ts:bankReservesOf` | ✅ |
+| F3 VERIFY assets = liabilities + equity every week | `src/engine/simulation/bank-identity-trace.ts:residualOf` | ✅ |
+| F4 a liquidity metric somebody outside can see | `src/ui/objects/company.tsx:srfBorrowingUSD` | ⚠️ |
+
+---
+
+## 3. THE DIFF
+
+### ❌ D6 / D6.a / E1–E5 — THE WHOLE LIABILITY SIDE HAS NO FAILURE MODE. KNOWN(20-LLR)
+
+`bank-lending.ts:917` is four lines: `shortfallUSD = operatingCashBufferUSD(...) - settledCashUSD`,
+and if it is positive the bank gets exactly that, always. No collateral, no eligibility, no cap, no
+refusal. `bank-funding-close.ts:38` calls it for every bank every week, up to eight rounds
+(`MAX_ROUNDS = 8`), until every reserve account is at its buffer. D6 is therefore unreachable and
+D6.a is violated in one expression. The run branch (E1–E5) has nothing at all: the household
+deposit line splits across banks by `bankMarketShare`
+(`ledger/accounts.ts:623`), and that share is *itself* re-derived every week as
+`depositsOf(b) / regionDepositsUSD` (`02b:108`) — deposits are distributed in proportion to
+deposits, so nothing about a bank's condition can move them. The one deposit flow that responds to
+anything, `divertHouseholdSavingsToMmf`, reads `reg.bankingSector.depositRateAnnual` — the REGION's
+aggregate rate — so it cannot distinguish one bank from another either.
+
+**Already §3 step 20-LLR**, in full: the unbounded facility, the capital-only trigger and the
+absent run are its three compounding failures, and its diagnosis of the CAUSE (the session at
+stage 3) is what this tree's D1/A4 rows record.
+
+### ❌ B2 / B2.a — A BANK HAS NO COST OF FUNDS, AND ITS LOANS ARE PRICED WITHOUT ONE. NEW
+
+This is the node 20-LLR does not cover, and it is the reason the funding side transmits nothing
+even where a bank's funding IS priced.
+
+`quoteLoanMarginBps` (`bank-pricing.ts:38`) is `expectedLoss + riskWeight ×
+BANK_WORKING_CAPITAL_RATIO × requiredReturn`. There is no cost-of-funds term. The all-in rate is
+assembled at the call site as `policyRate + margin/10000`
+(`bank-lending.ts:266`, and the mortgage quote at `:625` as `tenor10Y + margin`). **So every bank
+in a region funds at the policy rate for pricing purposes**, whatever it actually pays, whatever
+its mix, and whatever the money market cleared at. `B2` requires a blended read across A1–A4 and
+nothing computes one — the closest thing is `netInterestMarginPct`, which is an ex-post statistic,
+not an input to any price.
+
+Worse, the one place a bank's own credit *does* enter is inconsistent with the cash. `evolveBankingSector`
+charges the central-bank loan at the bank's OWN cleared bond spread —
+`wholesaleInterestUSD = wholesaleUSD × (policyRate + ownWholesaleSpreadBps/10000)/52`
+(`macro/banking.ts:349`) — but that number is only ever fed to the NIM statistic; the equity line is
+never debited by it. The money actually paid is `02b:464`:
+`centralBankLoanUSD × (policyRate + (SRF_SPREAD_BPS + CENTRAL_BANK_LOAN_PENALTY_BPS)/10000)/52` —
+policy + 125bp, identical for a sound bank and a breaching one. **Two rates on one liability, one
+of which is measured and one of which is paid.** A bank whose spread blows out feels it in a
+printed margin and nowhere else.
+
+Consequence: the funding channel is severed at both ends. Nothing carries a funding cost into a
+loan price, so `banks-lending.md` C1.a has no input; and nothing carries a bank's own condition
+into what it pays, so C2's buffer and D3's deposit bidding cost it the same whether it is sound or
+about to fail. **Becomes a §3 step** — small in code (one term in one function, one rate reconciled)
+and load-bearing for every price in `banks-lending.md` C.
+
+### ⚠️ D1 / A2 — THE MARKET IS SECURED-ONLY, SO A NAME IS NEVER PRICED. Already §3 step 20b
+
+`runRegionalRepoSession` is general-collateral repo: one cleared rate for every borrower, and a
+lender's schedule (`lenderSchedule`, `repo-clearing.ts:363`) carries a reservation and a size and no
+view of who is borrowing. There is no unsecured interbank book anywhere in the tree — a grep for
+`interbank` returns only FX squaring. So A2's first member and D1's "or unsecured" are absent, and
+the only unsecured lender a bank has is the central bank, at a rate that does not price it.
+Step 20b names exactly this and says it "was never built".
+
+### ⚠️ C2.a — THE BUFFER IS A CONSTANT WEIGHTED BY A PRIMITIVE. Already §3 step 30b (its sibling)
+
+`bankCashBufferRatioOf` is `MIN_CASH_BUFFER_RATIO (0.02) × riskAversionOf(management)`, applied to
+HOUSEHOLD deposits only (`operatingCashBufferUSD`, `bank-lending.ts:902`). The node asks for a
+preference derived from the liquidity of its own liabilities — and the model already has that
+number: `stressedOutflowUSD` weights retail at 10% and everything else at 40%. It is used for the
+sovereign floor and never for the cash buffer, so a bank funded entirely by overnight wholesale
+money keeps the same 2% of its retail line as one funded by term deposits, and the repo session's
+own borrower sizing uses the bare `MIN_CASH_BUFFER_RATIO` with no management weighting at all
+(`repo-clearing.ts:300`) — a third answer to one question. Step 30b names the same shape on the
+lending side of this market; this is its borrower-side twin.
+
+### ❌ D4 / D4.a — A FUNDING PROBLEM CANNOT REACH THE LOAN BOOK
+
+Origination is gated by capital and by nothing else: `headroomUSD = equityUSD /
+BANK_MIN_CAPITAL_RATIO - currentRwaUSD` (`bank-lending.ts:275`, and `:661` for the household books).
+A bank that is out of cash, out of collateral and financed entirely by the central bank writes
+exactly as many loans as one flush with reserves. So the credit crunch — the channel D4.a exists to
+carry — cannot happen, and `banks-lending.md` B2.b (liquidity as a constraint on lending) has no
+implementation. This is downstream of 20-LLR but not named by it: 20-LLR's fix (move the session to
+the close) makes a funding shortage REAL, and this is the missing wire that would let a real one
+reach the asset side. **Becomes a §3 step**, small, and it should be sequenced after 20-LLR.
+
+### ⚠️ E4 / A1.a — DEPOSIT INSURANCE COVERS EVERYTHING, WHICH IS WHY IT BREAKS NOTHING
+
+`bankAssumedLiabilitiesUSD` sweeps household, corporate, institutional and SME lines plus client
+margin and the secured lines into one number, and `planBankResolution`'s `guaranteeUSD` is the whole
+shortfall against it — the treasury makes ALL of them whole, with no limit and no class distinction
+(`bank-resolution.ts:191`, `reason: 'resolution: deposit guarantee on the hole'`). E4's entire point
+is the asymmetry: insured retail money stays and uninsured wholesale money runs, which is what makes
+E4.a true. With one undifferentiated guarantee the asymmetry does not exist, so even if E1 were
+built the run would have no reason to be wholesale-first. Attach to the same step as E1–E5;
+it is a precondition of them, not a separate mechanism.
+
+### ⚠️ A3 — CAPITAL IS EQUITY, AND THE ONLY WAY IN IS RETAINED EARNINGS
+
+No bank issues equity: `stage08-back.ts` runs the financing decision for every company, and
+`macro/banking.ts:466` records that the "recapitalization" write was deleted outright and "an
+undercapitalized bank now stays undercapitalized until a real equity raise exists". There is no
+subordinated layer either — `seniority` is `'SENIOR' | 'SUBORDINATED'` on `company.ts:83` and a
+bank's own ladder is written SENIOR throughout. This is `banks-capital-and-resolution.md` A2/A3's
+finding seen from the funding side; recorded there.
+
+### A measurement, for §3 step 38: C3.a, A1.d
+
+C3.a (the maturity gap) is never computed — every input exists (`MortgageVintage.wamWeeks`,
+`BankLoan.termWeeks`, the deposit lines) and nothing reads them together. A1.d's stickiness split
+exists (`stressedOutflowUSD`) but only inside the HQLA floor, so it is measured for one purpose and
+never as the read the node asks for. Both are standing reads, not mechanisms.
