@@ -23,7 +23,7 @@
 
 import { govBucketId } from '../../../domain/sovereign-id';
 import { ensureV2 } from '../../../engine2/world';
-import { ladderRowsOf, ensureLaddersSynced, facilityRowsOf } from '../../../engine2/tranches';
+import { ladderRowsOf, ensureLaddersSynced, facilityRowsOf, materializeGovLadder } from '../../../engine2/tranches';
 import { bookHeadOf, ensureBooksSynced } from '../../../engine2/holdings';
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../domain/assets';
@@ -340,7 +340,8 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   regionIds.forEach((r) => {
     const reg = state.regions[r];
     const a = out[r];
-    a.sovBond.outstandingUSD = (reg.govDebtTranches || [])
+    // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
+    a.sovBond.outstandingUSD = materializeGovLadder(v2hv, r)
       .reduce((s, t) => s + Math.max(0, t.principalUSD), 0);
     Object.values(reg.centralBankSheet?.sovereignHoldingsByTenor || {}).forEach((usd) => {
       a.sovBond.centralBankUSD += Math.max(0, Number(usd) || 0);

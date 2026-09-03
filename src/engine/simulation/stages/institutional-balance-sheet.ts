@@ -45,6 +45,7 @@ import { pendingSettlementUSD } from './settlement';
 import { sovereignCouponByBucket } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
 import { ladderTotalUSD } from '../../../engine2/tranches';
+import { materializeGovLadder } from '../../../engine2/tranches';
 
 /**
  * Balance-sheet leverage each type genuinely runs, as a fraction of total assets. A hedge fund
@@ -144,7 +145,8 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       const bucket = govBucketKeyOf(h.instrumentId, h.issuerRegion);
       if (!bucket) return;
       let cb = sovCouponByRegion.get(h.issuerRegion);
-      if (!cb) { cb = sovereignCouponByBucket(issuerReg.govDebtTranches, sovBucketKey); sovCouponByRegion.set(h.issuerRegion, cb); }
+      // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
+      if (!cb) { cb = sovereignCouponByBucket(materializeGovLadder(ctx.v2, h.issuerRegion), sovBucketKey); sovCouponByRegion.set(h.issuerRegion, cb); }
       weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * (cb[bucket] ?? 0)) / 52;
     });
     // A week with no income is written as ZERO, not skipped. Returned unchanged, the field kept

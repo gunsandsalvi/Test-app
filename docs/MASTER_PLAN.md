@@ -500,10 +500,18 @@ possible detector for a defect this project found by reading code instead.
       now honestly labelled, so the household leg converts at the ledger instead of not at all;
       that it was ever a raw number was a 34% discount on every foreign good a household bought.
 
-13-SOV. **THE SOVEREIGN IS A BOND — CONVERT IT COMPLETELY** *(THE TYPE IS DONE — §9.13-SOV.
-    `GovDebtTranche` is now `DebtTranche & { couponRate; tenorAtIssuanceYears }`, so row 1 of the
-    table below is closed and every `DebtTranche` consumer can take a sovereign. Rows 2–5 — the
-    store, the bucket holdings, the YIELD clearing and the parallel curve — are what is left.)*
+13-SOV. **THE SOVEREIGN IS A BOND — CONVERT IT COMPLETELY** *(ROWS 1 AND 2 ARE ALL BUT DONE —
+    §9.13-SOV. Row 1: `GovDebtTranche` is `DebtTranche & { couponRate; tenorAtIssuanceYears }`.
+    Row 2: the ladder lives in the one tranche store, opened by wire at the seed and reconciled by
+    wire at all three writers, so store and array agree at every point in the week; every READER
+    has moved to `materializeGovLadder` and the 39 array references are down to 31 — all of them
+    writers, the rebuild, or the seed. **What is left of row 2** is to make the rebuild write the
+    store directly and delete `reg.govDebtTranches`, `tenorAtIssuanceYears` with it (now provably
+    derivable) and the reconcile that exists only to keep the two in step; `macro/evolution.ts`'s
+    one read comes with that, since it takes a bare `region` and needs a `v2` handle it does not
+    have. **Rows 3–5 — the bucket holdings, the YIELD clearing and the parallel curve — are
+    untouched**, and row 3 is bigger than the table says: the atlas found FOUR holder registers,
+    not one.)*
     (user, 2026-09-03: *"the
     sovereign needs to be completely converted. it should have the same construction of a normal
     bond, they are a normal bond with some different characteristics."*)
@@ -1436,6 +1444,49 @@ was measured wrong. Treat a row there as a lead with a file:line, not a fact.
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**13-SOV ROWS 1 AND 2 — THE SOVEREIGN JOINS THE ONE STORE.** Five of the five parallel structures
+were: its own type, its own store, a holdings bucket with no instrument in it, a YIELD clearing,
+and its own curve. The first two are closed but for a deletion.
+
+**Row 1, the type.** `GovDebtTranche` was a standalone interface whose every field was also a
+`DebtTranche` field — a strict subset, declared separately, carrying no characteristic a corporate
+bond lacks and only lacking ones. It is now `DebtTranche & { couponRate; tenorAtIssuanceYears }`.
+The two fields the three construction sites gained are answers the bond contract asks for, not
+filler: FIXED because a sovereign's coupon is locked at issue (`bond.md` N5.a), SENIOR because a
+sovereign's claims rank equally and there is no stack (N13.a — stated even though the answer is
+"all equal"). Behaviour-neutral, as a type change should be.
+
+**Row 2, the store.** Staged the way a store migration has to be, and the staging earned its keep
+twice:
+- the ledger could not name a GOVERNMENT issuer at all — `issuerParty` returned `{kind:'COMPANY'}`
+  unconditionally — which is one of the reasons the sovereign got its own store in the first place;
+- the seed opens the sovereign ladder into the store BY WIRE, and all four regions mirror exactly:
+  USA 939.81B, UK 247.62B, JPN 304.45B, EUR 356.72B, 1.85T of government paper;
+- `reconcileLadderByWire` diffs the store against the array and wires the difference — face that
+  appeared is ISSUED, face that vanished is RETIRED. It does not overwrite rows, and that is
+  §9.37-SEED's lesson restated: `syncLadderRows` would make the store agree instantly and leave
+  the paper standing with no wire behind it;
+- all three writers write through (11-fiscal's weekly rebuild, and 07c's and 07f's withdrawals),
+  so store and array agree at every point in the week and a reader may take either;
+- every reader has moved: the audit's two, 07c's ladder and cross-region stock, 07f's bills, bill
+  stock and HQLA pool, 11-fiscal's interest bill and accrual, and the four coupon-by-bucket reads.
+
+**Sovereign paper had never been under `wires reproduce the ladders` (W3) or the store's
+`Σ held = issued`.** Joining them, it passes both on the first run.
+
+**And it found the seed rounding a span twice.** Moving the readers needs the bucket key, and the
+store has no tenor column — but it has both dates, so the tenor should be derivable. Tested rather
+than assumed: 20 of 260 rungs disagreed, all of them the seeded 13-week bills, because
+`originationWeek` was `-round(w/2)` and `maturityWeek` `+round(w/2)` — a 14-week span for an
+instrument that calls itself 13 weeks. Two representations of one fact, disagreeing (rule 3).
+Rounded once, they agree on all 260 rungs and the maturity week does not move, which is what lets
+the stored tenor be DELETED rather than carried forward and reconciled.
+
+**MEASURED at every step: 67 violations in 24 families, byte-identical, check for check.** The
+only findings the migration itself produced were two `payment reason matches no category rule` for
+the new wire reasons — registered, which is the repo's own requirement that every wire says what
+kind of flow it is.
 
 **37-ZEROSUM — THE THREE INVARIANTS, AND ALL THREE FIRED ON THE FIRST RUN.** Each was the cheapest
 possible detector for something the atlas had found by reading. Each now finds it without a person

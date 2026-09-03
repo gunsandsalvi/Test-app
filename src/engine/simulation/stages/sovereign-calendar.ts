@@ -48,6 +48,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
+import { materializeGovLadder } from '../../../engine2/tranches';
 
 /** `<region>|<bucket>|<partyKey>` — the receivable one holder has against one bucket. */
 const accrualKey = (regionId: RegionId, bucket: string, party: PartyRef) =>
@@ -68,7 +69,8 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
   REGION_IDS.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
-    const couponByBucket = sovereignCouponByBucket(reg.govDebtTranches ?? [], sovBucketKey);
+    // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
+    const couponByBucket = sovereignCouponByBucket(materializeGovLadder(ctx.v2, regionId), sovBucketKey);
 
     /** One holder's week of interest on one bucket, at that bucket's own weighted-average coupon. */
     const accrue = (bucket: string, party: PartyRef, notionalUSD: number): number => {

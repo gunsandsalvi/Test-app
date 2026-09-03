@@ -21,6 +21,7 @@ import {
 } from '../../../domain/central-bank';
 import { sovereignCouponByBucket } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
+import { materializeGovLadder } from '../../../engine2/tranches';
 
 export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
@@ -31,7 +32,8 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // ---- 1. The CB earns its own coupons and pays interest on reserves; the difference is
     // remitted to the treasury. Negative when policy exceeds the portfolio yield — a central bank
     // remitting nothing after a hiking cycle, reproduced rather than modelled separately. ----
-    const couponByBucket = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
+    // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
+    const couponByBucket = sovereignCouponByBucket(materializeGovLadder(ctx.v2, regionId), sovBucketKey);
     const couponIncomeUSD = Object.entries(cb.sovereignHoldingsByTenor || {})
       .reduce((a, [k, v]) => a + ((Number(v) || 0) * (couponByBucket[k] ?? 0)) / 52, 0);
     // What 02b actually PAID, recorded by 02b at the moment it paid it. Re-summing the banks'

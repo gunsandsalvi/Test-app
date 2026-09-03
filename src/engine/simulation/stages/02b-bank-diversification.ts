@@ -43,6 +43,7 @@ import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../do
 import { pay } from './settlement';
 import { SRF_SPREAD_BPS, bankCashBufferRatioOf } from '../../macro/banking';
 import { cashOf, entityCashOf, poolCashOf, adjustSectorRow, adjustBankReserves, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
+import { materializeGovLadder } from '../../../engine2/tranches';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
@@ -195,7 +196,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       consumerCreditOriginationUSD: number;
     }>();
 
-    const sovCouponByBucket = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
+    // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
+    const sovCouponByBucket = sovereignCouponByBucket(materializeGovLadder(ctx.v2, regionId), sovBucketKey);
 
     // What each bank owes and is owed on contracts that come due this week.
     const dueThisWeek = maturingAt(reg.repoBook ?? [], ctx.nextWeek);
