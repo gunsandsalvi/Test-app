@@ -13,7 +13,7 @@ import { isActiveCompany } from '../../domain/company';
 import { centralBankAssetsUSD, centralBankLiabilitiesUSD, centralBankSovereignBookUSD, centralBankFxReservesUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
-import { ensureV2 } from '../../engine2/world';
+import { ensureV2, currencyOfId } from '../../engine2/world';
 import { facilityBookOf } from '../../engine2/tranches';
 
 const banksOf = (s: GameState, r?: RegionId) =>
@@ -194,5 +194,45 @@ function m7(state: GameState, week: number): AuditFinding[] {
 }
 
 export function auditMoney(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
-  return [...m1(state, week), ...m2(state, week), ...m3(state, week), ...m4(state, week), ...m5(state, week), ...m6(prev, state, week), ...m7(state, week)];
+  return [...m1(state, week), ...m2(state, week), ...m3(state, week), ...m4(state, week), ...m5(state, week), ...m6(prev, state, week), ...m7(state, week), ...m8(state, week)];
+}
+
+/**
+ * M8 — §3.37-ZEROSUM. THE FX REVALUATION IS THE RATE MOVE ON THE WORLD'S OPEN POSITION.
+ *
+ * `fx-revaluation` walks BANKS and CENTRAL BANKS and books each one's gain to equity or to the
+ * revaluation account. This recomputes the same number from a different thing entirely — every
+ * account row that exists, whoever owns it — so the two can only agree if every foreign position
+ * in the world was revalued exactly once.
+ *
+ * A gap is not a rounding: it is a position that revalued twice, or one that nobody revalued.
+ * `docs/systems/currency-and-fx.md` D2.b — an unrevalued foreign position is money created or
+ * destroyed silently, which is a stale mark in the currency dimension. This is the only check
+ * that can see it, and it is the check the M family lacked when revaluation was added.
+ */
+function m8(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const rv = state.lastFxRevaluation;
+  if (!rv) return out;
+  const v2 = ensureV2(state);
+  const A = v2.accounts;
+  // The world's position per currency, from the rows themselves.
+  const posByCurrency = new Map<string, number>();
+  for (let r = 0; r < A.n; r++) {
+    const cur = currencyOfId(A.currencyId[r]);
+    posByCurrency.set(cur, (posByCurrency.get(cur) ?? 0) + A.balance[r]);
+  }
+  let expectedUSD = 0;
+  posByCurrency.forEach((pos, cur) => {
+    const before = rv.fxBefore[cur], after = rv.fxAfter[cur];
+    if (before === undefined || after === undefined) return;
+    expectedUSD += pos * (after - before);
+  });
+  const gap = rv.bookedUSD - expectedUSD;
+  // Float dust on a sum of this many rows, not a fraction of it (rule 28).
+  if (Math.abs(gap) > 1e4) {
+    out.push({ family: 'M', check: 'M8 the FX revaluation is the rate move on the open position', week, usd: gap,
+      message: `revaluation booked ${B(rv.bookedUSD)} against ${B(expectedUSD)} implied by every account row and the week's rate move — ${B(gap)} of foreign position revalued twice or by nobody` });
+  }
+  return out;
 }

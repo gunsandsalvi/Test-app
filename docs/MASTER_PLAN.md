@@ -267,20 +267,6 @@ possible detector for a defect this project found by reading code instead.
     (rule 28 read the other way round: a tolerance of zero fires on representation error). The
     second is step 27's shape and is recorded there too.
 
-37-ZEROSUM. **THE INVARIANTS THAT WOULD HAVE CAUGHT THE REST.** Three checks that do not exist, each
-    one the cheapest possible detector for a defect this atlas found by reading. (derivative D1.b;
-    the-derivative-layer A4, D2.b; currency-and-fx D4; trade-credit C4; the-register B2.b.)
-    · **Σ mark-to-market across the parties to a derivative = 0, exactly** — the invariant that
-      distinguishes a derivative from a security, and nothing checks it. Two of four classes carry
-      no mark at all, so there is nothing to sum;
-    · **Σ FX revaluation gains + losses = the rate move on the net open position** — the only check
-      that catches a position revalued twice or not at all, added right after revaluation cleared
-      the whole M family at 16 weeks;
-    · **Σ receivables = Σ payables**, world-wide — one line, and it is the cheapest proof that
-      trade credit is still two-sided.
-    These are audit families, not mechanisms. They belong before the steps below because each one
-    would have found its defect without a person reading anything.
-
 12. **ONE THING, ONE KEY** (user, 2026-09-03). *(Mostly done — §9.12. What is left is the tail.)*
     **THE POLICY, stated once so a check can test it:**
     · a COMPANY is its `id`; its `ticker` is a display name and a party address, never a key into
@@ -1438,6 +1424,44 @@ was measured wrong. Treat a row there as a lead with a file:line, not a fact.
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**37-ZEROSUM — THE THREE INVARIANTS, AND ALL THREE FIRED ON THE FIRST RUN.** Each was the cheapest
+possible detector for something the atlas had found by reading. Each now finds it without a person
+reading anything, which was the whole argument for putting them before the rest of the list.
+
+**MEASURED, 4 weeks, shocks off: 54 violations in 20 families → 67 in 24.** Every one of the 13 is
+a new check reporting a defect that was already there.
+
+**`O10` — a receivable is somebody's payable.** One line, and the largest of the three.
+*800 firms file 41.20B of receivables against 27.47B of payables — a 13.73B claim on nobody.* The
+cause is one line of the seed: `companyGenerator.ts:232` sets `accountsReceivable = workingCapital
+× 0.6` and `:233` `accountsPayable = workingCapital × 0.4` — **both fractions of the SAME firm's
+own working capital, neither naming a counterparty.** They cannot net because they were never two
+sides of anything. `trade-credit.md` A1/C4, and it confirms 37-TRADECREDIT from the other
+direction.
+
+**`O9` — every derivative carries a mark.** *939 live contracts on 357.83B of notional carry no
+mark at all.* `markToMarketUSDToA` returns `null` for CDS and for IRS, so their value moves and
+never becomes cash: no variation margin passes and no counterparty exposure is measured
+(`../instruments/derivative.md` D8, `the-derivative-layer.md` D2). The zero-sum half — the marks
+summed **across parties** rather than across contracts, so that a contract booked to one side only
+cannot net — **passes**, and that is worth recording: where a mark exists it is genuinely
+two-sided. It is the classes with no mark that are the hole.
+
+**`M8` — the FX revaluation is the rate move on the world's open position.** *Revaluation booked
+0.00B against −0.06B implied by every account row and the week's rate move.* The stage walks BANKS
+and CENTRAL BANKS; this recomputes the same number from every account row that exists, so the two
+can only agree if every foreign position was revalued exactly once. They do not: **a non-bank's
+foreign balance is revalued by nobody.** 60M is small and the mechanism is not — it is
+`currency-and-fx.md` D2.b exactly, an unrevalued position being money created or destroyed
+silently, and this is the only check in the tree that can see it. Tolerance is absolute float dust
+on a sum of that many rows, never a fraction of it (rule 28).
+
+`fx-revaluation` now records what it booked (`state.lastFxRevaluation`, with the rates it moved
+between) so the audit can recompute independently rather than re-deriving the stage's own
+arithmetic and passing tautologically (the-audit A1.a).
+
+Gates: tsc clean, eslint 341 (ratchet), 135 tests, hygiene, build ok.
 
 **37-SEED (part 3) — THE ROLLOVER CHANNEL EXISTS, AND TURNING IT ON FOUND IMMORTAL DEBT.**
 

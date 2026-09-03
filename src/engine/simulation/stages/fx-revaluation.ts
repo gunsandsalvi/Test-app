@@ -58,9 +58,15 @@ export function runFxRevaluationStage(state: GameState): void {
   const banks = state.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet);
   const bankBefore = new Map(banks.map((b) => [b.ticker, bankNetOf(state, b.ticker)]));
   const cbBefore = new Map(REGION_IDS.map((r) => [r, centralBankNetOf(state, r)]));
+  // §3.37-ZEROSUM: what this stage BOOKS, recorded so the audit can compare it against the rate
+  // move applied to the world's actual open position. The two are computed from different things
+  // — this from the entities it walks, the audit from every account row that exists — so a
+  // position revalued twice, or by nobody, is the difference between them.
+  const fxBefore: Record<string, number> = { ...(state.v2!.fx as unknown as Record<string, number>) };
 
   // The rate the last auction cleared becomes the rate in force. Nothing else in the week may
   // move it: two reads of one balance at two rates is a revaluation reported as a leak.
+  let bankGainUSD = 0, cbGainUSD = 0;
   openFxWeek(state.v2!);
 
   banks.forEach((b) => {
@@ -69,6 +75,7 @@ export function runFxRevaluationStage(state: GameState): void {
     // depositor's book (a ledger read) and against the bank as a liability, and the two net.
     const gain = bankNetOf(state, b.ticker) - (bankBefore.get(b.ticker) ?? 0);
     if (Math.abs(gain) > MIN_MARK) b.bankBalanceSheet!.bankEquityUSD += gain;
+    bankGainUSD += gain;
   });
 
   REGION_IDS.forEach((r) => {
@@ -78,5 +85,11 @@ export function runFxRevaluationStage(state: GameState): void {
     // unrealised and is not remitted (the sheet's "no retained earnings" note is about income).
     const gain = centralBankNetOf(state, r) - (cbBefore.get(r) ?? 0);
     if (Math.abs(gain) > MIN_MARK) cb.fxRevaluationUSD = (cb.fxRevaluationUSD ?? 0) + gain;
+    cbGainUSD += gain;
   });
+  state.lastFxRevaluation = {
+    bookedUSD: bankGainUSD + cbGainUSD,
+    fxBefore,
+    fxAfter: { ...(state.v2!.fx as unknown as Record<string, number>) },
+  };
 }

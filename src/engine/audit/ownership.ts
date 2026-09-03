@@ -334,6 +334,73 @@ function o5(state: GameState, week: number): AuditFinding[] {
 }
 
 export function auditOwnership(state: GameState, week: number): AuditFinding[] {
-  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week)];
+  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week)];
 }
 export type { RegionId };
+
+/**
+ * O9 / O10 — §3.37-ZEROSUM. THE TWO-SIDEDNESS OF THE CLAIMS THAT ARE NOT HOLDINGS.
+ *
+ * `Σ held = issued` (O1, O6) proves the register. Two whole classes of claim never go through the
+ * register and had no equivalent proof:
+ *
+ * O9 — A DERIVATIVE IS AN ASSET TO ONE PARTY AND A LIABILITY TO THE OTHER, ALWAYS
+ * (`docs/instruments/derivative.md` D1.b). It is the invariant that distinguishes a derivative
+ * from a security, and it was unchecked. Walking the parties rather than the contracts is the
+ * point: a contract booked onto one side only, or onto the same party twice, nets to zero when
+ * you sum the contracts and does not when you sum the parties.
+ * It also reports the notional whose class NEVER MARKS — `markToMarketUSDToA` returns null for
+ * CDS and IRS, so their value moves and never becomes cash, and there is nothing for the zero-sum
+ * to be about. That is a real gap (D8, and `the-derivative-layer.md` D2), not a passing check.
+ *
+ * O10 — A RECEIVABLE IS SOMEBODY'S PAYABLE (`trade-credit.md` A1, C4). One line, and the cheapest
+ * possible proof that trade credit is two-sided at all.
+ */
+function o9(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const book = state.derivativesBook ?? [];
+  const markByParty = new Map<string, number>();
+  const keyOf = (p: { kind: string; ticker?: string; id?: string }): string => `${p.kind}:${p.ticker ?? p.id ?? '?'}`;
+  let unmarkedNotionalUSD = 0, unmarkedN = 0, selfFaced = 0;
+  book.forEach((c) => {
+    const a = keyOf(c.a as never), b = keyOf(c.b as never);
+    if (a === b) selfFaced++;
+    if (c.settledMarkUSD === undefined) { unmarkedN++; unmarkedNotionalUSD += c.notionalUSD; return; }
+    markByParty.set(a, (markByParty.get(a) ?? 0) + c.settledMarkUSD);
+    markByParty.set(b, (markByParty.get(b) ?? 0) - c.settledMarkUSD);
+  });
+  let net = 0, grossUSD = 0;
+  markByParty.forEach((v) => { net += v; grossUSD += Math.abs(v); });
+  if (Math.abs(net) > 1e3) {
+    out.push({ family: 'O', check: 'O9 derivative marks net to zero across parties', week, usd: net,
+      message: `the parties' derivative marks sum to ${B(net)} rather than zero on ${B(grossUSD)} gross — a contract booked to one side only, or to the same party twice` });
+  }
+  if (selfFaced > 0) {
+    out.push({ family: 'O', check: 'O9 no contract faces itself', week, usd: selfFaced,
+      message: `${selfFaced} contracts name the same party on both sides — a position that cannot lose` });
+  }
+  if (unmarkedN > 0) {
+    out.push({ family: 'O', check: 'O9 every derivative carries a mark', week, usd: unmarkedNotionalUSD,
+      message: `${unmarkedN} live contracts on ${B(unmarkedNotionalUSD)} of notional carry no mark at all (CDS and IRS return null from markToMarketUSDToA) — their value moves and never becomes cash, so no variation margin passes and no counterparty exposure is measured` });
+  }
+  return out;
+}
+
+function o10(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  let receivableUSD = 0, payableUSD = 0, filed = 0;
+  state.companies.forEach((c) => {
+    if (!isActiveCompany(c)) return;
+    const bs = c.historicalFundamentals?.[c.historicalFundamentals.length - 1]?.balanceSheet;
+    if (!bs) return;
+    filed++;
+    receivableUSD += bs.accountsReceivable ?? 0;
+    payableUSD += bs.accountsPayable ?? 0;
+  });
+  const gap = receivableUSD - payableUSD;
+  if (filed > 0 && Math.abs(gap) > 1e6) {
+    out.push({ family: 'O', check: 'O10 every receivable is somebody\'s payable', week, usd: gap,
+      message: `${filed} firms file ${B(receivableUSD)} of receivables against ${B(payableUSD)} of payables — a ${B(gap)} claim on nobody (a receivable names no debtor and a payable names no creditor, so neither is a two-sided claim)` });
+  }
+  return out;
+}

@@ -143,6 +143,9 @@ export interface GameState {
   /** §5-WIRES — last week's wires, summarised: count and value by asset kind. */
   /** GOODS_TRACE=1 only: lot receipts per `companyId|subUnit`. */
   lotReceiptsTrace?: Record<string, number>;
+  /** §3.37-ZEROSUM: what `fx-revaluation` booked this week, and the rates it moved between, so
+   *  the audit can recompute the move against every account row that exists and compare. */
+  lastFxRevaluation?: { bookedUSD: number; fxBefore: Record<string, number>; fxAfter: Record<string, number> };
   lastWires?: { count: number; byKind: Record<string, number>; valueUSDByKind: Record<string, number>; /** money wires recorded after the last pass — they settle next week (N: dated wires) */ moneyPendingUSD: number; /** §3.13c: the week's money wires per currency, in that currency's units */ moneyByCurrency?: Record<string, number>; /** §3.13c: the dated tail per currency */ moneyPendingByCurrency?: Record<string, number>; /** §5-WIRES W2: the clearing house's net per `region|kind` after the week's wires */ houseNetUSDByKey?: Record<string, number>; houseNetUSDByAsset?: Record<string, number>; /** §5-WIRES W3: the issuers' net per `region|kind` */ issuerNetUSDByKey?: Record<string, number>; issuerNetUSDByTicker?: Record<string, number>; /** W5: the register's net per asset kind, in shares */ registerNetQtyByKind?: Record<string, number>; registerNetQtyByHolder?: Record<string, number>; /** §5-WIRES W4 */ goodsNetUnitsByKey?: Record<string, number>; goodsFlowByKey?: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>; goodsOutUnitsByKey?: Record<string, number>; goodsInUnitsByKey?: Record<string, number>; goodsDeliveredByKey?: Record<string, number>; goodsInByTicker?: Record<string, number> };
   regions: Record<RegionId, Region>;
   fxPairs: FxPair[];
