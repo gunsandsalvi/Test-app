@@ -318,17 +318,99 @@ do not reorder.
     and proves nothing. The measurement to keep is `P5`'s sizing (≈140B on the credit book alone)
     and its equivalents for goods, plant and housing once they have prices at all.
 
-    **ORDER.** Not "units first, then price" — that was the credit-only reading. Per CLASS, in
-    increasing order of what must be invented: goods (price exists, just discarded) → credit and
-    sovereign (price must be cleared instead of a spread) → inventory at cost versus price (the
-    new holding-gain mechanism) → plant and housing (units must be defined before anything else
-    is possible). Each class is its own commit and each is expected to move the numbers.
+    **ORDER — set by the user, 2026-09-03:** *"Isn't government bonds in the current financial
+    assets category? Start with refactoring that then move in order of higher to lower
+    difficulty."* So: **sovereign** (13-SOV, the hardest and the one with five parallel
+    structures) → **credit** (price clears instead of a spread) → **equity** (the stored value
+    goes) → **inventory at cost versus price** (the new holding-gain mechanism) → **goods**
+    (the price already exists and is discarded) → **plant and housing** (units must be defined
+    before anything else is possible — step 26 owns that decision). Each class is its own commit
+    and each is expected to move the numbers.
 
     **AND IT OWNS 11f.** `O7` reports ~55 tranches a week claimed beyond their face because
     `register-split.ts:65` spreads an ISSUER-level position across tranches with no cap, while
     `07b:530` clears one instrument per COMPANY. Clearing per tranche in price space closes it.
     Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
     DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
+13-SOV. **THE SOVEREIGN IS A BOND — CONVERT IT COMPLETELY** (user, 2026-09-03: *"the
+    sovereign needs to be completely converted. it should have the same construction of a normal
+    bond, they are a normal bond with some different characteristics."*)
+
+    `GovDebtTranche` (`region-macro.ts:312`) is `{ id, principalUSD, couponRate, originationWeek,
+    maturityWeek, tenorAtIssuanceYears }` — a **strict subset** of `DebtTranche`
+    (`company.ts:75`), field for field. A sovereign here is a fixed-rate senior bullet bond whose
+    issuer is a government; it has no characteristic a corporate bond lacks, it only LACKS ones
+    (no seniority stack, no call protection, no floating leg). For that non-difference it carries
+    **five parallel structures**:
+
+    | | corporate | sovereign |
+    |---|---|---|
+    | type | `DebtTranche` | `GovDebtTranche` — a subset |
+    | store | the engine2 tranche store | `reg.govDebtTranches`, a plain array |
+    | holdings | itemized, per instrument, per holder | `sovereignBondHoldingsByTenor: Record<tenorKey, USD>` — **a bucket with no instrument in it** |
+    | clearing | clears a **price** | `07c` clears a **YIELD**, then writes `reg.zeroRates` |
+    | curve | derived from cleared prices | `reg.zeroRates` / `computeSovereignBookAnnualYield`, its own object |
+
+    Row 3 is step 12's miskeying still standing: you cannot ask who holds a given government
+    bond, because the holding is keyed by TENOR BUCKET, not by instrument. Row 4 is rule 1
+    failing outright — the sovereign is the one asset in the model that does not trade on a
+    price. Row 5 is step 25's two-curve-owners defect, which cannot be fixed while the curve is
+    the thing that clears rather than a read of what cleared.
+
+    **The conversion.** A sovereign becomes a `DebtTranche` issued by a GOVERNMENT party: same
+    type, same store, same itemized holdings, cleared to a PRICE by the same engine, with the
+    zero curve DERIVED from those cleared prices. `GovDebtTranche`,
+    `sovereignBondHoldingsByTenor` and the parallel curve path are deleted. This subsumes the
+    sovereign half of step 25 and `assets/index.ts`'s `YIELD_LIKE` row.
+    Known consumers to move: `macro/banking.ts:91,170,566`, `macro/evolution.ts:815`,
+    `macro/initialization.ts:392,491`, `audit/ownership.ts:46`, `audit/money.ts:126`,
+    `companyGenerator.ts:673`, `ledger/bank-transfer.ts:42-46`, `repo-clearing.ts:99,119,712`,
+    `holdings-view.ts:109,316`, `07f:197,478`, `07c`, `11-fiscal-and-sovereign-debt.ts`,
+    `government.ts`, `government-entity.ts`.
+
+13c. **CURRENCY IS THE OTHER UNIVERSAL CHARACTERISTIC** (user, 2026-09-03: *"Every single asset
+    has a specific currency in which it's issued and in which is priced on, that's another key
+    universal characteristic… why is so much stuff called USD?"*)
+
+    **The suffix is a lie, repeated 11,243 times** (1,395 distinct `…USD` identifiers across
+    `src`; 518 in `src/domain` alone). `domain/currency.ts` states the design in its own header:
+    every monetary figure is stored in the price level of the region that OWNS it, and *"nobody
+    re-denominates their books."* So a German firm's `cashUSD` is euros, its `principalUSD` is
+    euros, its `payrollUSD` is euros. Rule 9 — the unit is part of the number — failing at the
+    largest scale in the tree. It is exactly the `countedIn` defect one axis over: a bare number
+    whose meaning lives in a comment instead of in the type.
+
+    **And the ledger is currency-blind, which makes it more than cosmetic.**
+    · `grep "currency"` across ALL of `engine/ledger/*.ts` and ALL of `engine2/*.ts` → **one
+      hit**, and it is `formatCurrency`, a display helper. An account has no currency field; its
+      currency is implied by its owner's region and never read.
+    · `pay()` (`settlement.ts:227`) takes `amountUSD` and converts NOTHING. A German firm paying
+      a US supplier subtracts N euros from one balance and adds N dollars to the other. The wire
+      ledger balances perfectly, because it is comparing two numbers that are not the same kind
+      of thing.
+    · Only **19 `convertLocal` call sites exist, in 6 files** (`currency.ts`, `initialization`,
+      `05-unit-bidding`, `sourcing-intent`, `freight-clearing`, `foreign-direct-investment`) —
+      every one a DECISION stage comparing a foreign quote. **Zero in settlement, accounts,
+      holdings, or any audit.** Conversion happens where somebody remembered, and nowhere money
+      actually moves.
+    · **No entity has per-currency books.** One balance per party.
+
+    **THE STRUCTURE IT SHOULD BE — the same abstraction, one field wider:** an asset declares
+    `countedIn` (done, §9.13 part 4) **and `quoteCurrency`**; a price is per unit IN THE ASSET'S
+    QUOTE CURRENCY; value in any numéraire is `units × price × fx(quote → numéraire)` — one
+    expression that cannot be evaluated without naming a currency. **Cash becomes an asset like
+    any other**: a position in a currency, whose price in its own currency is 1 by definition
+    (step 13's one allowed hard-coded 1). Per-currency books then FALL OUT of the position
+    abstraction instead of being bolted on — an entity holding EUR and USD holds two positions,
+    the way it already holds two bonds — and `pay()` gains a currency because a payment is a
+    transfer of units of a currency asset. This subsumes step 30c's `Money<C>` brand and the
+    journal's currency column, which were parked in PART VI for want of exactly this.
+
+    **Order:** the TYPE first (an asset cannot be declared without its currency), then the ledger
+    (`pay`, accounts, holdings), then the audits (every cross-region identity currently adds
+    euros to dollars — those failures are the finding), then the rename, which is mechanical once
+    the type carries the truth and must be LAST so the compiler has been doing the work.
+
 13b. **Coupon accruals are dated wires.** `pendingHolderAccrualUSD` is a side map beside the
     paper. It should be a dated wire that RE-KEYS with the paper when the paper moves, landing on
     the per-tranche register — the same treatment every other claim now gets. Step 13 keeps
