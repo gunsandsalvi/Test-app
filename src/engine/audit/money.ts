@@ -159,7 +159,17 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const advance = waysAndMeansOf(ensureV2(state), r) - before.waysAndMeansUSD;
     const explained = credit + issued + ownAccount + crossBorder + book + depositInterest + advance;
     const gap = (now - moneyBefore) - explained;
-    if (Math.abs(gap) > Math.max(5e8, moneyBefore * 0.005)) out.push({ family: 'M', check: 'M6 money moves only by its creators', week, usd: gap, message: `${r}: money stock moved ${B(now - moneyBefore)}; credit ${B(credit)} + central bank ${B(issued)} + banks' own account ${B(ownAccount)} + cross-border ${B(crossBorder)} + household books ${B(book)} + deposit interest ${B(depositInterest)} + advance ${B(advance)} = ${B(explained)}; ${B(gap)} unexplained` });
+    if (Math.abs(gap) > Math.max(5e8, moneyBefore * 0.005)) {
+      const unplaced = ls?.bankTallyUnmappedUSD ?? 0;
+      // The stock is summed over ACTIVE banks, and a bank that left that set still holds the
+      // deposits it held. Reported only when the two reads DIFFER, because then the gap is a
+      // filter rather than a missing creator, and that is a different defect entirely.
+      const allBanks = state.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && c.region === r);
+      const nowAll = sum(allBanks, (b) => depositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker))) + treasuryAccountOf(ensureV2(state), r);
+      const tail = (unplaced ? ` (${B(unplaced)} of bank tallies reached no region at all)` : '')
+        + (Math.abs(nowAll - now) > 1e6 ? ` [over ALL ${allBanks.length} of the region's banks the stock is ${B(nowAll)}, not ${B(now)} — the active filter is dropping a bank that still holds deposits]` : '');
+      out.push({ family: 'M', check: 'M6 money moves only by its creators', week, usd: gap, message: `${r}: money stock moved ${B(now - moneyBefore)}; credit ${B(credit)} + central bank ${B(issued)} + banks' own account ${B(ownAccount)} + cross-border ${B(crossBorder)} + household books ${B(book)} + deposit interest ${B(depositInterest)} + advance ${B(advance)} = ${B(explained)}; ${B(gap)} unexplained${tail}` });
+    }
   });
   return out;
 }

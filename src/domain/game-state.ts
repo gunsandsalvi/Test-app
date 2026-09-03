@@ -115,6 +115,9 @@ export interface GameState {
     centralBankIssuanceByRegion: Record<string, number>;
     bankOwnAccountByRegion: Record<string, number>;
     crossBorderByRegion: Record<string, number>;
+    /** Bank tallies whose ticker matched no company at all, so they reached no region's identity.
+     *  Named rather than absorbed — see M6. */
+    bankTallyUnmappedUSD?: number;
     /** §5-WIRES A — settled rows the store could not map to a party's row (must be zero). */
     accountRowsUnmapped: number;
     /** What those rows were worth: a count is not a size. */

@@ -513,6 +513,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
       default: return assertNever(ref, 'regionOfParty');
     }
   };
+  const xborderByPair = process.env.XBORDER_TRACE ? new Map<string, number>() : undefined;
   const traceUnresolved = process.env.UNRESOLVED_TRACE === '1';
   const sheetByTicker = traceUnresolved
     ? new Map(ctx.updatedCompanies.filter((c) => c.isBankEntity).map((c) => [c.ticker, !!c.bankBalanceSheet]))
@@ -559,6 +560,15 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     if (payerRegion !== payeeRegion) {
       if (payerRegion !== undefined) addTo(report.crossBorderByRegion, payerRegion, -amountUSD);
       if (payeeRegion !== undefined) addTo(report.crossBorderByRegion, payeeRegion, amountUSD);
+      // XBORDER_TRACE=1 names what the official-settlement leg is made of, by the two kinds on
+      // either side. M6 compares this total against the deposits that actually moved in the
+      // region, so when the two disagree the only useful question is which pairing did it.
+      if (xborderByPair) {
+        const hub = payerRef.kind === 'CLEARING_HOUSE' || payeeRef.kind === 'CLEARING_HOUSE';
+        const tag = hub ? 'hub' : 'real';
+        if (payerRegion !== undefined) xborderByPair.set(`${payerRegion} ${tag}`, (xborderByPair.get(`${payerRegion} ${tag}`) ?? 0) - amountUSD);
+        if (payeeRegion !== undefined) xborderByPair.set(`${payeeRegion} ${tag}`, (xborderByPair.get(`${payeeRegion} ${tag}`) ?? 0) + amountUSD);
+      }
     }
     // The ledgers below key by the reason's TEXT, so it is un-interned only for the few payments
     // whose payer or payee is one of the kinds that keeps a per-reason ledger.
@@ -635,6 +645,10 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   report.tgaDeltaByRegion.forEach((deltaUSD, region) => {
     if (!ctx.updatedRegions[region as RegionId]?.centralBankSheet) report.unresolvedUSD += deltaUSD;
   });
+
+  if (xborderByPair) {
+    [...xborderByPair.entries()].sort().forEach(([k, v]) => console.log(`  [xborder] w${week} ${k} ${(v / 1e6).toFixed(1)}M`));
+  }
 
   report.centralBankResidualUSD = centralBankResidualUSD(report);
   ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;

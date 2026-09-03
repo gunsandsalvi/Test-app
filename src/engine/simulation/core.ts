@@ -460,18 +460,33 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
           .map(([k, m]) => [k, Object.fromEntries(m.entries())])
       ),
       ...(() => {
-        const regionOfBank = new Map(ctx.updatedCompanies.filter((c) => c.isBankEntity).map((c) => [c.ticker, c.region as string]));
+        // Keyed off EVERY company, not the banks among them. These tallies are keyed by a bank's
+        // ticker, and a bank that stops being one during the week — resolved, or merged and its
+        // sheet cleared — is still the company whose region the money moved in. Filtering to
+        // `isBankEntity` dropped its whole delta on the floor, silently, and M6 saw the deposits
+        // move with no creator to explain them.
+        const regionOfBank = new Map(ctx.updatedCompanies.map((c) => [c.ticker, c.region as string]));
+        state.companies.forEach((c) => { if (!regionOfBank.has(c.ticker)) regionOfBank.set(c.ticker, c.region as string); });
         const mergeMapsForRegion = (x: Map<string, number>, y: Map<string, number>): Map<string, number> => {
           const out = new Map(x); y.forEach((v, k) => out.set(k, (out.get(k) ?? 0) + v)); return out;
         };
+        // Whatever still finds no region is NAMED, never absorbed: a tally that cannot be placed
+        // is money the identity below cannot see, which is the thing M6 exists to report.
+        let unmappedUSD = 0;
         const byRegion = (m: Map<string, number>): Record<string, number> => {
           const out: Record<string, number> = {};
-          m.forEach((v, ticker) => { const r = regionOfBank.get(ticker); if (r) out[r] = (out[r] ?? 0) + v; });
+          m.forEach((v, ticker) => {
+            const r = regionOfBank.get(ticker);
+            if (r) out[r] = (out[r] ?? 0) + v; else unmappedUSD += v;
+          });
           return out;
         };
+        const creditCreatedByRegion = byRegion(ctx.lastSettlementReport.creditCreatedByBank);
+        const bankOwnAccountByRegion = byRegion(mergeMapsForRegion(ctx.lastSettlementReport.bankEquityDeltaByBank, ctx.lastSettlementReport.bankSecuritiesDeltaByBank));
         return {
-          creditCreatedByRegion: byRegion(ctx.lastSettlementReport.creditCreatedByBank),
-          bankOwnAccountByRegion: byRegion(mergeMapsForRegion(ctx.lastSettlementReport.bankEquityDeltaByBank, ctx.lastSettlementReport.bankSecuritiesDeltaByBank)),
+          bankTallyUnmappedUSD: unmappedUSD,
+          creditCreatedByRegion,
+          bankOwnAccountByRegion,
           centralBankIssuanceByRegion: Object.fromEntries(ctx.lastSettlementReport.centralBankIssuanceByRegion.entries()),
           crossBorderByRegion: Object.fromEntries(ctx.lastSettlementReport.crossBorderByRegion.entries()),
         };

@@ -187,13 +187,28 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11d. **A creator is missing from M6's list.** The money stock moves by named creators only;
-    `audit/money.ts:120` names seven of them. In a week of large gross cross-border flow (week 8,
-    UK: cross-border +27.82B, banks' own account −21.25B, stock moved 0.36B) **2.55B is
-    unexplained**. Either a real creator has no name in that list or one of the seven is measured
-    on a different basis from the stock it is compared against. Found by step 9b, which did not
-    cause it.
-
+11d. **A creator is missing from M6's list.** UK, week 8 of 16, **2.55B unexplained** against a
+    406B stock — a 0.63% breach of a 0.5% tolerance, so it is marginal, and it is the money
+    family's only sized line. The two big terms it sits between are cross-border +27.82B and the
+    banks' own account −21.25B.
+    **Four hypotheses are DISPROVED — do not re-derive them** (§9.11d):
+    (a) the reverse-repo book disagreeing with its lenders — a new M2 check proves it does not;
+    (b) a bank tally reaching no region — every tally is now placed, and the unplaced total is
+    reported rather than dropped; it is zero;
+    (c) the ACTIVE-bank filter dropping a bank that still holds deposits — measured, 4 of 4 banks
+    and an identical stock, and M6 now says so whenever the two reads differ;
+    (d) the clearing house's legs being booked as official settlement — they ARE the bulk of the
+    cross-border total (UK week 8: hub −72.8B against real cross-region flows of −4.7B), but they
+    track a real movement of deposits between regions through the hub, so the attribution is not
+    wrong on its face.
+    **The sharpest lead left, and it is (d)'s other half:** `settlement.ts:506` `regionOfParty`
+    attributes a leg by the PARTY'S DOMICILE, while the deposits actually move at the party's
+    BANK. For a company or an institution those are two different regions whenever its
+    `homeBankTicker` is not in its own region, and then the cross-border leg and the money it is
+    supposed to explain are keyed differently — rule 3, and rule 14's pairing. Test it with
+    `XBORDER_TRACE=1`, which prints the official-settlement leg per region split into hub and real.
+    Second lead: the clearing house holding margin ACROSS a settlement pass, so its legs do not
+    pair inside the week M6 measures.
 11e. **The seed's unwired positions.** The world's week-0 register, ladders and plant open by
     assignment, not by wire. They should open by wires from a SEED party that closes at week 0 —
     the seed is an event after all — and the W family can then prove week 0 too, which today it
@@ -2346,6 +2361,26 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**11d (part 1). Two silent drops closed, four hypotheses killed.** (`PENDING`) M6 stays open; what
+this commit did was make it answerable. `core.ts`'s `byRegion` keyed the per-bank tallies off
+companies filtered to `isBankEntity`, so a bank that stopped being one during the week — resolved,
+or merged with its sheet cleared — had its whole delta dropped on the floor without a word. It is
+now keyed off every company, with `state.companies` behind it, and whatever still finds no region
+is NAMED (`bankTallyUnmappedUSD`) instead of absorbed. M6 reports it, and reports the active-bank
+filter too whenever summing the stock over all of a region's banks gives a different answer.
+
+Neither turned out to be the cause — both measured zero — and that is the value: **four
+hypotheses are now disproved and recorded in §3's step 11d so nobody spends the afternoon on them
+again.** The one that took longest to kill was the clearing house: its legs really are the bulk of
+the cross-border total (UK week 8, hub −72.8B against real cross-region flows of −4.7B), which
+looks damning until you check that money genuinely does move between regions through the hub. The
+attribution is not wrong on its face; what is still suspect is the OTHER half of that code, which
+keys a leg by the party's domicile while the deposits move at the party's bank.
+
+`XBORDER_TRACE=1` prints the official-settlement leg per region, split hub and real, and stays.
+Measured: **134 in 33, unchanged, and the family scoreboard is byte-identical** — which is what a
+commit that only sharpens the instrument should look like.
 
 **11c. The central bank's book drifts — the remittance under-counted its own expense.** (`PENDING`)
 EUR's M1 missed by 0.08B and 0.10B in the last two weeks of sixteen: reserves plus the reverse
