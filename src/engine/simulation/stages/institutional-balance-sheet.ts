@@ -1,7 +1,7 @@
 import { entityCashOf } from '../../ledger/accounts';
 /**
  * The institutional balance sheet: the link between the money in the system and the price of
- * assets (plan §5-S11).
+ * assets (plan ).
  *
  * Before this module existed, an institution's bid was bounded by a policy ceiling and by
  * nothing else. Measured, entity cash went from +5.7% of assets to −10% by week 20 and stayed
@@ -16,7 +16,7 @@ import { entityCashOf } from '../../ledger/accounts';
  *     one real book and arriving nowhere, the exact "1$ is 1$" hole rule 3 exists to catch.
  *     Corporate bond coupons and loan interest are credited weekly here off the issuer's own
  *     real tranche terms. Sovereign coupons are deliberately NOT credited: the government does
- *     not pay them yet (its interest expense does not exist — §5-S4r/BP5), and crediting the
+ *     not pay them yet (its interest expense does not exist — /BP5), and crediting the
  *     holder without debiting the payer would create money.
  *
  *  2. **Marking.** `totalAssetsUSD` becomes what it is: cash plus the book, recomputed weekly
@@ -73,7 +73,7 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashUS
   // HF1: what its prime broker will actually lend it this week, less what it has already drawn.
   // Negative when the line has been CUT below the draw — which makes the fund a net seller in
   // this week's auctions, at whatever they clear, which is what a margin call is.
-  // §7.241: whether a kind levers, and through what, is a registry fact.
+  // Whether a kind levers, and through what, is a registry fact.
   const allowanceUSD = institutionProfile(entity.entityType).leverage === 'PRIME_BROKERAGE'
     ? (entity.primeBrokerageAvailableUSD ?? 0)
     : 0;
@@ -83,9 +83,9 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashUS
   // than the residue of whatever the week's auctions did to it. Without this, entity cash was a
   // clearing residual swinging 72B → 23B → 32B → 18B week to week, and once institutional
   // balances became real bank liabilities (SETL5) that swing went straight into bank reserves
-  // (§7.91). Below the sleeve an entity is a net seller, which is what a fund short of cash is.
+  //. Below the sleeve an entity is a net seller, which is what a fund short of cash is.
   const sleeveTargetUSD = Math.max(0, entity.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, totalAssetsUSD);
-  // SETL6: plus what this week's already-agreed trades will settle — negative once the fund has
+  // Plus what this week's already-agreed trades will settle — negative once the fund has
   // committed, so the five books cannot each spend the same balance. The clearing legs are
   // payment instructions now (stages/book-settlement.ts) and the cash moves at the settlement
   // pass, so the unsettled position is where a commitment lives until then.
@@ -102,7 +102,7 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashUS
 export function stagePurchaseBudgetUSD(
   ctx: WeeklyStepContext,
   entity: InstitutionalEntity,
-  /** §5-WIRES D: the entity's live total assets (`institutionTotalAssetsUSD`), the sleeve's base. */
+  /** D: the entity's live total assets (`institutionTotalAssetsUSD`), the sleeve's base. */
   totalAssetsUSD: number,
   assetClass: 'CORP_BOND' | 'GOV_BOND' | 'LEVERAGED_LOAN',
   unsettledUSD = 0
@@ -123,7 +123,7 @@ export function stagePurchaseBudgetUSD(
  * earnings can size the week's bids.
  */
 export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
-  // SCALE: the sovereign ladder is a pure function of one region's stack and was being walked
+  // The sovereign ladder is a pure function of one region's stack and was being walked
   // once per gov-bond ROW — the same arithmetic once, memoized for the week.
   const sovCouponByRegion = new Map<string, Record<string, number>>();
 
@@ -147,15 +147,17 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       if (!cb) { cb = sovereignCouponByBucket(issuerReg.govDebtTranches, sovBucketKey); sovCouponByRegion.set(h.issuerRegion, cb); }
       weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * (cb[bucket] ?? 0)) / 52;
     });
-    if (weeklyIncomeUSD <= 0) return entity;
-    // Stage 08 reports this on the listed shell rather than inventing a portfolio yield of its
-    // own (HH1b — one institution, not two).
-    return { ...entity, lastWeeklyInvestmentIncomeUSD: weeklyIncomeUSD };
+    // A week with no income is written as ZERO, not skipped. Returned unchanged, the field kept
+    // last week's number for ever and every reader — the pension entitlement above all — credited
+    // income that was never earned again.
+    if (weeklyIncomeUSD <= 0 && !(entity.lastWeeklyInvestmentIncomeUSD ?? 0)) return entity;
+    // Stage 08 reports this on the listed shell rather than inventing a portfolio yield of its own.
+    return { ...entity, lastWeeklyInvestmentIncomeUSD: Math.max(0, weeklyIncomeUSD) };
   });
 }
 
 /**
- * §5-WIRES D — THE READ. An entity's total assets, live: cash, receivables, overnight cash lent,
+ * D — THE READ. An entity's total assets, live: cash, receivables, overnight cash lent,
  * the stock-loan book and the register's rows (a sponsor's portfolio at the public comparable).
  * While the clearing store is live the rows are the week's opening register and the books' cash
  * legs are in the receivable, so the receivable is left out until the write-back — the opening

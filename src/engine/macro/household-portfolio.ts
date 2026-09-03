@@ -1,5 +1,5 @@
 /**
- * MS1 — what households actually own.
+ * What households actually own.
  *
  * The household sector held its equity as a single number that appreciated by a formula return:
  * 2,224B against a total real market capitalisation of 1,052B, in no share register and clearing
@@ -7,16 +7,16 @@
  * with the real claims the model contains, and names the part it does not.
  *
  * Four components, in descending order of how real they are:
- *   - **ETF shares.** Created through the authorised-participant mechanism like any other holder's,
+ *   **ETF shares.** Created through the authorised-participant mechanism like any other holder's,
  *     marked at the fund's own NAV. A household has no research capacity, so the ETF project's
  *     coverage rule already makes it a 100% indexer — households are the buyer the broad-market
  *     funds were missing, which is what made this gap visible in the first place.
- *   - **Direct listed equity.** The float institutions do not hold. 07e already treats the
+ *   **Direct listed equity.** The float institutions do not hold. 07e already treats the
  *     non-institutional share as passive holders who do not bid; this says who they are.
- *   - **Private business equity.** Households own the unlisted economy. HC gave every private firm
+ *   **Private business equity.** Households own the unlisted economy. HC gave every private firm
  *     an `ownership.founderPct`; valued at the same cleared multiple the sponsors mark at, this is
  *     the largest real component and it was entirely invisible before.
- *   §5-CLOSE C5: there is no "unmodeled remainder" — household wealth is the claims that exist.
+ *   C5: there is no "unmodeled remainder" — household wealth is the claims that exist.
  */
 
 import { bookHeadOf } from '../../engine2/holdings';
@@ -49,7 +49,7 @@ export function householdPrivateBusinessEquityUSD(
 }
 
 /**
- * OWN4 — the listed shares households hold directly: the residual of a REAL register, name by
+ * The listed shares households hold directly: the residual of a REAL register, name by
  * name. Every share of a listed company is either on some institution's book (funds, insurers,
  * pensions and the index funds, all of which bid in 07e and settle their cash there) or it is
  * held directly, and this counts the second kind by subtracting the first from the register.
@@ -62,12 +62,15 @@ export function householdPrivateBusinessEquityUSD(
  * Nothing circular: 07e clears the whole register (OWN2), so this is a measurement of who ended
  * up holding it, never an input to what the book may trade.
  */
-// §7.313 flip: reads the persistent rows — mid-week the object books are a stale view.
+// Reads the persistent rows — mid-week the object books are a stale view.
 export function householdDirectEquityUSD(
   v2: import('../../engine2/world').V2World,
   regionId: RegionId,
   companies: Company[],
-  entities: InstitutionalEntity[]
+  entities: InstitutionalEntity[],
+  /** The banks' equity desks, by company — 07e creates their inventory as real bank-owned
+   *  shares, so what a desk holds is not part of the float. */
+  deskHeldUSD?: Map<string, number>
 ): number {
   const H = v2.holdings;
   const equityRef = internString(v2, 'EQUITY');
@@ -86,12 +89,17 @@ export function householdDirectEquityUSD(
   });
   return companies.reduce((sum, c) => {
     if (c.region !== regionId || !isActiveCompany(c) || !isPubliclyListed(c)) return sum;
-    return sum + Math.max(0, Math.max(0, marketCapOf(c)) - (institutionallyHeldUSD.get(c.id) ?? 0));
+    // The float is what NO named book holds: the register's institutions and the banks' desks
+    // both come out. Subtracting only the register counted the desks' whole equity book as
+    // household net worth — and 07e computes the same residual the other way, with the desks
+    // out, so the two disagreed by exactly that.
+    const namedUSD = (institutionallyHeldUSD.get(c.id) ?? 0) + (deskHeldUSD?.get(c.id) ?? 0);
+    return sum + Math.max(0, Math.max(0, marketCapOf(c)) - namedUSD);
   }, 0);
 }
 
 /** Marked value of the household's index-fund shares, at each fund's current net asset value. */
-// §7.313 flip: the fund's basket is read off the rows.
+// The fund's basket is read off the rows.
 export function householdEtfHoldingsUSD(
   v2: import('../../engine2/world').V2World,
   hs: Pick<HouseholdState, 'etfShares'>,

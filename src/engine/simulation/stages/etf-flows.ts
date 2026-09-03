@@ -63,7 +63,7 @@ function classAppetiteUSD(ctx: WeeklyStepContext, entity: InstitutionalEntity, d
 function indexedShare(ctx: WeeklyStepContext, entity: InstitutionalEntity, nameCount: number): number {
   if (nameCount <= 0) return 0;
   // A fund that picks names does not buy the basket that averages them away.
-  // §7.241: the fact lives on the kind's registry row, not in a stage condition.
+  // The fact lives on the kind's registry row, not in a stage condition.
   if (institutionProfile(entity.entityType).picksOwnNames) return 0;
   const aumBillions = Math.max(0, institutionTotalAssetsUSD(ctx, entity)) / 1e9;
   const namesCovered = NAMES_COVERED_AT_ONE_BILLION_AUM * Math.pow(aumBillions, RESEARCH_COVERAGE_SCALING_EXPONENT);
@@ -71,7 +71,7 @@ function indexedShare(ctx: WeeklyStepContext, entity: InstitutionalEntity, nameC
 }
 
 /** NAV of a fund: its real basket at this week's cleared marks, plus cash it has not deployed. */
-// §7.313 flip: read off the rows — mid-week the persistent store is the book's authority.
+// Read off the rows — mid-week the persistent store is the book's authority.
 function fundNavUSD(v2: import('../../../engine2/world').V2World, fund: InstitutionalEntity): number {
   const H = v2.holdings;
   let holdingsUSD = 0;
@@ -89,14 +89,14 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   const navByFundId = new Map<string, number>();
   funds.forEach((fund) => {
     const navUSD = fundNavUSD(ctx.v2, fund);
-    // §4.0 Tier 1 item 6 — a fee is paid FROM CASH THE FUND HAS. Charging the full ratio into a
+    // A fee is paid FROM CASH THE FUND HAS. Charging the full ratio into a
     // fund whose cash-plus-pending was already spent dug the small persistent overdrafts the
     // harness flags (USAIGX −18M, the IGX/LLX residue); the sponsor of a cash-short fund waits,
     // and next week's ratio is computed fresh off the NAV as before.
     const payableCapUSD = institutionSpendableUSD(ctx, fund);
     const feeUSD = Math.min((navUSD * fund.etf!.expenseRatioAnnual) / 52, payableCapUSD);
-    // §7.241: ONE fee, ONE payment. The old form computed the fee twice from two different NAVs
-    // — the sponsor's credit off the pre-flow book here, the fund's debit off the post-flow book
+    // ONE fee, ONE payment. The old form computed the fee twice from two different NAVs
+    // the sponsor's credit off the pre-flow book here, the fund's debit off the post-flow book
     // in the apply pass — so the two sides of one fee disagreed by the week's flow, silently.
     if (feeUSD > 0) {
       pay(ctx, {
@@ -111,7 +111,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
 
   // ---- 2. What every investor wants to hold in each fund next week. ----
   const investors = ctx.updatedInstitutionalEntities.filter(
-    // §7.241: an INCLUSION fact from the registry — the old exclusion list silently opted a new
+    // An INCLUSION fact from the registry — the old exclusion list silently opted a new
     // kind IN as an ETF investor, whatever it was.
     (e) => institutionProfile(e.entityType).investsInEtfs && !e.isDefaulted
   );
@@ -219,9 +219,9 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // It was `Math.max(0, saving x equityShare)`: a household could buy funds or not buy funds,
     // and there was no household term in `grossRedeemUSD` anywhere. Unemployment could only ever
     // SLOW purchases, never force a sale — so a drawdown had no household seller in it, which is
-    // precisely the amplifier that makes one self-reinforcing (§6.1).
+    // precisely the amplifier that makes one self-reinforcing.
     //
-    // The savings rate is signed since §7.165, so this is too. What a household does with a
+    // The savings rate is signed since, so this is too. What a household does with a
     // shortfall is not to sell at once: it runs its cash down first and sells only what its
     // deposits cannot cover. That ordering is why forced selling is rare, and why it is violent
     // when it comes — every buffer is exhausted at the same time, near the bottom.
@@ -239,10 +239,10 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       const heldUSD = householdEtfHoldingsUSD(ctx.v2, hs, ctx.updatedInstitutionalEntities);
       const cashGapUSD = Math.max(0, -weeklySavingUSD - depositHeadroomUSD);
       intoFundsUSD = -Math.min(Math.max(0, heldUSD), cashGapUSD);
-      // §7.281 — the ladder's NEXT rung. What neither the deposit buffer nor the fund shares
+      // The ladder's NEXT rung. What neither the deposit buffer nor the fund shares
       // could cover is announced as a direct-equity sale, and next week's 07e session executes
-      // it against the households' own residual shares — the position §7.166's row said was
-      // not a position ("a holding that cannot be sold is not a holding"). Announce-then-price,
+      // it against the households' own residual shares — a holding that cannot be sold is not a
+      // holding, so the residual has to be sellable. Announce-then-price,
       // the same one-week rhythm every flow in this stage follows.
       hs.pendingDirectEquitySaleUSD = Math.round(Math.max(0, cashGapUSD - Math.max(0, heldUSD)));
     }
@@ -262,7 +262,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   REGION_IDS.forEach((r) => {
     const banks = ctx.updatedCompanies.filter((c) => c.region === r && c.bankBalanceSheet);
     const equityUSD = banks.reduce((s, c) => s + (c.bankBalanceSheet?.bankEquityUSD ?? 0), 0);
-    // ETF2: the desks' capital over the risk a basket consumes while they hold it — the equity
+    // The desks' capital over the risk a basket consumes while they hold it — the equity
     // book's own weekly move cap, which is the same number the prime brokers haircut equity by.
     const scratch: number[] = [];
     const moves = ctx.updatedCompanies.filter((c) => c.region === r && c.listingStatus !== 'PRIVATE' && !c.isDefaulted)
@@ -279,7 +279,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   const netFlowByFund = new Map<string, number>();
   const householdExecutedByFund = new Map<string, { spentUSD: number; navPerShare: number }>();
   const holdingsDeltaByInvestor = new Map<string, Map<string, number>>();
-  /** ETF2: redeemer id -> fund id -> the value of the basket the fund owes it this week. */
+  /** Redeemer id -> fund id -> the value of the basket the fund owes it this week. */
   const inKindRedemptionsByInvestor = new Map<string, Map<string, number>>();
 
   /** What each investor wants to move in each fund, and the fund's net — computed before any
@@ -290,8 +290,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   }>();
   // One pass over the investors' books instead of a `.find` per investor PER FUND — the same
   // first-match-wins row each per-fund scan used to stop at (per-item scans in per-item loops:
-  // the §7.32 anti-pattern, found here by the SCALE profile at ~17 ms/week).
-  // §7.313 flip: first-match-wins share counts read off the rows.
+  // the anti-pattern, found here by the SCALE profile at ~17 ms/week).
+  // First-match-wins share counts read off the rows.
   const etfShareRowByInvestor = new Map<string, Map<string, number>>();
   const investorById = new Map(investors.map((i) => [i.id, i]));
   {
@@ -311,12 +311,12 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     });
   }
 
-  // ETF2 — ONE BUDGET PER INVESTOR, ACROSS EVERY FUND IT BUYS INTO.
+  // ONE BUDGET PER INVESTOR, ACROSS EVERY FUND IT BUYS INTO.
   //
   // The cash test below is right and was applied in the wrong place: inside a loop over FUNDS, so
   // an investor buying into three of them was allowed its full balance in each. The same dollar
   // was budgeted once per fund, and the overdrafts that produced are the harness's largest
-  // remaining violation family (§7.196 traced one of them; the reconcile plug was quietly paying
+  // remaining violation family (traced one of them; the reconcile plug was quietly paying
   // for it every week). A running budget is what every other book in this model gives a bidder.
   const budgetRemainingByInvestor = new Map<string, number>();
   const budgetOf = (inv: { id: string }): number => {
@@ -365,7 +365,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     });
 
     // Household saving is a creation order like any other and competes for the same AP capacity.
-    // ...and a household REDEMPTION is a redemption like any other, which is what makes a forced
+    //...and a household REDEMPTION is a redemption like any other, which is what makes a forced
     // household sale reach the fund's own basket and the prices in it.
     const householdUSD = householdDemandByFund.get(fund.id) ?? 0;
     if (householdUSD > 0) grossCreateUSD += householdUSD;
@@ -406,7 +406,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
 
     // Everyone's order is filled in the same proportion — the AP cannot choose whose basket to
     // carry. Redemptions net against creations first, so only the residual consumes capacity.
-    // ETF2 — AND A FUND CAN ONLY PAY A REDEMPTION OUT OF CASH IT HAS.
+    // AND A FUND CAN ONLY PAY A REDEMPTION OUT OF CASH IT HAS.
     //
     // A redemption settled in CASH is money leaving the fund, and nothing checked that it had
     // any: a fund whose assets are securities paid out anyway and went overdrawn, which is the
@@ -418,7 +418,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // constraint rather than a fix — until the basket moves, a fund short of cash genuinely
     // cannot honour the redemption.
     const fundCashAvailableUSD = institutionSpendableUSD(ctx, fund);
-    // ETF2 — AND NOW IT IS IN KIND, which is what makes the cash cap unnecessary rather than
+    // AND NOW IT IS IN KIND, which is what makes the cash cap unnecessary rather than
     // merely honest. An institutional redemption hands over the BASKET: the fund delivers the
     // redeemer its pro-rata slice of everything it owns — securities and cash together — and no
     // money has to be found, because a fund that owns something can always deliver a fraction of
@@ -447,7 +447,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // whose basket to carry. Paid for out of the deposits stage 02 credited this week, so the
     // money genuinely leaves the household balance sheet to buy the shares.
     let householdExecutedUSD = householdUSD * fillRatio * householdCashFillRatio;
-    // §7.248: a household cannot redeem more than it holds — the register has always trimmed the
+    // A household cannot redeem more than it holds — the register has always trimmed the
     // share leg at the holding (household-balance-sheet); now that the CASH leg is a real
     // payment, the same trim applies to it, or a household would be paid for shares it does not
     // hold. One number for both legs.
@@ -458,7 +458,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       householdExecutedUSD = Math.max(-heldUSD, householdExecutedUSD);
     }
     if (householdExecutedUSD !== 0) {
-      // §7.248: a REAL payment now, signed by direction. A purchase pays the fund out of the
+      // A REAL payment now, signed by direction. A purchase pays the fund out of the
       // household's deposits; a redemption pays the household out of the fund's cash. Settlement
       // moves the household deposit and the pending bank leg (T+1 to the banks, the standing
       // convention) and the fund's cash with its home bank's institutional line — so
@@ -477,7 +477,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
           amountUSD: -householdExecutedUSD,
           reason: 'etf household flow',
         });
-      // §7.248: the register settles shares at the SAME price this cash leg paid — the fund's
+      // The register settles shares at the SAME price this cash leg paid — the fund's
       // book is mid-flight when household-balance-sheet reads it (the payment applies at the
       // close), so a re-derived NAV divided by an empty week-one book there.
       householdExecutedByFund.set(fund.id, { spentUSD: householdExecutedUSD, navPerShare });
@@ -491,7 +491,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + -executedUSD);
         inKindRedemptionsByInvestor.set(id, byFund);
       } else {
-        // §7.241: a creation is a PAYMENT — this file used to contain no pay() call at all, so
+        // A creation is a PAYMENT — this file used to contain no pay call at all, so
         // no instruction ever reached settlement, no bank saw the deposits move, and 02b's
         // reconcile invented the reserves (the institutional 9.9B slice of the recorded plug).
         pay(ctx, {
@@ -535,7 +535,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
     let delivered = false;
     const fundAssetsUSD = new Map<string, number>();
-    // §7.262 — the cash the slice loop has NOT yet promised. The payments below settle at the
+    // The cash the slice loop has NOT yet promised. The payments below settle at the
     // close, so `fund.cashUSD` never falls between redeemers — while `share` renormalizes
     // against the SHRUNKEN total. Two 40%-of-the-fund redeemers therefore took 0.4 + 0.667 of
     // the SAME opening cash (the holdings legs shrink in place and were right; only the cash
@@ -546,7 +546,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     inKindOwedByFund.forEach((_owed, fundId) => {
       const fund = entityById.get(fundId);
       if (!fund) return;
-      // §7.307 holdings flip: row walk on the mirror.
+      // holdings flip: row walk on the mirror.
       let holdingsUSD = 0;
       { const H = ctx.v2.holdings; for (let r = bookHeadOf(ctx.v2, fundId); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r]; }
       fundAssetsUSD.set(fundId, holdingsUSD + institutionSpendableUSD(ctx, fund, false));
@@ -561,7 +561,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         // out is a fund being wound up, which is a real outcome rather than a failure to settle.
         const share = Math.min(1, owedUSD / totalUSD);
         const rows: ItemizedHolding[] = [];
-        // §7.313 flip: the basket slice reads the fund's rows; §5-WIRES W2 then moves it by wire,
+        // The basket slice reads the fund's rows; W2 then moves it by wire,
         // fund → investor, BEFORE the next redeemer reads the fund — its slice is of what is left
         // (measured: read-all-then-move handed later redeemers a slice of rows already promised,
         // and the small-cap ETFs' constituents over-delivered 2–3x by week 4).
@@ -588,7 +588,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         if (rows.length > 0) delivered = true;
         // The cash slice of the basket travels with it: a pro-rata claim is on everything the
         // fund owns, and leaving the cash behind would hand the last redeemer a fund of pure
-        // cash. Sliced from the REMAINING balance (§7.262) — the same base the renormalized
+        // cash. Sliced from the REMAINING balance — the same base the renormalized
         // `share` divides — never from the live field the settlement has not yet debited.
         const remainingCashUSD = remainingCashByFund.get(fundId) ?? 0;
         const cashSliceUSD = remainingCashUSD * share;
@@ -626,11 +626,11 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // premium — which is what an ETF's premium IS, rather than a number derived from one.
   const shareBookSpreadBps = DESK_SPREAD_BPS_BY_BOOK['equity'];
   const assemblyCostRate = basketAssemblyCostRate(shareBookSpreadBps);
-  // SCALE: the ETF_SHARE rows of the whole register, once. Each fund below asked every entity for
+  // The ETF_SHARE rows of the whole register, once. Each fund below asked every entity for
   // its holding of THAT fund by reducing over the entity's entire book — 27 funds x 75 entities x
   // ~1,600 rows is 3.2M row visits a week to read a few thousand positions. One pass, indexed by
   // fund, gives every fund its own holders directly.
-  // §7.307 holdings flip: row walk — a non-ETF row costs one int compare.
+  // holdings flip: row walk — a non-ETF row costs one int compare.
   const etfSharesByFundByInvestor = new Map<string, Map<string, number>>();
   {
     const H = ctx.v2.holdings;
@@ -684,7 +684,11 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const participants: ClearingParticipant[] = [];
     heldSharesByInvestor.forEach((shares, investorId) => {
       const wantUSD = plan.wantDelta.get(investorId) ?? 0;
-      const targetShares = Math.max(shares, shares + wantUSD / navPerShare);
+      // A HOLDER MAY SELL. Floored at what it already owns, no participant could ever post a
+      // target below its position: the only supply in the book was the AP's primary offering,
+      // so the print was pinned at the reservation whenever AP capacity was short — a premium
+      // that was a bound, not a clearing. A share count cannot go negative; nothing else bounds it.
+      const targetShares = Math.max(0, shares + wantUSD / navPerShare);
       participants.push({
         id: investorId,
         currentHoldingsByInstrumentId: new Map([[instrumentId, shares]]),
@@ -722,7 +726,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // assets backing them (measured: 13.49B of fund assets against 13.38B of claims after thirty
   // weeks), which is the same class of error as any stale mark.
   const finalNavPerShareByFund = new Map<string, number>();
-  // §7.313 flip: the deltas land on the rows — first matching row mutates in place, a spent
+  // The deltas land on the rows — first matching row mutates in place, a spent
   // position's row is dropped by one relink, a new position appends at the tail (where the old
   // array push put it).
   {
@@ -750,7 +754,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   }
 
   // Every fund's final price per share, after this week's creations, fees and cash movements.
-  // ETF2: what a holder's shares are WORTH is what they trade at, which is the share book's own
+  // What a holder's shares are WORTH is what they trade at, which is the share book's own
   // cleared price — not the net asset value behind them. The two differ by the premium, and the
   // premium is a transfer between holders (a buyer paid a seller for it), not wealth anybody
   // created; a fund whose book has not cleared yet still marks at net asset value, because that
@@ -762,7 +766,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const marketPrice = e.etf.marketPricePerShare;
     finalNavPerShareByFund.set(e.id, marketPrice && marketPrice > 0 ? marketPrice : navPerShare);
   });
-  // §7.313 flip: the re-mark writes the rows in place — an ETF claim row costs one int compare
+  // The re-mark writes the rows in place — an ETF claim row costs one int compare
   // and, when its fund priced, two column writes.
   {
     const H = ctx.v2.holdings;

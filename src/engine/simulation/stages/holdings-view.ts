@@ -1,5 +1,5 @@
 /**
- * The one holdings ledger, and the views derived from it (plan §5-S7).
+ * The one holdings ledger, and the views derived from it (plan ).
  *
  * **The design decision, stated once so it cannot drift:** the books the clearing stages write
  * ARE the ledger. Per-entity `InstitutionalEntity.itemizedHoldings` (07b/07c/07d), per-bank
@@ -42,6 +42,9 @@ export interface RegionalHoldingsView {
   institutionalLoanUSD: number;
   institutionalEquityUSD: number;
   institutionalCashUSD: number;
+  /** What the sector owes the people whose money it manages: beneficiary entitlements and money
+   *  fund shares. Every dollar of it is a named holder's, not the sector's capital. */
+  institutionalLiabilitiesUSD: number;
   /** Cash + all securities, summed from the real entity books. */
   institutionalTotalAssetsUSD: number;
   bankSovBondUSD: number;
@@ -53,9 +56,9 @@ export interface RegionalHoldingsView {
  */
 export function aggregateRegionalHoldings(state: GameState, regionId: RegionId): RegionalHoldingsView {
   const institutionalHoldings: ItemizedHolding[] = [];
-  let corp = 0, sov = 0, loan = 0, equity = 0, cash = 0;
+  let corp = 0, sov = 0, loan = 0, equity = 0, cash = 0, lent = 0, liabilities = 0;
 
-  // §7.313 flip — the rows are the register's authority mid-week; the flattened view the UI
+  // The rows are the register's authority mid-week; the flattened view the UI
   // reads is materialized from them here (idempotent sync first: initialization and the UI call
   // this outside the weekly step).
   const v2a = ensureV2(state);
@@ -63,8 +66,13 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
   const Ha = v2a.holdings;
   state.institutionalEntities.forEach((e) => {
     if (e.region !== regionId || e.isDefaulted) return;
-    // WS6: cash lent overnight is the entity's money in transit, part of its cash position.
-    cash += entityCashOf(ensureV2(state), e) + (e.repoLentUSD ?? 0) + (e.rrpLentUSD ?? 0);
+    // CASH IS CASH. What the entity lent overnight — to a bank in repo, or to the central bank
+    // at its window — is out the door and sitting in the borrower's own cash; counted here as
+    // well, the sector's aggregate holds the same dollars twice. It is a receivable, and it is
+    // in the entity's total assets below, where a claim belongs.
+    cash += entityCashOf(ensureV2(state), e);
+    lent += (e.repoLentUSD ?? 0) + (e.rrpLentUSD ?? 0);
+    liabilities += (e.beneficiaryLiabilityUSD ?? 0) + (e.mmfSharesOutstandingUSD ?? 0);
     for (let r = bookHeadOf(v2a, e.id); r >= 0; r = Ha.next[r]) {
       const type = v2a.internedStrings[Ha.typeRef[r]] as ItemizedHolding['instrumentType'];
       const sh = Ha.shares[r];
@@ -79,7 +87,7 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
       const v = Ha.qtyUSD[r];
       // CP: an issuer's short paper is corporate credit like its bonds — one view of the
       // institutional sector's claim on companies, whatever book prices it.
-      // §5-STRUCT step 4 — the class comes from the registry (domain/assets), which is also where
+      // step 4 — the class comes from the registry (domain/assets), which is also where
       // the four disagreeing instrument taxonomies are reconciled. The chain this replaces had to
       // be found and edited for every new instrument, and a missed one added silently to nothing.
       const cls = holdingClassOf(type);
@@ -102,8 +110,8 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
       if (v <= 0) return;
       bankSov += v;
       bankHoldings.push({
-        // §7.241: this view minted a SECOND id format (`_GOV_`) for paper every book ids as
-        // `-GOV-` — the §7.240-recorded fork seed. One format now.
+        // This view minted a SECOND id format (`_GOV_`) for paper every book ids as
+        // `-GOV-` — the fork seed. One format now.
         instrumentId: govBucketId(regionId, tenorKey),
         instrumentType: 'GOV_BOND',
         issuerRegion: regionId,
@@ -120,7 +128,8 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
     institutionalLoanUSD: loan,
     institutionalEquityUSD: equity,
     institutionalCashUSD: cash,
-    institutionalTotalAssetsUSD: cash + corp + sov + loan + equity,
+    institutionalTotalAssetsUSD: cash + lent + corp + sov + loan + equity,
+    institutionalLiabilitiesUSD: liabilities,
     bankSovBondUSD: bankSov,
   };
 }
@@ -156,7 +165,7 @@ export function measuredForeignOwnershipAllRegions(state: GameState): Record<Reg
   const foreign: Partial<Record<RegionId, Acc>> = {};
   const accFor = (table: Partial<Record<RegionId, Acc>>, r: RegionId): Acc =>
     table[r] ?? (table[r] = { equity: 0, corpBond: 0, sovBond: 0 });
-  // §7.307 holdings flip: row walk on the mirror; the registry dispatch (§7.241) is resolved
+  // holdings flip: row walk on the mirror; the registry dispatch is resolved
   // ONCE per interned type instead of per row. Idempotent sync first — harness reports call
   // this outside the weekly step, same as the ladder catch-up below in measuredOwnership.
   const v2 = ensureV2(state);
@@ -206,14 +215,16 @@ export function refreshRegionalHoldingsView(state: GameState, regionId: RegionId
   reg.institutionalSector.sovBondHoldingsUSD = Math.round(view.institutionalSovBondUSD);
   reg.institutionalSector.equityHoldingsUSD = Math.round(view.institutionalEquityUSD);
   reg.institutionalSector.cashUSD = Math.round(view.institutionalCashUSD);
-  // The sector's equity capital is the real book it actually carries — S11 marks each entity's
-  // totalAssetsUSD weekly, so this is a live number rather than an accreting formula.
-  reg.institutionalSector.sectorEquityUSD = Math.round(view.institutionalTotalAssetsUSD);
+  // EQUITY IS ASSETS LESS WHAT THEY ARE OWED TO. Set to total assets outright, the sector
+  // counted other people's money as its own capital — every dollar of money-fund shares and
+  // every beneficiary entitlement is a named holder's claim, and A = L + E cannot hold with the
+  // liabilities left out.
+  reg.institutionalSector.sectorEquityUSD = Math.round(view.institutionalTotalAssetsUSD - view.institutionalLiabilitiesUSD);
   reg.bankingSector = { ...reg.bankingSector, itemizedHoldings: view.bankHoldings };
 }
 
 /**
- * OWN1: the ownership register, MEASURED. `AssetOwnershipShares` used to be an input —
+ * The ownership register, MEASURED. `AssetOwnershipShares` used to be an input —
  * `OWNERSHIP_SHARES` assigned banks 3% of equity, 28% of corporate credit and 22% of sovereigns,
  * the shares drifted weekly on `(gdpGrowth + inflation) - tenor10Y` inside two bands, and were
  * rescaled whenever they summed above 0.85. Every one of those numbers then decided something
@@ -251,7 +262,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   });
   const acc = (r: RegionId): MeasuredOwnershipByClass | undefined => out[r];
 
-  // §7.307 holdings flip: row walk on the mirror; the §7.241 registry dispatch — the chain's
+  // holdings flip: row walk on the mirror; the registry dispatch — the chain's
   // silence on fund shares was an undocumented fact, now `isVehicleClaim`; a new holding type
   // gets its class in domain/assets, not here — is resolved once per interned type.
   const Hmo = v2hv.holdings;
@@ -274,11 +285,11 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     }
   });
 
-  // §4.0 Tier 1 item 11 — THE ESTATE WINDOW. A defaulted issuer leaves the active roster the
+  // THE ESTATE WINDOW. A defaulted issuer leaves the active roster the
   // week it fails, but its creditors' claims stand until the estate extinguishes them — often
   // weeks later. Dropping its tranches from the outstanding denominator while the holders'
   // paper stayed in the numerator pushed corpBondOwnership mechanically above 1 in every
-  // default wave (§7.253 measured accounted 1.02→1.07 in the UK's). Debt on a company with an
+  // default wave (measured accounted 1.02→1.07 in the UK's). Debt on a company with an
   // OPEN estate is still outstanding; its equity is not (dead equity is worthless).
   const openEstateCompanyIds = new Set(
     (state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
@@ -292,7 +303,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
       if (isPubliclyListed(c)) a.equity.outstandingUSD += Math.max(0, marketCapOf(c) ?? 0);
     }
     {
-      // §7.311 — ladder read on rows (fold order = chain order = array order).
+      // Ladder read on rows (fold order = chain order = array order).
       const TS = v2hv.tranches;
       let sum = 0;
       for (const r of ladderRowsOf(v2hv, c.id)) sum += Math.max(0, TS.principalUSD[r]);
@@ -309,7 +320,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   // Second pass: a facility's issuer region comes from the borrower, which may not be the
   // lender's — resolved only once every company's region is known.
   //
-  // OWN7: POOL loans are excluded. An SME pool's debt is a scalar on the pool (`seg.debtUSD`),
+  // POOL loans are excluded. An SME pool's debt is a scalar on the pool (`seg.debtUSD`),
   // not a tranche on any company, so it has no place in a register whose denominator is the
   // named companies' debt ladders — counting it put ~22% of corporate "ownership" in the banks'
   // column against paper that does not exist, which is most of what made these shares sum above
@@ -317,7 +328,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   state.companies.forEach((c) => {
     const sheet = c.bankBalanceSheet;
     if (!sheet || !isActiveCompany(c)) return;
-    // Step 10: the bank's facilities are its rows on the borrowers' ladders.
+    // The bank's facilities are its rows on the borrowers' ladders.
     facilityRowsOf(v2hv, c.ticker).forEach((l) => {
       const issuerRegion = companyRegionById.get(l.borrowerId);
       const a = issuerRegion ? acc(issuerRegion) : undefined;

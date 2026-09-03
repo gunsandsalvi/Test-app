@@ -40,11 +40,11 @@ import { REGION_IDS } from '../../../domain/geography';
 /**
  * RULE 19 — `PENSION_CONTRIBUTION_RATE = 0.09` is GONE (COH2). Its own comment carried the exit
  * condition — *"it becomes an outcome in HH4, where cohorts have ages and a contribution is
- * something a working cohort does"* — and DEM's age structure (§7.181) met it.
+ * something a working cohort does"* and DEM's age structure met it.
  *
  * A contribution is not a share of income a country sets; it is the LIFE-CYCLE half of the saving
  * a household already decides to do. The cohort build has computed exactly that number since
- * §7.181 — `disposable x the retired share of the population`, the rate at which the working
+ * `disposable x the retired share of the population`, the rate at which the working
  * population must set aside income to support the population that is not working — and it was
  * being accumulated into the household's own liquid stock while a flat 9% of the sector's income
  * went into the pension funds beside it. **Two representations of one motive** (rule 3), and the
@@ -55,7 +55,7 @@ import { REGION_IDS } from '../../../domain/geography';
  * retired share IS the rate.
  */
 /**
- * RULE 19 — `PENSION_BENEFIT_RATE_ANNUAL = 0.05` is GONE (§7.182). It asserted a twenty-year
+ * RULE 19 — `PENSION_BENEFIT_RATE_ANNUAL = 0.05` is GONE. It asserted a twenty-year
  * retirement as a flat drawdown rate and could not respond to an ageing population. The rate is
  * now `1 / remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS)` — derived from the hazard.
  */
@@ -64,10 +64,10 @@ import { REGION_IDS } from '../../../domain/geography';
 const corporateInsurableBaseUSD = (c: Company) => Math.max(0, c.grossPPEUSD ?? 0) + Math.max(0, c.annualRevenue);
 
 export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepContext): void {
-  // §7.241: this stage moved every one of its flows by DIRECT balance mutation — `comp.cash`,
+  // This stage moved every one of its flows by DIRECT balance mutation — `comp.cash`,
   // entity `cashUSD`, household deposits — with zero payment instructions in the file, so no bank
   // ever saw the deposits move and 02b's reconcile invented the reserves behind them. Every leg
-  // below is now a `pay()` instruction settled by the close pass, exactly like every other
+  // below is now a `pay` instruction settled by the close pass, exactly like every other
   // post-08 flow. The two liability-STOCK updates (beneficiaryLiabilityUSD and the two annual
   // stat annotations) are not money movements and stay.
   const underwritingByEntityId = new Map<string, number>();
@@ -87,7 +87,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     // IND19/IND-R4 — THE EXPENSE RATIO IS GONE, AND ITS ABSENCE HERE IS THE POINT.
     //
     // This line used to subtract `premiums x INSURER_EXPENSE_RATIO`, and its own comment gave the
-    // reason: "the P&L already charges an expense ratio against premiums". §7.125 deleted that
+    // reason: "the P&L already charges an expense ratio against premiums". deleted that
     // charge — an insurer's operating cost is now its REAL wage bill and its real input basket,
     // charged by the profile caller like every other firm's — and this cash leg was left behind.
     // So the same expense was taken twice: once as real staff and premises, once as a flat fifth
@@ -166,10 +166,10 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     });
 
     // ---- Pensions: contributions out of wages, benefits back to the people who earned them. ----
-    // COH2 — CONTRIBUTIONS COME FROM THE PEOPLE WHO ARE WORKING, and benefits go to the people
-    // who are not. A cohort has an age via DEM now (§7.181), so the split is real: applying the
+    // CONTRIBUTIONS COME FROM THE PEOPLE WHO ARE WORKING, and benefits go to the people
+    // who are not. A cohort has an age via DEM now, so the split is real: applying the
     // contribution rate to the whole sector's income charged retirees a pension contribution.
-    // COH2: the contribution IS the life-cycle saving the cohorts decided on — measured, squeezed
+    // The contribution IS the life-cycle saving the cohorts decided on — measured, squeezed
     // by each cohort's own budget, and already excluding retirees because it is a share of the
     // WORKING population's disposable income (household-cohorts.ts).
     const weeklyContributionsUSD = Math.max(0, reg.householdState?.lifeCycleSavingAnnualUSD ?? 0) / 52;
@@ -177,11 +177,11 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       (e) => e.region === region && e.entityType === 'PENSION_FUND' && !e.isDefaulted
     );
     const entitlementsUSD = pensionEntities.reduce((a, e) => a + (e.beneficiaryLiabilityUSD ?? 0), 0);
-    // COH2 — AND THE DRAWDOWN IS THE RETIREE'S OWN REMAINING LIFE, not a stated 5%.
+    // AND THE DRAWDOWN IS THE RETIREE'S OWN REMAINING LIFE, not a stated 5%.
     //
     // `PENSION_BENEFIT_RATE_ANNUAL = 0.05` asserted a twenty-year retirement and could not change
     // when the population aged — the exact shape rule 19 forbids. A fund pays its entitlement out
-    // over the years its members actually have, which the Gompertz hazard now says (§7.181).
+    // over the years its members actually have, which the Gompertz hazard now says.
     const drawdownYears = remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS);
     const weeklyBenefitsUSD = (entitlementsUSD / drawdownYears) / 52;
     if (pensionEntities.length > 0 && entitlementsUSD > 0) {
@@ -199,16 +199,18 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
           amountUSD: weeklyBenefitsUSD * share,
           reason: 'pension benefit',
         });
-        // COH2 — THE ENTITLEMENT IS A STOCK ACCUMULATED FROM REAL FLOWS, not a plug.
+        // THE ENTITLEMENT IS A STOCK ACCUMULATED FROM REAL FLOWS, not a plug.
         //
         // It used to be `totalAssets − equityCapital`, with equity fixed at 12% of assets at the
         // seed and NEVER UPDATED — so a fund's obligation to households was whatever kept that
         // ratio true forever, and households' claims were an accounting residual of the fund's own
         // asset growth (rule 13). What a pension fund owes is what was paid in, less what was paid
         // out, plus what the money earned on the way.
+        // Contributions in, benefits out. What the money EARNS on the way is credited in one
+        // place for every kind whose beneficiaries are households (the household sheet), so a
+        // pension is not the only one whose members own their fund's return.
         e.beneficiaryLiabilityUSD = Math.max(0, (e.beneficiaryLiabilityUSD ?? 0)
-          + (weeklyContributionsUSD - weeklyBenefitsUSD) * share
-          + Math.max(0, e.lastWeeklyInvestmentIncomeUSD ?? 0));
+          + (weeklyContributionsUSD - weeklyBenefitsUSD) * share);
         benefitsByEntityId.set(e.id, weeklyBenefitsUSD * share * 52);
       });
     }

@@ -94,7 +94,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         const comp = updatedCompanies.find((c) => c.ticker === pos.symbol);
         const sovParams = updatedRegions[pos.region].yieldCurveParams;
         if (comp) {
-          // §7.311 — the ladder find on rows (the id is interned; a short walk per position).
+          // The ladder find on rows (the id is interned; a short walk per position).
           let trRow = -1;
           for (const r of ladderRowsOf(v2, comp.id)) {
             if (v2.internedStrings[TS.idRef[r]] === pos.trancheId) { trRow = r; break; }
@@ -105,13 +105,14 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
             unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
 
-            // S9: a matured position realizes its P&L, not its face value. This book is
+            // A matured position realizes its P&L, not its face value. This book is
             // margin-financed — opening a position commits margin and pays the spread, never the
-            // notional — so crediting the full redemption here handed the player principal they
-            // had never paid, and stage 13 then added the P&L on top of it (it sums realized cash
-            // AND realized P&L into the week's cash). Money from nowhere, twice over. The
+            // notional — so crediting the full redemption here would hand the player principal
+            // they never paid, and stage 13 adds the P&L on top of it (it sums realized cash AND
+            // realized P&L into the week's cash). Money from nowhere, twice over. The
             // contractual payout is still what sets the price (par, or recovery on default);
-            // what settles to cash is the gain or loss against entry.
+            // what settles to cash is the gain or loss against entry. Every maturity in this
+            // stage writes ONE of the two lines, for the same reason.
             ctx.weeklyRealizedPnL += unrealizedPnL;
             pos.isClosed = true;
             closedCount++;
@@ -273,7 +274,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           pos.isClosed = true;
           closedCount++;
           ctx.weeklyRealizedPnL += unrealizedPnL;
-          ctx.weeklyRealizedCashUSD += unrealizedPnL;
           ctx.newsItems.push({
             id: `irs-matured-${pos.id}-${nextWeek}`,
             week: nextWeek,
@@ -325,12 +325,10 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             pos.isClosed = true;
             closedCount++;
             ctx.weeklyRealizedPnL += unrealizedPnL;
-            ctx.weeklyRealizedCashUSD += unrealizedPnL;
           } else if (nextWeek >= maturityWeek) {
             pos.isClosed = true;
             closedCount++;
             ctx.weeklyRealizedPnL += unrealizedPnL;
-            ctx.weeklyRealizedCashUSD += unrealizedPnL;
             ctx.newsItems.push({
               id: `cds-expired-${pos.id}-${nextWeek}`,
               week: nextWeek,
@@ -496,7 +494,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             pos.isClosed = true;
             closedCount++;
             ctx.weeklyRealizedPnL += unrealizedPnL;
-            ctx.weeklyRealizedCashUSD += unrealizedPnL;
             ctx.newsItems.push({
               id: `xcs-matured-${pos.id}-${nextWeek}`,
               week: nextWeek,
@@ -529,7 +526,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         break;
       }
       default:
-        // §7.241: without this, a position in a new asset type was never re-marked — frozen at
+        // Without this, a position in a new asset type was never re-marked — frozen at
         // entry price with zero P&L forever. A new AssetType member now fails to COMPILE here.
         assertNever(pos.assetType, 'position weekly mark (12-portfolio-and-positions)');
     }

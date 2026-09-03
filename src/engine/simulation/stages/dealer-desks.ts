@@ -1,5 +1,5 @@
 /**
- * G3a — the per-bank dealer desks, as participants in the books they make markets in.
+ * The per-bank dealer desks, as participants in the books they make markets in.
  *
  * The shape of the desk (why a market maker's schedule is what it is, why its size is its own
  * leverage headroom, and what this replaces) is documented once in domain/dealer-desk.ts. This
@@ -25,7 +25,7 @@ import { clearedBookDelta, HoldingKind } from '../../ledger/holdings-ledger';
 import { defect } from '../../../domain/defect';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
 
-/** §5-WIRES W2: the register kind each desk book carries — the wire's asset kind. */
+/** W2: the register kind each desk book carries — the wire's asset kind. */
 const DESK_BOOK_KIND: Record<string, HoldingKind> = {
   'corporate bond': 'CORP_BOND', 'sovereign bond': 'GOV_BOND', bill: 'GOV_BOND',
   'leveraged loan': 'LEVERAGED_LOAN', equity: 'EQUITY', 'commercial paper': 'COMMERCIAL_PAPER',
@@ -155,7 +155,7 @@ export function applyDealerDeskFills(args: {
   banks: Company[];
   book: string;
   /** The names this session actually priced. A stage may only rewrite the instruments it
-   *  cleared (§7.34): a desk position in a name that carried no float this week is untouched,
+   *  cleared: a desk position in a name that carried no float this week is untouched,
    *  not deleted — rebuilding the book from the fills alone made those positions vanish with no
    *  cash leg, which is the exact WS5 bug, caught by the per-bank identity in its first probe. */
   instruments: ClearingInstrument[];
@@ -164,7 +164,7 @@ export function applyDealerDeskFills(args: {
   unitPriceOf?: (instrumentId: string) => number;
   /** The desk's money leg, for a book whose engine cash legs are unit-denominated (07e). */
   cashDeltaOf?: (deskParticipantId: string) => number;
-  /** §4.C int flip — participant index by id; when present the desk fills read the dense
+  /** int flip — participant index by id; when present the desk fills read the dense
    *  holdings matrix and the lazy map is never materialized for this book. */
   piById?: Map<string, number>;
 }): Map<string, number> {
@@ -217,9 +217,14 @@ export function applyDealerDeskFills(args: {
     const cashDeltaUSD = args.cashDeltaOf
       ? args.cashDeltaOf(deskId)
       : (result.netCashDeltaByParticipantId.get(deskId) ?? 0);
-    const feeUSD = Math.max(0, -(cashDeltaUSD + (newUSD - prevMarkedUSD)));
+    // WHAT THE SESSION LEFT OVER, SIGNED. Cash out plus inventory in is the desk's own trading
+    // result: negative it is a cost, positive it is a gain, and both are the bank's. Floored at
+    // zero, a negative residual was charged to equity as a "fee" and a positive one was silently
+    // discarded — cash arriving on the securities account with no entry against it, and the
+    // per-bank identity drifting by exactly that.
+    const residualUSD = cashDeltaUSD + (newUSD - prevMarkedUSD);
 
-    // §5-WIRES W2: THE DESK'S FILLS ARE WIRES. Its position after the session against the one
+    // W2: THE DESK'S FILLS ARE WIRES. Its position after the session against the one
     // before, per cleared name, against the clearing house — bought or sold, one number each.
     // A unit book (equity) wires shares at the cleared price; a par book wires face at 1.
     {
@@ -245,7 +250,7 @@ export function applyDealerDeskFills(args: {
     // DESK_TRACE=1 instrument: the desk's whole leg for one book in one line — the fee formula
     // charges equity with any cash that left without inventory arriving, so a books-vs-cash
     // disagreement in the clearing engine lands HERE as a phantom fee. Print it where it books.
-    if (process.env.DESK_TRACE === '1' && (feeUSD > 50e6 || Math.abs(markToMarketUSD) > 50e6)) {
+    if (process.env.DESK_TRACE === '1' && (Math.abs(residualUSD) > 50e6 || Math.abs(markToMarketUSD) > 50e6)) {
       const dbgFills = fills ?? result.newParticipantHoldings.get(deskId) ?? new Map<string, number>();
       const fillsStr = Array.from(dbgFills.entries())
         .filter(([id, units]) => Math.abs(units * unitPrice(id)) > 10e6)
@@ -253,7 +258,7 @@ export function applyDealerDeskFills(args: {
         .slice(0, 6).join(' ');
       console.log(`  [desk] w${ctx.nextWeek} ${bank.ticker} ${book}: prevMarked ${(prevMarkedUSD / 1e6).toFixed(1)}M`
         + ` new ${(newUSD / 1e6).toFixed(1)}M cash ${(cashDeltaUSD / 1e6).toFixed(1)}M`
-        + ` fee ${(feeUSD / 1e6).toFixed(1)}M mtm ${(markToMarketUSD / 1e6).toFixed(1)}M :: ${fillsStr}`);
+        + ` residual ${(residualUSD / 1e6).toFixed(1)}M mtm ${(markToMarketUSD / 1e6).toFixed(1)}M :: ${fillsStr}`);
       // The wiped-name decomposition: each cleared prior position, whether the fills map came
       // back with the name, and the name's float in this clearing — the three facts that decide
       // whether its removal had a cash leg.
@@ -266,7 +271,7 @@ export function applyDealerDeskFills(args: {
       });
     }
     updateBankSheet(ctx, bank.ticker, {
-      ...bookPnL(bookPnL(sheet, -feeUSD, `desk fee: ${book}`, bank.ticker),
+      ...bookPnL(bookPnL(sheet, residualUSD, `desk trading result: ${book}`, bank.ticker),
         markToMarketUSD, `desk mark-to-market: ${book}`, bank.ticker),
       dealerDeskInventory: inventory,
     });
@@ -294,7 +299,7 @@ export function totalDeskCapacityUSD(ctx: WeeklyStepContext, banks: Company[], b
 }
 
 /**
- * G3c — the mandate allocator for one pass: who each issuer's lead bank is, and what winning a
+ * The mandate allocator for one pass: who each issuer's lead bank is, and what winning a
  * mandate costs the winner. The relationship comes off the banks' own itemized loan books, so it
  * is measured every time and a bank that lets a facility run off loses the call; free capacity
  * comes off the same desk capacity that underwrites the deal, and `award` decrements it, so a
@@ -313,7 +318,7 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
       book,
     }));
     const byBorrower = new Map<string, number>();
-    // Step 10: the relationship is the facilities this bank has lent — its rows on the ladders.
+    // The relationship is the facilities this bank has lent — its rows on the ladders.
     facilityRowsOf(ctx.v2, bank.ticker).forEach((l) => {
       byBorrower.set(l.borrowerId, (byBorrower.get(l.borrowerId) ?? 0) + l.principalUSD);
     });

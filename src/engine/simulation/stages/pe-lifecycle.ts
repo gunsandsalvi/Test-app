@@ -12,12 +12,12 @@ import { V2World } from '../../../engine2/world';
  * synthetic generator that conjured a company out of a category's demand growth, is deleted.
  *
  * Everything prices through machinery that already exists rather than new formulas:
- *   - an LBO's financing is a real WS8 primary offering in the loan book (it can be WITHDRAWN,
+ *   an LBO's financing is a real WS8 primary offering in the loan book (it can be WITHDRAWN,
  *     and a deal whose financing fails does not happen — real market access);
- *   - an IPO is a real WS8 equity offering into 07e's book (a weak book prices low or pulls);
- *   - the purchase price is the same EV/EBITDA arithmetic that already marks sponsor NAV
+ *   an IPO is a real WS8 equity offering into 07e's book (a weak book prices low or pulls);
+ *   the purchase price is the same EV/EBITDA arithmetic that already marks sponsor NAV
  *     weekly, so a portfolio is bought and marked on one valuation, not two;
- *   - a birth is a CARVE from the SME pool (conservation, exactly as HC1's cutover), so the
+ *   a birth is a CARVE from the SME pool (conservation, exactly as HC1's cutover), so the
  *     economy's totals never change because a firm was created.
  */
 
@@ -38,6 +38,8 @@ import { issueTranche } from '../../ledger/tranche-ledger';
 import { marketCapOf, totalDebtOf } from '../../../domain/company';
 import { ladderTotalUSD } from '../../../engine2/tranches';
 import { cashOf, openingCashOf, entityCashOf, poolCashOf } from '../../ledger/accounts';
+import { issueHolding } from '../../ledger/holdings-ledger';
+import { bumpRegister } from './register-index';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -99,13 +101,13 @@ const LBO_MAX_LEVERAGE = 6.0;
 /** Weeks a sponsor holds before it will consider an exit. */
 const MIN_HOLD_WEEKS = 78;
 /**
- * G5 — THE FUND'S LIFE, and why a sponsor sells to another sponsor at all.
+ * THE FUND'S LIFE, and why a sponsor sells to another sponsor at all.
  *
  * A closed-end fund has a term: it draws capital, holds, and must return that capital to its LPs
  * by the end of it. That is a CONTRACT TERM, the same kind of primitive as a mortgage's or a
  * CDS's tenor, and it is the whole reason sponsor-to-sponsor sales happen in reality — the seller
  * is out of time, not out of conviction. Without it a holding could only leave by listing, and
- * §5-G5 names that as "the half of the capital-recycling loop a listing cannot provide": when the
+ * names that as "the half of the capital-recycling loop a listing cannot provide": when the
  * public market is shut, a portfolio in this model simply never turned over.
  */
 const PE_FUND_LIFE_WEEKS = 10 * 52;
@@ -151,7 +153,7 @@ function callCapitalUSD(ctx: WeeklyStepContext, sponsorId: string, requestedUSD:
   const lpById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
   const capacity = sponsor.peFund.lpCommitments.map((c) => {
     const lp = lpById.get(c.lpEntityId);
-    // SETL6: an LP's real budget is its cash PLUS what it has already committed to pay or is due
+    // An LP's real budget is its cash PLUS what it has already committed to pay or is due
     // to receive at this week's settlement — the calls below are payments now, so without the
     // pending term two calls in one week could draw the same dollar twice.
     const lpBudgetUSD = lp
@@ -170,7 +172,7 @@ function callCapitalUSD(ctx: WeeklyStepContext, sponsorId: string, requestedUSD:
     if (!(x.availableUSD > 0)) return;
     const shareUSD = calledUSD * (x.availableUSD / totalAvailableUSD);
     x.commitment.drawnUSD += shareUSD;
-    // §7.241: the call is a PAYMENT — LP to fund — where it used to be a bare debit of the LP
+    // The call is a PAYMENT — LP to fund — where it used to be a bare debit of the LP
     // with no credit to anyone, so the buy side of every sponsor-to-sponsor deal paid twice and
     // one purchase price was destroyed per deal. Both legs live in the journal now.
     pay(ctx, {
@@ -198,14 +200,14 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: n
   // distribution side never got the same treatment. So a sponsor wired recap and exit proceeds
   // against `drawnUSD` alone and went negative: MEASURED, PEF1 paid 0.495B out of a 0.000B
   // balance at week 12 and carried the same -0.50B for the next forty weeks, the single largest
-  // violation family in the 60-week harness. This is not a clamp on a price (§1.2): it is the
+  // violation family in the 60-week harness. This is not a clamp on a price: it is the
   // constraint itself, and it is one side of an asymmetry rather than a new rule. What cannot be
   // wired stays undistributed, which leaves the commitment drawn — which is what an unpaid
   // distribution actually is.
-  // §5-STRUCT step 3 — the rule is on the fund (domain/fund.ts), where the CALL side has always
-  // had it: a fund moves what it has. §7.226 measured what its absence cost — PEF1 wired 0.495B
+  // step 3 — the rule is on the fund (domain/fund.ts), where the CALL side has always
+  // had it: a fund moves what it has. measured what its absence cost — PEF1 wired 0.495B
   // out of a 0.000B account and carried -0.50B for forty weeks.
-  // SETL6: the fund's payable budget includes what settlement already owes or is owed it.
+  // The fund's payable budget includes what settlement already owes or is owed it.
   const sponsorBudgetUSD = entityCashOf(ctx.v2, sponsor)
     + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: sponsorId });
   const { payableUSD: paidUSD } = distributable(amountUSD, totalDrawnUSD, sponsorBudgetUSD);
@@ -214,7 +216,7 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: n
     if (!(c.drawnUSD > 0)) return;
     const shareUSD = paidUSD * (c.drawnUSD / totalDrawnUSD);
     c.drawnUSD = Math.max(0, c.drawnUSD - shareUSD);
-    // §7.241: a distribution is a PAYMENT — fund to LP — not a pair of object rebuilds.
+    // A distribution is a PAYMENT — fund to LP — not a pair of object rebuilds.
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: sponsorId },
       payee: { kind: 'INSTITUTION', id: c.lpEntityId },
@@ -245,7 +247,7 @@ export function runPeLifecycleForRegion(
   );
   if (sponsors.length === 0) return;
 
-  // G3c: the sponsor's deals go to desks that can still underwrite them, and each award
+  // The sponsor's deals go to desks that can still underwrite them, and each award
   // consumes the winner's balance sheet.
   const leadBanks = mandateAllocator(ctx.prevActiveFirms
     .filter((c) => c.region === regionId && c.isBankEntity)
@@ -580,7 +582,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       // price is not destroyed on its way out of the institutional book.
       const sellerRegion = ctx.updatedRegions[comp.region];
       if (sellerRegion?.householdState) {
-        // §5-CLOSE C4: a PAYMENT. The LPs' calls above landed on the sponsor's own book, so the
+        // C4: a PAYMENT. The LPs' calls above landed on the sponsor's own book, so the
         // sponsor is the one payer of the purchase price and the founders' household sector is
         // the payee — settlement credits the deposit and records the banks' T+1 leg itself.
         pay(ctx, {
@@ -650,7 +652,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
 
     if (deal.kind === 'RECAP') {
       if (failed || settlement.proceedsUSD <= 0) return;
-      // §7.241: the recap dividend is a PAYMENT — the company (whose bond issue primary
+      // The recap dividend is a PAYMENT — the company (whose bond issue primary
       // settlement already paid it for) pays its sponsor — not a direct cash write on each side.
       pay(ctx, {
         payer: { kind: 'COMPANY', ticker: comp.ticker },
@@ -674,10 +676,30 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
     comp.listingStatus = 'PUBLIC';
     comp.sharesOutstanding = shares;
     comp.stockPrice = Number(settlement.clearedStat.toFixed(2));
-    // §7.241: the direct `comp.cash += proceeds` that stood here was a DOUBLE CREDIT — primary
+    // The direct `comp.cash += proceeds` that stood here was a DOUBLE CREDIT — primary
     // settlement already pays the issuer for the whole deal by instruction (the CCP for the
     // book's take, the lead for the residual). One payment, one arrival.
-    comp.ownership = { ...(comp.ownership ?? { founderPct: 0.05 }), peSponsorPct: 0.70 };
+    // THE SPONSOR KEEPS WHAT IT DID NOT SELL, AS REAL SHARES. The listing places a quarter of
+    // the company; the rest is still the fund's, and it now lives on the register like any other
+    // institution's equity. Written as a flat 70% on the ownership record instead — a number
+    // unrelated to what was actually placed — the retained stake left the fund's assets with no
+    // sale and no cash (`sponsorPortfolioUSD` reads the portfolio list, which this pass empties),
+    // and, unregistered, the same shares were counted as the public float and credited to
+    // households. Ownership destroyed at one end and re-granted at the other.
+    const offeredShares = settlement.offering.sizeUSD;
+    const retainedShares = Math.max(0, shares - offeredShares);
+    if (retainedShares > 0) {
+      issueHolding(ctx.v2,
+        { kind: 'COMPANY', ticker: comp.ticker },
+        { kind: 'INSTITUTION', id: deal.sponsorId },
+        {
+          instrumentType: 'EQUITY', instrumentId: comp.id, issuerRegion: comp.region as RegionId,
+          valueUSD: retainedShares * comp.stockPrice, shares: retainedShares,
+        },
+        'ipo: the sponsor retains its unsold stake');
+      bumpRegister(ctx);
+    }
+    comp.ownership = { ...(comp.ownership ?? { founderPct: 0.05 }), peSponsorPct: shares > 0 ? retainedShares / shares : 0 };
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
       if (e.id !== deal.sponsorId || !e.peFund) return e;
       return { ...e, peFund: { ...e.peFund, portfolioCompanyIds: e.peFund.portfolioCompanyIds.filter((id) => id !== comp.id) } };
@@ -694,7 +716,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
  * `generateIPOCompany` deleted, nothing conjures a company out of a category's demand growth.
  */
 /**
- * §5-WIRES W6 (B) — A FIRM IS BORN BY WIRES. The generator sketches a newborn with a debt base
+ * W6 (B) — A FIRM IS BORN BY WIRES. The generator sketches a newborn with a debt base
  * nobody lent it; here that debt becomes what a private newborn's debt is — a FACILITY from its
  * home bank, priced off its own default probability at the bank's hurdle — issued by wire, booked
  * on the bank as a loan, and its proceeds paid to the firm. The pool's carve-out (written by the
@@ -750,12 +772,12 @@ export function runFirmBirthsForRegion(
     const seg = c.smePoolIndustry;
     if (seg) namedBySegment.set(seg, (namedBySegment.get(seg) ?? 0) + c.annualRevenue);
   });
-  // §5-DYN — ENTRY GOES WHERE THE EXPECTED PROFIT OF ENTERING IS: unserved demand TIMES the
+  // ENTRY GOES WHERE THE EXPECTED PROFIT OF ENTERING IS: unserved demand TIMES the
   // margin earned serving it. The pool-vs-named ratio was the demand half alone, so entrants
   // chased size regardless of profitability; the pool's own measured margin is the other half,
   // and their PRODUCT needs no coefficient (rule 19). This is what makes category margins
   // mean-revert through entry instead of by assertion.
-  // §7.345 — and it goes to EVERY pool where entering pays this quarter, not the one that pays
+  // And it goes to EVERY pool where entering pays this quarter, not the one that pays
   // most: one firm per quarter per region was no supply response at all (a 0.4%-of-pool entrant
   // against a 30% shortage). The signal is unchanged — unserved demand × the pool's measured
   // margin, no coefficient — and every pool it is positive for gets an entrant, each a fraction
@@ -805,12 +827,12 @@ export function runFirmBirthsForRegion(
     // Conservation: the pool loses exactly what the firm gains.
     seg.annualRevenueUSD = Math.max(0, seg.annualRevenueUSD - revenueUSD);
     seg.employment = Math.max(1, seg.employment - employees);
-    // SEG1: the opening balance too. A born firm's working capital used to be conjured by the
+    // The opening balance too. A born firm's working capital used to be conjured by the
     // generator; now it is CARVED from the pool's own money, as a payment through settlement
     // (this stage runs after the week's cutoff, so it lands next cycle — the firm is born with
     // its opening balance in transit, and the economy's total cash never moved).
     newborn.forEach((c) => {
-      // §5-WIRES W6: the home bank's facility (fundNewbornDebt, below) funds the opening balance
+      // W6: the home bank's facility (fundNewbornDebt, below) funds the opening balance
       // first; the pool carves out the founders' remainder.
       const loanUSD = (c.debtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0);
       const openingCashUSD = Math.min(Math.max(0, openingCashOf(c) - loanUSD), Math.max(0, poolCashOf(ctx.v2, regionId, seg.industry)));
@@ -860,7 +882,7 @@ export function runFirmBirthsForRegion(
     if (!c.homeBankTicker) {
       c.homeBankTicker = banksForRelationship.pick(c.id, Math.max(0, openingCashOf(c)));
     }
-    // §7.241 root fix: issuerTickerById is built once at context creation, so a firm born
+    // root fix: issuerTickerById is built once at context creation, so a firm born
     // mid-week was invisible to every coupon and corporate-action payment that week — the money
     // then flowed payer-less into the unbacked ledger. Register the newborn where it is born.
     ctx.issuerTickerById?.set(c.id, c.ticker);

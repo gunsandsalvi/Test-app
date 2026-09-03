@@ -1,6 +1,6 @@
 import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
 /**
- * HH1 — the household balance sheet, and the claims that link it to the institutions.
+ * The household balance sheet, and the claims that link it to the institutions.
  *
  * Runs after the clearing books, the indexes and the ETF flows, because every line here is marked
  * from a price something else cleared. It owns one question: what do households actually own, and
@@ -13,7 +13,7 @@ import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
  * **The claim.** An insurer's assets are 495B against 40B of its own equity capital. The other
  * 455B is policyholder reserves. A pension fund's 146B against 17B is entitlements. An asset
  * manager's 188B against 31B is fund shares. Measured together, **740B was a liability to somebody
- * and nobody held the claim** (§7.48) — the same real thing represented once instead of twice, and
+ * and nobody held the claim** the same real thing represented once instead of twice, and
  * 46% of the gap MS1 had to label unmodeled.
  *
  * It is DERIVED, never stated: the claim is the residual `totalAssets − equityCapital` on a real
@@ -40,6 +40,7 @@ import {
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { REGION_IDS } from '../../../domain/geography';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { regionalDeskView } from '../../../domain/dealer-desk';
 
 // Whose beneficiaries are households is the kind registry's `beneficiariesAreHouseholds` row
 // (domain/institution-profiles.ts) — a new kind states it or fails to build.
@@ -63,7 +64,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       });
       reg.lastWeekHouseholdReceiptsUSD = Math.round(receiptsUSD);
       reg.lastWeekHouseholdTaxPaidUSD = Math.round(taxPaidUSD);
-      // §5-CLOSE C5: the dividends the public float was paid — a slice of the receipts above,
+      // C5: the dividends the public float was paid — a slice of the receipts above,
       // split out so the cohorts can put it where the equity exposure is.
       reg.lastWeekHouseholdDividendsUSD = Math.round(dividendsUSD);
     });
@@ -74,7 +75,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     if (!institutionProfile(entity.entityType).beneficiariesAreHouseholds) {
       return entity.beneficiaryLiabilityUSD === undefined ? entity : { ...entity, beneficiaryLiabilityUSD: undefined };
     }
-    // COH2 — REVERSED. This was `totalAssets − equityCapital`: the obligation derived from the
+    // REVERSED. This was `totalAssets − equityCapital`: the obligation derived from the
     // holdings, with equity pinned at its seed ratio and never updated, so a fund was as big as
     // its assets and households' claims were the residual that made the arithmetic work.
     // **In reality a pension fund is as big as the entitlements it owes**, and the entitlement is
@@ -82,8 +83,15 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // (`insurance-and-pensions.ts`). What is a RESIDUAL is the fund's own capital — its surplus or
     // deficit against what it owes, which is the number that actually means something, and the
     // one that retires `INSTITUTIONAL_OPENING_BOOK_SHARE`.
-    const liabilityUSD = Math.max(0, entity.beneficiaryLiabilityUSD
-      ?? (institutionTotalAssetsUSD(ctx, entity) - Math.max(0, entity.equityCapitalUSD)));
+    // THE BENEFICIARIES OWN WHAT THEIR MONEY EARNS, for every kind that has them — not only
+    // pensions. Set once and then kept, an insurer's, asset manager's or hedge fund's household
+    // claim was frozen at its opening value while every dollar of book return accrued to the
+    // fund's own capital, so the wealth transmission this module exists to create never ran.
+    // The claim grows by the week's measured investment income; the fund's capital stays what it
+    // is meant to be, the surplus or deficit against what it owes.
+    const openingUSD = entity.beneficiaryLiabilityUSD
+      ?? (institutionTotalAssetsUSD(ctx, entity) - Math.max(0, entity.equityCapitalUSD));
+    const liabilityUSD = Math.max(0, openingUSD + Math.max(0, entity.lastWeeklyInvestmentIncomeUSD ?? 0));
     return {
       ...entity,
       beneficiaryLiabilityUSD: liabilityUSD,
@@ -94,7 +102,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
   const fundNavPerShare = (fund: InstitutionalEntity): number => {
     const shares = fund.etf?.sharesOutstanding ?? 0;
     if (!(shares > 0)) return ETF_INCEPTION_NAV_PER_SHARE;
-    // §7.307 holdings flip: row walk on the mirror.
+    // holdings flip: row walk on the mirror.
     const H = ctx.v2.holdings;
     let heldUSD = 0;
     for (let r = bookHeadOf(ctx.v2, fund.id); r >= 0; r = H.next[r]) heldUSD += H.qtyUSD[r];
@@ -112,7 +120,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     ctx.updatedInstitutionalEntities.forEach((fund) => {
       if (fund.entityType !== 'ETF' || fund.region !== region) return;
       // DIST — SIGNED. A negative figure is a REDEMPTION: the household sold shares to raise cash
-      // it could not find in its deposits (§7.166). Both directions settle here, on the same
+      // it could not find in its deposits. Both directions settle here, on the same
       // arithmetic, because they are the same transaction with the sign flipped — and a
       // redemption that credited no deposits and retired no shares would be money from nowhere.
       const executed = ctx.householdEtfPurchasesUSD.get(fund.id);
@@ -120,7 +128,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       if (spentUSD === 0) return;
       const idx = etfShares.findIndex((x) => x.fundId === fund.id);
       const heldShares = idx >= 0 ? etfShares[idx].shares : 0;
-      // §7.248: the price the transaction EXECUTED at (etf-flows), not a NAV re-derived from a
+      // The price the transaction EXECUTED at (etf-flows), not a NAV re-derived from a
       // book whose cash leg has not applied yet — one transaction, one price (rule 3).
       const navPerShare = executed?.navPerShare ?? fundNavPerShare(fund);
       if (!(navPerShare > 0)) return;
@@ -140,11 +148,16 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const evMultiple = publicComparableEvMultiple(region, ctx.updatedCompanies);
     const etfHoldingsUSD = householdEtfHoldingsUSD(ctx.v2, { etfShares }, ctx.updatedInstitutionalEntities);
     const directEquityUSD = householdDirectEquityUSD(ctx.v2,
-      region, ctx.updatedCompanies, ctx.updatedInstitutionalEntities
+      region, ctx.updatedCompanies, ctx.updatedInstitutionalEntities,
+      regionalDeskView(
+        ctx.updatedCompanies.filter((c) => c.region === region && c.isBankEntity)
+          .map((c) => c.bankBalanceSheet?.dealerDeskInventory),
+        'equity'
+      )
     );
     const privateBusinessEquityUSD = householdPrivateBusinessEquityUSD(region, ctx.updatedCompanies, evMultiple);
 
-    // ---- 5. §5-CLOSE C5: household financial wealth is the claims that EXIST — fund shares,
+    // ---- 5. C5: household financial wealth is the claims that EXIST — fund shares,
     // the public float, private business equity, claims on institutions. The placeholder that
     // used to fill the gap to "1.5x income" (assets nobody issued, earning nothing) is deleted.
     const realClaimsUSD = etfHoldingsUSD + directEquityUSD + privateBusinessEquityUSD + institutionalClaimsUSD;
@@ -162,10 +175,10 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const mortgageUSD = hs.mortgageDebtUSD ?? 0;
     const homeEquityUSD = housingStockUSD - mortgageUSD;
 
-    // §7.248: the cash side of the fund-share purchase is a PAYMENT now (etf-flows pays it, the
+    // The cash side of the fund-share purchase is a PAYMENT now (etf-flows pays it, the
     // settlement close moves the deposit and the pending bank leg), so this view no longer
     // debits it — doing both moved the same dollar twice, and the max(0,…) that guarded the
-    // debit died with it (§7.46 L7). Only the SHARE register settles here.
+    // debit died with it. Only the SHARE register settles here.
     const depositsUSD = householdDepositsOf(ctx.v2, region);
     const mmfSharesUSD = Math.max(0, hs.mmfSharesUSD ?? 0);
     const equityHoldingsUSD = realClaimsUSD;
@@ -180,16 +193,16 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
 
       // DIST/COH — THE DEPOSIT SPLIT IS AN OUTCOME OF WHO SAVED, not a stated weight.
       //
-      // §5-COH's own sentence is "who holds deposits is whose savings accumulated", and it was
+      // own sentence is "who holds deposits is whose savings accumulated", and it was
       // not true: `W.deposits` applied a fixed share of the aggregate every week, so a tier that
       // saved more never got richer and the wealth distribution could not respond to the one
       // thing that produces it (rule 13). Each tier now carries the stock its own saving built,
       // and the split is that stock's share of the total.
       //
       // The stated weights remain the OPENING CONDITION only, used until the accumulation has
-      // anything in it (§7.4: a seed may state what the mechanism will then own). This is the
-      // largest of the nine tables §6.3-A records, and the first of them to become a measurement.
-      // COH1 — DEPOSITS FOLLOW THE LIQUID STOCK, not the whole accumulation. One number used to
+      // anything in it (: a seed may state what the mechanism will then own). This is the
+      // largest of the nine tables records, and the first of them to become a measurement.
+      // DEPOSITS FOLLOW THE LIQUID STOCK, not the whole accumulation. One number used to
       // drive this split and the three below it, so a tier's saving backed every asset class at
       // once and a house-rich, pension-rich tier looked as cash-rich as one holding deposits.
       const accumulatedByTier = WEALTH_TIERS.map((t: WealthTier) =>
@@ -203,8 +216,8 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // DIST/COH — AND THE OTHER FINANCIAL SPLITS FALL OUT OF THE SAME TWO MEASUREMENTS.
       //
       // A tier's holding of an asset class is the stock its own saving built, allocated by its own
-      // appetite for risk — and the model measures both: `accumulatedSavingsUSD` (§7.144) and
-      // `equityExposureShare`, which HH already derives per tier. So four more of §6.3-A's stated
+      // appetite for risk — and the model measures both: `accumulatedSavingsUSD` and
+      // `equityExposureShare`, which HH already derives per tier. So four more of stated
       // tables become one derivation:
       //
       //   equity-like and private business — RISKY OWNERSHIP, weighted by risk appetite;
@@ -218,7 +231,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // Equity-like and private business share a driver deliberately: both are appetite for risky
       // illiquid ownership, and the model measures ONE such appetite. Two tables with one cause is
       // one derivation, not two (rule 3).
-      // ...and the INVESTED stock is what backs them. It is the saving that was actually put
+      //...and the INVESTED stock is what backs them. It is the saving that was actually put
       // away, split by the same appetite that decided to put it there — so the two halves of the
       // balance sheet are now two stocks rather than one wearing two hats.
       const investedByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
@@ -235,13 +248,13 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
         cautiousTotal > 0 ? cautiousByTier[i] / cautiousTotal : 0;
 
       // DIST/COH — HOUSING AND DEBT FOLLOW DIFFERENT MEASUREMENTS AGAIN, and that is the point:
-      // each of §6.3-A's tables was a separate stated number precisely because nobody had asked
+      // each of tables was a separate stated number precisely because nobody had asked
       // what CAUSED it.
       //
       //   HOUSING and MORTGAGE follow BORROWING CAPACITY, not wealth. A house is bought with a
       //   mortgage, and what a lender will advance is a multiple of INCOME — so housing
       //   concentrates in the tiers that have income rather than the tiers that have assets. That
-      //   is why the middle of the distribution is house-rich and cash-poor (§7.142's
+      //   is why the middle of the distribution is house-rich and cash-poor (
       //   wealthy-hand-to-mouth result), and it falls straight out of using income here.
       //
       //   CONSUMER DEBT follows WHO DOES NOT COVER THEIR SPENDING. A tier saving a third of its
