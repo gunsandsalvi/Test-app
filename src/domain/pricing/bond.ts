@@ -115,3 +115,54 @@ export function spreadBpsFromPrice(terms: PaperTerms, curve: ZeroCurve, price: n
   }
   return (lo + hi) / 2;
 }
+
+/**
+ * §3.13-SOV row 4 — PRICE FROM YIELD, AND YIELD FROM PRICE, FOR PAPER WITH NO CREDIT SPREAD.
+ *
+ * The sovereign is the one book in this model that clears a YIELD and not a price
+ * (`assets/index.ts` declares it `YIELD_LIKE`, and `financial-clearing-engine` then values every
+ * sovereign fill at 1). Rule 1 says the price is the primitive and the yield is derived from it,
+ * and `../instruments/bond.md` N7.b says it in the instrument's own terms. These two functions
+ * are what lets that swap happen: a participant that has a reservation YIELD — which is what a
+ * sovereign buyer actually has, since its alternative is the policy rate — states it as the
+ * reservation PRICE the auction can clear on, and the yield comes back off the cleared price.
+ *
+ * A yield is ONE rate applied to the whole schedule, which is exactly what a yield IS and why it
+ * is not the same object as `priceFromSpreadBps`'s spread over a curve: that discounts every cash
+ * flow at its own tenor. Both are here because a sovereign has no credit spread to speak of and a
+ * corporate bond's price is not a single-rate discount of anything.
+ */
+export function priceFromYield(terms: PaperTerms, annualYield: number): number {
+  if (!(terms.weeksToMaturity > 0)) return 1;
+  const years = terms.weeksToMaturity / 52;
+  const { periods, couponPerPeriod, periodYears } = scheduleOf(terms);
+  // A yield at or below −100% a year has no discount factor; that is a bad input, not a price.
+  if (annualYield <= -1) return 0;
+  const dfAt = (t: number): number => discountFactor(annualYield, t);
+  if (periods === 0) return (1 + terms.annualCouponRate * years) * dfAt(years);
+  let pv = 0;
+  for (let i = 1; i <= periods; i++) {
+    const t = years - (periods - i) * periodYears;
+    if (t <= 0) continue;
+    pv += couponPerPeriod * dfAt(t);
+  }
+  return pv + dfAt(years);
+}
+
+/**
+ * The yield a price implies, by bisection. Price falls monotonically in yield, so it converges and
+ * cannot land on the wrong root. The bracket is wide enough to contain any rate this world can
+ * produce; hitting an end means the price is outside what any yield explains, and the CALLER
+ * decides whether that is a print or an untraded book (rule 1, and §3.21's bracket rule — an end
+ * of the search is not a market's answer).
+ */
+export function yieldFromPrice(terms: PaperTerms, price: number): number {
+  let lo = -0.5, hi = 5;
+  if (price >= priceFromYield(terms, lo)) return lo;
+  if (price <= priceFromYield(terms, hi)) return hi;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (priceFromYield(terms, mid) > price) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}

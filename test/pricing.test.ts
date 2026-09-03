@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   discountFactor, annuityFactor, levelPaymentFactor, presentValuePerFace,
-  zeroRateAt, priceFromSpreadBps, spreadBpsFromPrice, ZeroCurve,
+  zeroRateAt, priceFromSpreadBps, spreadBpsFromPrice, priceFromYield, yieldFromPrice, ZeroCurve,
 } from '../src/domain/pricing';
 import { ASSET_REGISTRY } from '../src/domain/assets';
 
@@ -82,4 +82,43 @@ test('every asset kind declares what its quantity is counted in', () => {
     // Money is the only kind whose price is one by definition; everything else must be priced.
     if (m.countedIn === 'USD') assert.equal(m.assetClass, 'CASH_LIKE', `${type} is counted in dollars but is not cash`);
   }
+});
+
+test('a sovereign prices off ONE yield, and the inverse returns the yield it came from', () => {
+  // §3.13-SOV row 4: the sovereign book clears a yield today; rule 1 says it must clear a PRICE
+  // and derive the yield. These are the two directions that swap costs.
+  const terms = { annualCouponRate: 0.04, periodWeeks: 26, weeksToMaturity: 10 * 52 };
+  let last = Infinity;
+  for (const y of [-0.01, 0, 0.02, 0.04, 0.08, 0.20]) {
+    const p = priceFromYield(terms, y);
+    assert.ok(p < last, `price must fall as yield rises (${y})`);
+    last = p;
+    assert.ok(Math.abs(yieldFromPrice(terms, p) - y) < 1e-6, `round trip at ${y}`);
+  }
+});
+
+test('a bond yielding its own coupon is worth par ONLY when the coupon is annual', () => {
+  // The one price a bond has that needs no arithmetic to verify — and it is exact only when the
+  // coupon period matches the yield's compounding. `priceFromYield` discounts at an ANNUAL
+  // EFFECTIVE yield, so a 4% coupon paid twice a year is genuinely worth more than one paid once,
+  // and the bond trades ABOVE par against a 4% yield. That premium is real, not error: it is
+  // rule 9 in the price, and asserting par at every frequency would be asserting the convention
+  // away. Measured: 30y at 26-week coupons is 1.006849, at 13-week 1.010290.
+  for (const weeks of [52, 5 * 52, 30 * 52]) {
+    const annual = priceFromYield({ annualCouponRate: 0.04, periodWeeks: 52, weeksToMaturity: weeks }, 0.04);
+    assert.ok(Math.abs(annual - 1) < 1e-12, `annual coupons at coupon = yield are exactly par (${weeks}w), got ${annual}`);
+    const semi = priceFromYield({ annualCouponRate: 0.04, periodWeeks: 26, weeksToMaturity: weeks }, 0.04);
+    const quarterly = priceFromYield({ annualCouponRate: 0.04, periodWeeks: 13, weeksToMaturity: weeks }, 0.04);
+    assert.ok(quarterly > semi && semi > annual, `paying sooner is worth more (${weeks}w)`);
+  }
+});
+
+test('a zero-coupon bill is worth its discounted face and nothing more', () => {
+  // A bill carries no coupon (bond.md N5.c): its whole return is the discount, so its price is
+  // exactly the discount factor. If this drifts, the bill has grown a coupon it does not have.
+  const bill = { annualCouponRate: 0, periodWeeks: 13, weeksToMaturity: 13 };
+  const p = priceFromYield(bill, 0.05);
+  assert.ok(p < 1, 'a discount bill is worth less than face');
+  assert.ok(Math.abs(p - discountFactor(0.05, 13 / 52)) < 1e-12, 'and exactly its discount factor');
+  assert.ok(Math.abs(yieldFromPrice(bill, p) - 0.05) < 1e-6, 'round trip');
 });
