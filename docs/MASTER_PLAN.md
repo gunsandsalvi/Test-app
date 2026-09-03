@@ -247,6 +247,39 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
+**These two come first, and they are the atlas's** (§9, step 37). Neither builds a mechanism;
+both make the instrument able to see. Everything below is verified against a harness that has
+never audited its own opening state, and the three identities in 37-ZEROSUM are each the cheapest
+possible detector for a defect this project found by reading code instead.
+
+37-SEED. **THE SEED IS NEVER AUDITED, AND EVERY WEEK-1 VIOLATION IS UNATTRIBUTABLE.** (the-seed
+    A2, D3, C3, C3.a, E1, C4, C4.a, D2.) `auditWeek` runs only inside the harness week loop; before
+    it the harness runs `init` only. **No invariant family has ever seen the seed's own state.**
+    So every week-1 finding is ambiguous between a bad opening world and a bad mechanism, which is
+    a cost the archive has paid 91 times. Three parts, in order:
+    · run the audit at week 0 and make it a gate — the cheapest step in this list, and it must go
+      first because it changes how every other step is verified;
+    · **every corporate bond is issued in week zero** (`companyGenerator.ts` `maturityWeeks`
+      [260,520,780]/[260,520]/[364], `originationWeek: 0`), so no corporate bond matures inside a
+      60-week run and **the rollover channel has been off for the model's whole measurable life**.
+      Seed the ladder mid-life; the sovereign side already does and is the template;
+    · the opening spread curve, yield curve and FX rate are seeded ANSWERS (E1), and the accrual
+      ledgers open empty for paper seeded mid-life (D2).
+
+37-ZEROSUM. **THE INVARIANTS THAT WOULD HAVE CAUGHT THE REST.** Three checks that do not exist, each
+    one the cheapest possible detector for a defect this atlas found by reading. (derivative D1.b;
+    the-derivative-layer A4, D2.b; currency-and-fx D4; trade-credit C4; the-register B2.b.)
+    · **Σ mark-to-market across the parties to a derivative = 0, exactly** — the invariant that
+      distinguishes a derivative from a security, and nothing checks it. Two of four classes carry
+      no mark at all, so there is nothing to sum;
+    · **Σ FX revaluation gains + losses = the rate move on the net open position** — the only check
+      that catches a position revalued twice or not at all, added right after revaluation cleared
+      the whole M family at 16 weeks;
+    · **Σ receivables = Σ payables**, world-wide — one line, and it is the cheapest proof that
+      trade credit is still two-sided.
+    These are audit families, not mechanisms. They belong before the steps below because each one
+    would have found its defect without a person reading anything.
+
 12. **ONE THING, ONE KEY** (user, 2026-09-03). *(Mostly done — §9.12. What is left is the tail.)*
     **THE POLICY, stated once so a check can test it:**
     · a COMPANY is its `id`; its `ticker` is a display name and a party address, never a key into
@@ -977,37 +1010,16 @@ and twenty trees reporting one cause is one step, not twenty.
 (13-SOV, 20-LLR, 21-BRACKET). Each step names the tree NODES it closes, so the atlas and the plan
 cannot drift apart: when the step lands, those nodes are re-marked in the same commit.
 
-**Ordered by what unblocks what.** The first three make everything else measurable; the next four
-are single causes that each disable a whole channel; the rest are absent systems, in the order
-their absence distorts the most.
+**Ordered by what unblocks what.** The two verification steps went to the head of PART I (below);
+what is left here opens with the single causes that each disable a whole channel, then the absent
+systems, in the order their absence distorts the most. **37-GOODS-RECIPE is deliberately last** —
+it moves every input-output number in the model, so it needs a stable measurement to land against.
 
-37-SEED. **THE SEED IS NEVER AUDITED, AND EVERY WEEK-1 VIOLATION IS UNATTRIBUTABLE.** (the-seed
-    A2, D3, C3, C3.a, E1, C4, C4.a, D2.) `auditWeek` runs only inside the harness week loop; before
-    it the harness runs `init` only. **No invariant family has ever seen the seed's own state.**
-    So every week-1 finding is ambiguous between a bad opening world and a bad mechanism, which is
-    a cost the archive has paid 91 times. Three parts, in order:
-    · run the audit at week 0 and make it a gate — the cheapest step in this list, and it must go
-      first because it changes how every other step is verified;
-    · **every corporate bond is issued in week zero** (`companyGenerator.ts` `maturityWeeks`
-      [260,520,780]/[260,520]/[364], `originationWeek: 0`), so no corporate bond matures inside a
-      60-week run and **the rollover channel has been off for the model's whole measurable life**.
-      Seed the ladder mid-life; the sovereign side already does and is the template;
-    · the opening spread curve, yield curve and FX rate are seeded ANSWERS (E1), and the accrual
-      ledgers open empty for paper seeded mid-life (D2).
-
-37-ZEROSUM. **THE INVARIANTS THAT WOULD HAVE CAUGHT THE REST.** Three checks that do not exist, each
-    one the cheapest possible detector for a defect this atlas found by reading. (derivative D1.b;
-    the-derivative-layer A4, D2.b; currency-and-fx D4; trade-credit C4; the-register B2.b.)
-    · **Σ mark-to-market across the parties to a derivative = 0, exactly** — the invariant that
-      distinguishes a derivative from a security, and nothing checks it. Two of four classes carry
-      no mark at all, so there is nothing to sum;
-    · **Σ FX revaluation gains + losses = the rate move on the net open position** — the only check
-      that catches a position revalued twice or not at all, added right after revaluation cleared
-      the whole M family at 16 weeks;
-    · **Σ receivables = Σ payables**, world-wide — one line, and it is the cheapest proof that
-      trade credit is still two-sided.
-    These are audit families, not mechanisms. They belong before the steps below because each one
-    would have found its defect without a person reading anything.
+**37-SEED and 37-ZEROSUM have MOVED to the head of PART I.** They are verification steps: one
+makes week zero auditable, the other adds the three invariants that would have found much of this
+list without a person reading anything. Leaving them here — behind forty-seven steps — would have
+meant every one of those steps was verified by an instrument the atlas had just shown to be blind
+at week zero. The rest of PART VII stays in the order below.
 
 37-LOSSRATE. **A LOSS RATE IS NOT A DEFAULT, AND FOUR SYSTEMS RUN ON ONE.** (banks-lending E1/E2;
     sme-pools E1; firm-birth-and-death C2.a pooled tier, E3; housing C4/C4.a; cds D1.)
