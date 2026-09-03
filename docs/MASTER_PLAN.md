@@ -1445,6 +1445,41 @@ was measured wrong. Treat a row there as a lead with a file:line, not a fact.
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
 
+**13-SOV ROW 3 — SIZED: 1.85T OF GOVERNMENT PAPER, HELD IN FOUR STORES, NONE NAMING A BOND.**
+
+A corporate bond's holder is a register row naming a TRANCHE, and O6/O7/O8 hold that to account.
+A government bond's holder is one of **four** separate stores, each keyed by a TENOR BUCKET:
+`bankBalanceSheet.sovereignBondHoldingsByTenor`, `centralBankSheet.sovereignHoldingsByTenor`,
+`bankingSector.sovBondDealerInventory`, and the institutional register's rows on a bucket id. A
+bucket has no issue date, no coupon of its own and no maturity, so **the question "who holds this
+government bond" has no answer.**
+
+**The clearest evidence it is a hole and not a style is in the audit itself.** `ownership.ts:o3` —
+the check that every register row names a live instrument — opens with
+`if (h.instrumentType === 'GOV_BOND') return;`. The integrity check carves out exactly the asset
+class that has no instrument to be checked against.
+
+`O11` measures it: **1852.61B across 4 stores — banks 295.04B, central banks 676.30B, desks
+11.84B, register 869.43B over 933 rows, of which 0 name a tranche.** Violations 70 in 24 families
+→ 75 in 25.
+
+It goes green when a sovereign holding is a row naming a tranche in the same store as every other
+holding. That is row 3, and it is what makes the sovereign BOTTOM-UP: row 4 made the direction
+right — price is the primitive, yield derived — but the object being priced is still an aggregate
+of four buckets per region whose coupon is a face-weighted average and whose maturity is a label.
+
+**Also fixed, my own rule 3 breach from row 4:** `SOVEREIGN_COUPON_PERIOD_WEEKS = 26` had been
+declared in `prices.ts` and again in `07c`, where `domain/pricing` already exported
+`COUPON_PERIOD_WEEKS = 26` for that fact — the third and fourth representations of one number.
+Both deleted. It matters beyond tidiness: P8 measures the sovereign against the same schedule 07c
+prices it on, and two constants that agree today can stop agreeing.
+
+**And O11 itself was written twice**: the first version compared `h.instrumentType !== 'GOV_BOND'`
+and the hygiene gate refused it — the instrument-literal ratchet was at 54 and that made 55. Asking
+`holdingClassOf` for the FACT is what the rule wants, and it is also more correct, because it
+catches `SOV_BOND` too — the model's other name for the same instrument, and part of what row 3
+has to collapse.
+
 **13-SOV ROW 4 — THE SOVEREIGN CLEARS A PRICE. BOTH BOOKS.**
 
 Bonds (07c) and bills (07f) both cleared a YIELD, and `financial-clearing-engine` values a
