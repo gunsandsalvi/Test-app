@@ -4,7 +4,7 @@
  * Until now every stage moved cash by mutating whatever field it owned: a company's `cash`, an
  * entity's `cashUSD`, a bank's `cashReservesUSD`, the treasury's account. Nothing connected them,
  * which is exactly how corporate cash came to sit outside the banking system for the whole life
- * of the model — reported as `corporateDepositsUSD`, held by no bank, backed by no asset (§7.86).
+ * of the model — reported as `corporateDepositsUSD`, held by no bank, backed by no asset.
  * A leak like that cannot happen once there is one place money moves through.
  *
  * **The real mechanism this reproduces.** A deposit is a named bank's liability to a named
@@ -48,7 +48,7 @@ export interface PaymentInstruction {
   amountUSD: number;
   /** The named real flow — carried into the ledgers so a dollar is traceable to why it moved. */
   reason: string;
-  /** §5-WIRES N — the week the money moves; this week when omitted. An obligation falling due
+  /** N — the week the money moves; this week when omitted. An obligation falling due
    *  later is a DATED wire in the journal, not a balance on a side map: settlement holds the row
    *  until its week, it counts against nobody's spendable balance until then, and what a party
    *  owes is the sum of its undue rows. */
@@ -73,7 +73,7 @@ export interface PaymentJournal {
   payeeId: Int32Array;
   amountUSD: Float64Array;
   reasonId: Int32Array;
-  /** §5-WIRES N: the week the row settles; a row dated past the pass's week is carried. */
+  /** N: the week the row settles; a row dated past the pass's week is carried. */
   settleWeek: Int32Array;
 }
 
@@ -89,7 +89,7 @@ export function newPaymentJournal(): PaymentJournal {
   };
 }
 
-/** §5-WIRES N — CORPORATE TAX IS A DATED WIRE. The walk's weekly accrual is a row to the treasury
+/** N — CORPORATE TAX IS A DATED WIRE. The walk's weekly accrual is a row to the treasury
  *  dated at the quarter; what a firm has accrued and not paid is the sum of its undue rows, and
  *  what the treasury collects in a week is the sum of the rows that fall due. */
 export const CORPORATE_TAX_REASON = 'cash taxes (accrued, due at the quarter)';
@@ -106,30 +106,30 @@ export function dueToPayeeUSD(j: PaymentJournal, payeeId: number, reasonId: numb
   return s;
 }
 
-/** §5-WIRES N: the week this step is settling — the wire journal's, the one clock. */
+/** N: the week this step is settling — the wire journal's, the one clock. */
 export const settlementWeek = (): number => activeWireJournal().week;
 /** A row is due at a pass when its week is this week or earlier. */
 export const rowDue = (j: PaymentJournal, n: number, week: number): boolean => j.settleWeek[n] <= week;
 
-/** SCALE (§7.305 step 2) — one journal row, typed-array columns with doubling growth: the
+/** SCALE — one journal row, typed-array columns with doubling growth: the
  *  ~200k-and-growing number[] pushes a week were the settlement file's own measured mass. */
 export function journalPush(j: PaymentJournal, payerId: number, payeeId: number, amountUSD: number, reasonId: number, settleWeek: number = activeWireJournal().week): void {
-  // §5-WIRES W1: a party "paying itself" moves nothing between parties — the SME tier buying
+  // W1: a party "paying itself" moves nothing between parties — the SME tier buying
   // its own output, a firm's line consuming its own — so it is no wire and no row: an honest
   // no-op, not a defect (the wire ledger rejects a self-wire from a direct caller).
   if (payerId === payeeId) return;
-  // §5-WIRES W1: a money row IS a wire. The wire is written first, numbered; the payment journal
-  // is settlement's projection of the week's money wires. §5-WIRES N: both carry the row's week.
+  // W1: a money row IS a wire. The wire is written first, numbered; the payment journal
+  // is settlement's projection of the week's money wires. N: both carry the row's week.
   wirePush(activeWireJournal(), payerId, payeeId, MONEY_KIND_ID, MONEY_ASSET_ID, amountUSD, 1, reasonId, settleWeek);
   journalAppendRow(j, payerId, payeeId, amountUSD, reasonId, settleWeek);
 }
 
 /**
- * §5-WIRES W1 — the ROW ONLY, for a payment whose wire already exists: stage 08's in-process
+ * W1 — the ROW ONLY, for a payment whose wire already exists: stage 08's in-process
  * shards journal through `journalPush` (wire written) into a shard journal that is then folded
  * into the week's; folding through `journalPush` wrote every shard row's wire TWICE (measured:
  * 180B a week of money wires with no settlement behind them — the whole of W1's line at
- * §7.367's re-measure). A worker thread's rows come back through `journalPush` — its own wire
+ * re-measure). A worker thread's rows come back through `journalPush` — its own wire
  * journal is scratch and dies with the job.
  */
 export function journalAppendRow(j: PaymentJournal, payerId: number, payeeId: number, amountUSD: number, reasonId: number, settleWeek: number): void {
@@ -153,7 +153,7 @@ export function journalAppendRow(j: PaymentJournal, payerId: number, payeeId: nu
 
 const reasonIdByText = new Map<string, number>();
 const reasonById: string[] = [];
-// §7.276: classified ONCE, at intern time — the category rides beside the free text for the
+// Classified ONCE, at intern time — the category rides beside the free text for the
 // life of the process, so the rollup and the harness's no-orphans assertion cost nothing per
 // payment.
 const reasonCategoryById: PaymentCategory[] = [];
@@ -168,10 +168,10 @@ export function internReason(reason: string): number {
 }
 /** The text behind an interned reason — the ledgers still key by it. */
 export const reasonText = (id: number): string => reasonById[id];
-/** §7.325 W2 — table size and texts-from-index, to seed a worker's reason table id-for-id. */
+/** W2 — table size and texts-from-index, to seed a worker's reason table id-for-id. */
 export const reasonTableSize = (): number => reasonById.length;
 export const reasonTextsFrom = (from: number): string[] => reasonById.slice(from);
-/** The category beside the free text (§7.276). */
+/** The category beside the free text. */
 export const reasonCategory = (id: number): PaymentCategory => reasonCategoryById[id];
 /** Every reason this run has written that no category rule matches. The harness asserts this
  *  list is EMPTY — a new payment reason must land a rule in `payment-category.ts` first. */
@@ -180,11 +180,24 @@ export function unclassifiedReasons(): string[] {
 }
 /** Append to the journal from a stage that holds only a slice of the context. Same encoding as
  *  `pay`, minus the running-net update, which those callers do not participate in. */
-export function journalPayment(j: PaymentJournal, instruction: PaymentInstruction): void {
+export function journalPayment(ctx: PendingNetCtx, instruction: PaymentInstruction): void {
   if (!guardPayableAmount(instruction)) return;
-  journalPush(j, partyId(instruction.payer), partyId(instruction.payee),
-    instruction.amountUSD, internReason(instruction.reason));
+  const payer = partyId(instruction.payer);
+  const payee = partyId(instruction.payee);
+  journalPush(ctx.paymentJournal, payer, payee, instruction.amountUSD, internReason(instruction.reason));
+  // ONE RUNNING NET. This wrote the journal and nothing else, so every payment the paying agent
+  // made — the week's coupons, dividends and redemptions — was invisible to `pendingSettlementUSD`
+  // until it settled. Repo's surplus, every bid sizer and the prime-brokerage sweep read that
+  // number, and the close sweep had to re-derive the whole thing by walking the journal because
+  // of it: two representations of one running total, the second one written to work around the
+  // first one's hole.
+  addPending(ctx, payer, -instruction.amountUSD);
+  addPending(ctx, payee, instruction.amountUSD);
 }
+
+/** What a caller must carry for its payment to reach the week's running net. */
+export type PendingNetCtx = Pick<WeeklyStepContext, 'paymentJournal' | 'pendingNetById' | 'pendingTouchedIds'>
+  & { deferPendingNet?: boolean };
 
 
 /**
@@ -197,7 +210,7 @@ export function journalPayment(j: PaymentJournal, instruction: PaymentInstructio
  * lot, and that is a fact about the model rather than a defect in it.
  */
 /**
- * §7.241: this guard used to silently drop NaN and negative amounts, which converted every
+ * This guard used to silently drop NaN and negative amounts, which converted every
  * upstream arithmetic defect in the codebase into quiet non-payment — the single worst silent
  * absorber found by the enforcement audit. A zero (or float dust below $1e-9) is an honest
  * no-op; anything else non-payable is a defect at the CALLER, named here so it fails where it
@@ -218,14 +231,14 @@ export function pay(ctx: WeeklyStepContext, instruction: PaymentInstruction): vo
   const week = settlementWeek();
   const settleWeek = instruction.settleWeek ?? week;
   journalPush(ctx.paymentJournal, payer, payee, instruction.amountUSD, internReason(instruction.reason), settleWeek);
-  // §5-WIRES N: a dated row is nobody's committed money until its week.
+  // N: a dated row is nobody's committed money until its week.
   if (settleWeek > week) return;
   addPending(ctx, payer, -instruction.amountUSD);
   addPending(ctx, payee, instruction.amountUSD);
 }
 
 /**
- * SCALE §7.303 — the hot-loop form of `pay`: party and reason already interned by the caller
+ * SCALE — the hot-loop form of `pay`: party and reason already interned by the caller
  * (hoisted once per company / per plan instead of two string-map probes per leg — the goods
  * auction and the cash walk emit ~400k legs a week). Same guard, same journal encoding, same
  * running-net update; a caller that cannot hoist keeps using `pay`.
@@ -247,8 +260,8 @@ export function payByIds(
 
 /** The running net, as a dense array indexed by party id. Touched ids are remembered so the
  *  week's reset is proportional to what moved rather than to the table's size. */
-function addPending(ctx: WeeklyStepContext, id: number, deltaUSD: number): void {
-  // §7.321 barrier mode: the running net is applied at MERGE time, leg by leg in the journal's
+function addPending(ctx: PendingNetCtx, id: number, deltaUSD: number): void {
+  // barrier mode: the running net is applied at MERGE time, leg by leg in the journal's
   // merged order (applyPendingLeg below), so per-party float sums keep the exact summation tree
   // the interleaved loop had. Emission-time application is suppressed inside the phase loops.
   if (ctx.deferPendingNet) return;
@@ -257,7 +270,7 @@ function addPending(ctx: WeeklyStepContext, id: number, deltaUSD: number): void 
   net[id] += deltaUSD;
 }
 
-/** §7.321 barrier merge: one journal leg's effect on the running net, applied in merged order. */
+/** barrier merge: one journal leg's effect on the running net, applied in merged order. */
 export function applyPendingLeg(ctx: WeeklyStepContext, payerId: number, payeeId: number, amountUSD: number, settleWeek: number = settlementWeek()): void {
   if (settleWeek > settlementWeek()) return; // §5-WIRES N: a dated leg commits nothing yet
   const net = ctx.pendingNetById;
@@ -265,6 +278,17 @@ export function applyPendingLeg(ctx: WeeklyStepContext, payerId: number, payeeId
   else net[payerId] += -amountUSD;
   if (net[payeeId] === undefined) { net[payeeId] = amountUSD; ctx.pendingTouchedIds.push(payeeId); }
   else net[payeeId] += amountUSD;
+}
+
+/** Seed the running net from the journal's rows that are DUE in this pass — the carried
+ *  instructions of earlier weeks, which nothing else would ever add. */
+export function seedPendingNetFromJournal(ctx: PendingNetCtx, week: number): void {
+  const j = ctx.paymentJournal;
+  for (let n = 0; n < j.n; n++) {
+    if (!rowDue(j, n, week)) continue;
+    addPending(ctx, j.payerId[n], -j.amountUSD[n]);
+    addPending(ctx, j.payeeId[n], j.amountUSD[n]);
+  }
 }
 
 /** Zero the week's running net. */
@@ -275,7 +299,7 @@ export function clearPendingNet(ctx: WeeklyStepContext): void {
 }
 
 /**
- * SETL6 — what a party has committed to pay or is due to receive at this week's settlement,
+ * What a party has committed to pay or is due to receive at this week's settlement,
  * before it happens. A trade agreed today is a payable or a receivable until it settles, and
  * both belong on the balance sheet: a fund's assets include what it is owed, and its spending
  * power excludes what it has already committed. Without this the five clearing books would each
@@ -286,7 +310,7 @@ export function pendingSettlementUSD(ctx: WeeklyStepContext, party: PartyRef): n
 }
 
 /**
- * §7.341 — STOCK-LOAN COLLATERAL A LENDER HOLDS IS NOT ITS MONEY TO SPEND. A fund that lends
+ * STOCK-LOAN COLLATERAL A LENDER HOLDS IS NOT ITS MONEY TO SPEND. A fund that lends
  * shares receives the borrower's cash and must hand it back when the shares return; it sits in
  * `cashUSD` beside the fund's own balance, and every book that sized a bid on `cash + pending`
  * spent it — the small-cap ETF bought equity with it, redeemed it away in kind, and then ran
@@ -339,7 +363,7 @@ export interface SettlementReport {
    *  stages/household-balance-sheet.ts): what they were actually paid, not a labor-share
    *  identity. Free, like the pools' P&L — every household flow is already a payment. */
   householdFlowsByRegion: Map<string, Map<string, number>>;
-  /** §5-CLOSE C5 — the treasury's week, from the payments themselves: per region, by reason.
+  /** C5 — the treasury's week, from the payments themselves: per region, by reason.
    *  The treasury's account moves by nothing else. */
   treasuryFlowsByRegion: Map<string, Map<string, number>>;
   /** SEG-D — every pool flow this week, keyed `<region>:<industry>` then by the payment's own
@@ -351,30 +375,30 @@ export interface SettlementReport {
   bankEquityDeltaByBank: Map<string, number>;
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
   creditCreatedByBank: Map<string, number>;
-  /** SETL6 — what the cleared books' central counterparty was left holding. Must be zero. */
+  /** What the cleared books' central counterparty was left holding. Must be zero. */
   clearingHouseResidualUSD: number;
-  /** SETL6 — reserves the central bank ISSUED this week by paying for assets with money it
+  /** Reserves the central bank ISSUED this week by paying for assets with money it
    *  created (an open-market purchase), less what it extinguished by selling. It is the one
    *  party whose payments are not funded from a balance, so the reserves that appear at the
    *  sellers' banks are new — and the identity below has to know that or it reads as a leak. */
   centralBankIssuanceUSD: number;
-  /** §5-CLOSE M6 — the same, per region (the central bank a payment was drawn on). */
+  /** M6 — the same, per region (the central bank a payment was drawn on). */
   centralBankIssuanceByRegion: Map<string, number>;
-  /** §5-CLOSE M6 — reserves a bank's own SECURITIES account paid (−) or received (+): a desk
+  /** M6 — reserves a bank's own SECURITIES account paid (−) or received (+): a desk
    *  buying paper from a fund destroys the fund's deposit, selling creates one. Own-account money
    *  the equity ledger above does not see (no P&L, one asset for another). */
   bankSecuritiesDeltaByBank: Map<string, number>;
   /** What the central bank's own books were left holding — see `centralBankResidualUSD`. Zero. */
   centralBankResidualUSD: number;
-  /** §5-CLOSE C4b — per region, the money that arrived from other regions less what left for
+  /** C4b — per region, the money that arrived from other regions less what left for
    *  them, read off each instruction's two sides (a side with no region — the clearing house —
    *  contributes nothing; its legs attribute through their other side). Booked on the central
    *  banks as foreign official claims; sums to zero across regions by construction. */
   crossBorderByRegion: Map<string, number>;
   /** Money that could not be applied: a party that does not exist, or a holder with no bank.
-   *  Must be zero. A non-zero value is money leaving the system — the §7.86 defect's shape. */
+   *  Must be zero. A non-zero value is money leaving the system — the defect's shape. */
   unresolvedUSD: number;
-  /** §5-WIRES A — the settled rows the store could not map to a party's row. Must be zero. */
+  /** A — the settled rows the store could not map to a party's row. Must be zero. */
   accountRowsUnmapped: number;
 }
 
@@ -461,11 +485,11 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     return ctx.lastSettlementReport;
   }
 
-  // ---- 1. Apply every due row to the account store by the one rule (§5-WIRES A) and keep the
+  // ---- 1. Apply every due row to the account store by the one rule and keep the
   // per-reason ledgers the sector parties' income statements are built from.
   const companyByTicker = new Map(ctx.updatedCompanies.map((c) => [c.ticker, c]));
   const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
-  // §5-CLOSE C4b — which central bank's system a side of a payment lives in. Every party but
+  // C4b — which central bank's system a side of a payment lives in. Every party but
   // the clearing house has one; the clearing house is the hub its legs pass through, so a leg
   // to or from it attributes through its other side and the hub itself contributes nothing.
   const regionOfParty = (ref: PartyRef): string | undefined => {
@@ -483,7 +507,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     ? new Map(ctx.updatedCompanies.filter((c) => c.isBankEntity).map((c) => [c.ticker, !!c.bankBalanceSheet]))
     : undefined;
   const week = settlementWeek();
-  // §5-WIRES A: the pass store, opened from the persistent accounts, takes every settled row by
+  // A: the pass store, opened from the persistent accounts, takes every settled row by
   // the one rule; the tallies are read off its rows' deltas (A4); the projection writes it back.
   const accounts = buildAccountMirror(ctx);
   for (let n = 0; n < nInstructions; n++) {
@@ -504,7 +528,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         }
       });
     }
-    // §5-CLOSE C4b: the official-settlement leg. A same-region payment nets to nothing here; a
+    // C4b: the official-settlement leg. A same-region payment nets to nothing here; a
     // cross-region one is money leaving one central bank's system for another's.
     const payerRegion = regionOfParty(payerRef);
     const payeeRegion = regionOfParty(payeeRef);
@@ -520,7 +544,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
       || payerKind === 'HOUSEHOLD' || payeeKind === 'HOUSEHOLD'
       || payerKind === 'GOVERNMENT' || payeeKind === 'GOVERNMENT') {
       const reason = reasonText(journal.reasonId[n]);
-      // §5-CLOSE C5: the treasury's flow statement is its payments.
+      // C5: the treasury's flow statement is its payments.
       if (payerRef.kind === 'GOVERNMENT') addToNested(report.treasuryFlowsByRegion, payerRef.region, reason, -amountUSD);
       if (payeeRef.kind === 'GOVERNMENT') addToNested(report.treasuryFlowsByRegion, payeeRef.region, reason, amountUSD);
       // SEG-D: the pools' income statement, built from the payments themselves.
@@ -531,7 +555,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     }
   }
 
-  // ---- 2. §5-WIRES A4: what the pass settled, read off the rows — no per-kind resolution, no
+  // ---- 2. A4: what the pass settled, read off the rows — no per-kind resolution, no
   // second set of writes. A bank's reserves moved by its own row; its income and expense are
   // its own-account parties' nets; a deposit its credit wrote, the treasury's account, the
   // central bank's issuance and the clearing house's residual are the rows of those classes.
@@ -561,7 +585,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   });
   projectBooks(ctx, accounts);
 
-  // ---- 4a. §5-CLOSE C4b: OFFICIAL SETTLEMENT. Reserves that crossed a border were credited by
+  // ---- 4a. C4b: OFFICIAL SETTLEMENT. Reserves that crossed a border were credited by
   // the receiving central bank against a claim on the paying one, whose own liability to it is
   // the same number with the other sign. Booked here, from the instructions, in the same pass
   // that moved the reserves — so every central bank's book closes every week and the world's
@@ -572,7 +596,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     cb.foreignOfficialClaimsUSD = (cb.foreignOfficialClaimsUSD ?? 0) + deltaUSD;
   });
 
-  // ---- 4b (retired, §5-FINALIZATION step 10). SETL2b booked a loan row on the lender here for
+  // ---- 4b (retired, step 10). SETL2b booked a loan row on the lender here for
   // every facility written this week, so the loan and the deposit appeared in one statement.
   // The asset half is now the facility row itself on the borrower's ladder, written where the
   // draw is made; the lender's book is a read of those rows (`facilityBookOf`). The BANK_CREDIT
@@ -581,7 +605,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // The treasury banks at the central bank, so its balance is a central-bank liability: what the
   // government collects has left the banking system's reserves, which is why a tax date tightens
   // money markets.
-  // §5-WIRES A2: the treasury's account and the advance (§5-CLOSE M4's rule) are the two signs
+  // A2: the treasury's account and the advance are the two signs
   // of its net position at the central bank — projected above. A region the tallies name but
   // the store does not is money with no account.
   report.tgaDeltaByRegion.forEach((deltaUSD, region) => {
@@ -590,7 +614,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
 
   report.centralBankResidualUSD = centralBankResidualUSD(report);
   ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;
-  // §5-WIRES N: the rows dated past this pass are CARRIED — the same journal, the same wires,
+  // N: the rows dated past this pass are CARRIED — the same journal, the same wires,
   // settled by the pass of their own week. Nothing else survives the pass.
   const carried = newPaymentJournal();
   for (let n = 0; n < nInstructions; n++) {
@@ -620,7 +644,7 @@ function addTo(map: Map<string, number>, key: string, deltaUSD: number): void {
  * The central bank's liabilities only move BETWEEN buckets: what the treasury took in came out
  * of bank reserves, and the central bank's own issuance is the one place new reserves come from.
  * (This function stood unused from the day it was written, with a sign the other way round;
- * nothing read it, so nothing caught it. It runs every week now. §5-WIRES A2 retired the T+1
+ * nothing read it, so nothing caught it. It runs every week now. A2 retired the T+1
  * household channel it once added back.)
  */
 function centralBankResidualUSD(report: SettlementReport): number {

@@ -4,7 +4,7 @@
  * itemized-holdings attribution). Kept together here rather than duplicated per stage.
  */
 
-import { journalPayment, partyId } from './settlement';
+import { journalPayment, partyId, PendingNetCtx } from './settlement';
 import { defect } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { transferHolding } from '../../ledger/holdings-ledger';
@@ -430,14 +430,8 @@ export function applyPendingCorporateActionSettlements(
     /** The issuers, so an equity payment can find the shares the register does NOT hold — the
      *  public float, whose dividend goes to the household sector by payment. */
     updatedCompanies?: Company[];
-    /** Present once the settlement layer is live — the register's payments become real payments
-     *  from the issuer rather than cash appearing on the holder's book. */
-    paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
-    /** The running settlement net, so a placement's budget sees what the holder's week has
-     *  already committed. Present on the real context. */
-    pendingNetById?: import('./context').WeeklyStepContext['pendingNetById'];
-  }
+  } & PendingNetCtx
 ): void {
   const pending = ctx.pendingHolderSettlements;
   const pendingCash = ctx.pendingHolderCashUSD;
@@ -516,10 +510,10 @@ export function applyPendingCorporateActionSettlements(
           const desk = { kind: 'BANK_SECURITIES' as const, ticker: bank.ticker };
           const spec = { instrumentType: type as ItemizedHolding['instrumentType'], instrumentId: p.instrumentId, issuerRegion, valueUSD: Math.abs(deltaUSD) };
           if (deltaUSD < 0) {
-            journalPayment(ctx.paymentJournal!, { payer: { kind: 'COMPANY', ticker: issuerTicker }, payee: desk, amountUSD: -deltaUSD, reason: 'principal redeemed to holder of record' });
+            journalPayment(ctx, { payer: { kind: 'COMPANY', ticker: issuerTicker }, payee: desk, amountUSD: -deltaUSD, reason: 'principal redeemed to holder of record' });
             transferHolding(ctx.v2, desk, house, spec, 'corporate action: desk paper retired pro rata');
           } else {
-            journalPayment(ctx.paymentJournal!, { payer: desk, payee: { kind: 'COMPANY', ticker: issuerTicker }, amountUSD: deltaUSD, reason: 'placement paid by holder of record' });
+            journalPayment(ctx, { payer: desk, payee: { kind: 'COMPANY', ticker: issuerTicker }, amountUSD: deltaUSD, reason: 'placement paid by holder of record' });
             transferHolding(ctx.v2, house, desk, spec, 'corporate action: desk paper placed pro rata');
           }
           touched = true;
@@ -624,7 +618,7 @@ export function applyPendingCorporateActionSettlements(
           byDesk?.forEach((usd, deskId) => {
             const amountUSD = owedUSD * (deskUSD / denomUSD) * (usd / deskBookUSD);
             if (!(amountUSD > 0)) return;
-            journalPayment(ctx.paymentJournal!, {
+            journalPayment(ctx, {
               payer, payee: holderPayee(deskId), amountUSD, reason: 'security payment to holder of record',
             });
             const deskTicker = dealerDeskTicker(deskId);
@@ -633,7 +627,7 @@ export function applyPendingCorporateActionSettlements(
         }
         const floatUSD = denomUSD - registerUSD - deskUSD;
         if (floatUSD > 0 && issuer) {
-          journalPayment(ctx.paymentJournal, {
+          journalPayment(ctx, {
             payer,
             payee: { kind: 'HOUSEHOLD', region: issuer.region },
             amountUSD: owedUSD * (floatUSD / denomUSD),
@@ -672,7 +666,7 @@ export function applyPendingCorporateActionSettlements(
           if (!ctx.paymentJournal || !issuerTicker) {
             defect(`security payment of ${(shareUSD / 1e6).toFixed(3)}M to ${entity.id} from an issuer with no ticker (${v2.internedStrings[H.instrRef[r]]})`);
           }
-          journalPayment(ctx.paymentJournal, {
+          journalPayment(ctx, {
             payer: { kind: 'COMPANY', ticker: issuerTicker },
             payee: { kind: 'INSTITUTION', id: entity.id },
             amountUSD: shareUSD,
@@ -717,7 +711,7 @@ export function applyPendingCorporateActionSettlements(
       // instruction backwards, because a placement is paid for.
       const principalIssuerTicker = issuerTickerOf(v2.internedStrings[H.instrRef[r]]);
       if (ctx.paymentJournal && principalIssuerTicker && Math.abs(principalCashUSD) > 0) {
-        journalPayment(ctx.paymentJournal, principalCashUSD > 0
+        journalPayment(ctx, principalCashUSD > 0
           ? {
             payer: { kind: 'COMPANY', ticker: principalIssuerTicker },
             payee: { kind: 'INSTITUTION', id: entity.id },
@@ -875,10 +869,9 @@ export function applyHolderInterestAccruals(
     holderAccruedInterestUSD: Map<string, Map<string, number>>;
     /** The banks, so the desks holding an issuer's paper accrue their share of its coupon. */
     updatedCompanies?: Company[];
-    paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
     nextWeek?: number;
-  }
+  } & PendingNetCtx
 ): void {
   const traceAccruedUSD = new Map<string, number>();
   const tracePaidUSD = new Map<string, number>();
@@ -1045,7 +1038,7 @@ export function applyHolderInterestAccruals(
         traceAdd(tracePaidUSD, type, accruedUSD);
         if (deskTicker !== undefined) traceAdd(traceDeskPaidUSD, type, accruedUSD);
       }
-      journalPayment(ctx.paymentJournal!, {
+      journalPayment(ctx, {
         payer,
         payee: holderPayee(holderId),
         amountUSD: accruedUSD,

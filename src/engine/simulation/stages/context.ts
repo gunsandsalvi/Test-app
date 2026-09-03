@@ -11,7 +11,7 @@
  */
 
 import { newWireJournal } from '../../ledger/wire';
-import { newPaymentJournal } from './settlement';
+import { newPaymentJournal, seedPendingNetFromJournal } from './settlement';
 import { ensureV2 } from '../../../engine2/world';
 import {
   GameState, Company, Region, Position, FxPair, Commodity, CompositeBenchmarkIndices,
@@ -156,6 +156,14 @@ export interface WeeklyStepContext {
   pendingTouchedIds: number[];
   /** What the last settlement run did — read by the invariants harness and the diagnostics. */
   lastSettlementReport?: import('./settlement').SettlementReport;
+  /** LAST week's flows, complete across all three settlement cycles. `lastSettlementReport` is
+   *  rebuilt from scratch every week and merged pass by pass, so a stage that runs before the
+   *  close sees only the intraday pass; anything settled in the close or the funding cycle is
+   *  simply missing from it. A stage that wants a whole week reads this. */
+  priorWeekFlows: {
+    smePoolFlowsByPool: Map<string, Map<string, number>>;
+    householdFlowsByRegion: Map<string, Map<string, number>>;
+  };
   /** SCALE C1 — the week's holdings, swept once and shared by the five clearing books; present
    * only between the store's build (before 07b) and its write-back (after 07e). While it is
    * set, entity `itemizedHoldings` arrays are stale week-start snapshots: read positions
@@ -330,8 +338,25 @@ export interface WeeklyStepContext {
   updatedPositions: Position[];
 }
 
+/** A persisted `{key: {reason: usd}}` block back as the nested maps the stages read. */
+function nestedFlows(src: Record<string, Record<string, number>> | undefined): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>();
+  Object.entries(src ?? {}).forEach(([k, byReason]) => out.set(k, new Map(Object.entries(byReason))));
+  return out;
+}
+
 export function createInitialContext(state: GameState): WeeklyStepContext {
   const nextWeek = state.currentWeek + 1;
+  const ctx = buildContext(state, nextWeek);
+  // A DATED ROW JOINS THE RUNNING NET IN ITS OWN WEEK. Carried instructions sit in the journal
+  // from the week they were recorded, but the net that every budget reads is cleared at the end
+  // of each settlement pass and nothing ever added them back — so an obligation dated for this
+  // week (corporate tax, above all) was invisible to every sizer on the very week it is paid.
+  seedPendingNetFromJournal(ctx, nextWeek);
+  return ctx;
+}
+
+function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
   return {
     v2: ensureV2(state),
     nextWeek,
@@ -363,6 +388,10 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     paymentJournal: (state as { pendingPaymentJournal?: import('./settlement').PaymentJournal })
       .pendingPaymentJournal ?? newPaymentJournal(),
     pendingNetById: [],
+    priorWeekFlows: {
+      smePoolFlowsByPool: nestedFlows(state.lastSettlement?.smePoolFlowsByPool),
+      householdFlowsByRegion: nestedFlows(state.lastSettlement?.householdFlowsByRegion),
+    },
     wireJournal: newWireJournal((state as { nextWireId?: number }).nextWireId ?? 1, state.currentWeek + 1),
     pendingTouchedIds: [],
     issuerTickerById: new Map(state.companies.map((c) => [c.id, c.ticker])),

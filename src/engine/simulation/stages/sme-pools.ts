@@ -7,7 +7,7 @@ import { poolCashOf } from '../../ledger/accounts';
  * its economics — it MEASURES them from what the pool actually paid and was paid, and lets the
  * pool's size, margin, investment and distress follow from that.
  *
- * What this replaces (§5-SEG): revenue that walked by `demandSignal x 0.06`, employment by
+ * What this replaces: revenue that walked by `demandSignal x 0.06`, employment by
  * `x 0.05`, both clamped to +/-4% a week, off a hand-written map from five buckets to a few
  * category growth rates. That is an outcome imposed by formula (rule 13), and because every
  * bucket got the same treatment and nothing reallocated between them, the tier's composition
@@ -40,8 +40,12 @@ const TARGET_CASH_WEEKS_OF_WAGES = 6;
 const TARGET_CAPEX_TO_REVENUE = 0.05;
 
 export function runSmePoolStage(ctx: WeeklyStepContext): void {
-  const flows = ctx.lastSettlementReport?.smePoolFlowsByPool;
-  if (!flows) return;
+  // LAST week's flows, all three settlement cycles of it. This read the week's own report, which
+  // at this point in the pipeline holds only the intraday pass — every pool flow settled in the
+  // close or the funding cycle was simply absent, so the margin, the revenue, the capex and the
+  // measured default rate all ran on part of a week.
+  const flows = ctx.priorWeekFlows.smePoolFlowsByPool;
+  if (flows.size === 0) return;
 
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
@@ -104,7 +108,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // against (bank-lending.ts reads it). Coverage is the pool's own measured earnings against
       // the debt service the banks' real loans imply. ----
       const annualEarningsUSD = pool.annualRevenueUSD * pool.marginPct;
-      // §7.241: the pool's cost of debt is its own loans' blended margin, derived by 02b from
+      // The pool's cost of debt is its own loans' blended margin, derived by 02b from
       // the banks' real quoted marginBps — not an invented +300bp. A credit tightening that
       // widens quoted margins now reaches measured pool distress, which is the default rate the
       // banks price against: the transmission loop is closed where it used to be open.
@@ -116,10 +120,10 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // `Math.max(0, 1 - coverage)` is a THRESHOLD, and this read it at the pool average — so a
       // pool with mean coverage 1.2 had exactly ZERO coverage-driven defaults however many of its
       // firms sat below 1, and **a mean-preserving spread could not cause a single default**,
-      // which is the mechanism of a credit cycle. `E[f(x)]` is not `f(E[x])` (§5-DIST).
+      // which is the mechanism of a credit cycle. `E[f(x)]` is not `f(E[x])`.
       //
       // The pool now carries a leverage cross-section struck from the same rule the named tier
-      // uses (§7.140), and the rate is the weighted sum of each stratum's own distress. The mean
+      // uses, and the rate is the weighted sum of each stratum's own distress. The mean
       // is preserved exactly, so this changes no aggregate — it changes what the aggregate can
       // RESPOND to.
       //
@@ -196,7 +200,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
           const survivors = pool.strata.map((st) => {
             // Each stratum loses weight in proportion to its share of the pool's total distress:
             // exiting_i = rate × (wᵢdᵢ / Σwⱼdⱼ), which sums to exactly the published exit rate.
-            // §7.241: the old form multiplied by `strata.length`, so a pool cut into 10 strata
+            // The old form multiplied by `strata.length`, so a pool cut into 10 strata
             // shed firm-weight twice as fast as one cut into 5 at the SAME default rate — a
             // RESOLUTION parameter setting an economic flow, rule 19's invariance test failed.
             const exiting = weeklyExitRate * (st.weight * distressOf(st.leverageMultiple) / totalDistress);

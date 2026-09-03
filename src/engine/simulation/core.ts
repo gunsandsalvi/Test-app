@@ -449,6 +449,14 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         Array.from(ctx.lastSettlementReport.treasuryFlowsByRegion.entries())
           .map(([r, m]) => [r, Object.fromEntries(m.entries())])
       ),
+      smePoolFlowsByPool: Object.fromEntries(
+        Array.from(ctx.lastSettlementReport.smePoolFlowsByPool.entries())
+          .map(([k, m]) => [k, Object.fromEntries(m.entries())])
+      ),
+      householdFlowsByRegion: Object.fromEntries(
+        Array.from(ctx.lastSettlementReport.householdFlowsByRegion.entries())
+          .map(([k, m]) => [k, Object.fromEntries(m.entries())])
+      ),
       ...(() => {
         const regionOfBank = new Map(ctx.updatedCompanies.filter((c) => c.isBankEntity).map((c) => [c.ticker, c.region as string]));
         const mergeMapsForRegion = (x: Map<string, number>, y: Map<string, number>): Map<string, number> => {

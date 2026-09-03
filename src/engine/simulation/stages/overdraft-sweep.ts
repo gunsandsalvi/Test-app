@@ -1,7 +1,7 @@
 /**
- * §5-CLOSE M4 — NO BALANCE STANDS NEGATIVE AT THE CLOSE. A payer whose settled balance is below
+ * M4 — NO BALANCE STANDS NEGATIVE AT THE CLOSE. A payer whose settled balance is below
  * zero has spent its bank's money; that is credit ALREADY extended, and the only choice left is
- * to name and price it (the 02b overdraft conversion's rule, §7.265, applied at the close to
+ * to name and price it (the 02b overdraft conversion's rule,, applied at the close to
  * every holder kind). A firm's overdraft becomes a revolver draw at its house bank; a fund's
  * becomes a prime-brokerage draw at its broker, past the struck line at a penalty; a pool's
  * becomes an SME facility draw at the region's banks. Every one is a loan that creates a
@@ -10,7 +10,7 @@
  */
 import { WeeklyStepContext } from './context';
 import { RegionId } from '../../../types';
-import { pay, partyId, PartyRef, settlementWeek, rowDue } from './settlement';
+import { pay, PartyRef, pendingSettlementUSD } from './settlement';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { smePoolId, facilityMarginBpsFor } from './bank-lending';
 import { PrimeBrokerageLine } from '../../../domain/prime-brokerage';
@@ -23,20 +23,12 @@ export const OVERDRAFT_PENALTY_BPS = 200;
 
 export function runOverdraftSweep(ctx: WeeklyStepContext): void {
   const v2 = ctx.v2;
-  // The balance the close will leave: the settled balance plus the net of EVERY instruction
-  // recorded since the mid-week pass — read off the journal itself, because the register's
-  // paying agent journals its payments without touching the running net (`pendingNetById`),
-  // and a quarterly dividend or coupon paid that way was exactly what left the biggest names
-  // negative after the first sweep (JTLN −7.8B, UYIR −8.8B).
-  const journal = ctx.paymentJournal;
-  const netById = new Map<number, number>();
-  const week = settlementWeek();
-  for (let n = 0; n < journal.n; n++) {
-    if (!rowDue(journal, n, week)) continue; // §5-WIRES N: a dated row is not this close's money
-    netById.set(journal.payerId[n], (netById.get(journal.payerId[n]) ?? 0) - journal.amountUSD[n]);
-    netById.set(journal.payeeId[n], (netById.get(journal.payeeId[n]) ?? 0) + journal.amountUSD[n]);
-  }
-  const pendingUSD = (ref: PartyRef): number => netById.get(partyId(ref)) ?? 0;
+  // The balance the close will leave: the settled balance plus the net of every instruction
+  // recorded since the last pass. That is the running net, and it is now the ONE representation
+  // of it — this used to re-derive the whole thing by walking the journal, because the paying
+  // agent journalled its payments without touching the net and a quarterly dividend or coupon
+  // paid that way left the biggest names negative after the first sweep.
+  const pendingUSD = (ref: PartyRef): number => pendingSettlementUSD(ctx, ref);
 
   // ---- 1. Firms: a revolver draw at the house bank (the 02b conversion, at the close). ----
   ctx.updatedCompanies.forEach((c) => {
@@ -135,7 +127,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     });
 
     // The brokers' and lenders' assets, on the live sheet (post-08 the only bank-sheet write
-    // that survives, §7.250).
+    // that survives, ).
     ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
       if (!c.bankBalanceSheet || c.region !== regionId) return c;
       const drawnUSD = drawnByBroker.get(c.ticker) ?? 0;

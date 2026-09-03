@@ -50,6 +50,11 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
   // they were paid — every employer's wages, the government's transfers, the interest the banks
   // really paid on their deposits — less the tax they really remitted. Recorded here for stage
   // 02 to read next week; a spend is not income, so purchases are excluded by name. ----
+  // The week's own report, which at this point holds the intraday pass: what the close settles
+  // for households is NOT in it. Reading the prior week's complete report instead would make
+  // these fields two weeks stale by the time stage 02 consumes them — they are already a
+  // one-week lag by name — and it breaks M6, whose identity is within a week. The close cycle's
+  // household flows are still missing; closing that needs the lag itself gone, not a longer one.
   const householdFlows = ctx.lastSettlementReport?.householdFlowsByRegion;
   if (householdFlows) {
     (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {

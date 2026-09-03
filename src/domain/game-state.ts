@@ -103,6 +103,11 @@ export interface GameState {
     centralBankResidualUSD: number;
     /** §5-CLOSE C5 — the treasury's week by reason, per region: what the account moved by. */
     treasuryFlowsByRegion: Record<string, Record<string, number>>;
+    /** The pools' and the households' weeks by reason, complete — all three settlement cycles.
+     *  The stages that read them run before the close, so a within-week report would carry only
+     *  the intraday pass and lose everything the close and the funding cycle settled. */
+    smePoolFlowsByPool?: Record<string, Record<string, number>>;
+    householdFlowsByRegion?: Record<string, Record<string, number>>;
     /** §5-CLOSE M6 — the week's money creators, per region: deposits written by bank credit,
      *  reserves the central bank issued, what the banks paid out of (−) or took into (+) their
      *  own account, and money that arrived from other regions. */
