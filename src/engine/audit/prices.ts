@@ -14,11 +14,7 @@ import { ensureV2 } from '../../engine2/world';
 import { isTrancheKind } from '../../domain/assets';
 import { trancheClearedPricePerFace } from '../credit-price';
 import { materializeGovLadder } from '../../engine2/tranches';
-import { priceFromYield, zeroRateAt } from '../../domain/pricing';
-
-/** A sovereign bond pays twice a year, which is what its price is discounted over. Stated here
- *  rather than assumed at the call site so the convention is one fact (rule 9). */
-const SOVEREIGN_COUPON_PERIOD_WEEKS = 26;
+import { priceFromYield, zeroRateAt, COUPON_PERIOD_WEEKS } from '../../domain/pricing';
 
 const RATING_RANK: Record<string, number> = { AAA: 0, AA: 1, A: 2, BBB: 3, BB: 4, B: 5, CCC: 6, D: 7 };
 
@@ -256,7 +252,7 @@ function p8(state: GameState, week: number): AuditFinding[] {
       const weeks = t.maturityWeek - state.currentWeek;
       if (!(weeks > 0) || !(t.principalUSD > 0)) return;
       const y = zeroRateAt(reg.zeroRates, weeks / 52);
-      const price = priceFromYield({ annualCouponRate: t.couponRate, periodWeeks: SOVEREIGN_COUPON_PERIOD_WEEKS, weeksToMaturity: weeks }, y);
+      const price = priceFromYield({ annualCouponRate: t.couponRate, periodWeeks: COUPON_PERIOD_WEEKS, weeksToMaturity: weeks }, y);
       face += t.principalUSD;
       implied += t.principalUSD * price;
       rungs++;

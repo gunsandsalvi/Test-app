@@ -48,12 +48,7 @@ import { govBucketId, govBucketKeyOf, isBillBucketKey } from '../../../domain/so
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS, sovBucketKey } from './shared-helpers';
 import { sovereignCouponByBucket } from '../../../domain/government';
-import { priceFromYield, yieldFromPrice, PaperTerms } from '../../../domain/pricing';
-
-/** A sovereign bond pays twice a year, which is the schedule its price is discounted over.
- *  Stated once so the convention is one fact and not a number repeated at three call sites
- *  (rule 9: the periodicity is part of the number). */
-const SOVEREIGN_COUPON_PERIOD_WEEKS = 26;
+import { priceFromYield, yieldFromPrice, PaperTerms, COUPON_PERIOD_WEEKS } from '../../../domain/pricing';
 import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { withdrawUnplacedIssuance } from '../../../domain/government';
@@ -338,7 +333,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const bucketCoupon = sovereignCouponByBucket(materializeGovLadder(ctx.v2, regionId), sovBucketKey);
     const termsOfBucket = (b: { key: string; years: number }): PaperTerms => ({
       annualCouponRate: bucketCoupon[b.key] ?? reg.zeroRates[TENOR_BUCKETS.find((t) => t.key === b.key)!.zeroRateField],
-      periodWeeks: SOVEREIGN_COUPON_PERIOD_WEEKS,
+      periodWeeks: COUPON_PERIOD_WEEKS,
       weeksToMaturity: Math.max(1, Math.round(b.years * 52)),
     });
     /** A reservation stated in yield, restated as the price that yield implies. */
