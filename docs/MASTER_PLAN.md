@@ -672,13 +672,49 @@ do not reorder.
     against good collateral, at a penalty rate, to the solvent — is three constraints and the
     model has none of them.
 
-    **The shape of the fix** (each part measurable on its own): the facility lends against
-    unencumbered collateral at a haircut, using the machinery repo already has; it charges a
-    penalty over the policy rate, so a bank prefers the market and drawing it is information;
-    it refuses a bank under PCA, which routes that bank to resolution instead; and depositors
-    move on an observable — the capital ratio and the facility draw are both already published.
-    Expect the run to get much worse before it gets better, and per rule 12 do not judge the
-    levels on the way.
+    **THE CAUSE IS AN ORDERING DEFECT, AND EVERYTHING ABOVE IS ITS SYMPTOM** (user, 2026-09-03:
+    *"Don't fix the symptoms, fix the cause."* — the four constraints this step first proposed
+    were all symptom patches; they are struck).
+
+    **The money market clears at stage 3 of about fifty.** `runRegionalRepoSession` — the session
+    where reserve-poor banks fund against collateral, reserve-rich banks and institutional idle
+    cash lend, and the standing facility sits in the book as the posted-rate seat of last resort
+    — is called from **`02b-bank-diversification.ts:413`**. Every book that MOVES reserves runs
+    after it: 07b, 07c, 07d, 07e, 07f, the derivatives, the whole of stage 08's cash walk, and
+    settlement itself at stage 308.
+
+    The two comments in the tree contradict each other and the second one is right.
+    `02b:407` claims *"Every real flow has posted"* — at stage 3, almost nothing has.
+    `bank-funding-close.ts`'s header states the truth: *"the shortfall is made by the books that
+    clear AFTER 02b … A repo session or a raise struck in the morning cannot see any of it. **A
+    real treasury funds its day at the end of the day; this is that.**"* It has the diagnosis
+    exactly right and then implements the wrong thing: instead of moving the MARKET to the close,
+    it puts an unbounded CENTRAL BANK at the close. `02b:409` even asserts *"there is no separate
+    'facility draw' step to run afterwards"*, and `bank-funding-close` at stage 417 is one.
+
+    **So the unbounded loan is a plug for a market that was already closed when the need arose.**
+    In aggregate the banking system's reserves barely move on a week of customer flow — they are
+    REDISTRIBUTED, one bank's drain is another's gain — so a session held after the flows would
+    match almost all of it bank to bank, against collateral, at a cleared rate. The session that
+    runs before them cannot see a single one, so the whole redistribution falls to the central
+    bank: it lends 54–84B a region to the banks that lost reserves while taking 87–250B back
+    through the reverse-repo window from the institutions whose cash the market never placed.
+    **The central bank is doing the interbank market's job because the interbank market is
+    closed by the time there is a job to do.**
+
+    **THE FIX IS TO MOVE THE SESSION, NOT TO BOUND THE LOAN.** Run the money market at the close,
+    where the shortfall is, and the rest follows without being added: borrowing is
+    collateral-bounded because repo already is; the facility is the corridor's ceiling because it
+    is already a seat in that book; a bank that still cannot fund faces a real constraint; and
+    `raiseCentralBankLoanUSD` is DELETED rather than fenced. What 02b keeps is the morning roll
+    (`unrenewedWholesaleUSD`) — the repayment of yesterday's funding, which genuinely belongs at
+    the open — and `reg.repoRateAnnual`, `repoFundableNeedUSD` and `repoClearedVolumeUSD` become
+    reads of the close's session.
+
+    Only after that is it worth asking the three questions the symptom list was reaching for — a
+    penalty rate, a solvency test, depositor flight — because only then does a bank that cannot
+    fund have anywhere to be. Expect the run to get worse before it gets better, and per rule 12
+    do not judge the levels on the way.
 
 21-BRACKET. **THE BRACKET IS STILL A PRINT, AND IT IS MEASURED: 206 TIMES IN 16 WEEKS.**
     Step 21 below names this; instrumenting `solveClearingStat` counted it. Over the 16-week
@@ -693,12 +729,21 @@ do not reorder.
     week"* — which was right about caps and leaves the bracket reaching the books directly:
     `comp.oasSpreadBps`, the curve's observed point, every mark derived from them.
 
-    The 139 are the case step 21 already names — **a book with no demand at any level is
-    UNTRADED, not priced**. With zero demand `targetUSD` is zero, the walk's `slope > 0` test
-    fails at every segment, and the fall-through prints the bracket. The saturation retreat
-    (`targetUSD = min(float, demandAtWideEnd × 0.999999)`) handles a book whose demand merely
-    cannot absorb the float; it cannot handle one with no demand at all, because there is no
-    level to retreat to. That book needs a third state beside "cleared" and "withdrawn".
+    **THE CAUSE IS THE SIGNATURE.** `solveClearingStat` returns `number`. There are books for
+    which no clearing level exists — no demand at any level (the 139: `targetUSD` is zero, the
+    walk's `slope > 0` test fails at every segment, and the fall-through prints the bound), and
+    demand that exceeds the float at every level (the 67: level-independent mandated cores summing
+    past what exists, which is not a mandate but an inconsistency). **A total function over a
+    partial domain has to invent something, and what it invents is the bracket.** Adding an
+    `UNTRADED` state to the adapters — which is what this step first proposed — is a symptom
+    patch: it leaves the function free to keep inventing and asks every caller to notice.
+
+    The fix is that the solve RETURNS whether it cleared, so a book with no price cannot be
+    mistaken for one with a price, and the compiler makes every adapter say what it does about
+    that: carry last week's mark and say so, or trade nothing. The saturation retreat
+    (`targetUSD = min(float, demandAtWideEnd × 0.999999)`) stays — it is right for a book whose
+    demand merely cannot ABSORB the float, and it is exactly why the wide-end fall-through is
+    reachable only when there is no demand at all.
 
 
 
