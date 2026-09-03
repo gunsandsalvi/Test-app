@@ -12,11 +12,11 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `aac7a6e` on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree
+- HEAD `bf2ecf9` on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree
   clean. (This branch replaces `claude/master-plan-review-j2z20v`.)
-- **Next step: §3 step 11b** (PART I's last two, with 11c), then 13 and PART II. §3 is the only list. §3 is the only work list, and it holds only
+- **Next step: §3 step 11b's remainder** (O5), then 11c, then 13 and PART II. §3 is the only list. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `aac7a6e` —
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `bf2ecf9` —
   **131 violations in 32 families**, "the money that is not anyone's" **0.06B across 2 lines**
   (M1's drift and M7's dust), M6 still grazing its band in 1 week of 16. See §9.11 and §6.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
@@ -194,15 +194,15 @@ do not reorder.
     — stage 02 reads the household week in the week it happened — and then the complete report is
     the natural source. `ctx.priorWeekFlows.householdFlowsByRegion` is already persisted and
     waiting for it.
-11b. **A dead firm's money and goods still move.** The doubled default rate step 11 uncovered
-    two paths that only bite when firms actually die. `settlement.ts:517` → `accounts.ts:432`:
-    when EITHER party has no account row `applySettledRow` applies NEITHER leg and the payment
-    simply does not happen, while `report.grossUSD` still counts it — now sized as well as
-    counted, and the answer at HEAD is **52 rows worth 0.01B** in 3 weeks of 16, so it is dust
-    with a name rather than a hole. Fix: open a row for the party, or refuse the instruction at
-    its site. `O5` finds **consignments in transit to or from a firm that is gone** (207 worst,
-    2 weeks of 16): `estate-resolution` scraps them at the CLOSE, which is right for a workout
-    that ends, and nothing scraps them when the estate is still open for years.
+11b. **A dead firm's goods still move.** The money half is closed (§9.11b): M7's unmapped rows
+    were all `payee BANK_SECURITIES`, a resolved bank's desk keeping its unpaid coupons, and both
+    ends of a shipment now follow the books on a merger and on an estate close. What is LEFT is
+    `O5`: **132 consignments in transit to or from a firm that is gone**, 1 week of 16 at HEAD,
+    and it is neither of those two paths — the merger re-keys both ends now and the estate sweeps
+    both ends now. Diagnose from `audit/ownership.ts:188`: the buyer is in `state.companies` but
+    neither active nor holding an open estate, so it is a firm whose estate CLOSED (which they now
+    do, §9.5) and was dropped from `state.estates` four weeks later, with consignments created or
+    surviving after the sweep. M7's 5 remaining rows are worth 0.00B and can ride with it.
 11c. **The central bank's book drifts.** M1 misses by **0.06B on a 208B sheet in 4 weeks of 16**
     at HEAD, having been clean for the whole project before the death rate rose. Small, real, and
     the money family's only sized line besides 11b's dust. Bisect from `56dc3ee`.
@@ -2469,3 +2469,15 @@ else in the closed circuit — the interest that was never paid, the residual wi
 silent truncations, the goods mint, the estate that never closed, bank resolution, the treasury's
 books, the register's holes, the settlement net, both legs of every trade, the wild swings and
 the carriers — is done and recorded above.
+
+**11b (part). The dead firm's money, and half its goods.** (`bf2ecf9`) M7 reported a COUNT of
+settled rows whose party the account store has no row for — a hole with no size and no name. Step
+11 gave it a size; this gave it a NAME, and the name found the cause in one run: every unmapped
+row was `payee BANK_SECURITIES`. **A resolved bank's desk keeps its unpaid coupons** — the dealer
+books merge into the acquirer but what that paper had already earned sat on the accrual ledger
+under the failed bank's own desk id, so the coupon date paid a desk whose bank has no account and
+the settlement store dropped both legs. Re-keyed now in `rekeyBankLinks`, where every other link
+to a failed bank already is. **Both ends of a shipment follow the books**: a merger re-keyed the
+BUYER and left the SELLER, and an estate swept only what was on its way TO the dead firm. Measured
+(SHOCKS=0 WEEKS=16): 131 in 32, unchanged in total; **M7 30 rows → 5** (0.00B either way) and O3's
+dangling rows 6 → 4. O5's 132 consignments survive both fixes and keep step 11b open.
