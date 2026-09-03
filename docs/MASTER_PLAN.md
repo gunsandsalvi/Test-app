@@ -492,7 +492,11 @@ possible detector for a defect this project found by reading code instead.
       now honestly labelled, so the household leg converts at the ledger instead of not at all;
       that it was ever a raw number was a 34% discount on every foreign good a household bought.
 
-13-SOV. **THE SOVEREIGN IS A BOND — CONVERT IT COMPLETELY** (user, 2026-09-03: *"the
+13-SOV. **THE SOVEREIGN IS A BOND — CONVERT IT COMPLETELY** *(THE TYPE IS DONE — §9.13-SOV.
+    `GovDebtTranche` is now `DebtTranche & { couponRate; tenorAtIssuanceYears }`, so row 1 of the
+    table below is closed and every `DebtTranche` consumer can take a sovereign. Rows 2–5 — the
+    store, the bucket holdings, the YIELD clearing and the parallel curve — are what is left.)*
+    (user, 2026-09-03: *"the
     sovereign needs to be completely converted. it should have the same construction of a normal
     bond, they are a normal bond with some different characteristics."*)
 

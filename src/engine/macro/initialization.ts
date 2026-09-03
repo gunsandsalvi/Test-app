@@ -396,6 +396,10 @@ function buildRegion(regionId: RegionId): Region {
     originationWeek: -Math.round(tenorWeeks / 2),
     maturityWeek: Math.round(tenorWeeks / 2),
     tenorAtIssuanceYears: tenorYears,
+    // §3.13-SOV: a sovereign is a bond. FIXED (`bond.md` N5.a) and SENIOR (N13.a — all sovereign
+    // claims rank equally; the answer is stated rather than left absent).
+    rateType: 'FIXED' as const,
+    seniority: 'SENIOR' as const,
   }));
 
   // PUB1 (§7.4): the debt stack exists at week 0, so its interest is in the decomposition from

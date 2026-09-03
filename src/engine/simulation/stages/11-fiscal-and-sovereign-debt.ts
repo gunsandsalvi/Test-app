@@ -616,6 +616,11 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           originationWeek: nextWeek,
           maturityWeek: nextWeek + weeks,
           tenorAtIssuanceYears: tenorYears,
+          // §3.13-SOV: a sovereign is a bond and says so. FIXED because its coupon is locked at
+          // issue (`bond.md` N5.a); SENIOR because a sovereign's claims rank equally and there is
+          // no stack (N13.a — stated even though the answer is "all equal").
+          rateType: 'FIXED' as const,
+          seniority: 'SENIOR' as const,
         });
       });
     }
@@ -657,6 +662,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             originationWeek: nextWeek,
             maturityWeek: nextWeek + tenorWeeks,
             tenorAtIssuanceYears: tenorYears,
+            // §3.13-SOV: a sovereign is a bond (`bond.md` N5.a fixed, N13.a all claims equal).
+            rateType: 'FIXED' as const,
+            seniority: 'SENIOR' as const,
           });
         });
       }

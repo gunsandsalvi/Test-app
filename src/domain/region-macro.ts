@@ -10,6 +10,7 @@ import { CentralBank } from './central-bank';
 import { BankingSectorView, AssetOwnershipShares } from './banking';
 import { InstitutionalSector } from './institutions';
 import { CategoryDemandState, SupplyRelationship } from './market-microstructure';
+import type { DebtTranche } from './company';
 
 export type WealthTier = 'BOTTOM_50' | 'NEXT_40' | 'TOP_9' | 'TOP_1';
 
@@ -309,14 +310,32 @@ export interface HouseholdState {
   weeklyDebtServiceUSD?: number;
 }
 
-export interface GovDebtTranche {
-  id: string;
-  principalUSD: number;
+/**
+ * §3.13-SOV — A SOVEREIGN BOND IS A BOND (user, 2026-09-03: *"the sovereign needs to be completely
+ * converted. it should have the same construction of a normal bond, they are a normal bond with
+ * some different characteristics."*).
+ *
+ * This was a STANDALONE interface whose every field was also a `DebtTranche` field — a strict
+ * subset, declared separately. It carried no characteristic a corporate bond lacks; it only
+ * LACKED ones, and for that non-difference the sovereign got five parallel structures (its own
+ * type, its own store, a holdings BUCKET with no instrument in it, a YIELD clearing, and its own
+ * curve). `docs/instruments/bond.md` is the fourteen characteristics any bond must have, and the
+ * sovereign answers N5, N11, N12 and N13 differently — not fewer of them.
+ *
+ * It is now a `DebtTranche` with the one field a sovereign genuinely adds. The remaining four
+ * parallel structures are the rest of 13-SOV.
+ *
+ * `tenorAtIssuanceYears` is retained and not derived from `maturityWeek - originationWeek`
+ * because it is the BUCKET KEY the register still groups by (`sovBucketKey`), and a derived key
+ * would change the moment a bucket was reopened at a different point in its life. It dies with
+ * the bucket, in the same commit, rather than being made derivable first and deleted twice.
+ */
+export type GovDebtTranche = DebtTranche & {
+  /** FIXED on every sovereign today: the coupon is locked at issue (bond.md N5.a). Bills carry
+   *  zero and return the discount (N5.c), which `isDiscountBill` reads off the tenor. */
   couponRate: number;
-  originationWeek: number;
-  maturityWeek: number;
   tenorAtIssuanceYears: number;
-}
+};
 
 /**
  * SEG — the SME tier of ONE registry industry in one region: the mass of firms too small to
