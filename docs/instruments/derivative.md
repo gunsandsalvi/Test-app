@@ -64,3 +64,151 @@ Node types, per `README.md`: **REASON**, **VERIFY**, **FORBID**.
 - FORBID — **it is not a substitute for the underlying market.** If the derivative's price is
   computed from a model and the cash market's price is computed from the derivative, neither has
   been cleared and rule 1 is broken in a loop
+
+---
+
+## 2. THE MAPPING
+
+Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+checked by `scripts/check-atlas.sh`. The three unnumbered FORBIDs of **WHAT A DERIVATIVE IS NOT**
+are given the ids `N1`–`N3` here, in the order they are written; the tree is unchanged.
+
+| Node | Code | |
+|---|---|---|
+| D1 two named counterparties, asset to one and liability to the other | `src/domain/derivatives/contract.ts:DerivativeContract` | ✅ |
+| **D1.a FORBID no derivative with one side** | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` | ❌ |
+| **D1.b VERIFY Σ mark-to-market = 0, exactly** | — | ❌ |
+| D2 a notional, in a unit, generally not exchanged | `src/domain/derivatives/contract.ts:notionalUSD` | ✅ |
+| D2.a the notional is not the exposure | `src/domain/derivatives/registry.ts:standingPfeChargeUSD` | ⚠️ |
+| D3 an observable underlying priced elsewhere | `src/domain/derivatives/profile.ts:DerivativeMarketView` | ✅ |
+| **D3.a FORBID no underlying that only exists inside the derivative** | `src/engine/macro/evolution.ts:evolveCommodity` | ⚠️ |
+| D4 a payoff function of D3 | `src/domain/derivatives/profile.ts:periodicLegUSDToB` | ✅ |
+| D5 a currency per leg, legs need not share one | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ⚠️ |
+| D6 a term: start, end, payment dates between | `src/domain/derivatives/contract.ts:maturityWeek` | ✅ |
+| D6.a a periodicity and accrual convention per periodic leg | `src/domain/derivatives/classes/irs.ts:IRS_PROFILE` | ⚠️ |
+| D7 a price at inception | `src/domain/derivatives/contract.ts:strike` | ✅ |
+| D7.a cleared from what the two sides would do, never solved for | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ⚠️ |
+| **D7.b struck at par: the price IS the rate, out of a mechanism** | `src/engine/simulation/stages/derivative-markets/irs.ts:runSwapMarket` | ✅ |
+| D8 a mark after inception, which moves and is not zero | `src/domain/derivatives/profile.ts:markToMarketUSDToA` | ⚠️ |
+| D8.a the mark is a real gain to one and a real loss to the other | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ✅ |
+| D9 collateral and margin | `src/domain/derivatives/profile.ts:initialMarginRate` | ⚠️ |
+| D9.a posted collateral leaves the poster's free balance | `src/engine/simulation/stages/derivative-lifecycle.ts:initialMarginUSD` | ✅ |
+| D10 counterparty credit: the other side can fail first | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` | ✅ |
+| D10.a who you face is part of what the contract is worth | — | ❌ |
+| D11 termination: it ceases to exist on both books at once | `src/domain/derivatives/profile.ts:eventTermination` | ✅ |
+| D11.a early termination on default has a stated close-out value | `src/domain/derivatives/profile.ts:closeOutUSDToB` | ⚠️ |
+| D12 an identity: counterparties + underlying + term + strike | `src/engine/simulation/stages/derivative-lifecycle.ts:strikeDerivatives` | ✅ |
+| N1 FORBID it is not a holding; it goes in the zero-sum check | `src/engine/audit/ownership.ts:o5` | ⚠️ |
+| N2 FORBID it is not a free exposure — the cash is real | `src/engine/simulation/stages/settlement.ts:pay` | ⚠️ |
+| N3 FORBID it is not a substitute for the underlying market | `src/engine2/stage08-back.ts:newCdsSpreadBps` | ⚠️ |
+
+---
+
+## 3. THE DIFF
+
+### ❌ D1.a — THE PLAYER'S DERIVATIVES HAVE NO COUNTERPARTY, AND THEIR P&L IS INVENTED MONEY
+
+`12-portfolio-and-positions.ts` runs a second, older derivative layer beside the one book, and it
+is the node's exact opposite. Six position kinds — `IRS` (:246), `CDS` (:294), `TRS` (:350),
+`COMMODITY` (:377), `OPTION` (:403), `XCS` (:466) — are priced by formula off
+`reg.yieldCurveParams` (`pricing.ts:priceInterestRateSwap`, `priceCreditDefaultSwap`) and off
+`fxPair.basisSpreadBps` (`priceCrossCurrencyBasisSwap`), none of them appears in
+`state.derivativesBook`, and **none has a `b` side.** The gain settles: `12-portfolio:276`,
+`:327`, `:496` do `ctx.weeklyRealizedPnL += unrealizedPnL`, and `13-news-and-turn-summary.ts:25`
+adds that straight into `state.portfolio.cashUSD`. A payoff received from nobody, which is D1.a
+verbatim.
+
+**Consequence.** Every VERIFY node in this contract that sums across parties (D1.b) is unrunnable
+while these positions exist, because their other half is not a party. It is also the one place in
+the model where a derivative is a way to get an exposure for free (N2): no margin leaves an
+account, no counterparty carries the mirror.
+
+**Already §3 step 17b** — but 17b understates it. Its words are *"stage 12's player options stay
+on the legacy layer instead of the one book, which is the last thing outside it"*: options are
+**one of six**. IRS, CDS, TRS, COMMODITY and XCS are all still on the legacy layer, and three of
+them have a live class in the registry that could carry them today.
+
+### ❌ D1.b — NOTHING CHECKS THE ZERO-SUM, AND TWO OF FOUR CLASSES HAVE NO MARK TO SUM
+
+Two separate holes behind one `❌`.
+
+**The invariant is never measured.** The audit's seven families touch `state.derivativesBook`
+exactly twice, and neither is this: `ownership.ts:260` (O8 — party and reference keys resolve) and
+`ownership.ts:292` (O5 — both parties are alive). There is no check anywhere that Σ marks = 0 per
+contract or in aggregate, and no check that Σ variation margin paid = Σ received. The zero-sum
+holds by construction for the two mark-leg classes — `settleDerivativeClass`'s `settleMark` pays
+one delta between the contract's own two parties — but *holding by construction* and *being
+checked* are different claims, and the second is what D1.b asks for.
+
+**Half the book has no mark at all.** `irs.ts:IRS_PROFILE` and `cds.ts:CDS_PROFILE` both set
+`markToMarketUSDToA: () => null`. A swap or a protection contract therefore has no value between
+inception and termination: it pays its periodic leg and is otherwise worth zero to both sides
+until somebody dies. So D8 is `⚠️` and D1.b has nothing to sum over for two of the four classes.
+
+The missing marks and margin are **Already §3 step 17** (which names `initialMarginRate` 0 for
+CDS, IRS and futures and requires variation margin to be the mark). The missing measurement is
+**A measurement, for §3 step 38** — it is the one number that tells a derivative from a security
+and no read produces it.
+
+### ❌ D10.a — WHO YOU FACE IS WORTH NOTHING
+
+No participant's reservation anywhere in the four markets contains a term for the counterparty.
+`cds.ts:runCdsMarket` prices the *reference's* expected loss and the seller's capital charge;
+`irs.ts:runSwapMarket` prices the receiver's alternative bond; `fx-forward.ts:strikeFor` picks the
+dealer with the most remaining capacity (`pickDealerBank`, :426), which is a size test and not a
+credit one. There is no CVA, no counterparty haircut, and no credit limit per pair.
+
+**Consequence.** A hedger is indifferent between the strongest and the weakest dealer in its
+region, so a weak dealer never loses flow and never pays for its weakness — and `cds.md` E2's
+wrong-way risk (the protection seller correlated with the reference) cannot cost anybody anything,
+because the identity of the seller is not in any price. It is the pricing half of what step 17's
+CCP work assumes.
+
+**Becomes a §3 step.** Small as a mechanism (one term in four reservations), large in what it
+enables: it is the first thing that makes D9's margin a *decision* rather than a stated rate.
+
+### ⚠️ D7.a — THE FX FORWARD'S PRICE IS THE ONE THAT IS NOT CLEARED
+
+Three of the four classes strike at what their auction printed (`irs.ts:189`, `cds.ts:212`,
+`commodity-future.ts:252`). The fourth does not: `fx-forward.ts:353` sets
+
+```
+strike: ctx.getFxToUsd(issuer) * (1 - basisBps / 10000)
+```
+
+— spot moved by the cleared basis. The **basis** clears; the **forward rate** is a formula applied
+to spot, and it carries no interest differential, so it is not covered interest parity either. See
+`fx-forwards-and-xcs.md` §3, whose tree owns this finding (E1/B2).
+
+### ⚠️ D5 / D6.a — ONE CURRENCY PER CONTRACT, ONE PERIODICITY, NO ACCRUAL CONVENTION
+
+`derivative-lifecycle.ts:payToB` settles every leg in `currencyOf(c.regionId)` — the contract has
+a region, not a currency per leg. An FX forward's two currencies exist only inside its mark, which
+is paid in the holder's home money, so a two-currency instrument (`fx-forwards-and-xcs.md` C1's
+cross-currency swap) cannot be represented at all. Every periodic leg is `/52` — `irs.ts:44`,
+`cds.ts:52` — so both legs of a swap share one weekly period and no accrual convention exists
+(rule 9); `interest-rate-swaps.md` A2's mismatch, which is *part of the price*, has nowhere to
+live. **Becomes a §3 step**, and it is a prerequisite for 17b's XCS.
+
+### ⚠️ D2.a — THE NOTIONAL *IS* THE EXPOSURE, THROUGH A FLAT RATE
+
+The only measure of derivative exposure in the model is
+`registry.ts:standingPfeChargeUSD` = Σ `notionalUSD × pfeAddOnRateOf(c)`, and the add-on is a
+per-class constant (`irs.ts` 0.005, `fx-forward.ts` 0.02, `cds.ts`/`commodity-future.ts` 0.10,
+with CDS's one investment-grade split). The mark never enters it. So the node's two things are not
+conflated — but only because one of them (current exposure) does not exist: what the desk budget
+charges is notional × a stated number, which is Basel's own CEM shape and is admitted by rule 4.
+Recorded as diverging rather than absent; it closes with step 17's risk-based margin.
+
+### ⚠️ N3 / D3.a — TWO PLACES WHERE THE DERIVATIVE AND THE CASH MARKET PRICE EACH OTHER
+
+`stage08-back.ts:1872`: `newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row] :
+newOasBps` — a reference with no protection book this week carries the **bond's OAS as its CDS
+spread**, and the basis for that name is zero by construction. `pricing.ts:priceCreditDefaultSwap`
+does it unconditionally (`const currentCdsSpreadBps = currentOasBps`) for every player CDS, with a
+`recoveryRate = 0.40` default parameter. Both are **Already §3 step 26**, which names
+`stage08-back.ts:1861` and `carryCalculator.ts` by line.
+
+Separately, D3.a's underlying: the commodity futures book cash-settles to
+`evolution.ts:evolveCommodity`'s spot, which is `spotPrice × exp(drift)` with a 0.5 floor — a
+price nothing cleared. **Already §3 step 22.**
