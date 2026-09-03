@@ -35,7 +35,7 @@ import { medianOf } from '../../../domain/volatility';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
-import { cashOf, settlementCurrencyOf } from '../../ledger/accounts';
+import { cashOf, obligationCurrencyOf } from '../../ledger/accounts';
 
 const sblInstrumentId = (regionId: RegionId, companyId: string) => `${regionId}-SBL-${companyId}`;
 export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
@@ -123,7 +123,15 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
             payer: { kind: 'INSTITUTION', id: loan.lender.id },
             payee: { kind: 'INSTITUTION', id: loan.borrower.id },
             amount: loan.collateralUSD,
-            currency: currencyOf(issuer!.region),
+            // The collateral is denominated in the money the shares were quoted in. This branch
+            // is the one where the issuer is GONE — de-listed, or a name the company table no
+            // longer carries — so there is nothing left to read that off; the lender is holding
+            // the cash and returns it in the money it holds. (A `!` assertion here read the
+            // issuer's region in the very branch whose condition is that there may be no issuer,
+            // and it threw in week 5 of the reference run. `SecurityLoan` carrying its own
+            // currency is what actually closes this — §3.13c's list of contracts with no
+            // denomination.)
+            currency: issuer ? currencyOf(issuer.region) : obligationCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: loan.lender.id }),
             reason: 'stock loan closed on credit event',
           });
         }
@@ -469,7 +477,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
             payer: { kind: 'INSTITUTION', id: d.fundId },
             payee: { kind: 'INSTITUTION', id: lenderId },
             amount: collateralUSD,
-            currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: d.fundId }, { kind: 'INSTITUTION', id: lenderId }),
+            currency: currencyOf(c.region),
             reason: 'stock loan collateral posted',
           });
           struck.push({

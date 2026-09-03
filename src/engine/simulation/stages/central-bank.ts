@@ -91,6 +91,6 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // the audit's M1 prints the residual until it does. ----
 
     // Statistic, not a driver: the old `centralBankBalanceSheet` scalar's replacement.
-    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb, waysAndMeansOf(ctx.v2, regionId)));
+    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb, waysAndMeansOf(ctx.v2, regionId), currencyOf(regionId), ctx.fx));
   });
 }

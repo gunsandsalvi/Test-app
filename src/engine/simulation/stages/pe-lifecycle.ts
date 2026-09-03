@@ -38,7 +38,7 @@ import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { marketCapOf, totalDebtOf } from '../../../domain/company';
 import { ladderTotalUSD } from '../../../engine2/tranches';
-import { cashOf, openingCashOf, entityCashOf, poolCashOf, settlementCurrencyOf } from '../../ledger/accounts';
+import { cashOf, openingCashOf, entityCashOf, poolCashOf, obligationCurrencyOf } from '../../ledger/accounts';
 import { issueHolding } from '../../ledger/holdings-ledger';
 import { bumpRegister } from './register-index';
 
@@ -180,7 +180,7 @@ function callCapitalUSD(ctx: WeeklyStepContext, sponsorId: string, requestedUSD:
       payer: { kind: 'INSTITUTION', id: x.commitment.lpEntityId },
       payee: { kind: 'INSTITUTION', id: sponsorId },
       amount: shareUSD,
-      currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: x.commitment.lpEntityId }, { kind: 'INSTITUTION', id: sponsorId }),
+      currency: obligationCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: sponsorId }),
       reason: 'private fund capital call',
     });
   });
@@ -223,7 +223,7 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: n
       payer: { kind: 'INSTITUTION', id: sponsorId },
       payee: { kind: 'INSTITUTION', id: c.lpEntityId },
       amount: shareUSD,
-      currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: sponsorId }, { kind: 'INSTITUTION', id: c.lpEntityId }),
+      currency: obligationCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: sponsorId }),
       reason: 'private fund distribution',
     });
   });
@@ -413,7 +413,7 @@ export function runPeLifecycleForRegion(
             payer: { kind: 'INSTITUTION', id: buyer.id },
             payee: { kind: 'INSTITUTION', id: sponsor.id },
             amount: priceUSD,
-            currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: buyer.id }, { kind: 'INSTITUTION', id: sponsor.id }),
+            currency: obligationCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: sponsor.id }),
             reason: 'private company sold sponsor-to-sponsor',
           });
           distributeToLps(ctx, sponsor.id, priceUSD);

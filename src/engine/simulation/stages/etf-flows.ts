@@ -1,4 +1,4 @@
-import { entityCashOf, householdDepositsOf, settlementCurrencyOf } from '../../ledger/accounts';
+import { entityCashOf, householdDepositsOf, obligationCurrencyOf } from '../../ledger/accounts';
 /**
  * ETF FLOWS — who buys the index, how the shares come into existence, and what the dealers do
  * about the gap.
@@ -618,7 +618,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
             payer: { kind: 'INSTITUTION', id: fundId },
             payee: { kind: 'INSTITUTION', id: investorId },
             amount: cashSliceUSD,
-            currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: fundId }, { kind: 'INSTITUTION', id: investorId }),
+            currency: obligationCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: fundId }),
             reason: 'etf in-kind redemption: cash slice',
           });
         }

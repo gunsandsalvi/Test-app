@@ -8,7 +8,7 @@
 import { GameState, RegionId } from '../../types';
 import { loanBooksOf, depositsOf, spendableDepositsOf } from '../../domain/banking';
 import { AuditSnapshot } from './snapshot';
-import { REGION_IDS } from '../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { centralBankAssetsUSD, centralBankLiabilitiesUSD, centralBankSovereignBookUSD, centralBankFxReservesUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
@@ -24,6 +24,7 @@ const banksOf = (s: GameState, r?: RegionId) =>
  *  payer's bank has already lost the reserves), no unbacked line. */
 function m1(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
+  const fx = ensureV2(state).fx;
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
@@ -32,7 +33,7 @@ function m1(state: GameState, week: number): AuditFinding[] {
     const reserves = sum(banksOf(state, r), (b) => bankReservesOf(v2, b.ticker));
     const tga = treasuryAccountOf(v2, r);
     const wam = waysAndMeansOf(v2, r);
-    const assets = centralBankAssetsUSD(cb, wam);
+    const assets = centralBankAssetsUSD(cb, wam, currencyOf(r), fx);
     const residual = centralBankLiabilitiesUSD(cb, reserves, tga) - assets;
     // CB_TRACE=1 prints the sheet every week for every region, breach or not. The residual is
     // CUMULATIVE, so the week a leak is MADE is invisible in the weeks it finally breaches —
@@ -48,9 +49,12 @@ function m1(state: GameState, week: number): AuditFinding[] {
       out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: ${liab} exceed ${asst} by ${B(residual)} — bank money nothing was bought against` });
     }
   });
-  // The official-settlement claims are bilateral, so the world's sum is zero or a leak.
+  // §3.13c — the official-settlement claims are bilateral, so the world's sum is zero or a leak.
+  // They are carried in the NUMÉRAIRE on both sides (see `foreignOfficialClaimsUSD`), so this is
+  // an exact sum: booking each side in its own money left the total non-zero by an exchange rate
+  // whenever a rate moved after the flow, which is a revaluation and not a missing leg.
   const claims = sum(REGION_IDS, (r) => state.regions[r]?.centralBankSheet?.foreignOfficialClaimsUSD ?? 0);
-  if (Math.abs(claims) > 1e6) out.push({ family: 'M', check: 'M1 foreign official claims net to zero', week, usd: claims, message: `the central banks' claims on each other sum to ${B(claims)}, not zero — a cross-border leg with one side missing` });
+  if (Math.abs(claims) > 1e3) out.push({ family: 'M', check: 'M1 foreign official claims net to zero', week, usd: claims, message: `the central banks' claims on each other sum to ${B(claims)}, not zero — a cross-border leg with one side missing` });
   return out;
 }
 

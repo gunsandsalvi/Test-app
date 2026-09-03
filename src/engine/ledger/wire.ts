@@ -10,6 +10,7 @@
  */
 import { PartyRef, partyId, partyOf } from './party';
 import { CurrencyCode, CURRENCY_CODES, NUMERAIRE } from '../../domain/geography';
+import { FxTable, PARITY_FX, toNumeraire } from '../../domain/currency';
 import { isVehicleClaim } from '../../domain/assets';
 
 export type AssetKind =
@@ -149,6 +150,13 @@ export interface WireSummary {
   valueUSDByKind: Record<string, number>;
   /** Money wires recorded after the last pass — they settle next week (N: dated wires). */
   moneyPendingUSD: number;
+  /** §3.13c — the same money wires PER CURRENCY, in that currency's own units. The identity
+   *  against settlement's gross is exact here and only approximate in the numéraire, because a
+   *  dated row is written in one week at one rate and settles in another at another; comparing
+   *  euros against euros needs no rate at all. */
+  moneyByCurrency: Record<string, number>;
+  /** The dated tail — money wires recorded after the last pass — per currency. */
+  moneyPendingByCurrency: Record<string, number>;
   /** §5-WIRES W2: what each region's clearing house holds of each asset kind after the week's
    *  wires, keyed `region|kind` — received minus delivered, in USD at the wires' prices. The
    *  house is on both sides of every fill, so a non-zero net is a leg no wire named. */
@@ -179,8 +187,16 @@ export interface WireSummary {
   goodsInByTicker?: Record<string, number>;
 }
 
-export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssuer?: (ticker: string) => string | undefined, reasonTextOf?: (id: number) => string): WireSummary {
+/**
+ * §3.13c — a MONEY wire's value is a quantity of ONE currency at a price of one of itself, so the
+ * four monies have to be brought to the numéraire before they can be added. Every other kind's
+ * price is already in one money by construction (an instrument has one quote currency).
+ */
+export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number; byCurrency: Record<string, number> } = { numeraire: 0, byCurrency: {} }, regionOfIssuer?: (ticker: string) => string | undefined, reasonTextOf?: (id: number) => string, fx: FxTable = PARITY_FX): WireSummary {
+  const moneyPendingUSD = moneyPending.numeraire;
+  const moneyPendingByCurrency = moneyPending.byCurrency;
   const byKind: Record<string, number> = {}; const valueUSDByKind: Record<string, number> = {};
+  const moneyByCurrency: Record<string, number> = {};
   const houseNetUSDByKey: Record<string, number> = {};
   const w2Trace = typeof process !== 'undefined' && process.env?.W2_TRACE === '1';
   const houseNetUSDByAsset: Record<string, number> | undefined = w2Trace ? {} : undefined;
@@ -210,7 +226,12 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
   };
   for (let i = 0; i < j.n; i++) {
     const k = ASSET_KINDS[j.kindId[i]];
-    const valueUSD = j.quantity[i] * j.priceUSD[i];
+    let valueUSD = j.quantity[i] * j.priceUSD[i];
+    if (k === 'MONEY') {
+      const cur = assetText(j.assetRef[i]);
+      moneyByCurrency[cur] = (moneyByCurrency[cur] ?? 0) + valueUSD;
+      valueUSD = toNumeraire(valueUSD, cur as CurrencyCode, fx);
+    }
     byKind[k] = (byKind[k] ?? 0) + 1;
     valueUSDByKind[k] = (valueUSDByKind[k] ?? 0) + valueUSD;
     if (k === 'MONEY') continue;
@@ -246,5 +267,5 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
       if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueUSD; if (issuerNetUSDByTicker) { const tk = `${to.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueUSD; } } }
     }
   }
-  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
+  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, moneyByCurrency, moneyPendingByCurrency, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
 }

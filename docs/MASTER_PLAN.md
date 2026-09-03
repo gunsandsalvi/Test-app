@@ -375,12 +375,32 @@ do not reorder.
     currency. and each entity needs a bank account per currency… Implement it, let the code throw
     errors and fix them. also rename the variables so that they actually make sense. Then do
     sovereign and the rest. this is a move fast break things kind of job."*): **13c runs BEFORE
-    13-SOV.** The TYPE first (nothing that holds money may be declared without its currency),
-    then SETTLEMENT and ACCOUNTS (an account per entity per currency; `pay` carries a currency
-    and converts at the cleared rate), then CLEARING (every instrument quotes in a currency),
-    then the audits — every cross-region identity today adds euros to dollars, and those failures
-    are the finding — then the RENAME, mechanical once the type carries the truth, and last so
-    the compiler has been doing the work. Break it and fix forward; do not preserve the run.
+    13-SOV.** The TYPE first, then SETTLEMENT and ACCOUNTS, then CLEARING, then the audits, then
+    the RENAME — mechanical once the type carries the truth, and last so the compiler has been
+    doing the work.
+
+    **PARTS 1 AND 2 ARE DONE (§9.13c).** What is LEFT of 13c:
+    · **the rename** — 11,243 `…USD` identifiers, of which a handful are now literally true
+      (`foreignOfficialClaimsUSD` is a numéraire claim and says so). Mechanical, and last;
+    · **clearing** — an instrument's quote currency. Every book still clears in the money of the
+      region that runs it, which is right for a domestic auction and unexamined for a
+      cross-listed one; and `financial-clearing-engine`'s `unitValueUSD` has no currency at all;
+    · **the contracts with no denomination.** `SecurityLoan`, `DerivativeContract` and the PE
+      commitments carry no currency field, so every payment they generate reads its money off
+      the obligation's OWNER (`obligationCurrencyOf`) or off the market it trades in
+      (`c.regionId`). `TradeInvoice` is the one obligation in the model that already carries its
+      own denomination, and it is the shape the other three want;
+    · **THE FX REVALUATION HAS NOWHERE TO GO.** A balance in a money that is not yours changes
+      value when the rate moves, and nothing books it. Measured at 16 weeks: `M1` 0.04B EUR /
+      0.20B JPN / 0.27B UK, `M5` on one US bank, `O1 sovereign held` 2.3–3.9% — every one of them
+      the same unbooked gain. `trade-settlement.ts` already computes exactly this for one case
+      (`tradeInvoiceFxGainUSD`) and it is the shape the rest wants: the holder takes the gain, in
+      the week the rate moves, as a real number on a real book;
+    · **stage 05's household leg.** `05-unit-bidding:2191` pays `units × book.clearedPriceUSD`
+      for a household, segment or treasury buyer — the ORIGIN auction's money — where the firm
+      loop two hundred lines above converts to buyer money first (`exWorksBuyerMoney`). Both are
+      now honestly labelled, so the household leg converts at the ledger instead of not at all;
+      that it was ever a raw number was a 34% discount on every foreign good a household bought.
 
 13-SOV. **THE SOVEREIGN IS A BOND — CONVERT IT COMPLETELY** (user, 2026-09-03: *"the
     sovereign needs to be completely converted. it should have the same construction of a normal
@@ -2628,6 +2648,116 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**13c — CURRENCY IS A UNIVERSAL CHARACTERISTIC (parts 1 and 2).** The `USD` suffix was a lie
+repeated 11,243 times across 1,395 identifiers. `currency.ts` said in its own header that every
+figure is held in the money of whoever owns it and that nobody re-denominates — and then `pay()`
+took an amount, a payer and a payee and converted **nothing**, so a German firm paying a US
+supplier took euros out of one balance and put dollars into another, and the wire ledger balanced
+because it was adding two numbers that are not the same kind of thing. Nineteen `convertLocal`
+call sites existed, every one in a DECISION stage comparing a foreign quote, and **none where
+money actually moves**. `grep "currency"` across all of `engine/ledger` and all of `engine2`
+returned one hit, and it was a formatter.
+
+**What landed.** `CurrencyCode` is a type, not a suffix, and `currency.ts`'s primitive is keyed by
+currency rather than by region — a region is a place, money is money. `v2.fx` is the world's one
+rate table, written by the FX auction and by the seed and read by the ledger, the audits and the
+UI; it lives on the world because a balance cannot be read without it and reads happen where there
+is no context. **An account is (party, currency, bank)**: a party holds as many rows as it holds
+currencies, and what it is WORTH is a conversion, never a bare sum. `pay()`, `payByIds()` and the
+payment journal carry a currency, and ~120 call sites now say which money they move. Money is
+**four assets** in the wire ledger, not one called `USD`; a unit of a currency costs one of itself,
+which is the one hard-coded 1 that belongs (§3.13's degenerate case).
+
+**THE RULE THE LEDGER SETTLES BY, and the measurement that chose it.** The first cut landed the
+raw foreign amount on both books. Measured after ONE WEEK: **every US bank short 23B of euros, 8B
+of sterling and 22B of yen** — a payer with no balance in a money it never held simply went
+negative in it. A party short a currency it does not keep is not a funding position, it is a
+missing conversion. So: **a payment is denominated in ONE currency and each side lands in the money
+it keeps its books in.** The payer's bank debits it in its own money and delivers the currency the
+obligation is in; the payee's bank credits it in ITS own money. Value is conserved because both
+legs are the same amount of the same currency through the same rate, and it is exactly
+`currency.ts`'s own rule that nobody re-denominates. 155 violations → 88.
+
+**WHAT A PAYMENT'S CURRENCY IS, and where it comes from.** The obligation's, and the obligation
+belongs to somebody: a wage to the employer, a coupon and a redemption to the paper (off the
+holding row's own `regionRef`), a tax to the treasury, a derivative's margin to the market it
+trades in (`c.regionId`), a stock loan's collateral to the money the shares are quoted in, a
+fund's call and fee and distribution to the FUND — never reflexively to the payer, because a
+capital call is paid BY the LP and owned BY the fund. `obligationCurrencyOf(v2, obligor)` names the
+owner and reads the money its account was opened in, which the seed took from its region. Nothing
+is left settling on a convention.
+
+**EVERY LEDGER IS ONE BOOK'S, SO EVERY LEDGER READS IN THAT BOOK'S MONEY.** The settlement report
+was adding euros to dollars in six places at once — the treasury's flow statement, the household
+sector's, the pools', the cross-border position, the banks' reserve tallies, and the world's
+central-bank identity. Each is now struck in the money of the book that reports it, and the two
+figures that genuinely span every book — the settled gross and the central banks' residual — in the
+numéraire, computed while the ROWS are in hand rather than by summing four per-book maps. 88 → 51.
+
+**THREE THINGS ONLY THE CONVERSION COULD HAVE FOUND.**
+1. **`ctx.fx` cannot be a live reference.** Settlement converted the week's gross at the pre-auction
+   rate and the wire summary valued the same wires at the post-auction one: W1 reported a 0.04B
+   hole that was an exchange rate moving between two reads. The week's rates are snapshotted at
+   the open; this week's auction sets next week's.
+2. **W1 can never be exact in one money.** A dated row is wired in one week and settles in another,
+   at another rate. The identity is now per currency, in that currency's own units, where it is
+   exact and needs no rate at all — the `moneyByCurrency` / `grossByCurrency` pair.
+3. **A bilateral claim needs ONE denomination.** `foreignOfficialClaimsUSD` booked in each central
+   bank's local money left the world's sum non-zero by 3.0M whenever a rate moved after the flow —
+   a revaluation, not a missing leg. It is carried in the numéraire on both sides now (one of the
+   few fields whose `USD` suffix is literally true) and `centralBankAssetsUSD` converts it into the
+   book's money.
+
+**A `!` IS A CLAIM, AND TWO OF MINE WERE FALSE.** `securities-lending.ts` read
+`currencyOf(issuer!.region)` inside the branch whose CONDITION is `!comp || !issuer` — the branch
+that exists precisely because the issuer may be gone — and it threw in week 5 of the reference run,
+after four clean weeks. `shared-helpers.ts` did the same at a site where `issuer` is `undefined`
+for every non-equity instrument. The lesson is not "check for undefined": it is that a currency
+should be read off the PARTY that owes the money (`obligationCurrencyOf`), which always has one,
+rather than off an object that may have stopped existing. A short run is not evidence; four weeks
+passed and the fifth was where the name died.
+
+**Two defects of my own, caught by the same process.** The seed's funding residual read a bank's
+deposit line before the bank had a currency, so the SME line came back zero and the household
+residual swallowed it — **10.6B on the largest US bank**; a deposit line now takes the bank's
+currency from the caller, because every caller holds the bank. And the read paths were calling
+`internString`, which MUTATES: a lookup that misses appends, renumbering every id assigned after
+it. `stringRef` reads without appending.
+
+**MEASURED, 4 weeks, SHOCKS=0.** Baseline 50 violations in 19 families. With every region forced
+onto one currency the run is unchanged through week 3. With the real four currencies and the whole
+ledger converting: **50 violations in 19 families — the baseline, family for family.** Every
+identity that broke has been made to read in one money and every one closes.
+
+**MEASURED, 16 weeks: 248 in 48 against the baseline's 231 in 46.** Four families go and six
+arrive, and the six ARE THE NEXT FINDING rather than plumbing left undone. They fire late (weeks
+6, 12–14) and they are small (`M1` 0.04B EUR, 0.20B JPN, 0.27B UK on sheets of ~180B), and every
+one of them is downstream of the same missing mechanism:
+
+  **NOBODY BOOKS AN FX GAIN OR LOSS.** A balance held in a money that is not yours is worth a
+  different number when the rate moves, and this model has nowhere to put that. The central banks'
+  claims on each other are the clearest case: the claim is one bilateral number in the numéraire
+  (it has to be, or the world's sum is a revaluation — see above), the reserves that funded it are
+  in each region's own money, and when a rate moves the two sides revalue by different amounts.
+  `M1`'s residual IS that revaluation, and `centralBankAssetsUSD` converting the claim at this
+  week's rate is what makes it visible rather than what causes it. The same shape reaches
+  `M5` on the one US bank that funds a foreign customer, and `O1 sovereign held = outstanding`
+  (2.3% USA week 6, 3.9% EUR week 12) is holdings converted against an outstanding that is not.
+
+  This is a MECHANISM, not a bug: an unhedged foreign position has a P&L, and until it is booked
+  the identities that span two currencies cannot close. It is 13c's next slice and it is what the
+  transaction-FX gap in `trade-settlement.ts` (`tradeInvoiceFxGainUSD`, already computed and
+  already real) is the one existing instance of. Per rule 20 nothing here is rolled back to make
+  the print smaller; per rule 12 no judgement is offered on the levels.
+
+Tests 135, eslint 341, hygiene and build pass.
+
+**The levels move, and they should.** A US household buying a euro-priced lot used to pay the euro
+number as if it were dollars — a 34% discount on every foreign good. That is corrected, and it
+moves reserves, trade and bank balance sheets. Per rule 12 no judgement is offered on whether the
+new levels are right; only that the identities close.
+
 
 **O8 — one piece of paper, one name.** (`PENDING`) Asked why one holding has two possible keys,
 the answer turned out to be worth measuring rather than asserting. The first version of O8 counted

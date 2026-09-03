@@ -38,7 +38,7 @@ import { WeeklyStepContext } from './context';
 export type { PartyRef } from '../../ledger/party';
 import { PartyRef, partyId, partyOf } from '../../ledger/party';
 import { activeWireJournal, wirePush, MONEY_ASSET_ID_BY_CURRENCY, ASSET_KINDS } from '../../ledger/wire';
-import { CurrencyCode, NUMERAIRE } from '../../../domain/geography';
+import { CurrencyCode, NUMERAIRE, currencyOf } from '../../../domain/geography';
 import { convert } from '../../../domain/currency';
 import { CURRENCY_ID, currencyOfId } from '../../../engine2/world';
 import { homeCurrencyOf } from '../../ledger/accounts';
@@ -422,6 +422,16 @@ export interface SettlementReport {
    *  buying paper from a fund destroys the fund's deposit, selling creates one. Own-account money
    *  the equity ledger above does not see (no P&L, one asset for another). */
   bankSecuritiesDeltaByBank: Map<string, number>;
+  /** §3.13c — the week's settled gross PER CURRENCY, in that currency's units: the exact form of
+   *  the identity the wire ledger checks (`grossUSD` is the same thing brought to one money,
+   *  which a dated row written at another week's rate can only match approximately). */
+  grossByCurrency: Record<string, number>;
+  /** §3.13c — the official-settlement leg per region IN THE NUMÉRAIRE. A claim between two
+   *  central banks is one bilateral number: booking each side in its own money leaves the
+   *  world's sum non-zero by an exchange rate whenever the rate moves after the flow
+   *  (measured: 3.0M on a stock of trillions). `crossBorderByRegion` stays local, because what
+   *  it is compared against — the deposits that actually moved in the region — is local. */
+  crossBorderNumeraireByRegion: Map<string, number>;
   /** What the central bank's own books were left holding — see `centralBankResidualUSD`. Zero. */
   centralBankResidualUSD: number;
   /** C4b — per region, the money that arrived from other regions less what left for
@@ -480,6 +490,7 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
     ...b,
     instructions: a.instructions + b.instructions,
     grossUSD: a.grossUSD + b.grossUSD,
+    grossByCurrency: mergeNumbers(a.grossByCurrency, b.grossByCurrency),
     reserveDeltaByBank: mergeMap(a.reserveDeltaByBank, b.reserveDeltaByBank),
     tgaDeltaByRegion: mergeMap(a.tgaDeltaByRegion, b.tgaDeltaByRegion),
     smePoolFlowsByPool: mergeNested(a.smePoolFlowsByPool, b.smePoolFlowsByPool),
@@ -507,6 +518,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const report: SettlementReport = {
     instructions: nInstructions,
     grossUSD: 0,
+    grossByCurrency: {},
+    crossBorderNumeraireByRegion: new Map(),
     reserveDeltaByBank: new Map(),
     tgaDeltaByRegion: new Map(),
     smePoolFlowsByPool: new Map(),
@@ -537,7 +550,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // C4b — which central bank's system a side of a payment lives in. Every party but
   // the clearing house has one; the clearing house is the hub its legs pass through, so a leg
   // to or from it attributes through its other side and the hub itself contributes nothing.
-  const regionOfParty = (ref: PartyRef): string | undefined => {
+  const regionOfParty = (ref: PartyRef): RegionId | undefined => {
     switch (ref.kind) {
       case 'COMPANY': return companyByTicker.get(ref.ticker)?.region;
       case 'INSTITUTION': return entityById.get(ref.id)?.region;
@@ -560,11 +573,11 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     if (!rowDue(journal, n, week)) continue; // §5-WIRES N: dated past this pass — carried below
     const amountUSD = journal.amount[n];
     const payerIdx = journal.payerId[n];
-    if (!applySettledRow(accounts, payerIdx, journal.payeeId[n], amountUSD, currencyOfId(journal.currencyId[n]))) {
+    if (!applySettledRow(accounts, payerIdx, journal.payeeId[n], amountUSD, currencyOfId(journal.currencyId[n]), ctx.fx)) {
       report.accountRowsUnmapped++;
       report.accountUnmappedUSD += amountUSD;
       // Which side had no row, and of what kind: a count says a hole exists, this says where.
-      const noRow = (id: number): boolean => !accounts.rowsOfParty.get(id);
+      const noRow = (id: number): boolean => !accounts.rowsOfParty.get(id)?.length;
       if (noRow(payerIdx)) {
         const k = `payer ${partyOf(payerIdx).kind}`;
         report.accountUnmappedByKind.set(k, (report.accountUnmappedByKind.get(k) ?? 0) + amountUSD);
@@ -577,7 +590,15 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     const payeeIdx = journal.payeeId[n];
     const payerRef = partyOf(payerIdx);
     const payeeRef = partyOf(payeeIdx);
-    report.grossUSD += amountUSD;
+    // §3.13c — EVERY LEDGER BELOW IS ONE BOOK'S, so every one reads the leg in THAT book's money:
+    // a treasury's flow statement in its own currency, a household sector's in its own, the
+    // cross-border position in the region whose position it is. The gross is the one figure that
+    // spans every book, so it is the numéraire. Recording the raw journal amount in all of them
+    // is how a yen payment used to land on a dollar statement.
+    const legCurrency = currencyOfId(journal.currencyId[n]);
+    const inMoneyOf = (r: RegionId): number => convert(amountUSD, legCurrency, currencyOf(r), ctx.fx);
+    report.grossUSD += convert(amountUSD, legCurrency, NUMERAIRE, ctx.fx);
+    report.grossByCurrency[legCurrency] = (report.grossByCurrency[legCurrency] ?? 0) + amountUSD;
     if (sheetByTicker) {
       // A leg addressed to a bank that has no sheet any more (resolved, merged) is money with
       // no account; name the stage's reason here, where the leg is still legible.
@@ -592,16 +613,17 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     const payerRegion = regionOfParty(payerRef);
     const payeeRegion = regionOfParty(payeeRef);
     if (payerRegion !== payeeRegion) {
-      if (payerRegion !== undefined) addTo(report.crossBorderByRegion, payerRegion, -amountUSD);
-      if (payeeRegion !== undefined) addTo(report.crossBorderByRegion, payeeRegion, amountUSD);
+      const numeraireLeg = convert(amountUSD, legCurrency, NUMERAIRE, ctx.fx);
+      if (payerRegion !== undefined) { addTo(report.crossBorderByRegion, payerRegion, -inMoneyOf(payerRegion)); addTo(report.crossBorderNumeraireByRegion, payerRegion, -numeraireLeg); }
+      if (payeeRegion !== undefined) { addTo(report.crossBorderByRegion, payeeRegion, inMoneyOf(payeeRegion)); addTo(report.crossBorderNumeraireByRegion, payeeRegion, numeraireLeg); }
       // XBORDER_TRACE=1 names what the official-settlement leg is made of, by the two kinds on
       // either side. M6 compares this total against the deposits that actually moved in the
       // region, so when the two disagree the only useful question is which pairing did it.
       if (xborderByPair) {
         const hub = payerRef.kind === 'CLEARING_HOUSE' || payeeRef.kind === 'CLEARING_HOUSE';
         const tag = hub ? 'hub' : 'real';
-        if (payerRegion !== undefined) xborderByPair.set(`${payerRegion} ${tag}`, (xborderByPair.get(`${payerRegion} ${tag}`) ?? 0) - amountUSD);
-        if (payeeRegion !== undefined) xborderByPair.set(`${payeeRegion} ${tag}`, (xborderByPair.get(`${payeeRegion} ${tag}`) ?? 0) + amountUSD);
+        if (payerRegion !== undefined) xborderByPair.set(`${payerRegion} ${tag}`, (xborderByPair.get(`${payerRegion} ${tag}`) ?? 0) - inMoneyOf(payerRegion));
+        if (payeeRegion !== undefined) xborderByPair.set(`${payeeRegion} ${tag}`, (xborderByPair.get(`${payeeRegion} ${tag}`) ?? 0) + inMoneyOf(payeeRegion));
       }
     }
     // The ledgers below key by the reason's TEXT, so it is un-interned only for the few payments
@@ -613,13 +635,13 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
       || payerKind === 'GOVERNMENT' || payeeKind === 'GOVERNMENT') {
       const reason = reasonText(journal.reasonId[n]);
       // C5: the treasury's flow statement is its payments.
-      if (payerRef.kind === 'GOVERNMENT') addToNested(report.treasuryFlowsByRegion, payerRef.region, reason, -amountUSD);
-      if (payeeRef.kind === 'GOVERNMENT') addToNested(report.treasuryFlowsByRegion, payeeRef.region, reason, amountUSD);
+      if (payerRef.kind === 'GOVERNMENT') addToNested(report.treasuryFlowsByRegion, payerRef.region, reason, -inMoneyOf(payerRef.region));
+      if (payeeRef.kind === 'GOVERNMENT') addToNested(report.treasuryFlowsByRegion, payeeRef.region, reason, inMoneyOf(payeeRef.region));
       // SEG-D: the pools' income statement, built from the payments themselves.
-      if (payerRef.kind === 'SEGMENT') addToPool(report, payerRef.region, payerRef.industry, reason, -amountUSD);
-      if (payeeRef.kind === 'SEGMENT') addToPool(report, payeeRef.region, payeeRef.industry, reason, amountUSD);
-      if (payerRef.kind === 'HOUSEHOLD') addToNested(report.householdFlowsByRegion, payerRef.region, reason, -amountUSD);
-      if (payeeRef.kind === 'HOUSEHOLD') addToNested(report.householdFlowsByRegion, payeeRef.region, reason, amountUSD);
+      if (payerRef.kind === 'SEGMENT') addToPool(report, payerRef.region, payerRef.industry, reason, -inMoneyOf(payerRef.region));
+      if (payeeRef.kind === 'SEGMENT') addToPool(report, payeeRef.region, payeeRef.industry, reason, inMoneyOf(payeeRef.region));
+      if (payerRef.kind === 'HOUSEHOLD') addToNested(report.householdFlowsByRegion, payerRef.region, reason, -inMoneyOf(payerRef.region));
+      if (payeeRef.kind === 'HOUSEHOLD') addToNested(report.householdFlowsByRegion, payeeRef.region, reason, inMoneyOf(payeeRef.region));
     }
   }
 
@@ -638,6 +660,10 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     report.centralBankIssuanceByRegion = t.centralBankIssuanceByRegion;
     report.clearingHouseResidualUSD = t.clearingHouseResidualUSD;
     report.unresolvedUSD += t.unresolvedUSD;
+    // §3.13c: the central banks' identity is read in ONE money. The per-book maps above are each
+    // in their own book's currency, which is right for a bank reading its own reserves and wrong
+    // for an identity that spans four of them.
+    report.centralBankResidualUSD = t.centralBankResidualNumeraire;
   }
 
   // ---- 3. Apply it. Every balance is the PROJECTION of the account store (`projectBooks`).
@@ -658,10 +684,11 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // the same number with the other sign. Booked here, from the instructions, in the same pass
   // that moved the reserves — so every central bank's book closes every week and the world's
   // claims net to zero.
-  report.crossBorderByRegion.forEach((deltaUSD, region) => {
+  // §3.13c: booked in the NUMÉRAIRE, because it is one bilateral claim and not two local ones.
+  report.crossBorderNumeraireByRegion.forEach((delta, region) => {
     const cb = ctx.updatedRegions[region as keyof typeof ctx.updatedRegions]?.centralBankSheet;
-    if (!cb) { report.unresolvedUSD += deltaUSD; return; }
-    cb.foreignOfficialClaimsUSD = (cb.foreignOfficialClaimsUSD ?? 0) + deltaUSD;
+    if (!cb) { report.unresolvedUSD += delta; return; }
+    cb.foreignOfficialClaimsUSD = (cb.foreignOfficialClaimsUSD ?? 0) + delta;
   });
 
   // ---- 4b (retired, step 10). SETL2b booked a loan row on the lender here for
@@ -684,7 +711,6 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     [...xborderByPair.entries()].sort().forEach(([k, v]) => console.log(`  [xborder] w${week} ${k} ${(v / 1e6).toFixed(1)}M`));
   }
 
-  report.centralBankResidualUSD = centralBankResidualUSD(report);
   ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;
   // N: the rows dated past this pass are CARRIED — the same journal, the same wires,
   // settled by the pass of their own week. Nothing else survives the pass.
@@ -696,6 +722,13 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   ctx.paymentJournal = carried;
   clearPendingNet(ctx);
   return report;
+}
+
+/** Two per-key totals, added. */
+function mergeNumbers(a: Record<string, number>, b: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = { ...a };
+  Object.entries(b).forEach(([k, v]) => { out[k] = (out[k] ?? 0) + v; });
+  return out;
 }
 
 function addToPool(report: SettlementReport, region: string, industry: string, reason: string, deltaUSD: number): void {
@@ -712,17 +745,8 @@ function addTo(map: Map<string, number>, key: string, deltaUSD: number): void {
   map.set(key, (map.get(key) ?? 0) + deltaUSD);
 }
 
-/**
- * The central bank's liabilities only move BETWEEN buckets: what the treasury took in came out
- * of bank reserves, and the central bank's own issuance is the one place new reserves come from.
- * (This function stood unused from the day it was written, with a sign the other way round;
- * nothing read it, so nothing caught it. It runs every week now. A2 retired the T+1
- * household channel it once added back.)
- */
-function centralBankResidualUSD(report: SettlementReport): number {
-  let tga = 0;
-  report.tgaDeltaByRegion.forEach((v) => { tga += v; });
-  let reserves = 0;
-  report.reserveDeltaByBank.forEach((v) => { reserves += v; });
-  return reserves + tga - report.centralBankIssuanceUSD;
-}
+// The central bank's liabilities only move BETWEEN buckets: what the treasury took in came out of
+// bank reserves, and the central bank's own issuance is the one place new reserves come from. That
+// residual is `settledTallies`' `centralBankResidualNumeraire` now (§3.13c): it has to be struck
+// while the ROWS are in hand, because the per-book maps this used to add together are each in
+// their own book's money and four monies do not sum.

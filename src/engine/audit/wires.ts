@@ -16,9 +16,20 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
   if (!w) { out.push({ family: 'W', check: 'W1 the week has a wire journal', week, message: 'no wires were recorded this week' }); return out; }
   // What settled this week = this week's money wires, less the tail recorded after the last pass
   // (it settles next week), plus last week's tail (it settled this week).
-  const moneyUSD = (w.valueUSDByKind.MONEY ?? 0) - w.moneyPendingUSD + (prev?.moneyPendingUSD ?? 0);
-  if (s && Math.abs(moneyUSD - s.grossUSD) > Math.max(1e3, s.grossUSD * 1e-9)) {
-    out.push({ family: 'W', check: 'W1 money wires = settlement gross', week, usd: moneyUSD - s.grossUSD, message: `money wires ${B(moneyUSD)} against settlement's gross ${B(s.grossUSD)} — a payment row with no wire, or a wire no pass settled` });
+  // §3.13c — PER CURRENCY, IN THAT CURRENCY'S OWN UNITS. The identity is exact here and can
+  // never be exact in one money: a dated row is wired in one week and settles in another, at
+  // another rate, so its numéraire value differs on the two sides by an exchange rate rather
+  // than by a missing wire. Comparing euros against euros needs no rate at all.
+  if (s) {
+    const currencies = new Set([...Object.keys(w.moneyByCurrency ?? {}), ...Object.keys(s.grossByCurrency ?? {})]);
+    currencies.forEach((cur) => {
+      const wired = (w.moneyByCurrency?.[cur] ?? 0)
+        - (w.moneyPendingByCurrency?.[cur] ?? 0) + (prev?.moneyPendingByCurrency?.[cur] ?? 0);
+      const settled = s.grossByCurrency?.[cur] ?? 0;
+      // Float dust on a sum of ~200k legs, not a fraction of it (rule 28).
+      if (Math.abs(wired - settled) <= 1e3) return;
+      out.push({ family: 'W', check: 'W1 money wires = settlement gross', week, usd: wired - settled, message: `${cur} money wires ${B(wired)} against settlement's gross ${B(settled)} — a payment row with no wire, or a wire no pass settled` });
+    });
   }
   // W2: the clearing house is on both sides of every fill — what the issuers and sellers
   // delivered to it is what the buyers took from it, per region and asset kind. A net is a

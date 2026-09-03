@@ -162,7 +162,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { marketCapOf } from '../../../domain/company';
-import { cashOf, entityCashOf, settlementCurrencyOf } from '../../ledger/accounts';
+import { cashOf, entityCashOf, obligationCurrencyOf } from '../../ledger/accounts';
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
 export const RECOVERY_PRIOR_WEIGHT = 8;
@@ -621,7 +621,10 @@ export function applyPendingCorporateActionSettlements(
             if (!(amountUSD > 0)) return;
             journalPayment(ctx, {
               payer, payee: holderPayee(deskId), amount: amountUSD,
-              currency: currencyOf(issuer!.region), reason: 'security payment to holder of record',
+              // The paper's own money, off the ISSUER — which is the payer here. Read from the
+              // party rather than from `issuer`, which is `undefined` for every non-equity
+              // instrument at this site and would have thrown the moment a credit desk was paid.
+              currency: obligationCurrencyOf(ctx.v2, payer), reason: 'security payment to holder of record',
             });
             const deskTicker = dealerDeskTicker(deskId);
             if (deskTicker !== undefined) deskIncomeByTicker.set(deskTicker, (deskIncomeByTicker.get(deskTicker) ?? 0) + amountUSD);
@@ -633,7 +636,7 @@ export function applyPendingCorporateActionSettlements(
             payer,
             payee: { kind: 'HOUSEHOLD', region: issuer.region },
             amount: owedUSD * (floatUSD / denomUSD),
-            currency: currencyOf(issuer!.region),
+            currency: currencyOf(issuer.region),
             reason: 'dividend to the public float',
           });
         }
@@ -673,7 +676,7 @@ export function applyPendingCorporateActionSettlements(
             payer: { kind: 'COMPANY', ticker: issuerTicker },
             payee: { kind: 'INSTITUTION', id: entity.id },
             amount: shareUSD,
-            currency: settlementCurrencyOf(ctx.v2, { kind: 'COMPANY', ticker: issuerTicker }, { kind: 'INSTITUTION', id: entity.id }),
+            currency: currencyOf(v2.internedStrings[H.regionRef[r]] as RegionId),
             reason: 'security payment to holder of record',
           });
           touched = true;
@@ -720,14 +723,14 @@ export function applyPendingCorporateActionSettlements(
             payer: { kind: 'COMPANY', ticker: principalIssuerTicker },
             payee: { kind: 'INSTITUTION', id: entity.id },
             amount: principalCashUSD,
-            currency: settlementCurrencyOf(ctx.v2, { kind: 'COMPANY', ticker: principalIssuerTicker }, { kind: 'INSTITUTION', id: entity.id }),
+            currency: currencyOf(v2.internedStrings[H.regionRef[r]] as RegionId),
             reason: 'principal redeemed to holder of record',
           }
           : {
             payer: { kind: 'INSTITUTION', id: entity.id },
             payee: { kind: 'COMPANY', ticker: principalIssuerTicker },
             amount: -principalCashUSD,
-            currency: settlementCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: entity.id }, { kind: 'COMPANY', ticker: principalIssuerTicker }),
+            currency: currencyOf(v2.internedStrings[H.regionRef[r]] as RegionId),
             reason: 'placement paid by holder of record',
           });
       } else if (principalCashUSD !== 0) {
@@ -1035,6 +1038,8 @@ export function applyHolderInterestAccruals(
       return defect(`coupon of ${(owedUSD / 1e6).toFixed(3)}M due on ${instrumentKey} from an issuer with no ticker`);
     }
     const payer = { kind: 'COMPANY', ticker } as import('./settlement').PartyRef;
+    // A coupon is paid in the paper's own money, which is the issuer's.
+    const couponCurrency = obligationCurrencyOf(ctx.v2, payer);
     byHolder.forEach((accruedUSD, holderId) => {
       if (!(accruedUSD > 0)) return;
       const deskTicker = dealerDeskTicker(holderId);
@@ -1048,7 +1053,7 @@ export function applyHolderInterestAccruals(
         payer,
         payee: holderPayee(holderId),
         amount: accruedUSD,
-        currency: settlementCurrencyOf(ctx.v2, payer, holderPayee(holderId)),
+        currency: couponCurrency,
         reason: 'coupon payment',
       });
     });

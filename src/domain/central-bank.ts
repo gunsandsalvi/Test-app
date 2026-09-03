@@ -14,6 +14,8 @@
  */
 
 import { RegionId } from './geography';
+import { CurrencyCode, NUMERAIRE } from './geography';
+import { FxTable, PARITY_FX, fromNumeraire } from './currency';
 
 export interface CentralBank {
   /** Real holdings of each foreign currency, in USD. Buying your own currency SPENDS these;
@@ -33,6 +35,10 @@ export interface CentralBank {
    *  asset), negative = their deposits here (a liability, carried on the asset side with its
    *  sign). Written by settlement from the instructions themselves; sums to zero across the
    *  world by construction, which the audit asserts. */
+  /** §3.13c — one of the FEW fields whose USD suffix is literally true: a claim on another
+   *  central bank is one bilateral number, so it is carried in the numéraire on both sides and
+   *  the world's sum is exactly zero whatever the rates then do. Every other line on this sheet
+   *  is in the region's own money, and `centralBankAssetsUSD` converts this one to match. */
   foreignOfficialClaimsUSD: number;
   /** C5 — Asset: what the standing repo facility has LENT the banks (the CB's seat in
    *  the repo session; each draw creates reserves against pledged collateral). Derived from the
@@ -115,9 +121,10 @@ export function centralBankFxReservesUSD(cb: CentralBank): number {
  * is the mechanism a balance-sheet scalar cannot express, and it is the whole reason a currency
  * peg ever breaks.
  */
-export function centralBankAssetsUSD(cb: CentralBank, waysAndMeansUSD: number): number {
+export function centralBankAssetsUSD(cb: CentralBank, waysAndMeansUSD: number, money: CurrencyCode = NUMERAIRE, fx: FxTable = PARITY_FX): number {
   return centralBankSovereignBookUSD(cb) + centralBankFxReservesUSD(cb) + (cb.loansToBanksUSD ?? 0)
-    + (cb.foreignOfficialClaimsUSD ?? 0) + (cb.standingFacilityLentUSD ?? 0) + waysAndMeansUSD;
+    // §3.13c: the one line on this sheet held in the numéraire, brought to the book's own money.
+    + fromNumeraire(cb.foreignOfficialClaimsUSD ?? 0, money, fx) + (cb.standingFacilityLentUSD ?? 0) + waysAndMeansUSD;
 }
 
 /**

@@ -115,6 +115,6 @@ export function closeSeedMoney(
       return { ...t, principalUSD: Math.round(out > 0 ? t.principalUSD * (held / out) : 0) };
     });
     reg.governmentInterestWeeklyUSD = Math.round(weeklyInterestExpenseUSD(reg.govDebtTranches));
-    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb, waysAndMeansOf(v2, regionId)));
+    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb, waysAndMeansOf(v2, regionId), currencyOf(regionId), v2.fx));
   });
 }

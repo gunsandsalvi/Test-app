@@ -8,7 +8,7 @@
 import { bankReservesOf, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { GameState, RegionId } from '../../types';
 import { WeeklyStepContext } from './stages/context';
-import { REGION_IDS } from '../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../domain/geography';
 import { centralBankAssetsUSD } from '../../domain/central-bank';
 
 const FLOOR_USD = 1e7;
@@ -36,7 +36,7 @@ export class CentralBankIdentityTrace {
         const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[c.ticker]?.bankBalanceSheet) || c.bankBalanceSheet;
         if (sheet) reserves += bankReservesOf(ctx.v2, c.ticker);
       });
-      const tga = treasuryAccountOf(ctx.v2, r), assets = centralBankAssetsUSD(cb, waysAndMeansOf(ctx.v2, r));
+      const tga = treasuryAccountOf(ctx.v2, r), assets = centralBankAssetsUSD(cb, waysAndMeansOf(ctx.v2, r), currencyOf(r), ctx.fx);
       out.set(r, reserves + tga + cb.currencyInCirculationUSD - assets);
       parts.set(r, { reserves, tga, assets });
     });

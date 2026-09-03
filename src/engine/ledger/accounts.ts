@@ -135,20 +135,21 @@ export function balanceOfIn(v2: V2World, party: PartyRef, currency: CurrencyCode
 }
 
 /**
- * THE MONEY A PAYMENT BETWEEN THESE TWO SETTLES IN, where the obligation itself does not say.
+ * THE MONEY AN OBLIGATION IS DENOMINATED IN, named by its OWNER.
  *
- * Most payments name their currency outright: a wage is in the employer's money, a coupon in the
- * bond's, an invoice in the invoice's. What is left is the bilateral financial flows — a capital
- * call, a management fee, variation margin, a broker's drawdown — where the contract exists only
- * as two party ids. For those the obligation is denominated in the PAYER's book money, the money
- * it is actually able to pay in, and the payee converts on receipt like any foreign receipt.
+ * A payment settles in the currency of the obligation behind it, and the obligation belongs to
+ * somebody: a fund's capital call and its fees are in the fund's money, a bond's coupon in the
+ * issuer's, a stock loan's collateral in the money the shares are quoted in. Pass the party that
+ * OWNS the claim — not, reflexively, the payer: a capital call is paid BY the LP and owned BY the
+ * fund, and reading the payer's books there would denominate the fund's call in the investor's
+ * money.
  *
- * This is a stated convention, not a derivation, and it is the one place §3.13c leaves one: an
- * audit that finds a flow whose two parties keep different books is finding a contract that
- * should carry its own currency field. Named here so there is exactly one of it.
+ * The money that party keeps its books in is a fact, not a convention: it is the currency its
+ * account was opened in, which the seed took from its region. The numéraire appears only for a
+ * party that has no account at all, which is a party that holds nothing.
  */
-export function settlementCurrencyOf(v2: V2World, payer: PartyRef, payee: PartyRef): CurrencyCode {
-  return homeCurrencyOf(v2, payer) ?? homeCurrencyOf(v2, payee) ?? NUMERAIRE;
+export function obligationCurrencyOf(v2: V2World, obligor: PartyRef): CurrencyCode {
+  return homeCurrencyOf(v2, obligor) ?? NUMERAIRE;
 }
 
 /** What the party holds, in the money it keeps its books in. */
@@ -505,15 +506,16 @@ function rowsInCurrency(s: AccountStore, party: number, currency: CurrencyCode):
   // Mirror the party's FIRST money — its home rows — bank for bank.
   const homeCur = s.currencyId[template[0]];
   const homeRows = byCur.get(homeCur) ?? template;
-  const opened: number[] = [];
-  homeRows.forEach((r) => {
-    opened.push(openRowRaw(s, party, s.bankIdx[r], s.classId[r], cur, 0));
-  });
-  byCur.set(cur, opened);
-  return opened;
+  homeRows.forEach((r) => openRowRaw(s, party, s.bankIdx[r], s.classId[r], cur, 0));
+  return byCur.get(cur) ?? [];
 }
 
-/** `openRow` by raw ids — the internal form the on-demand foreign row uses. */
+/**
+ * `openRow` by raw ids — the internal form the on-demand foreign row uses. It registers the row
+ * on BOTH indexes: `rowsOfParty` for the party's whole position and `rowsOfPartyCur` for the
+ * money it holds. Registering only the first is how a foreign reserve row settled all week and
+ * was then dropped by the projection, which reads per money.
+ */
 function openRowRaw(s: AccountStore, party: number, bankIdx: number, classId: number, cur: number, balance: number): number {
   if (s.n >= s.partyId.length) grow(s);
   const r = s.n++;
@@ -521,6 +523,10 @@ function openRowRaw(s: AccountStore, party: number, bankIdx: number, classId: nu
   s.currencyId[r] = cur; s.balance[r] = balance; s.opening[r] = balance;
   const rows = s.rowsOfParty.get(party);
   if (rows) rows.push(r); else s.rowsOfParty.set(party, [r]);
+  let byCur = s.rowsOfPartyCur.get(party);
+  if (!byCur) { byCur = new Map(); s.rowsOfPartyCur.set(party, byCur); }
+  const inCur = byCur.get(cur);
+  if (inCur) inCur.push(r); else byCur.set(cur, [r]);
   return r;
 }
 
@@ -620,17 +626,36 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
 }
 
 /**
- * One settled row, by the one rule, IN ONE MONEY. A party the store has no row for is reported,
- * not dropped. Both legs are the same amount of the same currency — a payment is one instruction,
- * not two — so a euro payment moves euros out of the payer and euros into the payee, and the
- * payee's own money is whatever it converts that to when it reads its books.
+ * The money this party keeps its books in — the currency of its first row, which the mirror
+ * opened from its region.
  */
-export function applySettledRow(s: AccountStore, payer: number, payee: number, amount: number, currency: CurrencyCode): boolean {
-  if (!s.rowsOfParty.has(payer) || !s.rowsOfParty.has(payee)) return false;
-  const pr = rowsInCurrency(s, payer, currency), qr = rowsInCurrency(s, payee, currency);
+function partyMoney(s: AccountStore, party: number): CurrencyCode | undefined {
+  const rows = s.rowsOfParty.get(party);
+  return rows && rows.length > 0 ? currencyOfId(s.currencyId[rows[0]]) : undefined;
+}
+
+/**
+ * ONE SETTLED ROW, BY THE ONE RULE — and each side lands in the money it keeps its books in.
+ *
+ * A payment is denominated in ONE currency: an invoice in the seller's money, a coupon in the
+ * bond's, a wage in the employer's. What each side then sees on its own books is that amount at
+ * the rate the FX market last cleared — which is exactly `currency.ts`'s rule that nobody
+ * re-denominates. The payer's bank debits it in its own money and delivers the currency the
+ * obligation is in; the payee's bank credits it in ITS own money. Value is conserved because
+ * both legs are the same amount of the same currency measured through the same rate.
+ *
+ * The alternative — landing the raw foreign amount on both books — was tried and measured: it
+ * left every US bank short 23B of euros, 8B of sterling and 22B of yen after ONE WEEK, because a
+ * payer with no balance in a money it never held simply went negative in it. A party that is
+ * short a currency it does not keep is not a funding position; it is a missing conversion.
+ */
+export function applySettledRow(s: AccountStore, payer: number, payee: number, amount: number, currency: CurrencyCode, fx: FxTable): boolean {
+  const payerCur = partyMoney(s, payer), payeeCur = partyMoney(s, payee);
+  if (payerCur === undefined || payeeCur === undefined) return false;
+  const pr = rowsInCurrency(s, payer, payerCur), qr = rowsInCurrency(s, payee, payeeCur);
   if (pr.length === 0 || qr.length === 0) return false;
-  side(s, payer, pr, -amount);
-  side(s, payee, qr, amount);
+  side(s, payer, pr, -convert(amount, currency, payerCur, fx));
+  side(s, payee, qr, convert(amount, currency, payeeCur, fx));
   return true;
 }
 
@@ -676,8 +701,14 @@ export interface SettledTallies {
   /** Treasury account movement per region. */
   tgaDeltaByRegion: Map<string, number>;
   /** Reserves the central bank ISSUED (paid for assets with money it created), less what it
-   *  extinguished — the one party whose payments are not funded from a balance. */
+   *  extinguished — the one party whose payments are not funded from a balance. IN THE NUMÉRAIRE:
+   *  it sums four central banks' books, and four monies do not add. */
   centralBankIssuanceUSD: number;
+  /** §3.13c — THE CENTRAL BANKS' IDENTITY, IN THE NUMÉRAIRE: every reserve row and every treasury
+   *  row this pass moved, less what the central banks issued. Computed here rather than from the
+   *  per-book maps because those are each in their OWN book's money and summing them across four
+   *  currencies is the very mistake this step exists to remove. Must be zero. */
+  centralBankResidualNumeraire: number;
   centralBankIssuanceByRegion: Map<string, number>;
   /** What the cleared books' central counterparty was left holding. Must be zero. */
   clearingHouseResidualUSD: number;
@@ -698,7 +729,8 @@ export function settledTallies(s: AccountStore, fx: FxTable): SettledTallies {
   const t: SettledTallies = {
     reserveDeltaByBank: new Map(), creditCreatedByBank: new Map(), bankSecuritiesDeltaByBank: new Map(),
     bankEquityDeltaByBank: new Map(), tgaDeltaByRegion: new Map(),
-    centralBankIssuanceUSD: 0, centralBankIssuanceByRegion: new Map(), clearingHouseResidualUSD: 0, unresolvedUSD: 0,
+    centralBankIssuanceUSD: 0, centralBankResidualNumeraire: 0, centralBankIssuanceByRegion: new Map(),
+    clearingHouseResidualUSD: 0, unresolvedUSD: 0,
   };
   const addTo = (m: Map<string, number>, k: string, d: number) => m.set(k, (m.get(k) ?? 0) + d);
   /** A row's move, in the money of the book that reports it. */
@@ -709,11 +741,13 @@ export function settledTallies(s: AccountStore, fx: FxTable): SettledTallies {
     if (rr < 0) return;
     const money = currencyOfId(s.currencyId[rr]);
     { const d = moved(rr, money); if (d !== 0) addTo(t.reserveDeltaByBank, ticker, d); }
+    t.centralBankResidualNumeraire += moved(rr, NUMERAIRE);
     // What it settled in every OTHER money is reserve movement too, at this pass's rate.
     CURRENCY_CODES.forEach((cur, ci) => {
       const fr = s.foreignReserveRow.get(bi * CURRENCY_CODES.length + ci);
       if (fr === undefined) return;
       const d = moved(fr, money); if (d !== 0) addTo(t.reserveDeltaByBank, ticker, d);
+      t.centralBankResidualNumeraire += moved(fr, NUMERAIRE);
     });
     const own = s.ownNetByParty.get(partyId({ kind: 'BANK', ticker })) ?? 0;
     const self = s.ownNetByParty.get(partyId({ kind: 'COMPANY', ticker })) ?? 0;
@@ -734,10 +768,18 @@ export function settledTallies(s: AccountStore, fx: FxTable): SettledTallies {
     switch (cls) {
       case 'CREATED': addTo(t.creditCreatedByBank, s.banks[bi], -d); break;
       case 'SECURITIES': addTo(t.bankSecuritiesDeltaByBank, s.banks[bi], d); break;
-      case 'TREASURY': { const p = partyOf(s.partyId[r]); if (p.kind === 'GOVERNMENT') addTo(t.tgaDeltaByRegion, p.region, d); break; }
+      case 'TREASURY': {
+        const p = partyOf(s.partyId[r]);
+        if (p.kind === 'GOVERNMENT') { addTo(t.tgaDeltaByRegion, p.region, d); t.centralBankResidualNumeraire += moved(r, NUMERAIRE); }
+        break;
+      }
       case 'VOID': {
         const p = partyOf(s.partyId[r]);
-        if (p.kind === 'CENTRAL_BANK') { t.centralBankIssuanceUSD -= d; addTo(t.centralBankIssuanceByRegion, p.region, -d); }
+        if (p.kind === 'CENTRAL_BANK') {
+          t.centralBankIssuanceUSD -= moved(r, NUMERAIRE);
+          t.centralBankResidualNumeraire += moved(r, NUMERAIRE);
+          addTo(t.centralBankIssuanceByRegion, p.region, -d);
+        }
         else if (p.kind === 'CLEARING_HOUSE') t.clearingHouseResidualUSD += d;
         break;
       }

@@ -1,5 +1,7 @@
 import { bankReservesOf } from '../ledger/accounts';
 import { ensureManagements, runManagementReviewStage } from './stages/management-review';
+import { toNumeraire } from '../../domain/currency';
+import { currencyOfId } from '../../engine2/world';
 import { runNewsDerivationStage } from './stages/news-derivation';
 import { rollDamperStreaks, setDamperStreaks } from './stages/financial-clearing-engine';
 import { GameState, RegionId } from '../../types';
@@ -463,6 +465,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // you cannot attribute is a number you cannot watch — this carries what hit it and why.
     lastSettlement: ctx.lastSettlementReport && {
       grossUSD: ctx.lastSettlementReport.grossUSD,
+      grossByCurrency: { ...ctx.lastSettlementReport.grossByCurrency },
       unresolvedUSD: ctx.lastSettlementReport.unresolvedUSD,
       clearingHouseResidualUSD: ctx.lastSettlementReport.clearingHouseResidualUSD,
       centralBankResidualUSD: ctx.lastSettlementReport.centralBankResidualUSD,
@@ -519,7 +522,17 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     pendingPaymentJournal: ctx.paymentJournal,
     nextWireId: ctx.wireJournal.base + ctx.wireJournal.n,
     ...(process.env.GOODS_TRACE === '1' ? { lotReceiptsTrace: (ctx.wireJournal as unknown as { lotReceipts?: Record<string, number> }).lotReceipts ?? {} } : {}),
-    lastWires: summarizeWires(ctx.wireJournal, (() => { let s = 0; for (let i = 0; i < ctx.paymentJournal.n; i++) s += ctx.paymentJournal.amount[i]; return s; })(),
-      (() => { const m = new Map<string, string>(); for (const c of nextState.companies) m.set(c.ticker, c.region); return (t: string) => m.get(t); })(), reasonText),
+    // §3.13c: the tail that settles next week is the numéraire value of those rows, matching the
+    // summary it is netted against — four currencies of dated rows do not add.
+    lastWires: summarizeWires(ctx.wireJournal, (() => {
+      let numeraire = 0; const byCurrency: Record<string, number> = {};
+      for (let i = 0; i < ctx.paymentJournal.n; i++) {
+        const cur = currencyOfId(ctx.paymentJournal.currencyId[i]);
+        numeraire += toNumeraire(ctx.paymentJournal.amount[i], cur, ctx.fx);
+        byCurrency[cur] = (byCurrency[cur] ?? 0) + ctx.paymentJournal.amount[i];
+      }
+      return { numeraire, byCurrency };
+    })(),
+      (() => { const m = new Map<string, string>(); for (const c of nextState.companies) m.set(c.ticker, c.region); return (t: string) => m.get(t); })(), reasonText, ctx.fx),
   }, timings, stageTrace: trace };
 }

@@ -249,10 +249,14 @@ export interface WeeklyStepContext {
 
   // Stage 05/06 boundary outputs, read by stage 08/12
   marketVolComponent: number;
-  /** §3.13c — THE WEEK'S RATES, as the FX auction last cleared them: what one unit of each money
-   *  is worth in the numéraire. Every payment that crosses a currency converts through this, and
-   *  it is the world's table (`v2.fx`) rather than a copy, so a stage cannot settle at a rate the
-   *  world does not hold. */
+  /** §3.13c — THE WEEK'S RATES, SNAPSHOTTED: what one unit of each money was worth in the
+   *  numéraire when the week opened, which is what the last FX auction cleared. Every conversion
+   *  inside one week — a payment settling, a book being read, a wire being valued — uses this one
+   *  table, so the two halves of an identity cannot be struck against different worlds. This
+   *  week's auction writes `v2.fx`, and that is what next week opens on. (Measured when it was a
+   *  live reference: settlement converted the week's gross at the pre-auction rate and the wire
+   *  summary valued the same wires at the post-auction one, and W1 reported a 0.04B hole that
+   *  was an exchange rate moving between two reads.) */
   fx: import('../../../domain/currency').FxTable;
   getFxToUsd: (regionId: RegionId) => number;
   /** WS9/XB2d: each currency's cleared value in USD. Every pair is derived from two of these,
@@ -425,7 +429,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     systemicStressFactorGlobal: 0,
 
     marketVolComponent: 0,
-    fx: ensureV2(state).fx,
+    fx: { ...ensureV2(state).fx },
     getFxToUsd: () => 1.0,
     currencyValueUSD: undefined,
     bilateralTradeWeeklyUSD: {
