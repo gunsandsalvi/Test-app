@@ -23,7 +23,7 @@ import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation'
 import { industryOfSubUnit, firmInputIntensities, financingProfileOf } from '../domain/industry-registry';
 import { calculateNelsonSiegelZeroRate } from '../engine/nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../engine/pricing';
-import { annuityFactor } from '../domain/pricing';
+import { annuityFactor, zeroRateAt } from '../domain/pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../engine/formatters';
 import { determineCreditRating } from '../engine/simulation/credit';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
@@ -1495,7 +1495,14 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // alongside the outstanding stock, and the settlement below either delivers the new
     // tranche at the CLEARED terms or — withdrawn/unpriced — the revolver catches the issuer
     // at its penalty rate, the same real funding-squeeze mechanism as a failed CP roll.
-    const fiveYearSovRate = calculateNelsonSiegelZeroRate(5, updatedRegions[L8.region[row]].yieldCurveParams);
+    // STRUCK ON THE CURVE THE PAPER IS VALUED ON. This read the Nelson-Siegel FIT while every
+    // holder of the resulting bond values it against the STRUCK curve (`zeroRates`, the points
+    // the auctions actually cleared), and `P6` measures those two disagreeing at all twenty
+    // tenor points, worst 28.5bp. A coupon set on one curve and a price taken on the other puts
+    // a brand-new issue away from par the week it is born, which is not a market moving — it is
+    // two answers to one question. `zeroRateAt` reads the cleared points at the tranche's OWN
+    // tenor, so the two stay linked if that tenor ever changes.
+    const fiveYearSovRate = zeroRateAt(updatedRegions[L8.region[row]].zeroRates, STANDARD_CORP_TENOR_YEARS);
     rowList.forEach((rTr) => {
       if (TS.flags[rTr] & TR_CP) return;
       if (TS.maturityWeek[rTr] !== nextWeek + 1) return;

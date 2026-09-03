@@ -10,6 +10,7 @@ import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, spearman, sum } from './types';
 import { marketCapOf } from '../../domain/company';
 import { priceFromSpreadBps } from '../../domain/pricing';
+import { calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 
 const RATING_RANK: Record<string, number> = { AAA: 0, AA: 1, A: 2, BBB: 3, BB: 4, B: 5, CCC: 6, D: 7 };
 
@@ -188,6 +189,43 @@ function p5(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
+/**
+ * P6 — ONE CURVE, ONE ANSWER (rule 3, and step 25 owns the fix).
+ *
+ * A region carries its yield curve TWICE: `zeroRates` — the five tenors the books strike and
+ * every consumer reads — and `yieldCurveParams`, the Nelson-Siegel fit that `stage08-back` prices
+ * a new issue's coupon off and that `index-calculation` and `12-portfolio` discount with. If the
+ * two disagree, a bond issued at "the cleared terms" is born away from par, because the coupon
+ * was struck on one curve and the paper is valued on the other. That is not a market moving; it
+ * is two answers to one question, and it feeds `P5` directly.
+ *
+ * Reported in basis points at the tenors both representations claim to express.
+ */
+function p6(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const TENORS: { years: number; key: 'tenor3M' | 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y' }[] = [
+    { years: 0.25, key: 'tenor3M' }, { years: 2, key: 'tenor2Y' }, { years: 5, key: 'tenor5Y' },
+    { years: 10, key: 'tenor10Y' }, { years: 30, key: 'tenor30Y' },
+  ];
+  const gaps: string[] = [];
+  let worstBps = 0;
+  REGION_IDS.forEach((r) => {
+    const reg = state.regions[r];
+    if (!reg?.zeroRates || !reg.yieldCurveParams) return;
+    TENORS.forEach((t) => {
+      const fitted = calculateNelsonSiegelZeroRate(t.years, reg.yieldCurveParams);
+      const struck = reg.zeroRates[t.key];
+      const gapBps = (fitted - struck) * 10000;
+      if (Math.abs(gapBps) > Math.abs(worstBps)) worstBps = gapBps;
+      if (Math.abs(gapBps) > 1) gaps.push(`${r} ${t.key} ${gapBps.toFixed(1)}bp`);
+    });
+  });
+  if (gaps.length > 0) {
+    out.push({ family: 'P', check: 'P6 one curve, one answer', week, usd: Math.abs(worstBps), message: `${gaps.length} of 20 tenor points differ between the struck curve and the fitted one, worst ${worstBps.toFixed(1)}bp (${gaps.slice(0, 4).join(' | ')}) — a new issue's coupon is struck on one and the paper is valued on the other` });
+  }
+  return out;
+}
+
 export function auditPrices(state: GameState, week: number): AuditFinding[] {
-  return [...p1(state, week), ...p2(state, week), ...p3(state, week), ...p4(state, week), ...p5(state, week), ...x1(state, week), ...x2(state, week)];
+  return [...p1(state, week), ...p2(state, week), ...p3(state, week), ...p4(state, week), ...p5(state, week), ...p6(state, week), ...x1(state, week), ...x2(state, week)];
 }

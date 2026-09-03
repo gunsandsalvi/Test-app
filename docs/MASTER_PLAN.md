@@ -17,8 +17,8 @@ There is deliberately no section 7 in this file, so the citation can never be mi
   is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
   that names anything but §3's first line; one was written, it disagreed with §3's order, and two
   steps were skipped behind it.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 13 part 1 —
-  **216 violations in 45 families**, and **"the money that is not anyone's" is 0.00B across ZERO
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 13 part 2 —
+  **231 violations in 46 families**, and **"the money that is not anyone's" is 0.00B across ZERO
   lines — the money family is clean.** The rise from 181/36 is O1, O6 and O7 becoming able to see
   300B of desk inventory that named no tranche (§9.12); step 11f owns what they report.
   **The money family is down to one check** (M7's dust, worth 0.00B): M1–M6 all print nothing.
@@ -444,7 +444,7 @@ do not reorder.
     lowers quits. Labour is rationed by posted vacancies, not cleared on price, and the comment at
     `:578` says otherwise. The ~13 bare constants in `region-macro.ts:489-621` ARE the labour
     market's answer today (rule 19).
-25. **One curve owner.** `07f:461` refits `yieldCurveParams` through bills+bonds while leaving
+25. **One curve owner. SIZED: `P6` measures all 20 tenor points disagreeing, worst 36bp.** `07f:461` refits `yieldCurveParams` through bills+bonds while leaving
     `zeroRates.tenor2Y…30Y` at 07c's cleared values, against 07c's own header claiming sole
     ownership — one real curve in two disagreeing representations, with consumers split between
     them. One owner refits once through all cleared points and derives every field from that fit.
@@ -2495,6 +2495,27 @@ The history is plain enough: the register was migrated to per-tranche rows and t
 behind. Folded into step 13, which owns the per-tranche world; O8 is the number to drive to zero.
 Measured: 165 in 35 → **181 in 36**, the whole rise being O8 firing every week on a defect that
 was always there.
+
+**13 (part 2). The two curves, measured — and the coupon moved onto the cleared one.** (`PENDING`)
+A new issue's coupon is struck at "the cleared terms", which sounded settled until you ask WHICH
+curve. `stage08-back:1498` read the Nelson-Siegel FIT (`yieldCurveParams`) while `zeroRates` — the
+points the auctions actually cleared — is what P5 and most consumers value the resulting paper
+against. `P6` now measures the gap: **all twenty tenor points disagree, worst 36bp.** A coupon set
+on one curve and a price taken on the other puts a brand-new bond away from par the week it is
+born, and that is not a market moving.
+
+The coupon now reads `zeroRateAt(zeroRates, STANDARD_CORP_TENOR_YEARS)` — the cleared points, at
+the tranche's OWN tenor, so the two stay linked if that tenor changes. **It picks a side of a
+two-sided defect**, and the side is rule 1's: a cleared price is the truth and a fit is a
+convenience. `index-calculation` and `12-portfolio` still discount with the fit, so the model is
+not yet consistent — that is step 25, which P6 now sizes.
+
+**It did not improve the number and it is kept anyway** (rule 20). Measured (SHOCKS=0 WEEKS=16):
+232 in 46 → **231 in 46**; P5's mismark moved 127.9B → 143.5B and P6's worst 28.5bp → 36.0bp,
+both on the re-path rather than on the mechanism — the fitted 5Y sat 3bp BELOW the struck one, so
+the direct effect was to raise coupons slightly and make the book worth MORE. Two curves cannot be
+made consistent by choosing between them at one call site; they are made consistent by there
+being one, which is step 25.
 
 **13 (part 1). What "credit trades at par" is worth: 127.9B.** (`PENDING`) The defect has been
 in the plan since the audit and nobody had ever put a number on it. `P5` does, using the pricing
