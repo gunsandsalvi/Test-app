@@ -182,8 +182,11 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const finalGdpGrowth = gdpGrowthBottomUp;
 
     // Government Debt Tranches: roll-off and new issuance
-    const maturedTranches = (reg.govDebtTranches || []).filter(t => t.maturityWeek <= nextWeek);
-    const liveTranches = (reg.govDebtTranches || []).filter(t => t.maturityWeek > nextWeek);
+    // §3.13-SOV row 2: the rebuild's own inputs come from the ONE store now, so the array is
+    // written here and read nowhere in the weekly loop.
+    const ladderNow = materializeGovLadder(ctx.v2, regionId);
+    const maturedTranches = ladderNow.filter(t => t.maturityWeek <= nextWeek);
+    const liveTranches = ladderNow.filter(t => t.maturityWeek > nextWeek);
     const maturedPrincipalUSD = maturedTranches.reduce((s, t) => s + t.principalUSD, 0);
 
     // Redeem the maturing principal out of whoever actually holds it. Without this, a maturing
