@@ -55,7 +55,7 @@ no price". A sweep finds defects. Only a reference model finds absences.
 ## Instrument contracts
 
 A tree whose subject is an instrument cites a **contract** rather than restating it:
-[`instrument-bond.md`](./instrument-bond.md) is the fourteen characteristics any bond must have,
+[`../instruments/bond.md`](../instruments/bond.md) is the fourteen characteristics any bond must have,
 and both credit trees satisfy it and state only where their type answers a node differently. This
 exists because a sovereign bond and a corporate bond are different TYPES, not one with fields
 unused — and because the difference between "this type answers N differently" and "nobody ever
@@ -71,11 +71,11 @@ could be wholly absent.** That is why banks are three and derivatives are five.
 |---|---|---|---|---|
 | | **INFRASTRUCTURE** | | | |
 | 1 | [money and settlement](./money-and-settlement.md) | ✅ | — | — |
-| 2 | the register | — | — | — |
-| 3 | the clearing engine | — | — | — |
-| 4 | the audit | — | — | — |
-| 5 | the seed | — | — | — |
-| 6 | currency and FX rates | — | — | — |
+| 2 | [the register](./the-register.md) | ✅ | — | — |
+| 3 | [the clearing engine](./the-clearing-engine.md) | ✅ | — | — |
+| 4 | [the audit](./the-audit.md) | ✅ | — | — |
+| 5 | [the seed](./the-seed.md) | ✅ | — | — |
+| 6 | [currency and FX rates](./currency-and-fx.md) | ✅ | — | — |
 | | **MARKETS** | | | |
 | 7 | [corporate credit](./corporate-credit.md) | ✅ d3 | ⚠️ stale | ✅ |
 | 8 | [sovereign credit](./sovereign-credit.md) | ✅ | — | — |
@@ -102,7 +102,7 @@ could be wholly absent.** That is why banks are three and derivatives are five.
 | 28 | hedge funds | — | — | — |
 | 29 | private equity | — | — | — |
 | | **PUBLIC SECTOR** | | | |
-| 30 | the treasury | — | — | — |
+| 30 | [the treasury](./the-treasury.md) | ✅ | — | — |
 | 31 | [the central bank](./the-central-bank.md) | ✅ | — | — |
 | | **FIRMS** | | | |
 | 32 | firm fundamentals | — | — | — |
