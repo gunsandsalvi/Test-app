@@ -203,16 +203,42 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11f. **The register gains equity shares no wire delivered.** W5, built in 11e, reports it in
-    **8 weeks of 16 and the sign is always the same: the register grows by MORE than its wires**.
-    Tiny at first — 8,252 shares in week 6, 7,607 in week 7 — then it jumps to 9.5M in week 8 and
-    runs 32M–77M a week after that. Week 8 is where the bank resolutions and mergers begin, and
-    the merger/estate paths re-key or seize register rows, so start there: a row written or
-    re-keyed without its wire, or a wire that should have debited a holder and did not.
-    ETF shares are CLEAN, so it is specific to equity. Diagnose the way §9.11d was: get the
-    instrument to name the holder before writing the fix — W5 reports one number per asset kind
-    today and the next thing it needs is the per-holder decomposition, the way `LADDER_TRACE`
-    gives W3 its per-issuer one.
+11f. **THE CLEARING HOUSE MINTS AND BURNS PAPER, and three open findings are all this one
+    defect.** `holdings-store.ts:285` wires a book's fills as the holder's CLAIMED rows before
+    against its APPENDED rows after: `before = group(slot.rows, (i) => slot.claimed[i] !== 0)`.
+    Nothing anywhere enforces that a book claimed EVERY row of a position it writes back —
+    `scan`'s `visit` returns a boolean per row (`:126`), so a book may claim some rows of an
+    instrument and not others, and positions ARE fragmented during the clearing window
+    (`consolidateRegister` merges duplicates only at the CLOSE of the week). When that happens the
+    holder's "before" is understated, the delta is overstated, and the difference is wired as a
+    purchase from a clearing house that never received it — **face the register holds and no
+    ladder ever issued.**
+    **The evidence, from `WIRE_TRACE=SICM-OPPORTUNISTIC-11` on one tranche:** the issuer put
+    528.1M into the house in week 11 and the house delivered 520.0M out (8.1M unplaced, fine);
+    over weeks 12–15 the house took in 271.7M and delivered out 280.8M, ending ~1M SHORT — it
+    delivered paper it never held. The register then held 528.770M against the ladder's 528.144M.
+    **Three symptoms, one cause:** `W2` (the clearing house nets to zero per asset — 32 findings a
+    run, and its message already says "a fill some holder books without a wire"); `W5`'s residue
+    (the register grows by more than its wires, §9.11e part 4); and
+    `estate-resolution.ts:591`'s register-versus-ladder guard, which **CRASHES the reference run**
+    the moment an issuer with an imbalance dies inside the measured window (it does not today only
+    because SICM dies in week 17; a re-path moved it to week 15 and the run died).
+    Fix at the claim, not at the wire: a book that writes back a consolidated position must own
+    every row of it. Then W2, W5 and the estate guard should all fall together, and that is the
+    test.
+11g. **A stock loan's delivery has no wire, and a fund lends to itself.** WRITTEN, MEASURED AND
+    SEQUENCED BEHIND 11f — see §9.11g for the diff, which is four lines and reproducible.
+    `securities-lending.ts:88` moved shares between two books with `store.addShares` on each side
+    and no instruction at all, the last such path in the tree (W5 saw it as ~40 books a week off
+    their wires, gross ~300M shares). Wiring it immediately exposed the second half: the borrow
+    demand is spread across EVERY lender including the borrower itself, so a fund borrowed its own
+    shares — posting collateral to itself, paying itself a fee, and delivering from a book to the
+    same book. That cancelled silently until the delivery became a wire and the ledger refused a
+    move from a party to itself.
+    **Both fixes are correct and both are held back**, because together they re-path the run into
+    11f's landmine (SICM's estate opens in week 15 instead of 17 and the guard kills the harness).
+    Do 11f first, then re-apply this and expect W5's gross to collapse from ~300M shares a week to
+    ~9M.
 
 11e. **The seed's unwired positions — plant is the last one.** *(Deliberately after 11f: that is
     a live leak and this is provenance, and this one is blocked on a design question it shares
@@ -2438,6 +2464,29 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**11g (written, not landed). The stock loan's missing wire, and the fund that lent to itself.**
+The change is four lines and it is recorded here because it is correct, measured, and deliberately
+NOT in the tree (§3 step 11g says why):
+
+1. `securities-lending.ts`'s `deliver` calls `wireHoldingMove(lender → borrower, EQUITY, shares,
+   'stock loan: shares delivered')` before its two `store.addShares` calls. `wireHoldingMove` is a
+   new export of `holdings-ledger.ts` — the instruction alone, for a mover that owns its own row
+   writes, which is what a stage inside the clearing store's window is.
+2. Its lender loop skips `lenderId === d.fundId`. The borrower's own share of the pool is simply
+   not available to it; the borrower fills LESS rather than more, because re-spreading that slice
+   over the other lenders would let one of them lend what it does not have.
+3. `payment-category.ts` registers the reason.
+
+Measured before it was pulled: W5's gross per week fell from ~300M shares across ~40 books to
+~9M, and every remaining gap turned the SAME sign — books gaining shares, which is 11f. Then the
+re-path moved SICM's death from week 17 to week 15 and the estate's register-versus-ladder guard
+killed the harness, so the change waits behind 11f rather than landing on top of it.
+
+**And a process note, because it cost real time.** The rule-28 plan commit was made with
+`git add -A` while this code sat uncommitted, so a "plan" commit shipped seven code files and a
+crashing reference run to `main`. `git add -A` is not a substitute for knowing what is in the
+tree; a commit named "Plan:" must contain only the plan.
 
 **11e (part 4). W5 — the register's replay, and what it caught immediately.** (`PENDING`) The
 register was wired in part 3 but nothing CHECKED it. W5 does: the register's change is the replay
