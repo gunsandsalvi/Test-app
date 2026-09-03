@@ -18,6 +18,22 @@ tree rediscovers "credit has no price" — I already knew that. It is whether th
 nodes I had never raised, and whether those nodes turn out to be empty. Judge it on the new rows
 in §3 of this file, not on the confirmations.
 
+**THIS TREE PREDATES THE REASON/VERIFY/FORBID RULE** (`README.md`, added 2026-09-03 on the user's
+"not imposed, a consequence" comment). It is annotated rather than rewritten, because rewriting it
+after the mapping is exactly the thing the method forbids. The three nodes that are OUTCOME-shaped
+and must be read as **VERIFY** — measure, never enforce — are **H2** (the level orders against the
+assessment), **H3** (seniority orders the spreads within an issuer) and **D5** (a seller with no
+buyer keeps its paper). Enforcing any of the three would clamp a price, which rule 1 forbids and
+which is how the audit's `P1`/`P3` rows became findings rather than settings.
+
+The rule also makes a node askable that this tree does not contain, and its absence here is a
+defect in the tree and not in the code:
+
+- **B7** FORBID — **a coupon may not be derived from a price that was derived from the coupon.**
+  A round trip through a curve cannot return the level it started from, and where one exists the
+  print is the arithmetic rather than the market. (§3.26 names three of these; the tree should
+  have asked for the prohibition rather than leaving them to be found one at a time.)
+
 ### A. THE ISSUER AND THE PROMISE
 
 - **A1** An issuer exists: a named legal entity with a balance sheet that can make a promise.

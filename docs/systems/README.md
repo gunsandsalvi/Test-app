@@ -35,6 +35,22 @@ no price". A sweep finds defects. Only a reference model finds absences.
   different answers and the file must distinguish them.
 - **The prose side is the user's to review.** It is a list of "this must exist" claims, not code,
   which makes it the cheapest thing in the repo to check.
+- **NOTHING IN A TREE IS IMPOSED. A node states a REASON, never an OUTCOME** (user, 2026-09-03:
+  *"not imposed, a consequence (just apply this comment everywhere)"*). "Surplus banks lend and
+  deficit banks borrow" is not a requirement — it is what happens. The requirement is that each
+  bank posts a schedule out of its own position, cost and constraints, and **who ends up on which
+  side is the result.** A tree written in outcomes reads as complete and then licenses code that
+  assigns the outcome directly, which is rule 1's defect wearing the atlas's clothes. So every
+  node takes one of three forms, and the form is marked:
+  - **REASON** — "it has a cost of funds and a position it wants": checkable, and cannot be
+    short-circuited by writing the answer down.
+  - **VERIFY** — "worse credit trades wider": a thing to MEASURE, never to enforce. A verify node
+    that fails is a finding about the mechanism, not a licence to clamp the number.
+  - **FORBID** — "there is no central-bank overdraft for the treasury": a requirement that
+    something be ABSENT. These are the nodes a code-derived tree can never contain, because the
+    code cannot show you what it should not have.
+
+  If a node is none of the three, it is an outcome, and it does not belong in a required tree.
 
 ## Status
 

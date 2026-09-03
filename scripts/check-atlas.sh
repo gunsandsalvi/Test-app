@@ -11,16 +11,14 @@
 #   RESOLUTION — every `path/file.ts:symbol` citation names a file that exists and a symbol that
 #     appears in it, so a rename that leaves the atlas behind fails the build. (It caught seven
 #     wrong citations on its first run, which is the argument for it.)
-#   COVERAGE — every stage core.ts runs, AND every module in src/domain, is in a tree or admitted
-#     in docs/systems/UNMAPPED, so a NEW system cannot ship undescribed. UNMAPPED's length is how
-#     far along the atlas is.
+#   COVERAGE — every stage core.ts runs, and EVERY SOURCE FILE UNDER src, is in a tree or admitted
+#     in docs/systems/UNMAPPED. A new system cannot ship undescribed and a new FILE cannot ship
+#     unclassified. UNMAPPED's length is exactly how far along the atlas is, and it only shrinks.
 #
-# The domain half was added on 2026-09-03 because the README claimed it and the script did not:
-# 72 domain modules were unchecked, so a system living entirely in src/domain — a whole set of
-# rules with no stage of its own — could stay invisible to the very instrument built to find
-# absences. Still NOT covered, and stated here rather than left to be discovered: src/engine2 (the
-# column stores), src/engine/ledger, src/engine/macro and src/ui. Extend the same way when a tree
-# needs them.
+# Coverage went stage-only → +src/domain → EVERYTHING (user, 2026-09-03: "can you just extend the
+# gate to everything?"). The two earlier scopes were both wrong in the same direction: a system
+# with no stage of its own, or no domain module of its own, stayed invisible to the instrument
+# built to find absences. There is no narrower scope that does not have that hole somewhere.
 #
 # What it deliberately does NOT check is whether a required tree is RIGHT, or complete. That is
 # prose, it is the whole value of the atlas, and it is the user's to review.
@@ -61,8 +59,8 @@ if [ -n "$ATLAS_TREES" ]; then
       echo "Add it to the tree of the system it belongs to, or admit it in docs/systems/UNMAPPED."
       ATLAS_FAIL=1
     fi
-  done < <(find src/domain -name '*.ts' | sort)
+  done < <(find src -name '*.ts' -o -name '*.tsx' | sort)
   if [ "$ATLAS_FAIL" -ne 0 ]; then exit 1; fi
-  echo "Atlas: $ATLAS_CITES citations resolve; every core.ts stage and src/domain module is accounted for."
+  echo "Atlas: $ATLAS_CITES citations resolve; $(find src -name '*.ts' -o -name '*.tsx' | wc -l | tr -d ' ') source files accounted for."
 fi
 
