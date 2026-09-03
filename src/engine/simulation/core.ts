@@ -284,6 +284,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // called and the loan it secured shrinks with it.
   run('repo-collateral-reconcile', () => reconcileRepoPledges(ctx));
   run('holdings-writeback', () => finalizeHoldingsStore(ctx));
+  // CREDIT IS WORTH PRICE x FACE — `credit-marking` is BUILT AND NOT YET WIRED IN. Marking here
+  // alone does not converge: stages after this one and next week's books write rows back in par
+  // space, so the register ends the week part marked and part not, and every held-versus-issued
+  // identity then compares a mark to a face. §9.13 part 3 has the measurement and the list of
+  // what must read face before this line comes back.
   run('08-company-fundamentals', () => runCompanyFundamentalsStage(state, ctx));
   // §7.250 — stage 08 has consumed the bank-sheet channel; any later write to it throws.
   ctx.bankSheetChannelClosed = true;

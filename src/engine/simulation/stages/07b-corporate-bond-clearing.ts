@@ -243,6 +243,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       store.scan(entity.id, 'CORP_BOND', (h) => {
         const issuerId = issuerIdOf(v2, h.instrumentId); // 13b: a row names a tranche or its issuer
         if (!issuerIdsThisRegion.has(issuerId)) return false;
+        // A book trades PAR amounts. This reads the value because nothing marks credit yet;
+        // when the mark lands it reads `faceUSD`, or a price move looks like a trade.
         currentHoldingByCompany.set(issuerId, (currentHoldingByCompany.get(issuerId) ?? 0) + h.quantityOrNotionalUSD);
         return true;
       });
@@ -537,7 +539,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
             ? { trancheId: primaryTrancheId(issuerId, offering.purpose, ctx.nextWeek), sliceUSD: primarySliceOf(newHoldingUSD - (prior?.get(issuerId) ?? 0), boughtByInstrument[ii], outcome.marketTakeUSD) }
             : undefined;
           splitAcrossTranches(v2, issuerId, 'CORP_BOND', newHoldingUSD, primary).forEach((t) => {
-            if (t.usd > 1) newCorpHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: t.usd });
+            // Written in par space; `credit-marking` prices it before anything reads a value.
+            if (t.usd > 1) newCorpHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceUSD: t.usd });
           });
         }
       }

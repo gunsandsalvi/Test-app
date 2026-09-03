@@ -2,3 +2,5 @@
 export { discountFactor, annuityFactor, levelPaymentFactor, presentValuePerFace } from './discount';
 export { zeroRateAt, priceFromSpreadBps, spreadBpsFromPrice } from './bond';
 export type { ZeroCurve, PaperTerms } from './bond';
+export { pricePerFace, COUPON_PERIOD_WEEKS } from './tranche';
+export type { ClearedPaper } from './tranche';

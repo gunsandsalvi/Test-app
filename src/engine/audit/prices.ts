@@ -4,13 +4,15 @@
  * and their count; the identity in each message is the relation asserted.
  */
 
-import { GameState } from '../../types';
+import { GameState, RegionId } from '../../types';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, spearman, sum } from './types';
 import { marketCapOf } from '../../domain/company';
-import { priceFromSpreadBps } from '../../domain/pricing';
 import { calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
+import { ensureV2 } from '../../engine2/world';
+import { isTrancheKind } from '../../domain/assets';
+import { trancheClearedPricePerFace } from '../credit-price';
 
 const RATING_RANK: Record<string, number> = { AAA: 0, AA: 1, A: 2, BBB: 3, BB: 4, B: 5, CCC: 6, D: 7 };
 
@@ -133,58 +135,46 @@ function x2(state: GameState, week: number): AuditFinding[] {
 }
 
 /**
- * P5 — CREDIT IS MARKED AT PAR, AND THIS IS WHAT THAT COSTS.
+ * P5 — THE REGISTER'S MARK AGREES WITH THE SPREAD ITS OWN BOOK CLEARED.
  *
- * `holdings-ledger.ts`'s `priceOf` returns `priceUSD = 1` for every notional instrument, so a
- * credit holding is worth its face whatever the market said. The books DO clear a spread — an OAS
- * on a bond, a discount margin on a loan — and `domain/pricing` turns that spread into the price
- * it implies. The gap between the two, summed over every ladder, is the mismarking the whole of
- * step 13 exists to remove: a bond whose issuer's spread doubled is still carried at 100.
+ * A credit row carries FACE and a VALUE, and the value must be face × the price the paper's own
+ * cleared spread implies. This check re-derives that price from scratch — the paper's real cash
+ * flows against the region's real curve — and compares it with what the register says.
  *
- * Reported as a SIZE, not a pass/fail: it is a defect the plan already owns, and what a check can
- * add is how big it is and which way it points, so the fix can be judged against it.
- *
- * TWO THINGS THE READER SHOULD KNOW ABOUT THE TAIL. A floater is compared against its ISSUER's
- * cleared discount margin, because that is the only cleared margin there is — so a tranche whose
- * own locked margin is far above it prices far above par, and the widest of those trace straight
- * back to `P1`'s inverted spreads (a 5540bp facility against a 1011bp bond). They are a handful
- * of small tranches and they do not move the aggregate; the aggregate is the discount the whole
- * book carries. And the direction is the honest one: spreads widened, so the book is worth LESS
- * than the par it is marked at.
+ * It was written to SIZE the "credit always trades at par" defect before it was fixed, and at
+ * that point it measured ~140B on ~1,000B of face. Now that `credit-marking` runs, the same
+ * arithmetic is the residual: what the mark did not reach. A row the mark could not price (no
+ * ladder row, no curve) keeps its old value and shows up here, which is the point.
  */
 function p5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  let faceUSD = 0, valueUSD = 0, priced = 0;
-  let widest = { id: '', price: 1, faceUSD: 0 };
-  REGION_IDS.forEach((r) => {
-    const curve = state.regions[r]?.zeroRates;
-    if (!curve) return;
-    state.companies.forEach((c) => {
-      if (c.region !== r || !isActiveCompany(c)) return;
-      (c.debtTranches ?? []).forEach((t) => {
-        if (t.isBankFacility || !(t.principalUSD > 0)) return;
-        const weeksToMaturity = t.maturityWeek - week;
-        if (!(weeksToMaturity > 0)) return;
-        const isFloating = t.rateType === 'FLOATING';
-        const spreadBps = isFloating
-          ? (c.leveragedLoan?.discountMarginBps ?? t.floatingMarginBps ?? 0)
-          : (c.oasSpreadBps ?? 0);
-        const annualCouponRate = isFloating
-          ? (state.regions[r].policyRate + (t.floatingMarginBps ?? 0) / 10000)
-          : (t.couponRate ?? 0);
-        // Commercial paper pays once, at maturity; everything else on its own period.
-        const periodWeeks = t.isCommercialPaper ? Math.max(1, weeksToMaturity) : 26;
-        const price = priceFromSpreadBps({ annualCouponRate, periodWeeks, weeksToMaturity }, curve, spreadBps);
-        if (!(price > 0) || !isFinite(price)) return;
-        faceUSD += t.principalUSD;
-        valueUSD += t.principalUSD * price;
-        priced++;
-        if (Math.abs(price - 1) > Math.abs(widest.price - 1)) widest = { id: t.id, price, faceUSD: t.principalUSD };
-      });
+  const v2 = ensureV2(state);
+  const byId = new Map(state.companies.map((c) => [c.id, c]));
+  const world = {
+    issuerById: (id: string) => byId.get(id),
+    regionById: (r: string) => state.regions[r as RegionId],
+  };
+  let faceUSD = 0, markedUSD = 0, impliedUSD = 0, rows = 0, unpriced = 0;
+  let widest = { id: '', gapUSD: 0 };
+  state.institutionalEntities.forEach((e) => {
+    if (e.isDefaulted) return;
+    e.itemizedHoldings.forEach((h) => {
+      if (!isTrancheKind(h.instrumentType)) return;
+      const face = h.faceUSD ?? h.quantityOrNotionalUSD ?? 0;
+      if (!(Math.abs(face) > 0)) return;
+      const price = trancheClearedPricePerFace(world, v2, h.instrumentId, week);
+      if (price === undefined) { unpriced++; return; }
+      faceUSD += face;
+      markedUSD += h.quantityOrNotionalUSD ?? 0;
+      impliedUSD += face * price;
+      rows++;
+      const gap = (h.quantityOrNotionalUSD ?? 0) - face * price;
+      if (Math.abs(gap) > Math.abs(widest.gapUSD)) widest = { id: h.instrumentId, gapUSD: gap };
     });
   });
-  if (priced > 0 && Math.abs(valueUSD - faceUSD) > 1e6) {
-    out.push({ family: 'P', check: 'P5 credit is marked at par', week, usd: valueUSD - faceUSD, message: `${priced} tranches carrying ${B(faceUSD)} of face are worth ${B(valueUSD)} at their own cleared spreads — the register marks every one of them at par, a ${B(valueUSD - faceUSD)} mismark (widest ${widest.id} at ${widest.price.toFixed(3)} on ${B(widest.faceUSD)})` });
+  const gapUSD = markedUSD - impliedUSD;
+  if (rows > 0 && Math.abs(gapUSD) > 1e6) {
+    out.push({ family: 'P', check: 'P5 the register marks credit at its cleared spread', week, usd: gapUSD, message: `${rows} credit rows on ${B(faceUSD)} of face are marked at ${B(markedUSD)} against ${B(impliedUSD)} implied by their own cleared spreads — a ${B(gapUSD)} gap (widest ${widest.id} by ${B(widest.gapUSD)}${unpriced ? `; ${unpriced} rows could not be priced` : ''})` });
   }
   return out;
 }

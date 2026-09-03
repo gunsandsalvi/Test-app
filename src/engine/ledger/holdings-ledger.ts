@@ -20,6 +20,7 @@ import {
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows,
 } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
+import { isTrancheKind } from '../../domain/assets';
 import { PartyRef } from './party';
 import { wire, AssetKind, ASSET_KINDS } from './wire';
 import { internReason } from '../simulation/stages/settlement';
@@ -39,13 +40,24 @@ export interface HoldingSpec {
   valueUSD: number;
   /** Shares moved (equity, fund shares); undefined for notional-only paper. */
   shares?: number;
+  /** CREDIT: the FACE moved. `valueUSD` is then face x price, so the wire carries a real price
+   *  instead of the 1.00 every notional instrument used to move at. */
+  faceUSD?: number;
 }
 
 /** The register's own read of a party as a holder: only institutions hold register rows today. */
 const holderIdOf = (p: PartyRef): string | undefined => (p.kind === 'INSTITUTION' ? p.id : undefined);
 
+/**
+ * WHAT MOVED, AND AT WHAT PRICE. The quantity is the thing owned — shares for equity, FACE for
+ * credit — and the price is what a unit of it fetched. Credit used to return `{ quantity: value,
+ * price: 1 }`, which is the whole of "credit always trades at par": a bond whose issuer's spread
+ * had doubled still wired at 100. A row that carries no face yet falls back to the old reading,
+ * where value and face are the same number because the price was always one.
+ */
 function priceOf(spec: HoldingSpec): { quantity: number; priceUSD: number } {
   if (spec.shares !== undefined && spec.shares > 0) return { quantity: spec.shares, priceUSD: spec.valueUSD / spec.shares };
+  if (spec.faceUSD !== undefined && spec.faceUSD > 0) return { quantity: spec.faceUSD, priceUSD: spec.valueUSD / spec.faceUSD };
   return { quantity: spec.valueUSD, priceUSD: 1 };
 }
 
@@ -57,12 +69,13 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
     H.qtyUSD[r] += spec.valueUSD;
     if (spec.shares !== undefined) H.shares[r] = (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]) + spec.shares;
+    if (spec.faceUSD !== undefined) H.faceUSD[r] = (Number.isNaN(H.faceUSD[r]) ? 0 : H.faceUSD[r]) + spec.faceUSD;
     markBookDirty(v2, holderId);
     return;
   }
   pushBookRow(v2, holderId, {
     instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
-    quantityOrNotionalUSD: spec.valueUSD, quantityShares: spec.shares,
+    quantityOrNotionalUSD: spec.valueUSD, quantityShares: spec.shares, faceUSD: spec.faceUSD,
   });
 }
 
@@ -271,6 +284,40 @@ export function clearedBookDelta(
     n++;
   });
   return n;
+}
+
+/**
+ * THE CREDIT BOOK, RE-MARKED. A price move is not a trade: the holder owns the same face before
+ * and after, so nothing moves and nothing is wired — the same rule `markHolding` states for one
+ * row, applied to every credit row a holder has.
+ *
+ * It also FIXES THE FACE on a row that has none yet: a book writes its fills in par space, so the
+ * value it was written with IS the face. After that the two are separate numbers and only the
+ * value moves, which is what lets a book keep trading face while the register carries a price.
+ *
+ * `priceOfInstrument` returns undefined for paper it cannot price; that row is left alone rather
+ * than marked to a guess.
+ */
+export function markCreditBook(
+  v2: V2World, holderId: string,
+  priceOfInstrument: (instrumentId: string) => number | undefined
+): { rows: number; deltaUSD: number } {
+  const H = mutableHoldings(v2);
+  let rows = 0, deltaUSD = 0;
+  for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
+    if (!isTrancheKind(v2.internedStrings[H.typeRef[r]])) continue;
+    if (Number.isNaN(H.faceUSD[r])) H.faceUSD[r] = H.qtyUSD[r];
+    const faceUSD = H.faceUSD[r];
+    if (!(Math.abs(faceUSD) > 0)) continue;
+    const price = priceOfInstrument(v2.internedStrings[H.instrRef[r]]);
+    if (price === undefined) continue;
+    const before = H.qtyUSD[r];
+    H.qtyUSD[r] = faceUSD * price;
+    deltaUSD += H.qtyUSD[r] - before;
+    rows++;
+  }
+  if (rows > 0) markBookDirty(v2, holderId);
+  return { rows, deltaUSD };
 }
 
 /** A change of value with no change of quantity — accretion, a NAV mark. No wire: nothing moved. */

@@ -25,6 +25,15 @@ export interface ItemizedHolding {
    * set — the circularity that broke ownership convergence once already (task #28).
    */
   quantityShares?: number;
+  /**
+   * CREDIT only: the FACE the row holds. `quantityOrNotionalUSD` is then face x price — a derived
+   * view of this, for exactly the reason `quantityShares` exists for equity: storing only the
+   * value would make the size of the book depend on the price the book is supposed to set.
+   *
+   * Absent means the row predates the mark or is not credit; a reader that needs face and finds
+   * none falls back to the value, which is what par pricing made them equal to anyway.
+   */
+  faceUSD?: number;
 }
 
 /**

@@ -237,10 +237,24 @@ do not reorder.
     is step 13. **One holdout on the convention:** `engine/nelsonSiegel.ts` discounts continuously
     (`exp(-z·t)`) where everything else compounds discretely. Unify it in the same commit as 13's
     sovereign pricing — moving it alone re-prices every sovereign for no gain.
-13. **Face, and price × face — and ONE NAME for one piece of paper.** **SIZED: `P5` measures the
-    mismark at 127.9B on 1,033.5B of face — the book is worth 905.6B at its own cleared spreads
-    and the register marks every tranche at 100.** That is the number this step removes, and it is
-    reported every week so the fix can be judged against it. (The "credit always trades at
+13. **Face, and price × face — and ONE NAME for one piece of paper.** **SIZED by `P5`, and the
+    machinery is BUILT AND NOT WIRED (§9.13 part 3) — read that record before touching this.**
+    The register now has a `faceUSD` column, the ledger has `markCreditBook`, `domain/pricing` has
+    the price, `engine/credit-price.ts` is the one adapter between them, and
+    `stages/credit-marking.ts` is the stage. One line in `core.ts` turns it on, **and turning it on
+    alone takes the run from 231 in 46 to 426 in 61.** It does not converge for two reasons, both
+    measured, and BOTH must be closed first:
+    (a) **Every writer of a credit row must maintain FACE.** `creditRow` adds to the value and only
+    adds to the face when the caller passes one, so any non-book path that touches a credit row —
+    an estate write-off, a primary settlement, a desk transfer, securities lending — drives face
+    below value. Measured with the mark OFF and only the audit reading face: `O1` fires 16 weeks of
+    16 at −92B/−128B/−237B and `O6` at −461B. That is the divergence, not the mark.
+    (b) **The mark must be the LAST word on a value in the week.** Wired after
+    `holdings-writeback`, later stages and next week's books write rows back in par space, so the
+    register ends the week part marked and part not.
+    Then, and only then, every held-versus-issued identity switches to `faceUSD` in one commit
+    with the mark: `O1`'s `add`, `O6`, `O7`, and the three books' scan reads (07b, 07d, 07f), each
+    of which is marked with a comment naming this step. (The "credit always trades at
     par" defect, plus rule 3). **The register keys credit by TRANCHE and the dealer desks key the
     same paper by ISSUER, and the two sets are disjoint: `O8` measures 11,655 desk positions worth
     301B on the issuer key and NOT ONE on a tranche.** The register was migrated to per-tranche
@@ -2495,6 +2509,44 @@ The history is plain enough: the register was migrated to per-tranche rows and t
 behind. Folded into step 13, which owns the per-tranche world; O8 is the number to drive to zero.
 Measured: 165 in 35 → **181 in 36**, the whole rise being O8 firing every week on a defect that
 was always there.
+
+**13 (part 3). The mark: built, measured, and deliberately not wired.** (`PENDING`) This is the
+big one and it did not land. The record is what it produced, because the next attempt should start
+from here rather than from the top.
+
+**What is in the tree and staying.** The register carries `faceUSD` beside `quantityShares` — the
+same idea, for the same reason: storing only the value makes the size of the book depend on the
+price the book is supposed to set. `markCreditBook` in the holdings ledger walks a holder's credit
+rows, fixes the face from the value a book wrote it with, and re-marks the value to face × price —
+no wire, because a price move is not a trade, which is the rule `markHolding` already stated for
+one row. `engine/credit-price.ts` is the ONE adapter between the world's stores and
+`domain/pricing`, so the stage that marks and the check that tests the mark cannot disagree about
+what the price is. `stages/credit-marking.ts` is the stage. The books write `faceUSD` on their
+fills.
+
+**What it does.** With the stage wired, 130,000–200,000 rows re-mark each week and **25B–38B of
+value moves**. That is the defect being removed, and it is the right order of magnitude against
+P5's sizing.
+
+**Why it is not wired.** Turning it on takes the run from **231 in 46 to 426 in 61**, and the
+cause is not the mark — it is that the model is not ready to hold face and value as two numbers:
+
+1. **Face leaks.** `creditRow` adds to the value and only adds to the face when its caller passes
+   one, so every non-book path that touches a credit row drives face below value. This was
+   isolated by running with the mark OFF and only the audit reading face: `O1` fired 16 weeks of
+   16 at −92B, −128B and −237B, and `O6` at −461B. With face and value identical the same run is
+   231 in 46. The divergence is the leak, and it is a small enumerable set of call sites.
+2. **The mark is not the last word.** Wired after `holdings-writeback`, stages after it and next
+   week's books write rows back in par space, so the register ends the week part marked and part
+   not — and P5 then reports 357.89B marked against 424.50B implied, which is the un-marked half.
+
+**The lesson, and it is the same one twice now.** A value that two subsystems disagree about
+cannot be introduced by marking one of them: every writer and every reader has to move in the same
+commit, or the identities that compare them start measuring the price instead of the ownership.
+The keying step (§9.12) worked precisely because the desks' store and the auction's read were
+separated FIRST and the key changed second. Face needs the same: make every writer maintain face
+while face still equals value — where nothing can break, because the two numbers are the same —
+and only then let them diverge.
 
 **13 (part 2). The two curves, measured — and the coupon moved onto the cleared one.** (`PENDING`)
 A new issue's coupon is struck at "the cleared terms", which sounded settled until you ask WHICH

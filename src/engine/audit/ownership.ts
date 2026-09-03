@@ -31,6 +31,9 @@ function o1(state: GameState, week: number): AuditFinding[] {
   // they cannot place is withdrawn from the ladder); it is offered, not yet anyone's, and not
   // yet owed to nobody either. Everything older must have a holder.
   REGION_IDS.forEach((r) => { outstanding[r].sov = sum((state.regions[r]?.govDebtTranches ?? []).filter((t) => t.originationWeek < state.currentWeek), (t) => t.principalUSD); });
+  // The VALUE, which is still the face: nothing marks credit yet (§9.13 part 3). When the mark
+  // lands this must read `faceUSD` — a ladder carries face, and comparing a mark to it would
+  // report every basis point of spread as paper that does not exist.
   const add = (h: { instrumentType: string; issuerRegion: string; quantityOrNotionalUSD?: number }) => {
     const b = held[h.issuerRegion]; if (!b) return; const v = h.quantityOrNotionalUSD ?? 0;
     if (h.instrumentType === 'CORP_BOND') b.corp += v; else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v; else if (h.instrumentType === 'GOV_BOND') b.sov += v; else if (h.instrumentType === 'COMMERCIAL_PAPER') b.cp += v;
@@ -184,6 +187,7 @@ function o7(state: GameState, week: number): AuditFinding[] {
   state.institutionalEntities.forEach((e) => {
     materializeBook(v2, e.id).forEach((h) => {
       if (!isTrancheKind(h.instrumentType)) return;
+      // The claim is FACE; when the mark lands this reads `faceUSD` (§9.13 part 3).
       const usd = h.quantityOrNotionalUSD ?? 0;
       if (!(usd > 0)) return;
       claimedByTranche.set(h.instrumentId, (claimedByTranche.get(h.instrumentId) ?? 0) + usd);
