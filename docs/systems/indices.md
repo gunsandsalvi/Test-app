@@ -67,3 +67,182 @@ Written 2026-09-03 from the domain, code shut.
 - **E2** FORBID — **no stored level.** It is recomputed from the register and the prices, always
 - **E3** VERIFY — an index and its constituents move together by construction, and a divergence is
   a defect in the read, not a market event
+
+---
+
+## 2. THE MAPPING
+
+Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+checked by `scripts/check-atlas.sh`.
+
+| Node | Code | |
+|---|---|---|
+| A1 a stated rule over stated constituents at stated weights | `src/domain/indexes.ts:IndexDefinition` | ✅ |
+| A1.a all three public and reproducible | `src/ui/objects/index-object.tsx:indexesOf` | ⚠️ |
+| A2 reads cleared prices and nothing else | `src/engine/simulation/stages/index-calculation.ts:indexValueUSD` | ⚠️ |
+| **A3 FORBID never an input to its own constituents** | `src/engine/macro/indices.ts:measureBeta` | ⚠️ |
+| A4 a unit and a base | `src/domain/indexes.ts:INDEX_BASE_LEVEL` | ✅ |
+| B1 weights come from something real | `src/engine/simulation/stages/index-calculation.ts:rebalance` | ✅ |
+| B2 the constituent set changes | `src/domain/indexes.ts:INDEX_REBALANCE_WEEKS` | ✅ |
+| B2.a chained across the rebalance | `src/engine/simulation/stages/index-calculation.ts:basketValueUSD` | ✅ |
+| B3 corporate actions handled explicitly | — | ❌ |
+| B4 VERIFY index return = weighted constituent return | — | ❌ |
+| C1 a benchmark, and the measurement drives flows | — | ❌ |
+| C2 a mandate: a real forced trade by every tracker | `src/engine/simulation/stages/etf-demand.ts:indexFundDemand` | ✅ |
+| C2.a VERIFY inclusion visible in the constituent's price | — | ❌ |
+| C3 an underlying futures/options/swaps settle against | `src/domain/derivatives/registry.ts:DERIVATIVE_CLASSES` | ❌ |
+| C4 a signal participants read | `src/engine/macro/indices.ts:regionIndexOf` | ✅ |
+| D1 an equity index per region | `src/domain/indexes.ts:INDEX_DEFINITIONS` | ⚠️ |
+| D2 a credit index over a defined bond set | `src/engine/simulation/stages/index-calculation.ts:fixedMarketValueUSD` | ⚠️ |
+| **D3 a rate benchmark floating instruments fix on** | `src/domain/company.ts:referenceBenchmark` | ❌ |
+| D3.a a read of actual transactions | `src/domain/pricing/tranche.ts:policyRate` | ❌ |
+| **D3.b FORBID no benchmark that is posted rather than transacted** | `src/engine/macro/evolution.ts:taylorTarget` | ❌ |
+| D4 a price level — CPI and PPI as DIFFERENT indices | `src/engine/simulation/stages/price-index.ts:computeCpiLevel` | ⚠️ |
+| D4.a the difference between them is a margin story | — | ❌ |
+| **E1 FORBID no index without constituents** | `src/engine/macro/indices.ts:makeIndexMetric` | ❌ |
+| **E2 FORBID no stored level** | `src/engine/macro/indices.ts:prevIndices` | ❌ |
+| E3 VERIFY index and constituents move together | — | ❌ |
+
+---
+
+## 3. THE DIFF
+
+### ❌ D1 / E1 / E2 — THERE ARE TWO INDEX SYSTEMS, AND THE ONE EVERYTHING READS IS THE INVENTED ONE
+
+`indexes.ts` + `index-calculation.ts` is the rule-based system this tree describes: a membership
+rule, a quarterly rebalance, market-value weights, and a level chained off the basket so a
+rebalance cannot print a return (`index-calculation:150-171`). It is correct, and **its level has
+no reader.** `grep` finds `MarketIndex.level` written at `index-calculation:145,161,175` and read
+nowhere in `src/` — `etf-flows` and `etf-demand` take `totalValueUSD` and `constituents`, and
+`ui/objects/index-object.tsx` renders names and weights only. The index publishes no level.
+
+The level everything DOES read is `macro/indices.ts:calculateCompositeIndices`, a second, older
+system with different regions, a different base (`regionIndexBase`, ~1000 scaled by population ×
+productivity, against `INDEX_BASE_LEVEL = 100`), no published membership, no rebalance calendar,
+and a **stored level moved by a delta**: `newUS = prevUS * (1 + usChange)` at `indices.ts:107`,
+where `usChange` is this week's cap-weighted return. Nothing ever re-reads a basket value, so
+E2 fails in the strong form the node means — the level is not recomputed from the register and the
+prices, it is accumulated, and a membership change enters it as whatever `prevPriceOf` happens to
+return.
+
+**And its first year is fabricated.** `makeIndexMetric` at `indices.ts:180` does
+`hist = prev ? [...prev.historical.slice(-51), val] : generate52WeekHistory(val, 0.015)`, and
+`macro/utils.ts:2-12` is a random walk: `val * (1 + (random() − 0.5) * volatility)`, 51 steps
+backwards from the seed level. So at inception every one of the twenty `IndexMetric` series —
+four regional composites, eight OAS series, four sector indices, the commodity composite, the
+global 10Y — carries a year of price history that no constituent ever produced. That is E1
+exactly: a level that moved without a constituent moving.
+
+It is not decoration. `stage08-back.ts:2016` measures every company's beta as
+`measureBeta(ownPrices, regionIndexOf(state.compositeIndices, region).historical, prior)`, and
+`measureBeta` needs 12 points and takes up to 53. **For the model's first year, every beta in the
+world is a covariance against a random walk** — and beta is the discount rate in
+`07e-equity-clearing:411 fairValuePerShare`, in `bank-lending:91`, `labor-market:258` and
+`freight-clearing:123`. This is the same defect as the fabricated CPI year that §9 records as
+fixed *("(d) **The fabricated CPI year is gone** — 53 weeks compounding at…")*; the composite
+indices still have it. Also `prevTech ?? 1000` at `indices.ts:102-105` seeds four sector indices at
+a bare literal, and `getDebtWeightedOas` returns `IG_OAS_FALLBACK`/`HY_OAS_FALLBACK` — a rating
+table's spread — for any bucket with no companies in it, which is a credit index level with no
+credit in it.
+
+Not in §3. **Becomes a step**, and a large one: it is a delete, not a build — the rule-based system
+already exists and is better, so the work is to publish its level, point `measureBeta`, the UI's
+macro page and stage 12's marks at it, and remove `calculateCompositeIndices` and
+`generate52WeekHistory` with it.
+
+### ❌ D3 / D3.a / D3.b — THE BENCHMARK IS A POSTED POLICY RATE, AND A CLEARED ONE EXISTS BESIDE IT
+
+Every floating instrument in the model fixes on `region.policyRate`. Measured: `front-core:524`
+(`isFloating ? principalUSD * (policyRate + annualRate)`), `pricing/tranche.ts:33`,
+`07f-short-debt-clearing:665`, `derivative-markets/irs.ts:114`, `bank-lending:232,267,492,493`,
+`02b-bank-diversification:224,229,239,255`, `stage08-back:1186,1394,1518,1668`,
+`prime-brokerage:142,260`, `overdraft-sweep:90,99`, `sme-pools:115`, `pe-lifecycle:533`. And
+`policyRate` is set by `evolution.ts:846-861`: an inertial Taylor rule moving 15% of the way to
+`rStar + expectedInflation + 0.5·inflation_gap + 0.5·output_gap`, rounded to 25bp, at a meeting
+every thirteenth week. **Nobody transacts at it.** That is D3.b's forbidden shape with the whole
+floating-rate book referencing it.
+
+`Company.referenceBenchmark` (`company.ts:228`) is `'SOFR' | 'EURIBOR' | 'SONIA' | 'TONA'`,
+assigned at `companyGenerator:554` and `07d-leveraged-loan-clearing:144` — a **label with no
+value behind it.** Nothing reads it to price anything; it is printed and forgotten. (Rule 4 also
+says those four names should not be in the tree at all.)
+
+The sharp part: **the model already clears an overnight rate.** `repo-clearing.ts:357` returns
+`onRateAnnual` from a real session, written to `reg.repoRateAnnual` at
+`02b-bank-diversification:414`, and its own comment there says *"RATE is one market print per
+region"*. It is read by the money-market fund's yield, the IRS float leg's discount
+(`irs.ts:231`) and `derivative-lifecycle:114` — and by nothing that fixes a coupon. So the world
+has a transacted overnight rate and a posted policy rate, and the entire floating book references
+the posted one. **Becomes a §3 step**, and it is small: the fixing source is one expression
+repeated at ~25 sites.
+
+### ⚠️ D4 / D4.a — THERE IS NO PPI, AND THE INPUT PRICE THAT WOULD BUILD IT IS ALREADY CLEARED
+
+`price-index.ts` builds a genuine Laspeyres CPI from stage 05's cleared shelf prices, weighted by
+real household spend, rebased and chain-linked (`buildCpiBasket`, `computeCpiLevel`), plus a core
+measure over the same basket with food and energy dropped. That is one index and one exclusion,
+not two indices. `grep -i ppi` over `src/` returns nothing.
+
+The missing half is not missing data. `shelfPriceFor` at `price-index.ts:52` distinguishes exactly
+the two prices a PPI/CPI pair needs — `demand.shelfUnitPriceUSD` (what a household pays) and
+`demand.unitPriceUSD`, the **landed** price, which its own comment calls *"the price a business
+pays for the same good"*. A producer price index is that second series over a producer basket
+(`buyerMix` already carries the firm share the way it carries `HOUSEHOLD`). Without it D4.a has no
+expression: the margin squeeze — input prices rising faster than output prices — is the difference
+between two series, and only one series exists. Not in §3. **Becomes a step**, small: the basket
+builder is already parameterised by buyer mix.
+
+### ⚠️ A3 — BETA IS MEASURED AGAINST THE INDEX AND THEN PRICES THE INDEX'S OWN CONSTITUENTS
+
+`measureBeta(stockPrices, indexHistory, prior)` → `comp.beta` (`stage08-back:2386`) →
+`betaArr[ci]` → `fairValuePerShare({ …, beta })` at `07e-equity-clearing:411`, which is the
+holder's reservation price in the equity book. The index history is the cap-weighted move of those
+same holders' constituents. The loop is real: constituent price → index → beta → discount rate →
+constituent reservation price → cleared constituent price.
+
+Marked `⚠️` and not `❌` deliberately. It is a one-week-lagged covariance, not a level feedback,
+and it is what CAPM actually does, which rule 8 favours. What makes it a finding rather than
+fidelity is the first paragraph of this diff: for the first fifty-two weeks the covariance is
+struck against `generate52WeekHistory`'s random walk, so A3's circularity is not even closed on a
+real index — it is closed on an invented one. **It closes when D1/E1 does**, and needs no step of
+its own.
+
+### ⚠️ A2 / D2 — THE CREDIT INDEX DISCOUNTS ON A FIT
+
+`index-calculation.ts:fixedMarketValueUSD` prices each fixed tranche at
+`calculateNelsonSiegelZeroRate(years, curve) + comp.oasSpreadBps / 10000`. The OAS is cleared; the
+curve is `reg.yieldCurveParams`, the **fitted** representation, while `zeroRates.tenor2Y…30Y`
+holds the cleared points. Equity (`marketCapOf`, off 07e's cleared `stockPrice`) and loans
+(`leveragedLoan.pricePar`, off 07d) read cleared prices; only the bond leg does not.
+
+**Already §3 step 25** — §9 names this file: *"`index-calculation` and `12-portfolio` still
+discount with the fit, so the model is not yet consistent — that is step 25."* This tree is a
+second witness, no more.
+
+### ❌ C1 / C3 — AN INDEX IS A MANDATE HERE AND NOTHING ELSE
+
+C2 is real and well built: `etf-demand.ts:indexFundDemand` puts a price-insensitive buyer at index
+weights into every clearing book, and `etf-flows.ts` sizes it off the entity's own mandate. But
+the other two uses of an index do not exist.
+
+**C1** — nobody's performance is measured against a benchmark, and no flow follows from it.
+`indexedShare` (`etf-flows:63`) is a *research-coverage* rule (how many names an AUM can cover),
+not a benchmark comparison; there is no tracking error, no relative return, and no manager who
+loses money for underperforming.
+
+**C3** — `DERIVATIVE_CLASSES` has four members (IRS, CDS, COMMODITY_FUTURE, FX_FORWARD). No
+contract references an index, so no index is a settlement price. Partly **already §3 step 17d**
+(the credit index/CDX) and adjacent to **17e** (bond futures); an equity index future is named
+nowhere and would be the third.
+
+### ❌ B3 / B4 / C2.a / E3 — ONE MISSING MECHANISM AND THREE UNMEASURED VERIFIES
+
+**B3** is a genuine absence: `grep -i "split"` over `src/` finds no share split or reverse split
+anywhere, so no corporate action can test whether the index survives one. Small, and arguably
+**OUT OF SCOPE** until a firm has a reason to split — but it is MISSING rather than declined, and
+the tree should not record it as a decision nobody made.
+
+**B4**, **C2.a** and **E3** are measurements nobody takes. The only index read in the audit is
+`ownership.ts:301`, which checks that constituent weights sum to 1 — not that the level's return
+equals the weighted constituent return, not that an inclusion moved a price, not that index and
+constituents move together. All three are **measurements, for §3 step 38.**
