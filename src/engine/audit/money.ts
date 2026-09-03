@@ -10,7 +10,7 @@ import { loanBooksOf, depositsOf } from '../../domain/banking';
 import { AuditSnapshot } from './snapshot';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
-import { centralBankAssetsUSD, centralBankLiabilitiesUSD } from '../../domain/central-bank';
+import { centralBankAssetsUSD, centralBankLiabilitiesUSD, centralBankSovereignBookUSD, centralBankFxReservesUSD } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
@@ -31,13 +31,24 @@ function m1(state: GameState, week: number): AuditFinding[] {
     const v2 = ensureV2(state);
     const reserves = sum(banksOf(state, r), (b) => bankReservesOf(v2, b.ticker));
     const tga = treasuryAccountOf(v2, r);
-    const assets = centralBankAssetsUSD(cb, waysAndMeansOf(v2, r));
+    const wam = waysAndMeansOf(v2, r);
+    const assets = centralBankAssetsUSD(cb, wam);
     const residual = centralBankLiabilitiesUSD(cb, reserves, tga) - assets;
+    // CB_TRACE=1 prints the sheet every week for every region, breach or not. The residual is
+    // CUMULATIVE, so the week a leak is MADE is invisible in the weeks it finally breaches —
+    // only the week-on-week deltas of the parts can name it.
+    if (process.env.CB_TRACE) {
+      console.log(`  [cb-trace] w${week} ${r} residual ${M(residual)} | reserves ${M(reserves)} tga ${M(tga)} currency ${M(cb.currencyInCirculationUSD)} rrp ${M(cb.reverseRepoBorrowedUSD ?? 0)} | sovereign ${M(centralBankSovereignBookUSD(cb))} fx ${M(centralBankFxReservesUSD(cb))} loans ${M(cb.loansToBanksUSD ?? 0)} foreign ${M(cb.foreignOfficialClaimsUSD ?? 0)} window ${M(cb.standingFacilityLentUSD ?? 0)} advance ${M(wam)} | coupon ${M(cb.lastCouponIncomeUSD ?? 0)} accretion ${M(cb.lastBillAccretionUSD ?? 0)} loanInt ${M(cb.lastLoanInterestUSD ?? 0)} sfInt ${M(cb.lastStandingFacilityInterestUSD ?? 0)} - ior ${M(cb.lastInterestOnReservesUSD ?? 0)} rrpInt ${M(cb.lastReverseRepoInterestUSD ?? 0)} = remit ${M(cb.lastRemittanceUSD ?? 0)}`);
+    }
     if (Math.abs(residual) > Math.max(1e6, assets * 1e-4)) {
-      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: reserves ${B(reserves)} + TGA ${B(tga)} + currency ${B(cb.currencyInCirculationUSD)} + reverse repo ${B(cb.reverseRepoBorrowedUSD ?? 0)} exceed the central bank's assets ${B(assets)} (foreign claims ${B(cb.foreignOfficialClaimsUSD ?? 0)}, window ${B(cb.standingFacilityLentUSD ?? 0)}) by ${B(residual)} — bank money nothing was bought against` });
+      // Every component by name on both sides: the residual is cumulative, so the only way to
+      // find the week it was made is to difference the parts across the weeks that print.
+      const liab = `reserves ${M(reserves)} + TGA ${M(tga)} + currency ${M(cb.currencyInCirculationUSD)} + reverse repo ${M(cb.reverseRepoBorrowedUSD ?? 0)}`;
+      const asst = `sovereign ${M(centralBankSovereignBookUSD(cb))} + fx ${M(centralBankFxReservesUSD(cb))} + loans ${M(cb.loansToBanksUSD ?? 0)} + foreign claims ${M(cb.foreignOfficialClaimsUSD ?? 0)} + window ${M(cb.standingFacilityLentUSD ?? 0)} + advance ${M(wam)}`;
+      out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: ${liab} exceed ${asst} by ${B(residual)} — bank money nothing was bought against` });
     }
   });
-  // C4b: the official-settlement claims are bilateral, so the world's sum is zero or a leak.
+  // The official-settlement claims are bilateral, so the world's sum is zero or a leak.
   const claims = sum(REGION_IDS, (r) => state.regions[r]?.centralBankSheet?.foreignOfficialClaimsUSD ?? 0);
   if (Math.abs(claims) > 1e6) out.push({ family: 'M', check: 'M1 foreign official claims net to zero', week, usd: claims, message: `the central banks' claims on each other sum to ${B(claims)}, not zero — a cross-border leg with one side missing` });
   return out;
@@ -53,6 +64,11 @@ function m2(state: GameState, week: number): AuditFinding[] {
     if (Math.abs(cb.currencyInCirculationUSD) > 1e6) out.push({ family: 'M', check: 'M2 currency plug', week, usd: cb.currencyInCirculationUSD, message: `${r}: currency in circulation ${B(cb.currencyInCirculationUSD)} is a residual nobody issued` });
     const cbLoans = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.centralBankLoanUSD ?? 0);
     if (Math.abs(cbLoans - (cb.loansToBanksUSD ?? 0)) > 1e6) out.push({ family: 'M', check: 'M2 central bank loans = banks\' borrowing', week, usd: cbLoans - (cb.loansToBanksUSD ?? 0), message: `${r}: banks owe the central bank ${B(cbLoans)}, its book says ${B(cb.loansToBanksUSD ?? 0)}` });
+    // The same two-sided identity for the window's other side: what the lenders say they have
+    // parked is what the central bank says it has taken. A lender that leaves the world with cash
+    // still parked would otherwise leave the borrowing on the book with nobody to return it to.
+    const parked = sum(state.institutionalEntities.filter((e) => e.region === r), (e) => e.rrpLentUSD ?? 0);
+    if (Math.abs(parked - (cb.reverseRepoBorrowedUSD ?? 0)) > 1e6) out.push({ family: 'M', check: 'M2 reverse repo book = lenders\' parked cash', week, usd: parked - (cb.reverseRepoBorrowedUSD ?? 0), message: `${r}: lenders have ${B(parked)} parked at the window, its book says ${B(cb.reverseRepoBorrowedUSD ?? 0)}` });
   });
   const s = state.lastSettlement;
   if (s) {
@@ -69,7 +85,7 @@ function m3(state: GameState, week: number): AuditFinding[] {
   // A3.6c-ii: a bank's corporate and institutional lines ARE its depositors' accounts
   // (`depositLinesAt`), so the line-versus-holders check is a tautology now; what remains
   // real is money with no bank at all.
-  // §5-FINALIZATION step 11: a house bank that has no sheet (resolved, merged away) is no bank —
+  // A house bank that has no sheet (resolved, merged away) is no bank —
   // the link is re-keyed at both events, and this is the measurement that it was.
   const liveBanks = new Set(state.companies.filter((b) => b.isBankEntity && b.bankBalanceSheet && isActiveCompany(b)).map((b) => b.ticker));
   const banked = (t: string | undefined) => !!t && liveBanks.has(t);
@@ -97,7 +113,7 @@ function m4(state: GameState, week: number): AuditFinding[] {
     if (negPools.length) out.push({ family: 'M', check: 'M4 overdrawn pools', week, usd: sum(negPools, (p) => poolCashOf(v2, r, p.industry)), message: `${r}: ${negPools.length} pools overdrawn ${B(sum(negPools, (p) => poolCashOf(v2, r, p.industry)))}` });
     const hh = householdDepositsOf(v2, r);
     if (hh < -1e6) out.push({ family: 'M', check: 'M4 overdrawn households', week, usd: hh, message: `${r}: household deposits ${B(hh)}` });
-    // A3.5: the treasury cannot overdraw — the negative side of its row IS the advance, granted by rule.
+    // The treasury cannot overdraw — the negative side of its row IS the advance, granted by rule.
   });
   return out;
 }
@@ -127,7 +143,7 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
     if (!before || !cb || !reg) return;
-    // Money is the bank lines and the treasury's account (§5-WIRES A2: nothing is in transit).
+    // Money is the bank lines and the treasury's account (nothing is in transit).
     const now = sum(banksOf(state, r), (b) => depositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker))) + treasuryAccountOf(ensureV2(state), r);
     const moneyBefore = before.bankDepositsUSD + before.treasuryAccountUSD;
     // Every creator, by name: the payment ledger's (bank credit written, reserves the central
@@ -148,7 +164,7 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
   return out;
 }
 
-/** M7 — §5-WIRES A: the account store, applied by one rule, agrees with every balance the books
+/** M7 — the account store, applied by one rule, agrees with every balance the books
  *  carry after each settlement pass, and every settled row found a party's row. */
 function m7(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];

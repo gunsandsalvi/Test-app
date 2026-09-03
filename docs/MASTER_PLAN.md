@@ -17,9 +17,9 @@ There is deliberately no section 7 in this file, so the citation can never be mi
   is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
   that names anything but §3's first line; one was written, it disagreed with §3's order, and two
   steps were skipped behind it.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 11b —
-  **136 violations in 34 families**, "the money that is not anyone's" **0.10B across 2 lines**
-  (M1's drift and M7's dust). Read the number off the run, not off this line.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 11c —
+  **134 violations in 33 families**, "the money that is not anyone's" **0.00B across 1 line**
+  (M7's dust, 6 rows worth nothing). Read the number off the run, not off this line.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
@@ -187,12 +187,6 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11c. **The central bank's book drifts.** EUR's M1 misses by **0.08B and 0.10B on a 159B and a
-    201B sheet, in weeks 15 and 16 of 16** at HEAD, having been clean for the whole project before
-    the death rate rose. Reserves + reverse repo exceed the assets they are supposed to be held
-    against. It is the money family's largest open line. Bisect from `56dc3ee`.
-    Note the shape: it appears only in the last two weeks and grows with the reverse-repo book,
-    which step 7 built — start there rather than at the central bank.
 11d. **A creator is missing from M6's list.** The money stock moves by named creators only;
     `audit/money.ts:120` names seven of them. In a week of large gross cross-border flow (week 8,
     UK: cross-border +27.82B, banks' own account −21.25B, stock moved 0.36B) **2.55B is
@@ -571,7 +565,7 @@ move into registries; lookups stay (rule 17).
 ## 6. WATCHLIST — measure, do not fix
 | Metric | Why |
 |---|---|
-| The money family (M1–M7) and "the money that is not anyone's" | Clean every run until §9.9 and §9.11, where the doubled death rate added M1's drift and M7's dust rows. At HEAD (after §9.9b): **0.10B unowned across 2 lines**. Steps 11c, 11d and 11b own the three open money lines; a line here is otherwise a defect at its site. |
+| The money family (M1–M7) and "the money that is not anyone's" | At HEAD: **0.00B unowned on one line** — M7's 6 dust rows, worth nothing, in one week of sixteen. M1, M2, M3, M4 and M5 print nothing. Step 11d owns the one sized money line left (M6, once, 2.55B). A new line here is a defect at its site. |
 | The 1e-8 week-1 drift (§7.370) | Three firms differ at the eighth digit at week 1; 13% price gap by week 13. Bisect by file, ONE dump per step. Watch it to zero; never widen a tolerance for it. |
 | The state-growth drift (§7.335, §7.380) | Weekly cost +45% over weeks 5→80 on two independent device runs, all stages inflating proportionally. First suspect: the contract book's row growth. |
 | TGA over a quarter; occupational mismatch; top-down vs bottom-up household income; the private tier that sells nothing; loan-book Spearman noise | Watch the TGA's LEVEL not its shape; mismatch is composition outrunning retraining; `estimatedHouseholdIncomeUSD` is still the anchor; ~300 seeded private firms per region carry `productLines: []`; Spearman 0.26–0.76 at 23–32 names — re-measure as the universe grows. |
@@ -2352,6 +2346,43 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**11c. The central bank's book drifts — the remittance under-counted its own expense.** (`PENDING`)
+EUR's M1 missed by 0.08B and 0.10B in the last two weeks of sixteen: reserves plus the reverse
+repo exceeded the assets they stand against. The plan guessed the reverse-repo book, which step 7
+had just built. It was the wrong end.
+
+The instrument found it, again, and the way it found it is the point. M1's message named two of
+the six asset lines; it now names all ten components on both sides, and a `CB_TRACE=1` flag prints
+the sheet EVERY week for every region, breach or not — necessary because the residual is
+CUMULATIVE, so the week a leak is made is invisible in the week it finally breaches. Two runs of
+that trace put the whole thing on one line: the residual sat at 0.1M through week 14, jumped 75.0M
+in week 15, and in that same week the remittance collapsed to −0.1M from a −43M/−61M run rate while
+interest on reserves halved to 38.2M with reserves unchanged.
+
+**The central bank keeps no retained earnings** — its income less its expenses is remitted to the
+treasury (or covered by it) the same week, which is exactly what makes its assets equal its
+liabilities. Its interest on reserves is PAID by stage 02b, bank by bank, at stage 219. The
+remittance then RE-DERIVED that expense at stage 395 by summing `reservesInterestWeeklyUSD` over
+the region's ACTIVE banks — two representations of one number (rule 3), read 176 stages apart from
+a set that `bank-resolution` (stage 390) had changed in between. A bank paid its interest and then
+resolved dropped out of the expense; the reserves it had been paid stayed in the world, standing
+against nothing. Week 15 measured it exactly: **113.2M paid, 38.2M counted, 75.0M short — the
+residual's jump to the dollar.**
+
+The expense is now accumulated on the central bank's sheet where it is paid, like the four smaller
+lines beside it (`lastReverseRepoInterestUSD`, `lastLoanInterestUSD`, …), and the remittance reads
+what was paid. `lastCouponIncomeUSD` and `lastInterestOnReservesUSD` complete the sheet's income
+statement, so it can be read rather than recomputed.
+
+Measured (SHOCKS=0 WEEKS=16): **136 in 34 → 134 in 33**, family diff a single line — **M1 goes
+from 2/16 weeks (worst 0.10B) to CLEAN** — and **"the money that is not anyone's" 0.10B across 2
+lines → 0.00B across 1**, which is M7's dust. The money family now prints one line in one week,
+worth nothing.
+
+Also added on the way, and it earns its place though it found nothing: **M2 reverse repo book =
+lenders' parked cash**, the two-sided identity the loan book already had. It was written to test
+the plan's hypothesis, proved it clean, and now stands as the check that the window closes.
 
 **11b (part 2). A dead firm's goods still move — the deliveries follow the books.** (`PENDING`)
 The money half closed earlier (below); what was left was `O5`, up to 196 consignments in transit

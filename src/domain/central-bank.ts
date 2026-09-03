@@ -16,7 +16,7 @@
 import { RegionId } from './geography';
 
 export interface CentralBank {
-  /** XB5 — real holdings of each foreign currency, in USD. Buying your own currency SPENDS these;
+  /** Real holdings of each foreign currency, in USD. Buying your own currency SPENDS these;
    *  selling it accumulates them. A central bank at zero cannot defend its currency, which is
    *  what makes a defence fail. */
   fxReservesByRegion?: Record<string, number>;
@@ -59,14 +59,19 @@ export interface CentralBank {
   lastReverseRepoInterestUSD?: number;
   /** Liability: notes in circulation — the slow, non-operational part of the balance sheet. */
   currencyInCirculationUSD: number;
-  /** PUB3d: last week's accretion on the bill book — a discount bill's income, which pays no coupon. */
+  /** Last week's accretion on the bill book — a discount bill's income, which pays no coupon. */
   lastBillAccretionUSD?: number;
-  /** Last week's remittance to the treasury: coupon income less interest paid on reserves. */
+  /** This week's coupon income on the sovereign book, and the interest paid on reserves — the
+   *  two largest lines of the remittance, reported like the four smaller ones beside them so the
+   *  whole income statement can be read off the sheet instead of recomputed. */
+  lastCouponIncomeUSD?: number;
+  lastInterestOnReservesUSD?: number;
+  /** Last week's remittance to the treasury: every income line above less every expense line. */
   lastRemittanceUSD: number;
   /** Last week's net reserve movement caused by TGA flows (negative = drained from banks). */
   lastReserveDrainUSD: number;
   /**
-   * PUB2b: next week's open-market order, by tenor bucket. The CB is a real bidder in 07c and
+   * Next week's open-market order, by tenor bucket. The CB is a real bidder in 07c and
    * 07f, so its policy is a QUANTITY the auction must price against everyone else's demand —
    * not a premium added to a curve.
    */
@@ -83,7 +88,7 @@ export interface CentralBank {
 /** Share of the sovereign stock the central bank holds at seed. */
 export const CENTRAL_BANK_SOVEREIGN_SHARE = 0.15;
 /**
- * Weeks of spending the treasury keeps on hand. Sized to the real dry spell: since PUB1c put
+ * Weeks of spending the treasury keeps on hand. Sized to the real dry spell: since
  * receipts on real calendars (monthly withholding and payroll, quarterly business and
  * consumption tax), the treasury pays out smoothly and is paid in lumps, and a four-week buffer
  * ran the account negative by week 10. A real treasury either holds a bigger balance or issues
@@ -96,7 +101,7 @@ export function centralBankSovereignBookUSD(cb: CentralBank): number {
   return Object.values(cb.sovereignHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
 }
 
-/** XB5 — foreign currency this central bank actually holds, in USD. */
+/** Foreign currency this central bank actually holds, in USD. */
 export function centralBankFxReservesUSD(cb: CentralBank): number {
   return Object.values(cb.fxReservesByRegion || {}).reduce((a, v) => a + (Number(v) || 0), 0);
 }
@@ -104,7 +109,7 @@ export function centralBankFxReservesUSD(cb: CentralBank): number {
 /**
  * The whole asset side: the domestic sovereign book PLUS the FX reserves.
  *
- * XB5 split these because XB2d had the central bank intervening in the currency market with the
+ * These are split because the central bank used to intervene in the currency market with the
  * size of its DOMESTIC BOND BOOK. A central bank does not sell its own government's paper to
  * defend its currency — it sells reserves, and when the reserves are gone the defence ends. That
  * is the mechanism a balance-sheet scalar cannot express, and it is the whole reason a currency
@@ -141,8 +146,8 @@ export function centralBankLiabilitiesUSD(cb: CentralBank, bankReservesUSD: numb
  */
 export function remittanceUSD(
   couponIncomeWeeklyUSD: number,
-  /** C4/C5: the interest on reserves the central bank actually PAID this week (the
-   *  banks' `reservesInterestWeeklyUSD`, posted by 02b), not a rate on a stock. */
+  /** The interest on reserves the central bank actually PAID this week, accumulated by 02b as
+   *  it pays each bank — not a rate on a stock, and not a later re-sum of the banks' own fields. */
   interestOnReservesPaidUSD: number
 ): number {
   return couponIncomeWeeklyUSD - interestOnReservesPaidUSD;
@@ -228,12 +233,12 @@ export function openMarketPolicy(args: {
 }
 
 /**
- * PUB3c — the bill program responds to the treasury's cash position.
+ * The bill program responds to the treasury's cash position.
  *
  * The gap this closes: the government spends every week but raises bond financing on a QUARTERLY
  * calendar (stage 11 accumulates `pendingUnfundedDeficitUSD` for 13 weeks), so between auctions
  * the TGA absorbs the entire shortfall. That works while the buffer is large enough and fails the
- * moment obligations grow — measured, the account ran to −497.5B once PUB3b indexed spending to
+ * moment obligations grow — measured, the account ran to −497.5B once spending was indexed to
  * real wages. A negative treasury account is not a fiscal outcome, it is a MISSING INSTRUMENT.
  *
  * **Not a cash-management bill, despite what this was first called.** A real CMB is a distinct

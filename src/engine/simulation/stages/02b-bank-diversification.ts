@@ -77,6 +77,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const reg = ctx.updatedRegions[regionId];
     const banks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity);
     if (banks.length === 0) return;
+    // The central bank's interest expense is ACCUMULATED where it is paid, below, like every
+    // other line of its income statement. It used to be re-derived at the central bank stage by
+    // summing `reservesInterestWeeklyUSD` over the region's ACTIVE banks — 170 stages later, by
+    // which point resolution had taken banks out of that set. The interest had been paid to them
+    // all the same, so the remittance under-counted its own expense and the reserves it created
+    // stood against nothing.
+    if (reg.centralBankSheet) reg.centralBankSheet.lastInterestOnReservesUSD = 0;
 
     // The aggregate stage 2 just computed via evolveBankingSector is this week's fallback
     // seed for any bank that doesn't yet carry its own bankBalanceSheet (e.g. a company
@@ -305,6 +312,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           amountUSD: sheet.reservesInterestWeeklyUSD!,
           reason: 'interest on reserves',
         });
+        if (reg.centralBankSheet) {
+          reg.centralBankSheet.lastInterestOnReservesUSD =
+            (reg.centralBankSheet.lastInterestOnReservesUSD ?? 0) + sheet.reservesInterestWeeklyUSD!;
+        }
       }
       // The dividend goes to the register: the paying agent settles it pro rata to the holders
       // of record as a payment from this bank (reserves and equity leave at settlement).
