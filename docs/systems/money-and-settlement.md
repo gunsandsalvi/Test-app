@@ -87,3 +87,137 @@ branches D, E and F.
 - **F2** REASON — the **gross** and the **net** are different numbers and both are reported
 - **F3** VERIFY — the clearing house's residual is **zero**, per asset and per currency
 - **F4** VERIFY — money that landed on a holder with no account is **counted, never dropped**
+
+---
+
+## 2. THE MAPPING
+
+Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+checked by `scripts/check-atlas.sh`.
+
+| Node | Code | |
+|---|---|---|
+| A1 money is a liability of somebody | `src/engine/ledger/accounts.ts:accountKey` | ✅ |
+| A1.a a deposit is a named bank's liability | `src/engine/ledger/accounts.ts:depositLinesAt` | ✅ |
+| A1.b a reserve is the central bank's liability to a bank | `src/engine/ledger/accounts.ts:reserveRowOf` | ✅ |
+| A1.c currency in circulation | `src/engine/bootstrap/close-seed.ts:currencyInCirculationUSD` | ❌ |
+| **A1.d FORBID no money without an issuer** | `src/engine/ledger/accounts.ts:applySettledRow` | ✅ |
+| A2 money is denominated | `src/engine2/world.ts:CURRENCY_ID` | ✅ |
+| A2.a a holder's own money | `src/engine/ledger/accounts.ts:homeCurrencyOf` | ✅ |
+| **A2.b FORBID two currencies are never added** | `src/domain/currency.ts:convert` | ✅ |
+| A3 fungible within its issuer and currency | `src/engine/ledger/accounts.ts:balanceOfIn` | ✅ |
+| A4 the money stock is a read | `src/domain/banking.ts:spendableDepositsOf` | ✅ |
+| B1 an account is (holder, issuer, currency) | `src/engine/ledger/accounts.ts:openRow` | ✅ |
+| B1.a several accounts; foreign currency is a real position | `src/engine/ledger/accounts.ts:rowsInCurrency` | ✅ |
+| B1.b VERIFY Σ(accounts at an issuer) = its money liability | `src/engine/audit/money.ts:m5` | ⚠️ |
+| B2 a balance is carried and changes only by a named movement | `src/engine/ledger/accounts.ts:projectBooks` | ✅ |
+| B3 a balance can be negative | `src/engine/ledger/accounts.ts:treasuryNetOf` | ✅ |
+| B3.a a customer overdrawn is borrowing — a **credit decision** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
+| B3.b a bank overdrawn at the CB borrows, priced by the corridor | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanUSD` | ⚠️ |
+| **B3.c FORBID an overdraft is never a silent negative** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ✅ |
+| C1 a payment is an instruction | `src/engine/simulation/stages/settlement.ts:PaymentInstruction` | ✅ |
+| C1.a it names both sides | `src/engine/ledger/wire.ts:wirePush` | ✅ |
+| C1.b it carries the reason | `src/engine/ledger/payment-category.ts:categoryOfReason` | ✅ |
+| C1.c it may be dated | `src/engine/simulation/stages/settlement.ts:rowDue` | ✅ |
+| C2 settlement applies each instruction by one rule | `src/engine/ledger/accounts.ts:applySettledRow` | ✅ |
+| C2.a the interbank leg | `src/engine/ledger/accounts.ts:reserveRowFor` | ✅ |
+| C2.b same-bank payment moves no reserves | `src/engine/ledger/accounts.ts:leg` | ✅ |
+| C2.d VERIFY Σ(all legs) = 0, per currency | `src/engine/audit/wires.ts:auditWires` | ✅ |
+| C3 a cross-currency payment is two amounts and a rate | `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ✅ |
+| C4 the money creators are enumerable and few | `src/engine/ledger/party.ts:PARTY_KINDS` | ✅ |
+| C4.a a bank writing a loan creates a deposit | `src/engine/ledger/accounts.ts:creditCreatedByBank` | ✅ |
+| C4.b the central bank creates reserves | `src/engine/ledger/accounts.ts:centralBankIssuanceUSD` | ✅ |
+| C4.c VERIFY Δ money stock = C4.a + C4.b and nothing else | `src/engine/audit/money.ts:m6` | ⚠️ |
+| D1 every asset move is a numbered instruction | `src/engine/ledger/wire.ts:WireInstruction` | ✅ |
+| D1.a numbered, so a position can be replayed | `src/engine/ledger/wire.ts:wirePush` | ✅ |
+| D1.b a residual is a missing wire | `src/engine/ledger/wire.ts:summarizeWires` | ✅ |
+| D2 money is an asset like any other | `src/engine/ledger/wire.ts:MONEY_ASSET_ID_BY_CURRENCY` | ✅ |
+| D3 VERIFY Σ(wires in) − Σ(wires out) = Δ holdings | `src/engine/audit/wires.ts:auditWires` | ✅ |
+| **D4 FORBID no move without a wire** | `src/engine/ledger/wire.ts:activeWireJournal` | ✅ |
+| **E1 a payer that cannot pay is a real state** | — | ❌ |
+| E1.a it does not silently not happen or silently overdraw | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
+| E1.b the payee has a receivable that did not arrive | `src/engine/simulation/stages/trade-settlement.ts:runTradeSettlementStage` | ✅ |
+| E2 settlement is final | `src/engine/simulation/stages/settlement.ts:journalAppendRow` | ✅ |
+| E2.a an error is corrected by a new payment | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
+| **E3 order matters within a pass, and the order is defined** | `src/engine/simulation/stages/settlement.ts:runSettlementStage` | ⚠️ |
+| E4 a party that ceases to exist is settled or refused by name | `src/engine/ledger/accounts.ts:applySettledRow` | ✅ |
+| F1 a statement per book, in that book's own money | `src/engine/simulation/stages/settlement.ts:SettlementReport` | ✅ |
+| F1.a treasury, household, bank, pool statements | `src/engine/simulation/stages/settlement.ts:treasuryFlowsByRegion` | ✅ |
+| **F1.b FORBID a per-book statement is never a sum across currencies** | `src/engine/simulation/stages/settlement.ts:grossByCurrency` | ✅ |
+| F2 the gross and the net are both reported | `src/engine/simulation/stages/settlement.ts:grossUSD` | ✅ |
+| F3 VERIFY the clearing house's residual is zero | `src/engine/simulation/stages/settlement.ts:clearingHouseResidualUSD` | ✅ |
+| F4 VERIFY money on a holder with no account is counted | `src/engine/simulation/stages/settlement.ts:unresolvedUSD` | ✅ |
+
+---
+
+## 3. THE DIFF
+
+The tree's own header says to judge this layer on D, E and F. **D is clean** — every asset move is
+a numbered wire, `activeWireJournal()` throws when there is none, and W1–W5 reconcile the four
+stores against the journal. **F is clean.** The findings are all in E, and they are one finding.
+
+### ❌ E1 / ⚠️ E1.a / B3.a / B3.b — NOBODY CAN FAIL TO PAY, BECAUSE CREDIT IS UNCONDITIONAL
+
+**Every payment path does go through `pay()`.** That half of the question is answered: the only
+writes to `v2.accounts.balance` outside `accounts.ts` are the seed's (`initialization.ts:783`,
+`close-seed.ts:69`), 02b's sub-dollar reserve rounding (`02b-bank-diversification.ts:376`) and the
+player's own ticket (`trade.ts:90`); `pay`/`payByIds`/`journalPayment` are otherwise the sole
+entry, and `journalPush` writes the wire before the row so a money row without a wire cannot
+exist. Capital calls (`pe-lifecycle.ts:184`), variation margin
+(`derivative-lifecycle.ts:143 payToB`) and every clearing fee (`book-settlement.ts:126`) are
+ordinary `pay` calls today. The historical hole recorded in the plan is closed.
+
+**What is not there is the refusal.** `applySettledRow` (accounts.ts:666) tests only that both
+parties have rows; `side`/`leg` (accounts.ts:675, 690) then add the delta with **no balance test
+anywhere**, so a payer with nothing pays anyway and the row goes negative. The close sweep
+(`overdraft-sweep.ts`) converts every negative it finds into a facility draw, a prime-brokerage
+draw or an SME facility draw — and none of the three can be refused: the fund's leg is written
+whether or not it is inside its line (`overdraft-sweep.ts:86`, "past the line it is still
+funded"), the pool's is split across the region's banks by market share with no test at all, and
+the firm's revolver is created out of nothing at its house bank. A bank short of reserves reaches
+`raiseCentralBankLoanUSD` (`bank-lending.ts:917`), which is still four lines and lends the
+shortfall unconditionally.
+
+So B3.c is genuinely satisfied — no negative is silent, every one has a named lender and a rate —
+and B3.a's "credit **decision**" is not: there is no decision, there is a conversion. E1 has no
+code at all, and the consequence is that **the liquidity dimension of this model has no failure
+state.** A firm, a fund, a pool and a bank all pay whatever they owe forever.
+
+Not itself a §3 step for the non-bank paths. The bank path is **Already §3 step 20-LLR**; the
+firm/fund/pool paths **become a §3 step** (small: the sweep already knows the size and the lender,
+what it lacks is a "no").
+
+**Two corrections to 20-LLR's own text, from reading the code today.** (1) The step says the
+facility carries "no penalty rate"; there is one — `CENTRAL_BANK_LOAN_PENALTY_BPS = 100` over
+SRF, charged at `02b-bank-diversification.ts:464`. The three real constraints it lacks are
+collateral, eligibility and a cap. (2) 20-LLR's reading of the auctions is confirmed
+independently here: `unsoldStaysWithHolder: true` is set at 07b:482, 07c:504, 07d:440, 07e:456 and
+07f:354/905, and the residual dealer is zero by construction on those books
+(`financial-clearing-engine.ts:887`).
+
+### ⚠️ E3 — "TWO INSTRUCTIONS THAT BOTH DRAW ON ONE BALANCE CANNOT BOTH SUCCEED BY LUCK"
+
+They both succeed by construction. `runSettlementStage` walks the journal in emission order and
+applies every due row; order therefore determines nothing, because no row can fail. The node's
+requirement is not that the order be defined (it is — the journal's) but that ordering MATTER, and
+it cannot while E1 is absent. Closes with E1.
+
+### ⚠️ B1.b / C4.c — THE TWO MONEY IDENTITIES ARE CHECKED AT A PERCENTAGE
+
+`audit/money.ts:170` fires M6 only when the unexplained change exceeds
+`max(5e8, moneyBefore * 0.005)` — half a percent of the money stock, which on a stock of trillions
+is billions of dollars of unexplained money creation per region per week, invisible. `m5`'s bank
+identity is `max(1e7, assets * 2e-3)`. Rule 28 says a tolerance is float dust, never a percentage.
+
+**Already §3 step 27** ("the audit measures what it claims — and its tolerances are float dust").
+Recorded here as a second witness: it is the money family's own headline identity that the band
+is hiding.
+
+### ❌ A1.c — CURRENCY IN CIRCULATION DOES NOT EXIST
+
+`close-seed.ts:83` sets `cb.currencyInCirculationUSD = 0` and `audit/money.ts:68` reports any
+non-zero value as "a residual nobody issued". Nothing ever issues notes.
+
+**OUT OF SCOPE**, and correctly so: every party in this world banks, so a bearer liability has no
+holder to be a liability to. The node stays because the distinction matters — this is a deliberate
+absence, not a missing mechanism, and a later cash-preferring household would need it.
