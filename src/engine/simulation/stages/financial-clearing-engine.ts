@@ -790,7 +790,18 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
     // §7.342) were clamps on prices; 1,346 names were pinned against them at once and the print
     // was the cap, not the market. A book with no other side now shows it as a price, and the
     // desks, the issuer and the float are what answer it — never a bound.
-    const clearedStat = Number(solvedStat.toFixed(4));
+    // §3.13-SOV row 4 — THE PRINT'S RESOLUTION IS RELATIVE, BECAUSE THE STAT'S SCALE IS NOT KNOWN
+    // HERE. This was `toFixed(4)`: an ABSOLUTE grid of 1e-4, which is invisible on a stat quoted
+    // in basis points (1e-4 of a bp) and enormous on one quoted as a price near 1 — where it is a
+    // whole basis point of PRICE, and on a 13-week bill four basis points of YIELD, which is more
+    // than the weekly move. Measured when the bill book was converted to clear a price: the
+    // 13-week print pinned at exactly 0.99030000 for every week of the run while the 26- and
+    // 52-week prints, whose grids are two and four times finer in yield terms, still moved.
+    //
+    // Significant figures instead of decimal places. The intent was always to drop the last bits
+    // of float noise rather than to impose a grid, and ten significant figures does that at any
+    // scale this engine prints at.
+    const clearedStat = Number(solvedStat.toPrecision(10));
     void isYieldLike;
     out.clearedStat[o] = isFinite(clearedStat) ? clearedStat : currentStat;
 
