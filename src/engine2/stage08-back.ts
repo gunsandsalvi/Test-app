@@ -23,6 +23,7 @@ import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation'
 import { industryOfSubUnit, firmInputIntensities, financingProfileOf } from '../domain/industry-registry';
 import { calculateNelsonSiegelZeroRate } from '../engine/nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../engine/pricing';
+import { annuityFactor } from '../domain/pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../engine/formatters';
 import { determineCreditRating } from '../engine/simulation/credit';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
@@ -1390,9 +1391,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         ? riskFree + L8.oasSpreadBps[row] / 10000
         : reg.policyRate + L8.oasSpreadBps[row] / 10000;
       const premiumPerDollar = callPremiumRowUSD(r, 1);
-      const discount = Math.max(1e-6, fairRateToday);
-      const savingPvPerDollar =
-        (annualRate - fairRateToday) * ((1 - Math.pow(1 + discount, -remainingYears)) / discount);
+      const savingPvPerDollar = (annualRate - fairRateToday) * annuityFactor(fairRateToday, remainingYears);
       return {
         premiumPerDollar,
         // Paper that can be retired at PAR is always worth retiring with surplus cash: it costs

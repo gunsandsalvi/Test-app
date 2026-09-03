@@ -1,3 +1,4 @@
+import { presentValuePerFace } from './pricing';
 /**
  * CALL PROTECTION — what it costs an issuer to retire a bond or loan before it matures.
  *
@@ -71,13 +72,14 @@ export function firstCallWeek(tranche: DebtTranche): number {
   return tranche.originationWeek + HY_NON_CALL_WEEKS;
 }
 
-/** Present value per dollar of par of a fixed-coupon stream, annual compounding. */
+/** Present value per dollar of par of a fixed-coupon stream, annual compounding. The arithmetic
+ *  is `domain/pricing`'s; the `max(1e-6, rate)` floor this used to carry is gone with it — the
+ *  annuity takes its own zero-rate limit exactly, and a negative rate is a real rate (rule 2). */
 function presentValuePerDollar(couponRate: number, years: number, discountRate: number, redemptionPerDollar: number): number {
-  const d = Math.max(1e-6, discountRate);
-  const t = Math.max(0, years);
-  const discountFactor = Math.pow(1 + d, -t);
-  const annuity = (1 - discountFactor) / d;
-  return couponRate * annuity + redemptionPerDollar * discountFactor;
+  return presentValuePerFace({
+    couponPerPeriod: couponRate, periods: Math.max(0, years),
+    ratePerPeriod: discountRate, redemptionPerFace: redemptionPerDollar,
+  });
 }
 
 /**

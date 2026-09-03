@@ -17,8 +17,8 @@ There is deliberately no section 7 in this file, so the citation can never be mi
   is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
   that names anything but §3's first line; one was written, it disagreed with §3's order, and two
   steps were skipped behind it.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 12 —
-  **197 violations in 44 families**, and **"the money that is not anyone's" is 0.00B across ZERO
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 12b —
+  **200 violations in 44 families**, and **"the money that is not anyone's" is 0.00B across ZERO
   lines — the money family is clean.** The rise from 181/36 is O1, O6 and O7 becoming able to see
   300B of desk inventory that named no tranche (§9.12); step 11f owns what they report.
   **The money family is down to one check** (M7's dust, worth 0.00B): M1–M6 all print nothing.
@@ -225,6 +225,18 @@ do not reorder.
 
 ### PART II — THE INSTRUMENTS ARE REAL
 
+12b. **Pricing is centralised; now use it.** `domain/pricing/` owns the time value of money
+    (§9.12b): `discountFactor`, `annuityFactor`, `levelPaymentFactor`, `presentValuePerFace`, and
+    step 13's pair `priceFromSpreadBps`/`spreadBpsFromPrice` with `zeroRateAt`. Eight modules that
+    wrote the formulas out by hand now call it. What is LEFT is the consumers that still price by
+    their own arithmetic rather than off a cleared print, and each belongs to the step that owns
+    its mechanism: `engine/pricing.ts`'s `priceCorporateBond`/`priceLeveragedLoan` are used by ONE
+    caller, `12-portfolio:141`, which step 26 deletes outright (a round trip through Nelson-Siegel
+    cannot return the cleared price); `carryCalculator.ts` is step 26's; `index-calculation.ts:52`
+    now uses the shared PV but still discounts a bond it should be able to READ a price for, which
+    is step 13. **One holdout on the convention:** `engine/nelsonSiegel.ts` discounts continuously
+    (`exp(-z·t)`) where everything else compounds discretely. Unify it in the same commit as 13's
+    sovereign pricing — moving it alone re-prices every sovereign for no gain.
 13. **Face, and price × face — and ONE NAME for one piece of paper** (the "credit always trades at
     par" defect, plus rule 3). **The register keys credit by TRANCHE and the dealer desks key the
     same paper by ISSUER, and the two sets are disjoint: `O8` measures 11,655 desk positions worth
@@ -2480,6 +2492,33 @@ The history is plain enough: the register was migrated to per-tranche rows and t
 behind. Folded into step 13, which owns the per-tranche world; O8 is the number to drive to zero.
 Measured: 165 in 35 → **181 in 36**, the whole rise being O8 firing every week on a defect that
 was always there.
+
+**12b. Pricing is centralised.** (`PENDING`) The time value of money was written out by hand in
+eight modules — `Math.pow(1 + r, -t)` and `(1 - that) / r` and `r / (1 - that)` — each copy with
+its own variable names and its own edge cases, so a reader had to prove to themselves that three
+files computing `rWeekly / (1 - (1 + rWeekly) ** -n)` meant the same thing. They do.
+
+`domain/pricing/` owns it now, in two modules with one job each: `discount.ts` for the primitives
+and `bond.ts` for price-from-spread and its inverse. Nothing in either reads the world, which is
+what makes them testable and what keeps the pricing out of the stages. Migrated:
+`call-protection.ts` (which was carrying its own complete bond PV), `company-week/debt-ladder.ts`,
+`engine2/stage08-back.ts`, `index-calculation.ts` (a fourth copy of the bond PV), the mortgage
+level payment in `domain/banking.ts`, `bank-lending.ts` and `evolution.ts` — three byte-identical
+copies — and `asset-allocation.ts`.
+
+**Three bounds died with them.** Each hand-written annuity carried `Math.max(1e-6, rate)` because
+`(1 - DF) / r` divides by zero. The shared one takes the limit exactly — ten payments of one are
+worth ten — so the floor is unnecessary, and with it goes the quiet lie that a negative rate is
+0.0001 (rule 2, and the model's own policy floor is −1%).
+
+The new pair `priceFromSpreadBps`/`spreadBpsFromPrice` is step 13's foundation and has no callers
+yet. It is solved rather than approximated: price falls monotonically in spread, so the inverse
+bisects and a price fed back gives the spread it came from. Seven tests pin the properties,
+including the round trip and the zero-rate limits.
+
+Measured (SHOCKS=0 WEEKS=16): 197 in 44 → **200 in 44**, the difference being the three floors no
+longer rounding negative and near-zero rates up, plus the P- and X-family re-path that follows
+(X1 improved, 9 weeks → 5). Tests 126 → 133.
 
 **12. One thing, one key.** (`PENDING`) Asked whether anything else was miskeyed, the answer had
 to be a sweep rather than an opinion. `O8` now states the policy and tests every arm of it every

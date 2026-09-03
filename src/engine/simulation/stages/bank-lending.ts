@@ -1,3 +1,4 @@
+import { levelPaymentFactor } from '../../../domain/pricing';
 import { openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf } from '../../ledger/accounts';
 /**
  * G2 — itemized bank lending and endogenous money.
@@ -635,8 +636,8 @@ export function runBankHouseholdLending(
   const householdsCount = Math.max(1, (reg.totalPopulation ?? 0) / AVERAGE_HOUSEHOLD_SIZE);
   const weeklyIncomePerHouseholdUSD = Math.max(0, reg.estimatedHouseholdIncomeUSD) / 52 / householdsCount;
   const rWeekly = Math.max(0.00001, marketMortgageRate / 52);
-  const annuityFactor = rWeekly / (1 - Math.pow(1 + rWeekly, -MORTGAGE_TERM_WEEKS));
-  const affordableLoanUSD = (weeklyIncomePerHouseholdUSD * MORTGAGE_DSTI_LIMIT) / annuityFactor;
+  const affordableLoanUSD = (weeklyIncomePerHouseholdUSD * MORTGAGE_DSTI_LIMIT)
+    / levelPaymentFactor(rWeekly, MORTGAGE_TERM_WEEKS);
 
   // HSG — TURNOVER IS AN OUTCOME. The share of the book that can now afford more than it
   // borrowed is a real measurement, because every vintage remembers the house it was written

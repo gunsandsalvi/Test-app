@@ -1,3 +1,4 @@
+import { presentValuePerFace } from '../../../domain/pricing';
 /**
  * INDEX CALCULATION — run the membership and weighting rules over the market that exists this
  * week, and publish the level.
@@ -48,9 +49,10 @@ function fixedMarketValueUSD(v2: V2World, comp: Company, curve: NelsonSiegelPara
     if (S.flags[r] & (INDEXABLE_EXCLUDED | TR_FLOATING)) continue;
     const years = Math.max(0.25, (S.maturityWeek[r] - week) / 52);
     const discount = calculateNelsonSiegelZeroRate(years, curve) + comp.oasSpreadBps / 10000;
-    const d = Math.max(1e-6, discount);
-    const df = Math.pow(1 + d, -years);
-    const pricePerDollar = (Number.isNaN(S.couponRate[r]) ? 0 : S.couponRate[r]) * ((1 - df) / d) + df;
+    const pricePerDollar = presentValuePerFace({
+      couponPerPeriod: Number.isNaN(S.couponRate[r]) ? 0 : S.couponRate[r],
+      periods: years, ratePerPeriod: discount, redemptionPerFace: 1,
+    });
     sum += S.principalUSD[r] * Math.max(0, pricePerDollar);
   }
   return sum;

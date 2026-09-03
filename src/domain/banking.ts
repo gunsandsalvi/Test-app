@@ -1,3 +1,4 @@
+import { levelPaymentFactor } from './pricing';
 /**
  * Commercial & Central Banking Domain Model
  *
@@ -531,8 +532,7 @@ export function annuityWeeklyPrincipalUSD(principalUSD: number, rateAnnual: numb
   if (!(principalUSD > 0)) return 0;
   const weeks = Math.max(1, wamWeeks);
   const r = Math.max(0, rateAnnual) / 52;
-  if (r <= 1e-9) return principalUSD / weeks;
-  const paymentUSD = (principalUSD * r) / (1 - Math.pow(1 + r, -weeks));
+  const paymentUSD = principalUSD * levelPaymentFactor(r, weeks);
   return Math.max(0, Math.min(principalUSD, paymentUSD - principalUSD * r));
 }
 

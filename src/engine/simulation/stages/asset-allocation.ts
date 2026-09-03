@@ -1,3 +1,4 @@
+import { discountFactor } from '../../../domain/pricing';
 /**
  * Cross-asset relative value: how much of an asset class is worth owning at today's price
  *
@@ -259,7 +260,7 @@ export function computeDistressedReservationSpreadBps(params: {
   const defaultProbOverWorkout = 1 - Math.pow(1 - pd, T);
   const expectedTerminalValuePerPar =
     defaultProbOverWorkout * params.recoveryRate + (1 - defaultProbOverWorkout) * 1.0;
-  const maxPricePerPar = expectedTerminalValuePerPar / Math.pow(1 + h, T);
+  const maxPricePerPar = expectedTerminalValuePerPar * discountFactor(h, T);
   const d = Math.max(0.5, params.durationYears);
   return (-Math.log(Math.max(1e-6, maxPricePerPar)) / d) * 10000;
 }

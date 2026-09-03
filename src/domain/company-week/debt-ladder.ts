@@ -1,3 +1,4 @@
+import { annuityFactor } from '../pricing';
 /**
  * §5-STRUCT step 2 — A FIRM'S DEBT LADDER FOR ONE WEEK.
  *
@@ -31,8 +32,7 @@ export function callSavingPvPerDollar(
   remainingYears: number,
   discountRate: number
 ): number {
-  const discount = Math.max(1e-6, discountRate);
-  return rateSavingAnnual * ((1 - Math.pow(1 + discount, -Math.max(0, remainingYears))) / discount);
+  return rateSavingAnnual * annuityFactor(discountRate, Math.max(0, remainingYears));
 }
 
 /**

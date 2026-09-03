@@ -1,3 +1,4 @@
+import { levelPaymentFactor } from '../../domain/pricing';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams } from '../nelsonSiegel';
@@ -983,7 +984,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     region.housingMarket?.bestMortgageRateAnnual
     ?? ((region.zeroRates?.tenor10Y ?? newPolicyRate) + MORTGAGE_SEED_SPREAD_OVER_10Y_BPS / 10000));
   const rWeekly = mortgageRateForPricing / 52;
-  const annuityFactorForPricing = rWeekly / (1 - Math.pow(1 + rWeekly, -MORTGAGE_TERM_WEEKS));
+  const annuityFactorForPricing = levelPaymentFactor(rWeekly, MORTGAGE_TERM_WEEKS);
   const affordabilityByTier = WEALTH_TIERS.map((t) => {
     const tier = region.wealthDistribution?.[t];
     const tierHouseholds = Math.max(1, householdsCount * Math.max(0, tier?.shareOfHouseholds ?? 0.25));
