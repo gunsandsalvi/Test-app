@@ -138,7 +138,19 @@ export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromTicke
   return moved;
 }
 
-/** A seeded or born firm's ladder, installed without wires — principle B closes this. */
-export function seedLadder(v2: V2World, companyId: string, ladder: DebtTranche[] | undefined): void {
-  syncLadderRows(v2, companyId, ladder);
+/**
+ * A SEEDED OR BORN FIRM'S LADDER OPENS BY WIRE, like every other face on a ladder.
+ *
+ * It used to be installed by a bare mirror of `comp.debtTranches`, with `wireRef` set to −1 on
+ * every row — face that existed because an array said so. The seed is an EVENT: the firm issued
+ * this paper, and the wire says so, from the issuer to the holder the tranche names, exactly as
+ * `issueTranche` does for face written any other week. So W3 can hold the world's opening ladders
+ * to the same standard as its second week's.
+ *
+ * The chain is claimed empty first, so a firm that somehow arrives here twice cannot double its
+ * ladder — the rows come only from the issues below.
+ */
+export function seedLadder(v2: V2World, issuer: TrancheIssuer, ladder: DebtTranche[] | undefined): void {
+  syncLadderRows(v2, issuer.id, []);
+  for (const t of ladder ?? []) if (t.principalUSD > 0.01) issueTranche(v2, issuer, t, 'seed: ladder opened');
 }

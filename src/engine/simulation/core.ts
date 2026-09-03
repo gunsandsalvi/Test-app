@@ -117,22 +117,12 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // one, and a run replayed from the same seed is identical week for week (engine/rng.ts).
   setRngState(state.rngState);
   {
-    // §7.310 tranche flip stage 1 — the mirror's catch-up: any firm not yet synced (the seed,
-    // and every birth path) gets its ladder mirrored before the week reads anything.
+    // The register's catch-up: the seed and any unhooked creation path (fund births, estate
+    // spawns) get their books mirrored before the week reads anything.
     const v2 = ensureV2(state);
-    for (const c of state.companies) {
-      if (!v2.tranches.synced.has(c.id)) seedLadder(v2, c.id, c.debtTranches);
-    }
-    // Holdings flip stage 1 — the same catch-up for the institutional register: the seed and any
-    // unhooked creation path (fund births, estate spawns) get their books mirrored here.
     ensureBooksSynced(v2, state.institutionalEntities ?? []);
-    // §5-FINALIZATION 13b: the LADDERS too, before any stage — the register's rows name tranches
-    // and every reader resolves an issuer through the store, so week 1's books cannot run on an
-    // empty store (they did: the seam synced it at stage 08, and the week-1 auctions claimed no
-    // row and wrote the fills back under the issuers' ids). A no-op from week 2.
-    ensureLaddersSynced(v2, state.companies);
-    // §5-BRAINS — the same catch-up for managements: any entity that entered the world by any
-    // path without one gets its two primitives drawn here, once, from its own stream.
+    // The same catch-up for managements: any entity that entered the world by any path without
+    // one gets its two primitives drawn here, once, from its own stream.
     ensureManagements(state.companies, state.institutionalEntities ?? [], state.currentWeek);
   }
   const baseCtx = createInitialContext(state);
@@ -145,8 +135,21 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   const trace = stageTraceEnabled() ? new StageDependencyTrace() : undefined;
   const idTrace = bankIdentityTraceEnabled() ? new BankIdentityTrace() : undefined;
   idTrace?.begin(state, baseCtx);
-  // §5-WIRES: the week's wire journal is active from the first stage to the last write-back.
+  // The week's wire journal is active from the first stage to the last write-back.
   setActiveWireJournal(baseCtx.wireJournal);
+  {
+    // THE LADDERS' CATCH-UP, INSIDE THE JOURNAL. Any firm not yet mirrored — the seed, and every
+    // birth path — opens its ladder here, by wire, which is why this cannot run before the
+    // journal is live (it used to, and that is precisely why the opening ladders had none).
+    // It must still come before any stage: the register's rows name tranches and every reader
+    // resolves an issuer through the store, so week 1's books cannot run on an empty store.
+    // A no-op from week 2.
+    const v2 = ensureV2(state);
+    for (const c of state.companies) {
+      if (!v2.tranches.synced.has(c.id)) seedLadder(v2, { id: c.id, ticker: c.ticker, region: c.region }, c.debtTranches);
+    }
+    ensureLaddersSynced(v2, state.companies);
+  }
   const cbTrace = centralBankIdentityTraceEnabled() ? new CentralBankIdentityTrace() : undefined;
   cbTrace?.begin(state, baseCtx);
   const timings: StageTiming[] = [];
@@ -305,7 +308,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       drainSeedRings({ v2: ensureV2(state), companies: fdiBorn });
       // §5-WIRES W6: a subsidiary is born with no debt (FDI is equity); its ladder is empty.
       const v2f = ensureV2(state);
-      for (const b of fdiBorn) seedLadder(v2f, b.id, []);
+      for (const b of fdiBorn) seedLadder(v2f, { id: b.id, ticker: b.ticker, region: b.region }, []);
     }
     // A take-private's tender is a corporate action recorded on the same per-week maps stage 08
     // uses — and stage 08 has already drained them by the time this stage runs, so settling here

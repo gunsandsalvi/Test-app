@@ -188,10 +188,19 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11e. **The seed's unwired positions.** The world's week-0 register, ladders and plant open by
-    assignment, not by wire. They should open by wires from a SEED party that closes at week 0 —
-    the seed is an event after all — and the W family can then prove week 0 too, which today it
-    cannot. A newborn firm's plant has the same hole.
+11e. **The seed's unwired positions — the three that are left.** The LADDERS now open by wire and
+    W3 proves week 1 (§9.11e). Three halves of the same hole remain, each its own commit:
+    (a) **the register** — `initialization.ts:794,918,1005` build `itemizedHoldings` arrays
+    directly and the store is mirrored from them, so no holding has a wire. Wire them and add
+    `holdings` to the audit's empty opening snapshot;
+    (b) **the goods pipeline** — `initialization.ts:1658` seeds `goodsInTransit` and the opening
+    stock with no wires. Wire them and add `goodsUnitsByKey: {}` to the opening snapshot, which
+    turns on W4 for week 1;
+    (c) **plant** — `grossPPEUSD` is assigned at the seed and at every birth, and there is no
+    asset kind for it (`ASSET_KINDS` has `HOUSE`, not plant). It needs the kind before it can
+    have a wire.
+    The pattern is set by 11e's first slice: claim the chain empty, issue by wire, then let the
+    audit's opening snapshot carry that key so week 1 is held to week 2's standard.
 
 ### PART II — THE INSTRUMENTS ARE REAL
 
@@ -2341,6 +2350,29 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**11e (part 1). The world's opening ladders open by wire.** (`PENDING`) `seedLadder` installed a
+seeded or born firm's ladder by mirroring `comp.debtTranches` into rows with `wireRef` set to −1
+on every one — face that existed because an array said so. Its own doc said as much: "installed
+without wires — principle B's gap". It now claims the chain empty and ISSUES each tranche through
+`issueTranche`, the same call every other week uses, so the wire names the issuer and the holder
+the tranche names.
+
+That could not work where it stood, and the reason is the finding: **the ladder catch-up ran
+BEFORE the week's wire journal was installed**, so a wire written there would have thrown. It now
+runs immediately after `setActiveWireJournal` and still before the first stage, which is the
+constraint that put it where it was.
+
+The other half is the audit's. Week 1 had no "before", so every week-over-week check skipped it
+and the opening world was the one state nothing ever proved. It has a before — the EMPTY world —
+and `lastSnapshot` now starts as one, claiming the ladders only. **W3 does not fire: the seed's
+wires reproduce the world's opening ladders exactly.** The goods and register keys stay absent
+(an absent key skips its check) until those are wired too, which is 11e's remainder.
+
+Measured (SHOCKS=0 WEEKS=16): **134 in 33, and the violation set is IDENTICAL line for line** —
+a week of the model's history that nothing could check is now checked, at no cost. One new reason
+string needed registering in `payment-category.ts`, which the gates caught immediately and which
+is the whole reason that check exists.
 
 **11d (part 2). The margin a client posts and never gets back.** (`PENDING`) Six hypotheses had
 died (part 1, below) and the seventh was retracted before it cost a run. What found it was the
