@@ -4,6 +4,8 @@
  */
 
 import { FunctionModule } from '../fn';
+import { ensureV2 } from '../../engine2/world';
+import { materializeGovLadder } from '../../engine2/tranches';
 import { Card, Hint, KV, Link, Table, T, mono, Nav } from '../ui';
 import { money, pctLevel, count } from '../format';
 import { formatDate, formatMonthYear, WEEKS_PER_YEAR } from '../calendar';
@@ -82,7 +84,7 @@ export const ladder: FunctionModule = {
     }
     const r = regionOf(world, ref.id);
     if (!r) return null;
-    const rows: Row[] = (r.govDebtTranches ?? []).map((t) => ({
+    const rows: Row[] = materializeGovLadder(ensureV2(world.state), r.id).map((t) => ({
       id: t.id, key: trancheId(r.id, t.id), kind: `${t.tenorAtIssuanceYears}y`, principalUSD: t.principalUSD, rate: t.couponRate, maturityWeek: t.maturityWeek, originationWeek: t.originationWeek,
     })).sort((a, b) => a.maturityWeek - b.maturityWeek);
     const total = rows.reduce((a, x) => a + x.principalUSD, 0);

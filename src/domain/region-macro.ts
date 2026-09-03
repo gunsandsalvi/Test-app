@@ -325,21 +325,22 @@ export interface HouseholdState {
  * It is now a `DebtTranche` with the one field a sovereign genuinely adds. The remaining four
  * parallel structures are the rest of 13-SOV.
  *
- * `tenorAtIssuanceYears` is retained ONLY until the readers move to the store, and it is a second
- * representation of a fact the dates already carry (rule 4). *(CORRECTED: an earlier note here
- * said it could not be derived because a reopened bucket would change the derived key. That was
- * wrong — each rung derives its own tenor from its own dates, so the key is stable per rung. What
- * was actually true is that the two DISAGREED, on 20 of 260 rungs, because the seed rounded the
- * origination and maturity ends separately and made a 13-week bill span 14. The span is rounded
- * once now and they agree exactly, which is what lets this field be deleted rather than
- * reconciled.)*
+ * `tenorAtIssuanceYears` is DERIVED, never stored: `tranches.ts:materializeGovLadder` computes it
+ * as `(maturityWeek − originationWeek) / 52` on every read. It used to be written beside the dates
+ * too, and the two DISAGREED on 20 of 260 rungs because the seed rounded the origination and
+ * maturity ends separately and made a 13-week bill span 14 (rule 4). The span is rounded once and
+ * the field has one source.
  */
 export type GovDebtTranche = DebtTranche & {
   /** FIXED on every sovereign today: the coupon is locked at issue (bond.md N5.a). Bills carry
    *  zero and return the discount (N5.c), which `isDiscountBill` reads off the tenor. */
   couponRate: number;
-  tenorAtIssuanceYears: number;
 };
+
+/** What a READER gets off the ladder: the rung, plus the tenor derived from its own dates. The
+ *  two types are what make "derived, never stated" a fact the compiler enforces — an issuer
+ *  cannot state a tenor because the type it issues has no field for one. */
+export type GovDebtTrancheView = GovDebtTranche & { tenorAtIssuanceYears: number };
 
 /**
  * SEG — the SME tier of ONE registry industry in one region: the mass of firms too small to
@@ -904,7 +905,6 @@ export interface Region {
   /** CAL — what this week's coupon dates actually turned into cash. The treasury's expense stays
    *  smooth (`governmentInterestWeeklyUSD`); its ACCOUNT moves by this (stages/central-bank.ts). */
   sovereignCouponPaidUSD?: number;
-  govDebtTranches: GovDebtTranche[];
   debtToGdpPctBottomUp: number;
 
   householdState: HouseholdState;

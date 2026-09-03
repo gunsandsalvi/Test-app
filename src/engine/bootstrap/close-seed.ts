@@ -1,4 +1,4 @@
-import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
+import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf, stashSeedGovLadder, seedGovLadderOf } from '../ledger/accounts';
 import { currencyOf } from '../../domain/geography';
 import { V2World } from '../../engine2/world';
 /**
@@ -25,7 +25,7 @@ import { bankTotalAssetsUSD } from '../macro/banking';
 import { centralBankFxReservesUSD, centralBankAssetsUSD } from '../../domain/central-bank';
 
 import { holdingClassOf } from '../../domain/assets';
-import { weeklyInterestExpenseUSD } from '../../domain/government';
+import { weeklyInterestExpenseUSD, govTrancheView } from '../../domain/government';
 import { facilityBookOf, ladderRowsOf, trancheScheduleOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../../engine2/tranches';
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../../domain/stated';
 import { accrueHoldersInterest, applyHolderInterestAccruals } from '../simulation/stages/shared-helpers';
@@ -90,7 +90,7 @@ export function closeSeedMoney(
     const weights = new Map<string, number>();
     // §3.13-SOV row 3: weighted by BOND, so the fallback book below names bonds like every
     // other holder's does.
-    (reg.govDebtTranches ?? []).forEach((t) => { weights.set(t.id, (weights.get(t.id) ?? 0) + t.principalUSD); });
+    materializeGovLadder(v2, regionId).forEach((t) => { weights.set(t.id, (weights.get(t.id) ?? 0) + t.principalUSD); });
     const weightTotal = [...weights.values()].reduce((a, v) => a + v, 0) || 1;
     const scaled: Record<string, number> = {};
     if (currentBookUSD > 0) {
@@ -117,12 +117,15 @@ export function closeSeedMoney(
         .forEach((h) => { if (holdingClassOf(h.instrumentType) === 'SOVEREIGN' && h.issuerRegion === regionId) add(h.instrumentId, h.quantityOrNotionalUSD ?? 0); });
     });
     (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => add(p.bondId, p.inventoryUSD));
-    reg.govDebtTranches = (reg.govDebtTranches ?? []).map((t) => ({
+    // §3.13-SOV row 2: the seed's ladder is a stash, not a field — `openSeededMirrors` issues
+    // its rows next and the stash is gone. The outstanding of a bond IS what its holders hold:
+    // no group, no share of a bucket.
+    stashSeedGovLadder(reg, seedGovLadderOf(reg).map((t) => ({
       ...t,
-      // The outstanding of a bond IS what its holders hold. No group, no share of a bucket.
       principalUSD: Math.round(heldByBond.get(t.id) ?? 0),
-    }));
-    reg.governmentInterestWeeklyUSD = Math.round(weeklyInterestExpenseUSD(reg.govDebtTranches));
+    })));
+    // The stash carries what the seed STATED; the tenor is derived, as it is on every read.
+    reg.governmentInterestWeeklyUSD = Math.round(weeklyInterestExpenseUSD(seedGovLadderOf(reg).map(govTrancheView)));
     reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb, waysAndMeansOf(v2, regionId), currencyOf(regionId), v2.fx));
   });
 }

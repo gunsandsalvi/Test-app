@@ -53,10 +53,9 @@ import { wireCentralBankFills } from './central-bank-demand';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
-import { discountBillProceedsUSD, billYieldFromPrice, isDiscountBill, withdrawUnplacedIssuance } from '../../../domain/government';
+import { discountBillProceedsUSD, billYieldFromPrice, isDiscountBill } from '../../../domain/government';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
-import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import {
   CP_SINGLE_ISSUER_LIMIT, CP_SHARE_OF_TERM_SLEEVE, CP_FULL_SIZE_YIELD_RANGE_BPS,
@@ -635,12 +634,17 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const placedUSD = o && !o.withdrawn ? Math.max(0, o.marketTakeUSD) : 0;
           const unplacedUSD = Math.max(0, (inst.primaryOfferingUSD ?? 0) - placedUSD);
           if (unplacedUSD <= 1) return;
-          const r = withdrawUnplacedIssuance(reg.govDebtTranches, inst.id, unplacedUSD);
-          reg.govDebtTranches = r.tranches;
-          // §3.13-SOV row 2: the store follows the array at the moment the array moves, so the
-          // two never disagree mid-week and a reader may take either. Withdrawn paper is face
-          // that ceased to exist, so it leaves by wire like any retirement.
-          reconcileLadderByWire(ctx.v2, { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' }, reg.govDebtTranches, 'sovereign ladder');
+          // §3.13-SOV row 2: withdrawn paper is face that ceased to exist, and it comes off THIS
+          // BOND's own row by wire — the array-and-diff this replaces rebuilt a list to derive the
+          // same retirement.
+          const row = trancheRowOf(ctx.v2, inst.id);
+          if (row === undefined) return;
+          const takeUSD = Math.min(unplacedUSD, ctx.v2.tranches.principalUSD[row]);
+          if (!(takeUSD > 0)) return;
+          const govIssuer = { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' as const };
+          retireTranche(ctx.v2, govIssuer, row, takeUSD, 'bill issuance withdrawn');
+          commitLadder(ctx.v2, govIssuer,
+            ladderRowsOf(ctx.v2, govIssuer.id).filter((r) => ctx.v2.tranches.principalUSD[r] > 0.01));
         });
       }
       // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the

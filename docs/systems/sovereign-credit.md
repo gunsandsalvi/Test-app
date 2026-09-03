@@ -178,9 +178,9 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | C3.a the obligation, not a backstop, is why it cannot fail | — | ❌ |
 | C3.b the obligation has a cost the dealer wears | — | ❌ |
 | C4 VERIFY the tail and the cover ratio | — | ❌ |
-| C5 weak demand resolves as a higher yield or a cut size | `src/domain/government.ts:withdrawUnplacedIssuance` | ✅ |
+| C5 weak demand resolves as a higher yield or a cut size | `src/engine/ledger/tranche-ledger.ts:retireTranche` | ✅ |
 | C6 proceeds reach the treasury's account | `src/engine/simulation/stages/book-settlement.ts:primaryTakes` | ✅ |
-| C7 paper nobody bid for is withdrawn | `src/domain/government.ts:withdrawUnplacedIssuance` | ✅ |
+| C7 paper nobody bid for is withdrawn | `src/engine/ledger/tranche-ledger.ts:retireTranche` | ✅ |
 | **D1 it trades: a PRICE per unit** | — | ❌ |
 | **D2 the yield is DERIVED from the price and never sets it** | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ❌ |
 | D3 the curve is a fit through observed points | `src/engine/nelsonSiegel.ts:fitNelsonSiegelParams` | ⚠️ |
@@ -231,7 +231,7 @@ Branches D and E fall out of the first; the whole of G and half of A out of the 
 | row | the step says | confirmed at |
 |---|---|---|
 | 1 type | `GovDebtTranche` is a strict subset of `DebtTranche` | `region-macro.ts:312` — `{id, principalUSD, couponRate, originationWeek, maturityWeek, tenorAtIssuanceYears}`, six fields, every one of them also on `company.ts:75`. No `seniority`, no `rateType`, no `callProtection`, no `paymentsPerYear`, no currency |
-| 2 store | a plain array, not the engine2 tranche store | `reg.govDebtTranches` — 20 read sites across `src`, all of them `(reg.govDebtTranches ?? []).filter/reduce`; `withdrawUnplacedIssuance` rebuilds the array with `.map(t => ({...t}))` |
+| 2 store | ✅ DONE — the ONE tranche store | `reg.govDebtTranches` — 20 read sites across `src`, all of them `(reg.govDebtTranches ?? []).filter/reduce`; the withdrawal rebuilt the array with `.map(t => ({...t}))` |
 | 3 holdings | ✅ DONE — every store keys by BOND | `banking.ts:129` `sovereignBondHoldingsByBond` for banks, `centralBankSheet.sovereignHoldingsByBond` for the CB, `sovBondDealerInventory[].bondId` for the desks, `GOV_BOND` register rows on the tranche id for institutions. Four stores, one id space; `audit/ownership.ts:o11` is the invariant and `o3` no longer exempts sovereigns |
 | 4 clearing | `07c` clears a **YIELD** | `07c:331` `statKind: 'YIELD_LIKE'`, `currentStat: currentYieldDecimal * 10000`; `financial-clearing-engine.ts:956` then values every fill at `1` because the stat is not `PRICE_LIKE` |
 | 5 curve | its own object | `07c:517-524` writes `reg.zeroRates` from the cleared yields and `reg.yieldCurveParams` from a fit through them, in the same pass |
@@ -273,7 +273,7 @@ drains branch C of consequence. `accounts.ts:waysAndMeansOf` is `max(0, −treas
 and `11-fiscal:647` makes it the FIRST TERM of the quarterly issue:
 `quarterlyFundingNeedUSD = waysAndMeansOf(v2, regionId) + 13 * marketFundedDeficitUSD`. So the
 sequence is spend into an overdraft, then issue to clear it. C5 and C7 are both ✅ —
-`withdrawUnplacedIssuance` genuinely retires paper nobody bought, which is the right mechanism —
+07c/07f genuinely retire paper nobody bought, off the bond's own row, which is the right mechanism —
 but a failed auction costs the treasury nothing, because the advance absorbs the gap and the next
 calendar week asks for more. A3.a is ⚠️ for the same reason: the account is real and can run low,
 and "low" has no consequence. H4 is the same fact from the monetary side: the node says this model

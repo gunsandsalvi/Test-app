@@ -8,8 +8,8 @@
  */
 
 import { treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
-import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
-import { materializeGovLadder } from '../../../engine2/tranches';
+import { retireTranche, issueTranche, commitLadder } from '../../ledger/tranche-ledger';
+import { materializeGovLadder, ladderRowsOf } from '../../../engine2/tranches';
 import { govBillTrancheId, govBondTrancheId } from '../../../domain/sovereign-id';
 import { GameState, RegionId, GovDebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
@@ -607,7 +607,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           couponRate: Number((tenorYears <= 0.3 ? reg.zeroRates.tenor3M : calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams)).toFixed(4)),
           originationWeek: nextWeek,
           maturityWeek: nextWeek + weeks,
-          tenorAtIssuanceYears: tenorYears,
           // §3.13-SOV: a sovereign is a bond and says so. FIXED because its coupon is locked at
           // issue (`bond.md` N5.a); SENIOR because a sovereign's claims rank equally and there is
           // no stack (N13.a — stated even though the answer is "all equal").
@@ -653,8 +652,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             couponRate: calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams), // priced off the region's own real curve
             originationWeek: nextWeek,
             maturityWeek: nextWeek + tenorWeeks,
-            tenorAtIssuanceYears: tenorYears,
-            // §3.13-SOV: a sovereign is a bond (`bond.md` N5.a fixed, N13.a all claims equal).
+              // §3.13-SOV: a sovereign is a bond (`bond.md` N5.a fixed, N13.a all claims equal).
             rateType: 'FIXED' as const,
             seniority: 'SENIOR' as const,
           });
@@ -726,6 +724,24 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     reg.lastRedemptionPaidUSD = Math.round(
       (maturedPrincipalUSD - (reg.lastUnsoldMaturedUSD ?? 0)));
 
+    // §3.13-SOV row 2 — THE LADDER MOVES BY WIRE, HERE, AS THE EVENTS IT IS. What matured is
+    // RETIRED off its own row and what was funded is ISSUED onto a new one; the array-and-diff
+    // this replaces derived the same two wires from a rebuilt list, one step further from what
+    // happened. `reconcileLadderByWire` goes with it.
+    {
+      const govIssuer = { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' as const };
+      const S = ctx.v2.tranches;
+      const matured = new Set(maturedTranches.map((m) => m.id));
+      const keep: number[] = [];
+      for (const r of ladderRowsOf(ctx.v2, govIssuer.id)) {
+        if (matured.has(ctx.v2.internedStrings[S.idRef[r]])) {
+          if (S.principalUSD[r] > 0) retireTranche(ctx.v2, govIssuer, r, S.principalUSD[r], 'sovereign redemption');
+        } else keep.push(r);
+      }
+      commitLadder(ctx.v2, govIssuer, keep);
+      newTranches.forEach((nt) => { if (nt.principalUSD > 0.01) issueTranche(ctx.v2, govIssuer, nt, 'sovereign issuance'); });
+    }
+
     const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);
 
     // ---- PUB2b: the week's open-market order. What matured is put back to work (or not, in
@@ -771,24 +787,14 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       nominalGdpHistory: updatedGdpHistory,
       consumptionComponentUSD,
       investmentComponentUSD,
-      govDebtTranches: [...liveTranches, ...newTranches],
+      // §3.13-SOV row 2: `govDebtTranches` is gone — the ladder IS the store, moved by the wires
+      // below rather than rebuilt as an array and diffed back into it.
       debtToGdpPctBottomUp,
       bankingSector: updatedBankingSector,
       institutionalSector: updatedInstitutionalSector,
     };
   });
 
-  // §3.13-SOV row 2 — the store follows the array, by wire, once all three writers have run
-  // (11-fiscal above, and 07c/07f's withdrawals earlier in the week). Dual-write: the array is
-  // still the authority. When the readers move, this call and the array go together.
-  (Object.keys(updatedRegions) as RegionId[]).forEach((regionId) => {
-    reconcileLadderByWire(
-      ctx.v2,
-      { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' },
-      updatedRegions[regionId].govDebtTranches,
-      'sovereign ladder',
-    );
-  });
 
   const generatedNews = generateWeeklyNews(
     nextWeek,

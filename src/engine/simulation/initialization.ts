@@ -74,7 +74,7 @@ import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGOR
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
-import { openAccount, openingCashOf, stashOpeningCash, sectorRowAt, stashSeedHouseholdLine } from '../ledger/accounts';
+import { openAccount, openingCashOf, stashOpeningCash, sectorRowAt, stashSeedHouseholdLine, seedGovLadderOf } from '../ledger/accounts';
 import { newWireJournal, setActiveWireJournal, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook } from '../ledger/holdings-ledger';
@@ -391,8 +391,8 @@ function openSeededMirrors(state: GameState): void {
     // paper under the same `Σ held = issued` and `wires reproduce the ladders` checks the
     // corporate ladders answer to (`the-register.md` B2, W3) — which it has never been under.
     (Object.keys(state.regions) as RegionId[]).forEach((regionId) => {
-      const ladder = state.regions[regionId]?.govDebtTranches;
-      if (!ladder?.length) return;
+      const ladder = seedGovLadderOf(state.regions[regionId]);
+      if (!ladder.length) return;
       seedLadder(v2, { id: govIssuerId(regionId), ticker: govIssuerId(regionId), region: regionId, kind: 'GOVERNMENT' }, ladder);
     });
     const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
@@ -670,7 +670,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           };
         });
 
-    const govDebtTranches = reg.govDebtTranches || [];
+    const govDebtTranches = seedGovLadderOf(reg);
     const sovCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = govDebtTranches.map(gt => ({
       id: gt.id,
       type: 'GOV_BOND',

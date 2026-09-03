@@ -364,6 +364,19 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
     `register-split.ts` goes with them (its own header says so).
     Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
     DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
+13-SOV. **THE SOVEREIGN IS A BOND — FINISH THE CONVERSION.** *(Rows 1–4 done — §9.13-SOV. Row 5
+    is what is left, and it is step 25's defect seen from this side.)* (user, 2026-09-03: *"the sovereign needs to be completely converted. it
+    should have the same construction of a normal bond, they are a normal bond with some different
+    characteristics."*) A sovereign is a fixed-rate senior bullet bond whose issuer is a
+    government: it has no characteristic a corporate bond lacks, it only LACKS some (no seniority
+    stack, no call protection, no floating leg). ONE of the five parallel structures is left.
+
+    · **Row 5, the parallel curve.** `reg.zeroRates` is written BY the clearing rather than read
+      FROM it. It becomes a derived read of the cleared bond prices, which is step 25's
+      two-curve-owners defect and cannot be fixed before row 4 (done). Deletes
+      `computeSovereignBookAnnualYield`'s separate path and `assets/index.ts`'s `YIELD_LIKE` row.
+
+
 13c. **CURRENCY IS THE OTHER UNIVERSAL CHARACTERISTIC** (user, 2026-09-03: *"Every single asset
     has a specific currency in which it's issued and in which is priced on, that's another key
     universal characteristic… why is so much stuff called USD?"*)
@@ -468,24 +481,6 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
       loop two hundred lines above converts to buyer money first (`exWorksBuyerMoney`). Both are
       now honestly labelled, so the household leg converts at the ledger instead of not at all;
       that it was ever a raw number was a 34% discount on every foreign good a household bought.
-
-13-SOV. **THE SOVEREIGN IS A BOND — FINISH THE CONVERSION.** *(Rows 1, 3 and 4 done; row 2 all
-    but — §9.13-SOV.)* (user, 2026-09-03: *"the sovereign needs to be completely converted. it
-    should have the same construction of a normal bond, they are a normal bond with some different
-    characteristics."*) A sovereign is a fixed-rate senior bullet bond whose issuer is a
-    government: it has no characteristic a corporate bond lacks, it only LACKS some (no seniority
-    stack, no call protection, no floating leg). Two of the five parallel structures are left.
-
-    · **Row 2's declared delete.** Make the rebuild write the store directly, then delete
-      `reg.govDebtTranches`, `tenorAtIssuanceYears` (provably derivable) and
-      `reconcileLadderByWire`, which exists only to keep store and array in step.
-      `macro/evolution.ts`'s one array read comes with it — it takes a bare `region` and needs a
-      `v2` handle it does not have.
-    · **Row 5, the parallel curve.** `reg.zeroRates` is written BY the clearing rather than read
-      FROM it. It becomes a derived read of the cleared bond prices, which is step 25's
-      two-curve-owners defect and cannot be fixed before row 4 (done). Deletes
-      `computeSovereignBookAnnualYield`'s separate path and `assets/index.ts`'s `YIELD_LIKE` row.
-
 
 13b. **Coupon accruals are dated wires.** `pendingHolderAccrualUSD` is a side map beside the
     paper. It should be a dated wire that RE-KEYS with the paper when the paper moves, landing on
@@ -656,7 +651,7 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
     Taylor target — a policy quantity, NOT a response to weak demand, so it cannot rescue a bad
     auction. And a primary deal is PULLED past the issuer's walk-away
     (`financial-clearing-engine.ts:779`), while unplaced sovereign issuance is retired outright
-    (`withdrawUnplacedIssuance`). A treasury CAN fail to place its debt here.
+    (07c/07f retire the unplaced face). A treasury CAN fail to place its debt here.
 
     **WHAT CANNOT FAIL IS A BANK.** `raiseCentralBankLoanUSD` (`bank-lending.ts`) is four lines:
     it computes the shortfall against the operating buffer and lends **exactly that, always**.
@@ -1398,6 +1393,20 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-SOV row 2 — the sovereign ladder IS the store; the array is gone.** `reg.govDebtTranches` was
+the second of the five parallel structures: a plain array beside the one tranche store, rebuilt by
+three stages a week and diffed back into the store by `reconcileLadderByWire`. All three writers now
+move the store as the events they are — 11-fiscal RETIRES what matured and ISSUES what it funded,
+07c and 07f retire the unplaced face off the bond's own row — and every reader takes
+`materializeGovLadder`. Deleted with it: the `Region` field, `reconcileLadderByWire`,
+`withdrawUnplacedIssuance` (an array rebuild for a one-row retirement) and the STORED
+`tenorAtIssuanceYears`, which disagreed with the dates on 20 of 260 rungs. The seed still needs a
+ladder before a store exists to hold it, so it rides the stash idiom `stashOpeningCash` already
+uses and dies at `openSeededMirrors`; `GovDebtTranche` is now what an issuer STATES and
+`GovDebtTrancheView` what a reader gets, so the compiler enforces that a tenor is derived and never
+written. `government-entity.ts` and `macro/evolution.ts` take the ladder from their callers, which
+is how every other world read already reaches those modules.
 
 **12b — pricing is centralised, and what is left of it belongs to the steps that own the
 mechanisms.** `domain/pricing/` owns the time value of money and eight modules call it. Verified by

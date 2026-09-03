@@ -41,6 +41,7 @@ import { partyId, partyOf, partyKey, partyFromKey } from './party';
 import { RegionId, CurrencyCode, CURRENCY_CODES, currencyOf, NUMERAIRE } from '../../domain/geography';
 import { FxTable, PARITY_FX, convert } from '../../domain/currency';
 import { Company } from '../../domain/company';
+import { GovDebtTranche } from '../../domain/region-macro';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { DepositLines } from '../../domain/banking';
 import { V2World, internString, stringRef, ensureV2, CURRENCY_ID, currencyOfId } from '../../engine2/world';
@@ -183,6 +184,20 @@ export function resetAccount(v2: V2World, party: PartyRef, currency: CurrencyCod
 const openingCashStash = new WeakMap<object, number>();
 export function stashOpeningCash(comp: object, usd: number): void { openingCashStash.set(comp, usd); }
 export function openingCashOf(comp: object): number { return openingCashStash.get(comp) ?? 0; }
+
+/**
+ * §3.13-SOV row 2 — THE SEED'S GOVERNMENT LADDER, and it is not a field.
+ *
+ * `Region.govDebtTranches` was the second of the sovereign's five parallel structures: a plain
+ * array beside the one tranche store, written by three stages a week and read by fifteen callers.
+ * The store is the ladder now. What is left is the SEED's need to build a ladder before the store
+ * exists to hold it, which is the same need `stashOpeningCash` answers for an account — so it
+ * rides the same kind of stash, and dies at `openSeededMirrors` when the rows are issued. Nothing
+ * in the weekly loop can read it, because a stash is not on the state.
+ */
+const seedGovLadderStash = new WeakMap<object, GovDebtTranche[]>();
+export function stashSeedGovLadder(region: object, ladder: GovDebtTranche[]): void { seedGovLadderStash.set(region, ladder); }
+export function seedGovLadderOf(region: object): GovDebtTranche[] { return seedGovLadderStash.get(region) ?? []; }
 
 /** A3.6c-iii — THE SEED'S PROVISIONAL HOUSEHOLD LINE of a bank sheet: sized as the funding
  *  residual while the seed builds the books (the migrations split by it), replaced by close-seed,

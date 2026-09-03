@@ -22,7 +22,7 @@ import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, householdDeposit
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
-import { facilityBookOf, facilityRowsOf } from '../src/engine2/tranches';
+import { facilityBookOf, facilityRowsOf, materializeGovLadder } from '../src/engine2/tranches';
 
 // Same seed, same world. Pass SEED=<n> to check a result against a genuinely different economy
 // rather than against the noise an unseeded run used to produce.
@@ -254,8 +254,7 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     });
   });
   regionIds.forEach((r) => {
-    const reg = state.regions[r];
-    outstanding[r].sov = (reg?.govDebtTranches || []).reduce((a: number, t: GovDebtTranche) => a + t.principalUSD, 0);
+    outstanding[r].sov = materializeGovLadder(ensureV2(state), r).reduce((a: number, t: GovDebtTranche) => a + t.principalUSD, 0);
   });
 
   const addHolding = (h: ItemizedHolding) => {
@@ -628,7 +627,7 @@ function checkCentralBankIdentity(state: GameState, week: number) {
       // was computed inside a stage with no name anyone could read from here. Both sides now come
       // off `Government`, so the check and the engine cannot disagree, and the message says which
       // half overran because contractual lines never can.
-      const gov = governmentOf(region, reg);
+      const gov = governmentOf(region, reg, materializeGovLadder(ensureV2(state), region));
       const { overrunUSD, contractualUSD, discretionaryUSD } = gov.overrun();
       if (spent > 0 && overrunUSD > 1e6) {
         violations.push({
@@ -1225,7 +1224,7 @@ const hhModule: HarnessModule = (() => {
 /** PUB close-out battery (§7.68), as a module on the shared run. */
 function couponReceipts(s: GameState, region: RegionId) {
   const reg = s.regions[region];
-  const cb = sovereignCouponByBond(reg.govDebtTranches);
+  const cb = sovereignCouponByBond(materializeGovLadder(ensureV2(s), region));
   const rate = (id: string) => cb[id] ?? 0;
   const banks = s.companies
     .filter((c: Company) => c.region === region && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
@@ -1238,7 +1237,7 @@ function couponReceipts(s: GameState, region: RegionId) {
       .reduce((x: number, h: ItemizedHolding) => x + ((h.quantityOrNotionalUSD ?? 0) * rate(h.instrumentId)) / 52, 0), 0);
   const central = Object.entries(reg.centralBankSheet?.sovereignHoldingsByBond || {})
     .reduce((a: number, [k, v]: [string, unknown]) => a + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0);
-  const paid = weeklyInterestExpenseUSD(reg.govDebtTranches);
+  const paid = weeklyInterestExpenseUSD(materializeGovLadder(ensureV2(s), region));
   return { paid, banks, insts, central };
 }
 
@@ -1336,8 +1335,7 @@ const pubModule: HarnessModule = (() => {
         setRngState(rngState);
         let x = clone(st);
         if (shocked) {
-          const reg = x.regions.USA;
-          (reg.govDebtTranches || []).forEach((t: GovDebtTranche) => { t.couponRate = (t.couponRate ?? 0) * 4 + 0.04; });
+          materializeGovLadder(ensureV2(x), 'USA').forEach((t: GovDebtTranche) => { t.couponRate = (t.couponRate ?? 0) * 4 + 0.04; });
         }
         const o = { interest: [] as number[], proc: [] as number[], transfers: [] as number[], debt: [] as number[] };
         for (let i = 0; i < horizon; i++) {
@@ -2193,7 +2191,7 @@ const spiralModule: HarnessModule = {
       const r = state.regions[region];
       const smeEmployment = (r.smePools || []).reduce((a, s) => a + (s.employment ?? 0), 0);
       const poolCashNeg = (r.smePools || []).filter((s) => poolCashOf(ensureV2(state), region, s.industry) < 0).length;
-      const gov = governmentOf(region, r);
+      const gov = governmentOf(region, r, materializeGovLadder(ensureV2(state), region));
       const { overrunUSD } = gov.overrun();
       console.log(`  [spiral] w${w} ${region}`
         + ` u ${(r.unemploymentRate * 100).toFixed(1)}`

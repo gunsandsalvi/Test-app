@@ -1,5 +1,6 @@
 import { RegionId } from '../../domain/geography';
 import { ensureV2 } from '../../engine2/world';
+import { materializeGovLadder } from '../../engine2/tranches';
 import { householdDepositsOf, treasuryAccountOf } from '../../engine/ledger/accounts';
 /**
  * AU · macro — the region's dashboard: activity, prices, labour, money, the external account,
@@ -90,10 +91,10 @@ export const macro: FunctionModule = {
       <SectionLabel>treasury</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
         <KV k="revenue · outlays" hint="weekly" v={`${money(r.governmentRevenueUSD)} · ${money(r.governmentOutlaysUSD ?? r.governmentSpendingWeeklyUSD)}`} />
-        <KV k="debt" hint="of gdp" v={gdp > 0 ? pctLevel((r.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0) / gdp, 0) : '—'} />
+        <KV k="debt" hint="of gdp" v={gdp > 0 ? pctLevel(materializeGovLadder(ensureV2(world.state), r.id).reduce((a, t) => a + t.principalUSD, 0) / gdp, 0) : '—'} />
         <KV k="treasury account" v={money(treasuryAccountOf(ensureV2(world.state), r.id as RegionId))} />
         <KV k="sovereign rating" hint={`fiscal stance ${r.fiscalStanceScore.toFixed(2)}`} v={r.sovereignRating} />
-        <KV k="the ladder" v={<Link to={ref} fn="ladder" nav={nav}>{count((r.govDebtTranches ?? []).length)} tranches</Link>} />
+        <KV k="the ladder" v={<Link to={ref} fn="ladder" nav={nav}>{count(materializeGovLadder(ensureV2(world.state), r.id).length)} tranches</Link>} />
       </Card>
     </>);
   },

@@ -1,5 +1,6 @@
 import { RegionId } from '../../domain/geography';
 import { ensureV2 } from '../../engine2/world';
+import { materializeGovLadder } from '../../engine2/tranches';
 import { householdDepositsOf } from '../../engine/ledger/accounts';
 /** AU · object: region — an economy: its people, prices, banks, treasury, central bank and markets. */
 
@@ -86,7 +87,7 @@ export const region = defineObject<Region>({
           { fn: 'markets', sub: `${markets} goods markets` },
           { fn: 'curves', sub: 'sovereign · policy · repo' },
           { fn: 'statements', sub: 'national accounts · treasury' },
-          { fn: 'ladder', sub: `${(r.govDebtTranches ?? []).length} sovereign tranches` },
+          { fn: 'ladder', sub: `${materializeGovLadder(ensureV2(world.state), r.id).length} sovereign tranches` },
           { fn: 'holders', sub: 'who holds the sovereign' },
           { fn: 'labour', sub: `${cohorts} cohorts · ${Object.keys(r.occupationPools ?? {}).length} occupations` },
           { fn: 'pools', sub: `${pools} small-business pools` },

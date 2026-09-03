@@ -1,4 +1,4 @@
-import { stashOpeningCash, stashSeedHouseholdLine } from '../ledger/accounts';
+import { stashOpeningCash, stashSeedHouseholdLine, stashSeedGovLadder } from '../ledger/accounts';
 import { govBondTrancheId } from '../../domain/sovereign-id';
 import { SEED_BUSINESS_LOAN_BOOK_TO_GDP, SEED_CONSUMER_LOAN_BOOK_TO_GDP } from '../../domain/stated';
 import { calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
@@ -6,7 +6,7 @@ import { openingSovereignRating } from './evolution';
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, SmePool, Industry, GovDebtTranche } from '../../types';
 import { buildHouseholdCohorts } from './household-cohorts';
-import { weeklyInterestExpenseUSD } from '../../domain/government';
+import { weeklyInterestExpenseUSD, govTrancheView } from '../../domain/government';
 import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
 import { governmentPayrollWeeklyUSD, governmentObligationsWeeklyUSD } from '../../domain/government';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
@@ -398,7 +398,6 @@ function buildRegion(regionId: RegionId): Region {
     // the stored tenor be deleted rather than reconciled.
     originationWeek: -Math.floor(tenorWeeks / 2),
     maturityWeek: tenorWeeks - Math.floor(tenorWeeks / 2),
-    tenorAtIssuanceYears: tenorYears,
     // §3.13-SOV: a sovereign is a bond. FIXED (`bond.md` N5.a) and SENIOR (N13.a — all sovereign
     // claims rank equally; the answer is stated rather than left absent).
     rateType: 'FIXED' as const,
@@ -407,7 +406,7 @@ function buildRegion(regionId: RegionId): Region {
 
   // PUB1 (§7.4): the debt stack exists at week 0, so its interest is in the decomposition from
   // week 0 too — otherwise the seed opens on a transfer base the engine immediately shrinks.
-  const seedInterestWeeklyUSD = weeklyInterestExpenseUSD(govDebtTranches);
+  const seedInterestWeeklyUSD = weeklyInterestExpenseUSD(govDebtTranches.map(govTrancheView));
   const seedWageSplit = splitWageBill(totalWageIncomeUSD);
   // PUB3 (§7.4): the government has its staff at week 0, so it owes them at week 0 — computed by
   // the same function the weekly step uses, off the same pools.
@@ -644,7 +643,6 @@ function buildRegion(regionId: RegionId): Region {
       lastOrderPlacedUSD: 0,
       lastReserveDrainUSD: 0,
     },
-    govDebtTranches,
     // Seeded from the stack this function just built, so week 0 rates the sovereign off the same
     // ratio week 1 will (§7.4).
     debtToGdpPctBottomUp: estimatedNominalGdpUSD > 0 ? totalGovDebtUSD / estimatedNominalGdpUSD : 0,
@@ -750,6 +748,9 @@ function buildRegion(regionId: RegionId): Region {
     });
   }
 
+  // §3.13-SOV row 2: the ladder the seed just built is the STORE's, not a field on the region.
+  // It rides a stash until `openSeededMirrors` issues its rows and then it is gone.
+  stashSeedGovLadder(region, govDebtTranches);
   return region;
 }
 

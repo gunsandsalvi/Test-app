@@ -16,6 +16,7 @@ import { marketCapOf, totalDebtOf } from '../../domain/company';
 import { institutionTotalAssetsFromState } from '../../engine/simulation/stages/institutional-balance-sheet';
 import { entityCashOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
+import { materializeGovLadder } from '../../engine2/tranches';
 import { facilitiesOfBorrower } from '../../engine2/tranches';
 
 /** A sovereign instrument id's tenor, read aloud: `…-t10` → "10y", `…-b13` → "13w bill". */
@@ -104,7 +105,7 @@ function RegionHolders({ world, id, nav }: { world: World; id: string; nav: impo
   const cb = r.centralBankSheet ? Object.values(r.centralBankSheet.sovereignHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0) : 0;
   const rows = [...inst.map((h) => ({ ...h, kind: 'institution' })), ...banks.map((h) => ({ ...h, kind: 'bank' })), ...(cb > 0 ? [{ holderId: r.centralBank, usd: cb, kind: 'central bank' }] : [])].sort((a, b) => b.usd - a.usd);
   const total = rows.reduce((a, h) => a + h.usd, 0);
-  const outstanding = (r.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0);
+  const outstanding = materializeGovLadder(ensureV2(world.state), r.id).reduce((a, t) => a + t.principalUSD, 0);
   return (<>
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
       <Hint>{rows.length} holders of the sovereign · {money(total)}</Hint>

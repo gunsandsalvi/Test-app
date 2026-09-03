@@ -1,6 +1,6 @@
 import { householdDepositsOf, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
 import { addDepositLines, ZERO_DEPOSIT_LINES, regionLoanBooksUSD } from '../../../domain/banking';
-import { facilityBookOf } from '../../../engine2/tranches';
+import { facilityBookOf, materializeGovLadder } from '../../../engine2/tranches';
 /**
  * Stage 2: Region Macro Evolution
  *
@@ -117,6 +117,8 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         bankDepositLines: ctx.updatedCompanies.reduce((a, c) => (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? addDepositLines(a, bankDepositLines(ctx, c.ticker)) : a), ZERO_DEPOSIT_LINES),
         bankLoanBooks: regionLoanBooksUSD(ctx.updatedCompanies.filter((c) => c.region === regionId && c.isBankEntity && !!c.bankBalanceSheet), (b) => facilityBookOf(ctx.v2, b.ticker)),
         householdWeek: householdWeekOf(ctx, regionId, state.regions[regionId].householdDepositInterestWeeklyUSD ?? 0),
+        // §3.13-SOV row 2: the ladder is the store's, read here and passed in.
+        govLadder: materializeGovLadder(ctx.v2, regionId),
       },
       ctx.nextWeek,
       equityRet,

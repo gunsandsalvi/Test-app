@@ -25,7 +25,7 @@ import {
   HOUSING_TURNOVER_SEED_RATE_ANNUAL,
 } from '../../domain/banking';
 import { quoteHouseholdMarginBps } from '../simulation/stages/bank-lending';
-import { GOVERNMENT_OCCUPATION_MIX, AVERAGE_HOUSEHOLD_SIZE, SmePool } from '../../domain/region-macro';
+import { GOVERNMENT_OCCUPATION_MIX, AVERAGE_HOUSEHOLD_SIZE, SmePool, GovDebtTrancheView } from '../../domain/region-macro';
 import { BufferBand, bufferMonthsOf, joinCreditTiersToBalanceSheets, delinquencyExposureOf } from '../../domain/household-credit';
 import { smePoolLinkedCommodities } from '../../domain/industry-registry';
 import { localToUsd, FxToUsd } from '../../domain/currency';
@@ -124,6 +124,8 @@ export function evolveRegionMacro(
      *  completed settlement report by the caller. Undefined in week 1, when there is no prior
      *  week to read. */
     householdWeek?: { receiptsUSD: number; taxPaidUSD: number; dividendsUSD: number };
+    /** §3.13-SOV row 2: the region's sovereign ladder, read off the ONE store by the caller. */
+    govLadder: GovDebtTrancheView[];
   },
   week: number,
   equityReturn: number = 0,
@@ -200,7 +202,7 @@ export function evolveRegionMacro(
 
   // Evaluate once per quarter, same cadence as monetary policy meetings
   if (week % 13 === 0) {
-    const gov = governmentOf(region.id, region);
+    const gov = governmentOf(region.id, region, microFeedback.govLadder);
     const revenueUSD = Math.max(1, region.governmentRevenueUSD);
     const interestShare = gov.interestWeeklyUSD() / revenueUSD;
     // 0 at the red line, 1 with a clean sheet: how much package this treasury can actually fund.
@@ -242,7 +244,7 @@ export function evolveRegionMacro(
   // and 11 saw.
   const newGovernmentRevenueUSD = region.governmentRevenueUSD;
   // PUB1: what the debt stack actually costs. Not added to spending — carved out of it.
-  const govInterestWeeklyUSD = weeklyInterestExpenseUSD(region.govDebtTranches);
+  const govInterestWeeklyUSD = weeklyInterestExpenseUSD(microFeedback.govLadder);
 
   let newCycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery' = 'Slowdown';
   if (newGdpGrowth < 0) newCycleRegime = 'Recession';
@@ -806,7 +808,7 @@ export function evolveRegionMacro(
     // The aggregate book's real yield at the real cleared curve — the per-bank truth is
     // recomputed in 02b, which overwrites this aggregate with the sum of named banks.
     computeSovereignBookAnnualYield(region.bankingSector.sovereignBondHoldingsByBond, region.zeroRates,
-      sovereignTenorResolver(region.govDebtTranches, week)),
+      sovereignTenorResolver(microFeedback.govLadder, week)),
     region.creditConditionsSpilloverAdjustment ?? 0
   );
 

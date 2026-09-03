@@ -48,8 +48,8 @@ import { bankReservesOf, bankDepositLines, householdDepositsAt } from '../../led
 import { GameState, RegionId, ItemizedHolding } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { priceFromYield, yieldFromPrice, zeroRateAt, PaperTerms, COUPON_PERIOD_WEEKS } from '../../../domain/pricing';
-import { reconcileLadderByWire } from '../../ledger/tranche-ledger';
-import { materializeGovLadder } from '../../../engine2/tranches';
+import { retireTranche, commitLadder } from '../../ledger/tranche-ledger';
+import { materializeGovLadder, ladderRowsOf, trancheRowOf } from '../../../engine2/tranches';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
@@ -663,11 +663,17 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // §3.13-SOV row 3: the paper that found no buyer is THIS BOND's, so it comes off THIS
       // BOND. It used to be withdrawn from a group and spread over whatever rungs were in it,
       // which took face off bonds the auction had actually placed.
-      reg.govDebtTranches = (reg.govDebtTranches ?? [])
-        .map((t) => (t.id === inst.id ? { ...t, principalUSD: Math.max(0, t.principalUSD - unplacedUSD) } : t))
-        .filter((t) => t.principalUSD > 0.01);
-      // §3.13-SOV row 2: the store follows the array at the moment the array moves.
-      reconcileLadderByWire(ctx.v2, { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' }, reg.govDebtTranches, 'sovereign ladder');
+      // §3.13-SOV row 2: withdrawn paper is face that ceased to exist, and it comes off THIS
+      // BOND's own row by wire — the array-and-diff this replaces rebuilt a list to derive the
+      // same retirement.
+      const row = trancheRowOf(ctx.v2, inst.id);
+      if (row === undefined) return;
+      const takeUSD = Math.min(unplacedUSD, ctx.v2.tranches.principalUSD[row]);
+      if (!(takeUSD > 0)) return;
+      const govIssuer = { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' as const };
+      retireTranche(ctx.v2, govIssuer, row, takeUSD, 'sovereign issuance withdrawn');
+      commitLadder(ctx.v2, govIssuer,
+        ladderRowsOf(ctx.v2, govIssuer.id).filter((r) => ctx.v2.tranches.principalUSD[r] > 0.01));
       // A3.5: withdrawn paper rolls into no side map — the treasury's account runs lower and the
       // next block sees the advance it drew.
     });

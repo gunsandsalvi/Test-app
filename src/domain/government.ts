@@ -6,13 +6,26 @@
  * paper. One side of a real flow.
  */
 
-import { GovDebtTranche } from './region-macro';
+import { GovDebtTranche, GovDebtTrancheView } from './region-macro';
+
+/**
+ * §3.13-SOV row 2 — THE TENOR AT ISSUANCE, DERIVED, IN ONE PLACE.
+ *
+ * A rung's tenor at issue is `(maturity − origination) / 52` and nothing else. It used to be
+ * WRITTEN beside the dates as well, and the two disagreed on 20 of 260 rungs because the seed
+ * rounded the two ends separately (rule 4). `GovDebtTranche` is what an issuer states and
+ * `GovDebtTrancheView` is what a reader gets, and this is the only thing between them — so an
+ * issuer cannot state a tenor and a reader never meets one that was.
+ */
+export function govTrancheView<T extends GovDebtTranche>(t: T): T & { tenorAtIssuanceYears: number } {
+  return { ...t, tenorAtIssuanceYears: (t.maturityWeek - t.originationWeek) / 52 };
+}
 
 /**
  * The coupon each sovereign bond pays, by bond id. A holder owns a BOND, not a group of them
  * (§3.13-SOV row 3), so this is a projection of the ladder and not an average of anything.
  */
-export function sovereignCouponByBond(tranches: GovDebtTranche[] | undefined): Record<string, number> {
+export function sovereignCouponByBond(tranches: readonly GovDebtTrancheView[] | undefined): Record<string, number> {
   const out: Record<string, number> = {};
   (tranches ?? []).forEach((t) => {
     // PUB3d: bills pay no coupon — their holders earn accretion instead (see accreteDiscountBills).
@@ -29,7 +42,7 @@ export function sovereignCouponByBond(tranches: GovDebtTranche[] | undefined): R
  * payment, and the whole return is the accretion to par paid at redemption. Its cost lands in the
  * redemption leg (face repaid against discounted proceeds received), not here.
  */
-export function weeklyInterestExpenseUSD(tranches: GovDebtTranche[] | undefined): number {
+export function weeklyInterestExpenseUSD(tranches: readonly GovDebtTrancheView[] | undefined): number {
   return (tranches ?? [])
     .filter((t) => !isDiscountBill(t.tenorAtIssuanceYears))
     .reduce((a, t) => a + (t.principalUSD * (t.couponRate ?? 0)) / 52, 0);
@@ -135,7 +148,7 @@ export function billYieldFromPrice(priceFraction: number, tenorYears: number): n
  * It is deliberately not added to the expense: the cost is already in the redemption leg, and
  * charging it here as well is the double count `discountBillProceedsUSD` warns about.
  */
-export function weeklyBillDiscountAccrualUSD(tranches: GovDebtTranche[] | undefined): number {
+export function weeklyBillDiscountAccrualUSD(tranches: readonly GovDebtTrancheView[] | undefined): number {
   return (tranches ?? [])
     .filter((t) => isDiscountBill(t.tenorAtIssuanceYears))
     .reduce((a, t) => a + (t.principalUSD * (t.couponRate ?? 0)) / 52, 0);
@@ -324,23 +337,3 @@ export function sovereignCouponDueShare(tranche: { originationWeek: number }, we
   return (week - tranche.originationWeek) % periodWeeks === 0 ? 1 / PAYMENTS_PER_YEAR : 0;
 }
 
-/**
- * §5-CLOSE O1 — PAPER NOBODY BOUGHT IS NOT DEBT. A tranche joins the ladder at its full size and
- * the auction places what the week's demand takes; what it cannot place used to stay on the ladder
- * as principal owed to nobody (measured: JPN 9% of the stock, "paper with no owner"). After the
- * auction the unplaced amount is WITHDRAWN from the bond that was offered, and the
- * treasury's need rolls forward to the next issuance — the deficit is not funded until someone
- * funds it. Returns the ladder and what was withdrawn.
- */
-export function withdrawUnplacedIssuance(
-  tranches: import('./region-macro').GovDebtTranche[],
-  bondId: string,
-  unplacedUSD: number
-): { tranches: import('./region-macro').GovDebtTranche[]; withdrawnUSD: number } {
-  if (!(unplacedUSD > 1)) return { tranches, withdrawnUSD: 0 };
-  const out = tranches.map((t) => ({ ...t }));
-  const rung = out.find((t) => t.id === bondId);
-  const withdrawnUSD = rung ? Math.min(rung.principalUSD, unplacedUSD) : 0;
-  if (rung) rung.principalUSD -= withdrawnUSD;
-  return { tranches: out.filter((t) => t.principalUSD > 1), withdrawnUSD };
-}

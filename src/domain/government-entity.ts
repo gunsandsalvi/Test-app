@@ -19,7 +19,7 @@ import { RegionId } from './geography';
 import {
   decomposeGovernmentSpending, governmentOutlaysUSD, weeklyInterestExpenseUSD,
 } from './government';
-import { GovDebtTranche } from './region-macro';
+import { GovDebtTrancheView } from './region-macro';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../engine/bootstrap/national-accounts';
 
 /** The government's own lines, as they sit on `Region` today. Narrowed so the object cannot reach
@@ -35,7 +35,6 @@ export interface GovernmentFields {
   governmentProcurementSpentUSD?: number;
   governmentOutlaysUSD?: number;
   fiscalStanceScore: number;
-  govDebtTranches: GovDebtTranche[];
 }
 
 /** What a week of this government's finances looks like, in one shape rather than four call sites. */
@@ -58,7 +57,10 @@ export interface FiscalWeek {
 export class Government {
   constructor(
     readonly regionId: RegionId,
-    private readonly f: GovernmentFields
+    private readonly f: GovernmentFields,
+    /** §3.13-SOV row 2: the ladder is the STORE's, read by the caller and passed in — this
+     *  module sees fields, never the world. */
+    private readonly ladder: readonly GovDebtTrancheView[],
   ) {}
 
   /**
@@ -70,7 +72,7 @@ export class Government {
    * consolidation. Stage 11 always used the coupon alone; now they agree.
    */
   interestWeeklyUSD(): number {
-    return weeklyInterestExpenseUSD(this.f.govDebtTranches);
+    return weeklyInterestExpenseUSD(this.ladder);
   }
 
   payrollWeeklyUSD(): number {
@@ -126,12 +128,12 @@ export class Government {
 
   /** Total debt outstanding — the stack, not a stated level. */
   debtOutstandingUSD(): number {
-    return (this.f.govDebtTranches ?? []).reduce((a, t) => a + Math.max(0, t.principalUSD ?? 0), 0);
+    return this.ladder.reduce((a, t) => a + Math.max(0, t.principalUSD ?? 0), 0);
   }
 }
 
-/** Build the object over a region. The cast is the façade's whole cost, and it goes away when the
- *  fields move off `Region` into their own record. */
-export function governmentOf(regionId: RegionId, region: unknown): Government {
-  return new Government(regionId, region as GovernmentFields);
+/** Build the object over a region and its ladder. The cast is the façade's whole cost, and it goes
+ *  away when the fields move off `Region` into their own record. */
+export function governmentOf(regionId: RegionId, region: unknown, ladder: readonly GovDebtTrancheView[]): Government {
+  return new Government(regionId, region as GovernmentFields, ladder);
 }

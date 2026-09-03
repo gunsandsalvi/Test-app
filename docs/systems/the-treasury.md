@@ -108,7 +108,7 @@ checked by `scripts/check-atlas.sh`.
 | **D4 issuance managed to cover outlays** | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
 | D4.a a foreseeable maturity wall | `src/engine/simulation/stages/sovereign-calendar.ts:runSovereignCalendarStage` | ⚠️ |
 | **D4.b a cash buffer** | `src/engine/ledger/accounts.ts:treasuryAccountOf` | ❌ |
-| D5 an auction can fail | `src/domain/government.ts:withdrawUnplacedIssuance` | ✅ |
+| D5 an auction can fail | `src/engine/ledger/tranche-ledger.ts:retireTranche` | ✅ |
 | D5.a FORBID no forced buyer | `src/engine/simulation/stages/financial-clearing-engine.ts:ClearingParams` | ✅ |
 | D6 debt outstanding reconciles | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | E1 chooses the maturity mix | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ✅ |
@@ -137,7 +137,7 @@ player: *"the treasury's overdraft here"*.
 `waysAndMeansOf(v2, regionId) + 13 * marketFundedDeficitUSD` — the advance is the first term. So
 the sequence is: spend freely all quarter into an overdraft, then issue to clear it. That inverts
 D1 (raise it *before* you spend it), makes D4.b's cash buffer unnecessary (D4.b is `❌` for exactly
-this reason — the overdraft IS the buffer), and drains D5 of consequence: `withdrawUnplacedIssuance`
+this reason — the overdraft IS the buffer), and drains D5 of consequence: the withdrawal
 correctly retires unplaced paper, but a failed auction costs the treasury nothing, because the
 overdraft absorbs whatever the auction did not place and the next calendar week simply asks for
 more. **A treasury that cannot be told no is not funding-constrained**, and every price in

@@ -33,6 +33,8 @@ import { pay } from './settlement';
 import { isDiscountBill } from '../../../domain/government';
 import { holdingClassOf } from '../../../domain/assets';
 import { bookHeadOf } from '../../../engine2/holdings';
+import { materializeGovLadder } from '../../../engine2/tranches';
+import { GovDebtTrancheView } from '../../../domain/region-macro';
 import { Company, InstitutionalEntity, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { computeSovereignBookAnnualYield, ON_RRP_SPREAD_BPS } from '../../macro/banking';
@@ -56,7 +58,7 @@ export function findRegionMmf(entities: InstitutionalEntity[], regionId: RegionI
  * fund quotes the floor its first dollar would earn (the RRP), net of fee — the honest opening
  * quote, and the reason the market can bootstrap itself when that beats the deposit rate.
  */
-export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashUSD: number, reg: Region, week: number): number {
+export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashUSD: number, reg: Region, week: number, govLadder: GovDebtTrancheView[]): number {
   const rrpRateAnnual = Math.max(0, reg.policyRate - ON_RRP_SPREAD_BPS / 10000);
   const repoRateAnnual = reg.repoRateAnnual ?? rrpRateAnnual;
 
@@ -65,7 +67,7 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashUSD: num
   // instrument id, which stopped resolving the moment holdings named bonds, and would have left
   // the fund holding bills it could not see and earning nothing on them.
   const billTenorById = new Map(
-    (reg.govDebtTranches ?? [])
+    govLadder
       .filter((t) => isDiscountBill(t.tenorAtIssuanceYears) && t.principalUSD > 0)
       .map((t) => [t.id, Math.max(1 / 52, (t.maturityWeek - week) / 52)] as const)
   );
@@ -143,7 +145,7 @@ export function divertHouseholdSavingsToMmf(
 export function refreshMmfQuotes(regionId: RegionId, reg: Region, ctx: WeeklyStepContext): void {
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.region !== regionId || e.entityType !== 'MONEY_MARKET_FUND' || e.isDefaulted) return e;
-    return { ...e, mmfNetYieldAnnual: Number(quoteMmfNetYieldAnnual(e, entityCashOf(ctx.v2, e), reg, ctx.nextWeek).toFixed(6)) };
+    return { ...e, mmfNetYieldAnnual: Number(quoteMmfNetYieldAnnual(e, entityCashOf(ctx.v2, e), reg, ctx.nextWeek, materializeGovLadder(ctx.v2, e.region)).toFixed(6)) };
   });
 }
 

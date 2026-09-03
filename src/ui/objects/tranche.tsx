@@ -1,6 +1,8 @@
 /** AU · object: tranche — one tranche of debt: a firm's, or a sovereign's. Reached from a ladder. */
 
 import { defineObject } from './registry';
+import { ensureV2 } from '../../engine2/world';
+import { materializeGovLadder } from '../../engine2/tranches';
 import { Card, KV, Link, Stat, StatGrid } from '../ui';
 import { money, pctLevel } from '../format';
 import { formatDate, formatSpan } from '../calendar';
@@ -32,7 +34,7 @@ function trancheOf(world: World, key: string): TrancheView | undefined {
   const owner = key.slice(0, i); const id = key.slice(i + 1);
   const reg = regionOf(world, owner);
   if (reg) {
-    const t = (reg.govDebtTranches ?? []).find((x) => x.id === id);
+    const t = materializeGovLadder(ensureV2(world.state), reg.id).find((x) => x.id === id);
     return t ? { ownerRef: { type: 'region', id: owner }, ownerName: `${owner} treasury`, id, principalUSD: t.principalUSD, couponRate: t.couponRate, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, tenorYears: t.tenorAtIssuanceYears } : undefined;
   }
   const c = companyOf(world, owner);

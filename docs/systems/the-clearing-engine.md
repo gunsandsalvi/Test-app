@@ -109,7 +109,7 @@ checked by `scripts/check-atlas.sh`.
 | C2 the price is discovered, not assigned | `src/engine/simulation/stages/financial-clearing-engine.ts:runClearingKernel` | ⚠️ |
 | C3 quantity is rationed by a stated rule | `src/engine/simulation/stages/financial-clearing-engine.ts:runClearingKernel` | ✅ |
 | **C4 it can fail to clear** | `src/engine/simulation/stages/double-auction.ts:emptyAuctionResult` | ⚠️ |
-| C4.a a failed auction has consequences that propagate | `src/domain/government.ts:withdrawUnplacedIssuance` | ✅ |
+| C4.a a failed auction has consequences that propagate | `src/engine/ledger/tranche-ledger.ts:retireTranche` | ✅ |
 | **C4.b failure is representable and observable, not a quiet substitute** | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ❌ |
 | C5 VERIFY the price is a function of the schedules alone | `src/engine/simulation/stages/financial-clearing-engine.ts:sortIndexByKey` | ✅ |
 | D1 a price, in a stated unit, for a stated instrument | `src/engine/simulation/stages/financial-clearing-engine.ts:ClearingResult` | ✅ |
@@ -160,7 +160,7 @@ A desk is additionally cash-bounded by its reserves above the buffer
 (`dealer-desks.ts:118-121`).
 
 **And a deal is pulled.** `runClearingKernel:775-784` re-solves without the offering when the
-level clears past `primaryWithdrawStat`, and `withdrawUnplacedIssuance` retires sovereign paper
+level clears past `primaryWithdrawStat`, and 07c/07f retire the unplaced face off the bond's own row (`retireTranche`) — sovereign paper
 that did not place.
 
 **One qualification 20-LLR does not make.** The residual dealer still exists on the FLOW books
