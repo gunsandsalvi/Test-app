@@ -12,12 +12,12 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `56dc3ee` on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree
+- HEAD `aac7a6e` on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 16). Tree
   clean. (This branch replaces `claude/master-plan-review-j2z20v`.)
-- **Next step: §3 step 12**, then 13, 14, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 11b** (PART I's last two, with 11c), then 13 and PART II. §3 is the only list. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `56dc3ee` —
-  **134 violations in 31 families**, "the money that is not anyone's" **0.06B across 2 lines**
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `aac7a6e` —
+  **131 violations in 32 families**, "the money that is not anyone's" **0.06B across 2 lines**
   (M1's drift and M7's dust), M6 still grazing its band in 1 week of 16. See §9.11 and §6.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
@@ -25,7 +25,7 @@ There is deliberately no section 7 in this file, so the citation can never be mi
 - **Recording a step:** delete the step from §3 and write its record in §9 — what changed, why,
   and the measured numbers, for a reader who was not here. A lesson that a FUTURE step could
   trip over goes in §5 as well; nothing else does.
-- Gates at HEAD: `tsc` 0, ESLint 348/354, hygiene pass, 126 tests.
+- Gates at HEAD: `tsc` 0, ESLint 342/354, hygiene pass, 126 tests.
 
 **Where this list came from (2026-09-02): a line-by-line audit of ~230 files / ~55k lines**, which
 found ~380 defects. Every material one is a step in §3 at its file:line (or, once done, in §9),
@@ -206,13 +206,6 @@ do not reorder.
 11c. **The central bank's book drifts.** M1 misses by **0.06B on a 208B sheet in 4 weeks of 16**
     at HEAD, having been clean for the whole project before the death rate rose. Small, real, and
     the money family's only sized line besides 11b's dust. Bisect from `56dc3ee`.
-12. **Carriers, and the fuel nobody sells.** `bootstrap/carriers.ts:284` seeds `totalDebt` — not a
-    field since the ladder became authoritative — so carriers open with ZERO debt while their seed
-    interest, coverage, rating, eps and stock price all assume it, and no lender holds it.
-    `profiles/carrier.ts:44` expenses fuel with no purchase and no `CARRIER` row in
-    `PROFILE_INPUT_BASKET`, so the world fleet's bunker demand never reaches `refined_products` and
-    nobody is paid for it.
-
 ### PART II — THE INSTRUMENTS ARE REAL
 
 13. **Face, and price × face** (the "credit always trades at par" defect). The tranche row carries
@@ -2454,3 +2447,25 @@ per row. Measured (SHOCKS=0 WEEKS=16): **110 in 33 → 134 in 31**. The driver i
 truth the unscaled EBITDA hid — open estates 41 → 77, active firms 2461 → 2427 — and the A/B came
 free: the harsher bank coverage gave 79 open estates against 77, so (b) is not the driver. The
 deaths expose steps 11b and 11c, both now sized rather than asserted.
+
+**12. Carriers, and the fuel nobody sells.** (`aac7a6e`) `totalDebt` stopped being a field when
+the ladder became authoritative, so a carrier seeded with `totalDebt: debtBase` and an EMPTY
+ladder opened with NO debt — while its seeded interest, coverage, leverage, rating, net income,
+eps and share price were all struck against that debt and no lender held a dollar of it. It now
+gets a real ladder from the same generator every other seeded firm uses. And a carrier sells
+nothing in the goods book, so it had no input basket and its fuel was expensed off a physics
+formula against a purchase that never happened: the world fleet's bunker demand never reached
+`refined_products`. Moving goods IS `facilities_and_logistics`, and the registry already states
+what a dollar of it consumes — that recipe is now the carrier's basket, no new stated constant,
+and the profile's separate fuel charge goes with it. The physics stays as a measurement
+(`lastWeekFuelBurnedTonnes`), which is what a bunker bid should eventually be sized from rather
+than a share of revenue. Measured (SHOCKS=0 WEEKS=16): **134 in 31 → 131 in 32**, money family
+unchanged in kind; O5's consignments 207 → 132.
+
+---
+
+**PART I is closed except 11b and 11c**, the two leaks the doubled death rate exposed. Everything
+else in the closed circuit — the interest that was never paid, the residual wired twice, the
+silent truncations, the goods mint, the estate that never closed, bank resolution, the treasury's
+books, the register's holes, the settlement net, both legs of every trade, the wild swings and
+the carriers — is done and recorded above.
