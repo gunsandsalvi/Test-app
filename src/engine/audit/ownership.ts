@@ -211,6 +211,45 @@ function o7(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
+/**
+ * O8 — ONE PIECE OF PAPER, ONE NAME (rule 3).
+ *
+ * A credit position can be keyed two ways in this model: by the TRANCHE it is, or by the COMPANY
+ * that issued it. The register settled on tranches (the seed opens issuer-named at
+ * `initialization.ts:548` and the books convert it in week 1), but the DEALER DESKS did not —
+ * they carry inventory under whatever id the book handed them. Every move between a desk and the
+ * register therefore wires a sale of one name against a purchase of another, the two do not
+ * cancel to the dollar, and the residue is what `W2` reports as the clearing house being left
+ * holding paper.
+ *
+ * An issuer-keyed position also cannot be checked: `O7` compares a claim against the ladder row
+ * it names, and a position naming a company names no row. This counts what is still on the wrong
+ * key, so step 13 has a number to drive to zero.
+ */
+function o8(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const v2 = ensureV2(state);
+  const CREDIT_BOOKS = ['corporate bond', 'leveraged loan', 'commercial paper'];
+  let issuerKeyed = 0, issuerKeyedUSD = 0, trancheKeyed = 0, trancheKeyedUSD = 0;
+  const worst: [string, number][] = [];
+  state.companies.forEach((b) => {
+    const inv = b.bankBalanceSheet?.dealerDeskInventory;
+    if (!inv || !isActiveCompany(b)) return;
+    CREDIT_BOOKS.forEach((book) => {
+      (inv[book] ?? []).forEach((p) => {
+        if (isTrancheId(v2, p.instrumentId)) { trancheKeyed++; trancheKeyedUSD += p.inventoryUSD; return; }
+        issuerKeyed++; issuerKeyedUSD += p.inventoryUSD;
+        if (Math.abs(p.inventoryUSD) > 0) worst.push([`${b.ticker}/${p.instrumentId}`, p.inventoryUSD]);
+      });
+    });
+  });
+  if (issuerKeyed > 0) {
+    worst.sort((a, b2) => Math.abs(b2[1]) - Math.abs(a[1] === undefined ? 0 : a[1]));
+    out.push({ family: 'O', check: 'O8 one piece of paper, one name', week, usd: issuerKeyedUSD, message: `${issuerKeyed} desk positions worth ${B(issuerKeyedUSD)} are keyed by ISSUER, not by the paper (${trancheKeyed} worth ${B(trancheKeyedUSD)} name a tranche) — the register keys the same holdings by tranche, so every desk-to-register move wires two different names for one asset` });
+  }
+  return out;
+}
+
 /** O5 — contracts, estates, indices, shipments: parties alive, claims bounded, weights whole. */
 function o5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
@@ -262,6 +301,6 @@ function o5(state: GameState, week: number): AuditFinding[] {
 }
 
 export function auditOwnership(state: GameState, week: number): AuditFinding[] {
-  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week)];
+  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week)];
 }
 export type { RegionId };

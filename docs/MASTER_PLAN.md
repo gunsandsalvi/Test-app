@@ -17,8 +17,8 @@ There is deliberately no section 7 in this file, so the citation can never be mi
   is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
   that names anything but §3's first line; one was written, it disagreed with §3's order, and two
   steps were skipped behind it.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 11g —
-  **165 violations in 35 families**, "the money that is not anyone's" **0.00B across 1 line**.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after O8 —
+  **181 violations in 36 families**, "the money that is not anyone's" **0.00B across 1 line**.
   **The money family is down to one check** (M7's dust, worth 0.00B): M1–M6 all print nothing.
   The rise from 134/33 is W5 and then O7 arriving and reporting real findings (§9.11e, §9.11f) —
   a new check that fires is the instrument working, not a regression. **O7 alone accounts for 15
@@ -225,7 +225,9 @@ do not reorder.
     **it made O7 WORSE — 105 tranches and 0.10B against 55 and 0.01B** — and moved W2 not at all.
     Reverted. The oscillation is real and is its own defect, but it is not this one.
     **Where the fix lives: with step 13 and step 21.** The book must clear the paper that exists,
-    per tranche, against the float that exists. Until then O7 carries the number.
+    per tranche, against the float that exists — and step 13 must first give the DESKS the same
+    key the register uses, because today 301B of credit inventory sits on the issuer key (`O8`)
+    and cannot be reconciled to any ladder row at all. Until then O7 carries the number.
     **The estate no longer crashes on it** (§9.11f): one invariant, one reporter.
 
 11e. **The seed's unwired positions — plant is the last one.** *(Deliberately after 11f: that is
@@ -241,8 +243,17 @@ do not reorder.
     other end. Answer it once, for both.
 ### PART II — THE INSTRUMENTS ARE REAL
 
-13. **Face, and price × face** (the "credit always trades at par" defect). The tranche row carries
-    FACE; a holding's value is price × face. Build `domain/bond-pricing.ts` (price from spread, the
+13. **Face, and price × face — and ONE NAME for one piece of paper** (the "credit always trades at
+    par" defect, plus rule 3). **The register keys credit by TRANCHE and the dealer desks key the
+    same paper by ISSUER, and the two sets are disjoint: `O8` measures 11,655 desk positions worth
+    301B on the issuer key and NOT ONE on a tranche.** The register was migrated to per-tranche
+    rows (13a/13b, §9); the desks were left behind, so every move between a desk and the register
+    wires a sale of one name against a purchase of another, the two do not cancel to the dollar,
+    and the residue is what `W2` reports as the clearing house left holding paper (32 findings a
+    run). An issuer-keyed position also cannot be CHECKED — `O7` compares a claim against the
+    ladder row it names, and a position naming a company names no row — so this is upstream of
+    11f as well. The desks move to the tranche key with everything else here.
+    The tranche row carries FACE; a holding's value is price × face. Build `domain/bond-pricing.ts` (price from spread, the
     inverse of the OAS/DM the books already clear), give the engine a real `unitValueUSD` for
     YIELD_LIKE books, settle primaries at the cleared price rather than par, mark desks and NAV off
     it, and keep accrual and estate claims on FACE. `holdings-ledger.ts:46-49` (`priceOf` returns
@@ -2452,6 +2463,23 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**O8 — one piece of paper, one name.** (`PENDING`) Asked why one holding has two possible keys,
+the answer turned out to be worth measuring rather than asserting. The first version of O8 counted
+issuer-named rows in the REGISTER and came back **clean** — the register is entirely tranche-keyed
+(the seed opens issuer-named at `initialization.ts:548` and the books convert it in week 1). So
+the second key is not in the register at all. It is the **dealer desks**, and they are not partly
+on it: **11,655 credit positions worth 301B are keyed by ISSUER and not one names a tranche.**
+
+The two key-spaces are disjoint, which is the worst case: every move between a desk and the
+register crosses them, wiring a sale of one name against a purchase of another for the same paper.
+They net in USD within a kind, which is why `W2` reports only the residue rather than the whole
+301B — and that residue is a real one, 32 findings a run, and it feeds `O7`.
+
+The history is plain enough: the register was migrated to per-tranche rows and the desks were left
+behind. Folded into step 13, which owns the per-tranche world; O8 is the number to drive to zero.
+Measured: 165 in 35 → **181 in 36**, the whole rise being O8 firing every week on a defect that
+was always there.
 
 **11f (part 1). O7 — the invariant that only ever fired as a crash, and two dead hypotheses.**
 (`PENDING`) `estate-resolution.ts` carried a `defect()` that killed the run when an estate's
