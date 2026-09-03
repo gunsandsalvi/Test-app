@@ -942,6 +942,38 @@ do not reorder.
 
 ### PARKED BY THE USER — not steps, and not to be started without being asked
 
+**THE SYSTEM ATLAS** (user, 2026-09-03, ASKED FOR AND NOT YET AUTHORISED: *"find and classify
+every system there is in this model; for each system, build the logical tree that they run
+through; translate these trees to what they represent (from code to model); verify what is missing
+or what diverges from reality or intent and save these logic trees somewhere… I'm asking this
+specifically because I've asked to do multiple full sweeps of the code and never once it was
+reported the credit didn't have a price or FX didn't exist. These trees will be saved down and
+updated with every change of the code."*)
+
+**Why the sweeps missed those two.** A sweep reads code and asks whether it is correct. An
+ABSENCE has no line number to be read at. Every file in this tree does something plausible and is
+heavily commented; nothing in the credit stage says "and there is no price" — it clears a discount
+margin, coherently, and the missing price is invisible unless you arrive with the expectation that
+every asset trades on one. FX was found the same way: not by reading code but by the user asking
+why everything was called USD. **A sweep finds defects; only a reference model finds absences.**
+
+**The one design decision that decides whether this works.** If the trees are derived FROM the
+code they reproduce the code's blind spots exactly, look complete, and find nothing — a tree built
+by reading `07d-leveraged-loan-clearing.ts` would have a "clear the DM" node and no "price" node,
+because the file has none. The required tree must therefore be written from the DOMAIN with the
+code shut, and the code mapped onto it afterwards. The empty nodes are the finding.
+
+Scope, measured: 68,788 lines over 295 files, 76 stages, 72 domain modules; roughly 40–50 systems
+at a useful granularity. Not a one-pass job.
+
+**What keeps it from rotting** — the requirement that it be updated with every code change is the
+part most likely to fail, and this repo has three dead documents proving it (a `CLAUDE.md` that
+described sections that no longer existed, an `ARCHITECTURE.md` referenced from code and never
+written, 699 markers pointing at a deleted section). So the code side of every tree is a
+MACHINE-VERIFIED citation (`file:symbol`) and a gate fails when one stops resolving or when a
+stage in `core.ts` appears in no tree; the domain side is prose and is reviewed by the user, which
+is the cheapest thing there is to review — a list of "this must exist" claims, not code.
+
 Two whole projects stand half-built outside this list because the user parked them. They are
 recorded here so that "§3 is the only list" stays true and neither is discovered a third time.
 Do NOT resume either without the user saying so.
