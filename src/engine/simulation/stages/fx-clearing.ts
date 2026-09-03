@@ -48,7 +48,9 @@ import { DEALER_QUOTE_WIDTH_BPS } from '../../../domain/dealer-derivatives';
 import { deskNotionalCapacityUSD } from '../../../domain/derivatives/registry';
 import { deskStandingPfeChargeUSD } from './derivative-lifecycle';
 import { leverageHeadroomUSD } from '../../macro/banking';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, REGION_BY_CURRENCY, currencyOf } from '../../../domain/geography';
+import { toNumeraire } from '../../../domain/currency';
+import { heldCurrenciesOf } from '../../ledger/accounts';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 
@@ -104,14 +106,27 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     });
   });
 
-  // ---- Trade receipts, bilateral because the goods market already knows who bought from whom
-  // (XB3a). An importer sells its own money to pay an exporter in the exporter's. ----
-  REGIONS.forEach(exporter => {
-    REGIONS.forEach(importer => {
-      if (exporter === importer) return;
-      const weeklyUSD = ctx.bilateralTradeWeeklyUSD?.[exporter]?.[importer] ?? 0;
-      if (!(Math.abs(weeklyUSD) > 0)) return;
-      addPairFlow(flows, exporter, importer, weeklyUSD);
+  // ---- §3.13c-FX-2 — THE DESKS' OWN BOOKS ARE THE TRADE FLOW, and they are REAL positions.
+  //
+  // This was `ctx.bilateralTradeWeeklyUSD[exporter][importer]` — a derived aggregate standing in
+  // for orders nobody placed, and a second representation (rule 3) of a conversion the ledger now
+  // performs for real: every cross-border payment converts through a named desk at a named price
+  // (`fx-funding.ts`), the desks offset each other's client flow (`fx-squaring.ts`), and what is
+  // LEFT on their books is the net imbalance the market has to price. That residual is this flow.
+  //
+  // It is inelastic because it is a funding need and not a view: a desk short a money it does not
+  // issue must cover, and an uncovered nostro is an overdraft rather than a position it chose.
+  // Measured: the gross it replaces ran to −601B and climbing by week 4 with nothing squaring it;
+  // squared, the net is ~−50B and no longer grows, which is the right order of magnitude for one
+  // week of one-way trade. ----
+  ctx.updatedCompanies.forEach((c) => {
+    if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted) return;
+    const home = currencyOf(c.region as RegionId);
+    heldCurrenciesOf(ctx.v2, { kind: 'BANK', ticker: c.ticker }).forEach(({ currency, balance }) => {
+      if (currency === home || !(Math.abs(balance) > 1e5)) return;
+      // Short of `currency` ⇒ demand for it, paid in the desk's own money; long ⇒ supply.
+      addPairFlow(flows, REGION_BY_CURRENCY[currency], c.region as RegionId,
+        toNumeraire(-balance, currency, ctx.fx));
     });
   });
 

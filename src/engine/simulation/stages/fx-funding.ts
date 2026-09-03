@@ -18,9 +18,15 @@
  * describes as "dealers flattening the FX inventory their client forwards left them". It is not
  * netted away here and it revalues like any other open position.
  *
- * **The reverse leg.** A party short of its OWN money while holding somebody else's sells the
- * foreign balance rather than overdrawing: that is what a treasury operation is, and without it a
- * seller paid in a foreign currency would accumulate it forever while overdrawing at home.
+ * **The reverse leg: a firm does not keep money it has no use for.** Any foreign balance beyond
+ * what the party is about to pay out in that currency is SOLD back — which is the whole of why a
+ * desk's book does not grow without bound: it sold euros to buyers and buys them back from the
+ * receivers. What is left over after both sides is the genuine net imbalance, which is the number
+ * that should reach the FX auction, and it is orders of magnitude smaller than the gross.
+ *
+ * This is also what keeps a foreign-currency account MEANINGFUL rather than either dead (nobody
+ * ever holds one) or unbounded (everybody hoards): a party with a real ongoing obligation in a
+ * money keeps enough to meet it and sells the rest, which is what a treasury actually does.
  *
  * Runs at the head of every settlement pass, off the persistent balances (what the party actually
  * holds coming in) and the pass's own due rows (what it is about to owe), so the purchase settles
@@ -123,7 +129,6 @@ export function fundForeignCurrencyShortfalls(
 
     // 1. Every foreign money it must pay out beyond what it holds: bought, at the cleared rate
     //    plus the pip, from its own region's desks.
-    let spentHome = 0;
     CURRENCY_CODES.forEach((cur) => {
       if (cur === home) return;
       const held = balanceOf(ctx.v2, ref, cur);
@@ -131,28 +136,24 @@ export function fundForeignCurrencyShortfalls(
       const short = -(held + owed);
       if (!(short > MIN_TRADE)) return;
       buy(ref, desks, cur, home, short);
-      spentHome += convert(short, cur, home, ctx.fx) * (1 + FX_SPREAD_BPS / 10000);
     });
 
-    // 2. Short of its OWN money while holding somebody else's: it sells, rather than overdrawing.
-    //    A seller paid in a foreign currency would otherwise hoard it and overdraw at home.
-    const homeShort = -(balanceOf(ctx.v2, ref, home) + (byCur.get(CURRENCY_CODES.indexOf(home)) ?? 0) - spentHome);
-    if (!(homeShort > MIN_TRADE)) return;
-    let stillNeeded = homeShort;
-    for (const cur of CURRENCY_CODES) {
-      if (cur === home || stillNeeded <= MIN_TRADE) continue;
+    // 2. Every foreign money it holds beyond what it is about to pay out in that money: SOLD.
+    //    A firm keeps its books in one currency and does not sit on somebody else's without a use
+    //    for it. This is the leg that closes the circle — the desks buy back from the receivers
+    //    what they sold to the buyers — and without it the desks' book grew without bound
+    //    (measured: −537.7B across the banks by week 3, against +88.3B held by everyone else).
+    CURRENCY_CODES.forEach((cur) => {
+      if (cur === home) return;
       const surplus = balanceOf(ctx.v2, ref, cur) + (byCur.get(CURRENCY_CODES.indexOf(cur)) ?? 0);
-      if (!(surplus > MIN_TRADE)) continue;
-      const proceedsIfAll = convert(surplus, cur, home, ctx.fx) * (1 - FX_SPREAD_BPS / 10000);
-      const sellCur = proceedsIfAll <= stillNeeded ? surplus : surplus * (stillNeeded / proceedsIfAll);
-      const proceeds = convert(sellCur, cur, home, ctx.fx) * (1 - FX_SPREAD_BPS / 10000);
+      if (!(surplus > MIN_TRADE)) return;
+      const proceeds = convert(surplus, cur, home, ctx.fx) * (1 - FX_SPREAD_BPS / 10000);
       desks.forEach(({ ticker, share }) => {
         if (share <= 0) return;
         const desk: PartyRef = { kind: 'BANK_SECURITIES', ticker };
-        pay(ctx, { payer: ref, payee: desk, amount: sellCur * share, currency: cur, reason: 'fx conversion: currency sold' });
+        pay(ctx, { payer: ref, payee: desk, amount: surplus * share, currency: cur, reason: 'fx conversion: currency sold' });
         pay(ctx, { payer: desk, payee: ref, amount: proceeds * share, currency: home, reason: 'fx conversion: proceeds delivered' });
       });
-      stillNeeded -= proceeds;
-    }
+    });
   });
 }

@@ -38,6 +38,7 @@ import { WeeklyStepContext } from './context';
 export type { PartyRef } from '../../ledger/party';
 import { PartyRef, partyId, partyOf } from '../../ledger/party';
 import { fundForeignCurrencyShortfalls } from './fx-funding';
+import { squareInterbankFxPositions } from './fx-squaring';
 import { activeWireJournal, wirePush, MONEY_ASSET_ID_BY_CURRENCY, ASSET_KINDS } from '../../ledger/wire';
 import { CurrencyCode, NUMERAIRE, currencyOf } from '../../../domain/geography';
 import { convert } from '../../../domain/currency';
@@ -539,6 +540,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // it — from a desk, at the cleared rate, paying the pip. Its rows join this pass's, so the
   // purchase and the payment that forced it settle together (rule 14).
   fundForeignCurrencyShortfalls(ctx, journal, settlementWeek(), partyRegionOf(ctx));
+  // §3.13c-FX-2: and the desks offset each other's client flow, so only the NET imbalance is
+  // left on anybody's book. Reads the positions the last pass left, so it follows the buying.
+  squareInterbankFxPositions(ctx);
   const nInstructions = journal.n;
   const report: SettlementReport = {
     instructions: nInstructions,

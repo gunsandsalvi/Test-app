@@ -390,15 +390,20 @@ do not reorder.
       the obligation's OWNER (`obligationCurrencyOf`) or off the market it trades in
       (`c.regionId`). `TradeInvoice` is the one obligation in the model that already carries its
       own denomination, and it is the shape the other three want;
-    · **13c-FX-2 — THE DESKS' SPOT BOOK IS NEVER FLATTENED (§9.13c-FX did the first half).**
-      A bank selling a client euros is short euros, and that short is now real: measured at week
-      3, the banks carry −537.7B of foreign currency against +88.3B held by everyone else, and
-      nothing squares it. `fx-clearing.ts`'s own header already names the participant —
-      *"dealers flattening the FX inventory their client forwards left them"* — but it reads the
-      DERIVATIVE desks' inventory and not this. Two things fall out together: the spot book joins
-      the FX auction as a real order, and `ctx.bilateralTradeWeeklyUSD` at `fx-clearing:108` — a
-      derived aggregate standing in for orders nobody places — is deleted, which is rule 1 on the
-      flow that sets the rate;
+    · **13c-FX-3 — THE NET IMBALANCE STILL ACCUMULATES, AND THAT IS §6.1'S FX ROW.** §9.13c-FX-2
+      stopped the runaway and did not stop the drift: the desks' book opens at −45.8B in week 1
+      (was −390.6B) and reaches −181.3B net / 227.2B gross by week 16, about −8.5B a week off a
+      small base rather than +53B a week off a huge one. What is left is a persistent ONE-WAY net
+      trade flow that the elastic side of the FX book cannot absorb — `residualByPair`, which the
+      stage already publishes as its own liquidity diagnostic. Three candidates and none of them
+      is obvious, which is why this is a step and not a fix: the elastic side is genuinely too
+      small (a capacity question — XB2b's number); the flow is genuinely one-way and something
+      real should be financing it (a capital-account question, and a persistent trade imbalance
+      financed by the banking system IS a real phenomenon); or the invoice-currency convention in
+      `05-unit-bidding` makes it one-way by construction (buyer money for firms at :1957, ORIGIN
+      money for households at :2191 — two conventions in one auction, which is worth settling on
+      its own). Measure which before touching any of them, and per rule 12 do not judge the
+      levels on the way.
     · ~~**13c-FX — CONVERTING AT THE LEDGER IS THE WRONG MECHANISM, AND IT IS MINE**~~ (DONE,
       §9.13c-FX; kept here because the reasoning is the step) (user, 2026-09-03:
       *"is that the cleanest and the real world way of doing that?"* — it is not).
@@ -2678,6 +2683,48 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**13c-FX-2 — THE DESKS SQUARE WITH EACH OTHER, AND THE TRADE AGGREGATE IS DELETED.** Two halves.
+
+**THE SWEEP: a firm does not keep money it has no use for.** Any foreign balance beyond what a
+party is about to pay out in that money is sold back to the desks. That is what a treasury does,
+and it is what keeps a foreign-currency account MEANINGFUL rather than dead (nobody holds one) or
+unbounded (everybody hoards): a party with a real ongoing obligation in a money keeps enough to
+meet it and sells the rest. Measured: non-bank foreign holdings went from **+88.3B across 3,528
+non-zero rows to 0.0B across 48** — the rows that survive are the parties that genuinely owe in
+that money next week.
+
+**AND IT WAS NOT ENOUGH, WHICH TAUGHT ME THE ACTUAL STRUCTURE.** The desks' book kept growing
+(−390.6B week 1 → −601.4B week 4) because the sweep can never reach the other side: a US desk
+sells euros to a client, the euros land on a euro-area payee as its HOME money, and home money is
+never swept. The desk's short is real, unfunded and one-directional.
+
+**But the shorts are SYMMETRIC, and that is the mechanism.** US clients buying euros leave US
+desks short euros; euro clients buying dollars leave euro desks short dollars. A US desk short
+euros holds dollars; a euro desk short dollars holds euros. **They swap, and both books go flat**
+— no third party, no warehoused residual, no unowned leftover, which is why this needed none of
+the residual-ownership decisions `fx-clearing`'s XB6 comment deliberately left open. That is what
+an interbank FX market IS: dealers offsetting each other's client flow, with only the net ever
+reaching anyone else. Week 1 fell from **−390.6B to −45.8B**.
+
+**THEN THE AGGREGATE COULD GO.** `fx-clearing.ts:108` read
+`ctx.bilateralTradeWeeklyUSD[exporter][importer]` — a derived aggregate standing in for orders
+nobody places, and a second representation (rule 3) of a conversion the ledger now performs for
+real. It is replaced by the desks' actual books: inelastic, because a desk short a money it does
+not issue must cover and an uncovered nostro is an overdraft rather than a position it chose. The
+flow the auction prices is now ~50B of real net imbalance instead of the gross it stood in for.
+
+**MEASURED, 16 weeks: 243 in 48 → 241 in 47.** Against the 231-in-46 baseline what remains is
+sovereign and register, not money: `O1 sovereign held = outstanding` (EUR, JPN), `O3 register rows
+name a live instrument`, and the harness's EUR sovereign-bond invariant — all 13-SOV's. 4 weeks
+stays at the baseline's 50 in 19.
+
+**WHAT IT DID NOT DO, stated plainly.** The book is bounded per week but the NET still drifts:
+−45.8B in week 1 to −181.3B by week 16, gross 45.8B to 227.2B. The runaway is gone (+53B a week
+off a huge base became −8.5B a week off a small one) and the drift is not. It is the one-way flow
+the elastic side cannot absorb, it is `residualByPair`, and it is §6.1's FX row — logged as
+13c-FX-3 with the three candidate causes and the instruction to measure before touching any.
+
 
 **13c-REVAL — A BALANCE IN SOMEBODY ELSE'S MONEY IS WORTH SOMETHING ELSE WHEN THE RATE MOVES.**
 Nobody pays anybody, so it is not a payment and it cannot go through `pay()`: it is a MARK, and

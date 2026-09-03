@@ -42,7 +42,7 @@ const RULES: ReadonlyArray<readonly [RegExp, PaymentCategory]> = [
   // §3.13c-FX: buying and selling a currency is one asset exchanged for another at a market
   // price, which is this list's SECURITIES. The pip charged on it is priced into the two legs,
   // so it needs no separate row — `fx conversion spread` above is stage 05's own, separate charge.
-  [/fx conversion: /, 'SECURITIES'],
+  [/fx conversion: |fx interbank: /, 'SECURITIES'],
 
   // -- Labor --
   [/wages|payroll/, 'LABOR'],
