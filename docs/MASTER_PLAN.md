@@ -188,19 +188,17 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11e. **The seed's unwired positions — the three that are left.** The LADDERS now open by wire and
-    W3 proves week 1 (§9.11e). Three halves of the same hole remain, each its own commit:
+11e. **The seed's unwired positions — the two that are left.** The LADDERS open by wire and the
+    GOODS start empty, so W3 and W4 both prove week 1 now (§9.11e). Two remain, each its own commit:
     (a) **the register** — `initialization.ts:794,918,1005` build `itemizedHoldings` arrays
     directly and the store is mirrored from them, so no holding has a wire. Wire them and add
     `holdings` to the audit's empty opening snapshot;
-    (b) **the goods pipeline** — `initialization.ts:1658` seeds `goodsInTransit` and the opening
-    stock with no wires. Wire them and add `goodsUnitsByKey: {}` to the opening snapshot, which
-    turns on W4 for week 1;
     (c) **plant** — `grossPPEUSD` is assigned at the seed and at every birth, and there is no
     asset kind for it (`ASSET_KINDS` has `HOUSE`, not plant). It needs the kind before it can
     have a wire.
-    The pattern is set by 11e's first slice: claim the chain empty, issue by wire, then let the
-    audit's opening snapshot carry that key so week 1 is held to week 2's standard.
+    The pattern is set by 11e's first two slices: claim the chain empty, issue by wire, then let
+    the audit's opening snapshot carry that key so week 1 is held to week 2's standard. Check
+    first whether the thing is seeded at all — the goods were not, and that slice was one line.
 
 ### PART II — THE INSTRUMENTS ARE REAL
 
@@ -2350,6 +2348,21 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**11e (part 2). The goods were never seeded at all.** (`PENDING`) The step listed the opening
+goods pipeline as unwired. It is not: no firm is generated holding finished stock
+(`companyGenerator.ts:703,1303` open `outputInventoryBySubUnit: {}`), no input lot is seeded, and
+the seeded in-transit consignments carry no `carrierTicker`, which is exactly the case
+`goodsUnitsByKey` does not count as stock — they pass through a sink at dispatch and reappear by
+wire on arrival. **The world starts with no goods**, so week 1's stock is precisely what week 1
+produced plus what its wires brought in: W4's own identity, with nothing special about it.
+
+So the slice is the audit's half alone — `goodsUnitsByKey: {}` in the opening snapshot — and
+**W4 does not fire.** Measured: 134 in 33, violation set identical again.
+
+The lesson is worth more than the line: **check whether the thing you are about to wire exists.**
+A step written from a file:line read said the pipeline was seeded without wires; it was seeded
+without goods. One grep of the generator would have said so before any of it was designed.
 
 **11e (part 1). The world's opening ladders open by wire.** (`PENDING`) `seedLadder` installed a
 seeded or born firm's ladder by mirroring `comp.debtTranches` into rows with `wireRef` set to −1

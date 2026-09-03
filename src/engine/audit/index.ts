@@ -20,12 +20,13 @@ export type { AuditFinding } from './types';
 /**
  * THE WORLD BEFORE THE SEED. The first week had no "before", so every week-over-week check
  * skipped it and the opening world was the one state nothing ever proved. It has a before: the
- * EMPTY world. Only the ladders are claimed here so far — the seed opens them by wire
- * (`seedLadder`), so W3 can hold week 1's ladders to the same standard as week 2's. The goods
- * pipeline and the register are still seeded without wires, so their keys stay absent (an absent
- * key skips its check) until they are wired too.
+ * EMPTY world. The LADDERS are claimed because the seed opens them by wire (`seedLadder`), and
+ * the GOODS because the world genuinely starts with none — no firm is generated holding finished
+ * stock and no input lot is seeded, so week 1's stock is exactly what week 1 produced plus what
+ * its wires brought in, which is the identity W4 checks every other week. The register is still
+ * seeded without wires, so its key stays absent (an absent key skips its check) until it is too.
  */
-let lastSnapshot: AuditSnapshot | undefined = { ladderUSDByKey: {} };
+let lastSnapshot: AuditSnapshot | undefined = { ladderUSDByKey: {}, goodsUnitsByKey: {} };
 
 /** Run every family on this week's state. Week-over-week checks read the audit's OWN snapshot of
  *  last week (the caller's state is mutated in place, so no reference to it can be "before"). */
