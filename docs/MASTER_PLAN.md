@@ -12,12 +12,14 @@ lesson the code still cites at its original number, so a `§7.N` citation still 
 There is deliberately no section 7 in this file, so the citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD `31755c9` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
+- HEAD `35fa0ea` on `claude/master-plan-cleanup-ld1oh1`. Tree clean. (This branch replaces the
   earlier one; the session that owns it may push nowhere else.)
-- **Next step: §3 step 9**, then 10, 11, … in order. §3 is the only work list, and it holds only
+- **Next step: §3 step 10**, then 11, 12, … in order. §3 is the only work list, and it holds only
   what is still OPEN — a finished step leaves it and lands in §9.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `31755c9` —
-  **108 violations in 27 families**, money family CLEAN, "the money that is not anyone's" 0.00B.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` at `35fa0ea` —
+  **115 violations in 33 families**, "the money that is not anyone's" 0.00B, and **M6 grazing its
+  band in 1 week of 16** (2.69B against a 0.5%-of-money tolerance ≈ 2.5B) — the first money line
+  in a long while; see §9.9 and §6.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
@@ -185,12 +187,14 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-9. **One running settlement net.** `settlement.ts:224,244` never adds a dated row to
-   `pendingNetById` even in its due week, and `overdraft-sweep.ts:33` re-derives the close balance by
-   walking the journal because the paying agent's payments are missing — so `pendingSettlementUSD`
-   (read by repo surplus, every bid sizer, the PB sweep) is systematically short by the week's
-   coupons and dividends. One representation. Same step: `sme-pools.ts:43` and
-   `household-balance-sheet.ts:52` read the INTRADAY report only, so close-cycle flows are lost.
+9b. **The household week has no lag.** `household-balance-sheet.ts:53` reads the week's own
+    settlement report, which at that point holds the intraday pass only, so every household flow
+    the close settles is lost. It cannot simply read the prior week whole (step 9 measured it):
+    the fields are named for a one-week lag and stage 02 consumes them the week after, so that
+    makes them two weeks stale and breaks M6's within-week identity. The fix is to delete the lag
+    — stage 02 reads the household week in the week it happened — and then the complete report is
+    the natural source. `ctx.priorWeekFlows.householdFlowsByRegion` is already persisted and
+    waiting for it.
 10. **Both legs, same money, same counterparty.** `05-unit-bidding.ts:1953` pays a cross-border cash
     leg in the BUYER's money to a seller whose books are in origin money with no conversion, while
     `:1838` books origin money; `:2183,2202` move the household/government goods leg lot-by-lot with
@@ -479,7 +483,7 @@ move into registries; lookups stay (rule 17).
 ## 6. WATCHLIST — measure, do not fix
 | Metric | Why |
 |---|---|
-| The money family (M1–M7) and "the money that is not anyone's" | Clean every run since §7.364; the scoreboard is the watch. A line here is a defect at its site. |
+| The money family (M1–M7) and "the money that is not anyone's" | Clean every run until §9.9, which left M6 grazing its band in 1 week of 16 (2.69B against ~2.5B of tolerance) while every other check stays clean and nothing is unowned. Bisect it when step 27 puts a real band on M6; a line here is otherwise a defect at its site. |
 | The 1e-8 week-1 drift (§7.370) | Three firms differ at the eighth digit at week 1; 13% price gap by week 13. Bisect by file, ONE dump per step. Watch it to zero; never widen a tolerance for it. |
 | The state-growth drift (§7.335, §7.380) | Weekly cost +45% over weeks 5→80 on two independent device runs, all stages inflating proportionally. First suspect: the contract book's row growth. |
 | TGA over a quarter; occupational mismatch; top-down vs bottom-up household income; the private tier that sells nothing; loan-book Spearman noise | Watch the TGA's LEVEL not its shape; mismatch is composition outrunning retraining; `estimatedHouseholdIncomeUSD` is still the anchor; ~300 seeded private firms per region carry `productLines: []`; Spearman 0.26–0.76 at 23–32 names — re-measure as the universe grows. |
@@ -2400,3 +2404,21 @@ the company from the fund's portfolio, so the retained stake left the sponsor's 
 sale and, unregistered, was credited to households; the sponsor now keeps what it did not sell as
 real shares and its percentage is a read of them. Measured (SHOCKS=0 WEEKS=16): **107 in 29 →
 108 in 27**, money clean, unowned 0.00B — flat, with eight holes closed.
+
+**9. One running settlement net.** (`35fa0ea`) `pendingSettlementUSD` — read by repo's surplus,
+every bid sizer, the prime-brokerage sweep and the close sweep — was short for two independent
+reasons, and a second representation had been written to work around the first. `journalPayment`
+wrote the journal and nothing else, so every coupon, dividend, call premium and redemption the
+paying agent made existed to no budget until it settled; it now updates the net like `pay`. A
+DATED ROW never joined the net even in its due week — `pay` skips it when recorded, correctly,
+and nothing added it when its week arrived — so a corporate tax obligation was invisible on the
+week it is paid; the net is seeded from the carried journal when the week's context is built.
+With both closed the close sweep stops re-deriving the net by walking the journal and reads the
+one total. `sme-pools` read the week's own report (the intraday pass only), losing every pool
+flow the close and funding cycles settle; the complete week is now persisted and it reads the
+prior one whole. **The household stage has the same hole and deliberately does not get the same
+fix** — its fields are a one-week lag consumed the week after, so the prior week makes them two
+weeks stale and breaks M6 — now step 9b. Measured (SHOCKS=0 WEEKS=16): **108 in 27 → 115 in
+33**, unowned 0.00B, M1/M2/M4/M5/M7 clean, **M6 grazing its band in 1 of 16 weeks** (2.69B
+against ~2.5B): a threshold crossing on a week whose flows moved, and the first thing to bisect
+when step 27 gives M6 a real band.
