@@ -400,6 +400,10 @@ export interface SettlementReport {
   unresolvedUSD: number;
   /** A — the settled rows the store could not map to a party's row. Must be zero. */
   accountRowsUnmapped: number;
+  /** …and what those rows were WORTH. A count is not a size, and the money family's headline is
+   *  in dollars: reported as a count alone, a leak of fifty small rows and a leak of fifty huge
+   *  ones read the same. */
+  accountUnmappedUSD: number;
 }
 
 export { partyId, partyOf, partyKey, partyFromKey } from '../../ledger/party';
@@ -453,6 +457,7 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
     centralBankResidualUSD: a.centralBankResidualUSD + b.centralBankResidualUSD,
     crossBorderByRegion: mergeMap(a.crossBorderByRegion, b.crossBorderByRegion),
     accountRowsUnmapped: a.accountRowsUnmapped + b.accountRowsUnmapped,
+    accountUnmappedUSD: a.accountUnmappedUSD + b.accountUnmappedUSD,
     unresolvedUSD: a.unresolvedUSD + b.unresolvedUSD,
   };
 }
@@ -479,6 +484,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     crossBorderByRegion: new Map(),
     unresolvedUSD: 0,
     accountRowsUnmapped: 0,
+    accountUnmappedUSD: 0,
   };
   if (nInstructions === 0) {
     ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;
@@ -514,7 +520,10 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     if (!rowDue(journal, n, week)) continue; // §5-WIRES N: dated past this pass — carried below
     const amountUSD = journal.amountUSD[n];
     const payerIdx = journal.payerId[n];
-    if (!applySettledRow(accounts, payerIdx, journal.payeeId[n], amountUSD)) report.accountRowsUnmapped++;
+    if (!applySettledRow(accounts, payerIdx, journal.payeeId[n], amountUSD)) {
+      report.accountRowsUnmapped++;
+      report.accountUnmappedUSD += amountUSD;
+    }
     const payeeIdx = journal.payeeId[n];
     const payerRef = partyOf(payerIdx);
     const payeeRef = partyOf(payeeIdx);

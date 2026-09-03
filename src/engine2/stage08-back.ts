@@ -1018,6 +1018,9 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       // §7.268: the bank's OWN sheet, not the region average — a solvency rating on the
       // cohort's mean rated every bank the same and none of them on itself.
       bankCapitalRatio: Number.isNaN(L8.bankCapitalRatio[row]) ? reg.bankingSector.bankCapitalRatio : L8.bankCapitalRatio[row],
+      bankEquityUSD: Number.isNaN(L8.bankEquityUSD[row]) ? reg.bankingSector.bankEquityUSD : L8.bankEquityUSD[row],
+      bankLossRateAnnual: Number.isNaN(L8.bankLossRateAnnual[row])
+        ? reg.bankingSector.loanLossProvisionRateAnnualPct : L8.bankLossRateAnnual[row],
     });
 
     // G5 — THE COMMITTED LINE IS DRAWN BEFORE ANYTHING DEFAULTS.

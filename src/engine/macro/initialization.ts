@@ -21,7 +21,7 @@ import {
   stationaryAgeDistribution, RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS, MAX_AGE_YEARS,
 } from '../bootstrap/population';
 import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
-import { CPI_BASE_LEVEL, seedCpiHistory } from '../simulation/stages/price-index';
+import { CPI_BASE_LEVEL, openingCpiHistory } from '../simulation/stages/price-index';
 import {
   computeHouseholdDisposableIncomeUSD,
   splitWageBill,
@@ -563,8 +563,8 @@ function buildRegion(regionId: RegionId): Region {
     // simulation/initialization.ts) — a price index needs the prices before it can be built.
     consumerPriceIndex: CPI_BASE_LEVEL,
     coreConsumerPriceIndex: CPI_BASE_LEVEL,
-    cpiHistory: seedCpiHistory(CPI_BASE_LEVEL, targetInflation),
-    coreCpiHistory: seedCpiHistory(CPI_BASE_LEVEL, targetInflation),
+    cpiHistory: openingCpiHistory(CPI_BASE_LEVEL),
+    coreCpiHistory: openingCpiHistory(CPI_BASE_LEVEL),
     cpiBasket: { weightBySubUnit: {}, basePriceBySubUnit: {}, baseIndexLevel: CPI_BASE_LEVEL, baseWeek: 1 },
     expectedInflation: targetInflation,
     targetInflation,

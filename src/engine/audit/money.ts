@@ -154,7 +154,7 @@ function m7(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const s = state.lastSettlement;
   if (!s) return out;
-  if (s.accountRowsUnmapped > 0) out.push({ family: 'M', check: 'M7 every settled row has an account', week, usd: s.accountRowsUnmapped, message: `${s.accountRowsUnmapped} settled rows named a party the account store has no row for` });
+  if (s.accountRowsUnmapped > 0) out.push({ family: 'M', check: 'M7 every settled row has an account', week, usd: s.accountUnmappedUSD ?? 0, message: `${s.accountRowsUnmapped} settled rows worth ${B(s.accountUnmappedUSD ?? 0)} named a party the account store has no row for — neither leg was applied` });
   return out;
 }
 

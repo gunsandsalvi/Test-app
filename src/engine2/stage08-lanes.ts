@@ -86,6 +86,8 @@ export interface BackLanes {
   employeeCount: Float64Array;
   employeeCountUpdate: Float64Array;       // NaN = no update / no field (the ?? fallback)
   bankCapitalRatio: Float64Array;          // NaN = no bank sheet
+  bankEquityUSD: Float64Array;             // NaN = no bank sheet
+  bankLossRateAnnual: Float64Array;        // NaN = no bank sheet
   customerConcentration: Float64Array;     // NaN = undefined
   supplierConcentration: Float64Array;     // NaN = undefined
   hasVehicle: Uint8Array;
@@ -152,6 +154,8 @@ export function buildBackLanes(
     baselineAnnualRevenueUSD: N.baselineAnnualRevenue, lastOpportunisticOfferingWeek: N.lastOpportunisticOfferingWeek,
     employeeCount: N.employeeCount, employeeCountUpdate: f(),
     bankCapitalRatio: f(),
+    bankEquityUSD: f(),
+    bankLossRateAnnual: f(),
     customerConcentration: N.customerConcentration, supplierConcentration: N.supplierConcentration,
     hasVehicle: new Uint8Array(n), boundaryTraceKey: new Array(n),
     occupationMixDrift: new Array(n), maxPayoutRatio: f(),
@@ -208,6 +212,8 @@ export function buildBackLanes(
     L.facilityMarginBps[i] = c.isBankEntity ? NaN_ : facilityMarginBpsFor(v2, c, updatedRegions[c.region], c.homeBankTicker ? bankByTicker.get(c.homeBankTicker) : undefined);
     L.employeeCountUpdate[i] = wu?.employeeCount ?? NaN_;
     L.bankCapitalRatio[i] = c.bankBalanceSheet?.bankCapitalRatio ?? NaN_;
+    L.bankEquityUSD[i] = c.bankBalanceSheet?.bankEquityUSD ?? NaN_;
+    L.bankLossRateAnnual[i] = c.bankBalanceSheet?.loanLossProvisionRateAnnualPct ?? NaN_;
     // NOTE (§7.320): revenueVolatility is NOT seam-computable — the PROFILE modules append
     // comp.revenueHistory MID-LOOP (profiles/bank.ts:52 and siblings), after any seam and
     // before the rating reads it. The fold stays closure-side; the week-2 rating drift that

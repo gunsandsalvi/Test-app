@@ -30,7 +30,7 @@ const INITIAL_ACCUM_DEPRECIATION_FRACTION = 0.45;
 export function getCategoryDemandSeedUSD(
   category: string,
   region: RegionId,
-  // §6 hoist: callers inside generation pass the world they already built; rebuilding four
+  // hoist: callers inside generation pass the world they already built; rebuilding four
   // regions (and consuming their RNG draws) once per company was most of the cold start's
   // random stream spent on immediately-discarded objects.
   initialRegions: Record<RegionId, import('../types').Region> = getInitialRegions()
@@ -65,7 +65,7 @@ export function getCategoryDemandSeedUSD(
  * The named tier's cut used to be a flat `0.35` while the SME segment took its industry's
  * `smeShareOfActivity` and the private tier carved out of THAT. Three independent claims on one
  * pot, summing to whatever they summed to: measured at seed, named firms took 93% of total output
- * and the pools another 36% — **129% between them** — because nothing made them add up.
+ * and the pools another 36% — **129% between them** because nothing made them add up.
  *
  * The registry already states the only split that is a structural fact: `smeShareOfActivity`, how
  * much of an industry is carried by firms too small to name. So the named tier's share is its
@@ -75,11 +75,11 @@ export function getCategoryDemandSeedUSD(
  * stated number).
  */
 /**
- * §7.227 — WHAT A SECTOR'S NAMED FIRMS MUST BE BIG ENOUGH TO SUPPLY.
+ * WHAT A SECTOR'S NAMED FIRMS MUST BE BIG ENOUGH TO SUPPLY.
  *
  * The demand for every sub-unit this sector produces, net of the share the registry says its SME
  * tier carries — read from the SAME demand vector the product lines are dealt against, so supply
- * and demand are one statement about the economy rather than two (§1.3, §7.4).
+ * and demand are one statement about the economy rather than two.
  */
 export function producingSectorNamedTierDemandUSD(
   sector: string,
@@ -122,7 +122,7 @@ export function deriveInitialRevenueUSD(
 }
 
 
-// generateUniqueName / generateUniqueTicker now live in ./bootstrap/firms (imported above)
+// generateUniqueName / generateUniqueTicker now live in./bootstrap/firms (imported above)
 // so the padding-clone loop below and the generative firm seeds share one implementation.
 
 // Real cost-driver dollar impacts this quarter (wage pressure, input-price shocks, capacity
@@ -425,13 +425,13 @@ export function generateInitialCompanies(
       let derivedRevBase = deriveInitialRevenueUSD(primaryCat, regionDemandSeed, rankInCategory >= 0 ? rankInCategory : 0, totalInCategory || 1);
 
       if (rawTmpl.sector === 'Banks') {
-        // OWN5: the seed share is the cohort's own firm-size curve (bootstrap/firms.ts) and it
+        // The seed share is the cohort's own firm-size curve (bootstrap/firms.ts) and it
         // survives only until 02b measures the deposits each bank actually holds.
         const bankShare = rawTmpl.bankMarketShare ?? 0.25;
         const initReg = initialRegions[region];
         if (initReg?.bankingSector) {
           const bs = initReg.bankingSector;
-          // §5-WIRES D: the seed's stated loan books size the opening revenue; nothing stores them.
+          // D: the seed's stated loan books size the opening revenue; nothing stores them.
           const totalAssets = seedLoanBookUSD(initReg.lastWeekNominalGdpUSD, 'business') + seedLoanBookUSD(initReg.lastWeekNominalGdpUSD, 'consumer') + bs.sovereignBondHoldingsUSD;
           derivedRevBase = bs.netInterestMarginPct * totalAssets * bankShare * 2.2;
         }
@@ -485,9 +485,9 @@ export function generateInitialCompanies(
       
       const interestRate = 0.045;
       const interestExpense = Math.max(1, tmpl.debtBase * interestRate);
-      // ONE OWNER (§6.1's duplicate row): the seed rate is the SAME number the fiscal stance
+      // ONE OWNER: the seed rate is the SAME number the fiscal stance
       // drifts from — a firm generated at 21% into a 31% world opened mispriced by the gap.
-      // §5-TAXR: that number is now the firm's own region's statutory rate.
+      // That number is now the firm's own region's statutory rate.
       const taxRate = CORPORATE_TAX_RATE_BY_REGION[region];
       const netIncome = Math.max(5, (ebit - interestExpense) * (1 - taxRate));
       const eps = Number((netIncome / tmpl.shares).toFixed(2));
@@ -501,7 +501,7 @@ export function generateInitialCompanies(
       const growthCapex = capex - maintenanceCapex;
 
       const sectorConfig = SECTOR_BENCHMARKS[tmpl.sector];
-      // Open the market at the price the market itself would set (§7.4: seed shape = engine
+      // Open the market at the price the market itself would set (: seed shape = engine
       // shape). The old `eps x sector basePE` capitalised earnings at ~1.5% net of growth while
       // every holder in 07e's auction capitalises them at 4-10%, so week 1 opened ~4x above any
       // real bid and the whole market spent ten weeks falling at its damping limit to get back.
@@ -747,13 +747,13 @@ export function generateInitialCompanies(
         insuranceClaimsPaidUSD: parent.insuranceClaimsPaidUSD,
 
         ...parent,
-        // §7.312 — the spread copies every object field BY REFERENCE, so all padding clones
+        // The spread copies every object field BY REFERENCE, so all padding clones
         // shared their parent's ladder ARRAY for week 1 (the back rebuild de-aliases at week
         // end): one firm's week-1 CP issue landed on its whole clone family's books, and the
         // rebuild then baked the foreign tranches in permanently. The ladder gets its own
         // tranche objects. (Known remainder, recorded: the copied principals are the PARENT's,
         // unscaled — the clone's scaled totalDebt is overwritten by the ladder sum at week 1.)
-        // §5-CLOSE C6 — a clone is a FIRM WITH ITS OWN NAME: its id is REGION_TICKER like every
+        // C6 — a clone is a FIRM WITH ITS OWN NAME: its id is REGION_TICKER like every
         // other firm's (it used to be the parent's id plus a hash, so 496 firms carried an id
         // that named another firm), its tranches carry ITS ticker (they were the parent's ids,
         // so 792 tranches were named for another firm), and its ladder is scaled with the rest
@@ -766,26 +766,21 @@ export function generateInitialCompanies(
             : t.id.startsWith(parent.id + '-') || t.id.startsWith(parent.id + '_')
               ? `${region}_${newTicker}` + t.id.slice(parent.id.length)
               : `${newTicker}-${t.id}`,
-          principalUSD: t.principalUSD * revenueScale,
         })),
         id: `${region}_${newTicker}`,
         ticker: newTicker,
         name: newName,
-        annualRevenue: parent.annualRevenue * revenueScale,
-        baselineAnnualRevenue: parent.baselineAnnualRevenue * revenueScale,
-        // §5-CLOSE O2: a clone's cap is price × ITS shares — the share count scales with the
-        // firm, the price is the parent's. Scaling the cap alone left every clone with a cap
-        // that was not price × shares (up to 7×), and the seed then wrote shares onto the
-        // register against that cap: 242 firms over-held at week 0, 94B of stock nobody issued.
-        sharesOutstanding: parent.sharesOutstanding * revenueScale,
-        grossPPEUSD: parent.grossPPEUSD * revenueScale,
-        accumulatedDepreciationUSD: parent.accumulatedDepreciationUSD * revenueScale,
         employeeCount: newEmployeeCount,
 
         historicalFundamentals: [...parent.historicalFundamentals]
       };
       stashSeedRing(newCompany, 'price', [...(peekSeedRing(parent, 'price') ?? [])]);
-      stashOpeningCash(newCompany, openingCashOf(parent) * revenueScale);
+      stashOpeningCash(newCompany, openingCashOf(parent));
+      // A clone's cap is price × ITS shares — the share count scales with the firm, the price is
+      // the parent's. Every line proportional to size scales together here; scaling the cap
+      // alone left clones whose cap was not price × shares, and the seed wrote register shares
+      // against that cap.
+      scaleFirmSize(newCompany, revenueScale);
       companies.push(newCompany as any);
     }
 
@@ -824,22 +819,16 @@ export function generateInitialCompanies(
         }
         const keptRevenueUSD = kept.reduce((a, c) => a + (c.annualRevenue || 0), 0);
         const lift = keptRevenueUSD > 0 ? totalRevenueUSD / keptRevenueUSD : 1;
-        kept.forEach((c) => {
-          c.annualRevenue *= lift;
-          c.baselineAnnualRevenue *= lift;
-          (c.debtTranches ?? []).forEach((t: DebtTranche) => { t.principalUSD *= lift; });
-          stashOpeningCash(c, openingCashOf(c) * lift);
-          c.sharesOutstanding *= lift; // §5-WIRES D: the cap is price × shares; the lift is more of the firm at the market's price, so the SHARES lift (the register was seeded that way already)
-          c.grossPPEUSD = (c.grossPPEUSD ?? 0) * lift;
-          c.accumulatedDepreciationUSD = (c.accumulatedDepreciationUSD ?? 0) * lift;
-        });
+        // The cap is price × shares, so the lift is more of the firm at the market's price and
+        // the SHARES lift with everything else.
+        kept.forEach((c) => scaleFirmSize(c, lift));
       }
     }
 
   });
 
   
-  // G1: Assign Product Lines & Category Market Share — dealt against the demand this seed has
+  // Assign Product Lines & Category Market Share — dealt against the demand this seed has
   // so far, and dealt AGAIN by `simulation/initialization.ts` once the authoritative demand
   // vector (real procurement, real firm capex) exists. See the function's own doc.
   dealProductLinesAndHeadcount(companies, (region, unitId) =>
@@ -851,12 +840,12 @@ export function generateInitialCompanies(
 
 
 /**
- * §7.227 — A SECTOR IS AS BIG AS WHAT IT HAS TO SUPPLY.
+ * A SECTOR IS AS BIG AS WHAT IT HAS TO SUPPLY.
  *
  * Every firm's revenue is sized off ONE hand-named industry per sector, through
  * `getCategoryDemandSeedUSD` — a switch of stated shares of household income that nothing else in
  * the model reads. So Tech's firms divide the SOFTWARE slice and are blind to semiconductors and
- * telecoms, which are most of what Tech actually makes. MEASURED at the seed (§7.224/§7.225):
+ * telecoms, which are most of what Tech actually makes. MEASURED at the seed:
  * Tech's named firms held 41% of the revenue their own demand implies and Consumer's held 145%,
  * while Energy (1.06) and Industrials (0.97) came out right only because their hand-named industry
  * is nearly their whole sector. Downstream that opened 36 of the USA's 37 categories below the
@@ -874,7 +863,7 @@ export function generateInitialCompanies(
  * IT RUNS HERE, against the AUTHORITATIVE demand vector, and not at generation time — the vector
  * that exists while firms are being built is not the one the goods market will clear against, and
  * normalising to it left the spread at 0.66-1.01 instead of closing it. Two earlier attempts are
- * recorded in §7.225 and §7.227; both failed on which vector they read.
+ * recorded in and; both failed on which vector they read.
  *
  * It carries the ratio through everything struck off revenue. Headcount is not in the list because
  * `dealProductLinesAndHeadcount`, which runs immediately after, re-derives it from revenue over
@@ -930,38 +919,55 @@ export function normalizeProducingSectorRevenue(
     if (!(actualUSD > 0)) return;
     const lift = targetUSD / actualUSD;
     if (!(lift > 0) || !isFinite(lift) || Math.abs(lift - 1) < 1e-9) return;
-    cohort.forEach((c) => {
-      c.annualRevenue *= lift;
-      c.baselineAnnualRevenue *= lift;
-      (c.debtTranches ?? []).forEach((t: DebtTranche) => { t.principalUSD *= lift; });
-      stashOpeningCash(c, openingCashOf(c) * lift);
-      c.sharesOutstanding *= lift; // §5-WIRES D: the cap is price × shares; the lift is more of the firm at the market's price, so the SHARES lift (the register was seeded that way already)
-      c.grossPPEUSD = (c.grossPPEUSD ?? 0) * lift;
-      c.accumulatedDepreciationUSD = (c.accumulatedDepreciationUSD ?? 0) * lift;
-    });
+    cohort.forEach((c) => scaleFirmSize(c, lift));
   });
+}
+
+/**
+ * A FIRM'S SIZE SCALES WHOLE. Three places resize a seeded firm — the roster padding's clone, the
+ * thinning lift and the sector normalisation — and each scaled revenue, shares, plant, ladder and
+ * opening cash while leaving the INCOME STATEMENT at the parent's or the pre-lift figure. A clone
+ * at 30% of its parent carried 100% of its EBITDA, so its implied margin exceeded one and the
+ * kernel read exactly that ratio; the same firm's rating, coverage and price were struck against
+ * it. Everything proportional to size moves together, here, once.
+ *
+ * `eps` and the margin ratios are deliberately NOT scaled: earnings and shares both move, so the
+ * per-share figure and every ratio built from two scaled lines are invariant by construction.
+ */
+function scaleFirmSize(company: Company | Record<string, unknown>, k: number): void {
+  const c = company as Record<string, unknown>;
+  const scale = (field: string) => {
+    const v = c[field];
+    if (typeof v === 'number' && isFinite(v)) c[field] = v * k;
+  };
+  ['annualRevenue', 'baselineAnnualRevenue', 'sharesOutstanding', 'grossPPEUSD',
+    'accumulatedDepreciationUSD', 'ebitda', 'ebit', 'netIncome', 'capex', 'maintenanceCapex',
+    'growthCapex', 'currentLiabilities', 'annualInterest', 'technicalReservesUSD', 'aumUSD',
+    'insurancePremiumsWrittenUSD', 'insuranceClaimsPaidUSD'].forEach(scale);
+  ((c.debtTranches as DebtTranche[] | undefined) ?? []).forEach((t) => { t.principalUSD *= k; });
+  stashOpeningCash(c as unknown as Company, openingCashOf(c as unknown as Company) * k);
 }
 
 /**
  * SUPPLY/CHAIN — DEAL THE PRODUCER BASE AGAINST THE DEMAND THE ECONOMY WILL ACTUALLY STATE.
  *
  * This pass decides which sub-units each firm produces, what share of each category it holds, and
- * — through value added — how many people it employs. It is weighted by `demandLevelAnnualUSD`, so the
+ * through value added — how many people it employs. It is weighted by `demandLevelAnnualUSD`, so the
  * producer base converges on demand's own shape and a new sub-unit in the registry gets producers
  * with no generator edit (BP1b, rule 17).
  *
  * **It is exported because it has to run TWICE, and that closes a fixed point the plan called
- * genuine.** Category demand is seeded three times (§7.120): a placeholder in
+ * genuine.** Category demand is seeded three times: a placeholder in
  * `macro/initialization.ts` off GDP shares, then the authoritative one in
  * `simulation/initialization.ts` which runs after the firms exist and can therefore use the real
  * procurement budget and the firms' OWN capex as `I`. The firm universe was dealt against the
  * placeholder and the demand vector was then overwritten — so the capital-goods sub-units were
  * dealt the producers a GDP-share investment number implied, and then asked to supply the real
  * one. Measured: 1.29x more capex bid than built for, four of five categories in permanent
- * shortage at 65-174% over base price (§7.168, §7.178).
+ * shortage at 65-174% over base price.
  *
  * **The coupling is one-directional, which is why one re-deal converges exactly.** A firm's SIZE
- * — its revenue, its PP&E, and therefore its capex — is set before any line is dealt, so `I` does
+ * its revenue, its PP&E, and therefore its capex — is set before any line is dealt, so `I` does
  * not move when the lines are re-dealt. Re-dealing against the authoritative vector is a fixed
  * point reached in one pass, not an iteration. It also draws no RNG: the deal is a deterministic
  * greedy over a sorted list, so running it twice relabels nothing (rule 10).
@@ -969,7 +975,7 @@ export function normalizeProducingSectorRevenue(
 export function dealProductLinesAndHeadcount(
   companies: Company[],
   demandLevelAnnualUSD: (region: RegionId, subUnitId: string) => number,
-  /** What the SME pools ACTUALLY carry of a sub-unit in this region (§7.227's discipline: the
+  /** What the SME pools ACTUALLY carry of a sub-unit in this region (discipline: the
    *  registry share is what they were sized from, not what they hold). Absent at the placeholder
    *  deal, where the stated share stands in. */
   smeRevenueForSubUnitUSD?: (region: RegionId, subUnitId: string) => number
@@ -998,7 +1004,7 @@ export function dealProductLinesAndHeadcount(
       comps.sort((a, b) => b.baselineAnnualRevenue - a.baselineAnnualRevenue);
 
       // BP1b (rule 17): lines are DEALT from the registry, weighted by this region's own seeded
-      // demand — supply seeded to meet the demand the economy states (§7.4), so a new sub-unit
+      // demand — supply seeded to meet the demand the economy states, so a new sub-unit
       // in the registry gets producers with no generator edit. Deterministic greedy: each firm
       // (largest first) takes the sub-units its sector currently under-serves most, so every
       // category's producer base converges to its demand share and coverage is an outcome.
@@ -1058,13 +1064,13 @@ export function dealProductLinesAndHeadcount(
       });
     });
 
-    // LVL (§7.338) — COVERAGE IS MADE EXACT AT SUB-UNIT GRAIN, CONSERVING EVERY FIRM'S REVENUE.
+    // LVL — COVERAGE IS MADE EXACT AT SUB-UNIT GRAIN, CONSERVING EVERY FIRM'S REVENUE.
     //
     // The greedy deal above converges each sector's producer base TOWARD its demand shares, but
     // three lines a firm and ten firms a sector leave real residue: measured at the seed, the
     // named tier covered household chemicals at ~0.67 of its demand and consumer software at
     // 0.04 — and a short market opens the auction at the household's reach-capped step every
-    // week for a year (the §6.1 level row). §7.227 fixed the split BETWEEN sectors by moving
+    // week for a year. fixed the split BETWEEN sectors by moving
     // revenue; this fixes the split WITHIN a sector by moving each firm's line SHARES: an
     // iterative proportional fit that scales every multi-line firm's shares by
     // target/current for each sub-unit and renormalises them to one, so the firm's revenue,
@@ -1143,14 +1149,14 @@ export function dealProductLinesAndHeadcount(
       // Dividing one by the other needs the ratio between them, which is exactly
       // `1 / (1 - recipe intensity)` for what this firm actually makes — so the seven stated
       // per-sector multiples above were a guess at a number the registry now knows per product
-      // (§7.117). Deriving it makes employment equal `Σ line revenue x (1 - a_line) /
+      //. Deriving it makes employment equal `Σ line revenue x (1 - a_line) /
       // productivity` — the firm's real value added over output per worker — so total employment
       // is pinned to what the economy PRODUCES rather than to gross output through a separate
       // multiple, and the two can no longer disagree.
       //
       // This is the half that makes CHAIN-E's demand change safe: intermediate demand raises
       // every producer's revenue, and without this headcount would rise with it and put
-      // employment above the labour force (§6.1 records that exact failure from an earlier
+      // employment above the labour force (records that exact failure from an earlier
       // attempt). Revenue rises, value added does not, and employment follows value added.
       const lines = c.productLines || [];
       if (lines.length > 0) {
@@ -1208,7 +1214,7 @@ export function generatePrivateCompanies(
     const da = revBase * 0.045;
     const ebit = Math.max(1, ebitda - da);
     const coverage = ebit / Math.max(0.5, annualInterest);
-    // CRD/§7.4: the seed rater sees the same facts the weekly one does, so a firm born without
+    // CRD/: the seed rater sees the same facts the weekly one does, so a firm born without
     // earnings opens at the rating the week would give it rather than at a bounded ratio's.
     const rating = determineCreditRating(debtBase / Math.max(1, ebitda), coverage, { ebitdaUSD: ebitda });
     const capex = Math.round(revBase * 0.05);

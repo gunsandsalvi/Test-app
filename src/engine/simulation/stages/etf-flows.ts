@@ -566,18 +566,34 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         // (measured: read-all-then-move handed later redeemers a slice of rows already promised,
         // and the small-cap ETFs' constituents over-delivered 2–3x by week 4).
         {
+          // ONE SLICE PER INSTRUMENT, not per row. A holder can carry several rows of the same
+          // paper, and the ledger's debit is addressed by (type, instrument) — it takes what it
+          // is asked for from every row of that instrument at once. Moved row by row, the first
+          // transfer of a repeated instrument already drained what the second one then asked
+          // for, and at a whole-book redemption the second ask had nothing left to take.
           const H = ctx.v2.holdings;
+          const byInstrument = new Map<string, ItemizedHolding>();
           for (let r = bookHeadOf(ctx.v2, fundId); r >= 0; r = H.next[r]) {
             const qty = H.qtyUSD[r] * share;
             if (!(Math.abs(qty) > 0.0001)) continue;
             const sh = H.shares[r];
+            const instrumentId = ctx.v2.internedStrings[H.instrRef[r]];
+            const instrumentType = ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
+            const key = `${instrumentType}|${instrumentId}`;
+            const seen = byInstrument.get(key);
+            if (seen) {
+              seen.quantityOrNotionalUSD += qty;
+              if (!Number.isNaN(sh)) seen.quantityShares = (seen.quantityShares ?? 0) + sh * share;
+              continue;
+            }
             const out: ItemizedHolding = {
-              instrumentId: ctx.v2.internedStrings[H.instrRef[r]],
-              instrumentType: ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'],
+              instrumentId,
+              instrumentType,
               issuerRegion: ctx.v2.internedStrings[H.regionRef[r]] as ItemizedHolding['issuerRegion'],
               quantityOrNotionalUSD: qty,
             };
             if (!Number.isNaN(sh)) out.quantityShares = sh * share;
+            byInstrument.set(key, out);
             rows.push(out);
           }
         }

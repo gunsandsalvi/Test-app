@@ -90,6 +90,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     reg.coreConsumerPriceIndex = Number(coreCpiLevel.toFixed(6));
     reg.cpiHistory = cpiHistory;
     reg.coreCpiHistory = coreCpiHistory;
+    // A year of real weeks, or no year-over-year number at all: until then `inflation` is the
+    // opening assumption it was seeded with, and the flag says so to everything that reports it.
+    reg.inflationIsMeasured = !!(yearAgoCpi && yearAgoCpi > 0);
     if (yearAgoCpi && yearAgoCpi > 0) reg.inflation = Number((cpiLevel / yearAgoCpi - 1).toFixed(4));
     if (yearAgoCoreCpi && yearAgoCoreCpi > 0) reg.coreInflation = Number((coreCpiLevel / yearAgoCoreCpi - 1).toFixed(4));
   });

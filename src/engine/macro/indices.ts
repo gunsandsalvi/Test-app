@@ -26,7 +26,7 @@ export function calculateCompositeIndices(
   regions: Record<RegionId, Region>,
   commodities?: Commodity[],
   prevIndices?: CompositeBenchmarkIndices,
-  // §4.C II.5 — prices read the ring; absent (the seed call) the len-0 path is the same
+  // II.5 — prices read the ring; absent (the seed call) the len-0 path is the same
   // `|| stockPrice` fallback the old length-1 seed array took.
   v2?: import('../../engine2/world').V2World
 ): CompositeBenchmarkIndices {
@@ -62,8 +62,12 @@ function regionIndexShortName(regionId: RegionId): string {
 const COMMODITY_INDEX_NAME = 'Broad Commodity Index';
 const COMMODITY_INDEX_SHORT_NAME = 'Commodities';
 
-const getCapWeightedAvgPrice = (firms: Company[], baseIndex: number) => {
-    if (firms.length === 0) return baseIndex;
+const getCapWeightedAvgPrice = (firms: Company[]) => {
+    // AN EMPTY MEMBERSHIP MOVES NOTHING. This returned the index's BASE LEVEL — around 1000 —
+    // where every caller multiplies the result as a fractional CHANGE, so a region or sector
+    // that emptied would have multiplied its index by about 1001 in a single week. There is no
+    // move to report when there is nobody left to move.
+    if (firms.length === 0) return 0;
     const totalCap = firms.reduce((sum, f) => sum + marketCapOf(f), 0);
     const avgChange = firms.reduce((sum, f) => {
       const prevP = prevPriceOf(f);
@@ -72,15 +76,15 @@ const getCapWeightedAvgPrice = (firms: Company[], baseIndex: number) => {
     }, 0);
     // IDX: no bound. An index is the cap-weighted move of its own constituents, whatever that
     // is — a STATISTIC, not a price and not a level. The +/-15%/wk clamp that stood here only
-    // hid §6's equity runaway inside the published number while the constituents themselves ran,
+    // hid equity runaway inside the published number while the constituents themselves ran,
     // which is the one thing a published index must never do (rule 2).
     return avgChange;
   };
 
-  const usChange = getCapWeightedAvgPrice(usFirms, regionIndexBase('USA'));
-  const euChange = getCapWeightedAvgPrice(euFirms, regionIndexBase('EUR'));
-  const ukChange = getCapWeightedAvgPrice(ukFirms, regionIndexBase('UK'));
-  const jpChange = getCapWeightedAvgPrice(jpFirms, regionIndexBase('JPN'));
+  const usChange = getCapWeightedAvgPrice(usFirms);
+  const euChange = getCapWeightedAvgPrice(euFirms);
+  const ukChange = getCapWeightedAvgPrice(ukFirms);
+  const jpChange = getCapWeightedAvgPrice(jpFirms);
 
   // IDX: sector sub-indices filter to `listed` like the regional ones. They did not, which was
   // harmless only while a private firm's marketCap was 0 — a latent double-count waiting for the
@@ -90,10 +94,10 @@ const getCapWeightedAvgPrice = (firms: Company[], baseIndex: number) => {
   const energyFirms = listed.filter(c => c.sector === 'Energy');
   const indFirms = listed.filter(c => c.sector === 'Industrials');
 
-  const techChange = getCapWeightedAvgPrice(techFirms, 1000);
-  const finChange = getCapWeightedAvgPrice(finFirms, 1000);
-  const energyChange = getCapWeightedAvgPrice(energyFirms, 1000);
-  const indChange = getCapWeightedAvgPrice(indFirms, 1000);
+  const techChange = getCapWeightedAvgPrice(techFirms);
+  const finChange = getCapWeightedAvgPrice(finFirms);
+  const energyChange = getCapWeightedAvgPrice(energyFirms);
+  const indChange = getCapWeightedAvgPrice(indFirms);
 
   const prevUS = prevIndices?.usaComposite?.value ?? regionIndexBase('USA');
   const prevEU = prevIndices?.eurComposite?.value ?? regionIndexBase('EUR');

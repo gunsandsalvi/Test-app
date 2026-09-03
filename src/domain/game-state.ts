@@ -117,6 +117,8 @@ export interface GameState {
     crossBorderByRegion: Record<string, number>;
     /** §5-WIRES A — settled rows the store could not map to a party's row (must be zero). */
     accountRowsUnmapped: number;
+    /** What those rows were worth: a count is not a size. */
+    accountUnmappedUSD?: number;
   };
   /** SEG1 — payments recorded AFTER the week's settlement cutoff (hc-lifecycle's tender
    * settlements, birth carves). A real net-settlement system rolls after-cutoff payments into

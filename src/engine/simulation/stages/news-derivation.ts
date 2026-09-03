@@ -315,7 +315,9 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: dp > 0 ? 'prices rise' : 'prices fall',
       category: 'MACRO',
       title: `${rid} prices ${dp > 0 ? 'up' : 'down'} ${P(Math.abs(dp))} in a week`,
-      description: `The ${rid} price level moved ${P(dp)} (annualised inflation ${P(after.inflation)}). `
+      description: `The ${rid} price level moved ${P(dp)} (${after.inflationIsMeasured
+        ? `annualised inflation ${P(after.inflation)}`
+        : `index at ${after.consumerPriceIndex.toFixed(1)}; no year of history yet`}). `
         + (cats.length ? `Biggest moves: ${cats.map((x) => `${x.k.replace(/_/g, ' ')} ${x.move > 0 ? '+' : ''}${P(x.move, 0)} (${P(x.fill, 0)} of demand served)`).join('; ')}.` : ''),
       refs: [region(rid)],
       materialityUSD: Math.abs(dp) * (after.derivedNominalGdpUSD ?? after.estimatedNominalGdpUSD ?? 0),

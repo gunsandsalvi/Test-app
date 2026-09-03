@@ -741,6 +741,10 @@ export interface Region {
    */
   taylorTargetRate: number;
   inflation: number;
+  /** True once fifty-three real weeks of index exist and `inflation` is a measured
+   *  year-over-year change. Until then it is the opening assumption, and what is REPORTED is the
+   *  level — a displayed change where no history exists is a lie. */
+  inflationIsMeasured?: boolean;
   coreInflation: number;
   /**
    * Real measured price level and its trailing year, produced by the CPI basket in

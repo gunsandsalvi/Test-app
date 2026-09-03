@@ -1,23 +1,23 @@
 /**
- * §5-STRUCT step 2 — A FIRM'S CREDIT STANDING FOR ONE WEEK.
+ * A FIRM'S CREDIT STANDING FOR ONE WEEK.
  *
  * The second object out of the ~1,900-line company kernel: the two ratios a rating is struck on,
  * how much of a committed line a lender would still extend, and when the firm is actually in
  * default. All three were inline, and all three are decisions a lender makes rather than
  * bookkeeping a stage does.
  *
- * WHY THESE THREE TOGETHER: they are one question asked from three sides. §5-G5's finding was that
+ * WHY THESE THREE TOGETHER: they are one question asked from three sides. finding was that
  * the public tier defaulted at ~10%/yr against ~1–2% in reality while the private tier with real
  * ladders showed ZERO — because **nothing at all stood between a bad week and a default.** A real
  * firm draws its revolver first, and it defaults when the line is exhausted, which is a different
  * event and a far rarer one. Leverage, coverage, headroom and the trigger have to agree, and they
  * agree here or nowhere.
  *
- * Pure functions over flat inputs, per the columnar constraint (§7.228).
+ * Pure functions over flat inputs, per the columnar constraint.
  */
 
 /**
- * LEVERAGE AND COVERAGE, UNBOUNDED — and that is deliberate (§1.15: a bound is not a measurement).
+ * LEVERAGE AND COVERAGE, UNBOUNDED — and that is deliberate.
  *
  * These carried `[0, 100]` and `[-50, 50]` clamps because EBITDA passes through zero and the ratio
  * explodes. The denominators are floored, so the numbers are finite without the clamps, and what
@@ -32,12 +32,29 @@ export function creditMetrics(i: {
   ebitUSD: number;
   annualInterestUSD: number;
   bankCapitalRatio: number;
+  /** A bank's own equity and the annual loss rate its own book is running. */
+  bankEquityUSD: number;
+  bankLossRateAnnual: number;
 }): { leverage: number; coverage: number } {
+  // A BANK IS RATED ON ITS OWN SHEET, AND ON A CONTINUUM. Its leverage denominator was
+  // `revenue x 0.4` — a stated 40% margin, the very constant the profile modules deleted — and
+  // its coverage took exactly TWO VALUES, 0.4 below a 5% capital ratio and 3.0 above it. A
+  // coverage that is a step cannot rate a bank on itself: every bank above the step shared one
+  // number, every bank below it shared another, and a hair's movement in the ratio jumped the
+  // whole rating several buckets at once. Both are now measurements.
+  //
+  // Leverage is debt against the equity behind it. Coverage is what coverage means for a bank:
+  // how many years of its own expected losses its capital absorbs. Both climb and fall with the
+  // sheet, the way a corporate's do, and they share the rating ladder with corporates — which is
+  // why coverage is measured against the WHOLE capital base rather than the buffer above the
+  // regulatory floor. That buffer is the right measure of distance to default and is what the
+  // default probability uses; on a rating ladder it turns negative for any bank under the floor,
+  // rating a thin but solvent bank below a corporate with no earnings at all.
   const rawLeverage = i.isBank
-    ? i.totalDebtUSD / Math.max(1, i.revenueUSD * 0.4)
+    ? i.totalDebtUSD / Math.max(1, i.bankEquityUSD)
     : i.totalDebtUSD / Math.max(1, i.ebitdaUSD);
   const rawCoverage = i.isBank
-    ? (i.bankCapitalRatio < 0.05 ? 0.4 : 3.0)
+    ? Math.max(0, i.bankCapitalRatio) / Math.max(1e-4, i.bankLossRateAnnual)
     : i.ebitUSD / Math.max(0.5, i.annualInterestUSD);
   return {
     leverage: isFinite(rawLeverage) ? Number(Math.max(0, rawLeverage).toFixed(2)) : 5.0,

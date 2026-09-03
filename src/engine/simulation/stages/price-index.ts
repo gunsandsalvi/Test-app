@@ -10,7 +10,7 @@
  *
  * This module replaces it with the real thing. Every week, stage 05's auction clears a real unit
  * price for every sub-unit against real bids from real buyers (`CategoryDemandState.unitPriceUSD`)
- * — the prices households genuinely transact at. A consumer price index is nothing more than
+ * the prices households genuinely transact at. A consumer price index is nothing more than
  * those prices, weighted by how much households actually spend on each of them:
  *
  *     CPI_t = 100 * sum_i ( w_i * p_i,t / p_i,base )
@@ -94,7 +94,7 @@ export function buildCpiBasket(region: Region, week: number, baseIndexLevel: num
     subUnits.forEach((su) => {
       if (su.buyerMix.HOUSEHOLD <= 0) return;
       const demand = region.categoryDemand[su.unitId as keyof typeof region.categoryDemand];
-      // IND16: a consumer price index prices what a CONSUMER pays, which is the shelf price —
+      // A consumer price index prices what a CONSUMER pays, which is the shelf price —
       // the landed price plus what the channel charges to hold the stock it is sold out of. The
       // landed price is what a business pays for the same good, and reading it here left the
       // channel's cost out of the household's cost of living entirely.
@@ -142,14 +142,21 @@ export function computeCpiLevel(region: Region, basket: CpiBasket, excludeFoodAn
 }
 
 /**
- * A trailing year of index levels for a region that did not just come into existence, so that the
- * year-over-year comparison is real from week 1 rather than undefined for the first year. Uses the
- * inflation target as the trend, which is what a central bank that has been hitting its target
- * would have produced. Same technique, and same reason, as the seeded nominal-GDP history.
+ * A YEAR-OVER-YEAR CHANGE NEEDS A YEAR OF WEEKS THAT HAPPENED.
+ *
+ * A trailing year of index levels used to be fabricated here, compounding at the inflation
+ * TARGET — what a central bank that had been hitting its target would have produced — so the
+ * year-over-year read had something to divide by from week 1. What it produced was a manufactured
+ * inflation series for the whole first year, and it did not sit quietly in a display: it fed the
+ * Taylor rule, the labour deflator's cost-of-living pass-through and the news, all of which
+ * treated it as a measurement of this economy. A central bank that has hit its target is also
+ * precisely the real-world outcome rule 4 forbids importing.
+ *
+ * The history now begins where the world does, with the opening level and nothing before it. The
+ * year-over-year figure is absent until fifty-three real weeks exist (`11-fiscal`'s guard already
+ * required that; it simply always found the fabricated year there), and what is reported until
+ * then is THE LEVEL, which is a fact.
  */
-export function seedCpiHistory(currentLevel: number, annualInflation: number): number[] {
-  const weeks = 53;
-  return Array.from({ length: weeks }, (_, i) =>
-    Number((currentLevel * Math.pow(1 + annualInflation, (i - (weeks - 1)) / 52)).toFixed(6))
-  );
+export function openingCpiHistory(currentLevel: number): number[] {
+  return [Number(currentLevel.toFixed(6))];
 }

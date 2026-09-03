@@ -66,9 +66,19 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   });
 }
 
-/** A row still worth keeping on the chain: over a dollar, or carrying shares. */
+/**
+ * A row still worth keeping on the chain: one that holds ANYTHING, in either unit.
+ *
+ * This kept rows over a dollar or over a millionth of a share, which meant two things. It
+ * destroyed up to a dollar of value per row with no wire — and it did so on every row of the
+ * holder's book, not only the one being debited, because the relink below rebuilds the whole
+ * chain. A basket delivery that moved several instruments in turn could therefore drop a small
+ * row of instrument B while transferring instrument A, and B's own transfer then found nothing
+ * to take. It is also the predicate `pruneEmptyRows` uses, and the two disagreeing was a second
+ * answer to one question.
+ */
 const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
-  H.qtyUSD[r] > 1 || (!Number.isNaN(H.shares[r]) && H.shares[r] > 1e-6);
+  H.qtyUSD[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0);
 
 /**
  * Take from the holder's row(s) of this instrument; a row emptied is unlinked. One walk of the
@@ -88,20 +98,27 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const tRef = internString(v2, spec.instrumentType), iRef = internString(v2, spec.instrumentId);
   let leftUSD = spec.valueUSD; let leftShares = spec.shares ?? Number.NaN;
   let hit = false; let drops = false;
+  // The residue of a row-by-row subtraction scales with the whole position the walk draws from,
+  // not with the amount asked for: a debit of a thousand dollars taken out of a book of billions
+  // carries the book's rounding, not its own.
+  let walkedUSD = 0; let walkedShares = 0;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] === tRef && H.instrRef[r] === iRef && (leftUSD > 1e-9 || leftShares > 1e-12)) {
       hit = true;
+      walkedUSD += Math.abs(H.qtyUSD[r]);
       const takeUSD = Math.min(leftUSD, H.qtyUSD[r]);
       H.qtyUSD[r] -= takeUSD; leftUSD -= takeUSD;
       if (!Number.isNaN(leftShares) && !Number.isNaN(H.shares[r])) {
+        walkedShares += Math.abs(H.shares[r]);
         const takeSh = Math.min(leftShares, H.shares[r]); H.shares[r] -= takeSh; leftShares -= takeSh;
       }
     }
     if (!keepsRow(H, r)) drops = true;
   }
   // What is left after the walk is either float noise from the row-by-row subtraction — which
-  // scales with the quantity moved — or paper the holder never had.
-  if (leftUSD > 1e-9 * Math.max(1, spec.valueUSD) || leftShares > 1e-9 * Math.max(1, spec.shares ?? 0)) {
+  // scales with the position it walked — or paper the holder never had.
+  if (leftUSD > 1e-9 * Math.max(1, spec.valueUSD, walkedUSD)
+    || leftShares > 1e-9 * Math.max(1, spec.shares ?? 0, walkedShares)) {
     defect(`${holderId} was debited ${spec.instrumentType} ${spec.instrumentId} beyond its position`
       + ` — ${(leftUSD / 1e6).toFixed(6)}M and ${Number.isNaN(leftShares) ? 0 : leftShares} shares undelivered`);
   }
