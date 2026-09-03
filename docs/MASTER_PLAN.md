@@ -256,18 +256,6 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
 
 ### PART II — THE INSTRUMENTS ARE REAL
 
-12b. **Pricing is centralised; now use it.** `domain/pricing/` owns the time value of money
-    (§9.12b): `discountFactor`, `annuityFactor`, `levelPaymentFactor`, `presentValuePerFace`, and
-    step 13's pair `priceFromSpreadBps`/`spreadBpsFromPrice` with `zeroRateAt`. Eight modules that
-    wrote the formulas out by hand now call it. What is LEFT is the consumers that still price by
-    their own arithmetic rather than off a cleared print, and each belongs to the step that owns
-    its mechanism: `engine/pricing.ts`'s `priceCorporateBond`/`priceLeveragedLoan` are used by ONE
-    caller, `12-portfolio:141`, which step 26 deletes outright (a round trip through Nelson-Siegel
-    cannot return the cleared price); `carryCalculator.ts` is step 26's; `index-calculation.ts:52`
-    now uses the shared PV but still discounts a bond it should be able to READ a price for, which
-    is step 13. **One holdout on the convention:** `engine/nelsonSiegel.ts` discounts continuously
-    (`exp(-z·t)`) where everything else compounds discretely. Unify it in the same commit as 13's
-    sovereign pricing — moving it alone re-prices every sovereign for no gain.
 13. **EVERY ASSET TRADES ON PRICE — AND THE STRUCTURE HAS TO CHANGE, NOT THE CREDIT BOOKS**
     *(37-SEED handed this step two findings it already owns. **(a)** the seed's spread table is the
     permanent CASH FLOW of every bond the world opened with — `RATING_OAS_SPREADS` sets
@@ -357,6 +345,12 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
     (the price already exists and is discarded) → **plant and housing** (units must be defined
     before anything else is possible — step 26 owns that decision). Each class is its own commit
     and each is expected to move the numbers.
+
+    **TWO CONVENTIONS TO SETTLE IN THE SOVEREIGN COMMIT** (step 12b, §9.12b): `index-calculation.ts:52`
+    discounts a bond it should be able to READ a cleared price for, and `engine/nelsonSiegel.ts`
+    discounts CONTINUOUSLY (`exp(-z·t)`) where `domain/pricing/` compounds discretely — two answers
+    to one question (rule 4). Unify the convention in the same commit as the sovereign pricing;
+    moving it alone re-prices every sovereign for no gain.
 
     **AND IT OWNS 11f AND STEP 12's TAIL** — one file, three findings, one cause: the register is
     keyed by TRANCHE and the auctions clear by ISSUER, so `register-split.ts` has to invent the
@@ -802,7 +796,9 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
     disagreeing depreciation schedules below are a symptom of: `capexUnderConstruction` already
     carries plant as a stack of DATED vintages while the sheet carries it as one number. Decide
     it once, here, and the wire follows; deciding it twice guarantees they diverge again.)* `12-portfolio:141` re-derives a bond price from the
-    cleared OAS through Nelson-Siegel (a round trip that cannot return the cleared price) and splits
+    cleared OAS through Nelson-Siegel (a round trip that cannot return the cleared price — and it is
+    the ONLY caller of `engine/pricing.ts:priceCorporateBond`/`priceLeveragedLoan`, so both die with
+    it) and splits
     P&L attribution by invented 70/30, 80/20 and 40/60 fractions that reach the user through the turn
     summary; `carryCalculator.ts:56-236` is a whole invented spread/yield world beside the cleared
     one; `stage08-back.ts:1861` falls back to deriving the CDS spread from the OAS, destroying the
@@ -1402,6 +1398,14 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**12b — pricing is centralised, and what is left of it belongs to the steps that own the
+mechanisms.** `domain/pricing/` owns the time value of money and eight modules call it. Verified by
+reading, not assumed: `engine/pricing.ts:priceCorporateBond`/`priceLeveragedLoan` and
+`carryCalculator.ts` have exactly ONE caller between them, `12-portfolio-and-positions.ts`, which
+step 26 deletes outright — so the functions die with it, recorded there. `index-calculation.ts:52`
+and `nelsonSiegel.ts`'s continuous-vs-discrete convention are step 13's, recorded there. Nothing
+left that is 12b's own.
 
 **12 — one thing, one key: the tail is step 13's, not a step of its own.** What was left (`O8`,
 0.42B on 219 positions) is `register-split.ts:63` falling back to the ISSUER's id when the ladder of
