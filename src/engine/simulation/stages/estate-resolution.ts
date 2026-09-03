@@ -142,7 +142,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     if (!estate) {
       // A dead firm nobody has a claim on opens no estate — nothing takes delivery for it, so
       // what is still on its way is scrapped by wire now, not on landing (step 8).
-      scrapConsignmentsTo(state, comp.ticker);
+      scrapConsignmentsOf(state, comp.ticker, comp.id);
       return;
     }
     // The death closes out every derivative the firm stands on, this
@@ -251,7 +251,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
         Object.entries(materializeInputInventory(ctx.v2, comp.id)).forEach(([subUnitId, lots]) => {
           scrapInputUnits(ctx.v2, comp, subUnitId, lots.reduce((a, l) => a + l.unitsHeld, 0));
         });
-        scrapConsignmentsTo(state, comp.ticker);
+        scrapConsignmentsOf(state, comp.ticker, comp.id);
       }
       // A closed estate leaves no ladder — whatever face no claim covered is
       // extinguished by wire, so a dead firm's debt cannot stand on a book nobody holds.
@@ -279,11 +279,20 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
 /** What is still on its way to a firm nothing can take delivery for is scrapped by wire:
  *  a named carrier held it as stock and writes it off; one the transport pool carried passed
  *  through a sink at dispatch and was never stock (the same rule goods-arrival applies). */
-function scrapConsignmentsTo(state: GameState, buyerTicker: string): void {
+/**
+ * A CLOSED ESTATE IS NEITHER END OF A SHIPMENT. What was on its way TO the dead firm has no
+ * consignee, and what was on its way FROM it has no shipper who can answer for it — both are
+ * scrapped where they sit, by the carrier that holds them. Only the buyer side was swept before,
+ * so a dead SELLER's consignments sailed on for ever against a firm that no longer exists.
+ */
+function scrapConsignmentsOf(state: GameState, ticker: string, companyId: string): void {
   const inFlight = state.goodsInTransit ?? [];
-  if (!inFlight.some((sh) => sh.buyerTicker === buyerTicker)) return;
+  const isDead = (sh: { buyerTicker: string; sellerKey?: unknown }): boolean =>
+    sh.buyerTicker === ticker || String(sh.sellerKey ?? '').replace(/^.*:/, '') === companyId
+    || String(sh.sellerKey ?? '').replace(/^.*:/, '') === ticker;
+  if (!inFlight.some(isDead)) return;
   state.goodsInTransit = inFlight.filter((sh) => {
-    if (sh.buyerTicker !== buyerTicker) return true;
+    if (!isDead(sh)) return true;
     if (sh.carrierTicker && sh.carrierRegion) scrapGoods(sh.carrierRegion, sh.subUnitId, sh.units);
     return false;
   });

@@ -61,7 +61,7 @@ function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix
     if (group.length === 1) { result.push(group[0]); newIdByOldId?.set(group[0].id, group[0].id); return; }
     const totalPrincipal = group.reduce((s, t) => s + t.principalUSD, 0);
     if (totalPrincipal <= 0) return;
-    // 13b: every member's holders re-key to the bucket's one id (the exchange reads this map).
+    // Every member's holders re-key to the bucket's one id (the exchange reads this map).
     group.forEach((t) => newIdByOldId?.set(t.id, `${idPrefix}-ASSUMED-${nextWeek}-${bucketIndex}`));
     const weightedCoupon = group.reduce((s, t) => s + (t.couponRate ?? 0) * t.principalUSD, 0) / totalPrincipal;
     const weightedMarginBps = group.reduce((s, t) => s + (t.floatingMarginBps ?? 0) * t.principalUSD, 0) / totalPrincipal;
@@ -86,9 +86,9 @@ function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix
 }
 
 /**
- * §7.283 — IND7's SECOND HALF: THE DIVESTITURE, with the register mint it was waiting on.
+ * IND7's SECOND HALF: THE DIVESTITURE, with the register mint it was waiting on.
  *
- * The hold was measured (§7.138): a firm dominant in a category for a sustained year may not
+ * The hold was measured: a firm dominant in a category for a sustained year may not
  * acquire. What follows a sustained hold in reality is a REMEDY — the authority makes the firm
  * divest the dominant line — and that was recorded as unbuilt because a spin-off must MINT a
  * new issuer's holder register, and `settleCorporateActionOnHolders` only scales an existing
@@ -146,7 +146,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     if (spin.baselineNetPpeUSD !== undefined) spin.baselineNetPpeUSD = spin.baselineNetPpeUSD * share;
     spin.antitrustWeeksAboveThreshold = 0;
     revHistSeed(ctx.v2!, rowOf(ctx.v2!, spin.id), spin.annualRevenue);
-    // §4.C II.5 — structuredClone(parent) used to carry the histories; the rings copy rows.
+    // II.5 — structuredClone(parent) used to carry the histories; the rings copy rows.
     {
       const v2r = ctx.v2!;
       const pf = rowOf(v2r, parent.id), sf = rowOf(v2r, spin.id);
@@ -157,7 +157,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
 
     // THE MINT: each holder of parent equity receives its pro-rata spin-co register rows,
     // BEFORE the parent's price steps down (the stake fraction reads the pre-split register).
-    // §7.307 holdings flip: row walk for the stake read (the push and sync below stay on objects).
+    // holdings flip: row walk for the stake read (the push and sync below stay on objects).
     const Hs = ctx.v2.holdings;
     const parentRef = internString(ctx.v2, parent.id);
     const equityRefS = internString(ctx.v2, 'EQUITY');
@@ -210,7 +210,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
 export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void {
   if (ctx.nextWeek % 13 !== 0) return;
 
-  // §7.283: the authority's remedy runs on the same quarterly clock as its docket, whether or
+  // The authority's remedy runs on the same quarterly clock as its docket, whether or
   // not a merger also fires this quarter.
   runDivestitures(ctx);
 
@@ -223,9 +223,9 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   const target = ctx.updatedCompanies.find(c => c.ticker === merger.targetTicker);
   if (!acquirer || !target || !isActiveCompany(acquirer) || !isActiveCompany(target)) return;
 
-  // IND7 — a firm under an antitrust hold does not get to buy another one. The hold is a
+  // A firm under an antitrust hold does not get to buy another one. The hold is a
   // MEASURED position: a dominant share in some category it sells into, held for a sustained
-  // window (§7.138), not a snapshot and not a label. This is the half of IND7 that exists; the
+  // window, not a snapshot and not a label. This is the half of IND7 that exists; the
   // divestiture that should follow it is recorded there as unbuilt.
   if (isAntitrustBlocked(acquirer)) return;
 
@@ -234,11 +234,11 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   const stockPaid = purchasePrice * 0.5;
   const targetMarketCapUSD = Math.max(1, marketCapOf(target));
 
-  // §7.241: the consideration is PAYMENTS now. The old form debited the acquirer directly and
+  // The consideration is PAYMENTS now. The old form debited the acquirer directly and
   // the money arrived on NO book — target shareholders' register rows were neither re-keyed nor
   // paid, and `Math.max(10, …)` silently recapitalised an over-payer. This stage runs after the
   // corporate-action drains, so the tender pays holders of record directly by instruction
-  // (the §7.43 timing trap is why it must not go through `payHoldersCash`'s pending map here).
+  // (the timing trap is why it must not go through `payHoldersCash`'s pending map here).
   pay(ctx, {
     payer: { kind: 'COMPANY', ticker: acquirer.ticker },
     payee: { kind: 'COMPANY', ticker: target.ticker },
@@ -256,7 +256,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // The tender: the target pays its equity holders of record their cash half, pro rata to the
   // stake each holds; the residual float (the household sector's) receives the remainder.
   let institutionalTenderUSD = 0;
-  // §7.307 holdings flip: row walk for the tender stake read.
+  // holdings flip: row walk for the tender stake read.
   const Ht = ctx.v2.holdings;
   const targetRef = internString(ctx.v2, target.id);
   const equityRefT = internString(ctx.v2, 'EQUITY');
@@ -306,7 +306,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // individually with a renamed id and remapped position, exactly as before. Tranches with no
   // open position are pooled across both companies and consolidated by (rateType, tenor
   // bucket) so the combined entity's ladder doesn't grow without bound across repeated mergers.
-  // §7.311 writer flip — the ladders are sourced from the ROWS (the authority) and written
+  // writer flip — the ladders are sourced from the ROWS (the authority) and written
   // back to the rows; the object arrays are a week-end materialized view now.
   const v2m = ensureV2(state);
   const newIdByOldTrancheId = new Map<string, string>();
@@ -325,7 +325,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     const mergeableAcquirerTranches = acquirerLadder.filter(t => !heldTrancheIds.has(t.id));
 
     protectedTargetTranches.forEach(t => {
-      // §5-CLOSE N2: the tranche is the ACQUIRER'S now and its id says so (the position that
+      // N2: the tranche is the ACQUIRER'S now and its id says so (the position that
       // protected it is re-pointed below, so nothing is orphaned); the old id stays inside for
       // the lineage.
       const transferredTranche = { ...t, id: `${acquirer.ticker}-ACQ${ctx.nextWeek}-${t.id}` };
@@ -338,9 +338,9 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       });
     });
 
-    // §5-FINALIZATION step 9 (N2): a target tranche that consolidates alone keeps its row but
+    // step 9 (N2): a target tranche that consolidates alone keeps its row but
     // is the acquirer's now — its id says so, the old id inside for the lineage.
-    // 13b: the map from every tranche id the holders' rows name today to the id they will name —
+    // The map from every tranche id the holders' rows name today to the id they will name —
     // a target tranche's renamed id, then the bucket it consolidates into (an acquirer tranche
     // that consolidates re-keys too).
     const renamedByOld = new Map(mergeableTargetTranches.map((t) => [t.id, `${acquirer.ticker}-ACQ${ctx.nextWeek}-${t.id}`] as const));
@@ -363,7 +363,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // sovereign tenor book, cash and equity. Before this, the target bank's sheet was simply
   // stranded on the absorbed shell: 54B of deposits vanished from every derived sum in one week
   // while the households still held the money, and the borrowers' loans lost their lender.
-  // §7.339: the line-by-line move is the resolution's `absorbBankSheet` (one transfer for the
+  // The line-by-line move is the resolution's `absorbBankSheet` (one transfer for the
   // two events that move a bank whole); a merger moves cash, wholesale and equity with it.
   if (target.bankBalanceSheet && acquirer.bankBalanceSheet) {
     const tb = target.bankBalanceSheet;
@@ -374,11 +374,11 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (target.bankMarketShare ?? 0)).toFixed(4));
     target.bankBalanceSheet = undefined;
 
-    // §7.241: the target's STANDING CONTRACTS come with the bank. Before this, the repo, swap,
+    // The target's STANDING CONTRACTS come with the bank. Before this, the repo, swap,
     // CDS and FX-forward books still named the absorbed ticker — the merged encumbrance scalar
     // above described pledges no live contract carried, and every counterparty's hedge pointed at
     // a dead desk. A contract survives a merger by NOVATION to the acquirer, so the books re-key.
-    // §7.339: one re-key for every link that names a bank — the customers' house-bank field, the
+    // One re-key for every link that names a bank — the customers' house-bank field, the
     // facility rows, the repo and prime-brokerage books, the offering pipeline, the derivatives.
     rekeyBankLinks(state, ctx, target.region as RegionId, target.ticker, acquirer.ticker);
     // Steps 10/11: the re-key moved the target's facility rows to the acquirer as lender and its
@@ -386,23 +386,23 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     restateBankSheetStatistics(ab, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker), facilityBookOf(ctx.v2, acquirer.ticker));
   }
 
-  // OWN7: the target's PAPER moves with its debt. Holdings are keyed by the issuer's company
+  // The target's PAPER moves with its debt. Holdings are keyed by the issuer's company
   // id, so a holder of the target's bonds or loans kept a row against a company that has just
   // left the books — while the same principal, now on the acquirer's ladder, was re-cleared to
   // the same institutions the following week. One tranche, two holders' rows, and the
   // conservation check saw the corporate books mint claims on the merger week (measured: 161B
-  // held against 131B outstanding in USA leveraged loans). §7.241: the equity rows ARE re-keyed
+  // held against 131B outstanding in USA leveraged loans).: the equity rows ARE re-keyed
   // now — each target shareholder was paid the cash half in the tender above and holds the stock
   // half as real acquirer shares below, instead of keeping a claim on a dead company.
-  // §7.241: the STOCK half of the consideration becomes real acquirer shares on the holders'
+  // The STOCK half of the consideration becomes real acquirer shares on the holders'
   // rows — the old code minted `newShares` onto `sharesOutstanding` with rows for NOBODY, while
   // target equity rows stayed keyed to a dead company. Each target share row converts to the
   // acquirer stock it was exchanged for (its stake's share of the stock leg).
-  // §7.313 flip — the re-key is column writes on the matching rows: interned refs swap to the
+  // The re-key is column writes on the matching rows: interned refs swap to the
   // acquirer's, and the equity rows revalue in place.
   const stockRatio = stockPaid / targetMarketCapUSD;
   {
-    // §5-WIRES W2: the exchange is two wires per holder — the target's paper back to the target
+    // W2: the exchange is two wires per holder — the target's paper back to the target
     // (retired), the acquirer's paper out to the holder (issued) — never a re-key in place.
     const H = ctx.v2.holdings;
     const targetIdRef = ctx.v2.internedIdByString.get(target.id);
@@ -410,13 +410,13 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       const equityRefR = internString(ctx.v2, 'EQUITY');
       const corpBondRef = internString(ctx.v2, 'CORP_BOND');
       const levLoanRef = internString(ctx.v2, 'LEVERAGED_LOAN');
-      // Step 9 (O3): the target's commercial paper is on the acquirer's ladder too — its holders'
+      // The target's commercial paper is on the acquirer's ladder too — its holders'
       // rows exchange like the bonds' (it was the one company-keyed kind the exchange skipped).
       const cpRef = internString(ctx.v2, 'COMMERCIAL_PAPER');
       ctx.updatedInstitutionalEntities.forEach((e) => {
         const swaps: { type: ItemizedHolding['instrumentType']; valueUSD: number; shares: number | undefined; id: string }[] = [];
         for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
-          // 13b: a row names a tranche or its issuer; the target's paper is what resolves to it.
+          // A row names a tranche or its issuer; the target's paper is what resolves to it.
           const rowId = ctx.v2.internedStrings[H.instrRef[r]];
           if (H.instrRef[r] !== targetIdRef && issuerIdOf(ctx.v2, rowId) !== target.id) continue;
           const t = H.typeRef[r];
@@ -425,17 +425,17 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
         }
         if (swaps.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };
-        // §5-WIRES W3: the exchange settles through the clearing houses — the target's paper goes
+        // W3: the exchange settles through the clearing houses — the target's paper goes
         // back to its house, the acquirer's comes from its own; the issuers' wires are the
         // ladders' (`rebuildLadder` below) and the equity issuer's, counted once.
         swaps.forEach((sw) => {
           const isEquity = heldInShares(sw.type);
-          // 13b: a credit row re-keys to the tranche it becomes on the acquirer's ladder (the
+          // A credit row re-keys to the tranche it becomes on the acquirer's ladder (the
           // consolidation's map); a row that still names the issuer re-keys to the acquirer.
           const newInstrumentId = isEquity ? acquirer.id : (newIdByOldTrancheId.get(sw.id) ?? acquirer.id);
           const oldSpec = { instrumentType: sw.type, instrumentId: sw.id, issuerRegion: target.region, valueUSD: sw.valueUSD, shares: sw.shares };
           transferHolding(ctx.v2, holder, { kind: 'CLEARING_HOUSE', region: target.region }, oldSpec, 'merger: target paper exchanged');
-          // Step 13 (W2): the equity issuers' sides — the target's shares are cancelled (house →
+          // The equity issuers' sides — the target's shares are cancelled (house →
           // target), the acquirer's created (acquirer → house); the credit kinds' are the ladders'.
           if (isEquity) transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: target.region }, { kind: 'COMPANY', ticker: target.ticker }, oldSpec, 'merger: target shares cancelled');
           const newValueUSD = isEquity ? sw.valueUSD * stockRatio : sw.valueUSD;
@@ -447,7 +447,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
         });
         bumpRegister(ctx);
       });
-      // 13b: the ACQUIRER's own tranches that consolidated into a bucket re-key their holders'
+      // The ACQUIRER's own tranches that consolidated into a bucket re-key their holders'
       // rows too — the same paper under the bucket's id, through the house (old out, new in).
       ctx.updatedInstitutionalEntities.forEach((e) => {
         const rekeys: { type: ItemizedHolding['instrumentType']; valueUSD: number; id: string; newId: string }[] = [];
@@ -469,7 +469,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     }
   }
 
-  // §5-FINALIZATION step 9 — NOTHING STAYS BEHIND ON THE TARGET. Its standing derivatives
+  // step 9 — NOTHING STAYS BEHIND ON THE TARGET. Its standing derivatives
   // novate to the acquirer (a bank's already did through `rekeyBankLinks`), the consignments
   // still on their way to it are the acquirer's to take delivery of, its finished stock and
   // input lots move onto the acquirer's books by wire, and its supply contracts name the
@@ -478,7 +478,18 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     const rekey = (p: DerivativeParty): DerivativeParty => (p.kind === 'COMPANY' && p.ticker === target.ticker ? { kind: 'COMPANY', ticker: acquirer.ticker } : p);
     ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekey(c.a), b: rekey(c.b) }));
   }
-  (state.goodsInTransit ?? []).forEach((sh) => { if (sh.buyerTicker === target.ticker) sh.buyerTicker = acquirer.ticker; });
+  // BOTH ENDS OF A SHIPMENT FOLLOW THE BOOKS. The buyer side was re-keyed and the SELLER side was
+  // not, so a consignment the target was shipping named a firm that no longer exists the moment
+  // the merger closed — and the ownership audit found it in transit from nobody for the rest of
+  // the run. The acquirer took the target's whole book; it took its deliveries with it.
+  (state.goodsInTransit ?? []).forEach((sh) => {
+    if (sh.buyerTicker === target.ticker) sh.buyerTicker = acquirer.ticker;
+    const seller = String(sh.sellerKey ?? '');
+    const sellerId = seller.replace(/^.*:/, '');
+    if (sellerId === target.id || sellerId === target.ticker) {
+      sh.sellerKey = seller.slice(0, seller.length - sellerId.length) + (sellerId === target.id ? acquirer.id : acquirer.ticker);
+    }
+  });
   Object.entries(target.outputInventoryBySubUnit ?? {}).forEach(([subUnitId, row]) => {
     moveOutputUnits(target, acquirer, subUnitId, row.unitsHeld, row.valueUSD, 'merger: finished stock assumed');
   });

@@ -1,8 +1,8 @@
 /**
- * §5-WIRES A — ONE KIND OF ACCOUNT FOR EVERY PARTY.
+ * A — ONE KIND OF ACCOUNT FOR EVERY PARTY.
  *
  * A balance used to be a differently-named field on five types, resolved by settlement's nine-way
- * kind switch; both are gone (A3, A4 — §7.384–394). This module is the account STORE: one row
+ * kind switch; both are gone (A3, A4 — –394). This module is the account STORE: one row
  * per (party, bank) — a company's deposit at its house bank, a bank's own reserves at the
  * central bank, the treasury's account there, the household sector's balance at each of its
  * region's banks (and the slice still in transit), a pool's balance at each bank by share — and
@@ -14,14 +14,14 @@
  *   reserves, the treasury) IS the central-bank side, so it carries no second leg; a row with no
  *   bank (a clearing house, the central bank's own issuance, money in transit) carries none.
  *
- * SECOND SLICE — THE AUTHORITY OF THE PASS (§7.378). Settlement applies the settled rows to the
+ * SECOND SLICE — THE AUTHORITY OF THE PASS. Settlement applies the settled rows to the
  * store and PROJECTS the books from it (`projectBooks`): a party's balance is its rows, a bank's
  * reserves its own row, a bank's deposit lines move by its depositors' rows, the treasury's
  * account and advance are the two signs of its net position. The nine-way switch keeps only its
  * tallies. The household sector's legs land on its region's banks by market share AT ONCE — the
  * T+1 transit (`pendingBankSettlementUSD`) is gone, and with it N's money in transit.
  *
- * FIRST SLICE — A MIRROR WITH A GATE (§7.377). The store is REBUILT from the balance fields
+ * FIRST SLICE — A MIRROR WITH A GATE. The store is REBUILT from the balance fields
  * before every settlement pass, the pass applies each settled row to it beside the legacy
  * per-kind writes, and `compareToBooks` proves the two agree after the pass — per party, per
  * bank's reserves, per treasury. That is the same method W1 used for wires: land the structure,
@@ -37,7 +37,7 @@ import { DepositLines } from '../../domain/banking';
 import { V2World, internString, ensureV2 } from '../../engine2/world';
 
 // ---------------------------------------------------------------------------------------------
-// THIRD SLICE — THE PERSISTENT ACCOUNTS, COMPANIES FIRST (A3.1, §7.384). A company's balance
+// THIRD SLICE — THE PERSISTENT ACCOUNTS, COMPANIES FIRST (A3.1, ). A company's balance
 // lives on the world (`v2.accounts`, keyed by the party's key interned in v2 — party ids are
 // process-local), the mirror opens a company's pass row FROM it, the projection writes the pass's
 // result back INTO it, and every reader takes `cashOf`; `Company.cash` no longer exists. A
@@ -104,7 +104,7 @@ export function seedHouseholdLineOf(sheet: object): number { return seedHousehol
 // ---- A3.3/A3.4 — THE SECTOR PARTIES' ROWS, ONE PER BANK, CARRIED. A pool (an SME tier) and the
 // household sector bank at every bank of their region: the balance is a row at each, moved by
 // settlement's split of each leg and CARRIED week to week — never re-guessed from a total by
-// this week's market shares (§7.378's half-backed shortcut). A bank's SME line is the sum of
+// this week's market shares. A bank's SME line is the sum of
 // the pool rows at it; its household line the household sector's row at it. ----
 
 /** The sector party's row at a bank, opened at zero on first sight. */
@@ -197,7 +197,7 @@ export const stateDepositLines = (state: { companies: readonly Company[]; instit
 /**
  * A3.4 — A BANK'S OWN BOOK MOVES A SECTOR ROW. The household loan pass and the evolution move a
  * bank's household line directly (a loan creates the borrower's deposit, amortization and
- * interest destroy it, the bank's deposit interest credits it — §7.352, the bank's second money
+ * interest destroy it, the bank's deposit interest credits it —, the bank's second money
  * engine as DEPOSIT events on its own sheet): each such move is the household row at that bank
  * moving by the same amount, so the line and the row cannot disagree. Retired when those
  * passes are account operations themselves (A3.6).
@@ -276,7 +276,7 @@ export function treasuryAccountOf(v2: V2World, region: RegionId): number { retur
 /** The ways-and-means advance drawn (an asset of the central bank). */
 export function waysAndMeansOf(v2: V2World, region: RegionId): number { return Math.max(0, -treasuryNetOf(v2, region)); }
 
-/** A company's cash: its account. A bank's cash IS its reserves (A3.1b, §7.379, rule 3): its
+/** A company's cash: its account. A bank's cash IS its reserves (A3.1b,, rule 3): its
  *  goods-market self settles on its reserve row and it has no company row at all. */
 export function cashOf(v2: V2World, c: Pick<Company, 'ticker'> & { isBankEntity?: boolean; bankBalanceSheet?: unknown }): number {
   if (c.isBankEntity && c.bankBalanceSheet) return bankReservesOf(v2, c.ticker);
@@ -477,7 +477,7 @@ export interface SettledTallies {
 }
 
 /**
- * §5-WIRES A4 — THE TALLIES ARE READS OF THE ROWS' DELTAS. Settlement used to resolve every
+ * A4 — THE TALLIES ARE READS OF THE ROWS' DELTAS. Settlement used to resolve every
  * party's net through a nine-way switch on its kind to find which bank line it moved and to
  * keep a dozen tallies beside the writes. The store already knows every row's bank and class
  * and every row's opening balance, so what the pass settled is one walk over the rows; a bank's
@@ -565,7 +565,7 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
     ctx.v2.accounts.balanceUSD[ensureAccount(ctx.v2, party)] = balanceOfParty(s, partyId(party));
   });
 }
-// A3.5: `compareToBooks` — the first slice's gate (§7.377) — is gone with the last field it
+// A3.5: `compareToBooks` — the first slice's gate — is gone with the last field it
 // compared: no book carries a balance any more.
 
 /** A row's party, for a report line. */

@@ -25,6 +25,7 @@ import { assumeBankBooks } from '../../ledger/bank-transfer';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { isActiveCompany } from '../../../domain/company';
 import { partyKey } from '../../ledger/party';
+import { dealerDeskParticipantId } from '../../../domain/dealer-desk';
 import { getSimulationDate } from '../../formatters';
 import { WeeklyStepContext } from './context';
 import { derivativesBookOf } from './derivative-lifecycle';
@@ -76,6 +77,19 @@ export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionI
     const k2 = k.slice(0, k.length - fromKey.length) + toKey;
     ctx.sovereignAccruedInterestUSD.set(k2, (ctx.sovereignAccruedInterestUSD.get(k2) ?? 0) + usd);
     ctx.sovereignAccruedInterestUSD.delete(k);
+  });
+  // THE DESK'S UNPAID COUPONS MOVE WITH ITS INVENTORY. `absorbBankSheet` merges the dealer books
+  // into the acquirer, but what that paper has already EARNED and not been paid sits on the
+  // register's accrual ledger under the failed bank's own desk id. Left there, the coupon date
+  // paid a desk whose bank has no account any more: the settlement store had no row for it and
+  // dropped BOTH legs of the payment — the only kind M7 ever named was `payee BANK_SECURITIES`.
+  const fromDesk = dealerDeskParticipantId(from);
+  const toDesk = dealerDeskParticipantId(to);
+  ctx.holderAccruedInterestUSD.forEach((byHolder) => {
+    const owedUSD = byHolder.get(fromDesk);
+    if (owedUSD === undefined) return;
+    byHolder.set(toDesk, (byHolder.get(toDesk) ?? 0) + owedUSD);
+    byHolder.delete(fromDesk);
   });
   const rekeyParty = (p: DerivativeParty): DerivativeParty =>
     ('ticker' in p && p.ticker === from) ? { ...p, ticker: to } : p;
@@ -142,7 +156,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
 
     // ---- 1. Every non-cash line moves (the ledger's transfer); the target keeps only its cash. ----
     assumeBankBooks(acquirer.bankBalanceSheet!, bank.bankBalanceSheet!, plan, cashUSD);
-    moveSectorRowsToBank(ctx.v2, bank.ticker, acquirer.ticker); // A3.3: the sector parties' rows at the failed bank move with its SME line
+    moveSectorRowsToBank(ctx.v2, bank.ticker, acquirer.ticker); // the sector parties' rows at the failed bank move with its SME line
     traceSheet('assumed', bank); traceSheet('assumed', acquirer);
 
     // ---- 2. The cash leg, the guarantee, and the world's links. ----

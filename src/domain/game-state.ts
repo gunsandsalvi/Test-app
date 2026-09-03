@@ -119,6 +119,8 @@ export interface GameState {
     accountRowsUnmapped: number;
     /** What those rows were worth: a count is not a size. */
     accountUnmappedUSD?: number;
+    /** …and which kinds of party had no row, against the dollars each accounts for. */
+    accountUnmappedByKind?: Record<string, number>;
   };
   /** SEG1 — payments recorded AFTER the week's settlement cutoff (hc-lifecycle's tender
    * settlements, birth carves). A real net-settlement system rolls after-cutoff payments into

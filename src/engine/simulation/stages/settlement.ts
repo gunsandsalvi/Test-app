@@ -404,6 +404,9 @@ export interface SettlementReport {
    *  in dollars: reported as a count alone, a leak of fifty small rows and a leak of fifty huge
    *  ones read the same. */
   accountUnmappedUSD: number;
+  /** …and WHICH KINDS of party had no row, so the next run names the hole instead of counting
+   *  it. `PAYER:kind` / `PAYEE:kind` against the dollars each accounts for. */
+  accountUnmappedByKind: Map<string, number>;
 }
 
 export { partyId, partyOf, partyKey, partyFromKey } from '../../ledger/party';
@@ -458,6 +461,7 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
     crossBorderByRegion: mergeMap(a.crossBorderByRegion, b.crossBorderByRegion),
     accountRowsUnmapped: a.accountRowsUnmapped + b.accountRowsUnmapped,
     accountUnmappedUSD: a.accountUnmappedUSD + b.accountUnmappedUSD,
+    accountUnmappedByKind: mergeMap(a.accountUnmappedByKind, b.accountUnmappedByKind),
     unresolvedUSD: a.unresolvedUSD + b.unresolvedUSD,
   };
 }
@@ -485,6 +489,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     unresolvedUSD: 0,
     accountRowsUnmapped: 0,
     accountUnmappedUSD: 0,
+    accountUnmappedByKind: new Map(),
   };
   if (nInstructions === 0) {
     ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;
@@ -523,6 +528,16 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     if (!applySettledRow(accounts, payerIdx, journal.payeeId[n], amountUSD)) {
       report.accountRowsUnmapped++;
       report.accountUnmappedUSD += amountUSD;
+      // Which side had no row, and of what kind: a count says a hole exists, this says where.
+      const noRow = (id: number): boolean => !accounts.rowsOfParty.get(id);
+      if (noRow(payerIdx)) {
+        const k = `payer ${partyOf(payerIdx).kind}`;
+        report.accountUnmappedByKind.set(k, (report.accountUnmappedByKind.get(k) ?? 0) + amountUSD);
+      }
+      if (noRow(journal.payeeId[n])) {
+        const k = `payee ${partyOf(journal.payeeId[n]).kind}`;
+        report.accountUnmappedByKind.set(k, (report.accountUnmappedByKind.get(k) ?? 0) + amountUSD);
+      }
     }
     const payeeIdx = journal.payeeId[n];
     const payerRef = partyOf(payerIdx);
