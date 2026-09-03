@@ -4,6 +4,7 @@
  * week-over-week checks need, copied out when the audit runs.
  */
 import { stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
+import { materializeGovLadder } from '../../engine2/tranches';
 import { GameState, RegionId } from '../../types';
 import { loanBooksOf, spendableDepositsOf } from '../../domain/banking';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
@@ -45,7 +46,9 @@ export function snapshotOf(state: GameState): AuditSnapshot {
       treasuryAccountUSD: treasuryAccountOf(ensureV2(state), r),
       waysAndMeansUSD: waysAndMeansOf(ensureV2(state), r),
       centralBankAssetsUSD: centralBankAssetsUSD(cb, waysAndMeansOf(ensureV2(state), r), currencyOf(r), ensureV2(state).fx),
-      sovereignOutstandingUSD: (reg.govDebtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0),
+      // §3.13-SOV row 2: read from the ONE store, not the array beside it. The audit runs after
+      // the whole week, so the reconcile in 11-fiscal has already run and the two agree.
+      sovereignOutstandingUSD: materializeGovLadder(ensureV2(state), r).reduce((a, t) => a + t.principalUSD, 0),
       // The SAME read M6 takes at week end — every deposit class BUT the margin line, which is
       // a bank liability and not spendable money (`spendableDepositsOf`).
       bankDepositsUSD: banks.reduce((a, b) => a + spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker)), 0),

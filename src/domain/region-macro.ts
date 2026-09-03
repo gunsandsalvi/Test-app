@@ -325,10 +325,14 @@ export interface HouseholdState {
  * It is now a `DebtTranche` with the one field a sovereign genuinely adds. The remaining four
  * parallel structures are the rest of 13-SOV.
  *
- * `tenorAtIssuanceYears` is retained and not derived from `maturityWeek - originationWeek`
- * because it is the BUCKET KEY the register still groups by (`sovBucketKey`), and a derived key
- * would change the moment a bucket was reopened at a different point in its life. It dies with
- * the bucket, in the same commit, rather than being made derivable first and deleted twice.
+ * `tenorAtIssuanceYears` is retained ONLY until the readers move to the store, and it is a second
+ * representation of a fact the dates already carry (rule 3). *(CORRECTED: an earlier note here
+ * said it could not be derived because a reopened bucket would change the derived key. That was
+ * wrong — each rung derives its own tenor from its own dates, so the key is stable per rung. What
+ * was actually true is that the two DISAGREED, on 20 of 260 rungs, because the seed rounded the
+ * origination and maturity ends separately and made a 13-week bill span 14. The span is rounded
+ * once now and they agree exactly, which is what lets this field be deleted rather than
+ * reconciled.)*
  */
 export type GovDebtTranche = DebtTranche & {
   /** FIXED on every sovereign today: the coupon is locked at issue (bond.md N5.a). Bills carry

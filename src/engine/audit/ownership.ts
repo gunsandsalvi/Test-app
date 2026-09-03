@@ -9,6 +9,7 @@ import { ensureV2 } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
 import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf } from '../../engine2/tranches';
 import { materializeBook } from '../../engine2/holdings';
+import { materializeGovLadder } from '../../engine2/tranches';
 import { isTrancheKind } from '../../domain/assets';
 import { bookHeadOf } from '../../engine2/holdings';
 
@@ -30,7 +31,8 @@ function o1(state: GameState, week: number): AuditFinding[] {
   // Paper issued THIS week is in the auction (07c/07f place it next week, and what
   // they cannot place is withdrawn from the ladder); it is offered, not yet anyone's, and not
   // yet owed to nobody either. Everything older must have a holder.
-  REGION_IDS.forEach((r) => { outstanding[r].sov = sum((state.regions[r]?.govDebtTranches ?? []).filter((t) => t.originationWeek < state.currentWeek), (t) => t.principalUSD); });
+  // §3.13-SOV row 2: the sovereign outstanding comes from the ONE store now.
+  REGION_IDS.forEach((r) => { outstanding[r].sov = sum(materializeGovLadder(ensureV2(state), r).filter((t) => t.originationWeek < state.currentWeek), (t) => t.principalUSD); });
   // The VALUE, which is still the face: nothing marks credit yet (§9.13 part 3). When the mark
   // lands this must read `faceUSD` — a ladder carries face, and comparing a mark to it would
   // report every basis point of spread as paper that does not exist.

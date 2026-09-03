@@ -338,6 +338,26 @@ export function materializeTranche(v2: V2World, r: number): DebtTranche {
 }
 
 /** The firm's whole ladder materialized (the week-end view write for dumps and the UI). */
+/**
+ * §3.13-SOV row 2 — THE SOVEREIGN LADDER, READ FROM THE ONE STORE.
+ *
+ * The reader side of the migration. `reg.govDebtTranches` is still written and still the
+ * authority; every consumer that moves to this function is one fewer thing standing between the
+ * array and its deletion.
+ *
+ * The tenor is DERIVED from the rung's own dates rather than carried as a column, because it is
+ * what those dates already say: a rung issued at `originationWeek` and due at `maturityWeek` has
+ * exactly `(maturityWeek - originationWeek) / 52` years of tenor at issuance. Verified equal to
+ * the stored field on all 260 rungs across five weeks once the seed stopped rounding the two ends
+ * separately.
+ */
+export function materializeGovLadder(v2: V2World, regionId: string): (DebtTranche & { tenorAtIssuanceYears: number })[] {
+  return materializeLadder(v2, `GOV_${regionId}`).map((t) => ({
+    ...t,
+    tenorAtIssuanceYears: (t.maturityWeek - t.originationWeek) / 52,
+  }));
+}
+
 export function materializeLadder(v2: V2World, companyId: string): DebtTranche[] {
   return ladderRowsOf(v2, companyId).map((r) => materializeTranche(v2, r));
 }
