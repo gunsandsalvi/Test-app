@@ -91,3 +91,163 @@ Written 2026-09-03 from the domain, code shut.
 - **G2** VERIFY — the index is a read of its constituents and cannot move independently of them
 - **G3** VERIFY — a derived statistic (P/E, dividend yield, book-to-market) is computed from the
   cleared price and never used to set it — B3 again, at the aggregate
+
+---
+
+## 2. THE MAPPING
+
+Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+checked by `scripts/check-atlas.sh`.
+
+| Node | Code | |
+|---|---|---|
+| A1 a residual claim | `src/engine/equity-valuation.ts:companyBookEquityUSD` | ✅ |
+| A1.a ranks below all debt | `src/engine/simulation/stages/estate-resolution.ts:CLAIM_SENIORITY` | ✅ |
+| A1.b value can be zero, not negative | `src/engine2/stage08-back.ts:newStockPrice` | ✅ |
+| A2 counted in SHARES | `src/domain/banking.ts:quantityShares` | ✅ |
+| A2.a a share count changed only by a named event | `src/engine2/stage08-back.ts:sharesToRetire` | ✅ |
+| A3 a currency it is quoted in | `src/domain/geography.ts:currencyOf` | ⚠️ |
+| A4 PERPETUAL — no maturity, no redemption | `src/domain/assets/index.ts:HoldingType` | ✅ |
+| **A5 CONTROL rides with it: a vote per share** | `src/domain/company.ts:ownership` | ⚠️ |
+| A5.a a majority can be bought | `src/engine/simulation/stages/10-mergers.ts:runMergersStage` | ✅ |
+| A5.b VERIFY control has a value a takeover pays for | `src/engine/simulation/stages/pe-lifecycle.ts:PATIENT_HOLDER_REQUIRED_RETURN` | ✅ |
+| A6 an identity: a ticker and a name | `src/domain/company.ts:ticker` | ✅ |
+| B1 holders and buyers post schedules | `src/engine/simulation/stages/07e-equity-clearing.ts:runEquityClearingStage` | ✅ |
+| B2 a PRICE clears per share | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
+| B3 FORBID price never from a multiple, book value, DCF or target | `src/engine/equity-valuation.ts:fairValuePerShare` | ✅ |
+| B4 market capitalisation is a READ | `src/domain/company.ts:marketCapOf` | ✅ |
+| B4.a FORBID no tautological market-cap check | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
+| B5 a dealer intermediates out of inventory and capital | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
+| B6 VERIFY a seller with no buyer keeps its shares | `src/engine/simulation/stages/07e-equity-clearing.ts:unsoldStaysWithHolder` | ✅ |
+| C1 a register: who holds how many shares | `src/engine2/holdings.ts:HoldingStore` | ✅ |
+| C1.a VERIFY Σ held = shares outstanding | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
+| C1.b the free float is what is genuinely tradeable | `src/engine/simulation/stages/07e-equity-clearing.ts:heldByInstitutionsShares` | ✅ |
+| C2 holder classes hold for different reasons | `src/domain/institution-profiles.ts:INSTITUTION_PROFILES` | ✅ |
+| C2.a households, directly | `src/engine/macro/household-portfolio.ts:householdDirectEquityUSD` | ⚠️ |
+| C2.b institutions with mandates | `src/domain/cross-border.ts:mandateWeightForIssuer` | ✅ |
+| C2.c index funds, which do not price | `src/engine/simulation/stages/etf-demand.ts:indexFundDemand` | ✅ |
+| **C2.d the issuer itself, via treasury shares** | — | ❌ |
+| C2.e insiders and founders, not for sale | `src/domain/company.ts:ownership` | ✅ |
+| C3 marked at the cleared price | `src/engine/ledger/holdings-ledger.ts:markHolding` | ✅ |
+| **C4 the change in the mark is P&L reaching the holder's income** | `src/engine/simulation/stages/institutional-balance-sheet.ts:accrueInstitutionalIncome` | ⚠️ |
+| C5 a leveraged holder funds and can be forced to sell | `src/domain/prime-brokerage.ts:maxDrawnUSD` | ⚠️ |
+| C5.a margin, and a call on it | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageStage` | ⚠️ |
+| C6 it can be lent and pledged, at a haircut | `src/engine/simulation/stages/prime-brokerage.ts:measuredHaircutsFor` | ✅ |
+| C7 a short is a borrow with a cost and a squeeze risk | `src/domain/securities-lending.ts:shortSizeShares` | ✅ |
+| **D1 ISSUANCE: the firm sells new shares for cash** | `src/engine/simulation/stages/primary-settlement.ts:settlePricedOfferings` | ⚠️ |
+| D1.a it dilutes existing holders | `src/engine/simulation/stages/07e-equity-clearing.ts:liveSharesOf` | ✅ |
+| **D1.b a decision with a reason: a funding need met with equity** | — | ❌ |
+| D1.c priced by the market, at a discount, and can fail | `src/engine/simulation/stages/primary-settlement.ts:settlePricedOfferings` | ✅ |
+| D2 BUYBACK: the firm buys its own shares for cash | `src/engine2/stage08-back.ts:buybacksThisWeek` | ✅ |
+| D2.a the count falls | `src/engine2/stage08-back.ts:sharesToRetire` | ✅ |
+| D2.b the cash is gone — a distribution, not an investment | `src/engine/simulation/stages/shared-helpers.ts:payHoldersCash` | ✅ |
+| D2.c it competes with the dividend and with investment | `src/engine2/stage08-back.ts:buybackShare` | ⚠️ |
+| D3 DIVIDEND: cash per share to whoever holds on a date | `src/domain/company-week/distributions.ts:dividendDecision` | ✅ |
+| D3.a it leaves the firm and arrives at named holders | `src/engine/simulation/stages/shared-helpers.ts:payHoldersCash` | ✅ |
+| D3.b a decision, and a cut is an event others react to | `src/domain/company-week/distributions.ts:dividendDecision` | ⚠️ |
+| **D4 a split changes the count and not the value** | — | ❌ |
+| E1 M&A: shares bought for cash, stock or both | `src/engine/simulation/stages/10-mergers.ts:runMergersStage` | ✅ |
+| E2 a spin-off: a new share line, a claim divided | `src/engine/simulation/stages/10-mergers.ts:spinShares` | ✅ |
+| E3 DELISTING / TAKE-PRIVATE | `src/engine/simulation/stages/pe-lifecycle.ts:settlePeLifecycleDeals` | ✅ |
+| E4 INSOLVENCY: equity wiped before any creditor takes a loss | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
+| F1 the dividend when declared | `src/engine/simulation/stages/shared-helpers.ts:payHoldersCash` | ✅ |
+| F2 the residual on wind-up | `src/engine/simulation/stages/estate-resolution.ts:CLAIM_SENIORITY` | ✅ |
+| **F3 a vote** | — | ❌ |
+| F4 FORBID no entitlement to undistributed earnings | `src/engine/simulation/stages/institutional-balance-sheet.ts:accrueInstitutionalIncome` | ✅ |
+| G1 an index on real prices and free-float weights | `src/engine/simulation/stages/index-calculation.ts:rebalance` | ⚠️ |
+| G2 VERIFY the index is a read of its constituents | `src/engine/simulation/stages/index-calculation.ts:basketValueUSD` | ✅ |
+| G3 VERIFY a derived statistic never sets the price | `src/engine/simulation/stages/pe-lifecycle.ts:publicComparableEvMultiple` | ⚠️ |
+
+Counts: 41 `✅` · 11 `⚠️` · 4 `❌`.
+
+---
+
+## 3. THE DIFF
+
+### ⚠️ THE STORED VALUE ON THE REGISTER ROW — KNOWN, §3 step 13 item 4
+
+Equity is the only asset in this model that stores a price, and the register row stores the VALUE
+as well: `07e:535` writes `quantityShares`, `quantityOrNotionalUSD: shares * comp.stockPrice` and
+`units: shares` on one row, and `comp.stockPrice` is the print. Step 13's survey table names this
+exact row and its item 4 is *"the equity row's stored value has to go"*. Not re-derived here.
+**Already §3 step 13.** What this mapping adds is one consequence the step does not list: the
+stored value is what `securities-lending.ts:79` and `07e:248` fall back to when
+`quantityShares` is absent (`quantityOrNotionalUSD / stockPrice`), so the two representations
+are load-bearing for each other in two stages, not one.
+
+### ❌ A5 / F3 — THERE IS NO VOTE, SO CONTROL IS A PERCENTAGE AND NOT A CLAIM
+
+Nothing in `src` contains a vote (`grep -rni vote src` returns nothing about equity). Control is
+`company.ts:ownership` — `founderPct`, `peSponsorPct` — a share of the register carried as a
+number on the company, and the register itself (the `EQUITY` rows) has no governance meaning at
+all. The consequences are specific rather than cosmetic:
+- a take-private (`pe-lifecycle:615`) extinguishes the whole register by paying every holder
+  `payHoldersCash`, because there is no tender any holder could refuse. `settleCorporateActionOnHolders`
+  takes 100% of the shares whatever a holder thinks of the price;
+- A5.b's control premium DOES exist and is derived honestly (`PATIENT_HOLDER_REQUIRED_RETURN` —
+  the takeout must clear the most patient holder's reservation, never the marginal one's), so the
+  PRICE of control is real while the THING being bought is not represented;
+- a merger cannot be contested, blocked, or won at a higher price by a rival bidder, because
+  nobody holds anything that could be voted.
+
+**Becomes a §3 step**, and a small one: a vote is a read of the register (`shares`), not a new
+store. What it unlocks — contested bids, a board that answers to holders, a founder block that
+can refuse — is larger than the change.
+
+### ❌ D1.b / D4 — A LISTED FIRM CANNOT ISSUE EQUITY, AND SHARES NEVER SPLIT
+
+`grep "instrumentType: 'EQUITY'"` over every `primaryOfferingsWorking.push` site finds exactly one
+producer: `pe-lifecycle.ts:369`, the sponsor's IPO. **No firm in this model ever raises equity as
+a funding decision.** `corporate-financing.ts` — the module whose whole job is "how a firm covers
+a shortfall" — queues debt only; `stage08-back.ts:2044` can BUY BACK shares but there is no
+opposite arm. So the financing choice a firm actually faces (debt against equity, at the prices
+both are quoting) does not exist: leverage can only ever rise except by repayment, and a firm shut
+out of the loan market has no second door. D1's machinery is all present and works — the IPO
+prices in 07e's book, dilutes through `liveSharesOf`, and is pulled at `walkAwayStat` — so this is
+a missing CALLER, not a missing mechanism.
+
+D4 (a split) is absent outright, and is genuinely **OUT OF SCOPE**: with the register in shares
+and every read a `shares × price`, a split is a no-op by construction and there is nothing for it
+to test.
+
+### ⚠️ C4 — A HOLDER'S EQUITY P&L NEVER REACHES ITS INCOME
+
+`accrueInstitutionalIncome` walks the holder's book and accrues `GOV_BOND` coupons only; the loop
+skips every `EQUITY` row. An institution's equity gains therefore change `institutionTotalAssetsUSD`
+(a read of the marked rows, so the wealth is real) and change nothing on any income statement —
+`lastWeeklyInvestmentIncomeUSD` is bond income alone. That matters beyond reporting, because
+`household-balance-sheet.ts:70` grows the household claim on every fund by exactly
+`lastWeeklyInvestmentIncomeUSD`: **a fund's equity performance never reaches its beneficiaries**,
+and the whole difference lands in the fund's own `equityCapitalUSD` residual. Same defect as
+`hedge-funds.md` A2, seen from the equity side. **Becomes a §3 step** (shared with that one).
+
+### ❌ C2.d — A BUYBACK RETIRES, IT DOES NOT CREATE TREASURY STOCK
+
+`stage08-back:2060` computes `sharesToRetire` and `2062` reduces the count. There is no treasury
+holding and the issuer never appears on its own register. **OUT OF SCOPE**: treasury stock is an
+accounting form for the same economics (cash out, claim count down), and the model books the
+economics. Recorded so it is not re-found.
+
+### ⚠️ G1 / G3 — INDEX WEIGHTS ARE FULL MARKET CAP, AND THE COMPARABLE MULTIPLE PRICES PRIVATE FIRMS
+
+`index-calculation.ts:121` weights by `indexValueUSD`, which for an equity index is `marketCapOf`
+— the WHOLE share count, not the free float 07e already computes for the same names
+(`heldByInstitutionsShares + deskHeldShares`). So an index fund buys weight in a name the register
+says is mostly unsellable, and the index level moves with holdings nobody could trade. The float
+read exists one file away; this is a wiring gap, not a missing mechanism.
+
+G3 holds for listed equity — every derived statistic is computed off the cleared print. It fails
+one level out: `publicComparableEvMultiple` takes the median of `(marketCap + debt) / ebitda`
+across cleared names and then SETS the price of every private company, every LBO and every
+sponsor-to-sponsor sale. That is `private-equity.md` C5.a's finding and is recorded there.
+
+### ⚠️ A3 / C2.a / C5.a — READS THAT EXIST BUT ARE NOT THE ONE THE NODE ASKS FOR
+
+**A3**: a share's currency is its issuer's region's, read through `currencyOf(comp.region)` at
+every payment site — never a field on the instrument. That is §3 step 13c's subject exactly
+(*"an asset declares … `quoteCurrency`"`*), and it is **Already §3 step 13c**.
+**C2.a**: households hold listed equity as the register's RESIDUAL (`liveSharesOf` minus what
+institutions and desks hold) and, since §7.281, can be forced sellers of it — but they have no buy
+schedule at all, so the largest holder class in the model is a one-way participant.
+**C5.a**: the margin call on a levered equity holder is real money (`prime-brokerage.ts:158`) but
+an unmet one has no consequence — see `prime-brokerage.md` C3/C5, which owns it.
