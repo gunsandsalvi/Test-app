@@ -12,7 +12,7 @@
 
 import { newWireJournal } from '../../ledger/wire';
 import { newPaymentJournal, seedPendingNetFromJournal } from './settlement';
-import { ensureV2, openFxWeek, V2World } from '../../../engine2/world';
+import { ensureV2 } from '../../../engine2/world';
 import {
   GameState, Company, Region, Position, FxPair, Commodity, CompositeBenchmarkIndices,
   InstitutionalEntity, NewsItem, RegionId,
@@ -354,12 +354,6 @@ function nestedFlows(src: Record<string, Record<string, number>> | undefined): M
   return out;
 }
 
-/** The week opens on what the last auction cleared, and settles at that rate throughout. */
-function openWeekFx(v2: V2World): V2World['fx'] {
-  openFxWeek(v2);
-  return v2.fx;
-}
-
 export function createInitialContext(state: GameState): WeeklyStepContext {
   const nextWeek = state.currentWeek + 1;
   const ctx = buildContext(state, nextWeek);
@@ -435,7 +429,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     systemicStressFactorGlobal: 0,
 
     marketVolComponent: 0,
-    fx: openWeekFx(ensureV2(state)),
+    fx: ensureV2(state).fx,
     getFxToUsd: () => 1.0,
     currencyValueUSD: undefined,
     bilateralTradeWeeklyUSD: {

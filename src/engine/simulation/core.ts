@@ -1,5 +1,6 @@
 import { bankReservesOf } from '../ledger/accounts';
 import { ensureManagements, runManagementReviewStage } from './stages/management-review';
+import { runFxRevaluationStage } from './stages/fx-revaluation';
 import { toNumeraire } from '../../domain/currency';
 import { currencyOfId } from '../../engine2/world';
 import { runNewsDerivationStage } from './stages/news-derivation';
@@ -232,6 +233,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     }
   };
 
+  // §3.13c-REVAL: the week opens on the rate the last auction cleared, and every foreign balance
+  // is marked to it before anything reads one. First, so no stage sees two rates.
+  run('fx-revaluation', () => runFxRevaluationStage(state));
   run('01-macro-feedback', () => runMacroFeedbackStage(state, ctx));
   syncCompanyField(state, 'cash');
   run('02-region-macro', () => runRegionMacroStage(state, ctx));

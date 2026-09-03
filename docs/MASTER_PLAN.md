@@ -426,12 +426,6 @@ do not reorder.
       draw). **And it pays for itself:** once the shorts are real orders,
       `ctx.bilateralTradeWeeklyUSD` at `fx-clearing:108` — a derived aggregate standing in for
       orders nobody places — is deleted, which is rule 1 on the flow that sets the rate;
-    · **THE FX REVALUATION HAS NOWHERE TO GO.** A balance in a money that is not yours changes
-      value when the rate moves, and nothing books it. Measured at 16 weeks: `M1` 0.04B EUR /
-      0.20B JPN / 0.27B UK, `M5` on one US bank, `O1 sovereign held` 2.3–3.9% — every one of them
-      the same unbooked gain. `trade-settlement.ts` already computes exactly this for one case
-      (`tradeInvoiceFxGainUSD`) and it is the shape the rest wants: the holder takes the gain, in
-      the week the rate moves, as a real number on a real book;
     · **stage 05's household leg.** `05-unit-bidding:2191` pays `units × book.clearedPriceUSD`
       for a household, segment or treasury buyer — the ORIGIN auction's money — where the firm
       loop two hundred lines above converts to buyer money first (`exWorksBuyerMoney`). Both are
@@ -2684,6 +2678,36 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**13c-REVAL — A BALANCE IN SOMEBODY ELSE'S MONEY IS WORTH SOMETHING ELSE WHEN THE RATE MOVES.**
+Nobody pays anybody, so it is not a payment and it cannot go through `pay()`: it is a MARK, and
+the holder takes it as an unrealised gain or loss. Until this stage the model had nowhere to put
+one — `trade-settlement.ts`'s invoice gap was the only instance anybody had written.
+
+**Most of it needed no booking at all**, which is the point of §3.13's rule that value is a
+function and never a field: `cashOf`, `entityCashOf` and `bankReservesOf` convert every row at the
+rate in force, so a firm's cash is worth what it is worth the moment the rate changes. What broke
+were the STORED numbers beside those reads — a bank's equity, a central bank's sheet — written in
+a week whose rate is gone.
+
+**The method is two reads, not a formula.** Value the book at the OLD rate, promote the rate,
+value it again, book the difference. No assumed exposure: the difference between two reads of the
+same balances IS the exposure. A bank's equity takes the whole of its move (it is the residual
+claim; a depositor's foreign balance revalues on the depositor's book and against the bank as a
+liability, and the two net). A central bank gets the thing a central bank actually has for this,
+a **revaluation account** — two lines on its sheet are held in the numéraire rather than locally,
+the official claim (which must be, or the world's bilateral sum is an exchange rate) and the FX
+reserves, so a rate move changes their worth in that book while nothing else moves. It is not
+remitted: the sheet's "no retained earnings" note is about INCOME, and a translation gain is not
+income until it is realised.
+
+**MEASURED, 16 weeks: 251 in 51 → 243 in 48. The whole M family is gone** — `M1 central bank
+closes` in all four regions and `M5 bank sheet closes` on all three US banks that carried a
+foreign position. Against the 231-in-46 baseline exactly two families remain, and neither is a
+money identity: `O1 sovereign held = outstanding` (2.33% USA week 6, 3.33% EUR week 12 — holdings
+converted against an outstanding that is not, which is 13-SOV's) and `O3 register rows name a live
+instrument` (13 rows worth 0.00B). 4 weeks stays at the baseline's 50 in 19.
+
 
 **13c-FX — A PARTY THAT MUST PAY IN A MONEY IT DOES NOT HOLD BUYS IT.** §9.13c part 2 settled a
 cross-currency payment by debiting the payer in its own money and crediting the payee in its. Asked

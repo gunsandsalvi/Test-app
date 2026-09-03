@@ -50,6 +50,15 @@ export interface CentralBank {
    *  sits here. Written by the repo session, one writer, and returned with interest the
    *  following week. */
   reverseRepoBorrowedUSD: number;
+  /** §3.13c-REVAL — THE REVALUATION ACCOUNT, in this region's own money. Two lines on this sheet
+   *  are held in the numéraire rather than locally — the official claim on other central banks
+   *  (which has to be, or the world's bilateral sum is an exchange rate) and the FX reserves,
+   *  which are foreign currency by definition — so when a rate moves their worth in this book
+   *  changes while nothing else does. That difference is a real unrealised gain, and a central
+   *  bank carries exactly this account for it. It is NOT remitted: the note above about keeping
+   *  no retained earnings is about INCOME, and a translation gain is not income until it is
+   *  realised. Without it the M1 identity broke by the revaluation every week a rate moved. */
+  fxRevaluationUSD?: number;
   /** A3.5 — the treasury's account (a liability) and the WAYS AND MEANS advance (an
    *  asset: the treasury cannot overdraw; when its payments exceed its account the central bank
    *  advances the difference at the policy rate, and the next money in repays it) are the two
@@ -142,7 +151,8 @@ export function centralBankIdentityResidualUSD(cb: CentralBank, bankReservesUSD:
 /** Reserves, the treasury's account, the currency it has issued, and what the non-banks have
  *  parked at the reverse repo window. */
 export function centralBankLiabilitiesUSD(cb: CentralBank, bankReservesUSD: number, treasuryAccountUSD: number): number {
-  return bankReservesUSD + treasuryAccountUSD + cb.currencyInCirculationUSD + (cb.reverseRepoBorrowedUSD ?? 0);
+  return bankReservesUSD + treasuryAccountUSD + cb.currencyInCirculationUSD + (cb.reverseRepoBorrowedUSD ?? 0)
+    + (cb.fxRevaluationUSD ?? 0);
 }
 
 /**
