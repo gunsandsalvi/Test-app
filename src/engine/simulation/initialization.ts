@@ -85,7 +85,7 @@ import { unitMassTonnes } from '../../domain/goods-physical';
 import { defect } from '../../domain/defect';
 import { generateCarriers, seedFreightDemand, specMarginalRatesByLane } from '../bootstrap/carriers';
 import { runFreightClearing } from './stages/freight-clearing';
-import { getFxToUsd, publishFxRates } from './stages/06-fx-and-trade';
+import { getFxToUsd, publishFxRatesNow } from './stages/06-fx-and-trade';
 import { convertLocal, localToUsd } from '../../domain/currency';
 import { laneTransitWeeks } from '../../domain/carrier';
 import { laneDistanceNm, currencyOf } from '../../domain/geography';
@@ -1199,7 +1199,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   const seedFxToUsd = (regionId: RegionId) => getFxToUsd(fxPairs, regionId);
   // §3.13c: the world opens at the seed's rates, so the very first payment across a border
   // converts at a real number rather than the parity the table opens at.
-  publishFxRates(seedV2, fxPairs);
+  publishFxRatesNow(seedV2, fxPairs);
   const carrierTickers = new Set<string>(companies.map(c => c.ticker));
   const carrierNames = new Set<string>(companies.map(c => c.name));
   const carriers = generateCarriers(regions, seededUnitMassTonnes, seedFxToUsd, carrierTickers, carrierNames);

@@ -39,6 +39,10 @@ export type PaymentCategory = (typeof PAYMENT_CATEGORIES)[number];
 const RULES: ReadonlyArray<readonly [RegExp, PaymentCategory]> = [
   // -- Fees before the books they ride on --
   [/dealer fee|underwriting|management fee|expense ratio|borrow fee|distribution margin|conversion spread|drawn from the vehicle|borne by the vehicle/, 'FINANCIAL_FEES'],
+  // §3.13c-FX: buying and selling a currency is one asset exchanged for another at a market
+  // price, which is this list's SECURITIES. The pip charged on it is priced into the two legs,
+  // so it needs no separate row — `fx conversion spread` above is stage 05's own, separate charge.
+  [/fx conversion: /, 'SECURITIES'],
 
   // -- Labor --
   [/wages|payroll/, 'LABOR'],

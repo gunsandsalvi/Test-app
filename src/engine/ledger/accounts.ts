@@ -39,7 +39,7 @@ import { WeeklyStepContext } from '../simulation/stages/context';
 import { PartyRef } from './party';
 import { partyId, partyOf, partyKey, partyFromKey } from './party';
 import { RegionId, CurrencyCode, CURRENCY_CODES, currencyOf, NUMERAIRE } from '../../domain/geography';
-import { FxTable, convert } from '../../domain/currency';
+import { FxTable, PARITY_FX, convert } from '../../domain/currency';
 import { Company } from '../../domain/company';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { DepositLines } from '../../domain/banking';
@@ -150,6 +150,18 @@ export function balanceOfIn(v2: V2World, party: PartyRef, currency: CurrencyCode
  */
 export function obligationCurrencyOf(v2: V2World, obligor: PartyRef): CurrencyCode {
   return homeCurrencyOf(v2, obligor) ?? NUMERAIRE;
+}
+
+/**
+ * EVERY MONEY THIS PARTY HOLDS, and how much of each, in that money's own units. For the passes
+ * that must move a whole position rather than its value — a resolution assuming a failed bank's
+ * book takes over its FX position, it does not receive it netted into one currency.
+ */
+export function heldCurrenciesOf(v2: V2World, party: PartyRef): { currency: CurrencyCode; balance: number }[] {
+  const ref = stringRef(v2, partyKey(party));
+  const rows = ref < 0 ? undefined : v2.accounts.rowsByPartyRef.get(ref);
+  if (!rows) return [];
+  return rows.map((r) => ({ currency: currencyOfId(v2.accounts.currencyId[r]), balance: v2.accounts.balance[r] }));
 }
 
 /** What the party holds, in the money it keeps its books in. */
@@ -437,7 +449,14 @@ export interface AccountStore {
    *  reserve row) by bank index, and each one's net over the pass: a bank's own income and
    *  expense, the one thing the rows' deltas cannot tell from a customer's money. */
   ownAccountBankOfParty: Map<number, number>;
+  /** A bank's own income and expense over the pass, IN THE BANK'S OWN MONEY. A leg in another
+   *  currency is converted on the way in: this is the one tally the rows' deltas cannot give
+   *  (it is the difference between a bank's money and its customers'), so it is accumulated as
+   *  it settles, and accumulating four currencies into it raw put a US bank's equity at −23.75B
+   *  the first week its desk sold euros. */
   ownNetByParty: Map<number, number>;
+  /** The rates this pass settles at — see `ctx.fx`, snapshotted at the week's open. */
+  fx: FxTable;
 }
 
 function grow(s: AccountStore): void {
@@ -456,7 +475,7 @@ export function newAccountStore(): AccountStore {
     currencyId: new Int8Array(cap), balance: new Float64Array(cap), opening: new Float64Array(cap),
     banks: [], reserveRowOfBank: new Int32Array(0), bankIdxOfTicker: new Map(), foreignReserveRow: new Map(),
     rowsOfParty: new Map(), rowsOfPartyCur: new Map(), splitOfParty: new Map(),
-    ownAccountBankOfParty: new Map(), ownNetByParty: new Map(),
+    ownAccountBankOfParty: new Map(), ownNetByParty: new Map(), fx: PARITY_FX,
   };
 }
 
@@ -536,6 +555,7 @@ function openRowRaw(s: AccountStore, party: number, bankIdx: number, classId: nu
  */
 export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
   const s = newAccountStore();
+  s.fx = ctx.fx;
   const banks = ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet);
   const a = ctx.v2.accounts;
   /** Open a party's pass rows: its home money first, then every OTHER money it carried into the
@@ -625,42 +645,43 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
   return s;
 }
 
-/**
- * The money this party keeps its books in — the currency of its first row, which the mirror
- * opened from its region.
- */
-function partyMoney(s: AccountStore, party: number): CurrencyCode | undefined {
-  const rows = s.rowsOfParty.get(party);
-  return rows && rows.length > 0 ? currencyOfId(s.currencyId[rows[0]]) : undefined;
-}
 
 /**
- * ONE SETTLED ROW, BY THE ONE RULE — and each side lands in the money it keeps its books in.
+ * ONE SETTLED ROW, BY THE ONE RULE — AND IT MOVES ONE CURRENCY.
  *
- * A payment is denominated in ONE currency: an invoice in the seller's money, a coupon in the
- * bond's, a wage in the employer's. What each side then sees on its own books is that amount at
- * the rate the FX market last cleared — which is exactly `currency.ts`'s rule that nobody
- * re-denominates. The payer's bank debits it in its own money and delivers the currency the
- * obligation is in; the payee's bank credits it in ITS own money. Value is conserved because
- * both legs are the same amount of the same currency measured through the same rate.
+ * A payment is denominated in the money of the obligation behind it, and both legs move that
+ * money: the payer pays euros, the payee receives euros, and the payee HOLDS them until it
+ * decides otherwise. That is what a foreign-currency account is for, and it is the only version
+ * of this in which a party can hold one.
  *
- * The alternative — landing the raw foreign amount on both books — was tried and measured: it
- * left every US bank short 23B of euros, 8B of sterling and 22B of yen after ONE WEEK, because a
- * payer with no balance in a money it never held simply went negative in it. A party that is
- * short a currency it does not keep is not a funding position; it is a missing conversion.
+ * REJECTED, AND WHY (§3.13c-FX). The version before this converted each leg into the money that
+ * side keeps its books in. It conserved value and closed every identity, and it was wrong three
+ * ways: no party ever ended a week holding a second currency, so the per-currency account was
+ * dead code; `fx-clearing.ts:108` ALREADY models the same conversion as the order flow that
+ * clears the rate, so the ledger was a second representation of one event, priced at mid by
+ * nobody; and `05-unit-bidding` already charges a desk spread on that flow, which the ledger's
+ * free conversion undercut. A party that cannot pay in a money it lacks must BUY it — see
+ * `fx-funding.ts` — and buying it is a trade with a counterparty and a price.
  */
-export function applySettledRow(s: AccountStore, payer: number, payee: number, amount: number, currency: CurrencyCode, fx: FxTable): boolean {
-  const payerCur = partyMoney(s, payer), payeeCur = partyMoney(s, payee);
-  if (payerCur === undefined || payeeCur === undefined) return false;
-  const pr = rowsInCurrency(s, payer, payerCur), qr = rowsInCurrency(s, payee, payeeCur);
+export function applySettledRow(s: AccountStore, payer: number, payee: number, amount: number, currency: CurrencyCode): boolean {
+  if (!s.rowsOfParty.has(payer) || !s.rowsOfParty.has(payee)) return false;
+  const pr = rowsInCurrency(s, payer, currency), qr = rowsInCurrency(s, payee, currency);
   if (pr.length === 0 || qr.length === 0) return false;
-  side(s, payer, pr, -convert(amount, currency, payerCur, fx));
-  side(s, payee, qr, convert(amount, currency, payeeCur, fx));
+  side(s, payer, pr, -amount);
+  side(s, payee, qr, amount);
   return true;
 }
 
 function side(s: AccountStore, party: number, rows: number[], delta: number): void {
-  if (s.ownAccountBankOfParty.has(party)) s.ownNetByParty.set(party, (s.ownNetByParty.get(party) ?? 0) + delta);
+  const ownBank = s.ownAccountBankOfParty.get(party);
+  if (ownBank !== undefined) {
+    // In the BANK's money: a leg in a customer's currency is that bank's income all the same,
+    // and it is worth what it converts to. Every row here shares one currency by construction.
+    const reserveRow = s.reserveRowOfBank[ownBank];
+    const into = reserveRow >= 0 ? currencyOfId(s.currencyId[reserveRow]) : currencyOfId(s.currencyId[rows[0]]);
+    const own = convert(delta, currencyOfId(s.currencyId[rows[0]]), into, s.fx);
+    s.ownNetByParty.set(party, (s.ownNetByParty.get(party) ?? 0) + own);
+  }
   if (rows.length === 1) { leg(s, rows[0], delta); return; }
   const split = s.splitOfParty.get(party);
   for (let i = 0; i < rows.length; i++) { const w = split ? split[i] : 1 / rows.length; if (w !== 0) leg(s, rows[i], delta * w); }

@@ -390,6 +390,42 @@ do not reorder.
       the obligation's OWNER (`obligationCurrencyOf`) or off the market it trades in
       (`c.regionId`). `TradeInvoice` is the one obligation in the model that already carries its
       own denomination, and it is the shape the other three want;
+    · **13c-FX-2 — THE DESKS' SPOT BOOK IS NEVER FLATTENED (§9.13c-FX did the first half).**
+      A bank selling a client euros is short euros, and that short is now real: measured at week
+      3, the banks carry −537.7B of foreign currency against +88.3B held by everyone else, and
+      nothing squares it. `fx-clearing.ts`'s own header already names the participant —
+      *"dealers flattening the FX inventory their client forwards left them"* — but it reads the
+      DERIVATIVE desks' inventory and not this. Two things fall out together: the spot book joins
+      the FX auction as a real order, and `ctx.bilateralTradeWeeklyUSD` at `fx-clearing:108` — a
+      derived aggregate standing in for orders nobody places — is deleted, which is rule 1 on the
+      flow that sets the rate;
+    · ~~**13c-FX — CONVERTING AT THE LEDGER IS THE WRONG MECHANISM, AND IT IS MINE**~~ (DONE,
+      §9.13c-FX; kept here because the reasoning is the step) (user, 2026-09-03:
+      *"is that the cleanest and the real world way of doing that?"* — it is not).
+      §9.13c part 2 settles a cross-currency payment by debiting the payer in its own money and
+      crediting the payee in its. That conserves value and closes every identity, and it is wrong
+      three ways:
+      **(a) it makes the per-currency account dead code.** No party ever ends a week holding a
+      second currency, so the structure this whole step exists to build is never used;
+      **(b) rule 3 — the conversion is ALREADY modelled.** `fx-clearing.ts:108` reads *"an
+      importer sells its own money to pay an exporter in the exporter's"* and puts that flow in
+      the book that clears the rate. The ledger now performs the same conversion a second time,
+      at mid, with no counterparty, at last week's snapshot rate while the market prices the
+      identical flow at this week's. One real event, two representations, one of them priced by
+      nobody;
+      **(c) it has no payer.** `05-unit-bidding:2126` already charges an FX spread on exactly
+      this flow, to a named desk, from a named payer (`R_FX_SPREAD`). A firm pays the spread in
+      stage 05 and then converts free at the ledger.
+      **THE MECHANISM.** A payment moves ONE currency: both legs land in the payment's own money.
+      A party short of that money BUYS it — a real order in the FX book at the cleared rate plus
+      the desk's spread — and a party paid in a money it does not want SELLS it. Held foreign
+      balances then revalue, which is the next bullet. The measured "every US bank short 23B of
+      euros, 8B of sterling, 22B of yen after one week" is not an argument against this: it is
+      the missing purchase showing up as a negative balance, and the model already has that shape
+      for a different scarcity (`overdraft-sweep.ts` turns an overdrawn balance into a facility
+      draw). **And it pays for itself:** once the shorts are real orders,
+      `ctx.bilateralTradeWeeklyUSD` at `fx-clearing:108` — a derived aggregate standing in for
+      orders nobody places — is deleted, which is rule 1 on the flow that sets the rate;
     · **THE FX REVALUATION HAS NOWHERE TO GO.** A balance in a money that is not yours changes
       value when the rate moves, and nothing books it. Measured at 16 weeks: `M1` 0.04B EUR /
       0.20B JPN / 0.27B UK, `M5` on one US bank, `O1 sovereign held` 2.3–3.9% — every one of them
@@ -2648,6 +2684,72 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**13c-FX — A PARTY THAT MUST PAY IN A MONEY IT DOES NOT HOLD BUYS IT.** §9.13c part 2 settled a
+cross-currency payment by debiting the payer in its own money and crediting the payee in its. Asked
+whether that was the real-world mechanism, the answer was no, three ways:
+
+  **(a) it made the per-currency account dead code.** No party ever ended a week holding a second
+  currency, so the structure the whole step exists to build was never used — which is the tell;
+  **(b) rule 3 — the conversion was already modelled.** `fx-clearing.ts:108` reads *"an importer
+  sells its own money to pay an exporter in the exporter's"* and puts that flow in the book that
+  clears the rate. The ledger did the same conversion a second time, at mid, with no counterparty,
+  at last week's snapshot rate while the market priced the identical flow at this week's;
+  **(c) it had no payer.** `05-unit-bidding:2126` already charges a desk spread on exactly this
+  flow, from a named payer, and the ledger's free conversion undercut it.
+
+**The mechanism instead.** A payment moves ONE currency: the payer pays euros, the payee receives
+euros and HOLDS them. A party short of a money BUYS it — from its own region's desks, at the
+cleared rate, paying the pip (`fx-funding.ts`, at the head of every settlement pass, so the
+purchase and the payment that forced it settle together, rule 14). A party short of its OWN money
+while holding somebody else's SELLS, rather than overdrawing, which is what stops a seller paid in
+a foreign currency hoarding it forever. **The "every US bank short 23B of euros after one week"
+that made me convert at the ledger was never an argument against this: it was the missing purchase
+showing up as a negative balance.**
+
+**THE ONE TALLY THE ROWS CANNOT GIVE, AND WHY IT BROKE.** A bank's own income and expense is not
+readable off its rows' deltas — the deltas cannot tell a customer's money from the bank's — so it
+is accumulated leg by leg as it settles (`ownNetByParty`). Accumulating four currencies into it RAW
+put a US bank's equity at **−23.75B** in week one, the first week its desk sold euros. It converts
+into the bank's own money now, at the pass's rate.
+
+**THREE THINGS THE PASS FOUND, EACH ONE A READ DISAGREEING WITH ANOTHER READ.**
+
+1. **A bank's own income cannot be summed across currencies.** It is the one tally the rows'
+   deltas cannot give — the deltas cannot tell a customer's money from the bank's — so it is
+   accumulated leg by leg as it settles (`ownNetByParty`). Accumulating four currencies into it
+   RAW put a US bank's equity at **−23.75B** in week one, the first week its desk sold euros.
+2. **A resolution assumes a POSITION, not its value.** The failed bank's foreign rows stayed on
+   the shell when only the home-money total was paid across, and the guard found **16.7M still on
+   QYTV** in week 12. It moves money by money now, and the legs sum to exactly the `cashUSD` the
+   plan struck the shell's equity on.
+3. **THE RATE CANNOT MOVE INSIDE A WEEK.** With `v2.fx` written by the auction mid-pipeline, a
+   resolution valued a failed bank's book at the post-auction rate (`bankReservesOf`, off the
+   world) while settlement paid it away at the pre-auction one (`ctx.fx`, a snapshot) — and the
+   **134.8M** difference, which is a revaluation, was reported as money left on the shell. It had
+   already shown up once as a 0.04B hole between settlement's gross and the wire summary, and I
+   had patched THAT by copying the table onto the context, which fixed one pair of reads and left
+   every other pair broken. The real rule is one rate per week: the auction writes `v2.fxNext`
+   and the next week's open promotes it (`openFxWeek`). `ctx.fx` is the world's table again, so a
+   stage, an audit and the UI cannot read one balance three ways.
+
+**AND A BANK IS THE MARKET, NOT A CLIENT.** Every kind excluded from the funding pass is one whose
+foreign position is a POSITION rather than a shortfall: a desk's is its inventory, a bank's own
+account is its nostro — and a nostro runs overdrawn, which is exactly what an unsquared spot book
+looks like on a balance sheet.
+
+**MEASURED.** 2 weeks 20/12, 4 weeks **50 violations in 19 families — the baseline, family for
+family**, with parties genuinely holding and trading four currencies: 2,579 home-currency rows and
+5,257 foreign, 3,528 of them non-zero. 16 weeks: 251 in 51 against the baseline's 231 in 46, and
+every new family is downstream of the two mechanisms this step does NOT yet have — nothing books
+an FX gain, and nothing flattens the desks' book. The desks carry the other side, as they must:
+−537.7B of foreign currency against +88.3B held by everyone else at week 3, and by week 16 the UK
+central bank's reserves have run from 92.5B to 6.4B behind it. That is a real position going
+unsquared, which is 13c-FX-2, not a defect in this one. Per rule 20, nothing is rolled back
+because the 16-week print is 20 violations uglier than the version this replaced: that version was
+structurally wrong — its per-currency accounts were dead code and its conversion was a second
+representation of an event the FX book already prices.
+
 
 **13c — CURRENCY IS A UNIVERSAL CHARACTERISTIC (parts 1 and 2).** The `USD` suffix was a lie
 repeated 11,243 times across 1,395 identifiers. `currency.ts` said in its own header that every

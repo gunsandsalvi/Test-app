@@ -20,7 +20,7 @@ import { WeeklyStepContext } from './context';
 import { MARKET_REGION_IDS } from './05-unit-bidding';
 import { defect } from '../../../domain/defect';
 import { REGION_IDS, CURRENCY_BY_REGION } from '../../../domain/geography';
-import { V2World } from '../../../engine2/world';
+import { V2World, openFxWeek } from '../../../engine2/world';
 
 /**
  * USD per one unit of a region's currency.
@@ -43,13 +43,20 @@ export function getFxToUsd(updatedFxPairs: FxPair[], regionId: RegionId): number
 }
 
 /**
- * §3.13c — PUBLISH THE WEEK'S RATES TO THE WORLD. `v2.fx` is what every conversion in the model
- * reads: the ledger's when a payment crosses a currency, an audit's when it adds two books
- * together, the UI's when it shows one number. It is written IN PLACE, because the week's context
- * holds the same object — a replacement would leave every stage converting at last week's rate.
+ * §3.13c — PUBLISH WHAT THE AUCTION CLEARED. It lands in `v2.fxNext` and takes effect at the NEXT
+ * week's open (`openFxWeek`), because the rate a payment settles at is the one the LAST auction
+ * cleared: a table that moves mid-week makes two honest reads of the same balance disagree, and
+ * every such disagreement is a revaluation reported as a leak. Written in place, because the
+ * week's context holds the same object.
  */
 export function publishFxRates(v2: V2World, fxPairs: FxPair[]): void {
-  REGION_IDS.forEach((r) => { v2.fx[CURRENCY_BY_REGION[r]] = getFxToUsd(fxPairs, r); });
+  REGION_IDS.forEach((r) => { v2.fxNext[CURRENCY_BY_REGION[r]] = getFxToUsd(fxPairs, r); });
+}
+
+/** The seed's rates are in force AND next: there is no earlier auction for the week to open on. */
+export function publishFxRatesNow(v2: V2World, fxPairs: FxPair[]): void {
+  publishFxRates(v2, fxPairs);
+  openFxWeek(v2);
 }
 
 export function runFxAndTradeStage(state: GameState, ctx: WeeklyStepContext): void {

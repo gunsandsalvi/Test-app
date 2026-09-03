@@ -36,7 +36,7 @@ import { fieldsOf, residualOf } from '../bank-identity-trace';
 import { ladderRowsOf, facilityBookOf } from '../../../engine2/tranches';
 import { moveFacilityLender } from '../../ledger/tranche-ledger';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../../domain/banking';
-import { moveSectorRowsToBank, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
+import { moveSectorRowsToBank, bankReservesOf, bankDepositLines, heldCurrenciesOf } from '../../ledger/accounts';
 
 const sheetLinesUSD = (s: BankingSector, cashUSD: number, lines: DepositLines, facilityBookUSD: number): number =>
   Math.abs(lines.householdUSD) + Math.abs(lines.corporateUSD) + Math.abs(lines.institutionalUSD)
@@ -170,15 +170,24 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     traceSheet('assumed', bank); traceSheet('assumed', acquirer);
 
     // ---- 2. The cash leg, the guarantee, and the world's links. ----
-    if (cashUSD > 0) {
-      pay(ctx, { payer: { kind: 'BANK', ticker: bank.ticker }, payee: { kind: 'BANK', ticker: acquirer.ticker },
-        amount: cashUSD, currency: currencyOf(regionId), reason: 'resolution: reserves to the assuming bank' });
-    } else if (cashUSD < 0) {
-      // An overdrawn failed bank: the assuming bank makes the reserve account whole — part of the
-      // net it took over, already in the equity line above.
-      pay(ctx, { payer: { kind: 'BANK', ticker: acquirer.ticker }, payee: { kind: 'BANK', ticker: bank.ticker },
-        amount: -cashUSD, currency: currencyOf(regionId), reason: 'resolution: overdrawn reserves made whole' });
-    }
+    // §3.13c-FX: MONEY BY MONEY. A failed bank holds whatever currencies its desk sold and its
+    // clients left it, and the acquirer assumes the POSITION, not its value netted into one
+    // currency — paying only the home-money total left the foreign rows on the shell and the
+    // guard found 16.7M still on QYTV in week 12. These legs sum to exactly `cashUSD` at this
+    // pass's rates, which is what `assumeBankBooks` above struck the shell's equity on, so the
+    // shell nets to zero; sweeping AFTER the week's other legs instead breaks that equality and
+    // leaves the difference as equity (measured: 134.8M on DOIE).
+    heldCurrenciesOf(ctx.v2, { kind: 'BANK', ticker: bank.ticker }).forEach(({ currency, balance }) => {
+      if (balance > 1e-6) {
+        pay(ctx, { payer: { kind: 'BANK', ticker: bank.ticker }, payee: { kind: 'BANK', ticker: acquirer.ticker },
+          amount: balance, currency, reason: 'resolution: reserves to the assuming bank' });
+      } else if (balance < -1e-6) {
+        // An overdrawn failed bank: the assuming bank makes the reserve account whole — part of
+        // the net it took over, already in the equity line above.
+        pay(ctx, { payer: { kind: 'BANK', ticker: acquirer.ticker }, payee: { kind: 'BANK', ticker: bank.ticker },
+          amount: -balance, currency, reason: 'resolution: overdrawn reserves made whole' });
+      }
+    });
     if (plan.guaranteeUSD > 0) {
       pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'BANK', ticker: acquirer.ticker },
         amount: plan.guaranteeUSD, currency: currencyOf(regionId), reason: 'resolution: deposit guarantee on the hole' });

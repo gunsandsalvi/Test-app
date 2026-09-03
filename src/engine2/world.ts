@@ -51,11 +51,17 @@ export interface V2World {
    *  week. Companies first (§7.384); the other kinds join per A3's list. Plain typed arrays and
    *  a Map, clone-safe like every table here. */
   accounts: PersistentAccounts;
-  /** §3.13c — THE ONE RATE TABLE: what a unit of each currency is worth in the numéraire, as the
-   *  FX auction last cleared it. It lives on the world rather than on the week's context because
-   *  a balance cannot be read, converted or settled without it, and reads happen everywhere —
-   *  the audits, the UI and the harness hold no context. `fx-clearing` is its only writer. */
+  /** §3.13c — THE RATE IN FORCE THIS WEEK: what a unit of each currency is worth in the
+   *  numéraire. It lives on the world rather than on the week's context because a balance cannot
+   *  be read, converted or settled without it and reads happen everywhere — the audits, the UI
+   *  and the harness hold no context — and it does NOT move inside a week, so every read of one
+   *  balance agrees with every other. */
   fx: Record<CurrencyCode, number>;
+  /** What the FX auction cleared, which takes effect at the NEXT week's open. A rate that moved
+   *  mid-week made two honest reads of the same balance disagree: a resolution valued a failed
+   *  bank's book at the post-auction rate while settlement paid it away at the pre-auction one,
+   *  and the 134.8M difference — a revaluation — was reported as money left on the shell. */
+  fxNext: Record<CurrencyCode, number>;
 }
 
 /**
@@ -102,6 +108,11 @@ export const currencyOfId = (id: number): CurrencyCode => CURRENCY_CODES[id];
 /** The world's rates, as the immutable table every conversion takes. */
 export const fxOf = (v2: V2World): FxTable => v2.fx;
 
+/** The week opens on what the last auction cleared. Called once, before any stage runs. */
+export function openFxWeek(v2: V2World): void {
+  CURRENCY_CODES.forEach((c) => { v2.fx[c] = v2.fxNext[c]; });
+}
+
 /** A per-row fixed-capacity ring of f64 slots. `len` is the actual entry count (these rings'
  *  object fields had no unset-vs-empty distinction to preserve — revRing's does, and keeps
  *  its own encoding). */
@@ -129,6 +140,7 @@ export function ensureV2(state: V2Host): V2World {
     // Parity until the FX auction clears once — the only honest opening value, and one every
     // read must survive, since the audits and the UI can be asked about week 0.
     fx: { ...PARITY_FX },
+    fxNext: { ...PARITY_FX },
   };
   state.v2 = v2;
   return v2;

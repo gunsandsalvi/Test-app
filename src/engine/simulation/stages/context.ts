@@ -12,7 +12,7 @@
 
 import { newWireJournal } from '../../ledger/wire';
 import { newPaymentJournal, seedPendingNetFromJournal } from './settlement';
-import { ensureV2 } from '../../../engine2/world';
+import { ensureV2, openFxWeek, V2World } from '../../../engine2/world';
 import {
   GameState, Company, Region, Position, FxPair, Commodity, CompositeBenchmarkIndices,
   InstitutionalEntity, NewsItem, RegionId,
@@ -249,14 +249,14 @@ export interface WeeklyStepContext {
 
   // Stage 05/06 boundary outputs, read by stage 08/12
   marketVolComponent: number;
-  /** §3.13c — THE WEEK'S RATES, SNAPSHOTTED: what one unit of each money was worth in the
-   *  numéraire when the week opened, which is what the last FX auction cleared. Every conversion
-   *  inside one week — a payment settling, a book being read, a wire being valued — uses this one
-   *  table, so the two halves of an identity cannot be struck against different worlds. This
-   *  week's auction writes `v2.fx`, and that is what next week opens on. (Measured when it was a
-   *  live reference: settlement converted the week's gross at the pre-auction rate and the wire
-   *  summary valued the same wires at the post-auction one, and W1 reported a 0.04B hole that
-   *  was an exchange rate moving between two reads.) */
+  /** §3.13c — THE WEEK'S RATES: what one unit of each money is worth in the numéraire, as the
+   *  LAST auction cleared it. The world's own table (`v2.fx`), not a copy, so a stage, an audit
+   *  and the UI cannot read one balance three ways — and it does not move inside a week, because
+   *  this week's auction writes `v2.fxNext` and the next week's open promotes it. Measured when
+   *  it did move mid-week: settlement valued the week's gross at one rate and the wire summary
+   *  the same wires at another (a 0.04B hole), and a resolution valued a failed bank's book at
+   *  the post-auction rate while paying it away at the pre-auction one (134.8M reported as money
+   *  left on the shell). Both were revaluations wearing a leak's clothes. */
   fx: import('../../../domain/currency').FxTable;
   getFxToUsd: (regionId: RegionId) => number;
   /** WS9/XB2d: each currency's cleared value in USD. Every pair is derived from two of these,
@@ -354,6 +354,12 @@ function nestedFlows(src: Record<string, Record<string, number>> | undefined): M
   return out;
 }
 
+/** The week opens on what the last auction cleared, and settles at that rate throughout. */
+function openWeekFx(v2: V2World): V2World['fx'] {
+  openFxWeek(v2);
+  return v2.fx;
+}
+
 export function createInitialContext(state: GameState): WeeklyStepContext {
   const nextWeek = state.currentWeek + 1;
   const ctx = buildContext(state, nextWeek);
@@ -429,7 +435,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     systemicStressFactorGlobal: 0,
 
     marketVolComponent: 0,
-    fx: { ...ensureV2(state).fx },
+    fx: openWeekFx(ensureV2(state)),
     getFxToUsd: () => 1.0,
     currencyValueUSD: undefined,
     bilateralTradeWeeklyUSD: {

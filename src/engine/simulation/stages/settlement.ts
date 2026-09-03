@@ -37,6 +37,7 @@ import { WeeklyStepContext } from './context';
  *  the two parties that bank at the central bank (the government and the central bank itself). */
 export type { PartyRef } from '../../ledger/party';
 import { PartyRef, partyId, partyOf } from '../../ledger/party';
+import { fundForeignCurrencyShortfalls } from './fx-funding';
 import { activeWireJournal, wirePush, MONEY_ASSET_ID_BY_CURRENCY, ASSET_KINDS } from '../../ledger/wire';
 import { CurrencyCode, NUMERAIRE, currencyOf } from '../../../domain/geography';
 import { convert } from '../../../domain/currency';
@@ -511,9 +512,33 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
   };
 }
 
+/**
+ * C4b — WHICH CENTRAL BANK'S SYSTEM A PARTY LIVES IN, and therefore which money it keeps its
+ * books in and whose desks it converts through. Every party but the clearing house has one; the
+ * house is the hub its legs pass through and belongs to no region.
+ */
+export function partyRegionOf(ctx: WeeklyStepContext): (ref: PartyRef) => RegionId | undefined {
+  const companyByTicker = new Map(ctx.updatedCompanies.map((c) => [c.ticker, c]));
+  const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
+  return (ref: PartyRef): RegionId | undefined => {
+    switch (ref.kind) {
+      case 'COMPANY': return companyByTicker.get(ref.ticker)?.region;
+      case 'INSTITUTION': return entityById.get(ref.id)?.region;
+      case 'BANK': case 'BANK_SECURITIES': case 'BANK_CREDIT': return companyByTicker.get(ref.ticker)?.region;
+      case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': return ref.region;
+      case 'CLEARING_HOUSE': return undefined;
+      default: return assertNever(ref, 'partyRegionOf');
+    }
+  };
+}
+
 export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const priorReport = ctx.lastSettlementReport;
   const journal = ctx.paymentJournal;
+  // §3.13c-FX: before anything applies, everyone who must pay in a money it does not hold buys
+  // it — from a desk, at the cleared rate, paying the pip. Its rows join this pass's, so the
+  // purchase and the payment that forced it settle together (rule 14).
+  fundForeignCurrencyShortfalls(ctx, journal, settlementWeek(), partyRegionOf(ctx));
   const nInstructions = journal.n;
   const report: SettlementReport = {
     instructions: nInstructions,
@@ -573,7 +598,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     if (!rowDue(journal, n, week)) continue; // §5-WIRES N: dated past this pass — carried below
     const amountUSD = journal.amount[n];
     const payerIdx = journal.payerId[n];
-    if (!applySettledRow(accounts, payerIdx, journal.payeeId[n], amountUSD, currencyOfId(journal.currencyId[n]), ctx.fx)) {
+    if (!applySettledRow(accounts, payerIdx, journal.payeeId[n], amountUSD, currencyOfId(journal.currencyId[n]))) {
       report.accountRowsUnmapped++;
       report.accountUnmappedUSD += amountUSD;
       // Which side had no row, and of what kind: a count says a hole exists, this says where.
