@@ -79,20 +79,20 @@ could be wholly absent.** That is why banks are three and derivatives are five.
 | | **MARKETS** | | | |
 | 7 | [corporate credit](./corporate-credit.md) | ✅ d3 | ⚠️ stale | ✅ |
 | 8 | [sovereign credit](./sovereign-credit.md) | ✅ | — | — |
-| 9 | short-term debt | — | — | — |
+| 9 | [short-term debt](./short-term-debt.md) | ✅ | — | — |
 | 10 | [equity](./equity.md) | ✅ | — | — |
 | 11 | [the money market](./money-market.md) | ✅ | — | — |
-| 12 | FX spot | — | — | — |
-| 13 | fund shares (ETF, MMF) | — | — | — |
-| 14 | securities lending | — | — | — |
-| 15 | prime brokerage | — | — | — |
+| 12 | [FX spot](./fx-spot.md) | ✅ | — | — |
+| 13 | [fund shares (ETF, MMF)](./fund-shares.md) | ✅ | — | — |
+| 14 | [securities lending](./securities-lending.md) | ✅ | — | — |
+| 15 | [prime brokerage](./prime-brokerage.md) | ✅ | — | — |
 | 16 | the derivative layer | — | — | — |
 | 17 | CDS | — | — | — |
 | 18 | interest-rate swaps | — | — | — |
 | 19 | FX forwards and XCS | — | — | — |
 | 20 | commodity futures | — | — | — |
-| 21 | commodities spot | — | — | — |
-| 22 | indices | — | — | — |
+| 21 | [commodities spot](./commodities-spot.md) | ✅ | — | — |
+| 22 | [indices](./indices.md) | ✅ | — | — |
 | | **FINANCIAL INSTITUTIONS** | | | |
 | 23 | [banks — lending](./banks-lending.md) | ✅ | — | — |
 | 24 | [banks — funding and liquidity](./banks-funding-and-liquidity.md) | ✅ | — | — |
