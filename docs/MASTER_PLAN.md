@@ -17,8 +17,8 @@ There is deliberately no section 7 in this file, so the citation can never be mi
   is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
   that names anything but §3's first line; one was written, it disagreed with §3's order, and two
   steps were skipped behind it.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 12b —
-  **200 violations in 44 families**, and **"the money that is not anyone's" is 0.00B across ZERO
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 13 part 1 —
+  **216 violations in 45 families**, and **"the money that is not anyone's" is 0.00B across ZERO
   lines — the money family is clean.** The rise from 181/36 is O1, O6 and O7 becoming able to see
   300B of desk inventory that named no tranche (§9.12); step 11f owns what they report.
   **The money family is down to one check** (M7's dust, worth 0.00B): M1–M6 all print nothing.
@@ -237,7 +237,10 @@ do not reorder.
     is step 13. **One holdout on the convention:** `engine/nelsonSiegel.ts` discounts continuously
     (`exp(-z·t)`) where everything else compounds discretely. Unify it in the same commit as 13's
     sovereign pricing — moving it alone re-prices every sovereign for no gain.
-13. **Face, and price × face — and ONE NAME for one piece of paper** (the "credit always trades at
+13. **Face, and price × face — and ONE NAME for one piece of paper.** **SIZED: `P5` measures the
+    mismark at 127.9B on 1,033.5B of face — the book is worth 905.6B at its own cleared spreads
+    and the register marks every tranche at 100.** That is the number this step removes, and it is
+    reported every week so the fix can be judged against it. (The "credit always trades at
     par" defect, plus rule 3). **The register keys credit by TRANCHE and the dealer desks key the
     same paper by ISSUER, and the two sets are disjoint: `O8` measures 11,655 desk positions worth
     301B on the issuer key and NOT ONE on a tranche.** The register was migrated to per-tranche
@@ -2492,6 +2495,28 @@ The history is plain enough: the register was migrated to per-tranche rows and t
 behind. Folded into step 13, which owns the per-tranche world; O8 is the number to drive to zero.
 Measured: 165 in 35 → **181 in 36**, the whole rise being O8 firing every week on a defect that
 was always there.
+
+**13 (part 1). What "credit trades at par" is worth: 127.9B.** (`PENDING`) The defect has been
+in the plan since the audit and nobody had ever put a number on it. `P5` does, using the pricing
+module 12b built: take every live tranche, take the spread its own book cleared — the issuer's OAS
+for a bond, its discount margin for a loan — and price the paper's real cash flows against the
+region's real curve. Then compare with what the register says it is worth, which is its face,
+because `holdings-ledger.ts`'s `priceOf` returns 1.00 for every notional instrument.
+
+**1,033.5B of face is worth 905.6B. The mismark is 127.9B, about 12% of the credit book**, and it
+points the honest way: spreads widened over the run, so the book is worth less than the par it is
+carried at. A bond whose issuer's spread doubled is still marked at 100.
+
+Two caveats recorded at the check rather than left for someone to rediscover. A floater is
+compared against its ISSUER's cleared discount margin, because that is the only cleared margin
+there is, so a tranche whose own locked margin sits far above it prices far above par — and the
+widest of those trace straight back to `P1`'s inverted spreads (a 5540bp facility against a
+1011bp bond). They are a handful of small tranches and they do not move the aggregate. Where they
+DO matter is as a second reading on P1: a spread that produces a price of 15× face is not a
+spread, and P5 makes that visible in dollars rather than basis points.
+
+Measured (SHOCKS=0 WEEKS=16): 200 in 44 → **216 in 45**, the whole rise being P5 reporting every
+week.
 
 **12b. Pricing is centralised.** (`PENDING`) The time value of money was written out by hand in
 eight modules — `Math.pow(1 + r, -t)` and `(1 - that) / r` and `r / (1 - that)` — each copy with

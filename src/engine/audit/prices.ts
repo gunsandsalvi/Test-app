@@ -9,6 +9,7 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, spearman, sum } from './types';
 import { marketCapOf } from '../../domain/company';
+import { priceFromSpreadBps } from '../../domain/pricing';
 
 const RATING_RANK: Record<string, number> = { AAA: 0, AA: 1, A: 2, BBB: 3, BB: 4, B: 5, CCC: 6, D: 7 };
 
@@ -130,6 +131,63 @@ function x2(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
+/**
+ * P5 — CREDIT IS MARKED AT PAR, AND THIS IS WHAT THAT COSTS.
+ *
+ * `holdings-ledger.ts`'s `priceOf` returns `priceUSD = 1` for every notional instrument, so a
+ * credit holding is worth its face whatever the market said. The books DO clear a spread — an OAS
+ * on a bond, a discount margin on a loan — and `domain/pricing` turns that spread into the price
+ * it implies. The gap between the two, summed over every ladder, is the mismarking the whole of
+ * step 13 exists to remove: a bond whose issuer's spread doubled is still carried at 100.
+ *
+ * Reported as a SIZE, not a pass/fail: it is a defect the plan already owns, and what a check can
+ * add is how big it is and which way it points, so the fix can be judged against it.
+ *
+ * TWO THINGS THE READER SHOULD KNOW ABOUT THE TAIL. A floater is compared against its ISSUER's
+ * cleared discount margin, because that is the only cleared margin there is — so a tranche whose
+ * own locked margin is far above it prices far above par, and the widest of those trace straight
+ * back to `P1`'s inverted spreads (a 5540bp facility against a 1011bp bond). They are a handful
+ * of small tranches and they do not move the aggregate; the aggregate is the discount the whole
+ * book carries. And the direction is the honest one: spreads widened, so the book is worth LESS
+ * than the par it is marked at.
+ */
+function p5(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  let faceUSD = 0, valueUSD = 0, priced = 0;
+  let widest = { id: '', price: 1, faceUSD: 0 };
+  REGION_IDS.forEach((r) => {
+    const curve = state.regions[r]?.zeroRates;
+    if (!curve) return;
+    state.companies.forEach((c) => {
+      if (c.region !== r || !isActiveCompany(c)) return;
+      (c.debtTranches ?? []).forEach((t) => {
+        if (t.isBankFacility || !(t.principalUSD > 0)) return;
+        const weeksToMaturity = t.maturityWeek - week;
+        if (!(weeksToMaturity > 0)) return;
+        const isFloating = t.rateType === 'FLOATING';
+        const spreadBps = isFloating
+          ? (c.leveragedLoan?.discountMarginBps ?? t.floatingMarginBps ?? 0)
+          : (c.oasSpreadBps ?? 0);
+        const annualCouponRate = isFloating
+          ? (state.regions[r].policyRate + (t.floatingMarginBps ?? 0) / 10000)
+          : (t.couponRate ?? 0);
+        // Commercial paper pays once, at maturity; everything else on its own period.
+        const periodWeeks = t.isCommercialPaper ? Math.max(1, weeksToMaturity) : 26;
+        const price = priceFromSpreadBps({ annualCouponRate, periodWeeks, weeksToMaturity }, curve, spreadBps);
+        if (!(price > 0) || !isFinite(price)) return;
+        faceUSD += t.principalUSD;
+        valueUSD += t.principalUSD * price;
+        priced++;
+        if (Math.abs(price - 1) > Math.abs(widest.price - 1)) widest = { id: t.id, price, faceUSD: t.principalUSD };
+      });
+    });
+  });
+  if (priced > 0 && Math.abs(valueUSD - faceUSD) > 1e6) {
+    out.push({ family: 'P', check: 'P5 credit is marked at par', week, usd: valueUSD - faceUSD, message: `${priced} tranches carrying ${B(faceUSD)} of face are worth ${B(valueUSD)} at their own cleared spreads — the register marks every one of them at par, a ${B(valueUSD - faceUSD)} mismark (widest ${widest.id} at ${widest.price.toFixed(3)} on ${B(widest.faceUSD)})` });
+  }
+  return out;
+}
+
 export function auditPrices(state: GameState, week: number): AuditFinding[] {
-  return [...p1(state, week), ...p2(state, week), ...p3(state, week), ...p4(state, week), ...x1(state, week), ...x2(state, week)];
+  return [...p1(state, week), ...p2(state, week), ...p3(state, week), ...p4(state, week), ...p5(state, week), ...x1(state, week), ...x2(state, week)];
 }
