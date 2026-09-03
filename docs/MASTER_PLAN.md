@@ -17,12 +17,12 @@ There is deliberately no section 7 in this file, so the citation can never be mi
   is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
   that names anything but §3's first line; one was written, it disagreed with §3's order, and two
   steps were skipped behind it.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 11e —
-  **142 violations in 34 families**, "the money that is not anyone's" **0.00B across 1 line**.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 11g —
+  **165 violations in 35 families**, "the money that is not anyone's" **0.00B across 1 line**.
   **The money family is down to one check** (M7's dust, worth 0.00B): M1–M6 all print nothing.
-  The rise from 134/33 is W5 arriving and reporting a real finding (§9.11e part 4, step 11f) —
-  a new check that fires is the instrument working, not a regression. Read the number off the
-  run, not off this line.
+  The rise from 134/33 is W5 and then O7 arriving and reporting real findings (§9.11e, §9.11f) —
+  a new check that fires is the instrument working, not a regression. **O7 alone accounts for 15
+  of it and step 11f owns closing it.** Read the number off the run, not off this line.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
@@ -203,42 +203,30 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11f. **THE CLEARING HOUSE MINTS AND BURNS PAPER, and three open findings are all this one
-    defect.** `holdings-store.ts:285` wires a book's fills as the holder's CLAIMED rows before
-    against its APPENDED rows after: `before = group(slot.rows, (i) => slot.claimed[i] !== 0)`.
-    Nothing anywhere enforces that a book claimed EVERY row of a position it writes back —
-    `scan`'s `visit` returns a boolean per row (`:126`), so a book may claim some rows of an
-    instrument and not others, and positions ARE fragmented during the clearing window
-    (`consolidateRegister` merges duplicates only at the CLOSE of the week). When that happens the
-    holder's "before" is understated, the delta is overstated, and the difference is wired as a
-    purchase from a clearing house that never received it — **face the register holds and no
-    ladder ever issued.**
-    **The evidence, from `WIRE_TRACE=SICM-OPPORTUNISTIC-11` on one tranche:** the issuer put
-    528.1M into the house in week 11 and the house delivered 520.0M out (8.1M unplaced, fine);
-    over weeks 12–15 the house took in 271.7M and delivered out 280.8M, ending ~1M SHORT — it
-    delivered paper it never held. The register then held 528.770M against the ladder's 528.144M.
-    **Three symptoms, one cause:** `W2` (the clearing house nets to zero per asset — 32 findings a
-    run, and its message already says "a fill some holder books without a wire"); `W5`'s residue
-    (the register grows by more than its wires, §9.11e part 4); and
-    `estate-resolution.ts:591`'s register-versus-ladder guard, which **CRASHES the reference run**
-    the moment an issuer with an imbalance dies inside the measured window (it does not today only
-    because SICM dies in week 17; a re-path moved it to week 15 and the run died).
-    Fix at the claim, not at the wire: a book that writes back a consolidated position must own
-    every row of it. Then W2, W5 and the estate guard should all fall together, and that is the
-    test.
-11g. **A stock loan's delivery has no wire, and a fund lends to itself.** WRITTEN, MEASURED AND
-    SEQUENCED BEHIND 11f — see §9.11g for the diff, which is four lines and reproducible.
-    `securities-lending.ts:88` moved shares between two books with `store.addShares` on each side
-    and no instruction at all, the last such path in the tree (W5 saw it as ~40 books a week off
-    their wires, gross ~300M shares). Wiring it immediately exposed the second half: the borrow
-    demand is spread across EVERY lender including the borrower itself, so a fund borrowed its own
-    shares — posting collateral to itself, paying itself a fee, and delivering from a book to the
-    same book. That cancelled silently until the delivery became a wire and the ledger refused a
-    move from a party to itself.
-    **Both fixes are correct and both are held back**, because together they re-path the run into
-    11f's landmine (SICM's estate opens in week 15 instead of 17 and the guard kills the harness).
-    Do 11f first, then re-apply this and expect W5's gross to collapse from ~300M shares a week to
-    ~9M.
+11f. **THE REGISTER HOLDS PAPER NO LADDER CARRIES.** `O7` measures it now, every week for every
+    issuer: **~55 tranches over-claimed in a typical week** (worst seen 105, 0.10B). The size is
+    small per tranche — SICM's week-11 primary is +0.626M on 528.1M of face — but it is
+    systematic, it grows, and it is the same fact three other places report: `W2` (32 findings a
+    run), `W5`'s residue, and `O6`'s held-versus-issued.
+    **The cause, and two hypotheses already spent on it (do not repeat them):**
+    `register-split.ts:65` spreads a holder's WHOLE issuer-level position across that issuer's
+    live tranches pro rata by face, with no cap at any tranche's own face. That is exactly right
+    when holders in aggregate hold what the issuer issued, and it faithfully distributes the
+    excess across every tranche when they do not. So the split is the messenger.
+    The sender is that **the corporate book clears at ISSUER level while the paper exists at
+    TRANCHE level** (`07b:530` iterates `regionCompanies`, one instrument per COMPANY), so nothing
+    in the clearing constrains a holder's issuer position to the ladder's outstanding face.
+    (a) DISPROVED — "the claim is incomplete, a book claims some rows of a position and writes
+    back all of it". The books' visitors claim by ISSUER, so for a given instrument it is all or
+    none.
+    (b) DISPROVED AND MEASURED — "the oscillation is the residue": a position IS re-keyed between
+    tranche-named and issuer-named rows every week (`register-split.ts:62`'s fallback fires 3,620
+    times in 13 weeks). Keeping an untouched position's rows verbatim was implemented and run:
+    **it made O7 WORSE — 105 tranches and 0.10B against 55 and 0.01B** — and moved W2 not at all.
+    Reverted. The oscillation is real and is its own defect, but it is not this one.
+    **Where the fix lives: with step 13 and step 21.** The book must clear the paper that exists,
+    per tranche, against the float that exists. Until then O7 carries the number.
+    **The estate no longer crashes on it** (§9.11f): one invariant, one reporter.
 
 11e. **The seed's unwired positions — plant is the last one.** *(Deliberately after 11f: that is
     a live leak and this is provenance, and this one is blocked on a design question it shares
@@ -2465,28 +2453,43 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
 
-**11g (written, not landed). The stock loan's missing wire, and the fund that lent to itself.**
-The change is four lines and it is recorded here because it is correct, measured, and deliberately
-NOT in the tree (§3 step 11g says why):
+**11f (part 1). O7 — the invariant that only ever fired as a crash, and two dead hypotheses.**
+(`PENDING`) `estate-resolution.ts` carried a `defect()` that killed the run when an estate's
+register claims exceeded the ladder's face on one tranche. It fired for the first time this
+session, on a re-path, at 0.626M against 528.1M — and under rule 28 that is not dust, it is a real
+over-issuance. But the guard could only ever speak about a firm that happened to DIE inside the
+measured window, so what it really reported was which firm died first.
 
-1. `securities-lending.ts`'s `deliver` calls `wireHoldingMove(lender → borrower, EQUITY, shares,
-   'stock loan: shares delivered')` before its two `store.addShares` calls. `wireHoldingMove` is a
-   new export of `holdings-ledger.ts` — the instruction alone, for a mover that owns its own row
-   writes, which is what a stage inside the clearing store's window is.
-2. Its lender loop skips `lenderId === d.fundId`. The borrower's own share of the pool is simply
-   not available to it; the borrower fills LESS rather than more, because re-spreading that slice
-   over the other lenders would let one of them lend what it does not have.
-3. `payment-category.ts` registers the reason.
+**`O7` replaces it: no tranche is claimed beyond its face, measured every week for every issuer**,
+with a dust bound derived from the row count and the face rather than a percentage. It fires
+immediately and widely — **~55 tranches in a typical week**, up to 105, and it names SICM's
+week-11 primary at exactly the +0.626M the estate died on. The `defect()` is gone: one invariant,
+one reporter, and a number instead of a landmine.
 
-Measured before it was pulled: W5's gross per week fell from ~300M shares across ~40 books to
-~9M, and every remaining gap turned the SAME sign — books gaining shares, which is 11f. Then the
-re-path moved SICM's death from week 17 to week 15 and the estate's register-versus-ladder guard
-killed the harness, so the change waits behind 11f rather than landing on top of it.
+Two hypotheses were spent and both are recorded in §3 so nobody repeats them. The second cost a
+full run and is the more useful: a position IS re-keyed between tranche-named and issuer-named
+rows every week (the split's issuer fallback fires 3,620 times in 13 weeks), and keeping an
+untouched position's rows verbatim **made O7 worse — 105 tranches and 0.10B against 55 and
+0.01B** — while moving W2 not at all. The oscillation is a real defect and it is not this one.
 
-**And a process note, because it cost real time.** The rule-28 plan commit was made with
-`git add -A` while this code sat uncommitted, so a "plan" commit shipped seven code files and a
-crashing reference run to `main`. `git add -A` is not a substitute for knowing what is in the
-tree; a commit named "Plan:" must contain only the plan.
+**11g. The stock loan's missing wire, and the fund that lent to itself.** (`PENDING`) Landed once
+O7 retired the crash that was blocking it. `securities-lending.ts`'s `deliver` moved shares
+between two books with `store.addShares` on each side and no instruction — the last such path in
+the tree. It now emits `wireHoldingMove` first: a new export of `holdings-ledger.ts`, the
+instruction alone, for a mover that owns its own row writes, which is what a stage inside the
+clearing store's window is.
+
+Wiring it exposed the second half immediately, because the ledger refuses a move from a party to
+itself: **the borrow demand was spread across every lender INCLUDING the borrower**, so a fund
+borrowed its own shares — posting collateral to itself, paying itself a fee, delivering from a
+book to the same book. It cancelled silently for the life of the model. The borrower is now
+skipped in its own lender pool and fills LESS rather than more, because re-spreading that slice
+over the other lenders would let one of them lend what it does not have.
+
+Measured (SHOCKS=0 WEEKS=16): 157 in 35 → **165 in 35**. W5 fires in more weeks (8 → 12) but the
+gross it reports collapsed from **~300M shares a week across ~40 books to ~9M**, and every
+remaining gap turned the same sign — which is 11f. The rest of the rise is P- and X-family
+market-behaviour lines that rule 12 says not to judge yet.
 
 **11e (part 4). W5 — the register's replay, and what it caught immediately.** (`PENDING`) The
 register was wired in part 3 but nothing CHECKED it. W5 does: the register's change is the replay

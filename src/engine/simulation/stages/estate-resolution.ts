@@ -14,7 +14,7 @@
  * goods — and the discount a buyer takes is the return it needs for the time it is tied up.
  */
 
-import { assertNever, defect } from '../../../domain/defect';
+import { assertNever } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
 import { moveOutputUnits, scrapOutputUnitsTo, moveInputUnits, scrapInputUnits, scrapGoods } from '../../ledger/goods-ledger';
@@ -37,7 +37,7 @@ import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { cashOf } from '../../ledger/accounts';
-import { facilitiesOfBorrower, issuerIdOf, materializeLadder } from '../../../engine2/tranches';
+import { facilitiesOfBorrower, issuerIdOf } from '../../../engine2/tranches';
 
 /** How many resolutions the realised recovery rate averages over before it displaces the prior. */
 export const RECOVERY_HISTORY_LENGTH = 24;
@@ -576,23 +576,13 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
     addClaim({ holder: { kind: 'BANK', ticker: bank.ticker }, instrumentType: 'BANK_FACILITY', seniority: CLAIM_SENIORITY.SECURED, principalUSD: usd, recoveredUSD: 0 });
   });
   if (claims.length === 0) return undefined;
-  // The ladder's own face for every tranche the register claims against. A row naming the
-  // issuer rather than a tranche has no single ladder row behind it and is checked against the
-  // whole ladder instead.
-  const ladderFaceById = new Map<string, number>();
-  let ladderFaceTotalUSD = 0;
-  materializeLadder(ctx.v2, comp.id).forEach((t) => {
-    ladderFaceById.set(t.id, (ladderFaceById.get(t.id) ?? 0) + t.principalUSD);
-    ladderFaceTotalUSD += t.principalUSD;
-  });
-  claimedFaceByInstrument.forEach((claimedUSD, id) => {
-    const faceUSD = ladderFaceById.get(id) ?? (id === comp.id ? ladderFaceTotalUSD : undefined);
-    if (faceUSD === undefined) return;
-    if (claimedUSD > faceUSD + 1e-6 * Math.max(1, faceUSD)) {
-      defect(`${comp.ticker}'s estate opens claims of ${(claimedUSD / 1e6).toFixed(3)}M on ${id}`
-        + ` against ${(faceUSD / 1e6).toFixed(3)}M of face — the register and the ladder are on two bases`);
-    }
-  });
+  // ONE INVARIANT, ONE REPORTER. This used to `defect()` — killing the run — when an estate's
+  // register claims exceeded the ladder's face on any one tranche. The audit's `O7` now measures
+  // exactly that, every week, for every issuer, and it fires for dozens of tranches a week: the
+  // condition is routine, not impossible, so crashing on it in the one path where a firm happens
+  // to DIE while tolerating it everywhere else told us nothing except which firm died first. The
+  // estate takes what the register actually claims; O7 owns the size of the gap and step 11f owns
+  // closing it.
 
   const grossPpeUSD = comp.grossPPEUSD ?? 0;
   const netPpeUSD = Math.max(0, grossPpeUSD - (comp.accumulatedDepreciationUSD ?? 0));

@@ -8,6 +8,8 @@ import { marketCapOf } from '../../domain/company';
 import { ensureV2 } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
 import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf } from '../../engine2/tranches';
+import { materializeBook } from '../../engine2/holdings';
+import { isTrancheKind } from '../../domain/assets';
 import { bookHeadOf } from '../../engine2/holdings';
 
 /** O1 — two-sided: what the books hold of each debt class equals what is outstanding, in both directions. */
@@ -163,6 +165,52 @@ function o6(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
+/**
+ * O7 — NO TRANCHE IS CLAIMED BEYOND ITS FACE. The register's credit rows name a tranche; the
+ * ladder says how much of that tranche exists. Holders cannot hold more of it than was issued.
+ *
+ * This was only ever discovered when an ESTATE opened on the issuer (`estate-resolution.ts`'s
+ * register-versus-ladder guard), which crashes the run and only fires for a firm that happens to
+ * die. Measured here every week for every issuer, it is a number instead of a landmine.
+ * The tolerance is float dust on the sum actually accumulated — the claims are added one row at a
+ * time, so it scales with the count of rows and the size of the face, never with a percentage
+ * (rule 28).
+ */
+function o7(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const v2 = ensureV2(state);
+  const claimedByTranche = new Map<string, number>();
+  const rowsByTranche = new Map<string, number>();
+  state.institutionalEntities.forEach((e) => {
+    materializeBook(v2, e.id).forEach((h) => {
+      if (!isTrancheKind(h.instrumentType)) return;
+      const usd = h.quantityOrNotionalUSD ?? 0;
+      if (!(usd > 0)) return;
+      claimedByTranche.set(h.instrumentId, (claimedByTranche.get(h.instrumentId) ?? 0) + usd);
+      rowsByTranche.set(h.instrumentId, (rowsByTranche.get(h.instrumentId) ?? 0) + 1);
+    });
+  });
+  const faceById = new Map<string, number>();
+  state.companies.forEach((c) => {
+    (c.debtTranches ?? []).forEach((t) => faceById.set(t.id, (faceById.get(t.id) ?? 0) + t.principalUSD));
+  });
+  const over: [string, number][] = [];
+  let overUSD = 0;
+  claimedByTranche.forEach((claimedUSD, id) => {
+    const faceUSD = faceById.get(id);
+    // A row naming the ISSUER rather than a tranche has no single ladder row behind it; O6 owns
+    // that comparison at the region-and-kind level.
+    if (faceUSD === undefined) return;
+    const dust = 1e-9 * Math.max(1, faceUSD, claimedUSD) * Math.max(1, rowsByTranche.get(id) ?? 1);
+    if (claimedUSD - faceUSD > dust) { over.push([id, claimedUSD - faceUSD]); overUSD += claimedUSD - faceUSD; }
+  });
+  if (over.length) {
+    over.sort((a, b) => b[1] - a[1]);
+    out.push({ family: 'O', check: 'O7 no tranche is claimed beyond its face', week, usd: overUSD, message: `${over.length} tranches are claimed beyond what was issued, by ${B(overUSD)} in total (${over.slice(0, 3).map(([id, d]) => `${id} +${(d / 1e6).toFixed(3)}M`).join(' | ')}) — the register holds paper no ladder carries` });
+  }
+  return out;
+}
+
 /** O5 — contracts, estates, indices, shipments: parties alive, claims bounded, weights whole. */
 function o5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
@@ -214,6 +262,6 @@ function o5(state: GameState, week: number): AuditFinding[] {
 }
 
 export function auditOwnership(state: GameState, week: number): AuditFinding[] {
-  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week)];
+  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week)];
 }
 export type { RegionId };
