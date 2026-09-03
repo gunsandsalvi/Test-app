@@ -9,6 +9,7 @@
  * wire first, so a money row without a wire cannot exist (W1). Other asset kinds arrive in W2–W5.
  */
 import { PartyRef, partyId, partyOf } from './party';
+import { isVehicleClaim } from '../../domain/assets';
 
 export type AssetKind =
   | 'MONEY' | 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER'
@@ -156,6 +157,11 @@ export interface WireSummary {
    *  `region|subUnit`; a household or a treasury is a sink (its region's stock does not hold
    *  what it bought), a carrier holds its consignments. */
   goodsNetUnitsByKey: Record<string, number>;
+  /** W5: what the REGISTER took in net of what it gave up, per asset kind, in the asset's own
+   *  unit (shares for equity and fund shares). Only institutions hold register rows, so a wire
+   *  TO one credits the register and a wire FROM one debits it; a wire between two other parties
+   *  never touches it. The register's change must equal this. */
+  registerNetQtyByKind: Record<string, number>;
   /** §5-WIRES W4: the week's transformations per `region|subUnit`. */
   goodsFlowByKey: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>;
   goodsOutUnitsByKey?: Record<string, number>;
@@ -173,6 +179,7 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
   const trace = typeof process !== 'undefined' && process.env?.LADDER_TRACE === '1';
   const issuerNetUSDByTicker: Record<string, number> | undefined = trace ? {} : undefined;
   const goodsNetUnitsByKey: Record<string, number> = {};
+  const registerNetQtyByKind: Record<string, number> = {};
   const goodsTrace = typeof process !== 'undefined' && process.env?.GOODS_TRACE === '1';
   const goodsOutUnitsByKey: Record<string, number> | undefined = goodsTrace ? {} : undefined;
   const goodsInUnitsByKey: Record<string, number> | undefined = goodsTrace ? {} : undefined;
@@ -206,6 +213,15 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
       if (goodsInByTicker && to.kind === 'COMPANY') { const tk = `${to.ticker}|${asset}|${reasonTextOf?.(j.reasonId[i]) ?? j.reasonId[i]}`; goodsInByTicker[tk] = (goodsInByTicker[tk] ?? 0) + j.quantity[i]; }
       continue;
     }
+    // AN ISSUER IS NOT A HOLDER OF ITS OWN INSTRUMENT. A vehicle's shares are issued BY the
+    // vehicle, which is an institution like its holders but keeps no register row of itself, so
+    // its leg moves no row and must not net against the holder's — and the vehicle's id IS the
+    // instrument's. The test is asked ONLY of a vehicle claim: entity ids are not unique across
+    // kinds (a seeded institution carries its company's id), so an id match on ordinary equity
+    // would silently drop a real holder's leg.
+    const selfIssued = isVehicleClaim(k) ? assetText(j.assetRef[i]) : undefined;
+    if (to.kind === 'INSTITUTION' && to.id !== selfIssued) registerNetQtyByKind[k] = (registerNetQtyByKind[k] ?? 0) + j.quantity[i];
+    if (from.kind === 'INSTITUTION' && from.id !== selfIssued) registerNetQtyByKind[k] = (registerNetQtyByKind[k] ?? 0) - j.quantity[i];
     if (to.kind === 'CLEARING_HOUSE') { const key = `${to.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) + valueUSD; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) + valueUSD; } }
     if (from.kind === 'CLEARING_HOUSE') { const key = `${from.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) - valueUSD; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) - valueUSD; } }
     if (regionOfIssuer) {
@@ -213,5 +229,5 @@ export function summarizeWires(j: WireJournal, moneyPendingUSD = 0, regionOfIssu
       if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueUSD; if (issuerNetUSDByTicker) { const tk = `${to.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueUSD; } } }
     }
   }
-  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
+  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
 }

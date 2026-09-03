@@ -5,7 +5,7 @@
  */
 import { GameState } from '../../types';
 import { AuditFinding, B } from './types';
-import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey } from './snapshot';
+import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey, registerQtyByKind } from './snapshot';
 import { isTrancheKind } from '../../domain/assets';
 import { ensureV2 } from '../../engine2/world';
 import { issuerIdOf } from '../../engine2/tranches';
@@ -131,6 +131,26 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       gaps.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
       const units = gaps.reduce((a, [, g]) => a + Math.abs(g), 0);
       out.push({ family: 'W', check: 'W4 wires reproduce the goods stock', week, usd: units, message: `${gaps.length} region-goods' stock moved by other than production, consumption and wires (${gaps.slice(0, 4).map(([k, g]) => `${k.replace('|', ' ')} ${g.toFixed(1)}u`).join(' | ')}${gaps.length > 4 ? ' | …' : ''}) — goods that moved with no wire, or were made or used with no record` });
+    }
+  }
+  // W5: the REGISTER's change is the replay of its wires — in the asset's own unit, shares, so
+  // that a re-mark cannot move it. Only institutions hold register rows, so what the register
+  // took in is what the wires delivered to an institution net of what they took away.
+  if (prev?.registerQtyByKind) {
+    const now = registerQtyByKind(state);
+    const net = w.registerNetQtyByKind ?? {};
+    const gaps: [string, number][] = [];
+    new Set([...Object.keys(now), ...Object.keys(prev.registerQtyByKind), ...Object.keys(net)]).forEach((kind) => {
+      if (!(kind in now) && !(kind in prev.registerQtyByKind!)) return;
+      const delta = (now[kind] ?? 0) - (prev.registerQtyByKind![kind] ?? 0);
+      const wired = net[kind] ?? 0;
+      // Dust on the GROSS moved, never a share of the position.
+      const gross = Math.abs(delta) + Math.abs(wired) + (now[kind] ?? 0);
+      if (Math.abs(delta - wired) > Math.max(1e-3, gross * 1e-9)) gaps.push([kind, delta - wired]);
+    });
+    if (gaps.length > 0) {
+      const worst = gaps.reduce((a, b) => (Math.abs(b[1]) > Math.abs(a[1]) ? b : a));
+      out.push({ family: 'W', check: 'W5 wires reproduce the register', week, usd: gaps.reduce((a, [, g]) => a + Math.abs(g), 0), message: `${gaps.length} asset kinds' register holdings moved by other than their wires (${gaps.map(([k, g]) => `${k} ${g.toFixed(3)}`).slice(0, 4).join(' | ')}) — a position booked without a wire, or a wire no book took; worst ${worst[0]}` });
     }
   }
   return out;

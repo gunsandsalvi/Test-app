@@ -24,9 +24,10 @@ export type { AuditFinding } from './types';
  * the GOODS because the world genuinely starts with none — no firm is generated holding finished
  * stock and no input lot is seeded, so week 1's stock is exactly what week 1 produced plus what
  * its wires brought in, which is the identity W4 checks every other week. The register is still
- * seeded without wires, so its key stays absent (an absent key skips its check) until it is too.
+ * REGISTER because the seed opens every holding by wire too (`seedBook`). All three of W3, W4 and
+ * W5 therefore hold week 1 to the same standard as week 2.
  */
-let lastSnapshot: AuditSnapshot | undefined = { ladderUSDByKey: {}, goodsUnitsByKey: {} };
+let lastSnapshot: AuditSnapshot | undefined = { ladderUSDByKey: {}, goodsUnitsByKey: {}, registerQtyByKind: {} };
 
 /** Run every family on this week's state. Week-over-week checks read the audit's OWN snapshot of
  *  last week (the caller's state is mutated in place, so no reference to it can be "before"). */

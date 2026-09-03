@@ -17,10 +17,12 @@ There is deliberately no section 7 in this file, so the citation can never be mi
   is still OPEN — a finished step leaves it and lands in §9. Do not write a "next step" note here
   that names anything but §3's first line; one was written, it disagreed with §3's order, and two
   steps were skipped behind it.
-- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 11d —
-  **134 violations in 33 families**, "the money that is not anyone's" **0.00B across 1 line**.
+- **The reference to judge a change against:** `SHOCKS=0 WEEKS=16` after step 11e —
+  **142 violations in 34 families**, "the money that is not anyone's" **0.00B across 1 line**.
   **The money family is down to one check** (M7's dust, worth 0.00B): M1–M6 all print nothing.
-  Read the number off the run, not off this line.
+  The rise from 134/33 is W5 arriving and reporting a real finding (§9.11e part 4, step 11f) —
+  a new check that fires is the instrument working, not a regression. Read the number off the
+  run, not off this line.
   (The family count is partly cosmetic: the P1 seniority line names example issuers and they move.)
   (The older 13-week 82/20 figure is NOT comparable: three fewer weeks of accumulation. Judge a
   13-week change against a 13-week run and a 16-week one against this.)
@@ -188,19 +190,25 @@ do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere)
 
-11e. **The seed's unwired positions — plant, and the check that would prove the register.** The
-    ladders and the register now open by wire and the goods were never seeded at all, so W3 and
-    W4 both prove week 1 (§9.11e). Two remain:
-    (a) **plant.** `grossPPEUSD` is assigned at the seed and at every birth, and there is no asset
-    kind for it — `ASSET_KINDS` has `HOUSE`, not plant. It needs the kind before it can have a
-    wire, which makes it the largest of the three and the one with a real design question:
-    is a firm's plant one asset or a stack of dated capital goods (`capexUnderConstruction`
-    already carries the latter shape).
-    (b) **W5, the register's replay.** The seed's holdings are wired now, but nothing CHECKS that
-    a holder's book is the replay of its wires — there is no register key in the audit snapshot
-    and no W5. Build it in QUANTITY, not USD: shares for equity, face for paper. A value-based key
-    would break every week on the marks, which is exactly why W3 works on ladder FACE and W4 on
-    goods UNITS. The `WireSummary` needs a `holderNetByKey` beside its `issuerNetUSDByKey`.
+11e. **The seed's unwired positions — plant is the last one.** The ladders, the register and the
+    goods all open by wire or were never seeded, and W3, W4 and W5 hold week 1 to week 2's
+    standard (§9.11e). What is left is **plant**: `grossPPEUSD` is assigned at the seed and at
+    every birth and there is no asset kind for it — `ASSET_KINDS` carries `HOUSE`, not plant. It
+    needs the kind before it can have a wire, and with the kind comes a real design question:
+    is a firm's plant ONE asset or a stack of dated capital goods? `capexUnderConstruction`
+    already carries the second shape, and step 26's two disagreeing depreciation schedules
+    (`front-core.ts:750` vs `capital-programme.ts:190`) are the same question asked from the
+    other end. Answer it once, for both.
+11f. **The register gains equity shares no wire delivered.** W5, built in 11e, reports it in
+    **8 weeks of 16 and the sign is always the same: the register grows by MORE than its wires**.
+    Tiny at first — 8,252 shares in week 6, 7,607 in week 7 — then it jumps to 9.5M in week 8 and
+    runs 32M–77M a week after that. Week 8 is where the bank resolutions and mergers begin, and
+    the merger/estate paths re-key or seize register rows, so start there: a row written or
+    re-keyed without its wire, or a wire that should have debited a holder and did not.
+    ETF shares are CLEAN, so it is specific to equity. Diagnose the way §9.11d was: get the
+    instrument to name the holder before writing the fix — W5 reports one number per asset kind
+    today and the next thing it needs is the per-holder decomposition, the way `LADDER_TRACE`
+    gives W3 its per-issuer one.
 
 ### PART II — THE INSTRUMENTS ARE REAL
 
@@ -2408,6 +2416,31 @@ src/engine/newsGenerator.ts, package.json, tsconfig.json, eslint.config.js, vite
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**11e (part 4). W5 — the register's replay, and what it caught immediately.** (`PENDING`) The
+register was wired in part 3 but nothing CHECKED it. W5 does: the register's change is the replay
+of its wires, **in shares, never dollars** — a value-keyed register would move every week on the
+marks and could never equal its wires, which is the same reason W3 works on ladder FACE and W4 on
+goods UNITS. Only kinds held in shares that are asset kinds in their own right are claimed; the
+notional kinds join when step 13 gives a holding a face separate from its value.
+
+Two things had to be got right and the first attempt got both wrong, which the instrument said
+straight away:
+- **An issuer is not a holder of its own instrument.** A vehicle's shares are issued BY the
+  vehicle, an institution like its holders but with no register row of itself, so its leg moves no
+  row and must not net against the holder's. Without that, every ETF creation cancelled itself and
+  W5 reported 777M phantom shares in week 1.
+- **Entity ids are not unique across kinds.** The fix for the above tested `party.id === asset`,
+  and a seeded institution carries its COMPANY's id (`initialization.ts:918`), so ordinary equity
+  wires started dropping real holders' legs and EQUITY lit up instead. The test is now asked only
+  of a vehicle claim, where the id genuinely identifies the issuer.
+
+Measured: **142 in 34 against 134 in 33, and the ONLY new line is W5's** — nothing else moved by
+one violation, which is also the proof the audit stays pure (it reads the register through
+`materializeBook` and perturbs nothing).
+
+**And it found something on its first run.** W5 fires in 8 weeks of 16 on EQUITY, always with the
+same sign — the register grows by more than its wires. That is now step 11f.
 
 **11e (part 3). The register opens by wire too.** (`PENDING`) `ensureBooksSynced` mirrored
 `itemizedHoldings` straight into rows, so the world's opening holdings existed because an array

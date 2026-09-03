@@ -14,6 +14,12 @@ import { V2World, ensureV2 } from '../../engine2/world';
 import { inputUnitsHeld } from '../../engine2/lots';
 import { SUBUNITS } from '../../engine2/state';
 import { facilityBookOf } from '../../engine2/tranches';
+import { materializeBook } from '../../engine2/holdings';
+import { heldInShares } from '../../domain/assets';
+import { ASSET_KINDS } from '../ledger/wire';
+
+/** A holding type that is an asset kind in its own right, so its row and its wire meet. */
+const isOwnAssetKind = (t: string): boolean => (ASSET_KINDS as readonly string[]).includes(t);
 
 export interface RegionSnapshot {
   treasuryAccountUSD: number;
@@ -26,10 +32,10 @@ export interface RegionSnapshot {
   clientMarginUSD: number;
   bankLoansUSD: number;
 }
-export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number> };
+export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number>; /** W5: register shares held per asset kind */ registerQtyByKind?: Record<string, number> };
 
 export function snapshotOf(state: GameState): AuditSnapshot {
-  const out: AuditSnapshot = { moneyPendingUSD: state.lastWires?.moneyPendingUSD ?? 0, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined, goodsUnitsByKey: goodsUnitsByKey(state) };
+  const out: AuditSnapshot = { moneyPendingUSD: state.lastWires?.moneyPendingUSD ?? 0, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined, goodsUnitsByKey: goodsUnitsByKey(state), registerQtyByKind: registerQtyByKind(state) };
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
@@ -69,6 +75,30 @@ export function ladderUSDByTicker(state: GameState): Record<string, number> {
     for (const t of c.debtTranches ?? []) {
       const key = `${c.ticker}|${trancheKindOf(t)}`;
       out[key] = (out[key] ?? 0) + t.principalUSD;
+    }
+  }
+  return out;
+}
+
+/**
+ * W5: the register's holdings per asset kind, in the asset's OWN unit — SHARES, never dollars.
+ *
+ * A value-keyed register would move every week on the marks and could never be the replay of its
+ * wires, which is the same reason W3 works on a ladder's FACE and W4 on goods UNITS. So only the
+ * kinds held in shares are claimed here, and only those that are asset kinds in their own right
+ * (a PE fund interest is held in shares but wires as a CONTRACT, so its wire and its row would
+ * not meet). The notional kinds join when step 13 gives a holding a face separate from its value.
+ */
+export function registerQtyByKind(state: GameState): Record<string, number> {
+  const out: Record<string, number> = {};
+  const v2 = state.v2 as V2World | undefined;
+  if (!v2) return out;
+  for (const e of state.institutionalEntities ?? []) {
+    for (const h of materializeBook(v2, e.id)) {
+      if (!heldInShares(h.instrumentType) || !isOwnAssetKind(h.instrumentType)) continue;
+      const q = h.quantityShares;
+      if (q === undefined || Number.isNaN(q) || q === 0) continue;
+      out[h.instrumentType] = (out[h.instrumentType] ?? 0) + q;
     }
   }
   return out;
