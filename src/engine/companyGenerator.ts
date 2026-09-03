@@ -320,7 +320,7 @@ function debtLadderShape(rank: number): { weights: number[]; maturityWeeks: numb
   return { weights: [1.0], maturityWeeks: [364] }; // single blended 7y tranche
 }
 
-function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating, policyRate: number = 0.045, rank: number = 0): DebtTranche[] {
+export function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating, policyRate: number = 0.045, rank: number = 0): DebtTranche[] {
   const fixedShare = FIXED_SHARE_BY_RATING[initialRating] ?? 0.5;
   const { weights: trancheWeights, maturityWeeks } = debtLadderShape(rank);
   const baseSpreadBps = RATING_OAS_SPREADS[initialRating]?.baseBps ?? 150;

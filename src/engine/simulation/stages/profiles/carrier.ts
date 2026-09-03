@@ -1,15 +1,12 @@
 /** A carrier's P&L: the freight it really carried against the fuel it really burned (moved verbatim from stage 08, BP1c). */
 
-import { random } from '../../../rng';
 import { ensureV2, rowOf, revHistPush } from '../../../../engine2/world';
-import { fuelPriceUsdPerTonne } from '../freight-clearing';
 import { weeklyCapacityTonnes } from '../../../../domain/carrier';
 import { laneDistanceNm } from '../../../../domain/geography';
 import { ProfileInput, ProfilePnl } from './types';
 
 export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
-  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
-    weeklyPayrollUSD } = input;
+  const { comp, state, ctx } = input;
   let newRevenue = 0;
 
   // XB3a-2: a carrier's revenue is the freight it actually carried this week, at the rate its
@@ -21,11 +18,10 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   newRevenue = Math.max(10, weeklyFreightUSD * 52);
   { const v2r = ensureV2(state); revHistPush(v2r, rowOf(v2r, comp.id), newRevenue); }
 
-  const fuelUsdPerTonne = fuelPriceUsdPerTonne(reg, state.unitMassTonnes ?? {});
-  // §4.0 Tier 1 item 14 — FUEL BURNS ON VOYAGES SAILED, NOT ON THE FLEET'S EXISTENCE. This
+  // FUEL BURNS ON VOYAGES SAILED, NOT ON THE FLEET'S EXISTENCE. This
   // charged every asset its FULL-CAPACITY voyage schedule every week while revenue was only
   // the freight actually carried — a fleet at 1% utilization paid 100% steaming costs, and all
-  // twelve carriers bled to death by mid-run (§7.253: 0 of 12 alive, logistics 0.03% of GDP).
+  // twelve carriers bled to death by mid-run.
   // An idle ship is laid up; fuel scales with the tonne-miles the carrier really moved this
   // week against what the fleet could move, bounded at 1 by physics (it cannot sail more than
   // its capacity).
@@ -41,7 +37,14 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const utilization = capacityTonneNm > 0
     ? Math.min(1, (ctx.carrierTonneNm[comp.ticker] ?? 0) / capacityTonneNm)
     : 0;
-  const annualFuel = fullFleetFuelTonnes * utilization * fuelUsdPerTonne * 52;
+  // WHAT THE FLEET BURNS, AS A MEASUREMENT. It used to be CHARGED here as well — an annual fuel
+  // bill expensed against a purchase that never happened, so the world fleet's bunker demand
+  // never reached `refined_products` and nobody was paid for it. A carrier now buys its inputs
+  // through the goods auction like every other firm, from the logistics sub-unit's own recipe
+  // (the registry's number for exactly this activity), and the caller charges what it paid.
+  // This stays as the physical burn the fleet reports; the remaining gap is that the BID is
+  // sized off revenue rather than off these tonnes, which is a real difference in a fuel spike.
+  const weeklyFuelTonnes = fullFleetFuelTonnes * utilization;
   // IND-R1, rule 3: ONE payroll. This used to be `sum(asset.crewCount) x crewAnnualWageUSD` —
   // a second wage bill computed off the fleet spec, which the labor market cannot touch, while
   // `employeeCount` (which it hires and fires, and which pays the households) moved
@@ -50,7 +53,8 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   if (comp.carrierFleet) {
     comp.carrierFleet.lastWeekTonneNm = ctx.carrierTonneNm[comp.ticker] ?? 0;
     comp.carrierFleet.lastWeekFreightRevenueUSD = weeklyFreightUSD;
+    comp.carrierFleet.lastWeekFuelBurnedTonnes = weeklyFuelTonnes;
   }
 
-  return { newRevenue, profileCostsAnnualUSD: annualFuel };
+  return { newRevenue, profileCostsAnnualUSD: 0 };
 };

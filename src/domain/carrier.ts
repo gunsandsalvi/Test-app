@@ -8,7 +8,7 @@
  *
  * A carrier here is a `Company` like any other, with the balance sheet, debt, employees, rating
  * and default that implies, and a `CARRIER` financial-statement profile in the same way banks,
- * insurers and REITs already have their own. **No parallel type** — §7.33's rule, because a second
+ * insurers and REITs already have their own. **No parallel type** rule, because a second
  * firm type is two representations of one real thing.
  *
  * What makes freight rates behave the way they do is entirely in the physics below: capacity is a
@@ -174,6 +174,10 @@ export interface CarrierFleet {
   /** Tonne-miles actually carried last week, and what it was paid for them. */
   lastWeekTonneNm: number;
   lastWeekFreightRevenueUSD: number;
+  /** Tonnes of bunker the fleet physically burned last week, at its own utilisation. The fleet's
+   *  real demand for refined product — measured here, and the number a bunker bid should
+   *  eventually be sized from rather than from a share of revenue. */
+  lastWeekFuelBurnedTonnes?: number;
 }
 
 export function emptyCarrierFleet(): CarrierFleet {

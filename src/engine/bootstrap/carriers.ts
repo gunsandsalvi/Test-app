@@ -4,13 +4,13 @@
  * Goods teleported: a purchase settled the week it cleared, from any seller, over no distance, at
  * no cost. So there was no freight bill on any buyer's books and no revenue on anybody's — an
  * entire sector, several percent of real output, simply absent. Carriers are not carved out of an
- * existing aggregate the way HC's private firms were (§7.33), because there was no aggregate
+ * existing aggregate the way HC's private firms were, because there was no aggregate
  * carrying them: this adds a real sector that was missing, and the cost it puts on buyers is the
  * mirror of the revenue it puts on carriers.
  *
  * **The fleet is seeded at what the seed economy actually has to move**, by running the sourcing
  * intent once against the bootstrap prices and sizing capacity to the tonnage it books. That is
- * §7.4's rule in its strict form — seed by calling the engine's own code — and it means the
+ * rule in its strict form — seed by calling the engine's own code — and it means the
  * freight market opens clearing somewhere a week of this simulation would actually produce,
  * rather than on a rate spike or collapse that is an artifact of a guessed fleet. It is a
  * starting condition and not a target: from week 1 capacity is an outcome of real ordering and
@@ -30,6 +30,7 @@ import { carryRatesByRegion, computeSourcingIntent, LaneBooking, SOURCING_REGION
 import { FxToUsd } from '../../domain/currency';
 import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
 import { determineCreditRating } from '../simulation/credit';
+import { generateDebtTranches } from '../companyGenerator';
 import { crewAnnualWageUSD, fuelPriceUsdPerTonne, runFreightClearing } from '../simulation/stages/freight-clearing';
 import { RATING_OAS_SPREADS } from '../pricing';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../equity-valuation';
@@ -187,7 +188,7 @@ export function generateCarriers(
   // marginal cost a carrier books exactly zero EBITDA by construction — it would be seeded
   // insolvent, and every one of them would default in the first weeks for a reason that is pure
   // arithmetic. So the seed runs the real freight auction once against the same bookings the
-  // fleet was sized from, and the carriers' books are built on the rate that clears (§7.4).
+  // fleet was sized from, and the carriers' books are built on the rate that clears.
   const provisional = staffed.map((c, i) => ({
     ticker: `SEED_CARRIER_${i}`,
     region: c.region,
@@ -248,7 +249,7 @@ function buildCarrierCompany(
     const weeklyFuelTonnes = voyagesPerWeek * asset.fuelTonnesPerNm * distanceNm;
     fullSailAnnualFuelCost += weeklyFuelTonnes * fuelUsdPerTonne * 52;
   });
-  // §7.259/item 14 — FUEL BURNS AT THE UTILIZATION THE SEED AUCTION ACTUALLY CLEARED, not at
+  // /item 14 — FUEL BURNS AT THE UTILIZATION THE SEED AUCTION ACTUALLY CLEARED, not at
   // full sail. The weekly model already burns by real tonne-miles moved (carrier.ts profile);
   // the seed costed the fleet as if every hull sailed full while its revenue was the cleared
   // (partial) fill — so any carrier the round-robin dealt slack lanes seeded LOSSMAKING by a
@@ -278,14 +279,14 @@ function buildCarrierCompany(
   // FLOW too, and whichever binds is the constraint — so the fleet's debt is also capped by the
   // covenant ceiling this model already applies to every other borrower (see
   // corporate-financing.ts). Without that second leg the seed produced carriers at 21x leverage,
-  // which is not a shipping cycle, it is a §7.4 cold start that defaults in the first weeks.
+  // which is not a shipping cycle, it is a cold start that defaults in the first weeks.
   const assetBackedUSD = grossPPEUSD * SHIP_FINANCE_LOAN_TO_VALUE;
   const cashFlowBackedUSD = Math.max(0, ebitda) * COVENANT_LEVERAGE_CEILING.B;
   const debtBase = Math.round(Math.min(assetBackedUSD, cashFlowBackedUSD));
   const annualInterest = debtBase * (policyRate + 0.02);
   const coverage = annualInterest > 0 ? ebit / annualInterest : 99;
   const leverage = ebitda > 0 ? debtBase / ebitda : 99;
-  // ONE OWNER (§4.0 Tier 1 item 5): the rating ladder lives in simulation/credit.ts — this
+  // ONE OWNER: the rating ladder lives in simulation/credit.ts — this
   // file carried its own three-cutoff copy, so a carrier opened rated on different arithmetic
   // than the market re-rates it with a week later.
   const rating: CreditRating = determineCreditRating(leverage, coverage, { ebitdaUSD: ebitda });
@@ -300,7 +301,7 @@ function buildCarrierCompany(
   // Carriers are LISTED. The shipping majors are public companies in reality, and it is also what
   // puts them inside every mechanism the model already has — the weekly P&L pass, the rating
   // ladder, equity clearing, default — instead of needing a special case in each. Seeded through
-  // the SAME valuation function the market itself prices with, never a multiple (§7.31).
+  // the SAME valuation function the market itself prices with, never a multiple.
   const sharesOutstanding = Math.max(1, Math.round(grossPPEUSD / 1000));
   const bookEquityUSD = grossPPEUSD * (1 - 0.35) - debtBase + Math.max(0, ebitda) * 0.6;
   const stockPrice = Number(fairValuePerShare({
@@ -333,9 +334,15 @@ function buildCarrierCompany(
     eps: Number(((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE) / sharesOutstanding).toFixed(2)),
     sharesOutstanding, stockPrice, marketCap: stockPrice * sharesOutstanding,
     forwardPE: 0,
-    totalDebt: debtBase,
     currentLiabilities: Math.round(debtBase * 0.2),
-    debtTranches: [],
+    // A FLEET IS FINANCED, AND THE LADDER IS WHERE ITS DEBT LIVES. `totalDebt` stopped being a
+    // field when the ladder became authoritative — the engine's lane is a read of the rows — so
+    // a carrier seeded with `totalDebt: debtBase` and an EMPTY ladder opened with no debt at
+    // all, while its seeded interest, coverage, leverage, rating, net income, eps and share
+    // price were every one of them struck against that debt, and no lender held a dollar of it.
+    // Its ship finance is now a real ladder, built by the same generator every other seeded
+    // firm's is, so the rows exist and the metrics above describe them.
+    debtTranches: generateDebtTranches(ticker, debtBase, rating, policyRate, idx),
     capex: Math.round(depreciation),
     maintenanceCapex: Math.round(depreciation),
     growthCapex: 0,

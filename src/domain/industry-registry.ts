@@ -30,12 +30,12 @@ import { defect } from './defect';
  * their stage-08 profiles. */
 export type ProducingSector = 'Tech' | 'Energy' | 'Industrials' | 'Consumer';
 /**
- * IND2 — how a cleared transaction becomes REVENUE on the seller's books. Stage 05 keeps clearing
+ * How a cleared transaction becomes REVENUE on the seller's books. Stage 05 keeps clearing
  * the transaction; this decides what the seller may recognise from it, and when.
  *
- * - `UNIT_SALE` — recognised on delivery, and what is not sold this week is not revenue this
+ * `UNIT_SALE` — recognised on delivery, and what is not sold this week is not revenue this
  *   week. Every good in the model behaved this way, whatever it was.
- * - `SUBSCRIPTION` — the sale buys a CONTRACT, not a unit. It keeps paying until it churns, so
+ * `SUBSCRIPTION` — the sale buys a CONTRACT, not a unit. It keeps paying until it churns, so
  *   the seller carries a recurring base (`recurringRevenueBaseUSD`) that survives a quarter with
  *   no new sales, and a week it cannot ship does not cost it the contract. This is the whole
  *   difference between a software company and a steel mill, and the model could not express it.
@@ -59,7 +59,7 @@ export interface SubUnitSpec {
   /** Share of any buyer's capex basket this category takes (capital-goods categories only). */
   capexBasketWeight?: number;
   /**
-   * IND13 — weeks from a capital good ARRIVING to it entering service.
+   * Weeks from a capital good ARRIVING to it entering service.
    *
    * A machine on the loading dock is not plant: it is installed, commissioned, and only then
    * makes anything. IND1 already separated ordering from delivery; this is the second half, and
@@ -69,7 +69,7 @@ export interface SubUnitSpec {
    */
   commissioningLeadWeeks?: number;
   /**
-   * IND18 — SEASONALITY, as a phase and an amplitude rather than a table of 52 numbers.
+   * SEASONALITY, as a phase and an amplitude rather than a table of 52 numbers.
    *
    * `production` is the physical one: a crop ripens once a year and the plant that harvests it
    * cannot choose otherwise, which is the whole reason commodity STORAGE exists and the whole
@@ -89,7 +89,7 @@ export interface SubUnitSpec {
   // (see isStorable / annualCarryingCostRateOf) rather than stated twice; these two are not
   // derivable from anything and are stated. ----
   /**
-   * IND10 — how many weeks pass between starting a unit and having one to sell.
+   * How many weeks pass between starting a unit and having one to sell.
    *
    * The field existed with every value at 0 and no reader, so production was instantaneous for
    * a fab and a shipyard alike. It is a TECHNOLOGICAL primitive — a process takes as long as it
@@ -125,7 +125,7 @@ export interface SubUnitSpec {
    * say about three unrelated processes at once is what they have in COMMON — so every
    * industry recipe collapsed to the same overhead line (professional services 0.05, facilities
    * 0.04, repair 0.02, identical in 13 of 16) with almost no materials in it. **The shallowness
-   * §7.111 measured was a consequence of the granularity, not of the numbers:** at industry
+   * measured was a consequence of the granularity, not of the numbers:** at industry
    * level a real BOM is unwriteable. Refining buys crude, a fab buys process chemicals, a
    * building buys steel and cement, and none of those statements is about a sector.
    *
@@ -151,11 +151,11 @@ export interface IndustrySpec {
    * is a fab or an assembly line. Stated per industry (rule 4 allows a real-world primitive;
    * it is not an equilibrium), and it is the ONLY size input the SME tier takes: a pool's
    * opening revenue is its industry's real demand times this, so the tier's composition is an
-   * outcome of where demand actually is rather than five hardcoded GDP shares (§5-SEG).
+   * outcome of where demand actually is rather than five hardcoded GDP shares.
    */
   smeShareOfActivity: number;
   /**
-   * IND4 — how an industry FUNDS itself and what it pays out. Two structural facts, both
+   * How an industry FUNDS itself and what it pays out. Two structural facts, both
    * primitives in rule 4's sense (a relationship between an industry's assets and its balance
    * sheet, not any real firm's observed capital structure).
    *
@@ -169,10 +169,10 @@ export interface IndustrySpec {
    * software firm had identical payout discipline, which is the single clearest thing that is
    * NOT alike across industries.
    *
-   * NOT here, deliberately: `cyclicalityBeta`, which §5-IND4 originally listed. Beta is a
-   * MEASUREMENT now (§7.134) — stating one per industry would restore exactly what IDX deleted.
+   * NOT here, deliberately: `cyclicalityBeta`, which originally listed. Beta is a
+   * MEASUREMENT now — stating one per industry would restore exactly what IDX deleted.
    */
-  /** §7.347 — `rndShareOfGrowthCapex`: the share of growth investment this industry books as
+  /** `rndShareOfGrowthCapex`: the share of growth investment this industry books as
    *  R&D rather than plant (the tech industries; absent = none). */
   financingProfile: { fixedRateTilt: number; maxPayoutRatio: number; rndShareOfGrowthCapex?: number };
   subUnits: SubUnitSpec[];
@@ -211,7 +211,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         // IND5. Electricity is the one input every industry buys and the model had none, which
-        // is part of why its recipes are so thin (§7.111: mean intensity 0.138 against a real
+        // is part of why its recipes are so thin (: mean intensity 0.138 against a real
         // ~0.5, and that thinness is what puts every firm on the cost-of-capital line).
         //
         // Its physics do the work here rather than a table: `IN_PLACE` means it is delivered
@@ -694,7 +694,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         householdUnitsPerCapitaAnnual: 2.0, corporateUnitsPerFirmAnnual: 18.0,
         recipeInputs: { refined_products: 0.14, commercial_fleet: 0.05, housing_rental_services: 0.05, enterprise_software: 0.02, electricity: 0.03, professional_services: 0.02, repair_and_maintenance: 0.05 },
         label: "Facilities & Logistics Services",
-        // IND16: NO HOUSEHOLD SHARE. A household does not buy distribution as a good — it pays
+        // NO HOUSEHOLD SHARE. A household does not buy distribution as a good — it pays
         // for it inside the price of everything else it buys, which is what a channel margin IS
         // (domain/distribution.ts). Leaving the 0.04 here as well would have sold this sector's
         // work to households twice, once in this book and once in every other one (rule 3), and
@@ -722,29 +722,29 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     financingProfile: { fixedRateTilt: 1.2, maxPayoutRatio: 0.75 },
     subUnits: [
       {
-        // §5-CRE — COMMERCIAL SPACE, the rule-17 way: one registry entry and the machinery the
+        // COMMERCIAL SPACE, the rule-17 way: one registry entry and the machinery the
         // model already owns does the rest. Landlords are DEALT as ordinary producers of this
-        // line (plus the industry's SME pool — the small-landlord tier, §7.229's gap closed for
+        // line (plus the industry's SME pool — the small-landlord tier, gap closed for
         // this profile); their buildings arrive as CAPEX through the commercial_construction
         // market; a LEASE is a SUBSCRIPTION (IND2's contracted base: it survives a week with no
         // new lettings and decays by churn — which is what a lease IS) struck through the same
         // contract machinery every supply relationship uses; VACANCY is this book's unsold
         // capacity, priced by the same auction; a landlord that cannot cover its unit cost
-        // idles (§7.139), mothballs and scraps (§5-DYN) — and its bank's CRE exposure is just
+        // idles, mothballs and scraps — and its bank's CRE exposure is just
         // its facilities and bonds on named books, so the vacancy → landlord default → bank
         // capital channel is the existing estate machinery with nothing new to teach it.
         unitId: 'commercial_rental_services',
         // A firm's premises requirement (space per firm is TECHNOLOGY — the registry's class of
         // number). NOTE the market's VALUE scale is pinned by the demand-level identity (C+G,
-        // §7.272), so a 92%-corporate service seeds at its government slice — the same
+        // ), so a 92%-corporate service seeds at its government slice — the same
         // structural under-sizing every corporate-heavy service rides (logistics at 0.08% of
-        // GDP against a real 5-6% is the named specimen). That is §6.1's level row, not this
+        // GDP against a real 5-6% is the named specimen). That is level row, not this
         // entry's: the MECHANISM here is complete at whatever scale the level hands it.
         //
-        // §7.301 measured the OPEN-SHORT question and closed it: restating the intensity
+        // measured the OPEN-SHORT question and closed it: restating the intensity
         // (400 -> 280 was tried) moves BOTH sides — supply derives from the same level
         // identity — so the ~0.74 opening fill is INVARIANT to this number and belongs to
-        // §6.1's seed-level row (~86% uniform undersupply), not to this entry. The stated
+        // seed-level row (~86% uniform undersupply), not to this entry. The stated
         // premises requirement stands.
         householdUnitsPerCapitaAnnual: 0, corporateUnitsPerFirmAnnual: 400.0,
         recipeInputs: { repair_and_maintenance: 0.12, electricity: 0.05, professional_services: 0.05, facilities_and_logistics: 0.02 },
@@ -846,9 +846,9 @@ allSubUnits.forEach((su) => {
 });
 
 /**
- * IND-R4/§7.122 step 4 — WHAT A FIRM BUYS WHEN IT SELLS NO PRODUCT.
+ * IND-R4/step 4 — WHAT A FIRM BUYS WHEN IT SELLS NO PRODUCT.
  *
- * A recipe is a property of a PRODUCT (§7.117), and IND-R2 correctly gave financial firms no
+ * A recipe is a property of a PRODUCT, and IND-R2 correctly gave financial firms no
  * product line — a bank does not SELL enterprise software. But those are the same field, so a
  * firm that sells nothing also BOUGHT nothing: a bank purchased none of the professional
  * services, facilities, software or power it obviously consumes, and its operating cost had
@@ -860,6 +860,19 @@ allSubUnits.forEach((su) => {
  * profile. A bank is staff, premises and technology; an asset manager is staff and technology
  * and almost nothing else, which is why its cost base is the lightest here.
  */
+/**
+ * A CARRIER'S BASKET IS THE LOGISTICS SUB-UNIT'S OWN RECIPE. It sells freight rather than units,
+ * so it has no product line and got no basket at all — which meant the world fleet's fuel was
+ * expensed straight off a physics formula in its profile while `refined_products` never saw the
+ * demand and nobody was paid for it. Moving goods IS what `facilities_and_logistics` describes,
+ * and the registry already states what a dollar of it consumes; taking that here keeps one
+ * number for one activity rather than a second table for the same thing.
+ */
+function profileBasket(profileKey: string): Record<string, number> {
+  if (profileKey === 'CARRIER') return byId.get('facilities_and_logistics')?.recipeInputs ?? {};
+  return PROFILE_INPUT_BASKET[profileKey] ?? {};
+}
+
 export const PROFILE_INPUT_BASKET: Record<string, Record<string, number>> = {
   BANK: { professional_services: 0.09, enterprise_software: 0.07, facilities_and_logistics: 0.04, repair_and_maintenance: 0.01, electricity: 0.01 },
   INSURER: { professional_services: 0.10, enterprise_software: 0.05, facilities_and_logistics: 0.03, repair_and_maintenance: 0.01, electricity: 0.01 },
@@ -873,14 +886,14 @@ export const PROFILE_INPUT_BASKET: Record<string, Record<string, number>> = {
  * buyer in one place and not in another (rule 3).
  */
 /**
- * SCALE: the basket is a pure function of the firm's product lines, and it was rebuilt from the
+ * The basket is a pure function of the firm's product lines, and it was rebuilt from the
  * registry on every call — including once per firm per candidate input in stage 05, where the
  * caller then read a SINGLE key off the fresh object it had just paid to build.
  *
  * Keyed on the product-line ARRAY's identity, which is exactly the right cache lifetime: nothing
  * mutates a `revenueShare` in place (checked — every one is built in a fresh object literal), and
  * stage 08 rebuilds the array whenever the mix changes, so a stale entry cannot outlive its
- * inputs. **The returned object is shared, so callers must treat it as read-only** — all five do
+ * inputs. **The returned object is shared, so callers must treat it as read-only** all five do
  * (`Object.values`, `Object.keys`, `Object.entries`, one key read).
  */
 const inputIntensityByLines = new WeakMap<object, Record<string, number>>();
@@ -905,7 +918,7 @@ export function firmInputIntensities(
   }
   const memo = inputIntensityByProfile.get(profileKey);
   if (memo !== undefined) return memo;
-  const out = { ...(PROFILE_INPUT_BASKET[profileKey] ?? {}) };
+  const out = { ...profileBasket(profileKey) };
   inputIntensityByProfile.set(profileKey, out);
   return out;
 }
@@ -913,16 +926,16 @@ export function firmInputIntensities(
 /**
  * CHAIN-E — the input-output structure the BOMs now describe, and the two things it derives.
  *
- * `recipeInputs` is a real matrix once every product carries one (§7.117), and two numbers the
+ * `recipeInputs` is a real matrix once every product carries one, and two numbers the
  * model previously STATED fall out of it directly. Both were stated beside it, and disagreed
- * with it, which is why §7.111 could measure three primitives "agreeing" at a level none of them
+ * with it, which is why could measure three primitives "agreeing" at a level none of them
  * actually set.
  */
 
 /** What one dollar of this product consumes in total — the product's own intermediate share. */
 const recipeIntensityById = new Map<string, number>();
 export function recipeIntensityOf(unitId: string): number {
-  // SCALE: a fixed property of a fixed registry, and it was allocating an array and reducing it
+  // A fixed property of a fixed registry, and it was allocating an array and reducing it
   // on every call — including once per sub-unit inside the labour-share derivation and once per
   // product line in the headcount and input-output walks.
   const memo = recipeIntensityById.get(unitId);
@@ -954,7 +967,7 @@ export function grossOutputMultiplierOf(unitId: string): number {
  * `recipeIntensityOf`, for a producer known only by its industry (the private tier's seed, whose
  * firms have no product lines yet). Same derivation, one source, so a fix cannot land in one
  * generator and miss the other — which is exactly what happened between the two firm generators
- * before IND-R6 (§7.119).
+ * before IND-R6.
  */
 export function industryRecipeIntensity(industry: Industry): number {
   const subUnits = INDUSTRY_REGISTRY[industry].subUnits;
@@ -965,12 +978,12 @@ export function industryRecipeIntensity(industry: Industry): number {
 /**
  * Headcount for an SME pool: value added over output per worker — the SAME rule the two named
  * firm generators use. One function, three tiers, because a headcount rule stated in four places
- * is how they came to disagree (§7.119): the pool's was `totalEmployed x SME_TIER_EMPLOYMENT_SHARE`
+ * is how they came to disagree: the pool's was `totalEmployed x SME_TIER_EMPLOYMENT_SHARE`
  * in one file and `revenue / (named revenue-per-worker x (1 - discount))` in another, the second
  * silently overwriting the first after the carve.
  *
  * The SME productivity gap is not stated here and should not be: it is an OUTCOME of the pools'
- * own measured P&L (rule 13, and §5-SEG says so).
+ * own measured P&L (rule 13, and says so).
  */
 export function smePoolEmployment(industry: Industry, annualRevenueUSD: number, productivityPerWorkerUSD: number): number {
   const valueAddedUSD = annualRevenueUSD * (1 - industryRecipeIntensity(industry));
@@ -984,7 +997,7 @@ export function smePoolEmployment(industry: Industry, annualRevenueUSD: number, 
  * which is a FINAL-demand identity: corporate demand there is investment only, and **intermediate
  * demand does not appear at all**. So gross output was pinned to final demand and the
  * gross-output-to-value-added ratio was ~1 by construction, whatever any recipe said — which is
- * why deepening every recipe 2.5x moved it by one part in a thousand (§7.117). Firms bid for
+ * why deepening every recipe 2.5x moved it by one part in a thousand. Firms bid for
  * their real inputs in stage 05, but the demand LEVEL those bids landed in had no room for them.
  *
  * Solved by iteration rather than inversion: `A`'s column sums are each product's own intensity,
@@ -1060,7 +1073,7 @@ export function subUnitsByProducingSector(): Record<ProducingSector, { industry:
 }
 
 // ---------------------------------------------------------------------------------------------
-// IND1 — what a good physically is, on the holding side.
+// What a good physically is, on the holding side.
 
 /**
  * What a year of warehouse costs per tonne held: rent, handling, insurance. The one stated
@@ -1073,10 +1086,10 @@ export const WAREHOUSE_USD_PER_TONNE_YEAR = 40;
  * Can this good be held at all? Only a separable physical object can sit in a warehouse. Software
  * and media are copied on demand; a building is made where it stands. Neither has an inventory to
  * carry, and both were carrying one — measured: enterprise software held 159 units worth 5.9M,
- * spoiling like steel (§7.50).
+ * spoiling like steel.
  */
 /**
- * IND2 — the share of a firm's revenue that is CONTRACTED rather than sold by the unit,
+ * The share of a firm's revenue that is CONTRACTED rather than sold by the unit,
  * weighted by its own product lines. A firm with no subscription line gets 0 and behaves exactly
  * as it always has.
  */
@@ -1091,7 +1104,7 @@ export function recurringRevenueShare(lines: { subUnitId: string; revenueShare: 
 }
 
 /**
- * IND2 — what share of a contracted base is lost per week. The one primitive the mechanism
+ * What share of a contracted base is lost per week. The one primitive the mechanism
  * needs: a subscription is defined by the fact that it ENDS unless renewed, and how fast it does
  * so is what separates a sticky enterprise contract from a month-to-month one. Stated once, at a
  * rate that implies a multi-year average contract life.
@@ -1102,13 +1115,13 @@ export function isStorable(unitId: string): boolean {
   return (byId.get(unitId)?.deliveryMode ?? 'PHYSICAL') === 'PHYSICAL';
 }
 
-/** IND10 — weeks from starting a unit to having one to sell. 0 = made on demand. */
+/** Weeks from starting a unit to having one to sell. 0 = made on demand. */
 export function productionLeadWeeksOf(unitId: string): number {
   return byId.get(unitId)?.productionLeadWeeks ?? 0;
 }
 
 /**
- * IND18 — this good's seasonal multiplier for a given week, on either side.
+ * This good's seasonal multiplier for a given week, on either side.
  *
  * One cosine: `1 + amplitude x cos(2*pi*(week - peakWeek)/52)`. It averages to exactly 1 over a
  * year, so seasonality REDISTRIBUTES output and demand across the year and never creates or
@@ -1120,7 +1133,7 @@ export function seasonalFactor(unitId: string, week: number, side: 'production' 
   return 1 + prof.amplitude * Math.cos((2 * Math.PI * (week - prof.peakWeek)) / 52);
 }
 
-/** IND13 — weeks from a capital good arriving to it entering service. 0 = usable on delivery. */
+/** Weeks from a capital good arriving to it entering service. 0 = usable on delivery. */
 export function commissioningLeadWeeksOf(unitId: string): number {
   return byId.get(unitId)?.commissioningLeadWeeks ?? 0;
 }
@@ -1156,7 +1169,7 @@ export function annualCarryingCostRateOf(unitId: string): number {
  * Every corporate purchase used to be written as an input LOT, but only recipe inputs are ever
  * drawn down (stage 08 consumes what an industry's recipe names). Capital goods and general
  * operating purchases therefore accumulated forever: ~12k dead lots a week, 1.05M by week 120,
- * counted into the buyer's inventory line and consumed by nobody (§6, §7.81). The fix is not to
+ * counted into the buyer's inventory line and consumed by nobody. The fix is not to
  * expire them; it is to route each purchase to what it physically is.
  *
  *   RECIPE_INPUT  — material that will be consumed making something. Held as a lot, drawn FIFO.
@@ -1240,13 +1253,13 @@ export function industryOfSubUnit(unitId: string): Industry | undefined {
 }
 
 
-/** IND4 — the one accessor for an industry's funding and payout posture (rule 17). */
+/** The one accessor for an industry's funding and payout posture (rule 17). */
 export function financingProfileOf(industry: Industry): IndustrySpec['financingProfile'] {
   return INDUSTRY_REGISTRY[industry].financingProfile;
 }
 
 /**
- * COH3 — THE LABOUR SHARE OF VALUE ADDED, DERIVED FROM THE TECHNOLOGY.
+ * THE LABOUR SHARE OF VALUE ADDED, DERIVED FROM THE TECHNOLOGY.
  *
  * A firm's value added splits into labour compensation and gross operating surplus, and the
  * surplus must cover what the capital costs: it wears out, and its owners require a return. So
@@ -1254,7 +1267,7 @@ export function financingProfileOf(industry: Industry): IndustrySpec['financingP
  *     labourShare = 1 − (depreciation rate + cost of capital) × (capital / value added)
  *
  * and every term is a primitive the registry or the seed already carries. **Capital per unit of
- * value added is not the same as capital per unit of REVENUE** — `SECTOR_PPE_INTENSITY` is the
+ * value added is not the same as capital per unit of REVENUE** `SECTOR_PPE_INTENSITY` is the
  * second, and value added is revenue net of what the recipe consumes, so the ratio is
  * `intensity / (1 − recipe intensity)`. Depreciation is one over the sector's own useful life.
  *
@@ -1266,7 +1279,7 @@ export function financingProfileOf(industry: Industry): IndustrySpec['financingP
  * The weighting across sectors is each sector's own share of the economy's OUTPUT, from the
  * registry's own sub-unit composition — not a chosen mix.
  */
-/** SCALE: the owning industry of each sub-unit, built once. The `Object.values(...).find(...)`
+/** The owning industry of each sub-unit, built once. The `Object.values(...).find(...)`
  *  this replaces ran INSIDE the per-sub-unit loop below, so one call to the derivation was
  *  quadratic in the registry — and the derivation is called per company per week. */
 const sectorBySubUnitId: Map<string, string> = (() => {
@@ -1276,7 +1289,7 @@ const sectorBySubUnitId: Map<string, string> = (() => {
   return m;
 })();
 
-/** SCALE: the answer depends only on the registry and the cost of capital, both of which are
+/** The answer depends only on the registry and the cost of capital, both of which are
  *  fixed for a run. Memoised on the one argument that varies between callers. */
 const labourShareByCostOfCapital = new Map<number, number>();
 
