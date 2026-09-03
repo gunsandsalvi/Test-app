@@ -630,6 +630,78 @@ do not reorder.
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 1)
 
+20-LLR. **NOTHING CAN FAIL FOR WANT OF LIQUIDITY, AND THAT IS THE MONEY SYSTEM'S LARGEST HOLE**
+    (user, 2026-09-03, asking whether the desks and the central bank are buyers of last resort so
+    that an auction cannot fail — half right, and the half that is right is not in the auctions).
+
+    **THE AUCTIONS ARE FINE, and the reasons are worth keeping.** A stock book hands nothing to a
+    residual dealer: `unsoldStaysWithHolder: true` in 07b/07c/07d/07e/07f means a seller that
+    finds no buyer KEEPS ITS PAPER (OWN7). The desks are capacity-bounded participants with real
+    reservations (`dealer-desks.ts:106,153`), not a backstop. The central bank's auction order is
+    `plannedPurchasesByTenor`, sized by `openMarketPolicy` from the policy rate against the
+    Taylor target — a policy quantity, NOT a response to weak demand, so it cannot rescue a bad
+    auction. And a primary deal is PULLED past the issuer's walk-away
+    (`financial-clearing-engine.ts:779`), while unplaced sovereign issuance is retired outright
+    (`withdrawUnplacedIssuance`). A treasury CAN fail to place its debt here.
+
+    **WHAT CANNOT FAIL IS A BANK.** `raiseCentralBankLoanUSD` (`bank-lending.ts`) is four lines:
+    it computes the shortfall against the operating buffer and lends **exactly that, always**.
+    No collateral, no haircut, no eligibility test, no penalty rate, no cap, and no path on which
+    the central bank refuses. `bank-funding-close.ts` calls it for every bank every week, up to
+    eight rounds, until every reserve account is at its buffer. **Sized at week 16 of the
+    reference: loans to banks 53,972M USA, 84,231M UK, 77,005M JPN, 11,018M EUR** — the UK's
+    banks are carrying 84B of central-bank credit against 6.4B of reserves.
+
+    Three failures compound into one:
+    · **the facility is unbounded** where the model's OTHER central-bank credit is properly
+      collateral-bounded (`repo-clearing`'s `unencumberedBorrowingCapacityUSD` with real
+      haircuts from `computeSovereignRepoHaircuts`). That is rule 3: two ways to borrow from the
+      same central bank, one of which is disciplined and one of which is not, and the
+      undisciplined one is the escape hatch from the disciplined one;
+    · **resolution triggers on CAPITAL ONLY** (`isBankUnderPca`, `BANK_MIN_CAPITAL_RATIO`), so a
+      bank fails on solvency and never on liquidity — the reverse of the real world, where the
+      overwhelming majority of bank failures are funding events;
+    · **no depositor ever runs.** A grep for depositor flight across the tree returns nothing.
+      Household and corporate deposits move by market share and by the lending book, never
+      because a bank looks weak, so the one mechanism that turns a weak bank into a failed bank
+      does not exist.
+
+    Together these mean the FUNDING CHANNEL cannot transmit anything. A bank can be bleeding
+    reserves, short in four currencies and financed entirely by its central bank, and nothing in
+    the model will price that, withdraw from it, or close it. Bagehot's actual rule — lend freely,
+    against good collateral, at a penalty rate, to the solvent — is three constraints and the
+    model has none of them.
+
+    **The shape of the fix** (each part measurable on its own): the facility lends against
+    unencumbered collateral at a haircut, using the machinery repo already has; it charges a
+    penalty over the policy rate, so a bank prefers the market and drawing it is information;
+    it refuses a bank under PCA, which routes that bank to resolution instead; and depositors
+    move on an observable — the capital ratio and the facility draw are both already published.
+    Expect the run to get much worse before it gets better, and per rule 12 do not judge the
+    levels on the way.
+
+21-BRACKET. **THE BRACKET IS STILL A PRINT, AND IT IS MEASURED: 206 TIMES IN 16 WEEKS.**
+    Step 21 below names this; instrumenting `solveClearingStat` counted it. Over the 16-week
+    reference, cumulative: **67 solves returned the TIGHT bracket** (`demandAtU(uLo) > targetUSD`
+    — oversubscribed even at the extreme, printing −2000bp for a spread or 1% of last week's
+    price) and **139 returned the WIDE one** (the segment walk found no crossing, printing
+    100,000bp — a 1000% spread — or 100× the price). Both counts grow monotonically with the run
+    (tight: 0, 1, 5, 18, … 67).
+
+    **And there is no damper to absorb them.** `financial-clearing-engine.ts:793` records the
+    user's own instruction — *"THERE IS NO CAP. The book prints where demand met supply this
+    week"* — which was right about caps and leaves the bracket reaching the books directly:
+    `comp.oasSpreadBps`, the curve's observed point, every mark derived from them.
+
+    The 139 are the case step 21 already names — **a book with no demand at any level is
+    UNTRADED, not priced**. With zero demand `targetUSD` is zero, the walk's `slope > 0` test
+    fails at every segment, and the fall-through prints the bracket. The saturation retreat
+    (`targetUSD = min(float, demandAtWideEnd × 0.999999)`) handles a book whose demand merely
+    cannot absorb the float; it cannot handle one with no demand at all, because there is no
+    level to retreat to. That book needs a third state beside "cleared" and "withdrawn".
+
+
+
 21. **A bracket can never be a print.** `financial-clearing-engine.ts:453` returns the numerical
     bracket as the cleared price whenever level-independent demand at the extreme exceeds the float
     — which the central bank (`central-bank-demand.ts:45`) and every index fund (`etf-demand.ts:43`)
