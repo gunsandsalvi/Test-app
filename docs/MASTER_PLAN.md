@@ -846,9 +846,8 @@ possible detector for a defect this project found by reading code instead.
     storage cost or tenor; `:33` compares spreads over the policy rate against a spread over the
     curve. `accounts.ts:194` allows a 5% gap on an exact two-legged identity. Every audit tolerance
     is declared in `stated.ts` or derived.
-28. **The harness's own defects.** `harness.ts:2430` subtracts `bs.businessLoanBookUSD` /
-    `consumerLoanBookUSD`, fields deleted when the loan books became reads — `c` is `any`, so the
-    residual is `NaN` every bank every week and the per-bank identity check **has never fired**.
+28. **The harness's own defects.** *(The first — the NaN per-bank identity — is DONE, with the
+    over-pledge and SME-cash reads that were dead the same way; §9's lint entry.)*
     `:2600` reads book-weighted regional averages for the capital and NIM bands, so a minority of
     banks below the floor can never report — iterate the named banks. `:592` computes a central-bank
     identity and `void`s it. `:296` skips any class with zero outstanding (a claim against a retired
