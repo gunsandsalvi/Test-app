@@ -8,132 +8,141 @@ references this one (its own system), but the boundary with both is a node here.
 
 ## 1. THE REQUIRED TREE
 
-Written 2026-09-03 from the domain, with the credit code shut, and committed with every code cell
-empty before any mapping was done — see this file's first commit.
+**REWRITTEN 2026-09-03 at depth 3, on the user's instruction** ("Redo credit as well following the
+guidelines"), superseding the depth-2 version and its annotation. The depth-2 tree is in this
+file's history. Node types per `README.md`: **REASON**, **VERIFY**, **FORBID**.
 
-**A caveat stated up front, because it bears on how much the pilot proves.** I had already read
-`07b`, `07d`, `financial-clearing-engine.ts` and `domain/pricing/` earlier in the same session,
-so this is not a clean-room. The honest success test for the pilot is therefore NOT whether the
-tree rediscovers "credit has no price" — I already knew that. It is whether the tree contains
-nodes I had never raised, and whether those nodes turn out to be empty. Judge it on the new rows
-in §3 of this file, not on the confirmations.
+**The instrument's own characteristics are NOT repeated here.** They are `instrument-bond.md`
+N1–N14, which this system must satisfy in full; this tree covers what is true of the MARKET, the
+HOLDER and the LIFE around a bond, and states only where corporate answers a contract node its own
+way.
 
-**THIS TREE PREDATES THE REASON/VERIFY/FORBID RULE** (`README.md`, added 2026-09-03 on the user's
-"not imposed, a consequence" comment). It is annotated rather than rewritten, because rewriting it
-after the mapping is exactly the thing the method forbids. The three nodes that are OUTCOME-shaped
-and must be read as **VERIFY** — measure, never enforce — are **H2** (the level orders against the
-assessment), **H3** (seniority orders the spreads within an issuer) and **D5** (a seller with no
-buyer keeps its paper). Enforcing any of the three would clamp a price, which rule 1 forbids and
-which is how the audit's `P1`/`P3` rows became findings rather than settings.
-
-The rule also makes a node askable that this tree does not contain, and its absence here is a
-defect in the tree and not in the code:
-
-- **B7** FORBID — **a coupon may not be derived from a price that was derived from the coupon.**
-  A round trip through a curve cannot return the level it started from, and where one exists the
-  print is the arithmetic rather than the market. (§3.26 names three of these; the tree should
-  have asked for the prohibition rather than leaving them to be found one at a time.)
+**Caveat, unchanged and still load-bearing.** I had read `07b`, `07d`, the clearing engine and
+`domain/pricing/` before writing any of this, so it is not clean-room. Judge it on the nodes I had
+never raised, not on the confirmations.
 
 ### A. THE ISSUER AND THE PROMISE
+- **A1** REASON — a named legal entity with a balance sheet that can make a promise (bond N1)
+- **A2** REASON — it has a **capital structure and a reason for it**
+  - A2.a a mix of debt kinds and seniorities, each a real instrument
+  - A2.b a **target or a constraint** it is managing towards — leverage, coverage, a rating it
+    wants — so that issuing is a decision and not an accounting consequence
+  - A2.c VERIFY — the structure that results is an outcome of A2.b meeting the market's price,
+    never assigned
+- **A3** REASON — a capacity to service: operating cash flow, and the coverage of the service by it
+  - A3.a the service is interest **plus** scheduled principal, both real payments
+  - A3.b coverage is a read of A3.a against cash flow, and it can fall below one
+- **A4** REASON — creditworthiness is **ASSESSED, and the assessment is an OPINION HELD BY
+  SOMEBODY** — an agency, or each holder's own model. It is not a property of the firm
+  - A4.a the assessor is named, and can be wrong
+  - A4.b assessments **disagree**, and the disagreement is what makes two sides of a market
+  - A4.c an assessment **changes**, and the change is an event other participants react to
 
-- **A1** An issuer exists: a named legal entity with a balance sheet that can make a promise.
-- **A2** The issuer has a capital structure — how much debt, of what kinds, at what seniorities —
-  and a reason for it (a target, a constraint, a preference).
-- **A3** The issuer has a capacity to service debt: an operating cash flow, and a coverage of the
-  service by it.
-- **A4** The issuer's creditworthiness is ASSESSED, and the assessment is an opinion held by
-  somebody — an agency, or each holder's own model. It is not a property of the firm.
-
-### B. THE INSTRUMENT
-
-- **B1** An instrument is created by an ISSUANCE DECISION and carries terms fixed at that moment:
-  principal, maturity, seniority, currency.
-- **B2** Its coupon is either a fixed rate or a floating margin over a named reference rate. Which
-  one is a property of the issue.
-- **B3** It is counted in UNITS — par value. Every position in it is a number of units.
-- **B4** It has an early-termination regime: callable, prepayable, make-whole, non-call period,
-  or none. Stamped at issuance from what the issue is.
-- **B5** It has COVENANTS: promises about the issuer's conduct whose breach is an event.
-- **B6** It has an identity a market would recognise: issuer + coupon + maturity, not an internal
-  id.
+### B. HOW CORPORATE ANSWERS THE BOND CONTRACT
+- **B1** REASON — bond **N11**: a real early-termination regime, stamped at issuance from what the
+  issue is — make-whole for investment grade, a non-call period for high yield, a soft call for
+  floating paper
+- **B2** REASON — bond **N12**: default is a missed payment **or a breached covenant**
+  - B2.a **covenants exist**: promises about the issuer's conduct — leverage, coverage,
+    restricted payments — whose breach is an observable event
+  - B2.b a breach can be **waived or cured**, at a price, and that negotiation is real
+- **B3** REASON — bond **N13**: a claim on an **estate**, and **N13.a**: a real seniority ranking
+  that varies by instrument
+- **B4** REASON — bond **N5**: fixed or floating, and floating is the norm in the loan market
 
 ### C. THE PRIMARY MARKET
-
-- **C1** A new issue is BROUGHT by someone — an underwriter or arranger, appointed and paid.
-- **C2** A book is built: real buyers indicate real demand at real levels.
-- **C3** The issue PRICES: one level struck, at which the book is filled.
-- **C4** The issuer has a WALK-AWAY: a level beyond which it pulls the deal. A pulled deal never
-  traded and never existed.
-- **C5** Allocation: who got how many units, decided by the book.
-- **C6** Proceeds reach the issuer, net of fees, as cash. The fee reaches the underwriter.
-- **C7** The underwriter bears risk between commitment and placement — it can be left holding.
+- **C1** REASON — a new issue is **BROUGHT** by a named underwriter or arranger, appointed and paid
+- **C2** REASON — a **book is built**: real buyers indicate real demand at real levels
+  - C2.a an indication is a schedule — a size at a level — not a quantity
+  - C2.b the book is **information**: its size and shape decide where the deal prices
+- **C3** REASON — it **prices**: one level struck at which the book fills
+- **C4** REASON — the issuer has a **WALK-AWAY**, and a pulled deal never traded and never existed
+- **C5** REASON — **allocation**: who got how many units, decided out of the book
+- **C6** REASON — proceeds reach the issuer as cash, **net of a fee that reaches the underwriter**
+- **C7** REASON — the underwriter **bears risk between commitment and placement**
+  - C7.a it can be **left holding** paper it could not place, and that is its own position
+  - C7.b VERIFY — the fee it earns and the risk it takes are related; a fee with no risk behind it
+    is a transfer
 
 ### D. THE SECONDARY MARKET
-
-- **D1** The instrument TRADES: holders who want out meet buyers who want in.
-- **D2** A PRICE clears — per unit, once per period, from real demand against real supply. **This
-  is the price. Everything else about value is derived from it.**
-- **D3** A dealer intermediates: it quotes both sides, holds inventory, and is bounded by its own
-  balance sheet and capital.
-- **D4** The dealer earns the bid-offer on the flow it facilitates.
-- **D5** A seller that finds no buyer KEEPS ITS PAPER. Illiquidity is an unsold position, never an
-  invisible bid.
-- **D6** Settlement moves two legs in the same pass: the paper one way, the cash the other.
-- **D7** ACCRUED INTEREST transfers with the paper: the buyer pays the seller the interest earned
-  since the last coupon.
-- **D8** Derived measures — spread, yield, discount margin, OAS — are computed FROM the cleared
-  price and never set it.
+- **D1** REASON — holders who want out and buyers who want in **post schedules**, and who trades is
+  the outcome
+- **D2** REASON — **a PRICE clears** — bond N7. Everything else about value is derived from it
+- **D3** REASON — a **dealer intermediates**, and it is a real party
+  - D3.a it quotes **both sides** out of its own inventory and its own cost
+  - D3.b it is bounded by its **balance sheet and capital**, and the bound bites
+  - D3.c its quote widens as its inventory fills — a reason, not a rule
+- **D4** REASON — the dealer earns the **bid-offer on the flow it facilitates**, and somebody pays it
+- **D5** VERIFY — **a seller that finds no buyer keeps its paper.** Illiquidity is an unsold
+  position; there is no invisible bid. (VERIFY because it is what the mechanism must PRODUCE, and
+  enforcing it as a rule is how a residual dealer gets invented)
+- **D6** REASON — settlement moves **two legs in the same pass** (bond N9.a)
+- **D7** REASON — **accrued interest transfers with the paper** (bond N9.b)
+- **D8** FORBID — bond **N7.b**: no derived measure may set the price. Spread, yield, DM and OAS are
+  computed FROM it
 
 ### E. THE HOLDER
-
-- **E1** A holder of record exists for every unit: a register that says who owns how much.
-- **E2** Σ(units held) = units issued. Always. A unit with no holder, or two holders, is a defect.
-- **E3** The holder MARKS the position at the cleared price. Its value is units × price.
-- **E4** The mark's change is the holder's P&L, and it reaches the holder's income.
-- **E5** The holder's willingness to hold has an economic reservation: its funding cost, its
-  expected loss, and the capital the position consumes.
-- **E6** A LEVERAGED holder funds the position — repo, prime brokerage, or its own deposits — and
-  that funding can be withdrawn.
-- **E7** The position consumes REGULATORY CAPITAL for a holder that has any, which bounds size.
-- **E8** The holder can PLEDGE the instrument as collateral, at a haircut.
-- **E9** The holder's statement shows the position, its price, its income and its P&L.
+- **E1** REASON — a **register**: who owns how many units (bond N8)
+- **E2** VERIFY — bond N8.a: Σ held = issued
+- **E3** REASON — the holder **marks** at the cleared price; its value is units × price
+- **E4** REASON — the change in the mark is **P&L, and it reaches the holder's income**
+  - E4.a realised on sale, unrealised while held, and the two are distinguishable
+- **E5** REASON — the holder's willingness to hold has an **economic reservation** built from
+  - E5.a its **cost of funds**
+  - E5.b its **expected loss** — A4's assessment, times a loss given default
+  - E5.c the **capital** the position consumes
+  - E5.d VERIFY — the level a book clears at is where the marginal holder's reservation sits, and
+    a spread below every reservation means demand is genuinely zero, not that a floor was applied
+- **E6** REASON — a **leveraged** holder funds the position, and **that funding can be withdrawn**
+  - E6.a the funding is a named liability to a named lender (repo, prime brokerage, deposits)
+  - E6.b withdrawal forces a sale — the link from the money market to this one
+- **E7** REASON — the position **consumes regulatory capital** for a holder that has any, bounding
+  size. *(MISSING rather than out of scope for non-bank holders: a pension fund's constraint is a
+  mandate rather than a capital charge, and the tree should say which each holder faces)*
+- **E8** REASON — it can be **pledged as collateral**, at a haircut, and is then encumbered
+- **E9** REASON — the holder's **statement** shows the position, its price, its income and its P&L
 
 ### F. THE LIFE OF THE PROMISE
-
-- **F1** Interest ACCRUES to the holder of record, continuously between coupon dates.
-- **F2** On the coupon date the issuer PAYS, to whoever holds it then, and the cash leaves the
-  issuer.
-- **F3** Principal is repaid: at maturity for a bullet, on a schedule for an amortiser.
-- **F4** The issuer may PREPAY or CALL, paying whatever B4's regime costs.
-- **F5** The issuer may REFINANCE: a new issue whose proceeds retire an old one, at whatever the
-  market then charges.
-- **F6** The instrument matures and CEASES TO EXIST. The register empties.
+- **F1** REASON — interest **accrues** to the holder of record, continuously (bond N6)
+- **F2** REASON — on the date the issuer **PAYS**, to whoever holds it then, and the cash leaves
+- **F3** REASON — principal repaid: bullet at maturity, or on a schedule for an amortiser
+- **F4** REASON — the issuer may **prepay or call**, paying what B1's regime costs
+- **F5** REASON — **refinancing**: a new issue whose proceeds retire an old one, at the market's
+  price on the day — which is how a rate rise reaches a firm that borrowed years ago
+- **F6** REASON — it **matures and ceases to exist** (bond N10)
 
 ### G. WHEN IT GOES WRONG
-
-- **G1** A missed payment or a breached covenant is an EVENT, observable by holders.
-- **G2** An event can ACCELERATE the claim: the whole principal becomes due.
-- **G3** DEFAULT: the issuer cannot pay. The claim becomes a claim on an estate.
-- **G4** The estate is realised: assets are sold for what they fetch.
-- **G5** Proceeds are distributed by SENIORITY — a waterfall, senior paid in full before
-  subordinated gets anything.
-- **G6** The holder books the loss: the difference between its mark and its recovery.
-- **G7** RESTRUCTURING is the alternative to liquidation: terms are changed, or debt is exchanged
-  for equity, and the holders decide.
-- **G8** A default is INFORMATION: it changes what every other issuer's paper is worth, through
-  the assessment in A4 and the reservations in E5.
+- **G1** REASON — a missed payment or a breached covenant is an **EVENT, observable by holders**
+- **G2** REASON — an event can **ACCELERATE**: the whole principal becomes due at once
+- **G3** REASON — **default**: the claim becomes a claim on an estate
+- **G4** REASON — the estate is **realised**: assets sold for what they fetch, not for book
+- **G5** REASON — proceeds distributed by **seniority** — a waterfall, senior in full first
+  - G5.a a junior claim can recover **nothing**, and that is the point of being junior
+- **G6** REASON — the holder **books the loss**: mark minus recovery, on a date
+- **G7** REASON — **restructuring** is the alternative to liquidation: terms changed, or debt
+  exchanged for equity, and **the holders decide**
+- **G8** REASON — a default is **INFORMATION**: it moves A4's assessments and E5's reservations for
+  every other issuer, which is how contagion travels without a correlation parameter
 
 ### H. THE AGGREGATE
-
-- **H1** The market has a level: an index, an average spread, a benchmark.
-- **H2** The level orders sensibly against the assessment: worse credit trades wider.
-- **H3** Seniority orders sensibly within an issuer: junior trades wider than senior.
-- **H4** The cash market and its synthetic (CDS) are connected, and the BASIS between them is a
-  real, tradeable difference — not one derived from the other.
+- **H1** REASON — the market has a level: an index built from real prices and real weights
+- **H2** VERIFY — worse assessment trades wider. **Measure, never enforce**
+- **H3** VERIFY — junior trades wider than senior within one issuer. **Measure, never enforce**
+- **H4** REASON — the cash market and its synthetic (CDS) are **separately cleared**, and the
+  **BASIS between them is a real tradeable difference**
+  - H4.a FORBID — neither may be derived from the other. A basis computed from one price is not a
+    basis, it is a restatement
 
 ---
 
 ## 2. THE MAPPING
+
+**STALE — the tree was renumbered when it was redone at depth 3 on 2026-09-03.** The citations
+below are from the depth-2 mapping and still RESOLVE (the gate checks them every commit), but they
+are no longer aligned to the node ids above and must be re-walked against the new tree. The
+findings in §3 survive the renumbering: they are about the code, not about which letter a node
+carries.
+
 
 Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
 checked by `scripts/check-atlas.sh`.

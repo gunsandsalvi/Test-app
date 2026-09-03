@@ -52,6 +52,15 @@ no price". A sweep finds defects. Only a reference model finds absences.
 
   If a node is none of the three, it is an outcome, and it does not belong in a required tree.
 
+## Instrument contracts
+
+A tree whose subject is an instrument cites a **contract** rather than restating it:
+[`instrument-bond.md`](./instrument-bond.md) is the fourteen characteristics any bond must have,
+and both credit trees satisfy it and state only where their type answers a node differently. This
+exists because a sovereign bond and a corporate bond are different TYPES, not one with fields
+unused — and because the difference between "this type answers N differently" and "nobody ever
+answered N" is the whole point of the atlas.
+
 ## Status
 
 | System | Required tree | Mapped | Diff → §3 |

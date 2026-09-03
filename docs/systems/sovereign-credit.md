@@ -7,6 +7,10 @@ and the benchmark everything else is priced against. Excludes the central bank's
 Node types, per `README.md`: **REASON** (a thing that must exist and cannot be short-circuited),
 **VERIFY** (a thing to measure, never to enforce), **FORBID** (a thing that must be absent).
 
+**Satisfies `instrument-bond.md` N1–N14 in full.** Branch B states only where it answers a contract
+node differently from a corporate bond; everything it answers the same way is in the contract and
+is not repeated.
+
 ---
 
 ## 1. THE REQUIRED TREE
@@ -37,18 +41,29 @@ any mapping — the revisions are recorded per node so the review is auditable.
   - A4.b in its own money it can always create more; in someone else's it cannot — and that
     distinction is the whole of sovereign credit risk
 
-### B. THE INSTRUMENT
-- **B1** REASON — a tranche with terms fixed at issuance: principal, maturity, coupon, currency
-  - B1.a a **bill** accretes to par and pays no coupon; a **bond** pays coupons. Different
-    instruments, not one with a flag
-  - B1.b the currency is its own or another's — see A4.b
-- **B2** REASON — counted in units of par
-- **B3** REASON — fungible within a benchmark line
-  - B3.a a **re-opening** adds to an existing line rather than creating a new one
-- **B4** FORBID — **no seniority. All of it is pari passu.** *(deliberately unlike corporate: this
-  is not a missing feature, it is what a sovereign is)*
-- **B5** FORBID — **no covenants and no acceleration.** Nothing to breach, nothing to accelerate
-- **B6** REASON — an identity a market would use: issuer + tenor + maturity
+### B. HOW SOVEREIGN ANSWERS THE BOND CONTRACT
+
+**A sovereign bond is a TYPE of bond, and it must satisfy all fourteen characteristics in
+`instrument-bond.md`** (user, 2026-09-03: *"we can have a different type of bond for sovereign, but
+it need to still have all the necessary characteristics of a bond"*). N1–N10 and N14 it answers
+exactly as a corporate bond does, and they are not repeated here. Where it answers DIFFERENTLY:
+
+- **B1** REASON — bond **N5**: a **bill** accretes to par and pays no coupon (N5.c); a **bond** pays
+  a fixed coupon (N5.a). Two instruments, not one with a flag
+- **B2** REASON — bond **N3**: its own money or another's — and per A4.b that single difference is
+  the whole of its credit risk
+- **B3** REASON — bond **N2/N8**: fungible within a **benchmark line**
+  - B3.a a **re-opening** adds to an existing line rather than creating a new one, so the line and
+    the tranche are not the same object
+- **B4** FORBID — bond **N13.a**: the ranking exists and **never varies. All of it is pari passu.**
+  This is not a missing feature and not a field left unused — it is what a sovereign IS, and a
+  `seniority` field whose only correct value is a constant is the second representation rule 3
+  forbids
+- **B5** FORBID — bond **N12**: default is a missed payment and **nothing else**. There are no
+  covenants to breach and no acceleration to trigger
+- **B6** REASON — bond **N11**: **no early-termination regime.** The issuer manages its curve by
+  buyback and switch (F5) rather than by calling
+- **B7** REASON — bond **N13**: the claim is on **nothing seizable** — see G3
 
 ### C. THE CALENDAR AND THE AUCTION
 - **C1** REASON — issuance is **announced before it happens**, in a size
