@@ -26,6 +26,13 @@ export type { AuditFinding } from './types';
  * its wires brought in, which is the identity W4 checks every other week. The register is still
  * REGISTER because the seed opens every holding by wire too (`seedBook`). All three of W3, W4 and
  * W5 therefore hold week 1 to the same standard as week 2.
+ *
+ * §3.37-SEED: this empty opener is now the baseline for `auditSeed` — the SEED — rather than for
+ * week 1, and it is a stronger claim than before rather than a weaker one. The seed used to be
+ * proved only indirectly, by week 1 being asked to account for the seed's wires and its own
+ * together; a failure could be either, and the audit could not say which. Now the seed is asked
+ * of itself against nothing, week 1 is asked of itself against the seed, and each answer names
+ * the week it belongs to.
  */
 let lastSnapshot: AuditSnapshot | undefined = { ladderUSDByKey: {}, goodsUnitsByKey: {}, registerQtyByKind: {} };
 
@@ -75,6 +82,12 @@ export function auditSeed(state: GameState): AuditFinding[] {
   run('accounts', () => auditAccounts(undefined, state, 0));
   run('names', () => auditNames(state, 0));
   run('wires', () => auditWires(undefined, state, 0));
+  // The seed is now week 1's "before". It opens its own ladders and register BY WIRE, in its own
+  // week-0 journal (`initialization.ts:openSeededMirrors`), so those wires are no longer sitting
+  // in week 1's journal waiting to explain a delta measured from nothing. Week 1 is therefore
+  // asked the sharper question — did WEEK 1's wires explain WEEK 1's movement — and the seed's
+  // own wires are asked of the seed.
+  lastSnapshot = snapshotOf(state);
   return out;
 }
 

@@ -252,19 +252,23 @@ both make the instrument able to see. Everything below is verified against a har
 never audited its own opening state, and the three identities in 37-ZEROSUM are each the cheapest
 possible detector for a defect this project found by reading code instead.
 
-37-SEED. **THE SEED IS NEVER AUDITED, AND EVERY WEEK-1 VIOLATION IS UNATTRIBUTABLE.** (the-seed
-    A2, D3, C3, C3.a, E1, C4, C4.a, D2.) `auditWeek` runs only inside the harness week loop; before
-    it the harness runs `init` only. **No invariant family has ever seen the seed's own state.**
-    So every week-1 finding is ambiguous between a bad opening world and a bad mechanism, which is
-    a cost the archive has paid 91 times. Three parts, in order:
-    · run the audit at week 0 and make it a gate — the cheapest step in this list, and it must go
-      first because it changes how every other step is verified;
+37-SEED. **THE OPENING WORLD.** *(Parts 1 and 2 DONE — §9.37-SEED. The audit now runs at week 0
+    and the seed opens its own ladders and register by wire, so the world is complete when
+    `createInitialGameState` returns. What is left is the two below.)*
     · **every corporate bond is issued in week zero** (`companyGenerator.ts` `maturityWeeks`
       [260,520,780]/[260,520]/[364], `originationWeek: 0`), so no corporate bond matures inside a
       60-week run and **the rollover channel has been off for the model's whole measurable life**.
-      Seed the ladder mid-life; the sovereign side already does and is the template;
-    · the opening spread curve, yield curve and FX rate are seeded ANSWERS (E1), and the accrual
-      ledgers open empty for paper seeded mid-life (D2).
+      Seed the ladder mid-life; the sovereign side already does and is the template. Expect it to
+      move numbers: a maturity wall inside the run is a funding event that has never happened;
+    · the opening spread curve, yield curve and FX rate are seeded ANSWERS (the-seed E1), and the
+      accrual ledgers open empty for paper seeded mid-life (D2) — so the first coupon on a
+      mid-life bond is short by up to half a period. The second half of this lands with the first
+      bullet, since it is the same paper.
+    **And the two the week-0 audit has already put on the board**, both real and neither owned by
+    another step: `F1` — 685 firms file a cash line that is not their balance (−78.80B); `O7` —
+    409 tranches claimed beyond face by float dust, where the check has no dust tolerance at all
+    (rule 28 read the other way round: a tolerance that is ZERO fires on representation error).
+    The second is step 27's shape and is recorded there too.
 
 37-ZEROSUM. **THE INVARIANTS THAT WOULD HAVE CAUGHT THE REST.** Three checks that do not exist, each
     one the cheapest possible detector for a defect this atlas found by reading. (derivative D1.b;
@@ -1437,6 +1441,55 @@ was measured wrong. Treat a row there as a lead with a file:line, not a fact.
 ## 9. THE LOG — WHAT IS DONE
 
 A finished step leaves §3 and lands here: what changed, why, and the measured numbers.
+
+**37-SEED (parts 1 and 2) — THE SEED IS AUDITED, AND IT FINISHES ITSELF.** The audit ran only
+inside the harness week loop, so no invariant family had ever seen the state the world STARTS in.
+Every week-1 finding was ambiguous between a bad opening world and a bad mechanism, and that
+ambiguity costs a search that cannot succeed: there is no stage to find a seed defect in.
+
+**MEASURED, 4 weeks, shocks off: 50 violations in 19 families → 53 in 19.** The three new ones are
+all at week 0 and weeks 1–4 are unchanged.
+
+**Part 1 — `auditSeed`, and it is not `auditWeek(state, 0)`.** Two differences, both found by
+running it the naive way first and reading what broke:
+- **It asks only what a stock can answer.** Week 0 has no elapsed week, so "what moved" is a
+  question about a flow that has not happened. The first run produced five findings of exactly
+  that kind — `W1` "no wires were recorded this week", and `F2` "revenue = tax remitted" against a
+  zero that means *not yet*. Both now guard on `week === 0` in the audit itself, because "the
+  opening state has no elapsed week" is a fact about the model, not about the harness.
+- **It is week 1's baseline, and that is a stronger claim than what it replaced.** `lastSnapshot`
+  opened as the EMPTY world so that week 1 was asked to account for the seed's wires and its own
+  together. A failure there could be either, and the audit could not say which. Now the seed is
+  asked of itself against nothing, and week 1 is asked of itself against the seed.
+
+**Part 2 — the seed opens its own mirrors, and the naive fix was wrong in an instructive way.**
+The week-0 audit's first finding was `O3`: **36,996 register rows worth 903.14B naming instruments
+that do not exist.** Cause established rather than guessed — `ensureLaddersSynced` runs at
+`core.ts:154`, inside the weekly step, so the columnar tranche store was empty until week 1 built
+it. Probed directly: calling it on a fresh seed took O3 from 36,996 rows to clean.
+
+**And that fix was wrong.** `core.ts:152` does not call `ensureLaddersSynced`; it calls
+`seedLadder`, which opens the ladder **by wire**, and it is guarded on `synced`. Syncing at the
+seed marks every firm synced, turns `seedLadder` into a no-op, and leaves the ladders standing
+with no wires behind them — measured, `W3` "wires reproduce the ladders" then failed at week 1 for
+the full 260.74B of USA CORP_BOND. **The mirror was never the point; the wire is the point.** The
+catch-up sits inside the weekly step for a stated reason — a wire needs a live journal, and none
+is live during the seed.
+
+So the seed opens a journal of its own, numbered week 0, and does the opening itself
+(`initialization.ts:openSeededMirrors`): `seedLadder` for every firm, `seedBook` for every entity,
+then `summarizeWires` into `state.lastWires`, so week 0's wires are a real journal the world
+carries. `core.ts`'s catch-up is untouched — guarded on `synced`, it is now a no-op for anything
+the seed opened and still catches every firm and fund BORN later, which is its other half.
+
+**Fixing O3 unmasked two more, which is the argument for the whole method:** with the mirrors
+empty, `O6` had been comparing a zero against a zero and passing, and `P5`'s register walk had
+nothing to walk. Complete, they read: `O6` clean; `P5` — the seed opens 903.14B of credit marked
+at FACE against 920.56B implied by its own seeded spreads, a −17.42B gap, which is step 13 visible
+at week 0; `O7` — 409 tranches claimed beyond face by float dust; `F1` — 685 firms filing a cash
+line that is not their balance, −78.80B.
+
+Gates: tsc clean, eslint 341 (ratchet), 135 tests, hygiene (atlas 910 citations), build ok.
 
 **37 — THE SYSTEM ATLAS, MAPPED. 45 OF 45, AND 114 NEW FINDINGS.** The other two thirds of the
 method (§9, THE SYSTEM ATLAS — THE REQUIRED SIDE): every required tree and both instrument

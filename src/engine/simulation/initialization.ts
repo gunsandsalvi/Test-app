@@ -75,6 +75,12 @@ import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
 import { openAccount, openingCashOf, stashOpeningCash, sectorRowAt, stashSeedHouseholdLine } from '../ledger/accounts';
+import { newWireJournal, setActiveWireJournal, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
+import { seedLadder } from '../ledger/tranche-ledger';
+import { seedBook } from '../ledger/holdings-ledger';
+import type { PartyRef } from '../ledger/party';
+import { holdingClassOf } from '../../domain/assets';
+import { reasonText } from './stages/settlement';
 import { ensureV2 } from '../../engine2/world';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand, industryOfSubUnit } from '../../domain/industry-registry';
@@ -345,6 +351,59 @@ export function solveSeedInvestmentFixedPoint(
  *  helpers below while it runs, carried by the state it returns. */
 let seedV2: import('../../engine2/world').V2World;
 
+/**
+ * §3.37-SEED — THE SEED FINISHES ITSELF, BY WIRE, IN ITS OWN WEEK-0 JOURNAL.
+ *
+ * `docs/systems/the-seed.md` A1 asks for "a complete, consistent state: every party, every
+ * account, every holding, every instrument, all present at once". It was not. The ladders and the
+ * register were built on the objects, and their COLUMNAR mirrors were opened at the head of the
+ * first weekly step (`core.ts`, "the ladders' catch-up, inside the journal"). Between this
+ * function returning and week 1 running, 36,996 register rows worth 903.14B named tranches that
+ * had no row — which is what the week-0 audit found the first time it was allowed to look.
+ *
+ * The catch-up sits where it does for a stated reason: it opens the ladders BY WIRE, and a wire
+ * needs a live journal. That reason is real and it is why the naive fix is wrong — calling
+ * `ensureLaddersSynced` here marks every firm `synced`, which turns `core.ts`'s `seedLadder` into
+ * a no-op and leaves the ladders standing with no wires behind them. Measured, that is exactly
+ * what happens: W3 "wires reproduce the ladders" fails at week 1 for the full 260.74B of USA
+ * CORP_BOND. The mirror is not the point; the WIRE is the point.
+ *
+ * So the seed opens a journal of its own, numbered week 0, and does the opening itself. The
+ * catch-up in `core.ts` stays exactly as it is — it is guarded on `synced` and is now a no-op for
+ * anything the seed opened, while still catching every firm and fund BORN later, which is the
+ * other half of what it is for.
+ */
+function openSeededMirrors(state: GameState): void {
+  const v2 = ensureV2(state);
+  // Nothing is active before the first week; the guard is here so this cannot silently steal a
+  // journal if the seed is ever run from inside one.
+  if (hasActiveWireJournal()) return;
+  const j = newWireJournal((state as { nextWireId?: number }).nextWireId ?? 1, 0);
+  setActiveWireJournal(j);
+  try {
+    for (const c of state.companies) {
+      if (!v2.tranches.synced.has(c.id)) seedLadder(v2, { id: c.id, ticker: c.ticker, region: c.region }, c.debtTranches);
+    }
+    const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
+    const issuerOfHolding = (h: ItemizedHolding): PartyRef => {
+      if (holdingClassOf(h.instrumentType) === 'SOVEREIGN') return { kind: 'GOVERNMENT', region: h.issuerRegion };
+      const ticker = tickerById.get(h.instrumentId);
+      return ticker ? { kind: 'COMPANY', ticker } : { kind: 'INSTITUTION', id: h.instrumentId };
+    };
+    for (const e of state.institutionalEntities ?? []) {
+      if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
+    }
+    // The seed's wires are a real journal and the world carries it, so week 0 can be asked what
+    // it wired exactly as any week is. There are no payments at the seed, so the pending money it
+    // is netted against is zero.
+    const regionByTicker = new Map(state.companies.map((c) => [c.ticker, c.region]));
+    state.lastWires = summarizeWires(j, { numeraire: 0, byCurrency: {} }, (t: string) => regionByTicker.get(t), reasonText, v2.fx);
+    (state as { nextWireId?: number }).nextWireId = j.base + j.n;
+  } finally {
+    setActiveWireJournal(undefined);
+  }
+}
+
 export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {
   // §5-WIRES A3: the persistent world is born with the seed — the accounts the seed opens below
   // (a firm's, an entity's, a pool's rows at its banks) live on it, and the state carries it.
@@ -355,6 +414,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   drainSeedRings(state);
   // §5-BRAINS — every deciding entity is born with its two preference primitives.
   ensureManagements(state.companies, state.institutionalEntities ?? [], 0);
+  openSeededMirrors(state);
   // §5-STRUCT step 6 — OFF unless asked for. Burn-in hands back a world the ENGINE produced rather
   // than one this function asserted, which is the end state for every §7.4 defect. It changes every
   // number in the project at once, so it is a switch someone turns deliberately after reading the
