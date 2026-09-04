@@ -435,11 +435,9 @@ written from here):
 
     **D. THE RULES WRITTEN MORE THAN ONCE — collapse, and the branding then becomes small.**
     D4. The float build, both halves: 5 + 5 copies.
-    D5. The credit demand build: 2 copies × ~80 lines, and **07b applies a sub-investment-grade
-        factor that 07d does not**. One copy carries a rule the other lost.
-    D6. The credit index-fund participant block: 2 × ~46 lines; and the ETF selection filter
-        ignores the index's region while `bookIndexIds` requires it, so a foreign-index ETF is
-        admitted as a participant and then given no demand.
+    D5. The credit demand build: 2 copies × ~80 lines. **The divergence is fixed (§9); the
+        COLLAPSE is what is left**, and the two are now word-for-word equal, which is the state
+        §5 says to collapse from.
     D7. `isActiveCompany` written longhand 6×, and `harness:2589` checks no liveness at all — a
         resolved bank's sheet is reconciled against a book it no longer owns.
     D9. Lookup maps rebuilt from the same source: **38 construction sites**, including three alive
@@ -1650,6 +1648,32 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ D5 (the divergence) + D6 — TWO BOOKS HAD EACH LOST A RULE THE OTHER KEPT.**
+
+**D5 — 07D SIZED A LEVERAGED LOAN AS IF IT WERE INVESTMENT GRADE.** 07b's demand build scales a
+sub-investment-grade name by the holder's own `subInvestmentGradeSizeFactor` — the sleeve an
+insurer or a pension fund is allowed to run in paper below BBB. 07d's build is 07b's word for
+word MINUS that factor, in both places it appears (the cash-weight loop and the structural size).
+So the same holder took a FULL structural position in a borrower's leveraged loan and a fractional
+one in that same borrower's bond — the wrong way round, because the loan is the riskier of the two
+by rating and the mandate binds harder there, not softer. 07d now computes `subIG` the same way
+and applies the same factor. **The collapse of the two ~80-line builds is deliberately NOT in this
+commit**: §5's sequencing lesson says make every writer maintain the rule while the copies are
+still equal, and only then merge them. They are equal now, which is the state to collapse from.
+
+**D6 — A FUND WAS SEATED IN AN AUCTION AND THEN GIVEN NOTHING TO DO.** Each credit book decides
+twice, a hundred lines apart, which indexes it prices: once to pick the ETFs that get a SEAT, once
+(`bookIndexIds`) to give them DEMAND. 07b's and 07d's two copies disagreed — the seat filter
+matched on asset class alone, the demand list also required the index's REGION. A fund tracking a
+foreign credit index was therefore admitted as a participant and handed no demand at all: seated,
+counted in the book's entity set and its write-back, and mute. 07e had the region clause in both
+places and was right. `bookIndexIdsOf` is the one predicate now, and `indexFundsSeatedIn` uses it.
+
+One difference between the three is KEPT and named rather than quietly unified: whether a fund
+domiciled in another region may bid in this book. 07e says yes, the credit books say no. That is a
+real modelling question, not a drift, so `sameRegionOnly` is a parameter each book answers for
+itself.
 
 **13-READ D2+D3 — THE LARGEST VERBATIM BLOCK, AND THE ROW IT BUILDS.** Three books wrote the
 "may only rewrite what it CLEARED" write-back loop word for word: fills out of the holdings

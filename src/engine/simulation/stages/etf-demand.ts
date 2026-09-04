@@ -17,6 +17,9 @@ import { InstitutionalEntity } from '../../../types';
 import { ParticipantDemand } from './financial-clearing-engine';
 import { MarketIndex } from '../../../domain/indexes';
 import { entityCashOf } from '../../ledger/accounts';
+import type { RegionId } from '../../../domain/geography';
+import { INDEX_DEFINITIONS } from '../../../domain/indexes';
+import type { IndexDefinition } from '../../../domain/indexes';
 
 /**
  * A reservation level so far beyond any real schedule that the fund is always a full-size bidder.
@@ -55,6 +58,47 @@ export function indexFundDemand(
  * instrument. Returns an empty list when there are no funds, so an adapter pays nothing for the
  * feature before any shares exist.
  */
+/**
+ * §3.13-READ D6 — THE INDEXES THIS BOOK PRICES, and the one predicate that says so.
+ *
+ * It was written twice per book, a hundred lines apart, and 07b's and 07d's two copies DISAGREED.
+ * The selection filter that decides which ETFs get a SEAT matched on asset class alone; the
+ * `bookIndexIds` list that decides which ETFs get DEMAND also required the index's region. So a
+ * fund tracking a foreign credit index was admitted to the auction as a participant and then
+ * handed no demand at all — seated, counted, and mute. 07e had the region clause in both places
+ * and was right.
+ *
+ * A region-less definition is a GLOBAL index and belongs in every region's book, which is what
+ * 07e's `|| !d.region` says; the credit books never wrote that clause because no credit index is
+ * region-less today, and it is inert there rather than a change.
+ */
+export function bookIndexIdsOf(
+  assetClass: IndexDefinition['assetClass'],
+  regionId: RegionId
+): string[] {
+  return INDEX_DEFINITIONS
+    .filter((d) => d.assetClass === assetClass && (d.region === regionId || !d.region))
+    .map((d) => d.id);
+}
+
+/**
+ * The funds that get a SEAT in this book: those tracking one of its indexes. `sameRegionOnly`
+ * is the one thing the three books still differ on and it is a real question rather than a drift
+ * — whether a fund domiciled elsewhere may bid in this region's book — so each names its own
+ * answer instead of one being silently imposed on the others.
+ */
+export function indexFundsSeatedIn(
+  entities: InstitutionalEntity[],
+  assetClass: IndexDefinition['assetClass'],
+  regionId: RegionId,
+  sameRegionOnly: boolean
+): InstitutionalEntity[] {
+  const ids = new Set(bookIndexIdsOf(assetClass, regionId));
+  return entities.filter((e) =>
+    e.entityType === 'ETF' && !!e.etf && ids.has(e.etf.indexId)
+    && (!sameRegionOnly || e.region === regionId));
+}
+
 export function indexFundsForBook(
   v2: V2World,
   entities: InstitutionalEntity[],

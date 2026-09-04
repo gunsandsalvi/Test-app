@@ -57,6 +57,8 @@ import {
   computeDistressedReservationSpreadBps,
   spreadRiskCapitalChargeRate,
   entityRequiredReturn,
+  isInvestmentGrade,
+  subInvestmentGradeSizeFactor,
 } from './asset-allocation';
 import { computeAnnualDefaultProbability, creditRecoveryRate, moveCorporateAccrued } from './shared-helpers';
 import { WeeklyStepContext } from './context';
@@ -71,8 +73,8 @@ import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, Clea
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
-import { INDEX_DEFINITIONS } from '../../../domain/indexes';
-import { indexFundDemand, indexFundsForBook } from './etf-demand';
+
+import { indexFundDemand, indexFundsForBook, bookIndexIdsOf, indexFundsSeatedIn } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
@@ -181,6 +183,16 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         comp: c,
         creditRating: c.creditRating,
         annualPd,
+        // §3.13-READ D5: THE RULE THIS COPY HAD LOST. 07b's demand build sizes a sub-investment-
+        // grade name by the holder's own `subInvestmentGradeSizeFactor` — the sleeve an insurer or
+        // a pension fund is allowed to run in paper below BBB. This build is 07b's, word for word,
+        // minus that factor, so the SAME holder took a full structural position in a leveraged
+        // loan and a fractional one in the same borrower's bond, which is the wrong way round: a
+        // loan is the riskier instrument of the two by rating and the mandate binds harder, not
+        // softer. Computed the same way here, so the two books state one rule before D5 collapses
+        // them into one build (§5: make every writer maintain the new thing while it still equals
+        // the old one).
+        subIG: !isInvestmentGrade(c.creditRating),
         expectedLossBps: annualPd * (1 - loanRecoveryRate) * 10000,
       };
     });
@@ -301,10 +313,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       (e) => e.entityType !== 'ETF'
         && mandateWeightForIssuer(e.entityType, e.region, regionId, loanStockByRegion) > 0
     );
-    const regionIndexFunds = ctx.updatedInstitutionalEntities.filter(
-      (e) => e.region === regionId && e.entityType === 'ETF' && e.etf
-        && INDEX_DEFINITIONS.some((d) => d.id === e.etf!.indexId && d.assetClass === 'LEVERAGED_LOAN')
-    );
+    // §3.13-READ D6: the SAME predicate `bookIndexIds` uses below (see 07b).
+    const regionIndexFunds = indexFundsSeatedIn(ctx.updatedInstitutionalEntities, 'LEVERAGED_LOAN', regionId, true);
     const bookEntities = [...regionEntities, ...regionIndexFunds];
 
     // SCALE C1: positions come off the shared store's LEVERAGED_LOAN rows — one claim-scan per
@@ -388,6 +398,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         if (li !== undefined) { heldArr[li] = faceLocal; heldTouched.push(li); }
       });
       const entityShare = (rawEntityTargets.get(entity.id) ?? 0) / sectorTotal;
+      const entitySubIGFactor = subInvestmentGradeSizeFactor(entity.entityType);
       const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
       // HF1: the distressed bid is a DISTRESSED fund's, not every hedge fund's. Pricing off
       // discounted expected recovery instead of expected loss, and running the conviction size
@@ -412,7 +423,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       let totalCashDemandWeightLocal = 0;
       for (let li = 0; li < nL; li++) {
         const l = loans[li];
-        const structuralLocal = (l.faceLocal + l.offeringLocal) * entityShare;
+        const f = companyTerms[l.ci].subIG ? entitySubIGFactor : 1;
+        const structuralLocal = (l.faceLocal + l.offeringLocal) * entityShare * f;
         const gapToTargetLocal = Math.max(0, structuralLocal - heldArr[li]);
         const weightLocal = l.offeringLocal + gapToTargetLocal;
         cashDemandWeightByIndex[li] = weightLocal;
@@ -440,7 +452,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
             })) + hedgeAdjBps;
         const reservationPrice = priceAtSpread(l, reservationBps);
         const rangePrice = Math.max(1e-9, Math.abs(reservationPrice - priceAtSpread(l, reservationBps + fullSizeRangeBps)));
-        const structuralSizeLocal = (l.faceLocal + l.offeringLocal) * entityShare;
+        const sizeFactor = t.subIG ? entitySubIGFactor : 1;
+        const structuralSizeLocal = (l.faceLocal + l.offeringLocal) * entityShare * sizeFactor;
         // The bound is posted in FACE, and the money it stands for buys that face at the price this
         // book opened at — the same commitment 07b's and 07e's bidders make.
         setDemand(DS, demandRow, li,
@@ -466,9 +479,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // one demand shape the engine could not previously express and a large real force in credit.
     // A credit index weights by MARKET VALUE, so a constituent's weight is spread over that
     // borrower's own loans by what each is worth — the index owns the paper, not the borrower.
-    const bookIndexIds = INDEX_DEFINITIONS
-      .filter((d) => d.assetClass === 'LEVERAGED_LOAN' && d.region === regionId)
-      .map((d) => d.id);
+    const bookIndexIds = bookIndexIdsOf('LEVERAGED_LOAN', regionId);
     const loansByIssuerId = new Map<string, number[]>();
     loans.forEach((l, li) => {
       const key = companyTerms[l.ci].id;

@@ -43,8 +43,8 @@ import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
-import { INDEX_DEFINITIONS } from '../../../domain/indexes';
-import { indexFundDemand, indexFundsForBook } from './etf-demand';
+
+import { indexFundDemand, indexFundsForBook, bookIndexIdsOf, indexFundsSeatedIn } from './etf-demand';
 import { fairValuePerShare, companyBookEquityLocal, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
@@ -232,11 +232,9 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
 
     // Index funds hold real equity and settle real cash, so they go through exactly the same
     // bookkeeping and apply passes as every other holder; only their SCHEDULE differs.
-    const regionIndexFunds = ctx.updatedInstitutionalEntities.filter(
-      (e) => e.entityType === 'ETF' && e.etf
-        && INDEX_DEFINITIONS.some((d) => d.id === e.etf!.indexId && d.assetClass === 'EQUITY'
-          && (d.region === regionId || !d.region))
-    );
+    // §3.13-READ D6: this book had it right in both places; `sameRegionOnly: false` is its own
+    // answer to the one question the three still differ on — a fund domiciled elsewhere may bid here.
+    const regionIndexFunds = indexFundsSeatedIn(ctx.updatedInstitutionalEntities, 'EQUITY', regionId, false);
     const bookEntities = [...regionEntities, ...regionIndexFunds];
     // §4.C direct-to-pack — demand written straight into the engine's staging.
     const DS = openDemandStaging(regionCompanies.length);
@@ -351,9 +349,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // — real positions, real cash — but their schedule has no reservation level: a fund buys its
     // benchmark weight at whatever the market is asking. That is the one demand shape this engine
     // could not previously express, and it is a large real force.
-    const equityIndexIds = INDEX_DEFINITIONS
-      .filter((d) => d.assetClass === 'EQUITY' && (d.region === regionId || !d.region))
-      .map((d) => d.id);
+    const equityIndexIds = bookIndexIdsOf('EQUITY', regionId);
     const indexFunds = indexFundsForBook(ctx.v2, regionIndexFunds, ctx.updatedMarketIndexes, equityIndexIds, (e) => store.currentHoldingsLocal(e.id));
     const indexFundParticipants: ClearingParticipant[] = indexFunds.map(({ fund, index, investableLocal }) => {
       const currentShares = currentSharesByEntity.get(fund.id) ?? new Map<InstrumentId, number>();

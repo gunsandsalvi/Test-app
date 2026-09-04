@@ -102,8 +102,8 @@ import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, Clea
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
-import { INDEX_DEFINITIONS } from '../../../domain/indexes';
-import { indexFundDemand, indexFundsForBook } from './etf-demand';
+
+import { indexFundDemand, indexFundsForBook, bookIndexIdsOf, indexFundsSeatedIn } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
@@ -360,10 +360,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       (e) => e.entityType !== 'ETF'
         && mandateWeightForIssuer(e.entityType, e.region, regionId, corpStockByRegion) > 0
     );
-    const regionIndexFunds = ctx.updatedInstitutionalEntities.filter(
-      (e) => e.region === regionId && e.entityType === 'ETF' && e.etf
-        && INDEX_DEFINITIONS.some((d) => d.id === e.etf!.indexId && d.assetClass === 'CORP_BOND')
-    );
+    // §3.13-READ D6: the SAME predicate `bookIndexIds` uses below. This filter matched on asset
+    // class alone, so a fund tracking a foreign credit index was seated and then given no demand.
+    const regionIndexFunds = indexFundsSeatedIn(ctx.updatedInstitutionalEntities, 'CORP_BOND', regionId, true);
     const bookEntities = [...regionEntities, ...regionIndexFunds];
 
     // SCALE C1: positions come off the shared store's CORP_BOND rows — one claim-scan per
@@ -546,9 +545,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // one demand shape the engine could not previously express and a large real force in credit.
     // A credit index weights by MARKET VALUE, so a constituent's weight is spread over that
     // issuer's own bonds by what each is worth — the index owns the paper, not the borrower.
-    const bookIndexIds = INDEX_DEFINITIONS
-      .filter((d) => d.assetClass === 'CORP_BOND' && d.region === regionId)
-      .map((d) => d.id);
+    const bookIndexIds = bookIndexIdsOf('CORP_BOND', regionId);
     const bondsByIssuerId = new Map<string, number[]>();
     bonds.forEach((b, bi) => {
       const key = companyTerms[b.ci].id;
