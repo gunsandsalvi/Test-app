@@ -420,32 +420,18 @@ written from here):
     **13-BILL — DONE, in §9.** A bill's return is the pull to par its own auction printed, for
     every holder class. What it left behind is one finding, and it is the next thing here:
 
-    **13-READ — READ THE SOURCE (rule 19), AND COLLAPSE THE RULES WRITTEN MORE THAN ONCE.**
-    INSERTED HERE, before 13-BOOK's remaining slices, because it is their prerequisite: an
-    instrument index cannot be built while eleven sites re-derive what kind a tranche is, and the
-    id branding cannot be done safely while identity is hand-built at 449 sites. Every item below
-    SHRINKS the surface the later slices cross. Sized by four surveys of the clearing books, the
-    seed/audit paths, the remaining stages, and the derivations a store now answers.
+    **13-READ — READ THE SOURCE (rule 19) — DONE, in §9, except one half.** Parts A (11 live
+    defects), B (the dead code), C (5 rule-19 conversions) and D (13 duplicated rules) are closed.
+    **THE TEST IT HAD TO PASS: net code lines −164** (845 in, 1,009 out), against the ~680 lines of
+    vocabulary slices (a) and (b) added — so it repaid a quarter of that and made every one of
+    13-BOOK's remaining slices smaller, which was its stated reason for being INSERTED here.
 
-    **A. THE LIVE DEFECTS — DONE, all eleven, in §9.**
-
-    **B. THE DEAD CODE — DONE, in §9. −188 lines.**
-
-    **C. THE SECOND ANSWERS — DONE, all five, in §9.**
-
-    **D. THE RULES WRITTEN MORE THAN ONCE — collapse, and the branding then becomes small.**
-    D13. The seed's house-bank assignment, 3 passes. **NOT the mechanical collapse the survey
-        assumed** (read for D12): each pass feeds `applyBankFundingSplit` in its own scope, and the
-        seed steps between them — the SME and household debt migrations, the pools' opening cash —
-        run against banks that must already carry the deposits the pass before them placed. "One
-        pass at the end" therefore means MOVING the funding-split application to the end, not
-        deleting two loops. The safe part is the inner rule (pick a bank, accumulate its deposits),
-        which is genuinely written 3×. Do that first; the reordering is its own step and wants the
-        seed's step order read whole.
-
-    **THE TEST THIS STEP MUST PASS.** Net lines must FALL. 13-BOOK slices (a)+(b) added ~680 lines
-    of vocabulary; this step is where that is repaid, and if it is not, the vocabulary was not worth
-    having. Report the number.
+    **What it leaves open, as its own step:** D13's REORDERING. The seed's three house-bank passes
+    now share one assignment rule, but they are still three passes, because each feeds
+    `applyBankFundingSplit` in its own scope and the seed steps between them — the SME and
+    household debt migrations, the pools' opening cash — run against banks that must already carry
+    what the pass before placed. "One pass at the end" means moving the funding-split application
+    to the end of the seed, which wants the seed's step order read whole and is not a collapse.
 
     **13-BOOK — THE ONE BOOK: ONE ID SPACE, ONE WRITE PATH, AND TABLES THAT CAN BE CHECKED
     AGAINST EACH OTHER** (user, 2026-09-05: *"I want a single source of truth for whatever is
@@ -1640,6 +1626,38 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ D13 (the safe half) — AND THE STEP'S OWN TEST: −164 CODE LINES.** The seed's three
+house-bank passes share one rule now. It has a subtlety that is the reason its two halves cannot be
+separated: `pick` CONSUMES the winner's free capacity, so the allocation depends on the order the
+parties are handed to it, and the deposit total has to come from the same walk that made the
+assignment. The seed's first copy had them apart — assign everybody in one loop, total them in a
+second that re-tested a `homeBankTicker` the first had just set on every row — and the two agreed
+only by accident. `assignHouseBanks` does both in one pass, and takes the late pass's
+"only whoever is still unbanked" as a flag rather than a fourth spelling.
+
+**THE TEST THIS STEP HAD TO PASS.** Net code lines must FALL. **They fell by 164** — 845 in, 1,009
+out across 78 files, against the ~680 lines of vocabulary that slices (a) and (b) added. So the
+vocabulary is a quarter repaid, and the part that matters more is that every remaining 13-BOOK
+slice is now smaller: the id grammars have owners (`instrument-keys`, `entity-keys`,
+`participant-keys`), the tranche-kind rule is one function on the row side as well as the object
+side, "this region's live banks" is one predicate, and the two credit books share one demand build
+instead of drifting apart in the dark.
+
+**And what the step actually found.** Eleven live defects, of which the ones that moved real
+numbers: an ACQUIRED bank still drawing SME facilities on a market share its acquirer had taken
+over; `units` read two ways across eighteen sites, a share count against a market value on the same
+equity row; 07e pricing EVERY listed company's equity on last week's leverage through a default
+parameter; `irs.ts` mixing two epochs in one subtraction; the money fund quoting its yield off a
+pre-trade book; the harness's O1 wrong on four counts against the audit it duplicated; P8 measuring
+the sovereign carrying gap against a price it made up; 07d sizing leveraged loans as investment
+grade; and a foreign-index ETF seated in credit auctions and given no demand.
+
+**Three of the survey's own items were WRONG, and reading is what found that** — A4 was latent
+rather than live (and the survey's own premise, that a bank could be private, is false), D9's
+proposed `ctx` memo would have INSTALLED a stale mirror, and D13 is a reordering rather than a
+collapse. Each is recorded where it was found rather than quietly dropped, which is the difference
+between a work list and a wish list.
 
 **13-READ D9 — THE PROPOSED FIX WAS THE DEFECT.** The survey said 38 lookup-map construction
 sites, "home: memoised on `ctx`". Reading them: **most of the 38 are not duplicates at all** —

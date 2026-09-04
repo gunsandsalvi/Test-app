@@ -239,3 +239,31 @@ export function mandateAllocator(banks: { ticker: string; bankMarketShare?: numb
     },
   };
 }
+
+/**
+ * §3.13-READ D13 — GIVE EACH PARTY A HOUSE BANK, AND TOTAL WHAT IT BANKS THERE. One statement of
+ * the seed's assignment rule, which was written three times.
+ *
+ * The rule has one subtlety and it is the reason the two halves cannot be separated: `pick`
+ * CONSUMES the winner's free capacity, so the allocation depends on the order parties are handed
+ * to it, and the deposit total must come from the same pass that did the assigning. Split into
+ * "assign everybody, then total them", the two agree only by accident — which is how the seed's
+ * first copy was written, in two loops, with the second one re-testing a `homeBankTicker` the
+ * first had just set on every row.
+ */
+export function assignHouseBanks<T extends { id: string; homeBankTicker?: string }>(
+  parties: readonly T[],
+  allocator: { pick: (clientId: string, sizeLocal: number) => string },
+  openingCashOf: (party: T) => number,
+  /** True for the LATE pass, which exists to catch whoever was created after the earlier ones. */
+  onlyUnbanked = false
+): Map<string, number> {
+  const byBank = new Map<string, number>();
+  parties.forEach((p) => {
+    if (onlyUnbanked && p.homeBankTicker) return;
+    const cashLocal = Math.max(0, openingCashOf(p));
+    p.homeBankTicker = allocator.pick(p.id, cashLocal);
+    byBank.set(p.homeBankTicker, (byBank.get(p.homeBankTicker) ?? 0) + cashLocal);
+  });
+  return byBank;
+}

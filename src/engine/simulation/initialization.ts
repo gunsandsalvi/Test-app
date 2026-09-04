@@ -69,7 +69,7 @@ import { reconcileEmploymentView } from './stages/labor-market';
 import { weeklyWageBillLocal } from '../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
 import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
-import { mandateAllocator } from '../../domain/primary-market';
+import { mandateAllocator, assignHouseBanks } from '../../domain/primary-market';
 import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, ItemizedHolding, INDUSTRY_SUBUNITS, DebtTranche } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
@@ -804,15 +804,12 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         ticker: b.ticker, bankMarketShare: b.bankMarketShare,
         capacityLocal: b.bankBalanceSheet?.bankEquityLocal ?? 0,
       })));
-      regionCompanies.forEach(c => {
-        if (c.isBankEntity) return;
-        c.homeBankTicker = houseBanks.pick(c.id, Math.max(0, openingCashOf(c)));
-      });
-      const corpDepositsByBank = new Map<string, number>();
-      regionCompanies.forEach(c => {
-        if (c.isBankEntity || !c.homeBankTicker) return;
-        corpDepositsByBank.set(c.homeBankTicker, (corpDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, openingCashOf(c)));
-      });
+      // §3.13-READ D13: assigned and totalled in ONE pass — `pick` consumes the winner's
+      // capacity, so the allocation depends on the order and the total has to come from the same
+      // walk that made it. This was two loops, the second re-testing a `homeBankTicker` the first
+      // had just set on every row.
+      const corpDepositsByBank = assignHouseBanks(
+        regionCompanies.filter(c => !c.isBankEntity), houseBanks, openingCashOf);
       // SEG1: the segment pools get their own money, sized by the named private tier's measured
       // cash/revenue ratio — the tier's small firms hold working balances like its named ones
       // do. The balance sits across the region's banks pro-rata by market share (small firms
@@ -1354,15 +1351,11 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const reg = regions[regionId];
     const regionBanks = banksOf(companies, regionId);
     if (regionBanks.length === 0) return;
-    const byBank = new Map<string, number>();
     const houseBanks = mandateAllocator(regionBanks.map(b => ({
       ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityLocal: b.bankBalanceSheet!.bankEquityLocal,
     })));
-    institutionalEntities.forEach(e => {
-      if (e.region !== regionId) return;
-      e.homeBankTicker = houseBanks.pick(e.id, Math.max(0, openingCashOf(e)));
-      byBank.set(e.homeBankTicker, (byBank.get(e.homeBankTicker) ?? 0) + Math.max(0, openingCashOf(e)));
-    });
+    const byBank = assignHouseBanks(
+      institutionalEntities.filter(e => e.region === regionId), houseBanks, openingCashOf);
     regionBanks.forEach(b => {
       const instLocal = Math.round(byBank.get(b.ticker) ?? 0);
       stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + instLocal);
@@ -1639,18 +1632,10 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const lateHouseBanks = mandateAllocator(regionBanks.map(b => ({
       ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityLocal: b.bankBalanceSheet!.bankEquityLocal,
     })));
-    const lateCorporateByBank = new Map<string, number>();
-    const lateInstitutionalByBank = new Map<string, number>();
-    companies.forEach(c => {
-      if (c.region !== regionId || c.isBankEntity || c.homeBankTicker) return;
-      c.homeBankTicker = lateHouseBanks.pick(c.id, Math.max(0, openingCashOf(c)));
-      lateCorporateByBank.set(c.homeBankTicker, (lateCorporateByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, openingCashOf(c)));
-    });
-    institutionalEntities.forEach(e => {
-      if (e.region !== regionId || e.homeBankTicker) return;
-      e.homeBankTicker = lateHouseBanks.pick(e.id, Math.max(0, openingCashOf(e)));
-      lateInstitutionalByBank.set(e.homeBankTicker, (lateInstitutionalByBank.get(e.homeBankTicker) ?? 0) + Math.max(0, openingCashOf(e)));
-    });
+    const lateCorporateByBank = assignHouseBanks(
+      companies.filter(c => c.region === regionId && !c.isBankEntity), lateHouseBanks, openingCashOf, true);
+    const lateInstitutionalByBank = assignHouseBanks(
+      institutionalEntities.filter(e => e.region === regionId), lateHouseBanks, openingCashOf, true);
     if (lateCorporateByBank.size === 0 && lateInstitutionalByBank.size === 0) return;
     regionBanks.forEach(b => {
       const sheet = b.bankBalanceSheet!;
