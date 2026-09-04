@@ -368,9 +368,7 @@ written from here):
     **13-CREDIT, the credit class, one book at a time** (user, 2026-09-04: *"there shouldn't be any
     spread per issuer. The spread is per asset, assets with different maturities should have
     different risk levels and so different spreads. There is no spread quantity associated with an
-    issuer aside from the CDS."*). Row 1 is in §9. What is left, in order:
-    · **row 2 — the corporate accrued leg** (above): the bond book now names a tranche on every
-      fill, so the leg 13b built for the sovereign has somewhere to ride.
+    issuer aside from the CDS."*). Rows 1 and 2 are in §9. What is left, in order:
     · **row 3 — `07d`, the loan book**: instruments become tranches, the price clears and
       `leveragedLoan.discountMarginBps` / `pricePar` are deleted the way `oasSpreadBps` was — the
       DM is read off the price, per loan, at its own life.
@@ -409,19 +407,19 @@ written from here):
     Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
     DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
     **AND THE CORPORATE ACCRUED LEG** (13b's other half, `bond.md` N9.b): a buyer pays the seller
-    what has accrued on the face it takes. The sovereign has it; the corporate could not until the
-    clear named a tranche, because there was no per-tranche face delta for the accrued to ride.
-    **Row 1 removed that blocker for the bond book and did not take the leg** — it is the next
-    bond-book row: `book-settlement.ts:accruedOnFills` with a `moveCorporateAccrued` beside
-    `moveSovereignAccrued`, keyed on `holderAccruedInterestLocal`'s `TYPE:instrumentId`, which is
-    already per tranche. 07d follows when it clears per tranche.
+    what has accrued on the face it takes. *(Done for the BOND book — §9.13-CREDIT row 2. `07d`
+    and `07f` follow when they clear per tranche, because the leg needs a per-tranche face delta
+    to ride and an issuer-keyed clear has none.)*
 13e. **A HOLDER OF RECORD IS EVERY HOLDER.** `sovereign-calendar.ts:accrueSovereignHolders` walks
     the institutional register and the banks' investment books — so a bank's govvie DESK inventory
     and the CENTRAL BANK's own book accrue nothing, and their share of every sovereign coupon is
-    paid out to the other holders instead. It is the exact shape already fixed on the corporate
-    side ("THE DESKS ARE HOLDERS OF RECORD TOO", `shared-helpers.ts:applyHolderInterestAccruals`
-    pass 3), never carried across. Found while building 13b, which now moves accrued balances onto
-    those two holders when they buy.
+    paid out to the other holders instead. It is the exact shape the corporate side means to fix
+    ("THE DESKS ARE HOLDERS OF RECORD TOO", `shared-helpers.ts:applyHolderInterestAccruals`
+    pass 3), never carried across — **and that corporate fix was not working either until
+    §9.13-CREDIT row 2**: it looked a tranche-keyed desk book up by ISSUER and missed every
+    position, so read the repaired version rather than the one this step was written against.
+    Found while building 13b, which now moves accrued balances onto those two holders when they
+    buy.
 13f. **An accrued coupon is an ASSET, and only the banks carry it.** The ledger holds the balance;
     a bank shows it as `sovereignAccruedCouponLocal`, an institution shows nothing. So an
     institution that pays a seller's accrued at settlement (13b) has the cash gone and no
@@ -1378,6 +1376,33 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-CREDIT row 2 — THE BUYER PAYS THE SELLER WHAT THE BOND HAS ALREADY ACCRUED, AND THE DESKS
+TURN OUT NEVER TO HAVE BEEN HOLDERS OF RECORD AT ALL.** 13b built the leg for the sovereign and
+could not carry it across, because the corporate auction named a COMPANY while the accrual ledger
+names a tranche and there was no per-tranche face delta for the accrued to ride. Row 1 gave every
+fill its own paper, so the leg is now `accruedOnFills` with a `moveCorporateAccrued` beside
+`moveSovereignAccrued`: each participant's own face delta times what one unit of that tranche has
+accrued since its own last coupon date, settled through the same clearing house as the paper and
+re-keyed on the ledger in the same pass (rule 5). Read at `currentWeek`, because the weekly accrual
+runs in stage 08 after this book. `AccruedLeg`'s issuer becomes per INSTRUMENT — a book of many
+borrowers has many issuers to owe it, where a sovereign book hands back the same treasury every
+time.
+
+**The defect it uncovered is the larger half.** `deskHoldingsByIssuer` returns a map keyed by
+`p.instrumentId` — a TRANCHE, since 13b — and both callers looked every entry up by ISSUER id, so
+**every tranche-keyed desk position missed**: the desks accrued nothing on the corporate register
+and their share of every coupon and every corporate action was paid to the other holders, which is
+the exact defect "THE DESKS ARE HOLDERS OF RECORD TOO" was written to remove. The only path that
+ever matched was an underwriting residual, stored under the issuer's id until row 1 gave it the
+deal's tranche. Both sides name the same paper now, so the split is per instrument and the roll-up
+that bridged the two key spaces is deleted whole: an issuer's register total carried beside every
+tranche's, a per-row issuer resolution to build it, and a scale-down at the payment. The leg had to
+have this: it re-keys balances the weekly walk builds, and a desk that sold would have gone negative
+against a balance it was never given.
+
+Gates green; no run (rule 11). 07d and 07f still clear per issuer, so their accrued leg waits on
+rows 3 and 4.
 
 **13-CREDIT row 1 — THE CORPORATE BOND BOOK CLEARS A PRICE, PER TRANCHE, AND A BORROWER HAS NO
 SPREAD.** 07b priced one instrument per ISSUER and cleared a SPREAD, and all three halves of that

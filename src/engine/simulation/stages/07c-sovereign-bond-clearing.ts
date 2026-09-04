@@ -661,7 +661,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
             : dealerDeskPartyOf(id, deskTickers));
     // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
     // through the same clearing house as the paper.
-    const accruedByParticipantId = accruedOnFills(
+    const accruedLeg = accruedOnFills(
       participants, result.newParticipantHoldings,
       (id) => accruedPerFaceById.get(id) ?? 0,
       (bondId, participantId, usd) => moveSovereignAccrued(
@@ -679,8 +679,10 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // PUB: the treasury is paid for the paper this week's auction actually placed.
       primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }), undefined, primaryAssetOf('GOV_BOND', regionId)),
       // The net is the ISSUER's: seasoned paper the primary placed carries accrued nobody has been
-      // paid for yet, and the treasury's receivable to the holders rose by the same amount.
-      { byParticipantId: accruedByParticipantId, issuer: { kind: 'GOVERNMENT', region: regionId } }
+      // paid for yet, and the treasury's receivable to the holders rose by the same amount. Every
+      // bond in this book has the same issuer, which is what makes a sovereign book a sovereign
+      // book — a corporate one names the borrower whose paper moved.
+      { ...accruedLeg, issuerOf: () => ({ kind: 'GOVERNMENT', region: regionId }) }
     );
 
     // §5-CLOSE O1: what this auction did not place is withdrawn from the ladder — paper nobody

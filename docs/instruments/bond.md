@@ -110,7 +110,7 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 | N9 · sov TRANSFERABILITY | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
 | N9.a · corp two legs in the same pass | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
 | N9.a · sov two legs in the same pass | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
-| N9.b · corp accrued interest travels with it | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ⚠️ |
+| N9.b · corp accrued interest travels with it | `src/engine/simulation/stages/shared-helpers.ts:moveCorporateAccrued` | ⚠️ |
 | N9.b · sov accrued interest travels with it | `src/engine/simulation/stages/book-settlement.ts:accruedOnFills` | ✅ |
 | N10 · corp REDEMPTION, and it ceases to exist | `src/engine/ledger/tranche-ledger.ts:retireTranche` | ✅ |
 | N10 · sov REDEMPTION, and it ceases to exist | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
@@ -220,10 +220,12 @@ same amount, and the net — the accrued on seasoned paper the primary placed �
 whose receivable rose with it. The apportionment is still weekly rather than daily, which is the
 model's clock everywhere.
 
-**The corporate cannot yet**, and the reason is not this node: `07b` clears one instrument per
-COMPANY while the accrual ledger is keyed per TRANCHE, so there is no face delta on a tranche to
-carry an accrued. It lands with **§3 step 12's tail** (clearing per tranche), which is where the
-same key mismatch already owns three findings.
+**The corporate BOND book has it too** (§9.13-CREDIT rows 1 and 2). The reason it could not
+before was never this node: `07b` cleared one instrument per COMPANY while the accrual ledger is
+keyed per TRANCHE, so there was no face delta on a tranche to carry an accrued. Row 1 made the clear
+name the paper and row 2 settled the leg (`moveCorporateAccrued`). Still ⚠️ for the class: `07d`
+(loans) and `07f` (commercial paper) clear per issuer and carry no leg, and they are §3.13's rows 3
+and 4.
 
 ### ⚠️ N13.a · corp — A RANKING THAT NOTHING EVER RANKS
 

@@ -360,13 +360,20 @@ const DESK_BOOK_BY_TYPE: Record<string, string> = {
 };
 
 /**
- * What the banks' desks hold in one book, by issuer and then by desk.
+ * What the banks' desks hold in one book, by the PAPER they hold and then by desk.
  *
- * A desk position names the ISSUER, not the tranche — it holds "this issuer's bonds" — while a
- * register row names a tranche. The two key spaces are disjoint, so a desk's claim on any one
- * tranche is its share of everything that issuer has outstanding in the book.
+ * The comment that stood here said a desk position names the ISSUER while a register row names a
+ * tranche, and that the two key spaces are disjoint. It stopped being true when the desks' books
+ * went per tranche (§5-FINALIZATION 13b), and the code below it never followed: it returns a map
+ * keyed by `p.instrumentId` — a TRANCHE — and the caller looked every entry up by ISSUER id, so
+ * **every tranche-keyed desk position missed and the desks accrued nothing**. The one path that
+ * ever matched was an underwriting residual, which was stored under the issuer's id until §3.13's
+ * row 1 gave it the deal's own tranche.
+ *
+ * Both sides name the same paper now, which is what the register was keyed by all along, so the
+ * split below is per INSTRUMENT and the issuer never enters it.
  */
-function deskHoldingsByIssuer(
+function deskHoldingsByInstrument(
   companies: Company[] | undefined,
   book: string | undefined
 ): Map<string, Map<string, number>> {
@@ -531,22 +538,19 @@ export function applyPendingCorporateActionSettlements(
   // rows in the same entity and chain order, so they are fused. When no cash is owed the walk
   // can stop at the first hit instead.
   const totalByPair = new Map<number, number>();
-  // The desks' books for the types this week's cash actions touch. A credit action names one
-  // tranche while a desk position names the issuer, so the desks' claim on it is their share of
-  // that issuer's whole stack — which needs the issuer's register total beside the tranche's.
-  // An equity desk position names the same instrument the register's rows do and needs no
-  // roll-up.
-  const deskByIssuerByType = new Map<string, Map<string, Map<string, number>>>();
-  const registerByIssuerByTypeRef = new Map<number, Map<string, number>>();
+  // The desks' books for the types this week's cash actions touch. §3.13 row 2: a desk position
+  // names THE SAME PAPER a register row does, for credit exactly as for equity, so there is one
+  // key and no roll-up. What stood here spread an issuer-keyed desk position across that issuer's
+  // tranches — an issuer's register total carried beside every tranche's, a per-row issuer
+  // resolution to build it, and a scale-down at the payment — all of it to bridge two key spaces
+  // that stopped being different in 13b, and none of it ever matching (see
+  // `deskHoldingsByInstrument`).
+  const deskByInstrumentByType = new Map<string, Map<string, Map<string, number>>>();
   if (hasCash) {
     pendingCashByType.forEach((_byId, type) => {
-      const byIssuer = deskHoldingsByIssuer(ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]);
-      deskByIssuerByType.set(type, byIssuer);
-      const t = refOf(type);
-      if (t !== undefined && t !== equityRef && byIssuer.size > 0) registerByIssuerByTypeRef.set(t, new Map());
+      deskByInstrumentByType.set(type, deskHoldingsByInstrument(ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
     });
   }
-  const issuerIdByInstRef: string[] = [];
   const entityHit: boolean[] = new Array(ctx.updatedInstitutionalEntities.length);
   ctx.updatedInstitutionalEntities.forEach((entity, ei) => {
     let anyHit = false;
@@ -555,16 +559,6 @@ export function applyPendingCorporateActionSettlements(
         const k = pairKeyOf(r);
         const owed = owedByPair.has(k);
         if (owed) totalByPair.set(k, (totalByPair.get(k) ?? 0) + H.qtyLocal[r]);
-        const byIssuer = registerByIssuerByTypeRef.get(H.typeRef[r]);
-        if (byIssuer) {
-          const inst = H.instrRef[r];
-          let issuerId = issuerIdByInstRef[inst];
-          if (issuerId === undefined) {
-            issuerId = issuerIdOf(v2, v2.internedStrings[inst]);
-            issuerIdByInstRef[inst] = issuerId;
-          }
-          byIssuer.set(issuerId, (byIssuer.get(issuerId) ?? 0) + H.qtyLocal[r]);
-        }
         if (!anyHit && (owed || ratioByPair.has(k))) anyHit = true;
       }
     } else {
@@ -586,8 +580,7 @@ export function applyPendingCorporateActionSettlements(
     pendingCashByType.forEach((byId, type) => {
       const t = refOf(type);
       if (t === undefined) return;
-      const deskByIssuer = deskByIssuerByType.get(type);
-      const registerByIssuer = registerByIssuerByTypeRef.get(t);
+      const deskByInstrument = deskByInstrumentByType.get(type);
       byId.forEach((owedLocal, instrumentId) => {
         const i = refOf(instrumentId);
         if (i === undefined) return;
@@ -596,16 +589,11 @@ export function applyPendingCorporateActionSettlements(
         const issuerId = t === equityRef ? instrumentId : issuerIdOf(v2, instrumentId);
         const issuer = companyById.get(issuerId);
         const issuerTicker = issuerTickerOf(issuerId);
-        const byDesk = deskByIssuer?.get(issuerId);
-        // An equity desk holds the named instrument itself. A credit desk holds the issuer's
-        // stack, and holds it in the register's own proportions — except where the register
-        // holds none of this paper, and then the desks hold all of it.
+        // Every desk holds the named instrument itself — the action names one piece of paper and
+        // so does the position.
+        const byDesk = deskByInstrument?.get(instrumentId);
         let deskLocal = 0;
         byDesk?.forEach((usd) => { deskLocal += usd; });
-        if (deskLocal > 0 && t !== equityRef) {
-          const issuerRegisterLocal = registerByIssuer?.get(issuerId) ?? 0;
-          if (registerLocal > 0 && issuerRegisterLocal > 0) deskLocal *= registerLocal / issuerRegisterLocal;
-        }
         const issuedLocal = t === equityRef && issuer ? Math.max(0, marketCapOf(issuer)) : 0;
         const denomLocal = Math.max(registerLocal + deskLocal, issuedLocal);
         if (!(denomLocal > 0)) return;
@@ -613,10 +601,8 @@ export function applyPendingCorporateActionSettlements(
         if (!issuerTicker || !ctx.paymentJournal) return;
         const payer = { kind: 'COMPANY' as const, ticker: issuerTicker };
         if (deskLocal > 0) {
-          let deskBookLocal = 0;
-          byDesk?.forEach((usd) => { deskBookLocal += usd; });
           byDesk?.forEach((usd, deskId) => {
-            const amountLocal = owedLocal * (deskLocal / denomLocal) * (usd / deskBookLocal);
+            const amountLocal = owedLocal * (usd / denomLocal);
             if (!(amountLocal > 0)) return;
             journalPayment(ctx, {
               payer, payee: holderPayee(deskId), amount: amountLocal,
@@ -818,9 +804,10 @@ export function payHoldersCash(
  * This is the piece that makes a lumpy coupon safe on a register that trades. Interest is earned
  * continuously and paid discretely, and between the two dates it is a RECEIVABLE — so a holder
  * that sells mid-period keeps what it earned and the buyer earns only from the week it bought.
- * Real markets settle that in the trade price (a bond trades DIRTY: clean price plus accrued);
- * this model settles it on the register instead, which is the same economics and needs no clearing
- * adapter to know about coupons.
+ * §3.13b: the SETTLEMENT of that is in the trade, as it is in a real market — a bond trades DIRTY,
+ * so the buyer pays the seller the accrued on top of the clean price and the balance re-keys with
+ * the face (`moveCorporateAccrued`, `book-settlement.ts:accruedOnFills`). This walk is what
+ * decides how much each holder has earned; the trade is what pays for it.
  *
  * Without it, paying the coupon to whoever happens to hold on the date would hand a one-week buyer
  * a half-year of interest and take it from the holder that earned it — a transfer the auction
@@ -839,6 +826,34 @@ export function accrueHoldersInterest(
   if (!(weeklyAccrualLocal > 0)) return;
   const key = `${instrumentType}:${instrumentId}`;
   ctx.pendingHolderAccrualLocal.set(key, (ctx.pendingHolderAccrualLocal.get(key) ?? 0) + weeklyAccrualLocal);
+}
+
+/**
+ * §3.13b / `../../../../docs/instruments/bond.md` N9.b — THE ACCRUED RE-KEYS WHEN THE PAPER MOVES,
+ * on the corporate register. The twin of `sovereign-calendar.ts:moveSovereignAccrued`, and the
+ * other half of the cash leg `book-settlement.ts:accruedOnFills` settles: a quoted price is a
+ * CLEAN price, the buyer pays the seller what has run since the last coupon date, and the BALANCE
+ * has to move with the face or the coupon date pays it to the seller a second time.
+ *
+ * The holder key is the CLEARING PARTICIPANT's id, which is what the weekly accrual walk already
+ * keys by — an institution's own id, or a desk's participant id — so a balance moved here is a
+ * balance that walk will find. A balance that reaches zero leaves the ledger, exactly as the
+ * payout path leaves it.
+ */
+export function moveCorporateAccrued(
+  holderAccruedInterestLocal: Map<string, Map<string, number>>,
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER',
+  instrumentId: string,
+  holderKey: string,
+  deltaLocal: number
+): void {
+  if (!Number.isFinite(deltaLocal) || deltaLocal === 0) return;
+  const key = `${instrumentType}:${instrumentId}`;
+  let byHolder = holderAccruedInterestLocal.get(key);
+  if (!byHolder) { byHolder = new Map(); holderAccruedInterestLocal.set(key, byHolder); }
+  const next = (byHolder.get(holderKey) ?? 0) + deltaLocal;
+  if (next === 0) byHolder.delete(holderKey); else byHolder.set(holderKey, next);
+  if (byHolder.size === 0) holderAccruedInterestLocal.delete(key);
 }
 
 /** The coupon date: what each holder accrued on this paper becomes cash, and the balance
@@ -910,7 +925,7 @@ export function applyHolderInterestAccruals(
     // order — and to the same value — whichever pass reads it.
     const deskHoldings = new Map<string, Map<string, Map<string, number>>>();
     accrualsByType.forEach((_byId, type) => {
-      deskHoldings.set(type, deskHoldingsByIssuer(ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
+      deskHoldings.set(type, deskHoldingsByInstrument(ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
     });
     const holdings = getHoldingsTable(ctx as never);
     const entities = ctx.updatedInstitutionalEntities;
@@ -943,27 +958,21 @@ export function applyHolderInterestAccruals(
       }
       // THE DESKS ARE HOLDERS OF RECORD TOO. Interest was split over the register alone, so the
       // paper a desk holds accrued nothing and its share of every coupon was paid to the other
-      // holders. A desk's position names the issuer, so it holds that issuer's stack in the
-      // register's own proportions: the register keeps `registerShare` of each tranche's week
-      // and the desks take the rest, split by what each one holds. Every live tranche accrues
-      // every week, so the accruing instruments ARE the issuer's interest-bearing stack.
-      const deskByIssuer = deskHoldings.get(type);
-      const issuerOfInst: string[] = [];
+      // holders. A desk holds THE SAME PAPER the register does, so this tranche's week is split
+      // between them by what each holds OF IT: the register keeps `registerShare` and the desks
+      // take the rest. (It used to reach for the ISSUER's stack because a desk position was said
+      // to name the issuer — see `deskHoldingsByInstrument`. It names the tranche, and had done
+      // since 13b, so this lookup missed on every position it was written for.)
+      const deskByInstrument = deskHoldings.get(type);
       const registerShare: number[] = [];
       const deskTotalOfInst: number[] = [];
-      if (deskByIssuer && deskByIssuer.size > 0) {
-        const registerByIssuer = new Map<string, number>();
+      if (deskByInstrument && deskByInstrument.size > 0) {
         accruingRow.forEach((instrumentText, iid) => {
-          const issuerId = issuerIdOf(ctx.v2, instrumentText);
-          issuerOfInst[iid] = issuerId;
-          registerByIssuer.set(issuerId, (registerByIssuer.get(issuerId) ?? 0) + (totalByInst[iid] ?? 0));
-        });
-        accruingRow.forEach((_instrumentText, iid) => {
-          const byDesk = deskByIssuer.get(issuerOfInst[iid]);
+          const byDesk = deskByInstrument.get(instrumentText);
           if (!byDesk) return;
           let deskLocal = 0;
           byDesk.forEach((usd) => { deskLocal += usd; });
-          const registerLocal = registerByIssuer.get(issuerOfInst[iid]) ?? 0;
+          const registerLocal = totalByInst[iid] ?? 0;
           if (!(deskLocal + registerLocal > 0)) return;
           deskTotalOfInst[iid] = deskLocal;
           registerShare[iid] = registerLocal / (registerLocal + deskLocal);
@@ -994,7 +1003,7 @@ export function applyHolderInterestAccruals(
       // Pass 3 — the desks' side of the same split, on the accrual ledger the register uses, so
       // the coupon date pays them out of the same balance. An issuer whose paper the register
       // does not hold at all is reached here and nowhere else: its whole coupon is the desks'.
-      if (deskByIssuer && deskByIssuer.size > 0) {
+      if (deskByInstrument && deskByInstrument.size > 0) {
         accruingRow.forEach((instrumentText, iid) => {
           const deskLocal = deskTotalOfInst[iid];
           if (!(deskLocal > 0)) return;
@@ -1003,7 +1012,7 @@ export function applyHolderInterestAccruals(
           const key = `${type}:${instrumentText}`;
           let byHolder = ctx.holderAccruedInterestLocal.get(key);
           if (!byHolder) { byHolder = new Map(); ctx.holderAccruedInterestLocal.set(key, byHolder); }
-          deskByIssuer.get(issuerOfInst[iid])?.forEach((usd, deskId) => {
+          deskByInstrument.get(instrumentText)?.forEach((usd, deskId) => {
             const shareLocal = deskCutLocal * (usd / deskLocal);
             if (!(shareLocal > 0)) return;
             byHolder.set(deskId, (byHolder.get(deskId) ?? 0) + shareLocal);

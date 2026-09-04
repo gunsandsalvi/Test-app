@@ -184,7 +184,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | D4 the dealer earns the bid-offer, and somebody pays it | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
 | D5 VERIFY an unsold seller keeps its paper | `src/engine/simulation/stages/financial-clearing-engine.ts:unsoldStaysWithHolder` | ✅ |
 | D6 two legs in the same pass (N9.a) | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
-| D7 accrued interest transfers with the paper (N9.b) | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ⚠️ |
+| D7 accrued interest transfers with the paper (N9.b) | `src/engine/simulation/stages/shared-helpers.ts:moveCorporateAccrued` | ⚠️ |
 | **D8 FORBID no derived measure may set the price (N7.b)** | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:pricePar` | ❌ |
 | D8 · bonds — the price is the primitive, the spread is read off it | `src/engine/credit-price.ts:trancheClearedSpreadBps` | ✅ |
 | E1 a register of holders (N8) | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
@@ -335,7 +335,7 @@ filling up gets smaller and never dearer. The node asks for a reason and the cod
 **Already named in §3 step 26** ("`dealer-desk.ts:117` charges a stated real-market spread table as a
 real cost in five books").
 
-### ⚠️ D7 — THE ACCRUAL FOLLOWS THE HOLDER, BUT THERE IS NO ACCRUED LEG AT THE TRADE
+### ⚠️ D7 — THE BOND BOOK SETTLES THE ACCRUED NOW; THE LOAN AND PAPER BOOKS DO NOT
 
 Better than the depth-2 mapping recorded, and still not N9.b. `shared-helpers.ts:872`
 apportions each issuer's WEEKLY interest across holders of record, accumulates it per
@@ -349,10 +349,16 @@ held.
 
 Step 13b built that leg and **the sovereign has it** (`book-settlement.ts:accruedOnFills`): the
 buyer pays the accrued on the face it took, the ledger re-keys by the same amount, and the net goes
-to the issuer. The corporate cannot follow while `07b` clears one instrument per COMPANY and the
-accrual ledger is keyed per TRANCHE — there is no face delta on a tranche for the accrued to ride.
-It lands with **§3 step 12's tail** (clearing per tranche), which already owns three findings from
-the same key mismatch.
+to the issuer. The corporate could not follow while `07b` cleared one instrument per COMPANY and the
+accrual ledger is keyed per TRANCHE — there was no face delta on a tranche for the accrued to ride.
+
+**§9.13-CREDIT rows 1 and 2 closed that for the BOND book**: the clear names the paper, the leg
+settles through the same house, and `moveCorporateAccrued` re-keys the balance. The node stays ⚠️
+because `07d` and `07f` still clear per issuer and carry no leg, and because the apportionment is
+weekly rather than daily — the model's clock everywhere. Row 2 also found that pass 3 of the weekly
+walk, the half that makes the DESKS holders of record, had been looking a tranche-keyed desk book up
+by ISSUER and missing every position since 13b: the desks accrued nothing at all until it was
+repaired.
 
 ### ⚠️ G4 — THE ESTATE SELLS AT A DISCOUNT OFF BOOK, NOT AT A PRICE
 

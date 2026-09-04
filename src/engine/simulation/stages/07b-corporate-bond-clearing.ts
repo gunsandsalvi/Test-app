@@ -73,8 +73,8 @@ import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY, issuerIdOf, trancheScheduleOf } from '../../../engine2/tranches';
 import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
 import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
-import { isActiveCompany } from '../../../domain/company';
-import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
+import { isActiveCompany, accruedPerFace } from '../../../domain/company';
+import { computeAnnualDefaultProbability, creditRecoveryRate, moveCorporateAccrued } from './shared-helpers';
 import { priceFromSpreadBps, zeroRateAt, COUPON_PERIOD_WEEKS } from '../../../domain/pricing';
 import type { PaperTerms, ZeroCurve } from '../../../domain/pricing';
 import { issuerSpreadAt, CreditPriceWorld } from '../../credit-price';
@@ -90,8 +90,8 @@ import {
 } from './asset-allocation';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetLocal } from './institutional-balance-sheet';
-import { institutionUnsettledLessCollateralLocal, institutionSpendableLocal } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
+import { institutionUnsettledLessCollateralLocal, institutionSpendableLocal, PartyRef } from './settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
@@ -257,14 +257,28 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         }),
       };
     };
+    // §3.13b / `bond.md` N9.b — WHAT ONE UNIT OF FACE HAS ACCRUED. This auction clears a CLEAN
+    // price, so the interest that has run since each tranche's own last coupon date is paid by the
+    // buyer to the seller on top of it, and re-keys on the accrual ledger with the paper. It is
+    // read at the CURRENT week, not next: `applyHolderInterestAccruals` runs in stage 08, after
+    // this book, so the ledger these balances move on stands at what it accrued through last week.
+    const accruedPerFaceById = new Map<string, number>();
     companyTerms.forEach((t, ci) => {
       for (const r of ladderRowsOf(v2, t.id)) {
         if (!isBondRow(S.flags[r]) || !(S.principalLocal[r] > 0.01)) continue;
         const weeksToMaturity = S.maturityWeek[r] - week;
         // Paper that is due redeems at its face; it does not trade for a price.
         if (!(weeksToMaturity > 0)) continue;
-        bonds.push(bondOf(ci, v2.internedStrings[S.idRef[r]], S.principalLocal[r], 0, {
-          annualCouponRate: Number.isNaN(S.couponRate[r]) ? 0 : S.couponRate[r],
+        const id = v2.internedStrings[S.idRef[r]];
+        const couponRate = Number.isNaN(S.couponRate[r]) ? 0 : S.couponRate[r];
+        accruedPerFaceById.set(id, accruedPerFace({
+          originationWeek: S.originationWeek[r],
+          paymentAnchorWeek: Number.isNaN(S.paymentAnchorWeek[r]) ? undefined : S.paymentAnchorWeek[r],
+          paymentsPerYear: Number.isNaN(S.paymentsPerYear[r]) ? undefined : S.paymentsPerYear[r],
+          rateType: 'FIXED',
+        }, couponRate, state.currentWeek));
+        bonds.push(bondOf(ci, id, S.principalLocal[r], 0, {
+          annualCouponRate: couponRate,
           periodWeeks: trancheScheduleOf(S, r).periodWeeks,
           weeksToMaturity,
         }, false));
@@ -721,19 +735,42 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // SETL6: the book's whole cash side, through the clearing house.
     const entityIds = new Set(bookEntities.map((e) => e.id));
+    /** The borrower behind a piece of this book's paper — the party its primary proceeds and its
+     *  accrued are owed to. */
+    const issuerPartyOf = (instrumentId: string): PartyRef | undefined => {
+      const issuer = companyById.get(issuerIdOfInstrument.get(instrumentId) ?? '');
+      return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
+    };
+    // ONE reading of who a participant is, for both halves of its settlement: the money and the
+    // accrual ledger's key. The weekly accrual walk names its holders the same way
+    // (`shared-helpers.ts:applyHolderInterestAccruals` — an institution's own id, a desk's
+    // participant id), so a balance moved here is a balance that walk will find.
+    const partyOfParticipant = (id: string): PartyRef | undefined =>
+      (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers));
+    // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
+    // through the same clearing house as the paper. 13b could not do this on the corporate side
+    // because the auction named a COMPANY and the ledger names a tranche, so there was no
+    // per-tranche face delta for the accrued to ride; row 1 made every fill name its paper.
+    const accruedLeg = accruedOnFills(
+      allParticipants, result.newParticipantHoldings,
+      (id) => accruedPerFaceById.get(id) ?? 0,
+      (instrumentId, participantId, usd) => moveCorporateAccrued(
+        ctx.holderAccruedInterestLocal, 'CORP_BOND', instrumentId, participantId, usd)
+    );
     settleClearedBook(
       ctx, regionId, currencyOf(regionId), BOOK,
       result.netCashDeltaByParticipantId,
-      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
+      partyOfParticipant,
       { netCashLocal: result.dealerNetCashLocal, feeLocal: result.totalDealerRevenueLocal },
       feeDesksForRegion(ctx, regionId),
       // WS8: the CCP pays each issuer for the paper its deal actually placed, AT THE PRICE it
       // placed at — a deal that conceded raises less, which is what a concession is.
       // The paper's leg is the tranche's own wire (issuer → house at issue, W3) — no asset here.
-      primaryTakes(result, (instrumentId) => {
-        const issuer = companyById.get(issuerIdOfInstrument.get(instrumentId) ?? '');
-        return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
-      }, (takeLocal, clearedPrice) => takeLocal * clearedPrice)
+      primaryTakes(result, issuerPartyOf, (takeLocal, clearedPrice) => takeLocal * clearedPrice),
+      // The net per instrument is ITS OWN borrower's: this book has one issuer per piece of paper,
+      // not one for the book. A deal struck this week has accrued nothing, so the only net here is
+      // seasoned paper's — and a secondary session redistributes a fixed float, so it is dust.
+      { ...accruedLeg, issuerOf: issuerPartyOf }
     );
   });
 }
