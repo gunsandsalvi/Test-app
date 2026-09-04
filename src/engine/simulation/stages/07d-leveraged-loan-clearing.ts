@@ -395,12 +395,9 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // A credit index weights by MARKET VALUE, so a constituent's weight is spread over that
     // borrower's own loans by what each is worth — the index owns the paper, not the borrower.
     const bookIndexIds = bookIndexIdsOf('LEVERAGED_LOAN', regionId);
-    const loansByIssuerId = new Map<string, number[]>();
-    loans.forEach((l, li) => {
-      const key = companyTerms[l.ci].id;
-      const list = loansByIssuerId.get(key);
-      if (list) list.push(li); else loansByIssuerId.set(key, [li]);
-    });
+    // §3.13-BOOK dV: a constituent is a TRANCHE; the book finds it by its own id.
+    const loansByInstrumentId = new Map<InstrumentId, number>();
+    loans.forEach((x, i) => loansByInstrumentId.set(x.id, i));
     const indexFundParticipants: ClearingParticipant[] = indexFundsForBook(
       ctx.v2,
       regionIndexFunds, ctx.updatedMarketIndexes, bookIndexIds, (e) => store.currentHoldingsLocal(e.id)
@@ -410,28 +407,39 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // index admits a new issue at the next rebalance, and a fund that waits has to chase it in
       // the aftermarket, so it takes its proportional share at issue.
       const fundShareOfIndex = index.totalValueLocal > 0 ? investableLocal / index.totalValueLocal : 0;
+      // §3.13-BOOK dV: the fund holds each constituent TRANCHE at the weight the index struck for
+      // it — the index owns the paper, and no issuer weight is spread over that issuer's paper by
+      // this week's values any more.
+      const memberIssuerIds = new Set(index.constituents.map((c) => issuerIdOf(ctx.v2, c.instrumentId)));
       index.constituents.forEach((c) => {
-        const list = loansByIssuerId.get(c.instrumentId);
-        if (!list || list.length === 0) return;
-        let valueLocal = 0;
-        list.forEach((li) => { valueLocal += (loans[li].faceLocal + loans[li].offeringLocal) * openingPrice[li]; });
-        if (!(valueLocal > 0)) return;
-        list.forEach((li) => {
-          const l = loans[li];
-          const shareOfIssuer = ((l.faceLocal + l.offeringLocal) * openingPrice[li]) / valueLocal;
-          const targetValueLocal = investableLocal * c.weight * shareOfIssuer
-            + l.offeringLocal * openingPrice[li] * fundShareOfIndex;
-          const px = Math.max(1e-9, openingPrice[li]);
-          demandByInstrumentId.set(
-            l.id,
-            // §7.270: shaved by the dealer spread — the kernel's cash leg is traded PLUS fee, and
-            // a bound spent exactly overdraws by spread × gross (see 07b).
-            indexFundDemand(
-              targetValueLocal / px,
-              (institutionSpendableLocal(ctx, fund) * c.weight * shareOfIssuer / (1 + DEALER_SPREAD_BPS / 10000)) / px,
-              'PRICE_LIKE')
-          );
-        });
+        const i = loansByInstrumentId.get(c.instrumentId);
+        if (i === undefined) return;
+        const px = Math.max(1e-9, openingPrice[i]);
+        demandByInstrumentId.set(
+          loans[i].id,
+          // §7.270: the kernel's cash leg is traded PLUS the dealer fee, so a bound spent to the
+          // last dollar overdraws by spread × gross — the fee rides outside the bound. A fund that
+          // never walks away rides the bound exactly; shave it by the spread.
+          indexFundDemand(
+            (investableLocal * c.weight) / px,
+            (institutionSpendableLocal(ctx, fund) * c.weight / (1 + DEALER_SPREAD_BPS / 10000)) / px,
+            'PRICE_LIKE')
+        );
+      });
+      // A NEW ISSUE by an issuer the index holds: the fund takes its proportional share at issue,
+      // since the index admits the paper at the next rebalance and a fund that waits has to chase
+      // it in the aftermarket. Bounded by the same share of the fund's cash the target is of its book.
+      loans.forEach((x, i) => {
+        if (!(x.offeringLocal > 0) || demandByInstrumentId.has(x.id)) return;
+        if (!memberIssuerIds.has(companyTerms[x.ci].id)) return;
+        const px = Math.max(1e-9, openingPrice[i]);
+        const targetValueLocal = x.offeringLocal * px * fundShareOfIndex;
+        if (!(targetValueLocal > 0)) return;
+        const shareOfFund = investableLocal > 0 ? targetValueLocal / investableLocal : 0;
+        demandByInstrumentId.set(
+          x.id,
+          indexFundDemand(targetValueLocal / px, (institutionSpendableLocal(ctx, fund) * shareOfFund / (1 + DEALER_SPREAD_BPS / 10000)) / px, 'PRICE_LIKE')
+        );
       });
       return {
         id: fund.id,

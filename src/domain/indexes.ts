@@ -80,8 +80,9 @@ export const INDEX_DEFINITIONS: IndexDefinition[] = [
 
 /** One constituent's standing in an index: what the fund must hold, and in what proportion. */
 export interface IndexConstituent {
-  /** The instrument this index weights — a company's equity, or a tranche of its paper. §3.13-BOOK
-   *  slice (a): the id space is stated, so an index cannot be built out of issuer ids. */
+  /** The instrument this index weights — a company's equity, or ONE tranche of its paper (§3.13-BOOK
+   *  dV: a credit index's constituents are tranches, never issuers). The instrument index says what
+   *  it is and who issued it. */
   instrumentId: InstrumentId;
   /** Share of the index, 0..1, fixed at the last rebalance. */
   weight: number;

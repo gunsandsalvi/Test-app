@@ -512,9 +512,6 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    dV. **AN INDEX CONSTITUENT IS AN INSTRUMENT.** `IndexConstituent.instrumentId` holds issuers
-        on the credit side and is read as one on the equity side; the index decides what it
-        names, and `indices.md` B4 becomes measurable.
     d4. **ONE CONTRACT STORE FOR EVERY BILATERAL OBLIGATION** (added 2026-09-04). Derivatives are
         in `v2.contracts` with one writer; repo contracts (`reg.repoBook`), securities loans, prime-
         brokerage lines, trade invoices and PE capital commitments are the same thing — two named
@@ -1715,6 +1712,22 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK dV — AN INDEX CONSTITUENT IS AN INSTRUMENT.** A credit index's constituents were
+ISSUERS in a field called `instrumentId`, each weighted by the market value of everything it owed,
+and the two credit trackers spread that weight over the issuer's paper by THIS WEEK'S values —
+so a new issue diluted the standing paper's share of a frozen weight, and nothing could join an
+index to the register or the price table. A constituent is one tranche now (`creditConstituents`:
+every indexable rung of an eligible issuer, weighted by its principal at its cleared price; the
+equity side is unchanged), the trackers hold each constituent at the weight the index struck and
+take a member issuer's NEW issue at issue (the membership is the constituents' issuers, read off
+the instrument index), and the level and basket read each constituent through the index
+(`constituentValueLocal`: equity via `issuerIdOf` to market cap, a tranche via its row; a rung
+that matured since the rebalance counts nothing until the next). `equityIssuerId`'s last read
+leg in the index stage is gone. NUMBERS MOVE: a credit fund's demand lands on the paper the
+index holds at frozen weights rather than on an issuer's paper at this week's split, and a
+credit index's membership is a set of tranches rather than of borrowers — the finding
+`indices.md` A1 recorded, closed; B4 is measurable now. Gates green; no run.
 
 **13-BOOK dIV — THE ISSUED AMOUNT LIVES ON THE INDEX.** `Company.sharesOutstanding`,
 `InstitutionalEntity.sharesOutstanding` (a constant nobody read) and `EtfFund.sharesOutstanding` are

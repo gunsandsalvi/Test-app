@@ -18,9 +18,9 @@
 import { GameState, Company } from '../../../types';
 import { marketCapAt, issuedSharesOf } from '../../../engine2/instruments';
 import { buildEntityIndex } from '../../ledger/entity-index';
-import type { EntityId } from '../../../domain/ids';
+import type { EntityId, InstrumentId } from '../../../domain/ids';
 import { ensureV2, V2World } from '../../../engine2/world';
-import { trancheIdOf, ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY } from '../../../engine2/tranches';
+import { trancheIdOf, ladderRowsOf, trancheRowOf, issuerIdOf, TR_FLOATING, TR_CP, TR_FACILITY } from '../../../engine2/tranches';
 import { clearedPriceOf } from '../../../engine2/prices';
 import { WeeklyStepContext } from './context';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
@@ -29,7 +29,7 @@ import {
   INDEX_DEFINITIONS, IndexDefinition, IndexConstituent, MarketIndex,
   LARGE_CAP_CUMULATIVE_SHARE, INDEX_REBALANCE_WEEKS, INDEX_BASE_LEVEL,
 } from '../../../domain/indexes';
-import { equityInstrumentId, equityIssuerId } from '../../../domain/instrument-keys';
+import { equityInstrumentId } from '../../../domain/instrument-keys';
 
 // §7.311 — ladder reads on rows; "indexable" = capital-markets paper (no bank debt, no CP).
 const INDEXABLE_EXCLUDED = TR_FACILITY | TR_CP;
@@ -47,39 +47,64 @@ const INDEXABLE_EXCLUDED = TR_FACILITY | TR_CP;
  * A tranche no session has printed contributes nothing rather than a guess — an index of what
  * traded is what an index is.
  */
-function creditMarketValueLocal(v2: V2World, comp: Company, floating: boolean): number {
+function creditRowValueLocal(v2: V2World, r: number, floating: boolean): number {
   const S = v2.tranches;
-  let sum = 0;
-  for (const r of ladderRowsOf(v2, comp.id)) {
-    if (S.flags[r] & INDEXABLE_EXCLUDED) continue;
-    if (((S.flags[r] & TR_FLOATING) !== 0) !== floating) continue;
-    const price = clearedPriceOf(v2, trancheIdOf(v2, r));
-    if (price === undefined || !(price > 0)) continue;
-    sum += S.principalLocal[r] * price;
-  }
-  return sum;
+  if (S.flags[r] & INDEXABLE_EXCLUDED) return 0;
+  if (((S.flags[r] & TR_FLOATING) !== 0) !== floating) return 0;
+  const price = clearedPriceOf(v2, trancheIdOf(v2, r));
+  if (price === undefined || !(price > 0)) return 0;
+  return S.principalLocal[r] * price;
+}
+
+/** Whether an issuer's paper is in this credit index's scope — the tier is the issuer's rating. */
+function creditIssuerEligible(def: IndexDefinition, comp: Company): boolean {
+  if (!isActiveCompany(comp)) return false;
+  if (def.region && comp.region !== def.region) return false;
+  if (def.assetClass === 'LEVERAGED_LOAN') return true;
+  const ig = isInvestmentGrade(comp.creditRating);
+  return def.tier === 'IG' ? ig : def.tier === 'HY' ? !ig : true;
 }
 
 /**
- * What each eligible name contributes to this index, at this week's cleared prices — market cap
- * for equity, outstanding principal for credit. Zero means not eligible.
+ * §3.13-BOOK dV — A CREDIT INDEX'S CONSTITUENTS ARE TRANCHES. The index held ISSUERS, each weighted
+ * by the market value of everything it owed, and the trackers spread that weight across the
+ * issuer's paper afterwards by this week's values; a field called `instrumentId` held a borrower.
+ * Each piece of indexable paper is its own constituent now, weighted by its own principal at its
+ * own cleared price — the index owns the paper, not the borrower, and its weights are the
+ * statement A1 asks for.
  */
-function indexValueLocal(v2: V2World, def: IndexDefinition, comp: Company, week: number): number {
+function creditConstituents(v2: V2World, def: IndexDefinition, companies: Company[]): { instrumentId: InstrumentId; valueLocal: number }[] {
+  const floating = def.assetClass === 'LEVERAGED_LOAN';
+  const out: { instrumentId: InstrumentId; valueLocal: number }[] = [];
+  companies.forEach((comp) => {
+    if (!creditIssuerEligible(def, comp)) return;
+    for (const r of ladderRowsOf(v2, comp.id)) {
+      const valueLocal = creditRowValueLocal(v2, r, floating);
+      if (valueLocal > 0) out.push({ instrumentId: trancheIdOf(v2, r), valueLocal });
+    }
+  });
+  return out;
+}
+
+/** What an eligible name's EQUITY contributes to an equity index — its market cap; zero = not eligible. */
+function equityValueLocal(v2: V2World, def: IndexDefinition, comp: Company): number {
   if (!isActiveCompany(comp)) return 0;
   if (def.region && comp.region !== def.region) return 0;
+  if (!isPubliclyListed(comp) || !(issuedSharesOf(v2, comp.id) > 0) || !(comp.stockPrice > 0)) return 0;
+  return marketCapAt(v2, comp);
+}
 
+/** One constituent's value this week, at cleared prices — the index's own instrument, whatever
+ *  its class: a company's equity at market cap, a tranche at its principal times its price. */
+function constituentValueLocal(v2: V2World, def: IndexDefinition, c: IndexConstituent, byId: ReadonlyMap<EntityId, Company>): number {
   if (def.assetClass === 'EQUITY') {
-    if (!isPubliclyListed(comp) || !(issuedSharesOf(v2, comp.id) > 0) || !(comp.stockPrice > 0)) return 0;
-    return marketCapAt(v2, comp);
+    const comp = byId.get(issuerIdOf(v2, c.instrumentId));
+    return comp ? equityValueLocal(v2, def, comp) : 0;
   }
-
-  if (def.assetClass === 'LEVERAGED_LOAN') return creditMarketValueLocal(v2, comp, true);
-
-  // Corporate bonds, split by the issuer's own cleared rating.
-  const ig = isInvestmentGrade(comp.creditRating);
-  if (def.tier === 'IG' && !ig) return 0;
-  if (def.tier === 'HY' && ig) return 0;
-  return creditMarketValueLocal(v2, comp, false);
+  // A constituent that matured or was retired since the rebalance contributes nothing until the
+  // next one, exactly as a delisted name does on the equity side.
+  const r = trancheRowOf(v2, c.instrumentId);
+  return r === undefined ? 0 : creditRowValueLocal(v2, r, def.assetClass === 'LEVERAGED_LOAN');
 }
 
 /**
@@ -87,9 +112,12 @@ function indexValueLocal(v2: V2World, def: IndexDefinition, comp: Company, week:
  * the cumulative share crosses the threshold; SMALL_CAP takes exactly what LARGE_CAP left, so the
  * two partition ALL_CAP with no name in both and none in neither.
  */
-function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], week: number): IndexConstituent[] {
-  const eligible = companies
-    .map((c) => ({ instrumentId: equityInstrumentId(c.id), valueLocal: indexValueLocal(v2, def, c, week) }))
+function rebalance(v2: V2World, def: IndexDefinition, companies: Company[]): IndexConstituent[] {
+  // §3.13-BOOK dV: every constituent is an INSTRUMENT the index holds — a company's equity, or
+  // one piece of its indexable paper — never the issuer.
+  const eligible = (def.assetClass === 'EQUITY'
+    ? companies.map((c) => ({ instrumentId: equityInstrumentId(c.id), valueLocal: equityValueLocal(v2, def, c) }))
+    : creditConstituents(v2, def, companies))
     .filter((x) => x.valueLocal > 0)
     .sort((a, b) => b.valueLocal - a.valueLocal);
   if (eligible.length === 0) return [];
@@ -111,15 +139,8 @@ function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], week
 }
 
 /** This week's aggregate value of a fixed membership, at cleared prices. */
-function basketValueLocal(v2: V2World, def: IndexDefinition, constituents: IndexConstituent[], byId: ReadonlyMap<EntityId, Company>, week: number): number {
-  return constituents.reduce((sum, c) => {
-    // §3.13-BOOK (c-then-2) — THE EQUITY CROSSING'S RETURN LEG, named. `rebalance` mints each
-    // constituent as `equityInstrumentId(c.id)`, which IS the company's id verbatim, so reading
-    // it back as an ISSUER is what the field means whatever it is called. Slice (a) already found
-    // the outbound half of this in `indices.md` A1; branding the index's key found the read.
-    const comp = byId.get(equityIssuerId(c.instrumentId));
-    return comp ? sum + indexValueLocal(v2, def, comp, week) : sum;
-  }, 0);
+function basketValueLocal(v2: V2World, def: IndexDefinition, constituents: IndexConstituent[], byId: ReadonlyMap<EntityId, Company>): number {
+  return constituents.reduce((sum, c) => sum + constituentValueLocal(v2, def, c, byId), 0);
 }
 
 export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -133,20 +154,20 @@ export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContex
 
     // Inception: strike the membership and start at base.
     if (!prior || prior.constituents.length === 0) {
-      const constituents = rebalance(v2, def, ctx.updatedCompanies, week);
+      const constituents = rebalance(v2, def, ctx.updatedCompanies);
       return {
         id: def.id,
         constituents,
         lastRebalanceWeek: week,
         level: prior?.level ?? INDEX_BASE_LEVEL,
-        totalValueLocal: basketValueLocal(v2, def, constituents, byId, week),
+        totalValueLocal: basketValueLocal(v2, def, constituents, byId),
       };
     }
 
     // Level FIRST, on the membership that was in force all week — the return the basket actually
     // delivered. Doing this after a rebalance would credit the index with the difference between
     // two different baskets, which is a return no holder could have earned.
-    const heldValueLocal = basketValueLocal(v2, def, prior.constituents, byId, week);
+    const heldValueLocal = basketValueLocal(v2, def, prior.constituents, byId);
     const level = prior.totalValueLocal > 0
       ? prior.level * (heldValueLocal / prior.totalValueLocal)
       : prior.level;
@@ -157,13 +178,13 @@ export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContex
     }
     // Rebalance: new membership, and the value line re-based onto it so next week's level change
     // is measured against what the index now holds.
-    const constituents = rebalance(v2, def, ctx.updatedCompanies, week);
+    const constituents = rebalance(v2, def, ctx.updatedCompanies);
     return {
       id: def.id,
       constituents,
       lastRebalanceWeek: week,
       level,
-      totalValueLocal: basketValueLocal(v2, def, constituents, byId, week),
+      totalValueLocal: basketValueLocal(v2, def, constituents, byId),
     };
   });
 }
