@@ -27,7 +27,7 @@ import { entityCashOf, householdDepositsOf, obligationCurrencyOf } from '../../l
 
 import { transferHolding, issueHolding, retireHolding, markHolding } from '../../ledger/holdings-ledger';
 import { institutionProfile } from '../../../domain/institution-profiles';
-import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { internType, regionOf, typeOf } from '../../../engine2/world';
 import { pay, institutionSpendableLocal } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
@@ -588,7 +588,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
             if (seen) {
               seen.quantityOrNotionalLocal += qty;
               if (!Number.isNaN(sh)) seen.quantityShares = (seen.quantityShares ?? 0) + sh * share;
-              seen.units += (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]) * share;
+              seen.units += (rowUnits(H, r)) * share;
               continue;
             }
             const out: ItemizedHolding = {
@@ -598,7 +598,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
               quantityOrNotionalLocal: qty,
               // §9.13-CREDIT row 5: the slice's QUANTITY is the row's own units scaled, not its
               // money — the two are the same number only while the paper marks at par.
-              units: (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]) * share,
+              units: (rowUnits(H, r)) * share,
             };
             if (!Number.isNaN(sh)) out.quantityShares = sh * share;
             byInstrument.set(key, out);

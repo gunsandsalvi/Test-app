@@ -8,7 +8,7 @@ import { marketCapOf } from '../../domain/company';
 import { ensureV2, entityOf, regionOf, tickerOf, typeRefOf } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
 import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf } from '../../engine2/tranches';
-import { materializeBook, instrumentIdAt } from '../../engine2/holdings';
+import { materializeBook, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { householdBookId } from '../ledger/holdings-ledger';
 import { sovereignHeldByClass, forEachSovereignPosition } from '../sovereign-register';
 import { holdingClassOf } from '../../domain/assets';
@@ -194,7 +194,7 @@ function o6(state: GameState, week: number): AuditFinding[] {
     for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
       const k = kindRefs.get(H.typeRef[r]); if (!k) continue;
       // The ladders below carry FACE; `units` is the register's own.
-      add(held, `${regionOf(v2, H.regionRef[r])}|${k}`, Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]);
+      add(held, `${regionOf(v2, H.regionRef[r])}|${k}`, rowUnits(H, r));
     }
   });
   const DESK_BOOKS: Record<string, typeof KINDS[number]> = { 'corporate bond': 'CORP_BOND', 'leveraged loan': 'LEVERAGED_LOAN', 'commercial paper': 'COMMERCIAL_PAPER' };

@@ -428,13 +428,6 @@ written from here):
     seed/audit paths, the remaining stages, and the derivations a store now answers.
 
     **A. THE LIVE DEFECTS — each is wrong today, in this order.**
-    A5. **Stock loans pay in the wrong money.** Five of six `pay()` legs re-derive the currency from
-        the issuer's region; only one reads `loan.currency`, which §3.13c says is where it lives.
-    A6. **The store's materializer and every stage reader disagree** on a row with `shares` and no
-        `units`: `holdings.ts` falls back through `shares`, the fifteen stage copies do not.
-    A7. **07b/07d's `issuerPartyOf` can `defect()` on retired paper** — its map is built over this
-        week's book only, and it is passed as `AccruedLeg.issuerOf`. 07f's reads the tranche store
-        and cannot fail that way.
     A8. **The player's corporate bond is marked by round-tripping its own print** through
         `rowSpreadBps` → `priceCorporateBond`, while the register marks the same tranche at the
         print. One instrument, two values. (`12-portfolio` already does it right for floaters.)
@@ -1679,6 +1672,40 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ A5+A6+A7 — THREE READS THAT WENT ROUND THE SOURCE, AND ONE OF THEM WAS A THROW WAITING
+FOR A GAP TO OPEN.** All three are rule 19, and only A6 was wrong on a number today.
+
+**A5, the stock loan.** Four carried legs (fee, both variation-margin directions, collateral
+returned) re-derived the money from `currencyOf(comp.region)` while `SecurityLoan.currency` sat on
+the record §3.13c put it on. The strike was worse in a quieter way: the collateral payment said
+`currencyOf(c.region)` and the record minted on the very next line said `currencyOf(regionId)` —
+two spellings of one fact, equal only because `listed` filters on `c.region === regionId`. The loan
+is now minted FIRST and every leg, at strike and for the rest of its life, reads `loan.currency`.
+No value moves: the region filter made all five agree. It is the standing invitation that goes.
+
+**A6, and this one is live.** `units` is NaN on a row nothing ever wrote it on (`freeRow` clears
+it; a book synced from a holding that predates the field never sets it), and EIGHTEEN sites fell
+back from that NaN in two different chains. The store's materializer fell back through `shares`
+and only then to the money; the other seventeen went straight to the money. On an EQUITY row those
+are not near each other — one is a share count, the other a market value — so a single row read
+two ways gave a count at the store and a dollar figure at every stage, and whichever the caller
+reached for is what the merger swap, the estate residue, the ETF creation basket and the register
+consolidation then moved. `rowUnits` in `engine2/holdings.ts` is now the only reader, on the
+store's chain, which is the correct one. Two of the eighteen spelled the fallback differently and
+both are folded in: `holdings-ledger`'s accumulate read the row AFTER incrementing it and had to
+unwind the addition (it now reads before), and its mark walk backfilled the NaN with the money
+(it now backfills with the count). `shared-helpers`' own named copy is deleted into it.
+
+**A7, a throw one map away.** 07b and 07d resolved a tranche's borrower through
+`issuerIdOfInstrument`, built over the paper OFFERED this week — and `settleClearedBook` turns an
+unknown issuer into a `defect()` on the accrued leg. `accruedOnFills` unions each participant's
+PRIOR holdings with its new ones, so it can name paper this session never offered; that never
+threw only because `accruedPerFaceById` is book-scoped too and returned 0 first. One map guarding
+another map's gap. Both now read `issuerIdOf(ctx.v2, …)` — the tranche store, which is where the
+fact lives and what 07f already did — and the two dead maps go with it (D9's first two sites).
+
+Gates green, and this time verified: eslint is clean.
 
 **13-READ A4 + D8 — AN ACQUIRED BANK WAS STILL LENDING, AND "THIS REGION'S LIVE BANKS" NOW HAS ONE
 SPELLING.** The question "which banks are here, alive, and have a sheet" was asked at 33 sites in

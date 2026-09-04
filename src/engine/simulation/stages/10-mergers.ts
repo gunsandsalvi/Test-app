@@ -12,7 +12,7 @@ import { currencyOf } from '../../../domain/geography';
 import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
 import { reassignConsignments } from './goods-arrival';
-import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { ensureV2, revHistSeed, rowOf, ringCopyRow, internType, typeOf, internInstrument, instrumentRefOf } from '../../../engine2/world';
 import { materializeLadder, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
 import { rebuildLadder } from '../../ledger/tranche-ledger';
@@ -436,7 +436,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           if (H.instrRef[r] !== targetIdRef && issuerIdOf(ctx.v2, rowId) !== target.id) continue;
           const t = H.typeRef[r];
           if (t !== equityRefR && t !== corpBondRef && t !== levLoanRef && t !== cpRef) continue;
-          swaps.push({ type: typeOf(ctx.v2, t) as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], units: Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r], id: rowId });
+          swaps.push({ type: typeOf(ctx.v2, t) as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], units: rowUnits(H, r), shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r], id: rowId });
         }
         if (swaps.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };
@@ -475,7 +475,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           const newId = newIdByOldTrancheId.get(rowId);
           if (newId === undefined || newId === rowId || H.instrRef[r] === targetIdRef) continue;
           if (issuerIdOf(ctx.v2, rowId) === target.id) continue; // exchanged above
-          rekeys.push({ type: typeOf(ctx.v2, H.typeRef[r]) as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], units: Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r], id: rowId, newId });
+          rekeys.push({ type: typeOf(ctx.v2, H.typeRef[r]) as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], units: rowUnits(H, r), id: rowId, newId });
         }
         if (rekeys.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };

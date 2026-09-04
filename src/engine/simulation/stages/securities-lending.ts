@@ -142,7 +142,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           payer: { kind: 'INSTITUTION', id: loan.borrower.id },
           payee: { kind: 'INSTITUTION', id: loan.lender.id },
           amount: feeLocal,
-          currency: currencyOf(comp.region),
+          currency: loan.currency,
           reason: 'stock borrow fee',
         });
       }
@@ -161,14 +161,14 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
             payer: { kind: 'INSTITUTION', id: loan.borrower.id },
             payee: { kind: 'INSTITUTION', id: loan.lender.id },
             amount: marginCallLocal,
-            currency: currencyOf(comp.region),
+            currency: loan.currency,
             reason: 'stock loan variation margin',
           }
           : {
             payer: { kind: 'INSTITUTION', id: loan.lender.id },
             payee: { kind: 'INSTITUTION', id: loan.borrower.id },
             amount: -marginCallLocal,
-            currency: currencyOf(comp.region),
+            currency: loan.currency,
             reason: 'stock loan variation margin returned',
           });
         loan.collateralLocal = markedLocal;
@@ -187,7 +187,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
               payer: { kind: 'INSTITUTION', id: loan.lender.id },
               payee: { kind: 'INSTITUTION', id: loan.borrower.id },
               amount: loan.collateralLocal,
-              currency: currencyOf(comp.region),
+              currency: loan.currency,
               reason: 'stock loan collateral returned',
             });
           }
@@ -466,6 +466,24 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           const shares = borrowedShares * (lenderShares / totalNewShares);
           if (shares <= 0.0001) return;
           const collateralLocal = shares * c.stockPrice;
+          // §3.13-READ A5: THE LOAN IS MINTED FIRST, AND THE PAYMENT READS IT. The collateral
+          // leg used to say `currencyOf(c.region)` while the record beside it said
+          // `currencyOf(regionId)` — two spellings of one fact that agree only because `listed`
+          // filters on `c.region === regionId`. The obligation states its money (§3.13c); every
+          // leg of it, at strike and for the rest of its life, reads that field.
+          const loan: SecurityLoan = {
+            id: `${regionId}-SBL-${c.id}-${ctx.nextWeek}-${seq++}`,
+            regionId,
+            instrumentId: c.id,
+            lender: { kind: 'INSTITUTION', id: lenderId },
+            borrower: { kind: 'INSTITUTION', id: d.fundId },
+            shares,
+            feeBps: Number(clearedBps.toFixed(1)),
+            currency: currencyOf(regionId),
+            collateralLocal,
+            lenderPositionAtStrike: positionAtStrike.get(lenderId) ?? shares,
+            struckWeek: ctx.nextWeek,
+          };
           // The delivery leg: the lender's shares are now in the borrower's hands, and it will
           // sell them in this week's equity auction. The register total is unchanged.
           deliver(lenderId, d.fundId, c.id, shares, c.stockPrice);
@@ -474,24 +492,11 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: d.fundId },
             payee: { kind: 'INSTITUTION', id: lenderId },
-            amount: collateralLocal,
-            currency: currencyOf(c.region),
+            amount: loan.collateralLocal,
+            currency: loan.currency,
             reason: 'stock loan collateral posted',
           });
-          struck.push({
-            id: `${regionId}-SBL-${c.id}-${ctx.nextWeek}-${seq++}`,
-            regionId,
-            instrumentId: c.id,
-            lender: { kind: 'INSTITUTION', id: lenderId },
-            borrower: { kind: 'INSTITUTION', id: d.fundId },
-            shares,
-            feeBps: Number(clearedBps.toFixed(1)),
-            // §3.13c: the money the shares trade in, stated once at strike.
-            currency: currencyOf(regionId),
-            collateralLocal,
-            lenderPositionAtStrike: positionAtStrike.get(lenderId) ?? shares,
-            struckWeek: ctx.nextWeek,
-          });
+          struck.push(loan);
         });
       });
     });

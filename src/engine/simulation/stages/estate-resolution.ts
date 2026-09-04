@@ -16,7 +16,7 @@
 
 import { assertNever } from '../../../domain/defect';
 import { currencyOf } from '../../../domain/geography';
-import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
 import { moveOutputUnits, scrapOutputUnitsTo, moveInputUnits, scrapInputUnits, scrapGoods } from '../../ledger/goods-ledger';
 import { totalInputValueLocal, inputUnitsHeld, materializeInputInventory } from '../../../engine2/lots';
@@ -430,7 +430,7 @@ function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Es
       const id = instrumentIdAt(index.v2, r);
       transferHolding(index.v2, { kind: 'INSTITUTION', id: holderId }, { kind: 'CLEARING_HOUSE', region },
         { instrumentType: type, instrumentId: id, issuerRegion: region, valueLocal: leftLocal,
-          units: Number.isNaN(H.units[r]) ? leftLocal : H.units[r] },
+          units: rowUnits(H, r) },
         'estate closed: residue written off');
       const dead = index.companyById.get(estate.companyId);
       if (dead && isTrancheKind(type)) {
@@ -474,8 +474,8 @@ function reduceHolding(
         // takes a FACE and was being handed this take's VALUE, so the moment a claim marks away
         // from par the estate would retire the wrong amount of the dead issuer's ladder. The take
         // is a fraction of a row, so the paper in it is that same fraction of the row's own units.
-        const rowUnits = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
-        const takeUnits = H.qtyLocal[r] > 0 ? rowUnits * (takeLocal / H.qtyLocal[r]) : 0;
+        const unitsHere = rowUnits(H, r);
+        const takeUnits = H.qtyLocal[r] > 0 ? unitsHere * (takeLocal / H.qtyLocal[r]) : 0;
         if (takeLocal > 0) takes.push({ type: typeOf(index.v2, H.typeRef[r]) as ItemizedHolding['instrumentType'], region: regionOf(index.v2, H.regionRef[r]) as RegionId, usd: takeLocal, units: takeUnits, id: instrumentIdAt(index.v2, r) });
       }
       // The holder's paper goes to the region's clearing house (the register side);
@@ -549,7 +549,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
       // worth, so the two take different lanes of the same row on purpose.
       const usd = instrumentType === 'EQUITY'
         ? H.qtyLocal[r]
-        : (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]);
+        : (rowUnits(H, r));
       if (instrumentType !== 'EQUITY') {
         const id = instrumentIdAt(ctx.v2, r);
         claimedFaceByInstrument.set(id, (claimedFaceByInstrument.get(id) ?? 0) + usd);

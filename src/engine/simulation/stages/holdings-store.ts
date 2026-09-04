@@ -29,7 +29,7 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
-import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, markBookDirty, instrumentIdAt } from '../../../engine2/holdings';
+import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, markBookDirty, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { V2World, instrumentRefOf } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
@@ -407,8 +407,8 @@ export function consolidateRegister(ctx: WeeklyStepContext): void {
       // §9.13-CREDIT row 5 — and the QUANTITY merges with the value. Two rows of one instrument
       // hold one position; folding only the money left the survivor reporting one row's face
       // against both rows' value.
-      const uKeep = Number.isNaN(H.units[first]) ? H.qtyLocal[first] : H.units[first];
-      const uDrop = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
+      const uKeep = rowUnits(H, first);
+      const uDrop = rowUnits(H, r);
       Hm.units[first] = uKeep + uDrop;
     }
     relinkBook(v2, entity.id, kept);

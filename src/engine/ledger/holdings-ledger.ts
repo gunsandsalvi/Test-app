@@ -17,7 +17,7 @@
  */
 import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
 import {
-  HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows, instrumentIdAt } from '../../engine2/holdings';
+  HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
 import { PartyRef } from './party';
 import { REGION_IDS } from '../../domain/geography';
@@ -146,11 +146,11 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
+    // §3.13-READ A6: what the row already holds is read BEFORE the row is touched, so the
+    // fallback is the ordinary one and not a value the addition has to be unwound out of.
+    const priorUnits = rowUnits(H, r);
     H.qtyLocal[r] += spec.valueLocal;
     if (spec.shares !== undefined) H.shares[r] = (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]) + spec.shares;
-    // A row whose units were never stored has none to add to, and the only honest reading of what
-    // it already holds is its value — which is what par pricing made them equal to.
-    const priorUnits = Number.isNaN(H.units[r]) ? H.qtyLocal[r] - spec.valueLocal : H.units[r];
     H.units[r] = priorUnits + unitsOf(spec);
     markBookDirty(v2, holderId);
     return;
@@ -209,10 +209,10 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
       // row's OWN — what fraction of its value is leaving, applied to what it holds — so the
       // ledger never needs the caller to know, and while value and units are the same number this
       // subtracts exactly what the value line does.
-      const rowUnits = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
-      const takeUnits = H.qtyLocal[r] > 0 ? rowUnits * (takeLocal / H.qtyLocal[r]) : 0;
+      const unitsHere = rowUnits(H, r);
+      const takeUnits = H.qtyLocal[r] > 0 ? unitsHere * (takeLocal / H.qtyLocal[r]) : 0;
       H.qtyLocal[r] -= takeLocal; leftLocal -= takeLocal;
-      H.units[r] = rowUnits - takeUnits;
+      H.units[r] = unitsHere - takeUnits;
       if (!Number.isNaN(leftShares) && !Number.isNaN(H.shares[r])) {
         walkedShares += Math.abs(H.shares[r]);
         const takeSh = Math.min(leftShares, H.shares[r]); H.shares[r] -= takeSh; leftShares -= takeSh;
@@ -345,7 +345,7 @@ export function scaleHoldings(
     if (!Number.isNaN(H.shares[r])) { anyShares = true; shares += H.shares[r] * Math.abs(1 - ratio); }
     // §9.13-CREDIT row 5: a corporate action scales the QUANTITY, and the value follows from it.
     // Reading only the value left the ratio applied to the money and not to the face.
-    units += (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]) * Math.abs(1 - ratio);
+    units += (rowUnits(H, r)) * Math.abs(1 - ratio);
     region = regionOf(v2, H.regionRef[r]) as RegionId;
   }
   if (!(valueLocal > 0) || !region) return 0;
@@ -435,7 +435,7 @@ export function markBookToMarket(
   let rows = 0, deltaLocal = 0;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     const instrumentType = typeOf(v2, H.typeRef[r]);
-    if (Number.isNaN(H.units[r])) H.units[r] = H.qtyLocal[r];
+    if (Number.isNaN(H.units[r])) H.units[r] = rowUnits(H, r);
     const unitsHeld = H.units[r];
     if (!(Math.abs(unitsHeld) > 0)) continue;
     const price = priceOfRow(instrumentType, instrumentIdAt(v2, r));

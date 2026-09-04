@@ -22,7 +22,7 @@ import { Table } from './table';
 import { INSTRUMENT_IDS, ENTITY_IDS } from './intern';
 import { REGION_IDS } from '../../domain/geography';
 import { V2World, internType, instrumentOf } from '../../engine2/world';
-import { bookHeadOf } from '../../engine2/holdings';
+import { bookHeadOf, rowUnits } from '../../engine2/holdings';
 
 /** v2-intern-id → INSTRUMENT_IDS id. Both pools assign ids in first-sight order and never reuse
  *  them, so a translation, once made, holds for the life of the world — the memo never
@@ -207,7 +207,7 @@ export class HoldingsTable {
         instrumentId[at] = iid;
         instrumentType[at] = code;
         qtyLocal[at] = H.qtyLocal[r];
-        unitsCol[at] = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
+        unitsCol[at] = rowUnits(H, r);
         typeCounts[code]++;
         at++;
       }

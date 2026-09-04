@@ -7,7 +7,7 @@
 import { journalPayment, partyId, PendingNetCtx } from './settlement';
 import { currencyOf } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
-import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { transferHolding, registerBooks } from '../../ledger/holdings-ledger';
 import { bookPnL } from '../../ledger/bank-book';
 import { revHistLen, revHistAt, rowOf, V2World, regionOf, typeOf, typeRefOf, instrumentRefOf } from '../../../engine2/world';
@@ -381,12 +381,6 @@ const DESK_BOOK_BY_TYPE: Record<string, string> = {
  * books have printed prices other than par since §9.13-CREDIT row 1, so it has been paying the
  * wrong split ever since. `units` is the paper.
  */
-/** HOW MUCH OF THE INSTRUMENT A ROW HOLDS, in the instrument's own unit — the register's side of
- *  any split that must agree with a ladder's face or an issue's share count. A row written before
- *  the units lane was maintained has only its value to report, which par pricing made the same. */
-const rowUnits = (H: { units: Float64Array; qtyLocal: Float64Array }, r: number): number =>
-  (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]);
-
 function deskHoldingsByInstrument(
   companies: Company[] | undefined,
   book: string | undefined

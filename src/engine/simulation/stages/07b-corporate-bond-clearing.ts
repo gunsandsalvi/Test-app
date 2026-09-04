@@ -315,7 +315,6 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     });
     if (bonds.length === 0) return;
     const nB = bonds.length;
-    const issuerIdOfInstrument = new Map(bonds.map((b) => [b.id, companyTerms[b.ci].id]));
 
     /** A reservation stated in spread, restated as the price it implies on THIS bond. */
     const priceAtSpread = (b: BondInstrument, spreadBps: number): number =>
@@ -738,10 +737,16 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // SETL6: the book's whole cash side, through the clearing house.
     const entityIds = new Set(bookEntities.map((e) => e.id));
-    /** The borrower behind a piece of this book's paper — the party its primary proceeds and its
-     *  accrued are owed to. */
+    /** §3.13-READ A7 — THE BORROWER BEHIND A PIECE OF THIS BOOK'S PAPER, read from the tranche
+     *  store rather than from this session's universe. The map this used (`issuerIdOfInstrument`,
+     *  built over the bonds/loans OFFERED this week) knows nothing about paper a participant
+     *  carried in and no longer trades, and `settleClearedBook` turns an unknown issuer into a
+     *  `defect()` on the accrued leg. It never fired only because `accruedPerFaceById` is
+     *  book-scoped too and returned 0 first — one map guarding another map's gap. 07f already read
+     *  the store here and could not fail that way; rule 19 says read the source, and the store is
+     *  the source of who issued a tranche. */
     const issuerPartyOf = (instrumentId: InstrumentId): PartyRef | undefined => {
-      const issuer = companyById.get(issuerIdOfInstrument.get(instrumentId) ?? '');
+      const issuer = companyById.get(issuerIdOf(ctx.v2, instrumentId));
       return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
     };
     // ONE reading of who a participant is, for both halves of its settlement: the money and the

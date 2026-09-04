@@ -312,6 +312,33 @@ export function instrumentIdAt(v2: V2World, r: number): InstrumentId {
 
 /** The entity's book as objects — the WEEK-END VIEW once rows are the authority: one linear
  *  pass at the close replaces every per-writer sync. */
+/**
+ * §3.13-READ A6 — HOW MANY UNITS THIS ROW HOLDS, and the only place that decides it.
+ *
+ * The `units` column is NaN on a row nothing ever wrote it on: `freeRow` clears it, and a book
+ * synced from an `ItemizedHolding` that predates the field leaves it unset. Eighteen sites fell
+ * back from that NaN, and they did not agree. The store's own materializer fell back through
+ * `shares` first and only then to the money; the other seventeen went straight to the money. For
+ * an EQUITY row those are not near each other — `shares` is a count and `qtyLocal` is a market
+ * value — so one row read two ways gave a share count at the store and a dollar figure at every
+ * stage, and whichever the caller happened to use is what the merger swap, the estate residue and
+ * the ETF creation basket then moved.
+ *
+ * The store's chain is the correct one and this is it: a stored count, else the share count beside
+ * it, else the value (which par pricing made equal to the count for the credit rows this was
+ * written for). Nothing may spell it again.
+ */
+export function rowUnits(
+  H: { units: { readonly [i: number]: number }; shares: { readonly [i: number]: number };
+       qtyLocal: { readonly [i: number]: number } },
+  r: number
+): number {
+  const u = H.units[r];
+  if (!Number.isNaN(u)) return u;
+  const sh = H.shares[r];
+  return Number.isNaN(sh) ? H.qtyLocal[r] : sh;
+}
+
 export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[] {
   const H = mutableHoldings(v2);
   const out: ItemizedHolding[] = [];
@@ -324,7 +351,7 @@ export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[
       instrumentType: typeOf(v2, H.typeRef[r]) as ItemizedHolding['instrumentType'],
       issuerRegion: regionOf(v2, H.regionRef[r]) as ItemizedHolding['issuerRegion'],
       quantityOrNotionalLocal: H.qtyLocal[r],
-      units: Number.isNaN(H.units[r]) ? (Number.isNaN(sh) ? H.qtyLocal[r] : sh) : H.units[r],
+      units: rowUnits(H, r),
     };
     if (!Number.isNaN(sh)) h.quantityShares = sh;
     out.push(h);
