@@ -15,13 +15,14 @@
 
 import { ItemizedHolding } from '../domain/banking';
 import { asInstrumentId, type InstrumentId } from '../domain/ids';
-import { V2World, rowOf, internString } from './world';
+import { V2World, rowOf, internType, internInstrument, internRegion } from './world';
+import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type TypeRef, type RegionRef } from './refs';
 
 export interface HoldingStore {
   cap: number;
-  typeRef: Int32Array;    // interned instrumentType
-  instrRef: Int32Array;   // interned instrumentId
-  regionRef: Int32Array;  // interned issuerRegion
+  typeRef: RefColumn<TypeRef>;      // the instrument KIND tag
+  instrRef: RefColumn<InstrRef>;    // the instrument this row holds
+  regionRef: RefColumn<RegionRef>;  // the issuer's region
   qtyLocal: Float64Array;
   shares: Float64Array;   // NaN = absent (quantityShares)
   /**
@@ -71,9 +72,9 @@ export function newHoldingStore(): HoldingStore {
   const cap = 1 << 17;
   return {
     cap,
-    typeRef: new Int32Array(cap),
-    instrRef: new Int32Array(cap),
-    regionRef: new Int32Array(cap),
+    typeRef: newRefColumn<TypeRef>(cap),
+    instrRef: newRefColumn<InstrRef>(cap),
+    regionRef: newRefColumn<RegionRef>(cap),
     qtyLocal: new Float64Array(cap),
     shares: new Float64Array(cap),
     units: new Float64Array(cap),
@@ -92,8 +93,12 @@ export function newHoldingStore(): HoldingStore {
 function growHoldings(H: HoldingStore): void {
   const cap = H.cap * 2;
   const gF = (old: Float64Array) => { const a = new Float64Array(cap); a.set(old); return a; };
-  const gI = (old: Int32Array) => { const a = new Int32Array(cap); a.set(old); return a; };
-  H.typeRef = gI(H.typeRef); H.instrRef = gI(H.instrRef); H.regionRef = gI(H.regionRef);
+  /** §3.13-BOOK slice (b): growth keeps the column's space — the cast is the allocation's, not
+   *  a site's, which is why it lives here and nowhere else. */
+  const gR = <B extends number>(old: RefColumn<B>): RefColumn<B> => {
+    const a = newRefColumn<B>(cap); a.set(old); return a;
+  };
+  H.typeRef = gR(H.typeRef); H.instrRef = gR(H.instrRef); H.regionRef = gR(H.regionRef);
   H.qtyLocal = gF(H.qtyLocal); H.shares = gF(H.shares); H.units = gF(H.units);
   const next = new Int32Array(cap).fill(-1); next.set(H.next); H.next = next;
   const mark = new Int32Array(cap); mark.set(H.mark); H.mark = mark;
@@ -139,9 +144,9 @@ export function syncBookRows(v2: V2World, entityId: string, book: ItemizedHoldin
   for (let i = 0; i < book.length; i++) {
     const h = book[i];
     const r = allocRow(H);
-    H.typeRef[r] = internString(v2, h.instrumentType);
-    H.instrRef[r] = internString(v2, h.instrumentId);
-    H.regionRef[r] = internString(v2, h.issuerRegion);
+    H.typeRef[r] = internType(v2, h.instrumentType);
+    H.instrRef[r] = internInstrument(v2, h.instrumentId);
+    H.regionRef[r] = internRegion(v2, h.issuerRegion);
     H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
     H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
     H.units[r] = h.units;
@@ -177,9 +182,9 @@ export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): 
   H.dirty.add(entityId);
   const slot = slotFor(H, rowOf(v2, entityId));
   const r = allocRow(H);
-  H.typeRef[r] = internString(v2, h.instrumentType);
-  H.instrRef[r] = internString(v2, h.instrumentId);
-  H.regionRef[r] = internString(v2, h.issuerRegion);
+  H.typeRef[r] = internType(v2, h.instrumentType);
+  H.instrRef[r] = internInstrument(v2, h.instrumentId);
+  H.regionRef[r] = internRegion(v2, h.issuerRegion);
   H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
   H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
   H.units[r] = h.units;
@@ -226,9 +231,9 @@ export function relinkBook(v2: V2World, entityId: string, rows: number[]): void 
 export function newBookRow(v2: V2World, h: ItemizedHolding): number {
   const H = mutableHoldings(v2);
   const r = allocRow(H);
-  H.typeRef[r] = internString(v2, h.instrumentType);
-  H.instrRef[r] = internString(v2, h.instrumentId);
-  H.regionRef[r] = internString(v2, h.issuerRegion);
+  H.typeRef[r] = internType(v2, h.instrumentType);
+  H.instrRef[r] = internInstrument(v2, h.instrumentId);
+  H.regionRef[r] = internRegion(v2, h.issuerRegion);
   H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
   H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
   // §9.13-CREDIT row 5 — THE QUANTITY, WHICH THIS DID NOT COPY. `syncBookRows` and `pushBookRow`
@@ -257,8 +262,8 @@ function freeRow(H: HoldingStore, r: number): void {
   H.qtyLocal[r] = 0;
   H.shares[r] = Number.NaN;
   H.units[r] = Number.NaN;
-  H.instrRef[r] = -1;
-  H.typeRef[r] = -1;
+  H.instrRef[r] = ABSENT_REF;
+  H.typeRef[r] = ABSENT_REF;
   H.next[r] = H.freeHead;
   H.freeHead = r;
 }

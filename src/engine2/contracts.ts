@@ -22,15 +22,16 @@
  * `structuredClone(state)` carries the book into battery replays by value.
  */
 
-import { V2World, internString } from './world';
+import { V2World, internPartyKey } from './world';
 import { SUBUNIT_INDEX, SUBUNITS, NSUB } from './state';
+import { newRefColumn, type RefColumn, type PartyKeyRef } from './refs';
 
 export interface ContractTable {
   cap: number;
   used: number;
   freeHead: number;
-  supplierRef: Int32Array;
-  customerRef: Int32Array;
+  supplierRef: RefColumn<PartyKeyRef>;
+  customerRef: RefColumn<PartyKeyRef>;
   subIdx: Int32Array;
   priceLocal: Float64Array;
   qtyPerWeek: Float64Array;
@@ -53,8 +54,8 @@ export function newContractTable(): ContractTable {
     cap,
     used: 0,
     freeHead: -1,
-    supplierRef: new Int32Array(cap),
-    customerRef: new Int32Array(cap),
+    supplierRef: newRefColumn<PartyKeyRef>(cap),
+    customerRef: newRefColumn<PartyKeyRef>(cap),
     subIdx: new Int32Array(cap),
     priceLocal: new Float64Array(cap),
     qtyPerWeek: new Float64Array(cap),
@@ -74,8 +75,9 @@ function grow(T: ContractTable): void {
   const cap = T.cap * 2;
   const gf = (old: Float64Array) => { const a = new Float64Array(cap); a.set(old); return a; };
   const gi = (old: Int32Array, fill = 0) => { const a = new Int32Array(cap).fill(fill); a.set(old); return a; };
-  T.supplierRef = gi(T.supplierRef);
-  T.customerRef = gi(T.customerRef);
+  const gR = <B extends number>(old: RefColumn<B>): RefColumn<B> => { const a = newRefColumn<B>(cap); a.set(old); return a; };
+  T.supplierRef = gR(T.supplierRef);
+  T.customerRef = gR(T.customerRef);
   T.subIdx = gi(T.subIdx);
   T.priceLocal = gf(T.priceLocal);
   T.qtyPerWeek = gf(T.qtyPerWeek);
@@ -111,8 +113,8 @@ export function formContractRow(
   let r: number;
   if (T.freeHead >= 0) { r = T.freeHead; T.freeHead = T.next[r]; }
   else { if (T.used >= T.cap) grow(T); r = T.used++; }
-  T.supplierRef[r] = internString(v2, supplierKey);
-  T.customerRef[r] = internString(v2, customerKey);
+  T.supplierRef[r] = internPartyKey(v2, supplierKey);
+  T.customerRef[r] = internPartyKey(v2, customerKey);
   T.subIdx[r] = subIdx;
   T.priceLocal[r] = priceLocal;
   T.qtyPerWeek[r] = qtyPerWeek;
@@ -139,8 +141,8 @@ export function formContractRow(
  *  naming the target (by either key the table stores, ticker or id) names the acquirer now. */
 export function novateContracts(v2: V2World, fromKeys: string[], toKey: string): number {
   const T = v2.contracts;
-  const from = new Set(fromKeys.map((k) => internString(v2, k)));
-  const to = internString(v2, toKey);
+  const from = new Set(fromKeys.map((k) => internPartyKey(v2, k)));
+  const to = internPartyKey(v2, toKey);
   let n = 0;
   for (let r = 0; r < T.used; r++) {
     if (from.has(T.supplierRef[r])) { T.supplierRef[r] = to; n++; }

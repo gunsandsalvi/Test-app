@@ -17,10 +17,11 @@
 import { DebtTranche } from '../domain/company';
 import { GovDebtTrancheView } from '../domain/region-macro';
 import { govTrancheView } from '../domain/government';
-import { V2World, rowOf, internString } from './world';
+import { V2World, rowOf, internInstrument, internTicker, internEntity } from './world';
 import { InstrumentId, asInstrumentId } from '../domain/ids';
 import { forgetClearedPrice } from './prices';
 import { defect } from '../domain/defect';
+import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type TickerRef, type EntityRef } from './refs';
 
 export const TR_FLOATING = 1;
 export const TR_CP = 2;
@@ -38,10 +39,10 @@ export interface TrancheStore {
   originationWeek: Int32Array;
   maturityWeek: Int32Array;
   flags: Uint8Array;
-  idRef: Int32Array;               // interned tranche id
-  bankRef: Int32Array;             // interned facilityBankTicker; -1 = absent
+  idRef: RefColumn<InstrRef>;      // the tranche this row IS
+  bankRef: RefColumn<TickerRef>;   // the facility's bank, by ticker; ABSENT_REF = none
   /** §5-FINALIZATION step 10: the issuer's company id on the row — a lender's book is one scan. */
-  issuerRef: Int32Array;           // -1 = a freed row
+  issuerRef: RefColumn<EntityRef>; // ABSENT_REF = a freed row
   /** §5-WIRES W3: the wire that created the row (-1 for a seeded or born ladder — B's gap). */
   wireRef: Int32Array;
   /** Call protection rides as the plain object it is — one per row, undefined when absent. */
@@ -92,9 +93,9 @@ export function newTrancheStore(): TrancheStore {
     originationWeek: new Int32Array(cap),
     maturityWeek: new Int32Array(cap),
     flags: new Uint8Array(cap),
-    idRef: new Int32Array(cap),
-    bankRef: new Int32Array(cap),
-    issuerRef: new Int32Array(cap).fill(-1),
+    idRef: newRefColumn<InstrRef>(cap),
+    bankRef: newRefColumn<TickerRef>(cap),
+    issuerRef: newRefColumn<EntityRef>(cap, -1),
     wireRef: new Int32Array(cap).fill(-1),
     callProt: new Array(cap),
     next: new Int32Array(cap).fill(-1),
@@ -117,8 +118,11 @@ function growTranches(S: TrancheStore): void {
   S.paymentAnchorWeek = gF(S.paymentAnchorWeek);
   S.originationWeek = gI(S.originationWeek); S.maturityWeek = gI(S.maturityWeek);
   const flags = new Uint8Array(cap); flags.set(S.flags); S.flags = flags;
-  S.idRef = gI(S.idRef); S.bankRef = gI(S.bankRef);
-  const issuerRef = new Int32Array(cap).fill(-1); issuerRef.set(S.issuerRef); S.issuerRef = issuerRef;
+  const gR = <B extends number>(old: RefColumn<B>, fill = 0): RefColumn<B> => {
+    const a = newRefColumn<B>(cap, fill); a.set(old); return a;
+  };
+  S.idRef = gR(S.idRef); S.bankRef = gR(S.bankRef);
+  S.issuerRef = gR(S.issuerRef, -1);
   const wireRef = new Int32Array(cap).fill(-1); wireRef.set(S.wireRef); S.wireRef = wireRef;
   S.callProt.length = cap;
   const next = new Int32Array(cap).fill(-1); next.set(S.next); S.next = next;
@@ -129,7 +133,7 @@ function growTranches(S: TrancheStore): void {
  *  included: §3.13's price store holds a fact about an instrument, and the instrument is gone. */
 function freeRow(S: TrancheStore, r: number, v2: V2World): void {
   if (S.rowByIdRef.get(S.idRef[r]) === r) { S.rowByIdRef.delete(S.idRef[r]); forgetClearedPrice(v2, S.idRef[r]); }
-  S.callProt[r] = undefined; S.flags[r] = 0; S.bankRef[r] = -1; S.issuerRef[r] = -1; S.principalLocal[r] = 0;
+  S.callProt[r] = undefined; S.flags[r] = 0; S.bankRef[r] = ABSENT_REF; S.issuerRef[r] = ABSENT_REF; S.principalLocal[r] = 0;
   S.next[r] = S.freeHead; S.freeHead = r;
 }
 
@@ -166,9 +170,9 @@ function writeRow(S: TrancheStore, r: number, v2: V2World, t: DebtTranche): void
     | (t.isBankFacility ? TR_FACILITY : 0)
     | (t.seniority === 'SUBORDINATED' ? TR_SUBORDINATED : 0)
     | (t._refinanceInitiated ? TR_REFI_INITIATED : 0);
-  S.idRef[r] = internString(v2, t.id);
+  S.idRef[r] = internInstrument(v2, t.id);
   S.rowByIdRef.set(S.idRef[r], r);
-  S.bankRef[r] = t.facilityBankTicker === undefined ? -1 : internString(v2, t.facilityBankTicker);
+  S.bankRef[r] = t.facilityBankTicker === undefined ? ABSENT_REF : internTicker(v2, t.facilityBankTicker);
   S.callProt[r] = t.callProtection;
 }
 
@@ -194,7 +198,7 @@ export function syncLadderRows(v2: V2World, companyId: string, ladder: DebtTranc
   for (let i = 0; i < ladder.length; i++) {
     const r = allocRow(S);
     writeRow(S, r, v2, ladder[i]);
-    S.issuerRef[r] = internString(v2, companyId);
+    S.issuerRef[r] = internEntity(v2, companyId);
     S.issuerRefByIdRef.set(S.idRef[r], S.issuerRef[r]);
     S.wireRef[r] = -1;
     S.next[r] = -1;
@@ -288,7 +292,7 @@ export function pushLadderRow(v2: V2World, companyId: string, t: DebtTranche, wi
   const slot = slotFor(S, firmRow);
   const r = allocRow(S);
   writeRow(S, r, v2, t);
-  S.issuerRef[r] = internString(v2, companyId);
+  S.issuerRef[r] = internEntity(v2, companyId);
   S.issuerRefByIdRef.set(S.idRef[r], S.issuerRef[r]);
   S.wireRef[r] = wireNo;
   S.next[r] = -1;

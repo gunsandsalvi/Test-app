@@ -28,7 +28,7 @@ import { entityCashOf, householdDepositsOf, obligationCurrencyOf } from '../../l
 import { transferHolding, issueHolding, retireHolding, markHolding } from '../../ledger/holdings-ledger';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
-import { internString } from '../../../engine2/world';
+import { internType } from '../../../engine2/world';
 import { pay, institutionSpendableLocal } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { mandatePctOf } from '../../../domain/institutions';
@@ -47,7 +47,6 @@ import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
-
 
 import { etfShareInstrumentId, etfShareRegisterId } from '../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../domain/ids';
@@ -298,7 +297,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   const investorById = new Map(investors.map((i) => [i.id, i]));
   {
     const H = ctx.v2.holdings;
-    const etfShareRef0 = internString(ctx.v2, 'ETF_SHARE');
+    const etfShareRef0 = internType(ctx.v2, 'ETF_SHARE');
     investors.forEach((inv) => {
       let rows: Map<string, number> | undefined;
       for (let r = bookHeadOf(ctx.v2, inv.id); r >= 0; r = H.next[r]) {
@@ -660,7 +659,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   const etfSharesByFundByInvestor = new Map<string, Map<string, number>>();
   {
     const H = ctx.v2.holdings;
-    const etfShareRef = internString(ctx.v2, 'ETF_SHARE');
+    const etfShareRef = internType(ctx.v2, 'ETF_SHARE');
     ctx.updatedInstitutionalEntities.forEach((e) => {
       for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== etfShareRef) continue;
@@ -799,7 +798,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // and, when its fund priced, two column writes.
   {
     const H = ctx.v2.holdings;
-    const etfShareRefM = internString(ctx.v2, 'ETF_SHARE');
+    const etfShareRefM = internType(ctx.v2, 'ETF_SHARE');
     ctx.updatedInstitutionalEntities.forEach((entity) => {
       for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== etfShareRefM) continue;

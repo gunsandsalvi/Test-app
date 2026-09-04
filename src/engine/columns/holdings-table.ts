@@ -21,7 +21,7 @@ import { InstitutionalEntity, ItemizedHolding } from '../../types';
 import { Table } from './table';
 import { INSTRUMENT_IDS, ENTITY_IDS } from './intern';
 import { REGION_IDS } from '../../domain/geography';
-import { V2World, internString } from '../../engine2/world';
+import { V2World, internType } from '../../engine2/world';
 import { bookHeadOf } from '../../engine2/holdings';
 
 /** v2-intern-id → INSTRUMENT_IDS id. Both pools assign ids in first-sight order and never reuse
@@ -172,7 +172,7 @@ export class HoldingsTable {
     this.entities = entities;
     const H = v2.holdings;
     const typeCode: number[] = [];
-    HOLDING_TYPES.forEach((t, i) => { typeCode[internString(v2, t)] = i; });
+    HOLDING_TYPES.forEach((t, i) => { typeCode[internType(v2, t)] = i; });
     let instrMemo = INSTR_ID_MEMO.get(v2);
     if (!instrMemo) { instrMemo = []; INSTR_ID_MEMO.set(v2, instrMemo); }
 

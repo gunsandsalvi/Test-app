@@ -19,7 +19,7 @@
  * which is what "1$ is 1$" means and the only place a hard-coded 1 belongs.
  */
 
-import { V2World, stringRef, internString } from './world';
+import { V2World, internInstrument, instrumentRefOf } from './world';
 import { InstrumentId } from '../domain/ids';
 
 export interface PriceStore {
@@ -41,7 +41,7 @@ export function newPriceStore(): PriceStore {
 /** The market's print. Only a clearing adapter calls this, and only for what it cleared. */
 export function setClearedPrice(v2: V2World, instrumentId: InstrumentId, pricePerUnit: number): void {
   if (!Number.isFinite(pricePerUnit)) return;
-  const ref = internString(v2, instrumentId);
+  const ref = internInstrument(v2, instrumentId);
   const prior = v2.prices.byIdRef.get(ref);
   if (prior !== undefined) v2.prices.prevByIdRef.set(ref, prior);
   v2.prices.byIdRef.set(ref, pricePerUnit);
@@ -49,7 +49,7 @@ export function setClearedPrice(v2: V2World, instrumentId: InstrumentId, pricePe
 
 /** What it printed at the session before — undefined until it has printed twice. */
 export function priorClearedPriceOf(v2: V2World, instrumentId: InstrumentId): number | undefined {
-  const ref = stringRef(v2, instrumentId);
+  const ref = instrumentRefOf(v2, instrumentId);
   return ref < 0 ? undefined : v2.prices.prevByIdRef.get(ref);
 }
 
@@ -69,7 +69,7 @@ export function weeklyPriceMoveOf(v2: V2World, instrumentId: InstrumentId): numb
  * lot, holding and account stores (see `stringRef`).
  */
 export function clearedPriceOf(v2: V2World, instrumentId: InstrumentId): number | undefined {
-  const ref = stringRef(v2, instrumentId);
+  const ref = instrumentRefOf(v2, instrumentId);
   return ref < 0 ? undefined : v2.prices.byIdRef.get(ref);
 }
 

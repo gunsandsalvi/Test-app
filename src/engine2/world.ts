@@ -21,6 +21,8 @@ import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
 import { newPriceStore, PriceStore } from './prices';
 import { CurrencyCode, CURRENCY_CODES } from '../domain/geography';
 import { FxTable, PARITY_FX } from '../domain/currency';
+import { asInstrumentId, type InstrumentId } from '../domain/ids';
+import { newRefColumn, type RefColumn, type InstrRef, type EntityRef, type RegionRef, type TypeRef, type TickerRef, type AccountRef, type PartyKeyRef } from './refs';
 
 export interface V2World {
   /** Company id -> table row. Rows are addressing only — order carries no economics. */
@@ -79,19 +81,19 @@ export interface V2World {
 export interface PersistentAccounts {
   n: number;
   /** The account's key (`KIND:name|CUR`, party.ts + the currency) as an interned string id. */
-  keyRef: Int32Array;
+  keyRef: RefColumn<AccountRef>;
   /** The row's balance, IN THE ROW'S OWN CURRENCY. */
   balance: Float64Array;
   /** Which money this row holds, as an index into CURRENCY_CODES. */
   currencyId: Int8Array;
-  rowByKeyRef: Map<number, number>;
+  rowByKeyRef: Map<AccountRef, number>;
   /** Every row of one party, across the currencies it holds: party key id → rows. */
-  rowsByPartyRef: Map<number, number[]>;
+  rowsByPartyRef: Map<PartyKeyRef, number[]>;
   /** THE MONEY A PARTY KEEPS ITS BOOKS IN, as a currency id: the money its FIRST account was
    *  opened in, which is by construction the one the seed gave it. Everything a party holds in
    *  another money is worth what it converts to at this one — a firm does not re-denominate
    *  because it was paid in yen. */
-  homeByPartyRef: Map<number, number>;
+  homeByPartyRef: Map<PartyKeyRef, number>;
   /** A3.3 — a sector party's rows, one per (bank, currency): party key id → `TICKER|CUR` → row. */
   bankRowsByParty: Map<number, Map<string, number>>;
 }
@@ -99,8 +101,8 @@ export interface PersistentAccounts {
 export function newPersistentAccounts(): PersistentAccounts {
   const cap = 1 << 12;
   return {
-    n: 0, keyRef: new Int32Array(cap), balance: new Float64Array(cap), currencyId: new Int8Array(cap),
-    rowByKeyRef: new Map(), rowsByPartyRef: new Map(), homeByPartyRef: new Map(), bankRowsByParty: new Map(),
+    n: 0, keyRef: newRefColumn<AccountRef>(cap), balance: new Float64Array(cap), currencyId: new Int8Array(cap),
+    rowByKeyRef: new Map<AccountRef, number>(), rowsByPartyRef: new Map<PartyKeyRef, number[]>(), homeByPartyRef: new Map<PartyKeyRef, number>(), bankRowsByParty: new Map(),
   };
 }
 
@@ -180,6 +182,56 @@ export function internString(v2: V2World, s: string): number {
   }
   return id;
 }
+
+/**
+ * §3.13-BOOK slice (b) — THE PER-SPACE DOORS ONTO THE INTERN TABLE (`engine2/refs.ts`).
+ *
+ * Every one of these delegates to `internString` above, so **every ref keeps the exact integer it
+ * has today** and nothing here can move a number. What they add is a NAME for the space, checked
+ * by the compiler: a `TypeRef` can no longer be compared with an `InstrRef`, and a column can no
+ * longer be written from the wrong door.
+ *
+ * They are the seam. Step two of slice (b) gives each space its own array and its own numbering,
+ * and when it does, only these twelve functions change — not the 131 sites that touch a ref
+ * column. That is why the types come first and the split second (§5: maintain the new thing while
+ * it still equals the old one).
+ */
+
+/** Intern an instrument id. */
+export const internInstrument = (v2: V2World, id: InstrumentId): InstrRef => internString(v2, id) as InstrRef;
+/** Intern an entity id — anything that can hold, issue or be paid. */
+export const internEntity = (v2: V2World, id: string): EntityRef => internString(v2, id) as EntityRef;
+/** Intern a region code. */
+export const internRegion = (v2: V2World, id: string): RegionRef => internString(v2, id) as RegionRef;
+/** Intern an instrument KIND tag. */
+export const internType = (v2: V2World, tag: string): TypeRef => internString(v2, tag) as TypeRef;
+/** Intern a company ticker — its party address, not its id. */
+export const internTicker = (v2: V2World, ticker: string): TickerRef => internString(v2, ticker) as TickerRef;
+/** Intern an account key (`accounts.ts:accountKey` — a party and a currency). */
+export const internAccount = (v2: V2World, key: string): AccountRef => internString(v2, key) as AccountRef;
+/** Intern a party key (`party.ts:partyKey` — the ledger's address, not the entity id). */
+export const internPartyKey = (v2: V2World, key: string): PartyKeyRef => internString(v2, key) as PartyKeyRef;
+
+/**
+ * A READ, per space: the ref this string already has, or -1. Interning on a read path MUTATES —
+ * see `stringRef` above for the 0.43B that cost — so these exist separately and every one of them
+ * can miss.
+ */
+export const instrumentRefOf = (v2: V2World, id: InstrumentId): InstrRef => stringRef(v2, id) as InstrRef;
+export const entityRefOf = (v2: V2World, id: string): EntityRef => stringRef(v2, id) as EntityRef;
+export const regionRefOf = (v2: V2World, id: string): RegionRef => stringRef(v2, id) as RegionRef;
+export const typeRefOf = (v2: V2World, tag: string): TypeRef => stringRef(v2, tag) as TypeRef;
+export const tickerRefOf = (v2: V2World, ticker: string): TickerRef => stringRef(v2, ticker) as TickerRef;
+export const accountRefOf = (v2: V2World, key: string): AccountRef => stringRef(v2, key) as AccountRef;
+export const partyKeyRefOf = (v2: V2World, key: string): PartyKeyRef => stringRef(v2, key) as PartyKeyRef;
+
+/** Decode, per space. Each is where a ref becomes a string again, and the only place that claim
+ *  is made — `instrumentOf` is the one that also crosses into the branded id space. */
+export const instrumentOf = (v2: V2World, ref: InstrRef): InstrumentId => asInstrumentId(v2.internedStrings[ref]);
+export const entityOf = (v2: V2World, ref: EntityRef): string => v2.internedStrings[ref];
+export const regionOf = (v2: V2World, ref: RegionRef): string => v2.internedStrings[ref];
+export const typeOf = (v2: V2World, ref: TypeRef): string => v2.internedStrings[ref];
+export const tickerOf = (v2: V2World, ref: TickerRef): string => v2.internedStrings[ref];
 
 const REV_CAP = 13;
 

@@ -466,7 +466,11 @@ written from here):
        borrowers rather than paper. Slice (d) decides which way that resolves — the field splits
        by asset class, or a credit index states tranches.
     b. **SPLIT THE INTERN TABLE** — one ref space per id kind, so an instrument ref cannot be a
-       region ref by construction.
+       region ref by construction. **Step one is done, in §9** (the spaces are TYPES and the
+       numbering is untouched). **Step two is open:** give each space its own array, which
+       renumbers. Until it does, the one table holds ~15 type tags and 5 region codes mixed among
+       thousands of instrument ids, so *"enumerate every instrument"* has no answer — which is
+       exactly what (d) needs, so this is a prerequisite and not polish.
     c. **THE ENTITY REGISTRY** — one store; `PartyRef` becomes a VIEW of it rather than a parallel
        union; the ByTicker maps collapse; `O8`'s party arm widens from the derivatives book to
        every party-keyed store.
@@ -1525,6 +1529,31 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK slice (b) step one — EVERY REF COLUMN NAMES ITS SPACE, WITH THE NUMBERING UNTOUCHED.**
+Nine columns index one intern table — `H.instrRef`, `H.typeRef`, `H.regionRef`, `TS.idRef`,
+`TS.issuerRef`, `TS.bankRef`, `A.keyRef`, `T.supplierRef`, `T.customerRef` — so they are one
+numbering and only their names kept them apart. `engine2/refs.ts` gives each a branded integer type
+and, crucially, `RefColumn<B>`: dropping `Int32Array`'s numeric index signature and restating it as
+`B` keeps the brand **across the subscript**, which a brand on the intern function alone does not —
+it would die at the first read and every comparison downstream would be unchecked again.
+
+Proven rather than asserted: a scratch file comparing a TYPE column against an `InstrRef`, writing
+an `InstrRef` into the REGION column, decoding a `TypeRef` as an instrument, decoding the instrument
+column as a type tag, and writing a bare number into a ref column was rejected on all five, with the
+matching correct uses compiling in the same file. Every write now goes through a per-space door
+(`internInstrument`, `internType`, `internRegion`, `internEntity`, `internTicker`, `internAccount`,
+`internPartyKey`) and raw `internString` fell out of nine files that used to reach past it —
+`ABSENT_REF` types the -1 sentinel as a member of every space at once, since a sentinel belongs to
+none.
+
+**Every door delegates to the same table, so every ref keeps the integer it has today and no number
+can have moved.** That is the §5 sequencing rule and the reason this is two steps: the split that
+renumbers comes second, once the compiler has already proved every site is in the right space.
+Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`, with what is still
+false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
+thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
+green; no run.
 
 **13-BOOK slice (a) — THE ID SPACES BECOME TYPES, AND THE KEY GRAMMAR BECOMES ONE FILE.**
 `domain/ids.ts` states the three spaces a string can name — `EntityId`, `InstrumentId`, `Ticker` —

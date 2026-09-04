@@ -37,7 +37,6 @@
  *     coupon reaches a holder of record on its date or is not paid.
  */
 
-
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
@@ -46,7 +45,7 @@ import { sovereignCouponByBond, sovereignCouponDueShare } from '../../../domain/
 import { isActiveCompany } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
-import { internString } from '../../../engine2/world';
+import { internType, internRegion } from '../../../engine2/world';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { asInstrumentId } from '../../../domain/ids';
 
@@ -90,8 +89,8 @@ export function accrueSovereignHolders(
   };
   // §7.307 holdings flip: row walk — a non-GOV_BOND or foreign row costs two int compares.
   const H = ctx.v2.holdings;
-  const govBondRef = internString(ctx.v2, 'GOV_BOND');
-  const regionRef = internString(ctx.v2, regionId);
+  const govBondRef = internType(ctx.v2, 'GOV_BOND');
+  const regionRef = internRegion(ctx.v2, regionId);
   ctx.updatedInstitutionalEntities.forEach((entity) => {
     if (entity.isDefaulted) return;
     for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
@@ -133,7 +132,6 @@ export function moveSovereignAccrued(
   const next = (accrued.get(k) ?? 0) + deltaLocal;
   if (next === 0) accrued.delete(k); else accrued.set(k, next);
 }
-
 
 /**
  * Accrue this week's sovereign interest to every holder of record, then pay out the bonds whose

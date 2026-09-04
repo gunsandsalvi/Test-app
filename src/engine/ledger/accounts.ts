@@ -44,7 +44,8 @@ import { Company } from '../../domain/company';
 import { GovDebtTranche } from '../../domain/region-macro';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { DepositLines } from '../../domain/banking';
-import { V2World, internString, stringRef, ensureV2, CURRENCY_ID, currencyOfId } from '../../engine2/world';
+import { V2World, ensureV2, CURRENCY_ID, currencyOfId, internAccount, accountRefOf, internPartyKey, partyKeyRefOf } from '../../engine2/world';
+import { newRefColumn, type AccountRef } from '../../engine2/refs';
 
 // ---------------------------------------------------------------------------------------------
 // THIRD SLICE — THE PERSISTENT ACCOUNTS, COMPANIES FIRST (A3.1, ). A company's balance
@@ -57,7 +58,7 @@ import { V2World, internString, stringRef, ensureV2, CURRENCY_ID, currencyOfId }
 
 function growPersistent(a: V2World['accounts']): void {
   const cap = a.keyRef.length * 2;
-  const k = new Int32Array(cap); k.set(a.keyRef); a.keyRef = k;
+  const k = newRefColumn<AccountRef>(cap); k.set(a.keyRef); a.keyRef = k;
   const b = new Float64Array(cap); b.set(a.balance); a.balance = b;
   const c = new Int8Array(cap); c.set(a.currencyId); a.currencyId = c;
 }
@@ -67,20 +68,20 @@ export const accountKey = (party: PartyRef, currency: CurrencyCode): string => `
 
 /** The party's row in one currency, or -1. */
 export function accountRowOf(v2: V2World, party: PartyRef, currency: CurrencyCode): number {
-  const ref = stringRef(v2, accountKey(party, currency));
+  const ref = accountRefOf(v2, accountKey(party, currency));
   return ref < 0 ? -1 : (v2.accounts.rowByKeyRef.get(ref) ?? -1);
 }
 
 /** Open the party's account in one currency. Opening one that exists is a defect: a balance has one row. */
 export function openAccount(v2: V2World, party: PartyRef, currency: CurrencyCode, balance: number): number {
   const a = v2.accounts;
-  const ref = internString(v2, accountKey(party, currency));
+  const ref = internAccount(v2, accountKey(party, currency));
   if (a.rowByKeyRef.has(ref)) throw new Error(`ENGINE DEFECT: account ${accountKey(party, currency)} opened twice`);
   if (a.n >= a.keyRef.length) growPersistent(a);
   const r = a.n++;
   a.keyRef[r] = ref; a.balance[r] = balance; a.currencyId[r] = CURRENCY_ID[currency];
   a.rowByKeyRef.set(ref, r);
-  const partyRef = internString(v2, partyKey(party));
+  const partyRef = internPartyKey(v2, partyKey(party));
   const rows = a.rowsByPartyRef.get(partyRef);
   if (rows) rows.push(r); else a.rowsByPartyRef.set(partyRef, [r]);
   if (!a.homeByPartyRef.has(partyRef)) a.homeByPartyRef.set(partyRef, CURRENCY_ID[currency]);
@@ -94,7 +95,7 @@ export function openAccount(v2: V2World, party: PartyRef, currency: CurrencyCode
  * because a party with no account holds nothing and there is nothing to denominate.
  */
 export function homeCurrencyOf(v2: V2World, party: PartyRef): CurrencyCode | undefined {
-  const ref = stringRef(v2, partyKey(party));
+  const ref = partyKeyRefOf(v2, partyKey(party));
   if (ref < 0) return undefined;
   const id = v2.accounts.homeByPartyRef.get(ref);
   return id === undefined ? undefined : currencyOfId(id);
@@ -102,7 +103,7 @@ export function homeCurrencyOf(v2: V2World, party: PartyRef): CurrencyCode | und
 
 /** Declare the money a party keeps its books in, before it has been paid anything (the seed). */
 export function setHomeCurrency(v2: V2World, party: PartyRef, currency: CurrencyCode): void {
-  v2.accounts.homeByPartyRef.set(internString(v2, partyKey(party)), CURRENCY_ID[currency]);
+  v2.accounts.homeByPartyRef.set(internPartyKey(v2, partyKey(party)), CURRENCY_ID[currency]);
 }
 
 /** The party's row in one currency, opened at zero on first sight. */
@@ -123,7 +124,7 @@ export function balanceOf(v2: V2World, party: PartyRef, currency: CurrencyCode):
  * says in which money — that is the whole content of §3.13c, and why no read returns a bare sum.
  */
 export function balanceOfIn(v2: V2World, party: PartyRef, currency: CurrencyCode): number {
-  const ref = stringRef(v2, partyKey(party));
+  const ref = partyKeyRefOf(v2, partyKey(party));
   const rows = ref < 0 ? undefined : v2.accounts.rowsByPartyRef.get(ref);
   if (!rows) return 0;
   if (rows.length === 1) {
@@ -159,7 +160,7 @@ export function obligationCurrencyOf(v2: V2World, obligor: PartyRef): CurrencyCo
  * book takes over its FX position, it does not receive it netted into one currency.
  */
 export function heldCurrenciesOf(v2: V2World, party: PartyRef): { currency: CurrencyCode; balance: number }[] {
-  const ref = stringRef(v2, partyKey(party));
+  const ref = partyKeyRefOf(v2, partyKey(party));
   const rows = ref < 0 ? undefined : v2.accounts.rowsByPartyRef.get(ref);
   if (!rows) return [];
   return rows.map((r) => ({ currency: currencyOfId(v2.accounts.currencyId[r]), balance: v2.accounts.balance[r] }));
@@ -218,7 +219,7 @@ const bankSlot = (bankTicker: string, currency: CurrencyCode): string => `${bank
 /** The sector party's row at a bank in one currency, opened at zero on first sight. */
 export function sectorRowAt(v2: V2World, party: PartyRef, bankTicker: string, currency: CurrencyCode): number {
   const a = v2.accounts;
-  const ref = internString(v2, partyKey(party));
+  const ref = internPartyKey(v2, partyKey(party));
   let byBank = a.bankRowsByParty.get(ref);
   if (!byBank) { byBank = new Map(); a.bankRowsByParty.set(ref, byBank); }
   const slot = bankSlot(bankTicker, currency);
@@ -226,7 +227,7 @@ export function sectorRowAt(v2: V2World, party: PartyRef, bankTicker: string, cu
   if (r === undefined) {
     if (a.n >= a.keyRef.length) growPersistent(a);
     r = a.n++;
-    a.keyRef[r] = internString(v2, `${partyKey(party)}@${slot}`);
+    a.keyRef[r] = internAccount(v2, `${partyKey(party)}@${slot}`);
     a.balance[r] = 0; a.currencyId[r] = CURRENCY_ID[currency];
     byBank.set(slot, r);
   }
@@ -235,7 +236,7 @@ export function sectorRowAt(v2: V2World, party: PartyRef, bankTicker: string, cu
 
 /** A sector party's balance across its banks, expressed in ONE money. */
 export function sectorCashOf(v2: V2World, party: PartyRef, currency: CurrencyCode): number {
-  const ref = stringRef(v2, partyKey(party));
+  const ref = partyKeyRefOf(v2, partyKey(party));
   const byBank = ref < 0 ? undefined : v2.accounts.bankRowsByParty.get(ref);
   if (!byBank) return 0;
   let total = 0;
@@ -390,7 +391,7 @@ export function adjustBankReserves(v2: V2World, bankTicker: string, delta: numbe
 /** A bank leaves whole (a merger): its reserves join the acquirer's rows, money by money. */
 export function moveBankReserves(v2: V2World, fromTicker: string, toTicker: string): void {
   const from: PartyRef = { kind: 'BANK', ticker: fromTicker };
-  const fromRef = stringRef(v2, partyKey(from));
+  const fromRef = partyKeyRefOf(v2, partyKey(from));
   const rows = fromRef < 0 ? undefined : v2.accounts.rowsByPartyRef.get(fromRef);
   if (!rows) return;
   rows.forEach((r) => {
@@ -578,7 +579,7 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
    *  its home row would settle that balance out of existence. */
   const openCarried = (party: PartyRef, bankIdx: number, cls: AccountClass, home: CurrencyCode): number => {
     const row = openRow(s, partyId(party), bankIdx, cls, home, ctx.v2.accounts.balance[ensureAccount(ctx.v2, party, home)]);
-    (a.rowsByPartyRef.get(internString(ctx.v2, partyKey(party))) ?? []).forEach((pr) => {
+    (a.rowsByPartyRef.get(internPartyKey(ctx.v2, partyKey(party))) ?? []).forEach((pr) => {
       const cur = currencyOfId(a.currencyId[pr]);
       if (cur !== home) openRow(s, partyId(party), bankIdx, cls, cur, a.balance[pr]);
     });
@@ -596,7 +597,7 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
       ctx.v2.accounts.balance[reserveRowOf(ctx.v2, b.ticker, money, 0)]);
     s.reserveRowOfBank[bi] = row;
     // Any other money the bank carried into the week is its foreign liquidity row.
-    (a.rowsByPartyRef.get(internString(ctx.v2, partyKey(bankParty))) ?? []).forEach((pr) => {
+    (a.rowsByPartyRef.get(internPartyKey(ctx.v2, partyKey(bankParty))) ?? []).forEach((pr) => {
       const cur = a.currencyId[pr];
       if (currencyOfId(cur) === money) return;
       s.foreignReserveRow.set(bi * CURRENCY_CODES.length + cur,
@@ -659,7 +660,6 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
   });
   return s;
 }
-
 
 /**
  * ONE SETTLED ROW, BY THE ONE RULE — AND IT MOVES ONE CURRENCY.

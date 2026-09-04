@@ -13,7 +13,7 @@ import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
 import { reassignConsignments } from './goods-arrival';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
-import { ensureV2, internString, revHistSeed, rowOf, ringCopyRow } from '../../../engine2/world';
+import { ensureV2, revHistSeed, rowOf, ringCopyRow, internType, internEntity } from '../../../engine2/world';
 import { materializeLadder, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
 import { rebuildLadder } from '../../ledger/tranche-ledger';
 import { pay } from './settlement';
@@ -162,8 +162,8 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     // BEFORE the parent's price steps down (the stake fraction reads the pre-split register).
     // holdings flip: row walk for the stake read (the push and sync below stay on objects).
     const Hs = ctx.v2.holdings;
-    const parentRef = internString(ctx.v2, parent.id);
-    const equityRefS = internString(ctx.v2, 'EQUITY');
+    const parentRef = internEntity(ctx.v2, parent.id);
+    const equityRefS = internType(ctx.v2, 'EQUITY');
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.isDefaulted) return;
       let heldShares = 0;
@@ -264,8 +264,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   let institutionalTenderLocal = 0;
   // holdings flip: row walk for the tender stake read.
   const Ht = ctx.v2.holdings;
-  const targetRef = internString(ctx.v2, target.id);
-  const equityRefT = internString(ctx.v2, 'EQUITY');
+  const targetRef = internEntity(ctx.v2, target.id);
+  const equityRefT = internType(ctx.v2, 'EQUITY');
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     let heldLocal = 0;
@@ -415,12 +415,12 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     const H = ctx.v2.holdings;
     const targetIdRef = ctx.v2.internedIdByString.get(target.id);
     if (targetIdRef !== undefined) {
-      const equityRefR = internString(ctx.v2, 'EQUITY');
-      const corpBondRef = internString(ctx.v2, 'CORP_BOND');
-      const levLoanRef = internString(ctx.v2, 'LEVERAGED_LOAN');
+      const equityRefR = internType(ctx.v2, 'EQUITY');
+      const corpBondRef = internType(ctx.v2, 'CORP_BOND');
+      const levLoanRef = internType(ctx.v2, 'LEVERAGED_LOAN');
       // The target's commercial paper is on the acquirer's ladder too — its holders'
       // rows exchange like the bonds' (it was the one company-keyed kind the exchange skipped).
-      const cpRef = internString(ctx.v2, 'COMMERCIAL_PAPER');
+      const cpRef = internType(ctx.v2, 'COMMERCIAL_PAPER');
       ctx.updatedInstitutionalEntities.forEach((e) => {
         const swaps: { type: ItemizedHolding['instrumentType']; valueLocal: number; units: number; shares: number | undefined; id: InstrumentId }[] = [];
         for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {

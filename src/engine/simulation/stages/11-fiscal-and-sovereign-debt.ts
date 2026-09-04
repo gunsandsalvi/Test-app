@@ -17,16 +17,14 @@ import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { generateWeeklyNews } from '../../newsGenerator';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
-import {
-  weeklyInterestExpenseLocal, decomposeGovernmentSpending, governmentOutlaysLocal,
-  weeklyBillDiscountAccrualLocal, isDiscountBill } from '../../../domain/government';
+import { weeklyInterestExpenseLocal, decomposeGovernmentSpending, governmentOutlaysLocal, weeklyBillDiscountAccrualLocal, isDiscountBill } from '../../../domain/government';
 import { centralBankSovereignBookLocal, openMarketPolicy, cashPositionBillIssuanceLocal } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay, dueToPayee, partyId, internReason, CORPORATE_TAX_REASON, settlementWeek } from './settlement';
 import { retireHolding } from '../../ledger/holdings-ledger';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
-import { internString } from '../../../engine2/world';
+import { internType, internRegion } from '../../../engine2/world';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { encumberedFaceByBond, repoBorrowedLocal, srfBorrowedLocal } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
@@ -404,8 +402,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // §7.313 flip — the redemption scales rows in place and relinks past the dust; the cash
       // leg reads the same rows in the same order.
       const Hsov = ctx.v2.holdings;
-      const govBondRefS = internString(ctx.v2, 'GOV_BOND');
-      const regionRefS = internString(ctx.v2, regionId);
+      const govBondRefS = internType(ctx.v2, 'GOV_BOND');
+      const regionRefS = internRegion(ctx.v2, regionId);
       ctx.updatedInstitutionalEntities.forEach(entity => {
         // §5-WIRES W2: each matured slice is RETIRED to the treasury by wire; the ledger debits
         // the row and unlinks it when empty.
@@ -795,7 +793,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       institutionalSector: updatedInstitutionalSector,
     };
   });
-
 
   const generatedNews = generateWeeklyNews(
     nextWeek,

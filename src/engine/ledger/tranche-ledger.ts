@@ -19,7 +19,7 @@
  *   moveFacilityLender — a resolved bank's facilities move to the assuming bank: one wire each
  *   seedLadder     — a seeded or born firm's ladder installed without wires (principle B's gap)
  */
-import { V2World, internString } from '../../engine2/world';
+import { V2World, internTicker } from '../../engine2/world';
 import {
   mutableTranches, pushLadderRow, relinkLadder, syncLadderRows, ladderRowsOf, TR_FACILITY, TR_CP, TR_FLOATING, trancheIdOf } from '../../engine2/tranches';
 import { DebtTranche } from '../../domain/company';
@@ -139,7 +139,7 @@ export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromTicke
   const S = mutableTranches(v2);
   const fromRef = v2.internedIdByString.get(fromTicker);
   if (fromRef === undefined) return 0;
-  const toRef = internString(v2, toTicker);
+  const toRef = internTicker(v2, toTicker);
   let moved = 0;
   for (const r of ladderRowsOf(v2, issuer.id)) {
     if (S.bankRef[r] !== fromRef) continue;

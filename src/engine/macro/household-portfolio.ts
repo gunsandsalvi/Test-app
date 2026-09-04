@@ -20,7 +20,7 @@
  */
 
 import { bookHeadOf } from '../../engine2/holdings';
-import { internString } from '../../engine2/world';
+import { internType, internRegion } from '../../engine2/world';
 import { Company, RegionId } from '../../types';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { HouseholdState } from '../../domain/region-macro';
@@ -74,8 +74,8 @@ export function householdDirectEquityLocal(
   regionId: RegionId
 ): number {
   const H = v2.holdings;
-  const equityRef = internString(v2, 'EQUITY');
-  const regionRef = internString(v2, regionId);
+  const equityRef = internType(v2, 'EQUITY');
+  const regionRef = internRegion(v2, regionId);
   let sum = 0;
   for (let r = bookHeadOf(v2, householdBookId(regionId)); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== equityRef || H.regionRef[r] !== regionRef) continue;

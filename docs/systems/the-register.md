@@ -119,7 +119,7 @@ checked by `scripts/check-atlas.sh`.
 | E3 a default converts the holding into a recovery claim | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | E4 a split, buyback or new issue moves both sides at once | `src/engine/ledger/holdings-ledger.ts:scaleHoldings` | ✅ |
 | E5 VERIFY every register event moves money or says why not | `src/engine/ledger/holdings-ledger.ts:markHolding` | ✅ |
-| F1 an instrument has a stable identity for its whole life | `src/domain/ids.ts:InstrumentId` | ⚠️ |
+| F1 an instrument has a stable identity for its whole life | `src/domain/ids.ts:InstrumentId` · `src/engine2/refs.ts:RefColumn` | ⚠️ |
 | F1.a two instruments with the same terms are still two | `src/domain/instrument-keys.ts:corporateTrancheId` | ⚠️ |
 | F2 a dead party leaves its holdings to a named successor | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | F3 VERIFY the register survives a week boundary unchanged | `src/engine2/holdings.ts:assertBooksInSync` | ✅ |
@@ -158,6 +158,31 @@ because there is nothing for it to describe. It is the ownership-side twin of
 
 **Becomes a §3 step.** Medium: the two legs already exist and already name the same parties; what
 is missing is one settlement point that writes both or neither.
+
+### ⚠️ F1 — THE REF COLUMNS NAME THEIR SPACE NOW; THEY STILL SHARE A NUMBERING
+
+A columnar store cannot hold a string, so every string a row names is an integer into the intern
+table: `H.instrRef`, `H.typeRef`, `H.regionRef`, `TS.idRef`, `TS.issuerRef`, `TS.bankRef`,
+`A.keyRef`, `T.supplierRef`, `T.customerRef`. All nine index ONE array (`world.ts:internString`),
+so they are drawn from one numbering and the only thing keeping an instrument ref out of a region
+column is that the columns have different names.
+
+§3.13-BOOK slice (b) step one gives each column its space as a TYPE (`engine2/refs.ts`:
+`InstrRef`, `EntityRef`, `RegionRef`, `TypeRef`, `TickerRef`, `AccountRef`, `PartyKeyRef`), riding
+through the subscript via `RefColumn<B>` — so `H.typeRef[r] === someInstrRef` no longer compiles,
+nor does writing a bare number into a ref column, nor decoding a `TypeRef` as an instrument. Every
+write now goes through a per-space door (`internInstrument`, `internType`, …) and the raw
+`internString` has disappeared from nine call sites that used to reach past it.
+
+**The numbering is deliberately unchanged.** Each door delegates to the same table, so every ref
+keeps the integer it has today and nothing can have moved — the §5 sequencing rule, which is the
+whole reason this is two steps and not one. Step two gives each space its own array, which
+renumbers, and can be done knowing the compiler has already proved every site is in the right
+space.
+
+**Until it is, one thing stays false.** The single table holds ~15 type tags and 5 region codes
+mixed among thousands of instrument ids, so *"enumerate every instrument"* has no answer — which is
+what slice (d)'s instrument index needs, and why step two is not optional polish.
 
 ### ⚠️ F1 / F1.a — ONE INSTRUMENT, TWO KEYS: THE ETF SHARE
 

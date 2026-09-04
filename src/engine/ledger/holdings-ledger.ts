@@ -15,7 +15,7 @@
  *   markHolding     — a change of VALUE with no change of quantity: no wire (a mark is not a move;
  *                     P retires it when value becomes price × quantity by construction)
  */
-import { V2World, internString } from '../../engine2/world';
+import { V2World, internType, internInstrument } from '../../engine2/world';
 import {
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows, instrumentIdAt } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
@@ -116,7 +116,7 @@ const unitsOf = (spec: HoldingSpec): number => spec.shares ?? spec.units ?? spec
 /** Add to (or open) the holder's row of this instrument. */
 function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const H = mutableHoldings(v2);
-  const tRef = internString(v2, spec.instrumentType), iRef = internString(v2, spec.instrumentId);
+  const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
     H.qtyLocal[r] += spec.valueLocal;
@@ -164,7 +164,7 @@ const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
  */
 function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const H = mutableHoldings(v2);
-  const tRef = internString(v2, spec.instrumentType), iRef = internString(v2, spec.instrumentId);
+  const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
   let leftLocal = spec.valueLocal; let leftShares = spec.shares ?? Number.NaN;
   let hit = false; let drops = false;
   // The residue of a row-by-row subtraction scales with the whole position the walk draws from,
@@ -310,7 +310,7 @@ export function scaleHoldings(
   const holderId = holderIdOf(holder);
   if (!holderId || !(ratio >= 0) || Math.abs(ratio - 1) < 1e-12) return 0;
   const H = mutableHoldings(v2);
-  const tRef = internString(v2, instrumentType), iRef = internString(v2, instrumentId);
+  const tRef = internType(v2, instrumentType), iRef = internInstrument(v2, instrumentId);
   let valueLocal = 0, shares = 0, units = 0, anyShares = false, region: RegionId | undefined;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
