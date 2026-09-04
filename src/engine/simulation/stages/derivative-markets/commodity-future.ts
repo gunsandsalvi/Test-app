@@ -30,7 +30,7 @@ import { deskNotionalCapacityLocal } from '../../../../domain/derivatives/regist
 import { COMMODITY_CATEGORY_LINKAGE } from '../../../../domain/instruments';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../../domain/market-microstructure';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
-import { isActiveCompany } from '../../../../domain/company';
+import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { exposureToHedgeLocal } from '../corporate-financing';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
@@ -116,7 +116,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       // The print this contract last cleared at is the published curve point; spot before one.
       const published = tenorMonths === 1 ? comm.futures1M : tenorMonths === 3 ? comm.futures3M : comm.futures6M;
       const priorPrint = published > 0 ? published : spot;
-      const banks = firms.filter((c) => c.isBankEntity && c.bankBalanceSheet);
+      const banks = banksOf(firms);
       let arbUnits = 0;
       if (priorPrint > carryBound) {
         banks.forEach((bank) => {

@@ -62,11 +62,11 @@ import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, d
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { maxOverweightMultipleOf } from './asset-allocation';
-import { holdingClassOf } from '../../../domain/assets';
+
 import { centralBankParticipant, applyCentralBankFills, wireCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { clearedBookDelta } from '../../ledger/holdings-ledger';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityLocal } from './repo-clearing';
-import { accruedPerFace } from '../../../domain/company';
+import { accruedPerFace, banksOf } from '../../../domain/company';
 import { sovereignCouponByBond } from '../../../domain/government';
 import { moveSovereignAccrued } from './sovereign-calendar';
 import { defect } from '../../../domain/defect';
@@ -342,7 +342,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Real participants: named banks (own HQLA-liquidity-driven book) + institutional entities
     // (own real target, distributed by relative weight — never an independent number).
-    const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const regionBanks = banksOf(ctx.prevActiveFirms, regionId);
 
     // XB1: every region's institutions bid here, not just this one's, and each one's target is
     // ITS OWN book — assets x its government-bond allocation x what its mandate allows in this

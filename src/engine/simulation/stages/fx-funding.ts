@@ -36,7 +36,7 @@
 import { CurrencyCode, CURRENCY_CODES, RegionId, currencyOf } from '../../../domain/geography';
 import { convert } from '../../../domain/currency';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
-import { Company } from '../../../domain/company';
+import { Company, banksOf } from '../../../domain/company';
 import { balanceOf, homeCurrencyOf } from '../../ledger/accounts';
 import { PartyRef, partyOf } from '../../ledger/party';
 import { WeeklyStepContext } from './context';
@@ -49,7 +49,7 @@ const MIN_TRADE = 1e-6;
 
 /** The desks a region's conversions go through: its banks, pro rata by market share. */
 function deskSharesOf(firms: readonly Company[], region: RegionId): { ticker: string; share: number }[] {
-  const banks = firms.filter((b) => b.region === region && b.isBankEntity && b.bankBalanceSheet && !b.isDefaulted);
+  const banks = banksOf(firms, region);
   const total = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
   if (banks.length === 0) return [];
   return banks.map((b) => ({

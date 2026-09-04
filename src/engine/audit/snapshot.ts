@@ -9,7 +9,7 @@ import { GameState, RegionId } from '../../types';
 import { loanBooksOf, spendableDepositsOf } from '../../domain/banking';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
 import { centralBankAssetsLocal } from '../../domain/central-bank';
-import { isActiveCompany } from '../../domain/company';
+import { banksOf } from '../../domain/company';
 import { trancheKindOf } from '../../domain/assets';
 import { V2World, ensureV2 } from '../../engine2/world';
 import { inputUnitsHeld } from '../../engine2/lots';
@@ -41,7 +41,7 @@ export function snapshotOf(state: GameState): AuditSnapshot {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
     if (!reg || !cb) return;
-    const banks = state.companies.filter((c) => c.region === r && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet);
+    const banks = banksOf(state.companies, r);
     out[r] = {
       treasuryAccountLocal: treasuryAccountOf(ensureV2(state), r),
       waysAndMeansLocal: waysAndMeansOf(ensureV2(state), r),

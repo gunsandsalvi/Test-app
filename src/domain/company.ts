@@ -633,6 +633,28 @@ export function isPubliclyListed(c: Pick<Company, 'listingStatus' | 'ticker'>): 
 export function isActiveCompany(c: Company): boolean { return !c.isDefaulted && !c.mergerAcquired; }
 
 /**
+ * §3.13-READ D8 — THIS REGION'S LIVE BANKS WITH A SHEET, and the only spelling of it.
+ *
+ * Fourteen sites asked this question in four different ways, and the differences were accidents
+ * rather than decisions: some read `ctx.prevActiveFirms` (week-start, public-only), some
+ * `ctx.updatedCompanies` (live), some `state.companies`; some spelled liveness `isActiveCompany`,
+ * some `!isDefaulted`, and four asked for no liveness at all. The clearing stages all run before
+ * `bank-resolution`, so most of those differences were latent — but ONE was not: `overdraft-sweep`
+ * runs at stage 406 and spelled liveness `!isDefaulted`, while `10-mergers` sets `mergerAcquired`
+ * at stage 380. An acquired bank was still being handed a share of every SME facility draw,
+ * weighted by a `bankMarketShare` its acquirer had already taken over.
+ *
+ * A bank with no `bankBalanceSheet` is not a counterparty to anything — every one of the four
+ * sites that omitted the check reached for the sheet on the next line with `?.` and scored the
+ * bank at zero. Requiring it here says that once, instead of fourteen times by accident.
+ */
+export function banksOf(companies: readonly Company[], region?: RegionId): Company[] {
+  return companies.filter((c) =>
+    c.isBankEntity && !!c.bankBalanceSheet && isActiveCompany(c)
+    && (region === undefined || c.region === region));
+}
+
+/**
  * §7.269 — THE FULL-STAFFING CEILING SCALES WITH THE PLANT, and this is its ONE derivation
  * (rule 4: stage 05's `staffedShare` denominator and the labour market's hiring cap are the
  * same physical statement — what headcount runs this plant at full).

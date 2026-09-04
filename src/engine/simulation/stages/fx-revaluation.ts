@@ -27,6 +27,7 @@ import { openFxWeek } from '../../../engine2/world';
 import { centralBankAssetsLocal, centralBankLiabilitiesLocal } from '../../../domain/central-bank';
 import { bankReservesOf, treasuryAccountOf, waysAndMeansOf, stateDepositLines } from '../../ledger/accounts';
 import { depositsOf } from '../../../domain/banking';
+import { banksOf } from '../../../domain/company';
 
 /** Below this the move is float dust on a sum of billions, not a revaluation (rule 7). */
 const MIN_MARK = 1e-6;
@@ -55,7 +56,7 @@ const centralBankNetOf = (state: GameState, region: RegionId): number => {
 };
 
 export function runFxRevaluationStage(state: GameState): void {
-  const banks = state.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet);
+  const banks = banksOf(state.companies);
   const bankBefore = new Map(banks.map((b) => [b.ticker, bankNetOf(state, b.ticker)]));
   const cbBefore = new Map(REGION_IDS.map((r) => [r, centralBankNetOf(state, r)]));
   // §3.37-ZEROSUM: what this stage BOOKS, recorded so the audit can compare it against the rate

@@ -42,7 +42,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { derivativesBookOf, initialMarginLocal, strikeDerivatives } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
-import { cashOf, entityCashOf, bankReservesOf } from '../../../ledger/accounts';
+import { cashOf, bankReservesOf } from '../../../ledger/accounts';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
 import { fxBasisInstrumentId } from '../../../../domain/instrument-keys';

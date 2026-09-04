@@ -75,7 +75,7 @@ import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY, issuerIdOf, trancheScheduleOf, trancheIdOf } from '../../../engine2/tranches';
 import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
 import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
-import { isActiveCompany, accruedPerFace, defaultPeriodWeeks } from '../../../domain/company';
+import { isActiveCompany, accruedPerFace, defaultPeriodWeeks, banksOf } from '../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate, moveCorporateAccrued } from './shared-helpers';
 import { priceFromSpreadBps, zeroRateAt } from '../../../domain/pricing';
 import type { PaperTerms, ZeroCurve } from '../../../domain/pricing';
@@ -398,7 +398,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // PAPER now, so a tranche that matured is repaid at its own face rather than netted against
     // the borrower's other bonds — and the desks' own positions, which have always been stored
     // per tranche, are finally on the same key the outstanding is measured on.
-    const regionBanksEarly = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const regionBanksEarly = banksOf(ctx.prevActiveFirms, regionId);
     const outstandingByInstrumentId = new Map(bonds.filter((b) => !b.isPrimary).map((b) => [b.id, b.faceLocal]));
     const issuerOfInstrument = new Map<InstrumentId, Company>();
     bonds.forEach((b) => issuerOfInstrument.set(b.id, companyTerms[b.ci].comp));
@@ -601,7 +601,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // G3a: the market makers, one per named bank, sized by that bank's own leverage headroom
     // and funded by its own reserves. They are ordinary participants — the residual with no
     // owner this replaces is documented in domain/dealer-desk.ts.
-    const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const regionBanks = banksOf(ctx.prevActiveFirms, regionId);
     const deskParticipants = buildDealerDeskParticipants({
       ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
       unitPriceOf: (i) => openingPrice[i],

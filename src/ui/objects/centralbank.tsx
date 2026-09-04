@@ -7,9 +7,9 @@ import { defineObject } from './registry';
 import { Card, KV, Link, Stat, StatGrid } from '../ui';
 import { money, pctLevel } from '../format';
 import { regionOf, tapeSeries } from '../world';
-import { REGION_IDS, RegionId } from '../../domain/geography';
+import { REGION_IDS, RegionId, asRegionId } from '../../domain/geography';
 import { ensureV2 } from '../../engine2/world';
-import { isActiveCompany } from '../../domain/company';
+import { banksOf } from '../../domain/company';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, taped } from './common';
 
 export const centralbank = defineObject<Region>({
@@ -45,7 +45,7 @@ export const centralbank = defineObject<Region>({
     const cb = r.centralBankSheet;
     const book = Object.values(cb?.sovereignHoldingsByBond ?? {}).reduce((a, v) => a + (Number(v) || 0), 0);
     const policy = tapeSeries(world, `region:${ref.id}:policy`).values;
-    const banks = world.state.companies.filter((c) => c.region === ref.id && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet);
+    const banks = banksOf(world.state.companies, asRegionId(ref.id));
     const atWindow = banks.filter((b) => (b.bankBalanceSheet!.srfBorrowingLocal ?? 0) > 1e6);
     const reserves = r.bankingSector?.centralBankReservesLocal ?? 0;
     return (

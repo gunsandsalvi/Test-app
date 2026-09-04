@@ -5,19 +5,16 @@
  * true, and a size when it is not.
  */
 
-import { GameState, RegionId } from '../../types';
+import { GameState } from '../../types';
 import { loanBooksOf, depositsOf, spendableDepositsOf } from '../../domain/banking';
 import { AuditSnapshot } from './snapshot';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
-import { isActiveCompany } from '../../domain/company';
+import { isActiveCompany, banksOf } from '../../domain/company';
 import { centralBankAssetsLocal, centralBankLiabilitiesLocal, centralBankSovereignBookLocal, centralBankFxReservesLocal } from '../../domain/central-bank';
 import { AuditFinding, B, M, sum } from './types';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { ensureV2, currencyOfId } from '../../engine2/world';
 import { facilityBookOf } from '../../engine2/tranches';
-
-const banksOf = (s: GameState, r?: RegionId) =>
-  s.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c) && (!r || c.region === r));
 
 /** M1 — the central bank's balance sheet closes EXACTLY: assets = reserves + treasury account + currency
  *  + the households' money in transit to their banks (settled this week, on a bank's book next — the
@@ -30,7 +27,7 @@ function m1(state: GameState, week: number): AuditFinding[] {
     const cb = reg?.centralBankSheet;
     if (!cb) return;
     const v2 = ensureV2(state);
-    const reserves = sum(banksOf(state, r), (b) => bankReservesOf(v2, b.ticker));
+    const reserves = sum(banksOf(state.companies, r), (b) => bankReservesOf(v2, b.ticker));
     const tga = treasuryAccountOf(v2, r);
     const wam = waysAndMeansOf(v2, r);
     const assets = centralBankAssetsLocal(cb, wam, currencyOf(r), fx);
@@ -66,7 +63,7 @@ function m2(state: GameState, week: number): AuditFinding[] {
     const cb = reg?.centralBankSheet;
     if (!cb) return;
     if (Math.abs(cb.currencyInCirculationLocal) > 1e6) out.push({ family: 'M', check: 'M2 currency plug', week, usd: cb.currencyInCirculationLocal, message: `${r}: currency in circulation ${B(cb.currencyInCirculationLocal)} is a residual nobody issued` });
-    const cbLoans = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.centralBankLoanLocal ?? 0);
+    const cbLoans = sum(banksOf(state.companies, r), (b) => b.bankBalanceSheet!.centralBankLoanLocal ?? 0);
     if (Math.abs(cbLoans - (cb.loansToBanksLocal ?? 0)) > 1e6) out.push({ family: 'M', check: 'M2 central bank loans = banks\' borrowing', week, usd: cbLoans - (cb.loansToBanksLocal ?? 0), message: `${r}: banks owe the central bank ${B(cbLoans)}, its book says ${B(cb.loansToBanksLocal ?? 0)}` });
     // The same two-sided identity for the window's other side: what the lenders say they have
     // parked is what the central bank says it has taken. A lender that leaves the world with cash
@@ -91,7 +88,7 @@ function m3(state: GameState, week: number): AuditFinding[] {
   // real is money with no bank at all.
   // A house bank that has no sheet (resolved, merged away) is no bank —
   // the link is re-keyed at both events, and this is the measurement that it was.
-  const liveBanks = new Set(state.companies.filter((b) => b.isBankEntity && b.bankBalanceSheet && isActiveCompany(b)).map((b) => b.ticker));
+  const liveBanks = new Set(banksOf(state.companies).map((b) => b.ticker));
   const banked = (t: string | undefined) => !!t && liveBanks.has(t);
   const orphanCorp = sum(state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c) && !banked(c.homeBankTicker)), (c) => cashOf(v2, c));
   const orphanInst = sum(state.institutionalEntities.filter((e) => !e.isDefaulted && !banked(e.homeBankTicker)), (e) => entityCashOf(v2, e));
@@ -108,7 +105,7 @@ function m4(state: GameState, week: number): AuditFinding[] {
   if (negCorp.length) out.push({ family: 'M', check: 'M4 overdrawn firms', week, usd: sum(negCorp, (c) => cashOf(v2, c)), message: `${negCorp.length} firms overdrawn, ${B(sum(negCorp, (c) => cashOf(v2, c)))} in all (worst ${negCorp.sort((a, b) => cashOf(v2, a) - cashOf(v2, b))[0].ticker} ${M(cashOf(v2, negCorp[0]))})` });
   const negInst = state.institutionalEntities.filter((e) => !e.isDefaulted && entityCashOf(v2, e) < -1e6);
   if (negInst.length) { const worst = [...negInst].sort((a, b) => entityCashOf(v2, a) - entityCashOf(v2, b))[0]; out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => entityCashOf(v2, e)), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => entityCashOf(v2, e)))} (worst ${worst.ticker ?? worst.id} ${worst.entityType} ${M(entityCashOf(v2, worst))})` }); }
-  const negBank = banksOf(state).filter((b) => bankReservesOf(v2, b.ticker) < -1e6);
+  const negBank = banksOf(state.companies).filter((b) => bankReservesOf(v2, b.ticker) < -1e6);
   if (negBank.length) out.push({ family: 'M', check: 'M4 negative reserves', week, usd: sum(negBank, (b) => bankReservesOf(v2, b.ticker)), message: `${negBank.map((b) => b.ticker).join(' ')} hold negative reserves` });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
@@ -125,7 +122,7 @@ function m4(state: GameState, week: number): AuditFinding[] {
 /** M5 — every bank's own sheet closes: assets = liabilities + equity. */
 function m5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  banksOf(state).forEach((b) => {
+  banksOf(state.companies).forEach((b) => {
     const bs = b.bankBalanceSheet!;
     const sov = sum(Object.values(bs.sovereignBondHoldingsByBond ?? {}), (v) => Number(v) || 0);
     const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryLocal));
@@ -148,7 +145,7 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const cb = reg?.centralBankSheet;
     if (!before || !cb || !reg) return;
     // Money is the bank lines and the treasury's account (nothing is in transit).
-    const now = sum(banksOf(state, r), (b) => spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker))) + treasuryAccountOf(ensureV2(state), r);
+    const now = sum(banksOf(state.companies, r), (b) => spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker))) + treasuryAccountOf(ensureV2(state), r);
     const moneyBefore = before.bankDepositsLocal + before.treasuryAccountLocal;
     // Every creator, by name: the payment ledger's (bank credit written, reserves the central
     // bank issued, what the banks paid out of their own account, money from other regions), the
@@ -164,7 +161,7 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const explained = credit + issued + ownAccount + crossBorder + book + depositInterest + advance;
     // The margin line is inside `depositsOf` but is NOT an account row, so it moves with no
     // settled row and no tally behind it — the one part of the stock the creator list cannot see.
-    const marginNow = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.clientMarginLocal ?? 0);
+    const marginNow = sum(banksOf(state.companies, r), (b) => b.bankBalanceSheet!.clientMarginLocal ?? 0);
     const marginDelta = marginNow - (before.clientMarginLocal ?? 0);
     const gap = (now - moneyBefore) - explained;
     if (Math.abs(gap) > Math.max(5e8, moneyBefore * 0.005)) {

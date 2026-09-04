@@ -10,7 +10,7 @@ import { Card, KV, Link, Stat, StatGrid } from '../ui';
 import { money, pctLevel, num, count } from '../format';
 import { regionOf, tapeSeries } from '../world';
 import { REGION_IDS } from '../../domain/geography';
-import { isActiveCompany } from '../../domain/company';
+import { isActiveCompany, banksOf } from '../../domain/company';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, taped, ringed, words } from './common';
 
 export const region = defineObject<Region>({
@@ -56,7 +56,7 @@ export const region = defineObject<Region>({
     const u = tapeSeries(world, `region:${r.id}:unemployment`).values;
     const cpi = r.cpiHistory ?? [];
     const gdp = tapeSeries(world, `region:${r.id}:gdp`).values;
-    const banks = world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet);
+    const banks = banksOf(world.state.companies, r.id);
     const firms = world.state.companies.filter((c) => c.region === r.id && isActiveCompany(c) && !c.isBankEntity);
     const funds = world.state.institutionalEntities.filter((e) => e.region === r.id && !e.isDefaulted);
     const markets = Object.keys(r.categoryDemand).length;

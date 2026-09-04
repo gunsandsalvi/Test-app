@@ -47,7 +47,7 @@ import { ladderRowsOf, issuerIdOf, trancheScheduleOf, trancheIdOf } from '../../
 import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
 import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../../credit-price';
-import { isActiveCompany, accruedPerFace, defaultPeriodWeeks } from '../../../domain/company';
+import { isActiveCompany, accruedPerFace, defaultPeriodWeeks, banksOf } from '../../../domain/company';
 import { priceFromSpreadBps } from '../../../domain/pricing';
 import type { PaperTerms } from '../../../domain/pricing';
 import {
@@ -335,7 +335,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // principal already repaid, and the loan ledger minted 2–3% within weeks. Keyed by the PAPER
     // now, so a loan that matured is repaid at its own face and the desks — whose positions have
     // always been stored per tranche — are finally on the key the outstanding is measured on.
-    const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const regionBanks = banksOf(ctx.prevActiveFirms, regionId);
     const outstandingByInstrumentId = new Map(loans.filter((l) => !l.isPrimary).map((l) => [l.id, l.faceLocal]));
     const issuerOfInstrument = new Map<InstrumentId, Company>();
     loans.forEach((l) => issuerOfInstrument.set(l.id, companyTerms[l.ci].comp));

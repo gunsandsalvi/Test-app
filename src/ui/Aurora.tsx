@@ -26,7 +26,7 @@ import { FunctionModule } from './fn';
 import { Nav, T, mono, Hint, Card } from './ui';
 import { formatDate } from './calendar';
 import { storiesFor, Story } from './functions/news';
-import { isActiveCompany } from '../domain/company';
+import { isActiveCompany, banksOf } from '../domain/company';
 import { marketCapOf } from '../domain/company';
 import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
 
@@ -352,7 +352,7 @@ function ObjectChip({ world, refv, nav, text, dense }: { world: World; refv: Obj
 
 function Home({ world, nav, recents, onRecent, stepMs }: { world: World; nav: Nav; recents: string[]; onRecent: (r: string) => void; stepMs?: number }) {
   const regions = Object.keys(world.state.regions);
-  const banks = world.state.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c)).sort((a, b) => stateDepositLines(world.state, b.ticker).householdLocal - stateDepositLines(world.state, a.ticker).householdLocal);
+  const banks = banksOf(world.state.companies).sort((a, b) => stateDepositLines(world.state, b.ticker).householdLocal - stateDepositLines(world.state, a.ticker).householdLocal);
   const biggest = [...world.state.companies].filter((c) => isActiveCompany(c) && !c.isBankEntity && c.listingStatus !== 'PRIVATE').sort((a, b) => marketCapOf(b) - marketCapOf(a)).slice(0, 6);
   const assetsOf = (e: InstitutionalEntity) => institutionTotalAssetsFromState(world.state, e);
   const funds = [...world.state.institutionalEntities].filter((e) => !e.isDefaulted).sort((a, b) => assetsOf(b) - assetsOf(a)).slice(0, 6);

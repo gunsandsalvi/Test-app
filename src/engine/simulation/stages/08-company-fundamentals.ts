@@ -13,7 +13,7 @@ import {
   GameState, Company, NewsItem, RegionId,
 } from '../../../types';
 import { currencyOfId } from '../../../engine2/world';
-import { isActiveCompany, getOutputInventoryLocal } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryLocal, banksOf } from '../../../domain/company';
 import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } from './shared-helpers';
 import { openCorporateSweepBooks, settleCorporateSweepBooks } from './money-market-fund';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
@@ -169,7 +169,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const leadAllocatorByRegion = new Map<string, ReturnType<typeof leadBankAllocator>>();
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
     leadAllocatorByRegion.set(r, leadBankAllocator(
-      ctx, ctx.prevActiveFirms.filter((c) => c.isBankEntity && c.region === r && c.bankBalanceSheet), 'corporate bond'
+      ctx, banksOf(ctx.prevActiveFirms, r), 'corporate bond'
     ));
   });
   /** Who leads this issuer's deal — re-asked every time, so the mandate can be lost. */

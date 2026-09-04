@@ -34,7 +34,7 @@ import { channelMarginRate, shelfPriceLocal, DISTRIBUTION_SUBUNIT_ID } from '../
 import { subUnitSpecOf } from '../../../domain/industry-registry';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
-import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryLocal, fullStaffingCapHeads } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryLocal, fullStaffingCapHeads, banksOf } from '../../../domain/company';
 import { WeeklyStepContext, CompanyWeekUpdate } from './context';
 import { revHistLen, revHistAt, rowOf, V2World, ensureV2, partyKeyOf } from '../../../engine2/world';
 import { deliverGoods, receiveInputLot, settleOutputInventory, setOutputStock, consumeGoods } from '../../ledger/goods-ledger';
@@ -156,7 +156,7 @@ function fxFeeBanksOf(firms: Company[], region: RegionId): { banks: Company[]; t
   if (!byRegion) { byRegion = new Map(); fxFeeBanksCache.set(firms, byRegion); }
   let entry = byRegion.get(region);
   if (!entry) {
-    const banks = firms.filter((b) => b.region === region && b.isBankEntity && b.bankBalanceSheet);
+    const banks = banksOf(firms, region);
     const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0) || banks.length;
     entry = { banks, totalShare };
     byRegion.set(region, entry);

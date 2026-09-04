@@ -12,13 +12,14 @@ import { money, pctLevel, count } from '../format';
 import { World, companyOf, institutionOf, regionOf, holdersOf, bookOf, sovereignHoldersOf } from '../world';
 import { refOfIdentifier, labelOf } from '../objects';
 import { instrumentName } from '../objects/book';
-import { isActiveCompany } from '../../domain/company';
+import { banksOf } from '../../domain/company';
 import { marketCapOf, totalDebtOf } from '../../domain/company';
 import { institutionTotalAssetsFromState } from '../../engine/simulation/stages/institutional-balance-sheet';
 import { entityCashOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { facilitiesOfBorrower } from '../../engine2/tranches';
+import { asRegionId } from '../../domain/geography';
 
 /** A sovereign instrument id's tenor, read aloud: `…-t10` → "10y", `…-b13` → "13w bill". */
 function tenorWord(id: string): string {
@@ -50,7 +51,7 @@ function CompanyHolders({ world, id, nav, tab }: { world: World; id: string; nav
   if (!c) return null;
   const rows = holdersOf(world, id);
   // Step 10: the lenders' claims are the facility rows on this firm's own ladder.
-  const bankIdByTicker = new Map(world.state.companies.filter((b) => b.isBankEntity && b.bankBalanceSheet && isActiveCompany(b)).map((b) => [b.ticker, b.id]));
+  const bankIdByTicker = new Map(banksOf(world.state.companies).map((b) => [b.ticker, b.id]));
   const facilities = facilitiesOfBorrower(ensureV2(world.state), id)
     .filter((f) => bankIdByTicker.has(f.bankTicker))
     .map((f) => ({ holderId: bankIdByTicker.get(f.bankTicker)!, instrumentType: 'BANK_FACILITY', usd: f.principalLocal, shares: NaN }));
@@ -118,7 +119,7 @@ function RegionHolders({ world, id, nav }: { world: World; id: string; nav: impo
   const r = regionOf(world, id);
   if (!r) return null;
   const inst = sovereignHoldersOf(world, id);
-  const banks = world.state.companies.filter((c) => c.region === id && c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c))
+  const banks = banksOf(world.state.companies, asRegionId(id))
     .map((c) => ({ holderId: c.id, usd: Object.values(c.bankBalanceSheet!.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0) }));
   const cb = r.centralBankSheet ? Object.values(r.centralBankSheet.sovereignHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0) : 0;
   const rows = [...inst.map((h) => ({ ...h, kind: 'institution' })), ...banks.map((h) => ({ ...h, kind: 'bank' })), ...(cb > 0 ? [{ holderId: r.centralBank, usd: cb, kind: 'central bank' }] : [])].sort((a, b) => b.usd - a.usd);

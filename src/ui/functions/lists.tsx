@@ -7,11 +7,12 @@ import { FunctionModule } from '../fn';
 import { Tabs, Card, KV, T } from '../ui';
 import { pctLevel, num, count } from '../format';
 import { regionOf } from '../world';
-import { isActiveCompany } from '../../domain/company';
+import { isActiveCompany, banksOf } from '../../domain/company';
 import { moduleOf } from '../objects';
 import { companyColumns } from '../objects/company';
 import { Screener } from './screener';
 import { SectionLabel } from '../objects/common';
+import { asRegionId } from '../../domain/geography';
 
 const inRegion = (type: 'market' | 'pool' | 'cohort' | 'occupation' | 'book' | 'institution', world: import('../world').World, region: string): string[] =>
   moduleOf(type).list(world).filter((x) => (moduleOf(type).label(world, x.id, x.obj).region ?? '') === region).map((x) => x.id);
@@ -38,7 +39,7 @@ export const books: FunctionModule = {
 export const banks: FunctionModule = {
   name: 'banks', appliesTo: ['region'], blurb: 'the banks here',
   render: ({ world, ref, nav }) => <Screener world={world} nav={nav} type="company" columns={companyColumns(true)} sort="cap" noun={['bank', 'banks']} hide={['region']}
-    ids={world.state.companies.filter((c) => c.region === ref.id && c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c)).map((c) => c.id)} subtitle={`${ref.id} banks`} />,
+    ids={banksOf(world.state.companies, asRegionId(ref.id)).map((c) => c.id)} subtitle={`${ref.id} banks`} />,
 };
 
 export const firms: FunctionModule = {

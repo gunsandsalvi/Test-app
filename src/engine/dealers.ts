@@ -21,6 +21,7 @@ import { dealerDeskCapacityLocal, dealerDeskGrossLocal, DESK_SPREAD_BPS_BY_BOOK 
 
 export { DESK_SPREAD_BPS_BY_BOOK };
 import { BASEL_MIN_LEVERAGE_RATIO, leverageHeadroomLocal } from './macro/banking';
+import { banksOf } from '../domain/company';
 
 /** The desk book each tradable asset class lands in — the same names the clearing adapters use.
  *  A derivative consumes the desk through a PFE add-on rather than at notional, exactly as the
@@ -50,8 +51,7 @@ export function dealersFromBanks(
   facilityBookOf: (bank: Company) => number,
   banks: Company[]
 ): Dealer[] {
-  return banks
-    .filter((b) => b.isBankEntity && b.bankBalanceSheet)
+  return banksOf(banks)
     .map((bank, i) => {
       const sheet = bank.bankBalanceSheet!;
       const grossLocal = dealerDeskGrossLocal(sheet.dealerDeskInventory);

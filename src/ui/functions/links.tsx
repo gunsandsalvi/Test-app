@@ -14,7 +14,7 @@ import { World, companyOf, institutionOf, regionOf, bankLinesTo, contractsOf, di
 import { ObjectRef } from '../types';
 import { labelOf } from '../objects';
 import { SectionLabel, words } from '../objects/common';
-import { isActiveCompany } from '../../domain/company';
+import { isActiveCompany, banksOf } from '../../domain/company';
 import { ensureV2 } from '../../engine2/world';
 import { facilityRowsOf } from '../../engine2/tranches';
 
@@ -102,7 +102,7 @@ export const links: FunctionModule = {
     }
     const r = regionOf(world, ref.id);
     if (!r) return null;
-    const banks = world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && isActiveCompany(c)).map((c) => ({ ref: { type: 'company' as const, id: c.id }, v: money(c.bankBalanceSheet ? stateDepositLines(world.state, c.ticker).householdLocal : undefined) }));
+    const banks = banksOf(world.state.companies, r.id).map((c) => ({ ref: { type: 'company' as const, id: c.id }, v: money(c.bankBalanceSheet ? stateDepositLines(world.state, c.ticker).householdLocal : undefined) }));
     const lanes = Object.keys(world.state.freightRatePerTonneLaneMoneyByLane ?? {}).filter((k) => k.startsWith(r.id + '>') || k.endsWith('>' + r.id)).map((k) => ({ ref: { type: 'lane' as const, id: k } }));
     const pairs = world.state.fxPairs.filter((p) => p.pair.includes(r.currency)).map((p) => ({ ref: { type: 'fx' as const, id: p.pair } }));
     const indexes = (world.state.marketIndexes ?? []).filter((x) => x.id.startsWith(r.id)).map((x) => ({ ref: { type: 'index' as const, id: x.id } }));

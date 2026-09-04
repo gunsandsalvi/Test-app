@@ -41,6 +41,7 @@ import { ClearingResult } from './financial-clearing-engine';
 import { transferHolding, HoldingSpec, HoldingKind } from '../../ledger/holdings-ledger';
 import { heldInShares } from '../../../domain/assets';
 import type { InstrumentId } from '../../../domain/ids';
+import { banksOf } from '../../../domain/company';
 
 /** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
 export interface FeeDesk { ticker: string; share: number }
@@ -217,7 +218,7 @@ export function settleClearedBook(
 
 /** The desks that share a region's clearing fees: its named banks, weighted by market share. */
 export function feeDesksForRegion(ctx: WeeklyStepContext, regionId: RegionId): FeeDesk[] {
-  const banks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity);
+  const banks = banksOf(ctx.prevActiveFirms, regionId);
   return banks.map((b) => ({ ticker: b.ticker, share: b.bankMarketShare ?? 1 / Math.max(1, banks.length) }));
 }
 

@@ -19,6 +19,7 @@ import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { cashOf, poolCashOf } from '../../ledger/accounts';
 import { entityCashOf } from '../../ledger/accounts';
 import { overdraftFacilityTrancheId } from '../../../domain/instrument-keys';
+import { banksOf } from '../../../domain/company';
 
 /** What a broker charges over its standing line for a balance it did not agree to fund. */
 export const OVERDRAFT_PENALTY_BPS = 200;
@@ -108,7 +109,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
 
     // ---- 3. Pools: an SME facility draw at the region's banks, by their share of the pool's
     // deposits (the split settlement itself uses for a SEGMENT balance). ----
-    const banks = ctx.updatedCompanies.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet && !c.isDefaulted);
+    const banks = banksOf(ctx.updatedCompanies, regionId);
     const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
     const smeDrawByBank = new Map<string, { industry: string; poolId: string; usd: number }[]>();
     (reg.smePools ?? []).forEach((seg) => {

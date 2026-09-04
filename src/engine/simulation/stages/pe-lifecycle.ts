@@ -26,12 +26,12 @@ import { currencyOf } from '../../../domain/geography';
 import { Company, InstitutionalEntity, Region, RegionId, DebtTranche, NewsItem } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { PrimaryOffering, mandateAllocator } from '../../../domain/primary-market';
-import { isActiveCompany } from '../../../domain/company';
+import { isActiveCompany, banksOf } from '../../../domain/company';
 import { random } from '../../rng';
 import { companyFairValuePerShare } from '../../equity-valuation';
 import { REQUIRED_RETURN_ON_CAPITAL } from './asset-allocation';
 import { settleCorporateActionOnHolders, payHoldersCash } from './shared-helpers';
-import { pay, pendingSettlementLocal, institutionSpendableLocal } from './settlement';
+import { pay, institutionSpendableLocal } from './settlement';
 import { smePoolSubUnits } from '../../../domain/industry-registry';
 import { STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../../credit-price';
@@ -273,8 +273,7 @@ export function runPeLifecycleForRegion(
 
   // The sponsor's deals go to desks that can still underwrite them, and each award
   // consumes the winner's balance sheet.
-  const leadBanks = mandateAllocator(ctx.prevActiveFirms
-    .filter((c) => c.region === regionId && c.isBankEntity)
+  const leadBanks = mandateAllocator(banksOf(ctx.prevActiveFirms, regionId)
     .map((c) => ({
       ticker: c.ticker, bankMarketShare: c.bankMarketShare,
       capacityLocal: (ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet)?.bankEquityLocal ?? 0,
@@ -891,8 +890,7 @@ export function runFirmBirthsForRegion(
   // on the firm and nowhere else (rule 4's "1$ is 1$"). Measured: 12 unbanked firms at seed
   // growing with every birth cohort. The relationship is chosen the same way the seed chooses
   // it, so a born firm enters the world banked like every other.
-  const banksForRelationship = mandateAllocator(ctx.updatedCompanies
-    .filter((b) => b.region === regionId && b.isBankEntity && isActiveCompany(b))
+  const banksForRelationship = mandateAllocator(banksOf(ctx.updatedCompanies, regionId)
     .map((b) => ({
       ticker: b.ticker, bankMarketShare: b.bankMarketShare,
       capacityLocal: (ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet)?.bankEquityLocal ?? 0,

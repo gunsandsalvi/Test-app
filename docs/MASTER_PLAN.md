@@ -428,8 +428,6 @@ written from here):
     seed/audit paths, the remaining stages, and the derivations a store now answers.
 
     **A. THE LIVE DEFECTS — each is wrong today, in this order.**
-    A4. **07f disagrees with itself about which banks exist** — `:179` filters `updatedCompanies`
-        with `isActiveCompany`, `:768` filters `prevActiveFirms` without it, one region loop apart.
     A5. **Stock loans pay in the wrong money.** Five of six `pay()` legs re-derive the currency from
         the issuer's region; only one reads `loan.currency`, which §3.13c says is where it lives.
     A6. **The store's materializer and every stage reader disagree** on a row with `shares` and no
@@ -487,7 +485,6 @@ written from here):
         admitted as a participant and then given no demand.
     D7. `isActiveCompany` written longhand 6×, and `harness:2589` checks no liveness at all — a
         resolved bank's sheet is reconciled against a book it no longer owns.
-    D8. "This region's live banks with a sheet": 14 filter sites, 4 spellings. Home: `banksOf`.
     D9. Lookup maps rebuilt from the same source: **38 construction sites**, including three alive
         in one scope in `wires.ts` and two rebuilt inside a `forEach`. Home: memoised on `ctx`.
     D10. `derivativePartyKey` hand-built 10×; `repoLenderParty` 3×; `partyRegionOf` twice in one
@@ -1682,6 +1679,30 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ A4 + D8 — AN ACQUIRED BANK WAS STILL LENDING, AND "THIS REGION'S LIVE BANKS" NOW HAS ONE
+SPELLING.** The question "which banks are here, alive, and have a sheet" was asked at 33 sites in
+five different ways — three different source arrays (`prevActiveFirms`, `updatedCompanies`,
+`state.companies`), three spellings of liveness (`isActiveCompany`, `!isDefaulted`, none), and the
+sheet check present or absent. A4's stated case (07f asking two ways, one region loop apart) turned
+out to be LATENT: `bank-resolution` runs at stage 421, after every clearing book, and an LBO
+explicitly refuses a bank, so `prevActiveFirms` and this week's live banks are the same set at 07x
+time. The survey found the live one instead. `overdraft-sweep` runs at 406 and spelled liveness
+`!isDefaulted`; `10-mergers` sets `mergerAcquired` at 380. An acquired bank was still being handed
+its `bankMarketShare` of every SME facility draw — a share its acquirer had already taken over — so
+the pools drew credit from a bank that no longer existed and the surviving banks were diluted by it.
+One `banksOf(companies, region?)` in `domain/company.ts` now answers it, requiring the sheet: every
+one of the four sites that omitted that check reached for the sheet on the very next line with `?.`
+and scored the bank at zero. The audit's own fifth spelling (a local `banksOf` over `GameState`) is
+deleted into it. THREE SITES ARE DELIBERATELY LEFT: `audit/money.ts:175` reads ALL banks precisely
+to compare against the active-only read (its comment says so), and `accounts.ts:buildAccountMirror`
+and `fx-revaluation`'s reserve sum must still see a bank between default and resolution, which is
+holding real deposits and real reserves. `asRegionId` lands beside it — the UI's `ObjectRef` still
+carries `id: string`, and three views knew more than the type did. Net +8 code lines: D8 is a
+uniformity win, not a line win — 30 import lines pay for 26 shortened filters. The line fall this
+step owes is in D2/D3/D4/D5/D6, which are verbatim blocks rather than one-liners. Gates green.
+**And a correction: the eslint gate was RED at A2/A3** — four unused imports the two steps left
+behind — and I reported it green. It is green here, and the four are gone.
 
 **13-READ A3 — THE FIVE BOOKS NOW AGREE ABOUT WHEN A PRICE IS REAL.** §3.21: a book with nothing
 to trade has no clearing level, and what comes back is the solver's bracket, so the instrument keeps

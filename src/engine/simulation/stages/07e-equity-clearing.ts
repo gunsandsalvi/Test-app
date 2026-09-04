@@ -28,7 +28,7 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
-import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, banksOf } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { entityRequiredReturn, maxOverweightMultipleOf } from './asset-allocation';
 import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -266,7 +266,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     instruments.forEach((inst) => { inst.tradableFloatLocal = heldByInstitutionsShares.get(inst.id) ?? 0; });
 
     // G3a/G3e: the banks' equity desks, and the float they and the other participants make up.
-    const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const regionBanks = banksOf(ctx.prevActiveFirms, regionId);
     const deskParticipants = buildDealerDeskParticipants({
       ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
       unitPriceOf: (i) => refPriceOf(regionCompanies[i]),

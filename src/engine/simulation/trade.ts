@@ -9,6 +9,7 @@ import { DERIVATIVE_CLASSES } from '../../domain/derivatives/registry';
 import { DerivativeClassId } from '../../domain/derivatives/contract';
 import { equityInstrumentId } from '../../domain/instrument-keys';
 import { asInstrumentId, type InstrumentId } from '../../domain/ids';
+import { banksOf } from '../../domain/company';
 
 /** The player's legacy position types onto the registry's classes; anything the registry does
  *  not know is charged at the FX forward's add-on, which is what every derivative paid before. */
@@ -101,8 +102,7 @@ export function executeTrade(
         // §3.13: both credit books are keyed by the PAPER — 07b and 07d clear per tranche — so
         // the shared walk hands back ids and each line names its own.
         const view = (b: string) => Array.from(regionalDeskView(
-          updatedCompanies
-            .filter((c) => c.region === posData.region && c.isBankEntity)
+          banksOf(updatedCompanies, posData.region)
             .map((c) => c.bankBalanceSheet?.dealerDeskInventory),
           b
         ).entries()).filter(([, usd]) => Math.abs(usd) > 1);

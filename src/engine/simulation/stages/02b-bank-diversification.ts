@@ -47,6 +47,7 @@ import { cashOf, entityCashOf, adjustSectorRow, adjustBankReserves, bankReserves
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { sovereignTenorResolver } from '../../../domain/government';
 import { overdraftFacilityTrancheId } from '../../../domain/instrument-keys';
+import { banksOf } from '../../../domain/company';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBook: Record<string, number> = {};
@@ -80,7 +81,7 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
 export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    const banks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity);
+    const banks = banksOf(ctx.prevActiveFirms, regionId);
     if (banks.length === 0) return;
     // The central bank's interest expense is ACCUMULATED where it is paid, below, like every
     // other line of its income statement. It used to be re-derived at the central bank stage by

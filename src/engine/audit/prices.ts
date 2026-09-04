@@ -6,7 +6,7 @@
 
 import { GameState } from '../../types';
 import { REGION_IDS } from '../../domain/geography';
-import { isActiveCompany } from '../../domain/company';
+import { isActiveCompany, banksOf } from '../../domain/company';
 import { AuditFinding, B, pct, spearman, sum } from './types';
 import { marketCapOf } from '../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
@@ -146,7 +146,7 @@ function x1(state: GameState, week: number): AuditFinding[] {
     }
     const repo = reg.repoRateAnnual ?? reg.policyRate;
     if (repo > reg.policyRate + 0.015 || repo < reg.policyRate - 0.015) out.push({ family: 'X', check: 'X1 repo inside the corridor', week, usd: repo - reg.policyRate, message: `${r}: repo ${pct(repo)} against policy ${pct(reg.policyRate)}` });
-    const banks = state.companies.filter((c) => c.region === r && c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c));
+    const banks = banksOf(state.companies, r);
     const negNim = banks.filter((b) => b.bankBalanceSheet!.bankCapitalRatio > 0.08 && b.bankBalanceSheet!.netInterestMarginPct < 0);
     if (negNim.length) out.push({ family: 'X', check: 'X1 a solvent bank earns a margin', week, usd: negNim.length, message: `${r}: ${negNim.map((b) => b.ticker).join(' ')} run a negative margin while solvent` });
     const highDep = banks.filter((b) => (b.bankBalanceSheet!.depositRateAnnual ?? 0) > reg.policyRate + 0.005);

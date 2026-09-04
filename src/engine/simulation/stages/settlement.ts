@@ -47,6 +47,7 @@ import { homeCurrencyOf } from '../../ledger/accounts';
 const MONEY_KIND_ID = ASSET_KINDS.indexOf('MONEY');
 import { PaymentCategory, categoryOfReason } from '../../ledger/payment-category';
 import { assertNever } from '../../../domain/defect';
+import { banksOf } from '../../../domain/company';
 
 export interface PaymentInstruction {
   payer: PartyRef;
@@ -699,7 +700,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // Equity is not a balance: the bank's own-account legs are its income and expense, and they
   // land here, on the sheet.
   const bankByTicker = new Map(
-    ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet).map((c) => [c.ticker, c])
+    banksOf(ctx.updatedCompanies).map((c) => [c.ticker, c])
   );
   report.bankEquityDeltaByBank.forEach((equityDeltaLocal, ticker) => {
     const bank = bankByTicker.get(ticker);

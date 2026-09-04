@@ -1,5 +1,5 @@
 import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf, stashSeedGovLadder, seedGovLadderOf, mutableAccounts } from '../ledger/accounts';
-import { accruedPerFace, weeksAccrued } from '../../domain/company';
+import { accruedPerFace, weeksAccrued, banksOf } from '../../domain/company';
 import { currencyOf } from '../../domain/geography';
 import { V2World } from '../../engine2/world';
 /**
@@ -53,7 +53,7 @@ export function closeSeedMoney(
 ): void {
   (Object.keys(regions) as RegionId[]).forEach((regionId) => {
     const reg = regions[regionId];
-    const banks = companies.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet && !c.isDefaulted);
+    const banks = banksOf(companies, regionId);
     const cb = reg.centralBankSheet;
     if (!cb || banks.length === 0) return;
 

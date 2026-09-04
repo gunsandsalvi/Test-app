@@ -49,6 +49,15 @@ export const currencyOf = (region: RegionId): CurrencyCode => CURRENCY_BY_REGION
 export const REGION_IDS = Object.keys(CURRENCY_BY_REGION) as readonly RegionId[];
 
 /**
+ * §3.13-READ D8 — THE UI'S REGION REF IS STILL A PLAIN STRING, and this is the one place that
+ * says so. `ObjectRef` carries `{ type: 'region'; id: string }`, so a component that has already
+ * matched on `type === 'region'` knows more than the type does. Narrowing it here — once, named —
+ * beats three `as RegionId` casts scattered through the views, and it is the site to delete when
+ * `ObjectRef` finally carries the branded id.
+ */
+export const asRegionId = (id: string): RegionId => id as RegionId;
+
+/**
  * Compile-loud completeness for a hand-ordered region tuple: `AllRegionsNamed<typeof X>`
  * resolves to `never` (a type error at the use site) until X names every RegionId. Use it for
  * orders that are bit-load-bearing (seed RNG draw order, float-sum order) and therefore must

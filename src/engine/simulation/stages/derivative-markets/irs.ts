@@ -30,7 +30,7 @@ import {
 } from '../../../../domain/derivatives/classes/irs';
 import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from '../financial-clearing-engine';
-import { isActiveCompany } from '../../../../domain/company';
+import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
 import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
 import { strikeDerivatives } from '../derivative-lifecycle';
@@ -65,7 +65,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
     if (!reg?.zeroRates) return;
 
     const moveBps = twoSigmaYieldMoveBps(reg);
-    const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const regionBanks = banksOf(ctx.prevActiveFirms, regionId);
     const regionCompanies = ctx.prevActiveFirms.filter(
       (c) => c.region === regionId && !c.isBankEntity && !c.isInstitutionalEntity && isActiveCompany(c)
     );

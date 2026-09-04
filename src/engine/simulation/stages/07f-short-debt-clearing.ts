@@ -45,7 +45,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { computeAnnualDefaultProbability, creditRecoveryRate, payHoldersAccruedInterest, moveCorporateAccrued, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
-import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetLocal, accruedPerFace } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetLocal, accruedPerFace, banksOf } from '../../../domain/company';
 import type { CreditRating } from '../../../domain/company';
 import { priceFromYield, zeroRateAt } from '../../../domain/pricing';
 import type { PaperTerms } from '../../../domain/pricing';
@@ -177,7 +177,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         durationYears: b.years,
       }));
 
-      const regionBanks = ctx.updatedCompanies.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c));
+      const regionBanks = banksOf(ctx.updatedCompanies, regionId);
       // XB1: bills are the one book a money fund belongs in, and foreign cash sleeves reach for
       // them too — a mandate bound, not an assigned share.
       const billStockByRegion: Record<string, number> = {};
@@ -776,7 +776,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const cpIssuerIds = new Set(cpIssuers.map((i) => i.comp.id));
       const issuerById = new Map(cpIssuers.map((i) => [i.comp.id, i]));
       const cpEntities = ctx.updatedInstitutionalEntities.filter((e) => !e.isDefaulted);
-      const cpBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+      const cpBanks = banksOf(ctx.updatedCompanies, regionId);
 
       // ---- 1. MATURITIES, PER PIECE OF PAPER. The issuer repays the holders of the tranche that
       // came due, at its own face — not every holder of that borrower scaled by a surviving ratio,

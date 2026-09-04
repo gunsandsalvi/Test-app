@@ -61,7 +61,7 @@ import { facilityBookOf } from '../../engine2/tranches';
  */
 const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42 };
 
-import { isActiveCompany, isPubliclyListed, managedEntityIdsOf } from '../../domain/company';
+import { isActiveCompany, isPubliclyListed, managedEntityIdsOf, banksOf } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
 import { closeSeedMoney, seedOpeningAccruals, seedOpeningCreditPrices } from '../bootstrap/close-seed';
 import { centralBankAssetsLocal, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../domain/central-bank';
@@ -727,7 +727,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // auction could only express as a monotonic slide in yields — the whole banking sector
     // permanently on the bid. Two representations of one book, and the engine was reading the
     // empty one. Seed shape must match engine shape.
-    const regionBanksForSov = regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet);
+    const regionBanksForSov = banksOf(regionCompanies);
     if (regionBanksForSov.length > 0 && totalSovOutstandingLocal > 1) {
       // OWN6: a bank opens with the sovereign book its OWN EQUITY supports under the leverage
       // floor, not with `sovBondOwnership.bankShare x the market`. Its other assets are already
@@ -804,7 +804,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // G2 slice 1: itemize the business book onto real borrowers, and recalibrate the SME
     // seed scalar (`debtLocal = 2 x revenue`, ~17.8x EBITDA — §6's unpriced primitive) down to
     // what the pools can service AND the banks' capital can carry.
-    const regionBanksForLending = regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet);
+    const regionBanksForLending = banksOf(regionCompanies);
     if (regionBanksForLending.length > 0) {
       migrateSmeDebtAtSeed(seedV2, regionId, reg, regionBanksForLending);
       // HH3: the household debt the region already carries becomes real mortgage / card / term
@@ -1168,7 +1168,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // workforce to the one-employee floor by week 3 (§7.108, §7.109).
     //
     // A bank's opening revenue IS what its opening balance sheet earns.
-    regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet).forEach((c) => {
+    banksOf(regionCompanies).forEach((c) => {
       const sheet = c.bankBalanceSheet!;
       const sovLocal = Object.values(sheet.sovereignBondHoldingsByBond || {})
         .reduce((a, v) => a + (Number(v) || 0), 0);
@@ -1382,7 +1382,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // outside the banking system, which is the blind spot that let a 64B double-count pass (§7.90).
   (Object.keys(regions) as RegionId[]).forEach(regionId => {
     const reg = regions[regionId];
-    const regionBanks = companies.filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const regionBanks = banksOf(companies, regionId);
     if (regionBanks.length === 0) return;
     const byBank = new Map<string, number>();
     const houseBanks = mandateAllocator(regionBanks.map(b => ({
@@ -1661,7 +1661,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // where it now sits: on the bank's own funding line, with the reserves behind it.
   (Object.keys(regions) as RegionId[]).forEach(regionId => {
     const reg = regions[regionId];
-    const regionBanks = companies.filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const regionBanks = banksOf(companies, regionId);
     if (regionBanks.length === 0) return;
     const lateHouseBanks = mandateAllocator(regionBanks.map(b => ({
       ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityLocal: b.bankBalanceSheet!.bankEquityLocal,

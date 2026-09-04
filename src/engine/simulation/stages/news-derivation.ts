@@ -20,7 +20,7 @@ import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { partyId, partyOf, PartyRef } from '../../ledger/party';
 import { reasonText } from './settlement';
-import { isActiveCompany } from '../../../domain/company';
+import { isActiveCompany, banksOf } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { ladderTotalLocal } from '../../../engine2/tranches';
@@ -231,7 +231,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   });
 
   // ---- 6. A bank at the window. ----
-  ctx.updatedCompanies.filter((c) => c.isBankEntity && isActiveCompany(c)).forEach((b) => {
+  banksOf(ctx.updatedCompanies).forEach((b) => {
     const sheet = ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet;
     if (!sheet) return;
     const now = sheet.srfBorrowingLocal ?? 0;

@@ -20,7 +20,7 @@ import { computeSovereignRepoHaircuts } from './repo-clearing';
 import { PrimeBrokerageLine, maxDrawnLocal, drawnByFund, lentByBroker } from '../../../domain/prime-brokerage';
 import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { WeeklyStepContext, updateBankSheet } from './context';
-import { pay, pendingSettlementLocal, institutionUnsettledLessCollateralLocal } from './settlement';
+import { pay, institutionUnsettledLessCollateralLocal } from './settlement';
 import { leverageHeadroomLocal } from '../../macro/banking';
 import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';

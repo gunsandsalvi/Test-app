@@ -15,7 +15,7 @@ import { evolveRegionMacro } from '../../macro/evolution';
 import { computeOccupationDemand } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
-import { marketCapOf } from '../../../domain/company';
+import { marketCapOf, banksOf } from '../../../domain/company';
 
 /**
  * What households received and paid over the whole of LAST week: every wage, transfer and
@@ -119,7 +119,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         householdDepositsLocal: householdDepositsOf(ctx.v2, regionId),
         bankReservesLocal: ctx.updatedCompanies.reduce((a, c) => a + (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? bankReservesOf(ctx.v2, c.ticker) : 0), 0),
         bankDepositLines: ctx.updatedCompanies.reduce((a, c) => (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? addDepositLines(a, bankDepositLines(ctx, c.ticker)) : a), ZERO_DEPOSIT_LINES),
-        bankLoanBooks: regionLoanBooksLocal(ctx.updatedCompanies.filter((c) => c.region === regionId && c.isBankEntity && !!c.bankBalanceSheet), (b) => facilityBookOf(ctx.v2, b.ticker)),
+        bankLoanBooks: regionLoanBooksLocal(banksOf(ctx.updatedCompanies, regionId), (b) => facilityBookOf(ctx.v2, b.ticker)),
         householdWeek: householdWeekOf(ctx, regionId, state.regions[regionId].householdDepositInterestWeeklyLocal ?? 0),
         // §3.13-SOV row 2: the ladder is the store's, read here and passed in.
         govLadder: materializeGovLadder(ctx.v2, regionId),

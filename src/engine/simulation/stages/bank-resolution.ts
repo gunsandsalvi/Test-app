@@ -25,7 +25,7 @@ import {
 import { assumeBankBooks } from '../../ledger/bank-transfer';
 import { reassignConsignments } from './goods-arrival';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
-import { isActiveCompany } from '../../../domain/company';
+import { banksOf } from '../../../domain/company';
 import { partyKey } from '../../ledger/party';
 import { dealerDeskParticipantId } from '../../../domain/dealer-desk';
 import { getSimulationDate } from '../../formatters';
@@ -108,7 +108,7 @@ export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionI
 
 export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext): void {
   const week = ctx.nextWeek;
-  const liveBanks = () => ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c));
+  const liveBanks = () => banksOf(ctx.updatedCompanies);
   // Instrument: BANK_RESOLUTION_FORCE=<ticker>@<week> closes a named bank on a named week, so the
   // mechanism can be exercised on a world where no bank is under PCA. Inert unless set.
   const forced = (process.env.BANK_RESOLUTION_FORCE ?? '').split(',')
