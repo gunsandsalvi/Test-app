@@ -379,11 +379,6 @@ written from here):
       price on both classes. It cannot land one book at a time (§9.13 part 3) — it lands when
       every credit book prints a price and every reader takes `faceLocal`.
 
-    **A stale marking found while doing row 1, and not fixed here:** `docs/instruments/bond.md`
-    still marks **N7 · sov** and **N7.b · sov** ❌ against `discountBillProceedsLocal`, which
-    §9.13-SOV row 4 made false — both sovereign books clear a price now. Re-mark it in row 4,
-    where the bill book is being read anyway.
-
     **THE CONTINUOUS-VERSUS-DISCRETE CONVENTION** (step 12b, §9.12b): `engine/nelsonSiegel.ts`
     discounts CONTINUOUSLY (`exp(-z·t)`) where `domain/pricing/` compounds discretely — two answers
     to one question (rule 4). *(`index-calculation.ts:52`, the other half, is done: §9.13-CREDIT
@@ -1304,6 +1299,11 @@ reckoning, do not reason about it. §7.345 the burn-in is an instrument — the 
 point found six rules wrong on their own terms. §7.370 three firms differing at the eighth digit at
 week 1 became a 13% price gap by week 13: a 1e-8 is never "just rounding". §7.373 an audit can print
 a leak that is its own; a unit threshold in a shard merge dropped shares as if they were dollars.
+§9.13-CREDIT row 2: **the atlas gate proves a citation RESOLVES and can say nothing about whether a
+mark is still TRUE** — so a node closed by a commit that did not re-mark it stays ❌ for ever, and
+nothing fails. It had happened four times before anyone noticed, twice with the DIFF prose updated
+and the row above it left behind. Re-mark in the commit that closes the node, and RECOUNT the
+tally rather than adjusting it: both had drifted.
 
 **Money and ownership.** §7.230/§7.242/§7.275 `post()` is the one write path; a movement with no
 counterparty is a defect. §7.250 four post-08 stages wrote bank sheets to a DEAD channel — the banks'
@@ -1402,7 +1402,10 @@ have this: it re-keys balances the weekly walk builds, and a desk that sold woul
 against a balance it was never given.
 
 Gates green; no run (rule 11). 07d and 07f still clear per issuer, so their accrued leg waits on
-rows 3 and 4.
+rows 3 and 4. **And four stale atlas rows re-marked** — `bond.md`'s N7 · sov, N7.b · sov and N8 · sov,
+closed by 13-SOV rows 3 and 4 and never re-marked, plus N7 · corp, which row 1 closed and did not
+re-mark either; the tally was recounted rather than adjusted because it had drifted too. §5 carries
+the lesson.
 
 **13-CREDIT row 1 — THE CORPORATE BOND BOOK CLEARS A PRICE, PER TRANCHE, AND A BORROWER HAS NO
 SPREAD.** 07b priced one instrument per ISSUER and cleared a SPREAD, and all three halves of that

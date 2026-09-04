@@ -96,14 +96,14 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 | N5 · sov a COUPON in exactly one of three shapes | `src/domain/government.ts:isDiscountBill` | ⚠️ |
 | N6 · corp a PERIODICITY and an accrual convention | `src/domain/company.ts:paymentsPerYear` | ✅ |
 | N6 · sov a PERIODICITY and an accrual convention | `src/domain/government.ts:sovereignCouponDueShare` | ⚠️ |
-| **N7 · corp a PRICE per unit of par it changes hands at** | — | ❌ |
-| **N7 · sov a PRICE per unit of par it changes hands at** | `src/domain/government.ts:discountBillProceedsLocal` | ❌ |
+| N7 · corp a PRICE per unit of par it changes hands at | `src/engine2/prices.ts:setClearedPrice` | ⚠️ |
+| N7 · sov a PRICE per unit of par it changes hands at | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:priceAtYieldBps` | ✅ |
 | N7.a · corp cleared from real demand against real supply | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ⚠️ |
 | N7.a · sov cleared from real demand against real supply | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ⚠️ |
-| **N7.b · corp FORBID the price is never derived from the spread** | `src/domain/pricing/bond.ts:priceFromSpreadBps` | ❌ |
-| **N7.b · sov FORBID the price is never derived from the yield** | `src/domain/government.ts:discountBillProceedsLocal` | ❌ |
+| **N7.b · corp FORBID the price is never derived from the spread** | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:pricePar` | ❌ |
+| N7.b · sov FORBID the price is never derived from the yield | `src/domain/government.ts:billYieldFromPrice` | ✅ |
 | N8 · corp a HOLDER OF RECORD: who owns how many units | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
-| **N8 · sov a HOLDER OF RECORD: who owns how many units** | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ❌ |
+| N8 · sov a HOLDER OF RECORD: who owns how many units | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ✅ |
 | N8.a · corp VERIFY Σ units held = units issued | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | N8.a · sov VERIFY Σ units held = units issued | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | N9 · corp TRANSFERABILITY | `src/engine/ledger/holdings-ledger.ts:transferHolding` | ✅ |
@@ -131,33 +131,50 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-**42 rows — 21 nodes (the fourteen plus their seven sub-nodes) × 2 types: 20 ✅, 13 ⚠️, 9 ❌.**
+**42 rows — 21 nodes (the fourteen plus their seven sub-nodes) × 2 types: 24 ✅, 13 ⚠️, 5 ❌.**
+
+*Re-marked 2026-09-04 at §9.13-CREDIT row 2, catching up four rows the commits that closed them
+left behind: N7 · sov and N7.b · sov (13-SOV row 4 made both books clear a price), N8 · sov (13-SOV
+row 3 — its DIFF entry below already said "closed all of it" while the row above still read ❌), and
+N7 · corp (13-CREDIT row 1). The count above was COUNTED rather than adjusted, because it had
+drifted on its own too: it read 20/13/9 against a table that summed to 21/13/8. The lesson is the
+file's own: `check-atlas.sh` proves every citation RESOLVES and can say nothing about whether a mark
+is still TRUE, so a row nobody re-marks — and a tally nobody recounts — is the one kind of drift the
+gate cannot catch.*
 
 The contract's own thesis is confirmed and sharpened: the two types differ correctly at N11, N13
 and N13.a — the sovereign genuinely has no call machinery and no seniority field, which is the
 right answer and rule 4's — and they fail IDENTICALLY at N7, N7.b and N14, which is where the
 model's real defect lives.
 
-### ❌ N7 / N7.b BOTH TYPES — THE ONE CHARACTERISTIC NEITHER TYPE HAS
+### ⚠️ N7 / N7.b — THE SOVEREIGN AND THE CORPORATE BOND HAVE A PRICE; THE LOAN AND THE PAPER DO NOT
 
-**KNOWN(13).** No bond in this model has a price per unit of par that it changes hands at.
-`financial-clearing-engine.ts:956` values a fill at `1` for anything whose `statKind` is not
-`PRICE_LIKE`, and both credit (`SPREAD_LIKE`) and sovereign (`YIELD_LIKE`) are declared that way at
-`assets/index.ts:69-71`. A unit of par trades at a dollar on every book in the tree.
+**What this entry said when it was written, and what has landed since.** It said no bond in this
+model had a price per unit of par that it changes hands at: `financial-clearing-engine` values a
+fill at `1` for anything whose `statKind` is not `PRICE_LIKE`, and credit (`SPREAD_LIKE`) and
+sovereign (`YIELD_LIKE`) were both declared that way. It said N7.b was not merely unmet but
+INVERTED — `priceFromSpreadBps` was called and `spreadBpsFromPrice` was called by nothing — and that
+step 13's pair-swap, moving the derivation to the participant's side and the inverse to after the
+clear, was exactly the fix.
 
-**N7.b is not merely unmet, it is inverted: the only direction that exists is the forbidden one.**
-`domain/pricing/bond.ts` is built as a matched pair and both halves are honest arithmetic, but
-`priceFromSpreadBps` is called and `spreadBpsFromPrice` is called by nothing outside its own module.
-The three places a "price" appears are all outputs of a spread or a yield:
-`07d:472`'s `pricePar = 100 − DM_delta × duration × 100`, `credit-price.ts:36`'s `pricePerFace` (the
-mark, built and not wired in), and `07f:375`'s `discountBillProceedsUSD(1, y, years)` at the bill
-primary. That last one is the ONE price anything actually pays in this model — a real discount, on
-a real primary leg, that made the treasury's proceeds honest — and it is still `face/(1+y·t)` off
-the cleared yield rather than a level anyone bid. Step 13's pair-swap (`priceFromSpreadBps` moves to
-the participant's side, `spreadBpsFromPrice` to after the clear) is exactly the fix and this file is
-the reference model that says so for both types at once.
+That fix has now landed on three of the five books, and this is where it stands:
 
-### ❌ N8 · sov — A HOLDER OF RECORD OF WHAT?
+- **SOVEREIGN ✅, both books** (§9.13-SOV row 4). `07c` clears a PRICE per bond, stating each
+  holder's reservation yield as the price it implies on that bond's own schedule, and derives the
+  yield back with `yieldFromPrice`; `07f`'s bills do the same on the money market's simple-interest
+  convention, which is their own and stays theirs (rule 8). `discountBillProceedsLocal` is still the
+  price-from-yield direction and that is now PERMITTED, because it sits on the bidder's side: N7.b
+  forbids deriving the CLEARED price from a cleared yield, not stating a reservation as a price.
+- **CORPORATE BONDS ⚠️** (§9.13-CREDIT row 1). `07b` clears a price per TRANCHE, deposits it in
+  `engine2/prices.ts`, and every spread in the model is read back off it — there is no issuer spread
+  left to derive a price from.
+- **LOANS AND COMMERCIAL PAPER ❌**, which is why N7 · corp is ⚠️ and N7.b · corp is still ❌.
+  `07d:pricePar = 100 − DM_delta × duration × 100` is a price linearised out of a cleared discount
+  margin — the forbidden direction, still running, still on the surface through the loan index and
+  the player's position book — and `07f`'s commercial-paper book still clears a yield. They are
+  §3.13's rows 3 and 4.
+
+### ✅ N8 · sov — A HOLDER OF RECORD OF WHAT? (closed, 13-SOV row 3)
 
 **KNOWN(13-SOV, row 3.)** `banking.ts:129`'s `sovereignBondHoldingsByBond: Record<string, number>`
 was dollars against a tenor key. There was no instrument in it, so N8's question ("who owns how
