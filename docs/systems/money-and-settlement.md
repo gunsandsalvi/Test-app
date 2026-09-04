@@ -220,6 +220,10 @@ What is true now, and where the record is:
   keyed by ticker, its own field. `O8` walks every party-keyed store through one `partyExists`
   over the index — §9 c-then-4.
 
+- **One door** (§9.13-BOOK d0): no file outside `engine/ledger/` and `engine2/` names a mutable
+  store handle, and `check-hygiene.sh` fails the first that does; the seed sets a sector row
+  through `accounts.ts:openSectorRow` and nothing in a week sets one.
+
 What the collapse handed to slice (d): `DerivativeContract.referenceId` holds four id spaces
 (`the-derivative-layer.md` A1), and `O3` passes a fund share whose fund is gone (`the-register.md`
 A1.b).

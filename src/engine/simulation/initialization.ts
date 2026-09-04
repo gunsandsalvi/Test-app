@@ -76,7 +76,7 @@ import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGOR
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
-import { openAccount, openingCashOf, stashOpeningCash, sectorRowAt, stashSeedHouseholdLine, seedGovLadderOf, mutableAccounts } from '../ledger/accounts';
+import { openAccount, openingCashOf, stashOpeningCash, stashSeedHouseholdLine, seedGovLadderOf, openSectorRow } from '../ledger/accounts';
 import { newWireJournal, setActiveWireJournal, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
@@ -841,7 +841,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           const rowLocal = bankShareTotal > 0
             ? Math.round(openingCashOf(seg) * ((b.bankMarketShare ?? 0) / bankShareTotal))
             : Math.round(openingCashOf(seg) / regionBanksForLending.length);
-          mutableAccounts(seedV2).balance[sectorRowAt(seedV2, { kind: 'SEGMENT', region: regionId, industry: seg.industry }, b.ticker, currencyOf(regionId))] = rowLocal;
+          openSectorRow(seedV2, { kind: 'SEGMENT', region: regionId, industry: seg.industry }, b.ticker, currencyOf(regionId), rowLocal);
           smeLocal += rowLocal;
         });
         // SETL2 (§7.4 — the seed must open in the shape the weekly engine maintains): a corporate

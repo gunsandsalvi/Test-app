@@ -29,12 +29,11 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
-import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, markBookDirty, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
+import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, instrumentIdAt, setRowShares, foldRowInto } from '../../../engine2/holdings';
 import { V2World, instrumentRefOf } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 import { clearedBookDelta, registerBooks, BookEntry } from '../../ledger/holdings-ledger';
-import { mutableHoldings } from '../../../engine2/holdings';
 import { RegionId } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
 import type { InstrumentId } from '../../../domain/ids';
@@ -200,14 +199,7 @@ export class HoldingsStore {
         row.units = next;
         // The persistent row is the authority; the delivery lands on it too.
         const rid = slot.rowIds[i];
-        if (rid >= 0) {
-          const H = mutableHoldings(this.v2);
-          H.shares[rid] = next;
-          H.qtyLocal[rid] = next * pricePerShare;
-          // A share-counted row's units ARE its shares (`holdings-ledger.ts:unitsOf`).
-          H.units[rid] = next;
-          markBookDirty(this.v2, entityId);
-        }
+        if (rid >= 0) setRowShares(this.v2, entityId, rid, next, pricePerShare);
         remaining -= take;
         if (isDust(remaining)) return;
       }
@@ -393,23 +385,13 @@ export function consolidateRegister(ctx: WeeklyStepContext): void {
     if (!hasDuplicate) return;
     const firstByKey = new Map<number, number>();
     const kept: number[] = [];
-    const Hm = mutableHoldings(v2);
     for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
       const k = pairKey(r);
       const first = firstByKey.get(k);
       if (first === undefined) { firstByKey.set(k, r); kept.push(r); continue; }
-      Hm.qtyLocal[first] = H.qtyLocal[first] + H.qtyLocal[r];
-      const sh = H.shares[r];
-      if (!Number.isNaN(sh)) {
-        const cur = H.shares[first];
-        Hm.shares[first] = (Number.isNaN(cur) ? 0 : cur) + sh;
-      }
-      // §9.13-CREDIT row 5 — and the QUANTITY merges with the value. Two rows of one instrument
-      // hold one position; folding only the money left the survivor reporting one row's face
-      // against both rows' value.
-      const uKeep = rowUnits(H, first);
-      const uDrop = rowUnits(H, r);
-      Hm.units[first] = uKeep + uDrop;
+      // §9.13-CREDIT row 5 — the QUANTITY merges with the value: two rows of one instrument hold
+      // one position. §3.13-BOOK d0 — through the store's own operation, not its handle.
+      foldRowInto(v2, first, r);
     }
     relinkBook(v2, entity.id, kept);
     bumpRegister(ctx);

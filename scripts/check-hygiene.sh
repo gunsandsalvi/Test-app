@@ -100,6 +100,19 @@ if [ -n "$LOT_STRAY$OUT_STRAY" ]; then
   echo "$LOT_STRAY$OUT_STRAY"
   exit 1
 fi
+# §3.13-BOOK d0 — ONE DOOR. The five mutable store handles are the stores' own: nothing outside
+# engine/ledger/ and engine2/ may name one. A stage or the seed that needs a write asks the owning
+# module for a named operation (`openSectorRow`, `setRowShares`, `restrikeContract`, …), so every
+# write has a name and a home, and the type-level seal (`Readonly*` views) has no function-level
+# way round it. This is the guard the three list-shaped ones above could not be, because a new
+# handle would have needed a new list.
+HANDLE_STRAY=$(grep -rnE "\bmutable(Holdings|Tranches|Lots|Contracts|Prices|Accounts)\b" src scripts/harness.ts test --include=*.ts --include=*.tsx 2>/dev/null \
+  | grep -vE '^src/engine/ledger/|^src/engine2/' || true)
+if [ -n "$HANDLE_STRAY" ]; then
+  echo "ERROR: a mutable store handle is named outside engine/ledger/ and engine2/ — ask the store for a named operation:"
+  echo "$HANDLE_STRAY"
+  exit 1
+fi
 # §3.13c — THESE GUARDS NAME FIELDS IN SHELL REGEXES, which nothing type-checks. The `…USD`
 # rename broke three of them silently (they matched names that no longer existed, so they could
 # never fire again) and they were repaired by hand. A guard here has to be updated WITH any

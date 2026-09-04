@@ -462,16 +462,13 @@ written from here):
     have, made total. `structuredClone` on the host state must keep working, so these are plain
     data with private accessors, never classes.
 
-    **THE WALL IS UP ON ALL SIX STORES — in §9 — AND IT HAS OPEN DOORS.** `accounts`, `prices` and
-    `contracts` had no read view at all, so any file could write a balance, invent a print, or
-    re-strike a contract price. What is LEFT: the five mutable handles are exported and fourteen
-    files import one, six of them outside `engine/ledger/` and `engine2/` (`close-seed`,
-    `initialization`, `05-unit-bidding`, `holdings-store`, `stage08-front`, `lots`); and the
-    register itself is still TWO representations — `engine2/holdings.ts` calls itself *"Stage 1: a
-    SYNCED MIRROR"* of `entity.itemizedHoldings`, the seed pushes rows straight into the object
-    array (`initialization.ts:1570,1619`), and `core.ts:463` materialises the array back each week
-    under a sync check that runs only behind an env flag. Slices (d0) and (d1) below are those two
-    sentences.
+    **THE WALL IS UP ON ALL SIX STORES AND HAS ONE DOOR — d0 in §9.** No file outside
+    `engine/ledger/` and `engine2/` names a mutable handle, and `check-hygiene.sh` fails the first
+    that does. What is LEFT is that the register itself is still TWO representations —
+    `engine2/holdings.ts` calls itself *"Stage 1: a SYNCED MIRROR"* of `entity.itemizedHoldings`,
+    the seed pushes rows straight into the object array (`initialization.ts:1570,1619`), and
+    `core.ts:463` materialises the array back each week under a sync check that runs only behind
+    an env flag. Slice (d1) below is that sentence.
 
     **THE CROSS-TABLE CHECK IS AT THE WRITE, NOT IN A GATE** (reviewed 2026-09-04: a scan of four
     tables needs a STATE, so "a gate in `check-hygiene.sh`" is either a run — rule 11 forbids it —
@@ -512,11 +509,6 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d0. **ONE DOOR.** The five mutable handles become module-private to `engine/ledger/` and
-        `engine2/`; the six outside writers move into named ledger operations (`seedHolding`,
-        `seedBalance`, the contract-book columns `05-unit-bidding` writes, `holdings-store`'s six
-        register columns). `check-hygiene.sh`'s import boundary becomes total rather than a list of
-        exemptions. Byte-identical.
     d1. **THE MIRROR DIES.** `entity.itemizedHoldings` becomes the week-end materialised view its
         own header promises, never a writer's target: the seed wires its rows through the ledger like
         everyone else, `syncBookRows` and `HOLDINGS_SYNC_CHECK` go, and every reader of the array is
@@ -1743,6 +1735,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d0 — ONE DOOR.** No file outside `engine/ledger/` and `engine2/` names a mutable store
+handle now, and `check-hygiene.sh` fails the first that does — one guard over all five handles
+rather than three lists of exemptions. The four outside writers became named operations of the
+store they wrote: the seed's two direct balance sets are `accounts.ts:openSectorRow` (the household
+line and each pool's row at a bank — the one operation that SETS a sector row, used by the seed's
+close and nothing in a week); `05-unit-bidding`'s settle kernel, which held the contract book's
+handle and wrote five columns itself, reads the book through the world's view and asks
+`contracts.ts` for `ageContractWeek`, `restrikeContract`, `setContractBacklog`,
+`applyContractDeposit` and `setContractShortWeeks` — each the statement it replaced, in the same
+order; and `holdings-store`'s two column writes (a stock-loan delivery landing on a row, the
+week-end fold of two rows of one instrument) are `holdings.ts:setRowShares` and `foldRowInto`.
+The plan's count was off by two: `stage08-front` and `lots` are inside `engine2/`, so there were
+four outside writers, not six. Byte-identical by construction (the same statements behind a name).
+Gates green; no run.
 
 **PLAN AND ATLAS REVIEW (2 of 2) — THE ATLAS CHECKS ITSELF, AND 47 FILES ARE RE-MARKED AGAINST WHAT
 IS TRUE.** `check-atlas.sh` proves a citation RESOLVES; nothing proved a mark was TRUE, and the

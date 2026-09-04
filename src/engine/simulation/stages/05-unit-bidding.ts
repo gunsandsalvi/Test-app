@@ -39,7 +39,7 @@ import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryLocal, full
 import { WeeklyStepContext, CompanyWeekUpdate } from './context';
 import { revHistLen, revHistAt, rowOf, V2World, ensureV2, partyKeyOf } from '../../../engine2/world';
 import { deliverGoods, receiveInputLot, settleOutputInventory, setOutputStock, consumeGoods } from '../../ledger/goods-ledger';
-import { contractRows, relinkChain, formContractRow, endOfWeekCompact, mutableContracts, type ContractTable } from '../../../engine2/contracts';
+import { contractRows, relinkChain, formContractRow, endOfWeekCompact, ageContractWeek, restrikeContract, setContractBacklog, applyContractDeposit, setContractShortWeeks, type ReadonlyContractTable } from '../../../engine2/contracts';
 import { random, beginEntityScope, endEntityScope } from '../../rng';
 import { capacityMixShares } from '../../../domain/sme-pool';
 import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
@@ -584,10 +584,10 @@ const CS_ALIVE = 0, CS_DEAD_MISSING = 1, CS_DEAD_SUPPLIER = 2, CS_DEAD_CUSTOMER 
 /** The portable core: per-row settlement arithmetic in chain order, draining each supplier's
  *  one balance sequentially (the coupling that makes this loop serial by construction). */
 function settleContractsCore(
-  // §3.13-BOOK: this core WRITES the contract book (the escalation re-strike, the backlog and the
-  // progress deposit), so it takes the book's own mutable handle rather than the world's read
-  // view. `settleContracts` above is the only caller and holds the handle.
-  T: ContractTable, rows: number[], contractLeadWeeks: number,
+  // §3.13-BOOK d0: this core reads the contract book through the world's read view and makes its
+  // five writes (the ageing, the escalation re-strike, the backlog, the progress deposit, the
+  // short-weeks count) through the store's own operations. No handle is held here.
+  v2: V2World, T: ReadonlyContractTable, rows: number[], contractLeadWeeks: number,
   preStatus: Uint8Array, supSlot: Int32Array, needLocal: Float64Array,
   marketPrice: Float64Array, avail: Float64Array,
   status: Uint8Array, buyerLoss: Float64Array, sellerLoss: Float64Array,
@@ -598,20 +598,19 @@ function settleContractsCore(
     const r = rows[i];
     if (preStatus[i] !== 0) { status[i] = preStatus[i]; continue; }
 
-    T.weeksRemaining[r] -= 1;
+    const weeksLeft = ageContractWeek(v2, r);
     const marketPriceLocal = marketPrice[i];
 
-    if (T.weeksRemaining[r] < 0) {
+    if (weeksLeft < 0) {
       buyerLoss[i] = T.backlogUnits[r] * Math.max(0, marketPriceLocal - T.priceLocal[r]);
       status[i] = CS_DEAD_EXPIRY;
       continue;
     }
 
     if (T.escalationBaseLocal[r] > 0.0001) {
-      T.priceLocal[r] = Number(
+      restrikeContract(v2, r, Number(
         (T.priceLocal[r] * (marketPriceLocal / T.escalationBaseLocal[r])).toFixed(4)
-      );
-      T.escalationBaseLocal[r] = marketPriceLocal;
+      ), marketPriceLocal);
     }
 
     const openingBacklogUnits = T.backlogUnits[r];
@@ -632,18 +631,17 @@ function settleContractsCore(
     const actualTransacted = Math.min(owedAfterCancellationUnits, supplierUnits);
     avail[supSlot[i]] = supplierUnits - actualTransacted;
     availAfter[i] = supplierUnits - actualTransacted;
-    T.backlogUnits[r] = Math.max(0, owedAfterCancellationUnits - actualTransacted);
+    setContractBacklog(v2, r, Math.max(0, owedAfterCancellationUnits - actualTransacted));
     const paymentLocal = actualTransacted * T.priceLocal[r];
 
     const targetDepositLocal = contractLeadWeeks
       * T.qtyPerWeek[r] * T.priceLocal[r] * PROGRESS_PAYMENT_SHARE;
     const appliedFromDepositLocal = Math.min(T.prepaidLocal[r], paymentLocal);
-    T.prepaidLocal[r] = T.prepaidLocal[r] - appliedFromDepositLocal;
-    const topUpLocal = Math.max(0, targetDepositLocal - T.prepaidLocal[r]);
-    T.prepaidLocal[r] += topUpLocal;
+    const topUpLocal = Math.max(0, targetDepositLocal - (T.prepaidLocal[r] - appliedFromDepositLocal));
+    applyContractDeposit(v2, r, appliedFromDepositLocal, topUpLocal);
     const fillRate = T.qtyPerWeek[r] > 0
       ? Math.min(1, actualTransacted / T.qtyPerWeek[r]) : 1.0;
-    T.shortWeeks[r] = fillRate < 0.95 ? T.shortWeeks[r] + 1 : 0;
+    setContractShortWeeks(v2, r, fillRate < 0.95 ? T.shortWeeks[r] + 1 : 0);
 
     actualT[i] = actualTransacted; paymentL[i] = paymentLocal;
     appliedL[i] = appliedFromDepositLocal; topUpL[i] = topUpLocal; fillL[i] = fillRate;
@@ -667,11 +665,9 @@ function settleContracts(
   contractSalesUnitsBySupplier: Map<Company, number>,
   availableBySupplier: Map<Company, number>
 ): number[] {
-  // §3.13-BOOK — THE ONE STAGE THAT WRITES A STORE IT DOES NOT OWN. Five columns are written
-  // here directly (the escalation re-strike, the backlog, and the progress deposit), so the
-  // contract book's wall has a door this stage walks through. Named rather than hidden: the
-  // I/O-layer step turns these into operations on `contracts.ts` and this handle goes away.
-  const T = mutableContracts(v2);
+  // §3.13-BOOK d0: the book is read through the world's view; its five writes are the store's
+  // own operations (`contracts.ts`), and the handle this stage used to hold is gone.
+  const T = v2.contracts;
   const { resolveRef, pidOf } = wk;
   const R_NONPERF = internReason('non-performance damages');
   const R_CANCEL = internReason('order cancellation damages');
@@ -762,7 +758,7 @@ function settleContracts(
   const availAfter = new Float64Array(m);
   const __c0 = S05_PROF ? performance.now() : 0;
   if (S05_PROF) { s05Phase.settlePre += __c0 - __sp0; s05Phase.settleRows += m; }
-  settleContractsCore(T, rows, contractLeadWeeks, preStatus, supSlot, needLocal, marketPrice,
+  settleContractsCore(v2, T, rows, contractLeadWeeks, preStatus, supSlot, needLocal, marketPrice,
     avail, status, buyerLoss, sellerLoss, actualT, paymentL, appliedL, topUpL, fillL, availAfter);
   const __c1 = S05_PROF ? performance.now() : 0;
   if (S05_PROF) s05Phase.settleCore += __c1 - __c0;

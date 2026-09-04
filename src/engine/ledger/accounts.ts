@@ -241,6 +241,17 @@ export function sectorRowAt(v2: V2World, party: PartyRef, bankTicker: Ticker, cu
   return r;
 }
 
+/**
+ * §3.13-BOOK d0 — THE SEED OPENS A SECTOR ROW AT A BANK. The one operation that SETS a sector
+ * party's row (the household sector's line at each bank, a pool's row at each bank), used by the
+ * seed's close and by nothing that runs in a week: a week moves a row by settlement's split of a
+ * leg (`adjustSectorRow`) and never sets one. Before this the two seed sites reached through
+ * `mutableAccounts` and wrote the column themselves — the wall's one door into the account store.
+ */
+export function openSectorRow(v2: V2World, party: PartyRef, bankTicker: Ticker, currency: CurrencyCode, balance: number): void {
+  mutableAccounts(v2).balance[sectorRowAt(v2, party, bankTicker, currency)] = balance;
+}
+
 /** A sector party's balance across its banks, expressed in ONE money. */
 export function sectorCashOf(v2: V2World, party: PartyRef, currency: CurrencyCode): number {
   const ref = partyKeyRefOf(v2, partyKey(party));

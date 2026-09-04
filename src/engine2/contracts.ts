@@ -153,6 +153,44 @@ export function formContractRow(
   }
 }
 
+/**
+ * §3.13-BOOK d0 — THE SETTLE KERNEL'S WRITES, AS OPERATIONS OF THE STORE. `05-unit-bidding`'s
+ * settlement core used to hold `mutableContracts` and write five columns itself — the one stage
+ * that wrote a store it did not own. These are those five writes, named, so the kernel reads the
+ * book through the world's read view and asks here to move it. Each is exactly the statement it
+ * replaced, in the same order, so the arithmetic is byte-identical.
+ */
+
+/** A week passes on the contract; returns the weeks left (negative = it expired this week). */
+export function ageContractWeek(v2: V2World, r: number): number {
+  const T = mutableContracts(v2);
+  return (T.weeksRemaining[r] -= 1);
+}
+
+/** An escalation clause re-strikes the price against the market and rebases the escalator. */
+export function restrikeContract(v2: V2World, r: number, priceLocal: number, escalationBaseLocal: number): void {
+  const T = mutableContracts(v2);
+  T.priceLocal[r] = priceLocal;
+  T.escalationBaseLocal[r] = escalationBaseLocal;
+}
+
+/** What the supplier still owes after this week's delivery. */
+export function setContractBacklog(v2: V2World, r: number, units: number): void {
+  mutableContracts(v2).backlogUnits[r] = units;
+}
+
+/** The progress deposit: what this week's delivery drew from it, then what topped it back up. */
+export function applyContractDeposit(v2: V2World, r: number, appliedLocal: number, topUpLocal: number): void {
+  const T = mutableContracts(v2);
+  T.prepaidLocal[r] = T.prepaidLocal[r] - appliedLocal;
+  T.prepaidLocal[r] += topUpLocal;
+}
+
+/** The running count of weeks the supplier fell short. */
+export function setContractShortWeeks(v2: V2World, r: number, weeks: number): void {
+  mutableContracts(v2).shortWeeks[r] = weeks;
+}
+
 /** §5-FINALIZATION step 9 — a merger NOVATES the target's contracts to the acquirer: every row
  *  naming the target (by either key the table stores, ticker or id) names the acquirer now. */
 export function novateContracts(v2: V2World, fromKeys: string[], toKey: string): number {

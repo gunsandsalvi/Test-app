@@ -297,6 +297,36 @@ export function markBookDirty(v2: V2World, entityId: string): void {
 }
 
 /**
+ * §3.13-BOOK d0 — THE TWO WRITES THE CLEARING STORE USED TO MAKE THROUGH THE HANDLE.
+ * `holdings-store.ts` held `mutableHoldings` for exactly these: a delivery landing on an existing
+ * row (a stock-loan leg, `addShares`), and the week-end merge of two rows of one instrument on
+ * one book. Both are operations of this store now, so the handle stays inside it.
+ */
+
+/** A share-counted row's whole position, set: shares, the units they are, and the value. */
+export function setRowShares(v2: V2World, entityId: string, r: number, shares: number, pricePerShare: number): void {
+  const H = mutableHoldings(v2);
+  H.shares[r] = shares;
+  H.qtyLocal[r] = shares * pricePerShare;
+  // A share-counted row's units ARE its shares (`holdings-ledger.ts:unitsOf`).
+  H.units[r] = shares;
+  H.dirty.add(entityId);
+}
+
+/** Fold row `drop` into row `keep` — value, shares and units — leaving `drop` for the relink to
+ *  free. Two rows of one instrument on one book hold one position (§9.13-CREDIT row 5). */
+export function foldRowInto(v2: V2World, keep: number, drop: number): void {
+  const H = mutableHoldings(v2);
+  H.qtyLocal[keep] = H.qtyLocal[keep] + H.qtyLocal[drop];
+  const sh = H.shares[drop];
+  if (!Number.isNaN(sh)) {
+    const cur = H.shares[keep];
+    H.shares[keep] = (Number.isNaN(cur) ? 0 : cur) + sh;
+  }
+  H.units[keep] = rowUnits(H, keep) + rowUnits(H, drop);
+}
+
+/**
  * §3.13-BOOK slice (a) — THE ONE PLACE A REGISTER ROW BECOMES AN INSTRUMENT ID.
  *
  * `instrRef` is an index into the shared intern table, which holds entity names, instrument keys,
