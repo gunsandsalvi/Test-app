@@ -1,14 +1,14 @@
 # §5-STRUCT — THE RATCHETS ONLY MEAN SOMETHING IF SOMETHING RUNS THEM.
 #
-# `check-hygiene.sh` carries three budgets (money writes outside the ledger, literal comparisons
-# against an instrument type, the pure-test boundary) and each may fall and never rise. Before this
+# `check-hygiene.sh` carries the budgets (literal comparisons against an instrument type, the
+# pure-test boundary, the ledger's import boundaries) and each may fall and never rise. Before this
 # file they fired only when a human typed `npm run verify`, which makes an architectural fitness
-# function a comment with extra steps.
+# function a comment with extra steps. It runs §4's five gates and nothing else.
 #
-# The harness is NOT run here. It takes minutes, it currently fails (§7.233 — 1,130 violations, of
-# which 237 are checks that got sharper), and a check that is always red teaches people to ignore
-# the build. It stays a deliberate local run until its count is meaningful; what gates a push is
-# what is fast and unambiguous: types, hygiene, unit tests.
+# The harness is NOT run here. It takes minutes and it is DELIBERATELY red — its violations are
+# the plan's unbuilt steps (rule 11), and a check that is always red teaches people to ignore the
+# build. It stays a local run, and it is step 38's to move. What gates a push is what is fast and
+# unambiguous: types, lint, hygiene, unit tests, build.
 name: verify
 
 on:
@@ -25,11 +25,12 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      # Types AND lint. `strict: true` is on (§7.234); the lint carries a --max-warnings ratchet
-      # at today's count, so a new `any` or a new dead assignment fails the build even though the
-      # existing 437 do not.
+      # Types AND lint. `strict: true` is on (§7.234) and the lint is `--max-warnings 0` — the
+      # ratchet that once stood at 437 is spent, so any warning fails the build.
       - run: npm run lint
-      # The architectural ratchets. Each budget may fall and never rise.
+      # The architectural ratchets (and check-atlas). Each budget may fall and never rise.
       - run: npm run hygiene
       # Pure-function tests over domain/. No world is run; see §2.4.
       - run: npm test
+      # The fifth gate: the app still builds. §4 lists all five and CI runs all five.
+      - run: npm run build

@@ -517,10 +517,13 @@ written from here):
     empty while `setDamperStreaks`/`rollDamperStreaks`/`packed.damperStreak`/`GameState.damperBindStreakById`,
     six adapters, `native-kernels.ts:62` and `audit/prices.ts:80` all still run. `MAX_WEEKLY_FX_MOVE_PCT`
     (`fx-market.ts:112`) has NO use site and a fifteen-line doc describing a live damper that no
-    longer exists. `ledger/parties.ts` (the `isModelled` "declared boundary" registry) has zero
-    importers; so do `engine2/state.ts` (~180 lines of a second unreachable world),
-    `stages/register-index.ts`, and `columns/{arena,company-table,tranche-table}.ts`. Delete all of
-    it, and every comment that still describes a boundary the model no longer has.
+    longer exists. Delete all of it, and every comment that still describes a boundary the model no
+    longer has. *(The dead-FILE half is done — §9's dead-file sweep. `engine2/state.ts` and
+    `stages/register-index.ts` were the sweep's two corrections: both have real importers and the
+    audit's claim that they had none was stale.)* **AND THE DEAD EXPORTS**, measured by the same
+    sweep: **369 exported names in 147 files appear in no other file** — over-exported internals
+    for the most part, dead constants for the rest. It is a mechanical pass (drop the `export`, or
+    the name, and let `tsc`/`eslint` say), and it belongs here rather than in a step of its own.
 20. **Where a bound covered a missing mechanism, BUILD THE MECHANISM** (rule 6's pairing). Named:
     the estate's asset sale clears against real bidders instead of `sold × (1 − min(0.9, …))`
     (`estate-resolution.ts:213`) and peers are allocated by a bid, not pro rata to cash; the LOLR and
@@ -1334,6 +1337,19 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**The dead-file sweep (part of step 19, done early for a handover).** Seven files with no importer
+anywhere: `engine/columns/{arena,company-table,tranche-table}.ts` (SCALE wave 2's parallel company
+and tranche tables — `engine2/` is the one that shipped), `engine/ledger/{index,parties,balance}.ts`
+(a money facade nothing imported, the party-kind registry only that facade re-exported, and an
+`Account` interface whose stated target `engine/ledger/accounts.ts` already reached), and
+`engine/simulation/ipo.ts`, a file whose whole body was `export {}` and a note saying where the
+logic used to live — which is what git history is for. `check-hygiene.sh`'s asset-switch exemption
+for `parties.ts` went with it and the ratchet fell 54 → 49. Step 19's other two named files were
+CORRECTIONS: `engine2/state.ts` (5 importers) and `stages/register-index.ts` (7) are live, and the
+audit's "zero importers" claim about them was stale. The same sweep measured 369 dead exported names
+in 147 files and left them to step 19. CI now runs all five of §4's gates (it was missing the
+build), and its own stale counts are gone.
 
 **13b — a bond's price is CLEAN, so the buyer pays the seller what has already accrued.** The
 accrual ledger was correct per holder and nobody ever paid for it: the seller carried the interest

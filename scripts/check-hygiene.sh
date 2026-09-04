@@ -34,17 +34,20 @@ fi
 # 4. §5-STRUCT step 4 — TYPE UNIONS ARE REGISTRIES, NOT SWITCHES. A literal comparison against a
 #    union member is a case that the compiler will not point you at when a member is added — and
 #    §7.229 counted AssetType at 75 sites across 17 files, PartyRef.kind at 69 across 19. Facts
-#    about a kind belong in its registry (domain/assets, engine/ledger/parties); genuinely
+#    about a kind belong in its registry (domain/assets); genuinely
 #    per-kind BEHAVIOUR may still switch, which is why this is a ratchet and not a ban.
 ASSET_MEMBERS="'EQUITY'|'CORP_BOND'|'LEVERAGED_LOAN'|'SOV_BOND'|'GOV_BOND'|'COMMERCIAL_PAPER'|'PE_FUND_INTEREST'|'ETF_SHARE'"
-REGISTRY_OWNED='^src/domain/assets/|^src/engine/ledger/parties\.ts:'
+REGISTRY_OWNED='^src/domain/assets/'
 ASSET_SWITCH=$(grep -rnE "(===|!==|case )[[:space:]]*(${ASSET_MEMBERS})" src --include=*.ts 2>/dev/null \
   | grep -vE "$REGISTRY_OWNED" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
 ASSET_SWITCH_COUNT=$(printf '%s' "$ASSET_SWITCH" | grep -c . || true)
 # THE RATCHET: may fall, never rise. §7.279 lowered 64 → 60 (mandatePctOf Record lookup);
 # §7.283 lowered 60 → 58 (isIssuerEquityRow registry predicate at the corporate-action sites);
 # §7.290 lowered 58 → 56 (hedgedAsFixedIncome / carriesRateDuration registry facts).
-ASSET_SWITCH_BUDGET=54
+# The dead-file sweep lowered 54 → 49: `ledger/parties.ts` was the kind registry for PARTIES, had
+# no importer left, and went with the dead money facade that re-exported it — so the exemption for
+# it went too, and the count is now what the tree actually holds.
+ASSET_SWITCH_BUDGET=49
 if [ "$ASSET_SWITCH_COUNT" -gt "$ASSET_SWITCH_BUDGET" ]; then
   echo "ERROR: $ASSET_SWITCH_COUNT literal comparisons against an instrument type (budget $ASSET_SWITCH_BUDGET)."
   echo "$ASSET_SWITCH" | head -20
