@@ -1,25 +1,20 @@
-# Stages core.ts runs that no system tree describes yet.
+# Stages core.ts runs and files under src that no system tree describes yet.
 #
-# check-atlas.sh requires every stage to be either in a tree or listed here, so the atlas cannot
-# quietly fall behind the pipeline: a NEW stage fails the build until somebody decides which
-# system it belongs to. A line here is an admission, not an exemption — the list shrinks as the
-# atlas is built and its length is the honest measure of how far along it is.
+# check-atlas.sh requires every stage and every source file to be either cited in a tree or listed
+# here, so the atlas cannot quietly fall behind the pipeline: a NEW stage or file fails the build
+# until somebody decides which system it belongs to. A line here is an admission, not an exemption.
 #
-# Written 2026-09-03 with corporate credit as the only mapped system. The domain half was added
-# when the gate was extended to src/domain: the README had claimed that coverage and the script
-# had never checked it, so 72 modules were invisible to the instrument built to find absences.
+# The gate also checks this file both ways (2026-09-04): an entry naming a file that no longer
+# exists fails, and an entry naming a file a tree already cites fails — the first is how seven
+# deleted files stayed listed for a day, the second how `engine/credit-price.ts` was both "unmapped"
+# and cited by three trees. The list only shrinks, and the gate is what makes that true.
 #
-# PRUNED 2026-09-03 when all 45 trees were mapped (§3 step 37): 212 of 321 lines removed because
-# the file or stage is now cited in a tree. What is LEFT is the honest remainder — 109 entries,
-# and each is one of three things, which the next pass must distinguish:
+# Each entry is one of three things, and the next pass must say which:
 #   · INFRASTRUCTURE a tree legitimately does not describe (columns/, workers, kernels, shims,
-#     formatters) — these want an "OUT OF SCOPE, and why" line rather than a tree;
+#     formatters, the UI shell) — these want an "OUT OF SCOPE, and why" line rather than a tree;
 #   · a stage whose system IS mapped but whose file the mapping never needed to cite;
 #   · a real gap — code doing something no required tree accounts for, which is the most
 #     interesting kind of entry in this file and the reason it is not simply deleted.
-
-# ---- PIPELINE STAGES core.ts runs ----
-
 institutional-income
 repo-collateral-reconcile
 08-company-fundamentals
@@ -31,10 +26,6 @@ reverse-repo-draw
 settlement-funding
 register-consolidation
 
-# ---- EVERY SOURCE FILE NOT YET IN A TREE ----
-# The gate now covers all of src (user, 2026-09-03: "can you just extend the gate to everything?").
-# This list is the atlas's own progress bar: 29 of 295 files are described by a tree, 266 are not.
-# It only shrinks. A new file joins a tree or joins this list, and the build fails otherwise.
 src/App.tsx
 src/domain/company-week/learning.ts
 src/domain/defect.ts
@@ -53,25 +44,17 @@ src/domain/volatility.ts
 src/engine/blackScholes.ts
 src/engine/bootstrap/carriers.ts
 src/engine/bootstrap/category-demand.ts
-src/engine/columns/arena.ts
-src/engine/columns/company-table.ts
 src/engine/columns/intern.ts
 src/engine/columns/kernel.ts
 src/engine/columns/table.ts
-src/engine/columns/tranche-table.ts
-src/engine/credit-price.ts
 src/engine/dealers.ts
 src/engine/formatters.ts
-src/engine/ledger/balance.ts
-src/engine/ledger/index.ts
-src/engine/ledger/parties.ts
 src/engine/macro/utils.ts
 src/engine/macro/weather.ts
 src/engine/macroEngine.ts
 src/engine/simulation.ts
 src/engine/simulation/central-bank-identity-trace.ts
 src/engine/simulation/constants.ts
-src/engine/simulation/ipo.ts
 src/engine/simulation/stages/01-macro-feedback.ts
 src/engine/simulation/stages/08-company-fundamentals.ts
 src/engine/simulation/stages/13-news-and-turn-summary.ts

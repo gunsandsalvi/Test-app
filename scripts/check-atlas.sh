@@ -60,6 +60,20 @@ if [ -n "$ATLAS_TREES" ]; then
       ATLAS_FAIL=1
     fi
   done < <(find src -name '*.ts' -o -name '*.tsx' | sort)
+  # UNMAPPED is checked both ways (2026-09-04): an entry must name a file that exists, and must not
+  # name a file a tree already cites — otherwise the list neither shrinks nor measures anything.
+  while IFS= read -r um; do
+    [ -z "$um" ] && continue
+    case "$um" in src/*)
+      if [ ! -f "$um" ]; then
+        echo "ERROR: docs/systems/UNMAPPED lists '$um', which no longer exists — delete the line."
+        ATLAS_FAIL=1
+      elif grep -qF "\`$um:" $ATLAS_TREES; then
+        echo "ERROR: docs/systems/UNMAPPED lists '$um', which a tree already cites — delete the line."
+        ATLAS_FAIL=1
+      fi ;;
+    esac
+  done < <(grep -v '^#' docs/systems/UNMAPPED | sed 's/[[:space:]]*$//' | sort -u)
   if [ "$ATLAS_FAIL" -ne 0 ]; then exit 1; fi
   echo "Atlas: $ATLAS_CITES citations resolve; $(find src -name '*.ts' -o -name '*.tsx' | wc -l | tr -d ' ') source files accounted for."
 fi

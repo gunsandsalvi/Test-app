@@ -3,7 +3,7 @@
  *
  * Step 2 of the generative bootstrap pipeline. Consumes population.ts's per-region
  * productivity level and derives an occupation-level wage table from it, replacing the
- * previously hardcoded flat BASE_ANNUAL_WAGE_USD constant table. Household income is the
+ * previously hardcoded flat BASE_ANNUAL_WAGE constant table. Household income is the
  * sum of wage income across occupation pools (computed by callers from the returned table).
  */
 

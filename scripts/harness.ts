@@ -153,7 +153,7 @@ import { DERIVATIVE_CLASSES } from '../src/domain/derivatives/registry';
 import { auditWeek, auditSeed, auditSummary, AuditFinding } from '../src/engine/audit';
 import { ownershipCoverage } from '../src/engine/audit/ownership';
 import { instrumentEntries, type InstrumentId, asEntityId } from '../src/domain/ids';
-import type { Ticker } from '../src/domain/ids';
+import type { EntityId } from '../src/domain/ids';
 
 interface Violation {
   week: number;
@@ -470,7 +470,7 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     const cb = state.regions[region]?.centralBankSheet;
     if (!cb) return;
     const reserves = banksOf(state.companies, region)
-      .reduce((a, c) => a + bankReservesOf(ensureV2(state), c.ticker), 0);
+      .reduce((a, c) => a + bankReservesOf(ensureV2(state), c.id), 0);
     // XB5: the asset side is the sovereign book PLUS the FX reserves. Leaving the reserves out
     // here while the engine counts them made the identity fail by exactly their size — 231 of
     // 273 violations at the XB close, and a harness bug rather than an engine one.
@@ -863,8 +863,8 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
   // funding for their bond bids) and every USA institution's real cash (their budgets).
   shocked.companies.forEach(c => {
     if (c.region === 'USA' && c.bankBalanceSheet) {
-      const beforeLocal = bankReservesOf(ensureV2(shocked), c.ticker);
-      adjustBankReserves(ensureV2(shocked), c.ticker, beforeLocal * 0.01 - beforeLocal); // the drain: the account keeps 1%
+      const beforeLocal = bankReservesOf(ensureV2(shocked), c.id);
+      adjustBankReserves(ensureV2(shocked), c.id, beforeLocal * 0.01 - beforeLocal); // the drain: the account keeps 1%
       // WS6 taught the check the same lesson S6 did, one field later: with a repo market, a
       // bank with drained CASH still bids — it funds the purchase secured against its
       // collateral, which is exactly why real sovereign auctions rarely fail. "Buyers with no
@@ -1288,18 +1288,18 @@ const xbModule: HarnessModule = (() => {
       const withRevenue = carriers.filter(c => (c.carrierFleet?.lastWeekFreightRevenueLocal ?? 0) > 0);
       out.push(`  carriers earning freight this week: ${withRevenue.length} of ${alive.length}; tonne-miles ${carriers.reduce((a, c) => a + (c.carrierFleet?.lastWeekTonneNm ?? 0), 0).toExponential(2)}`);
       out.push('--- MNC: subsidiaries and intra-firm trade (§5-MNC) ---');
-      const subs = s.companies.filter((c) => c.parentTicker && isActiveCompany(c));
+      const subs = s.companies.filter((c) => c.parentId && isActiveCompany(c));
       out.push(`  subsidiaries ${subs.length}${subs.length > 0
-        ? ` (${subs.slice(0, 6).map((c) => `${c.parentTicker}->${c.ticker}@${c.region}`).join(' ')})` : ''}`);
+        ? ` (${subs.slice(0, 6).map((c) => `${c.parentId}->${c.ticker}@${c.region}`).join(' ')})` : ''}`);
       const groupOf = new Map<string, string>();
-      s.companies.forEach((c) => { groupOf.set(c.ticker, c.parentTicker ?? c.ticker); });
+      s.companies.forEach((c) => { groupOf.set(c.id, c.parentId ?? c.id); });
       let intraLocal = 0; let crossLocal = 0;
       (s.tradeInvoices ?? []).forEach((inv) => {
         if (inv.sellerRegion === inv.buyerRegion) return;
         const usd = Math.max(0, inv.amountCurrency * inv.bookedUsdPerCurrency);
         crossLocal += usd;
-        if (groupOf.get(inv.sellerTicker) !== undefined
-          && groupOf.get(inv.sellerTicker) === groupOf.get(inv.buyerTicker)) intraLocal += usd;
+        if (groupOf.get(inv.sellerId) !== undefined
+          && groupOf.get(inv.sellerId) === groupOf.get(inv.buyerId)) intraLocal += usd;
       });
       out.push(`  intra-firm share of cross-border invoices: ${crossLocal > 0 ? pct(intraLocal / crossLocal) : 'n/a (no cross-border book)'} [real: ~one third; EMERGES from who owns whom]`);
       out.push('--- transit, the currency boundary, reserves ---');
@@ -1739,18 +1739,18 @@ const indModule: HarnessModule = (() => {
     out.push('--- IND12: trade credit, and who carries it ---');
     const invoices = s.tradeInvoices ?? [];
     let domesticLocal = 0, crossLocal = 0, termSum = 0;
-    const receivableByTicker = new Map<Ticker, number>();
-    const payableByTicker = new Map<Ticker, number>();
+    const receivableById = new Map<EntityId, number>();
+    const payableById = new Map<EntityId, number>();
     invoices.forEach(iv => {
       const usd = iv.amountCurrency * iv.bookedUsdPerCurrency;
       if (iv.sellerRegion === iv.buyerRegion) domesticLocal += usd; else crossLocal += usd;
       termSum += iv.weekDue - iv.weekBooked;
-      receivableByTicker.set(iv.sellerTicker, (receivableByTicker.get(iv.sellerTicker) ?? 0) + usd);
-      payableByTicker.set(iv.buyerTicker, (payableByTicker.get(iv.buyerTicker) ?? 0) + usd);
+      receivableById.set(iv.sellerId, (receivableById.get(iv.sellerId) ?? 0) + usd);
+      payableById.set(iv.buyerId, (payableById.get(iv.buyerId) ?? 0) + usd);
     });
     const totalLocal = domesticLocal + crossLocal;
-    const receivables = [...receivableByTicker.values()].reduce((a, x) => a + x, 0);
-    const payables = [...payableByTicker.values()].reduce((a, x) => a + x, 0);
+    const receivables = [...receivableById.values()].reduce((a, x) => a + x, 0);
+    const payables = [...payableById.values()].reduce((a, x) => a + x, 0);
     out.push(`  ${invoices.length} invoices outstanding, ${B(totalLocal)} — domestic ${B(domesticLocal)} (${pct(totalLocal ? domesticLocal / totalLocal : 0)}), cross-border ${B(crossLocal)}`);
     out.push(`  receivables ${B(receivables)} vs payables ${B(payables)} [must be equal: every invoice is two-sided]`);
     out.push(`  mean terms ${(invoices.length ? termSum / invoices.length : 0).toFixed(1)} weeks`);
@@ -1770,7 +1770,7 @@ const indModule: HarnessModule = (() => {
       const firms = s.companies.filter(c => isActiveCompany(c) && c.annualRevenue > 0 && b.test(leadOf(c)));
       if (firms.length === 0) return;
       const rev = firms.reduce((a, c) => a + c.annualRevenue, 0) / 52;
-      const rec = firms.reduce((a, c) => a + (receivableByTicker.get(c.ticker) ?? 0), 0);
+      const rec = firms.reduce((a, c) => a + (receivableById.get(c.id) ?? 0), 0);
       out.push(`  ${b.label}: ${String(firms.length).padStart(4)} firms, receivables ${(rev > 0 ? rec / rev : 0).toFixed(2)} weeks of sales`);
     });
 
@@ -1870,7 +1870,7 @@ const fpModule: HarnessModule = {
       // dump carries them as columns read off the ledger so the differ still sees every balance.
       const dumpV2 = ensureV2(state);
       writeFileSync(process.env.STATE_DUMP,
-        JSON.stringify(state.companies.map((c) => ({ ...c, cash: cashOf(dumpV2, c), ...(c.bankBalanceSheet ? { reserves: bankReservesOf(dumpV2, c.ticker), lines: stateDepositLines(state, c.ticker) } : {}) })),
+        JSON.stringify(state.companies.map((c) => ({ ...c, cash: cashOf(dumpV2, c), ...(c.bankBalanceSheet ? { reserves: bankReservesOf(dumpV2, c.id), lines: stateDepositLines(state, c) } : {}) })),
           (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Number(v.toPrecision(15)) : v)));
     }
     if (!FP || w > FP_WEEKS) return;
@@ -2052,7 +2052,7 @@ const spiralModule: HarnessModule = {
         banksOf(state.companies, region)
           .forEach((c) => {
             const bs = c.bankBalanceSheet!;
-            const facilityBookLocal = facilityBookOf(ensureV2(state), c.ticker);
+            const facilityBookLocal = facilityBookOf(ensureV2(state), c.id);
             const rwa = businessLoanBookOf(bs, facilityBookLocal) * 1.0 + householdBookRwaLocal(bs.householdLoans);
             const deskLocal = Object.values(bs.dealerDeskInventory ?? {})
               .reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0);
@@ -2060,7 +2060,7 @@ const spiralModule: HarnessModule = {
               + ` eq ${(bs.bankEquityLocal / 1e9).toFixed(2)}B rwa ${(rwa / 1e9).toFixed(2)}B`
               + ` ratio ${(rwa > 0 ? bs.bankEquityLocal / rwa : 0).toFixed(4)}`
               + ` | biz ${(businessLoanBookOf(bs, facilityBookLocal) / 1e9).toFixed(2)}B hh ${(consumerLoanBookOf(bs) / 1e9).toFixed(2)}B`
-              + ` cash ${(bankReservesOf(ensureV2(state), c.ticker) / 1e9).toFixed(2)}B cbloan ${((bs.centralBankLoanLocal ?? 0) / 1e9).toFixed(2)}B`
+              + ` cash ${(bankReservesOf(ensureV2(state), c.id) / 1e9).toFixed(2)}B cbloan ${((bs.centralBankLoanLocal ?? 0) / 1e9).toFixed(2)}B`
               + ` desk ${(deskLocal / 1e9).toFixed(2)}B`
               + ` oas5y ${(issuerSpreadAtOnCurve(ensureV2(state), state.regions[c.region], c.id, state.currentWeek, 5)?.spreadBps ?? 0).toFixed(0)}bps rating ${c.creditRating}`);
           });
@@ -2326,15 +2326,15 @@ function runHarness() {
     // never plug it.
     banksOf(state.companies).forEach((c: Company) => {
       const bs = c.bankBalanceSheet!;
-      const reservesLocal = bankReservesOf(ensureV2(state), c.ticker);
-      const lines = stateDepositLines(state, c.ticker);
+      const reservesLocal = bankReservesOf(ensureV2(state), c.id);
+      const lines = stateDepositLines(state, c);
       const sovLocal = Object.values((bs.sovereignBondHoldingsByBond || {}) as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
       // §5-WIRES D: the loan books are READS of the sheet's rows. This check subtracted
       // `bs.businessLoanBookLocal` and `bs.consumerLoanBookLocal`, two fields that stopped existing
       // when the rows became the truth — so the residual was `number - undefined` = NaN,
       // `Math.abs(NaN) > 5e6` is false, and THIS CHECK PASSED EVERY BANK EVERY WEEK. A `bs as any`
       // in the same expression is what let it compile. `audit/money.ts:m5` is the live one.
-      const facilityBookLocal = facilityBookOf(ensureV2(state), c.ticker);
+      const facilityBookLocal = facilityBookOf(ensureV2(state), c.id);
       const residualLocal: number =
         // SETL2: `corporateDepositsLocal` IS a liability now. Company payments settle through bank
         // books (stages/settlement.ts), so the line has real reserves behind it and excluding it
@@ -2450,13 +2450,13 @@ function runHarness() {
       const reg = state.regions[regionId];
       const book: RepoContract[] = reg.repoBook ?? [];
       if (book.length === 0) return;
-      const borrowedBy = new Map<string, number>();
-      const pledgedBy = new Map<string, Map<string, number>>();
+      const borrowedBy = new Map<EntityId, number>();
+      const pledgedBy = new Map<EntityId, Map<string, number>>();
       book.forEach((c) => {
-        borrowedBy.set(c.borrowerTicker, (borrowedBy.get(c.borrowerTicker) ?? 0) + c.principalLocal);
-        const byBond = pledgedBy.get(c.borrowerTicker) ?? new Map<string, number>();
+        borrowedBy.set(c.borrowerId, (borrowedBy.get(c.borrowerId) ?? 0) + c.principalLocal);
+        const byBond = pledgedBy.get(c.borrowerId) ?? new Map<string, number>();
         (c.collateral ?? []).forEach((p) => byBond.set(p.bondId, (byBond.get(p.bondId) ?? 0) + p.faceLocal));
-        pledgedBy.set(c.borrowerTicker, byBond);
+        pledgedBy.set(c.borrowerId, byBond);
         if (!(c.principalLocal >= 0) || !(c.maturityWeek > c.struckWeek)) {
           violations.push({ week: w, message: `${regionId} repo contract ${c.id} is malformed (principal ${c.principalLocal}, ${c.struckWeek}->${c.maturityWeek})` });
         }
@@ -2466,7 +2466,7 @@ function runHarness() {
       // owns — a violation reported against a bank that does not exist.
       banksOf(state.companies, regionId).forEach((c: Company) => {
         const bs = c.bankBalanceSheet!;
-        const derivedLocal = borrowedBy.get(c.ticker) ?? 0;
+        const derivedLocal = borrowedBy.get(c.id) ?? 0;
         const sheetLocal = (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0);
         if (Math.abs(derivedLocal - sheetLocal) > 5e6) {
           violations.push({ week: w, message: `Bank ${c.ticker} secured borrowing ${(sheetLocal / 1e9).toFixed(2)}B disagrees with its ${(derivedLocal / 1e9).toFixed(2)}B of repo contracts` });
@@ -2475,11 +2475,11 @@ function runHarness() {
         // (domain/collateral.ts). This check used a 1e6 tolerance against the reconcile's 1, so it
         // could fail a bank the engine had just declared clean.
         overPledgedByBond({
-          pledgedByBond: (pledgedBy.get(c.ticker) ?? new Map()) as Map<InstrumentId, number>,
+          pledgedByBond: (pledgedBy.get(c.id) ?? new Map()) as Map<InstrumentId, number>,
           heldByBond: new Map(instrumentEntries(bs.sovereignBondHoldingsByBond)
             .map(([k, v]) => [k, Number(v) || 0] as const)),
         }).forEach((excessLocal: number, bondId: InstrumentId) => {
-          const faceLocal = (pledgedBy.get(c.ticker) as Map<string, number>).get(bondId) ?? 0;
+          const faceLocal = (pledgedBy.get(c.id) as Map<string, number>).get(bondId) ?? 0;
           const heldLocal = Number(bs.sovereignBondHoldingsByBond?.[bondId] ?? 0);
           if (excessLocal > 0) {
             violations.push({ week: w, message: `Bank ${c.ticker} pledged ${(faceLocal / 1e9).toFixed(2)}B of ${bondId} against ${(heldLocal / 1e9).toFixed(2)}B held of it` });
@@ -2580,18 +2580,18 @@ function runHarness() {
   // absorbs the target's revenue and (for banks) its whole balance sheet in one week, so its
   // baseline steps up by the targets' own baselines rather than the acquirer being flagged for
   // running a bigger real book (the JLXP case: a small bank legitimately doubled at a merger).
-  const acquiredBaselineByAcquirer = new Map<string, number>();
+  const acquiredBaselineByAcquirer = new Map<EntityId, number>();
   state.companies.forEach(c => {
-    if (c.mergerAcquired && c.acquiredByTicker) {
+    if (c.mergerAcquired && c.acquiredById) {
       const targetInit = initialRevenueByTicker.get(c.ticker) ?? 0;
       acquiredBaselineByAcquirer.set(
-        c.acquiredByTicker,
-        (acquiredBaselineByAcquirer.get(c.acquiredByTicker) ?? 0) + targetInit
+        c.acquiredById,
+        (acquiredBaselineByAcquirer.get(c.acquiredById) ?? 0) + targetInit
       );
     }
   });
   state.companies.forEach(c => {
-    const initRev = (initialRevenueByTicker.get(c.ticker) ?? 0) + (acquiredBaselineByAcquirer.get(c.ticker) ?? 0);
+    const initRev = (initialRevenueByTicker.get(c.ticker) ?? 0) + (acquiredBaselineByAcquirer.get(c.id) ?? 0);
     if (initRev && c.annualRevenue > initRev * 20) {
       violations.push({
         week: WEEKS,

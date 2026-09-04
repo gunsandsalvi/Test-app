@@ -1871,7 +1871,7 @@ function runSubUnitMarkets(
       supUp.salesUnits = (supUp.salesUnits ?? 0) + soldUnits;
       (supUp.salesUnitsBySubUnit ??= {})[subUnitId] = (supUp.salesUnitsBySubUnit[subUnitId] ?? 0) + soldUnits;
     }
-    supUp._targetProductionUSD = (supUp._targetProductionUSD ?? 0) + plan.targetProductionLocal;
+    supUp._targetProductionLocal = (supUp._targetProductionLocal ?? 0) + plan.targetProductionLocal;
   });
 
   MARKET_REGION_IDS.forEach(regionId => {

@@ -2304,7 +2304,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.inputSupplyConstraintFactor = round4(newInputSupplyConstraintFactor);
 
-    comp._targetProductionUSD = (weekUpdate?._targetProductionUSD ?? targetProductionLocal);
+    comp._targetProductionLocal = (weekUpdate?._targetProductionLocal ?? targetProductionLocal);
 
     comp.lastWeekSalesLocal = update?.salesLocal ?? 0;
 

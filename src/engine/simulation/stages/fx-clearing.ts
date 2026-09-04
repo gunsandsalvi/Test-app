@@ -357,7 +357,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     // What each desk actually took, as a position: absorbing base DEMAND leaves it short the
     // base, absorbing base SUPPLY leaves it long. Its own schedule decided the size, and its own
     // capacity bounded it — no pro-rata split of a leftover.
-    deskCapacityByTicker.forEach((_capUSD, ticker) => {
+    deskCapacityByTicker.forEach((_capLocal, ticker) => {
       const filledLocal = result.newParticipantHoldings.get(`FXDESK-${ticker}-${key}`)?.get(instrument.id) ?? 0;
       if (!(filledLocal > 1)) return;
       let byRegion = deskFillByTicker.get(ticker);

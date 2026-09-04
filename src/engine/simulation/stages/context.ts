@@ -81,7 +81,7 @@ export interface CompanyWeekUpdate {
   treasuryHoldings?: import('../../../types').ItemizedHolding[];
   /** The production target stage 05 set, carried so stage 08 books against the same number. The
    *  underscore is the original author's marker that it is a hand-off and not a company field. */
-  _targetProductionUSD?: number;
+  _targetProductionLocal?: number;
 }
 
 export interface WeeklyStepContext {

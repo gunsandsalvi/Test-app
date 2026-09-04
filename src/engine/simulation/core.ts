@@ -226,11 +226,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
           });
         });
         if (focusIds.size > 1) console.log(`  [mint-stage] NOTE: ${focusIds.size} ids share ticker ${mintFocus}`);
-        const prev = (globalThis as { __mintPrevUSD?: number }).__mintPrevUSD ?? usd;
+        const prev = (globalThis as { __mintPrevLocal?: number }).__mintPrevLocal ?? usd;
         if (Math.abs(usd - prev) > 1e6) {
           console.log(`  [mint-stage] ${stage}: ${(prev / 1e6).toFixed(0)}M -> ${(usd / 1e6).toFixed(0)}M`);
         }
-        (globalThis as { __mintPrevUSD?: number }).__mintPrevUSD = usd;
+        (globalThis as { __mintPrevLocal?: number }).__mintPrevLocal = usd;
       }
     }
   };

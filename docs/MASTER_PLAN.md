@@ -1,20 +1,19 @@
 # THE MASTER PLAN — one file, one project: a closed circuit
 
 **Read §1 before touching anything.** §2 is the map, §3 IS THE WORK (one ordered project; take the
-first step), §4 the gates, §5 the lessons, §6 the watchlist, **§8 the full audit record behind
-§3's steps**, §9 the ledger of what is done. §1–6 are the plan and stay brief; §8 and
-`docs/LOG_ARCHIVE.md` are appendices you read at the step that needs one. There is no second rules
+first step), §4 the gates, §5 the lessons, §6 the watchlist, §8 the pointers to the two archive files,
+§9 the ledger of what is done. §1–6 are the plan and stay brief; the archives §8 names are
+appendices you read at the step that needs one. There is no second rules
 file and no second work list — §3 is the only list and it holds only what is still open.
 
-**A note on `§7.N`.** ~400 code comments cite `§7.N` — the ORIGINAL numbered records, which live in
+**A note on `§7.N`.** 699 code comments cite `§7.N` — the ORIGINAL numbered records, which live in
 git at `79c239b:docs/MASTER_PLAN.md`. §5 keeps every lesson the code still cites at its original
 number, so a `§7.N` citation still resolves. There is deliberately no section 7 here, so the
 citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD on `claude/master-plan-review-qbp6qp` (the branch this session was given; rule 14's own
-  branch name is `claude/master-plan-cleanup-ld1oh1` and `main`, and a session told to use another
-  pushes only where it was told).
+- HEAD on `claude/master-plan-review-qbp6qp`, the branch this session was given; rule 14 says
+  every commit goes there AND to `main`.
 - **Take §3's first open step, finish it, stop** (rule 10 states it in full). Do not write a "next
   step" note here naming anything but §3's first line; one was written, it disagreed with §3's
   order, and two steps were skipped behind it.
@@ -23,13 +22,13 @@ citation can never be misread as one.
   much list is left, not whether a change was good. The reference to judge against is
   `SHOCKS=0 WEEKS=16` at step 38, and the last one taken — **231 in 46**, money family clean — is
   history, not a target. Do not open a run to explain a print.
-- **Recording a step:** delete it from §3 and write ONE LINE in §9 — what changed, why, the
-  measured numbers. A lesson a FUTURE step could trip over goes in §5 as well; nothing else does.
+- **Recording a step:** delete it from §3 and write ONE ENTRY in §9, newest first — what changed,
+  why, the measured numbers (rule 16 says how long). A lesson a FUTURE step could trip over goes in §5 as well; nothing else does.
 
 **Where this list came from (2026-09-02): a line-by-line audit of ~230 files / ~55k lines**, which
 found ~380 defects. Every material one is a step in §3 at its file:line (or, once done, in §9), and
-**the sweep in full is in §8 so nobody re-derives it** — including the long tail that did not earn a
-step. §8 is a record, not a work list, and it was NOT re-verified: treat a finding there as a lead
+**the sweep in full is in `docs/AUDIT_ARCHIVE_2026-09-02.md` (§8 points at it) so nobody re-derives
+it** — including the long tail that did not earn a step. It is a record, not a work list, and it was NOT re-verified: treat a finding there as a lead
 with a file:line. The headline that set the order: money and ownership do NOT close, price is NOT
 universal (credit trades at par, commodity spot is a drift formula), and the instrument that
 measures all this is itself broken (the wires family never prints, the per-bank identity check has
@@ -38,7 +37,7 @@ ABSENT.
 
 ## 1. RULES OF ENGAGEMENT
 
-Standing user directives. Not suggestions. Eighteen; none of them restates another.
+Standing user directives. Not suggestions. Nineteen; none of them restates another.
 
 ### The world
 
@@ -147,7 +146,7 @@ Standing user directives. Not suggestions. Eighteen; none of them restates anoth
     it now describes is uglier — the ugliness was there and the constant was covering it. **A bad
     print is a finding, not a regression.** Only a change WRONG ON ITS OWN TERMS may be undone.
 
-14. **One bounded commit per step, pushed to `claude/master-plan-cleanup-ld1oh1` AND `main`.** Never
+14. **One bounded commit per step, pushed to the branch the session was given AND `main`.** Never
     one large unreviewable change. The message says what changed and WHY, for a reader who was not
     here. **No model identifiers in any committed artifact.** No PR unless asked.
 
@@ -264,10 +263,12 @@ holds PURE-FUNCTION tests over `domain/` only — no engine run; hygiene enforce
 **One list, in order.** A closed circuit means: every dollar and share has a named counterparty at
 every instant; every asset that has a price has a CLEARED one and shows it; nothing is bounded,
 plugged or invented; and the instrument that measures all this is itself true. Each step is ONE
-commit, gated by §4. **The full audit detail behind each step is in §8** — read the step's area
-before starting it (the index is at the head of §8). A finished step is deleted from here and
-recorded in §9, so this list is always exactly what is left. Later parts depend on earlier ones —
-do not reorder.
+commit, gated by §4. The 2026-09-02 sweep behind the older steps is in
+`docs/AUDIT_ARCHIVE_2026-09-02.md` (§8) — read the step's area before starting it. A finished step
+is deleted from here and recorded in §9, so this list is always exactly what is left. **FILE ORDER
+IS THE ORDER. A step's number is its identity, not its rank** — 28b sits after 29, 33–36 sit before
+30, 20-LLR opens PART IV — because a step is inserted where its dependencies put it and keeps the
+id it was born with. Later parts depend on earlier ones — do not reorder.
 
 ### PART I — THE CIRCUIT CLOSES (money and ownership leak nowhere) — **CLOSED**
 
@@ -423,9 +424,10 @@ written from here):
     · **Entities have four identities.** `PartyRef` (the ledger's), `v2.rowById` (a universal
       id→row allocator, 28 sites), `Company.id` and `Company.ticker` — **845 `.ticker` references
       and 155 `ByTicker` maps** — and `PartyRef` is itself inconsistent, keying COMPANY and the
-      three BANK kinds by TICKER and INSTITUTION by ID. **All four are branded types now**, with a
-      named function at every crossing, so the compiler refuses a mix; what is left is that they
-      are still FOUR, and (c-then-3b) makes `PartyRef` a view of the entity store.
+      three BANK kinds by TICKER and INSTITUTION by ID. **CLOSED by (c)**: all four are branded, a
+      named function stands at every crossing, and `PartyRef` is a view of the entity store keyed
+      by `EntityId`. What is left is that `Company.ticker` still keys ~470 reads and 129 maps,
+      each marked at its site as a display name or a participant seat, never an identity.
     · **Instruments have no registry of instances.** Debt is `v2.tranches` (real, one writer);
       **equity's issued side is `Company.sharesOutstanding`, a scalar with no instrument record**;
       derivatives are `v2.contracts`; fund shares reuse the holder's ENTITY id as an instrument
@@ -460,19 +462,26 @@ written from here):
     have, made total. `structuredClone` on the host state must keep working, so these are plain
     data with private accessors, never classes.
 
-    **THE WALL IS UP ON ALL SIX STORES — in §9.** `accounts`, `prices` and `contracts` had no read
-    view at all, so any file could write a balance, invent a print, or re-strike a contract price.
-    What is LEFT is that the handles are exported: the wall has named doors, and eleven files hold
-    one. Three of those should not — `05-unit-bidding` writes five contract-book columns,
-    `holdings-store` writes six register columns, and the seed writes balances directly. Making the
-    handles module-private is the rest of this paragraph, and it can only be done by moving those
-    writes into the owning module as named operations.
+    **THE WALL IS UP ON ALL SIX STORES — in §9 — AND IT HAS OPEN DOORS.** `accounts`, `prices` and
+    `contracts` had no read view at all, so any file could write a balance, invent a print, or
+    re-strike a contract price. What is LEFT: the five mutable handles are exported and fourteen
+    files import one, six of them outside `engine/ledger/` and `engine2/` (`close-seed`,
+    `initialization`, `05-unit-bidding`, `holdings-store`, `stage08-front`, `lots`); and the
+    register itself is still TWO representations — `engine2/holdings.ts` calls itself *"Stage 1: a
+    SYNCED MIRROR"* of `entity.itemizedHoldings`, the seed pushes rows straight into the object
+    array (`initialization.ts:1570,1619`), and `core.ts:463` materialises the array back each week
+    under a sync check that runs only behind an env flag. Slices (d0) and (d1) below are those two
+    sentences.
 
-    **THE CROSS-TABLE CHECK.** Referential integrity as a GATE, not an audit: every position names
-    an instrument that exists, every instrument names an issuer that exists, every position names a
-    holder that exists, every price names an instrument. It is a scan of four tables — cheap enough
-    to run in `check-hygiene.sh` beside the atlas gate, which means it runs on every commit rather
-    than waiting for step 38. `O3`, `O8` and `O11` become its consumers rather than its substitutes.
+    **THE CROSS-TABLE CHECK IS AT THE WRITE, NOT IN A GATE** (reviewed 2026-09-04: a scan of four
+    tables needs a STATE, so "a gate in `check-hygiene.sh`" is either a run — rule 11 forbids it —
+    or a test over the seed, which is the weak form). The strong form is `pay()`'s: `wire()` and
+    every ledger operation resolve both parties through the entity index and the instrument through
+    its store, and `defect()` on a miss — an unknown holder, an unknown instrument, an issuer that is
+    not alive. Today `wire()` throws on a non-positive quantity, a self-wire and a missing journal,
+    and on nothing about WHO or WHAT; `O3`, `O8` and `O11` find it a week later as a count. After
+    (d2) they are regressions rather than the detection, and the pure test over the seeded state is
+    the gate-time half.
 
     **THE SLICES, each its own commit, in this order.**
     **(a) BRAND THE STORE KEYS, (b) SPLIT THE INTERN TABLE and (c) THE ENTITY REGISTRY are DONE
@@ -496,22 +505,73 @@ written from here):
     `EntityId`, the eleven stored ticker references are in the entity space, the seat→party
     crossing is one named function per stage, and `O8` walks every party-keyed store.
 
-    **THE OPEN SLICES:**
+    **THE OPEN SLICES — REORDERED 2026-09-04 (user), ENFORCEMENT FIRST.** The twelve commits of
+    (a)–(c) were identity plumbing: necessary for (d), byte-identical, and after all of them the
+    user's sentence — *impossible to change an object outside a clear I/O layer, violations throw
+    at the site* — was still false in four places (the mirror, the open doors, the write that does
+    not resolve its parties, the books outside the register). The old order put every one of those
+    behind three large representation refactors. The new order puts them first, each small and
+    byte-identical, so the goal is mostly in hand before a number moves:
+    d0. **ONE DOOR.** The five mutable handles become module-private to `engine/ledger/` and
+        `engine2/`; the six outside writers move into named ledger operations (`seedHolding`,
+        `seedBalance`, the contract-book columns `05-unit-bidding` writes, `holdings-store`'s six
+        register columns). `check-hygiene.sh`'s import boundary becomes total rather than a list of
+        exemptions. Byte-identical.
+    d1. **THE MIRROR DIES.** `entity.itemizedHoldings` becomes the week-end materialised view its
+        own header promises, never a writer's target: the seed wires its rows through the ledger like
+        everyone else, `syncBookRows` and `HOLDINGS_SYNC_CHECK` go, and every reader of the array is
+        a reader of the store. Byte-identical in state; the precondition for "sealed" meaning
+        anything.
+    d2. **THE WRITE THROWS.** `wire()` and every ledger operation resolve `from`, `to`, the holder
+        and the issuer through `entity-index.ts` and the instrument through its store, and
+        `defect()` on a miss. Needs only an *instrument-exists* resolver over the tranche store,
+        the company table and the fund entities — the minimal half of (d) — not the full index. The
+        seed is the first thing it is run against (`auditWeek(state, 0)` already exists, 37-SEED),
+        and a pure test over the seeded state joins §4's `npm test`.
+    d3. **THE OUTSIDE BOOKS COME IN — 13-OUTSIDE, moved up from (f).** The banks'
+        `sovereignBondHoldingsByBond`, the central bank's `sovereignHoldingsByBond`,
+        `Company.treasuryHoldings` and the desks' inventories become register rows, so
+        `sovereign-register.ts` collapses from a five-store walk to a filter and the two books that
+        store a VALUE with no quantity (`sovereign-credit.md` E3) stop existing. Six writers today
+        (`07c`, `07f`, `02b`, `bill-accretion`, `bank-transfer`, `macro/banking`), none of them a
+        wire. This one moves numbers (the marks meet the audit), and that is the finding.
     d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
        share and contract gets a row: kind, issuer, **currency**, issued units, and nothing else.
        Terms stay in the class store, so the index copies no quantity and cannot drift.
        `UnitOfMeasure` loses its money: `PAR` and `USD` become a unit and a currency, separately.
        `sharesOutstanding` moves here, which gives `O2` a real issued side. **Closes step 13's
-       item 5** — the registry becomes what the adapter reads.
+       item 5** — the registry becomes what the adapter reads. Resolves what (c) handed forward:
+       the ETF share's two keys, `IndexConstituent.instrumentId` holding issuers, and
+       `DerivativeContract.referenceId` holding four id spaces.
+    d4. **ONE CONTRACT STORE FOR EVERY BILATERAL OBLIGATION** (added 2026-09-04). Derivatives are
+        in `v2.contracts` with one writer; repo contracts (`reg.repoBook`), securities loans, prime-
+        brokerage lines, trade invoices and PE capital commitments are the same thing — two named
+        parties, both of whom must be alive, zero-sum — in five stores with five key formats and
+        five liveness checks (`O4`, `O5`, `O10`, or none). They join the contract store behind the
+        same door, and (d2)'s party resolution covers them for free. A derivative is in the INDEX
+        and the CONTRACT store, never in the position book: nothing is held, and its check is `O9`'s
+        zero-sum, not held = issued.
+    d5. **A CLAIM ON A POSITION IS A LIEN ON A LOT** (added 2026-09-04). Repo encumbrance
+        (`encumberedFaceByBond`), stock-loan collateral and posted initial margin
+        (`initialMarginHeldLocal`, a scalar on the desk) are parallel numbers reconciled after the
+        fact. Each becomes a lien on the lot it binds, so a pledged unit cannot also be sold or
+        counted free, and `the-derivative-layer.md` D3 ("held, not consumed") is true on the
+        poster's side. Depends on (f)'s lots for identified assets; fungible ones can carry it now.
     e. **COLLAPSE THE FOUR TAXONOMIES** into the index's kind.
     f. **ONE POSITION BOOK, AS LOTS** — `v2.holdings` and `v2.lots` merge. A fungible asset sums
        its lots, an identified one addresses them, and **every position gains a basis**, which
        closes `the-register.md` D4 (❌ today, *no code at all*), unblocks the capital-gains base
        (`the-treasury.md` C1) and lets `equity.md` E4.a — realised versus unrealised — close.
-       This is where 13-OUTSIDE lands: the bank, central-bank, treasury and desk books all become
-       rows, and `sovereign-register.ts` collapses from a five-store walk to a filter.
+       Accrued interest (`holderAccruedInterestLocal` and its sovereign twin, 13f) becomes a
+       receivable beside the lot it accrues on, and the last goods stock outside the goods ledger
+       (`categoryDemand[c].inventoryLevelLocal`, a value with no holder and no units) gets a holder.
     g. **PLANT AND HOUSING JOIN** — BLOCKED on step 26 deciding what a unit of plant is. Not a
        cost exclusion: there is no unit to register until that decision is made.
+
+    **WHAT IS NOT IN THE BOOK, AND WHY.** SME pool loans, mortgage vintages and consumer pools are
+    positions of the BANK with no register of their own — that is 37-LOANBOOK, sequenced there
+    because it needs 37-LOSSRATE's answer to "what is a loan". The employment relationship is the
+    non-financial twin of this step and is 37-EMPLOYMENT.
 
     **IT WILL MOVE THE NUMBERS AND SLICE (f) WILL MOVE THEM A LOT** — the merge changes iteration
     order, so float identity goes, and the basis columns are new. That is expected (rule 11: the
@@ -1043,7 +1103,7 @@ written from here):
 ### PART VII — WHAT THE ATLAS FOUND
 
 Step 37 is DONE (§9, THE SYSTEM ATLAS — MAPPED). 45 trees and 2 instrument contracts walked onto
-the code, ~1,400 nodes marked, 927 machine-checked citations (the gate prints the live count). It produced **331 findings**, of
+the code, ~1,400 nodes marked, every citation machine-checked (the gate prints the live count). It produced **331 findings**, of
 which 217 were already steps here or are measurements for step 38. The remaining **114 are new**,
 and they are consolidated below into the steps that actually close them — a finding is not a step,
 and twenty trees reporting one cause is one step, not twenty.
@@ -1052,16 +1112,16 @@ and twenty trees reporting one cause is one step, not twenty.
 (13-SOV, 20-LLR, 21-BRACKET). Each step names the tree NODES it closes, so the atlas and the plan
 cannot drift apart: when the step lands, those nodes are re-marked in the same commit.
 
-**Ordered by what unblocks what.** The two verification steps went to the head of PART I (below);
-what is left here opens with the single causes that each disable a whole channel, then the absent
-systems, in the order their absence distorts the most. **37-GOODS-RECIPE is deliberately last** —
-it moves every input-output number in the model, so it needs a stable measurement to land against.
+**Ordered by what unblocks what.** The two verification steps (37-SEED, 37-ZEROSUM) ran first and
+are in §9; what is left here opens with the single causes that each disable a whole channel, then
+the absent systems, in the order their absence distorts the most. **37-GOODS-RECIPE is deliberately
+last** — it moves every input-output number in the model, so it needs a stable measurement to land
+against. **The trees still say "Becomes a §3 step" where they mean one of these** — a tree names the
+step that owns its node; where it does not yet, the step below is the owner.
 
-**37-SEED and 37-ZEROSUM have MOVED to the head of PART I.** They are verification steps: one
-makes week zero auditable, the other adds the three invariants that would have found much of this
-list without a person reading anything. Leaving them here — behind forty-seven steps — would have
-meant every one of those steps was verified by an instrument the atlas had just shown to be blind
-at week zero. The rest of PART VII stays in the order below.
+**Added 2026-09-04 from the review of the atlas** — eight findings the trees had marked "Becomes a
+§3 step" that no step here owned: 37-LOANBOOK, 37-OVERDRAFT, 37-OPENFUND, 37-VIEW, 37-FIRMCOST,
+37-BIRTH, 37-SECURITISE, 37-EMPLOYMENT. Each is inserted at its dependency position, not appended.
 
 37-LOSSRATE. **A LOSS RATE IS NOT A DEFAULT, AND FOUR SYSTEMS RUN ON ONE.** (banks-lending E1/E2;
     sme-pools E1; firm-birth-and-death C2.a pooled tier, E3; housing C4/C4.a; cds D1.)
@@ -1080,6 +1140,17 @@ at week zero. The rest of PART VII stays in the order below.
     One mechanism closes all four: a pooled borrower that can cross a threshold, default as an
     event with a date, and a recovery that is what something fetched. Large, and it is the single
     largest hole in the credit channel now that the atlas has separated it from the clean half.
+
+37-LOANBOOK. **A BANK'S LOANS ARE NOT A BOOK, THEY ARE FIELDS ON ITS SHEET.** (banks-lending F1/F1.a,
+    A3.a/A3.b, D4; sme-pools B1/B2; housing C1/C6; households D2.) The corporate facility is a
+    tranche with one writer. Everything else a bank lends — the SME pool rows, the mortgage
+    vintages, the consumer pools, the central-bank loan — is a `Record` on `bankBalanceSheet`,
+    written by 02b, `bank-lending`, `bill-accretion`, `bank-transfer` and the seed, with no
+    register, no issued side, no wire and no lender-of-record walk. So a loan cannot be sold,
+    pooled, pledged or matured, and `F1.a`'s FORBID (*no loan-book number that is not Σ(loans)*)
+    holds only because the sum IS the field. After 37-LOSSRATE gives a pooled loan an event, each
+    loan becomes a row in 13-BOOK's position store with the bank as holder and the borrower as
+    issuer, behind the ledger's door — which is what lets 37-SECURITISE move it. Medium.
 
 37-MARGIN. **AN UNMET CALL BECOMES A LOAN — THREE INDEPENDENT SIGHTINGS OF ONE SHAPE.**
     (prime-brokerage C3/C5/D1–D3, E4; hedge-funds D3/D6/E3, D5/D5.a; the-derivative-layer D4/D4.a,
@@ -1106,6 +1177,16 @@ at week zero. The rest of PART VII stays in the order below.
     pension's `pensionHurdle` makes it reach for MORE risk with no solvency consequence. Small in
     code — the reads already exist — and it is what makes 37-MARGIN's chain terminate somewhere.
 
+37-OPENFUND. **NO VEHICLE IN THE MODEL REDEEMS IN CASH AND SELLS TO PAY.** (fund-shares C2.b/C4/
+    C4.a/C5; hedge-funds D5/D5.a; prime-brokerage C3.a; insurers-and-pensions A2.b.) The ETF
+    redeems in kind — correct for an ETF, and it means the forced-seller channel the fund tree calls
+    "the point" is absent from the largest fund complex; a hedge fund's investors hold a scalar with
+    no share count and cannot ask for their money back; a household ETF redemption is rationed by the
+    fund's cash and the unfilled part is dropped. One redeemable claim, used by the mutual-fund and
+    hedge-fund vehicles: a share count, a redemption request, a sale in the SAME week's books, and
+    the cost of a late sale landing on the holders who stayed (C4.a). Pairs with 37-MMF (same
+    representation, one class over) and 37-MARGIN (the other forced seller). Medium.
+
 37-COSTOFCAPITAL. **NOBODY PAYS FOR MONEY, SO PRICE CANNOT REACH A DECISION.** (banks-funding B2/B2.a;
     banks-lending C1/C1.a; the-capital-programme B1/B1.b/B5/B3; dealer-desks D3.) The transmission
     channel this whole model exists to have, broken at three joints:
@@ -1121,6 +1202,35 @@ at week zero. The rest of PART VII stays in the order below.
     · a dealer's inventory consumes cash and capital and is **never charged rent**, so carrying a
       position is free and the desk has no reason to shed it.
     Large, and it is the step that makes every cleared price in Part IV actually do something.
+
+37-FIRMCOST. **A THIRD OF EVERY FIRM'S COST BASE IS THE GAP TO ITS SEEDED MARGIN.** (firm-fundamentals
+    B4/B4.a/B5, C1/C2, F2; trade-credit A2, C4.) `front-core.ts:683` strikes `otherOpexRate` as
+    `1 − baselineMargin − inputs − payroll/revenue` on the seed week and applies it as a fixed share
+    of revenue for ever — perfectly variable by construction, so operating leverage comes only from
+    payroll and D&A and the seeded margin is an attractor. Beside it: reported receivables and
+    payables are `revenue × 0.08 × {0.6, 0.4}` while the real invoice book is `state.tradeInvoices`
+    (two representations, rule 4, and `changeInWorkingCapital` reads the stated one); and
+    `baselineAnnualRevenue` compounds on `(potentialGdpGrowth + targetInflation)/52` and is then
+    differenced against measured revenue to make the region's health signal. Three commits, each a
+    deletion into a read: named cost lines with real payees, receivables as Σ(invoice book), and
+    the baseline as last year's measured revenue. Small each; sequenced before 37-COSTOFCAPITAL's
+    decision reads them.
+
+37-OVERDRAFT. **THE TREASURY HAS A CENTRAL-BANK OVERDRAFT, AND IT IS THE FUNDING MECHANISM.**
+    (the-treasury D3/D4/D4.b/D5/A1.a; sovereign-credit A3.b/A2.b/H4 and the whole of G;
+    the-central-bank E2/D4; bond N12/N13 · sov; ratings E1's sovereign half.) The user's own
+    FORBID, stated in three trees, and the code has its opposite: `accounts.ts:waysAndMeansOf` is
+    `max(0, −treasuryNetOf)`, `11-fiscal:647` makes it the FIRST TERM of the quarterly issue, the
+    interest on it round-trips through remittance in the same week, and nothing approves, caps or
+    refuses it. So the treasury spends into an overdraft and issues to clear it, D4.b's buffer is
+    unnecessary, a failed auction costs nothing, and a sovereign cannot fail — which is why
+    `07c` prices its paper with `hasCreditRisk: false` and why the sovereign rating reaches five UI
+    strings and nothing else. Two commits: (1) the account is a balance like any other — the
+    programme is sized forward against redemptions and outlays (D4, A2.a), the buffer exists, and a
+    shortfall is a real event; (2) a sovereign can default — a missed-payment definition, an
+    exchange offer with holdouts, market exclusion, and the rating gains its first consumer.
+    Sequenced here because 37-BENCHMARK and every price struck over the sovereign curve assume a
+    borrower with no funding constraint. Medium.
 
 37-FX-CROSS. **THE MARKET CLEARS SIX PAIRS AND THE LEDGER READS THREE.** (fx-spot E3/A3/C3;
     currency-and-fx C3/C3.a; fx-forwards B3/C4, A1.c/B1/E1, A4, C1/C1.a/C3, D3, A1.b/A2/E3.)
@@ -1167,6 +1277,18 @@ at week zero. The rest of PART VII stays in the order below.
     whole purpose is to hold a second opinion about a credit. With one tenor and `termKey: ''`
     there is also no CDS curve and therefore no term structure of credit anywhere in the model.
     Medium. Pair it with 37-LOSSRATE: a spread can only disagree once a default is an event.
+
+37-VIEW. **THREE DERIVATIVE BOOKS HAVE TWO PARTICIPANTS AND BOTH ARE HEDGERS.** (interest-rate-swaps
+    B4/B5/B1; cds B3 buy side/B4; commodity-futures B5; the-derivative-layer B3.) Every swap is
+    struck between a bank whose repricing loss binds and a pension closing a duration gap; every CDS
+    buyer is a bank above its large-exposure limit; the commodity desk appears only as a carry
+    arbitrageur and only on the sell side; `dealerSpreadBps: 0` in all three. So the cleared par
+    rate, spread and curve are functions of regulatory gaps and never of a view, a week in which
+    neither gap binds does not open the book, and the swap spread cannot move because somebody
+    thinks rates are wrong. 17f's `RELATIVE_VALUE` book is the natural home for the speculator;
+    the two-sided desk is `dealer-desks.md` C5's replacement quote posted into these books too.
+    Sequenced after 37-CDS-DIRECTION, which is what lets a view disagree with the accounting
+    model. Medium.
 
 37-ESTATE. **A DEAD PARTY'S DERIVATIVES ARE PAID IN FULL, AHEAD OF EVERY RANKED CLAIM.**
     (the-derivative-layer E2/E3; trade-credit D2; firm-birth-and-death D6.a, D1, D4/D4.a.)
@@ -1238,6 +1360,17 @@ at week zero. The rest of PART VII stays in the order below.
     affordability at the keenest bank quote, floored at build cost). Medium; needs step 26's
     unit-of-plant decision first.
 
+37-SECURITISE. **THE INSTRUMENT HALF OF THE SME SYSTEM DOES NOT EXIST.** (sme-pools C1–C6, D1–D4.a,
+    E2/E3; housing C6; banks-capital D2's other side.) Zero hits in `src` for a vehicle, a tranche
+    on a pool, a loss waterfall, or a holder of pool risk other than the originating bank. So SME
+    and mortgage credit risk sits on the bank that wrote it for ever, a bank's origination can
+    never be expanded by selling risk, and the event this system exists to produce — correlation
+    worse than the tranching assumed, every holder hit at once — has no holders to hit. Needs a
+    named vehicle party, a tranche instrument with a cleared price, a stated waterfall, and named
+    holders; blocked on 37-LOSSRATE (tranching a loss RATE yields senior notes that can never be
+    touched) and on 37-LOANBOOK (a loan has to be a row before it can be transferred). Large; the
+    same step gives housing C6 its pool.
+
 37-MANDA. **THERE IS NO M&A MARKET. THERE IS A COIN FLIP.** (m-and-a B5/B2/B2.a/B3/B4/C1/C2/C3,
     E3/A4, D4.) `merger.ts:24` fires `random() < 0.20`, quarterly, at most one deal in the world,
     at `marketCap × 1.15`. No funding test, no acceptance, no rival bidder, no walk-away — so the
@@ -1246,6 +1379,31 @@ at week zero. The rest of PART VII stays in the order below.
     the headcount saving destroys jobs with no separation event. `D5` is one of the few present
     nodes: the money really does move acquirer → target → holders of record. §3 has no M&A step at
     all. Medium.
+
+37-EMPLOYMENT. **THERE IS NO EMPLOYMENT RELATIONSHIP, ONLY A HEADCOUNT.** (labour A4, A1, C2/C3,
+    D2/D2.b; households B1.) `employeeCount` is an integer on the firm and a worker is a fraction
+    spread across five occupations by the sector's fixed mix, so a hire and a separation are
+    additions to a count: there is no contract with a wage and a term, nothing for stickiness to be
+    a consequence OF (`MARKET_WAGE_CATCHUP_SPEED_WEEKLY = 0.15` stands in), nothing a severance
+    payment could sever, and no household that can be told its earner lost a job. This is the
+    non-financial twin of 13-BOOK: a register of employment rows (firm, cohort, wage, start week)
+    behind one door, from which the wage bill, the unemployment rate and the separation flow are
+    reads. Step 24 (labour clears on the wage) needs it — a bid for labour is a bid for a
+    contract — and 37-SMALL's labour C2/C3 lands on it. Medium; after 37-MANDA, which is the
+    largest consumer of a transfer of employees.
+
+37-BIRTH. **A FIRM'S AGE IS WRITTEN AND NEVER READ, AND FOUR SMALL THINGS AT THE EDGES OF ITS LIFE.**
+    (firm-birth-and-death B2, A4.a, D4/D4.a, D6.a; m-and-a D4; labour C4.) `Company.bornWeek` is
+    read by a trace, a log tag and a headline; no rating, spread, term or lending decision is a
+    function of it, and the rating's volatility notch returns 0 below three prints, so a newborn
+    scores best. An entrant's opening size is `pool revenue × 0.004` whatever the opportunity. A
+    dead firm's employees stop being counted rather than being separated (`employeeCount = 0`,
+    never `separationsByOcc`) — and a MERGED firm's headcount saving does the same. A claimless
+    death (`openEstate` returns `undefined`) keeps its cash, plant and lots for ever, owned by a
+    party that no longer trades. Four commits, each small: the age enters the assessment, the size
+    is what the founders can fund, deaths and mergers route headcount through the labour market's
+    own separation path, and a claimless estate pays its residual to the founders. After
+    37-LOSSRATE, which owns what a pooled death IS.
 
 37-SECLENDING. **THE LENDER LOSES THE DIVIDEND AND PAYS FOR THE PRIVILEGE.** (securities-lending
     A3/A5.b, C1, C5/B3, D1.) No manufactured payment exists anywhere — `payHoldersCash` pays the
@@ -1280,11 +1438,8 @@ at week zero. The rest of PART VII stays in the order below.
       **ratings C3** — collateral haircuts are one per instrument TYPE from the region's median
       move, so a CCC and a AAA bond are identical collateral. That is the one leg of the downgrade
       loop that is wholly absent, and a per-issuer OAS ring closes it with no rating table;
-    · **sovereign-credit F2** — a bill accretes at this week's interpolated curve point rather than
-      at the yield it was bought at, breaking the accretion stage's own conservation claim;
-    · **short-term-debt A2/E2** — the short end clears a YIELD, so a bill's return is re-set weekly
-      (13's shape, at the short end), and **B4** — a committed backstop is free, with no commitment
-      fee on undrawn headroom;
+    · **short-term-debt B4** — a committed backstop is free, with no commitment fee on undrawn
+      headroom *(A2/E2 and sovereign-credit F2, listed here before, closed at §9.13-BILL)*;
     · **households D5.a** — MMF shares are issued pro rata and never chosen, so the deposit / money
       fund / bill substitution never happens, and **F2** — nobody inherits anything;
     · **labour B1** — participation moves by a constant keyed off a regime label with the wage
@@ -1321,7 +1476,7 @@ at week zero. The rest of PART VII stays in the order below.
     hole. The fix is to resolve against a DECLARATION — `export (function|const|class|type|interface)
     <symbol>`, a class member, or a bare `function <symbol>` — and to keep the current text search
     only as the fallback for the handful of citations that name something else (a field, a literal).
-    Cheap: it is a grep pattern change in one script, and the 921 existing citations are the test —
+    Cheap: it is a grep pattern change in one script, and the existing citations are the test —
     any that stop resolving are either a real rot or a citation that should have named a declaration.
 
 
@@ -1548,35 +1703,32 @@ kept for the few entries whose reasoning a line cannot carry. Neither file gover
 
 ## 9. THE LOG — WHAT IS DONE
 
-A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, why, and the measured
-numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
+A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 says how long): what
+changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**13-BOOK slice (b) step one — EVERY REF COLUMN NAMES ITS SPACE, WITH THE NUMBERING UNTOUCHED.**
-Nine columns index one intern table — `H.instrRef`, `H.typeRef`, `H.regionRef`, `TS.idRef`,
-`TS.issuerRef`, `TS.bankRef`, `A.keyRef`, `T.supplierRef`, `T.customerRef` — so they are one
-numbering and only their names kept them apart. `engine2/refs.ts` gives each a branded integer type
-and, crucially, `RefColumn<B>`: dropping `Int32Array`'s numeric index signature and restating it as
-`B` keeps the brand **across the subscript**, which a brand on the intern function alone does not —
-it would die at the first read and every comparison downstream would be unchecked again.
-
-Proven rather than asserted: a scratch file comparing a TYPE column against an `InstrRef`, writing
-an `InstrRef` into the REGION column, decoding a `TypeRef` as an instrument, decoding the instrument
-column as a type tag, and writing a bare number into a ref column was rejected on all five, with the
-matching correct uses compiling in the same file. Every write now goes through a per-space door
-(`internInstrument`, `internType`, `internRegion`, `internEntity`, `internTicker`, `internAccount`,
-`internPartyKey`) and raw `internString` fell out of nine files that used to reach past it —
-`ABSENT_REF` types the -1 sentinel as a member of every space at once, since a sentinel belongs to
-none.
-
-**Every door delegates to the same table, so every ref keeps the integer it has today and no number
-can have moved.** That is the §5 sequencing rule and the reason this is two steps: the split that
-renumbers comes second, once the compiler has already proved every site is in the right space.
-Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`, with what is still
-false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
-thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
-green; no run.
+**PLAN AND ATLAS REVIEW (1 of 2) — THE BOOK REORDERED, EIGHT UN-HOMED FINDINGS INSERTED, AND `tsc`
+WAS RED.** The user asked whether 13-BOOK was being built the smart way. It was not, in order:
+twelve identity-plumbing commits had left the user's sentence — one door, violations throw at the
+site — false in four places (the register is still a synced MIRROR of `itemizedHoldings`; five
+mutable handles are imported by fourteen files; `wire()` resolves neither party nor instrument;
+the sovereign, treasury and desk books are outside the register), all four sequenced BEHIND three
+large refactors. Step 13's open slices are reordered enforcement-first (d0 one door, d1 the mirror
+dies, d2 the write throws, d3 the outside books come in), (d4) one contract store for every
+bilateral obligation and (d5) liens on lots are added, and the cross-table check is restated as an
+at-write resolve rather than a gate that would need a run. PART VII gains 37-LOANBOOK,
+37-OVERDRAFT (the user's own FORBID, ❌ in four trees, owned by no step), 37-OPENFUND, 37-VIEW,
+37-FIRMCOST, 37-BIRTH, 37-SECURITISE and 37-EMPLOYMENT, each at its dependency position, and
+37-SMALL loses two items §9.13-BILL had already closed. Plan corrections: nineteen rules, 699
+`§7.N` citations, §8 is pointers not an index, file order is the order (stated at §3's head),
+rule 14 names no branch, §9 is one ENTRY newest-first and its one out-of-order entry is moved.
+`UNMAPPED` listed seven files the dead-file sweep deleted and one a tree cites — pruned, and
+`check-atlas.sh` now fails both cases. Four `…USD` names 13c-RENAME missed are `…Local`.
+**And the first gate was red at HEAD**: `npx tsc --noEmit` reported 27 errors in
+`scripts/harness.ts`, every one a ticker the c-then-3b renames left behind — the three commits that
+claimed five green gates ran the typecheck on `src` alone. Fixed by name, no casts. Gates green;
+no run. Part 2 is the atlas sweep.
 
 **13-BOOK slice (c-then-4) — `O8` WALKS EVERY PARTY-KEYED STORE, AND IT WAS READING THE ONE IT
 HAD WRONG.** `O8`'s party arm checked the derivatives book alone — `the-register` D2 recorded that
@@ -2492,6 +2644,31 @@ Also separated: `NO_REF` (-2, "this name was never interned") from `ABSENT_REF` 
 names nothing"). They were the same integer, and the collision is unreachable only because freed
 rows are unlinked from their chains — the kind of thing that stops being unreachable later, when a
 missed lookup would equal a freed row and a walk would read it as real. Gates green; no run.
+
+**13-BOOK slice (b) step one — EVERY REF COLUMN NAMES ITS SPACE, WITH THE NUMBERING UNTOUCHED.**
+Nine columns index one intern table — `H.instrRef`, `H.typeRef`, `H.regionRef`, `TS.idRef`,
+`TS.issuerRef`, `TS.bankRef`, `A.keyRef`, `T.supplierRef`, `T.customerRef` — so they are one
+numbering and only their names kept them apart. `engine2/refs.ts` gives each a branded integer type
+and, crucially, `RefColumn<B>`: dropping `Int32Array`'s numeric index signature and restating it as
+`B` keeps the brand **across the subscript**, which a brand on the intern function alone does not —
+it would die at the first read and every comparison downstream would be unchecked again.
+
+Proven rather than asserted: a scratch file comparing a TYPE column against an `InstrRef`, writing
+an `InstrRef` into the REGION column, decoding a `TypeRef` as an instrument, decoding the instrument
+column as a type tag, and writing a bare number into a ref column was rejected on all five, with the
+matching correct uses compiling in the same file. Every write now goes through a per-space door
+(`internInstrument`, `internType`, `internRegion`, `internEntity`, `internTicker`, `internAccount`,
+`internPartyKey`) and raw `internString` fell out of nine files that used to reach past it —
+`ABSENT_REF` types the -1 sentinel as a member of every space at once, since a sentinel belongs to
+none.
+
+**Every door delegates to the same table, so every ref keeps the integer it has today and no number
+can have moved.** That is the §5 sequencing rule and the reason this is two steps: the split that
+renumbers comes second, once the compiler has already proved every site is in the right space.
+Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`, with what is still
+false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
+thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
+green; no run.
 
 **13-BOOK slice (a) — THE ID SPACES BECOME TYPES, AND THE KEY GRAMMAR BECOMES ONE FILE.**
 `domain/ids.ts` states the three spaces a string can name — `EntityId`, `InstrumentId`, `Ticker` —

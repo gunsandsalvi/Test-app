@@ -42,5 +42,5 @@ Two things it demands of you:
   `check-hygiene.sh` and fails when a cited `file:symbol` stops resolving or a source file appears
   in no tree — but it cannot tell you a node has become WRONG. That part is on you.
 
-Step 37 (the atlas) is done. Its 114 new findings are §3 PART VII's `37-*` steps; when one lands,
+Step 37 (the atlas) is done. Its 114 new findings are grouped into §3 PART VII's `37-*` steps; when one lands,
 re-mark its tree's nodes in the same commit.

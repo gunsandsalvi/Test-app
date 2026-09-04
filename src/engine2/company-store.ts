@@ -58,7 +58,7 @@ const F64_FIELDS = [
   'bankRiskFactor', 'defaultedWeek', 'institutionalMarketShare', 'beta', 'seniorBondYield',
   'cdsSpreadBps', 'cdsBasisBps', 'shortInterestShares',
   'inputSupplyConstraintFactor', 'recentFulfillmentEMA', 'deliveryReliability',
-  'recurringRevenueBaseLocal', '_targetProductionUSD', 'bankResolvedWeek',
+  'recurringRevenueBaseLocal', '_targetProductionLocal', 'bankResolvedWeek',
   'taxLossCarryforwardLocal', 'taxBasisPpeLocal', 'deferredTaxLiabilityLocal', 'lastWeekSalesLocal',
   'offeredWageIndex', 'unfilledVacancyShare', 'lastWeekPurchasesLocal', 'expectedEbitdaLocal',
 ] as const satisfies readonly (keyof Company | DerivedF64Field)[];

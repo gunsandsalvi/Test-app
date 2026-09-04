@@ -594,7 +594,7 @@ export interface Company {
    *  week with no sales and decays only by churn, which is what makes a software firm's revenue
    *  behave differently from a steel mill's. Absent on pure unit sellers. */
   recurringRevenueBaseLocal?: number;
-  _targetProductionUSD?: number;
+  _targetProductionLocal?: number;
   // 1$ is 1$ Phase 6: this week's real settled sales/purchases (from 05-unit-bidding.ts's
   // actual bid/offer clearing — open-market plus active-contract volume) — persisted onto the
   // company so the UI can show real weekly production/purchasing activity, not just the target.

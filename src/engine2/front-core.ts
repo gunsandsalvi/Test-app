@@ -477,9 +477,9 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
       atSh++;
     }
     S.updSalesLocal[row] = update?.salesLocal ?? 0;
-    if (update?._targetProductionUSD !== undefined) {
+    if (update?._targetProductionLocal !== undefined) {
       S.updHasTargetProd[row] = 1;
-      S.updTargetProdLocal[row] = update._targetProductionUSD;
+      S.updTargetProdLocal[row] = update._targetProductionLocal;
     }
   }
   S.trStart[n] = atTr; S.plStart[n] = atPl; S.outStart[n] = atOut;
