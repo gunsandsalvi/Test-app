@@ -5,10 +5,10 @@
  */
 
 import { GameState } from '../../types';
+import { marketCapAt } from '../../engine2/instruments';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany, banksOf } from '../../domain/company';
 import { AuditFinding, B, pct, spearman, sum } from './types';
-import { marketCapOf } from '../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { ensureV2, typeOf } from '../../engine2/world';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../engine2/holdings';
@@ -122,8 +122,8 @@ function p3(state: GameState, week: number): AuditFinding[] {
     const rhoL = spearman(lev.map((x) => x.oas), lev.map((x) => x.c.leverage));
     if (rhoL < 0.2) out.push({ family: 'P', check: 'P3 spread ranks with leverage', week, usd: rhoL, message: `${r}: Spearman(OAS, leverage) = ${rhoL.toFixed(2)} over ${lev.length} names` });
   });
-  const dead = state.companies.filter((c) => c.isDefaulted && (c.stockPrice > 0.01 || marketCapOf(c) > 1e6));
-  if (dead.length) out.push({ family: 'P', check: 'P3 a defaulted firm has no equity price', week, usd: sum(dead, (c) => marketCapOf(c)), message: `${dead.length} defaulted firms still print a price or a market cap (${B(sum(dead, (c) => marketCapOf(c)))})` });
+  const dead = state.companies.filter((c) => c.isDefaulted && (c.stockPrice > 0.01 || marketCapAt(ensureV2(state), c) > 1e6));
+  if (dead.length) out.push({ family: 'P', check: 'P3 a defaulted firm has no equity price', week, usd: sum(dead, (c) => marketCapAt(ensureV2(state), c)), message: `${dead.length} defaulted firms still print a price or a market cap (${B(sum(dead, (c) => marketCapAt(ensureV2(state), c)))})` });
   return out;
 }
 

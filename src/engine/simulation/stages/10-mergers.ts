@@ -8,7 +8,9 @@
  */
 
 import { restateBankSheetStatistics } from '../../../domain/bank-resolution';
-import { registerCompanyEquity } from '../../ledger/instrument-ledger';
+import { marketCapAt } from '../../../engine2/instruments';
+import { registerCompanyEquity, setIssuedUnits } from '../../ledger/instrument-ledger';
+import { issuedSharesOf } from '../../../engine2/instruments';
 import { companyParty } from '../../../domain/party';
 import { admitParty } from '../../ledger/wire';
 import { currencyOf } from '../../../domain/geography';
@@ -28,7 +30,6 @@ import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 import { issueHolding, transferHolding } from '../../ledger/holdings-ledger';
 import { heldInShares } from '../../../domain/assets';
-import { marketCapOf } from '../../../domain/company';
 import { cashOf, moveSectorRowsToBank, moveBankReserves, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
 import { moveOutputUnits, moveInputUnits } from '../../ledger/goods-ledger';
 import { materializeInputInventory, inputUnitsHeld } from '../../../engine2/lots';
@@ -119,7 +120,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
   const blocked = ctx.updatedCompanies.filter((c) =>
     isActiveCompany(c) && !c.isBankEntity && !c.isInstitutionalEntity
     && isPubliclyListed(c) && isAntitrustBlocked(c)
-    && (c.productLines?.length ?? 0) >= 2 && c.sharesOutstanding > 0 && c.stockPrice > 0);
+    && (c.productLines?.length ?? 0) >= 2 && issuedSharesOf(ctx.v2, c.id) > 0 && c.stockPrice > 0);
   blocked.forEach((parent) => {
     const line = [...(parent.productLines ?? [])]
       .sort((a, b) => (b.categoryMarketShare ?? 0) - (a.categoryMarketShare ?? 0))[0];
@@ -130,10 +131,10 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     // §3.13-BOOK slice (c2c): a spin-off's ticker is minted here, from its parent's.
     let ticker = asTicker(`${parent.ticker}SP`);
     for (let n = 2; tickers.has(ticker); n++) ticker = asTicker(`${parent.ticker}SP${n}`);
-    const spinMcapLocal = Math.max(1, marketCapOf(parent) * share);
+    const spinMcapLocal = Math.max(1, marketCapAt(ctx.v2, parent) * share);
     // One spin-co share per parent share — the classic ratio, so a holder's fraction of the
     // parent IS its fraction of the spin-co and the mint below is one multiplication.
-    const spinShares = parent.sharesOutstanding;
+    const spinShares = issuedSharesOf(ctx.v2, parent.id);
     const spinPrice = spinMcapLocal / Math.max(1e-9, spinShares);
     const employees = Math.max(1, Math.round(parent.employeeCount * share));
 
@@ -148,7 +149,6 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     spin.netIncome = Number((parent.netIncome * share).toFixed(1));
     spin.ebitda = Number((parent.ebitda * share).toFixed(1));
     spin.employeeCount = employees;
-    spin.sharesOutstanding = spinShares;
     spin.stockPrice = Number(spinPrice.toFixed(4));
     spin.debtTranches = [];
     spin.grossPPELocal = (parent.grossPPELocal ?? 0) * share;
@@ -183,7 +183,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
         heldShares += Number.isNaN(sh) ? Hs.qtyLocal[r] / Math.max(0.01, parent.stockPrice) : sh;
       }
       if (!(heldShares > 0)) return;
-      const fraction = Math.min(1, heldShares / parent.sharesOutstanding);
+      const fraction = Math.min(1, heldShares / issuedSharesOf(ctx.v2, parent.id));
       issueHolding(ctx.v2, companyParty(spin), { kind: 'INSTITUTION', id: e.id },
         { instrumentType: 'EQUITY', instrumentId: equityInstrumentId(spin.id), issuerRegion: spin.region, valueLocal: fraction * spinMcapLocal, shares: fraction * spinShares }, 'spin-off: shares distributed');
     });
@@ -210,7 +210,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     // §3.13-BOOK d2/dI: the spin-off is admitted to the wire world, and its equity declared on
     // the instrument index, before its first wire.
     admitParty(companyParty(spin));
-    registerCompanyEquity(ctx.v2, spin);
+    registerCompanyEquity(ctx.v2, spin, spinShares);
     if (openingCashLocal > 0) {
       pay(ctx, {
         payer: companyParty(parent),
@@ -247,10 +247,10 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // divestiture that should follow it is recorded there as unbuilt.
   if (isAntitrustBlocked(acquirer)) return;
 
-  const purchasePrice = marketCapOf(target) * 1.15;
+  const purchasePrice = marketCapAt(ctx.v2, target) * 1.15;
   const cashPaid = purchasePrice * 0.5;
   const stockPaid = purchasePrice * 0.5;
-  const targetMarketCapLocal = Math.max(1, marketCapOf(target));
+  const targetMarketCapLocal = Math.max(1, marketCapAt(ctx.v2, target));
 
   // The consideration is PAYMENTS now. The old form debited the acquirer directly and
   // the money arrived on NO book — target shareholders' register rows were neither re-keyed nor
@@ -307,7 +307,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     reason: 'merger tender: cash for target shares',
   });
   const newShares = stockPaid / Math.max(1, acquirer.stockPrice);
-  acquirer.sharesOutstanding = Number((acquirer.sharesOutstanding + newShares).toFixed(3));
+  // §3.13-BOOK dIV: the stock leg mints acquirer shares on the instrument index — the one count.
+  setIssuedUnits(ctx.v2, equityInstrumentId(acquirer.id), Number((issuedSharesOf(ctx.v2, acquirer.id) + newShares).toFixed(3)));
   acquirer.annualRevenue = Number((acquirer.annualRevenue + target.annualRevenue * 0.85).toFixed(1));
   acquirer.employeeCount += Math.round(target.employeeCount * 0.75);
   acquirer.grossPPELocal = (acquirer.grossPPELocal ?? 0) + (target.grossPPELocal ?? 0);

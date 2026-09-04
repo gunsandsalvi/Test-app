@@ -512,10 +512,6 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    dIV. **THE ISSUED AMOUNT LIVES ON THE INDEX.** `Company.sharesOutstanding` moves to the index
-        as issued units, one owner, which gives `O2` a real issued side (`the-register.md` B2);
-        a tranche's is a read of its row. **Closes step 13's item 5** — the registry is what the
-        adapter reads.
     dV. **AN INDEX CONSTITUENT IS AN INSTRUMENT.** `IndexConstituent.instrumentId` holds issuers
         on the credit side and is read as one on the equity side; the index decides what it
         names, and `indices.md` B4 becomes measurable.
@@ -1719,6 +1715,26 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK dIV — THE ISSUED AMOUNT LIVES ON THE INDEX.** `Company.sharesOutstanding`,
+`InstitutionalEntity.sharesOutstanding` (a constant nobody read) and `EtfFund.sharesOutstanding` are
+deleted. The instrument index carries `issuedUnits` for the kinds no class store counts — a
+company's shares, a fund's — and `instrument-ledger.ts:setIssuedUnits` is the one writer: a listing
+creates the count and a take-private extinguishes it (pe-lifecycle), a buyback lowers it (stage
+08's write-back, off the lane it read), a stock-paid merger mints onto it and a spin-off is
+declared with its parent's count (10-mergers), an ETF's creations and redemptions move the fund's
+(etf-flows). The reads are `issuedSharesOf`, `etfSharesOutstandingOf` and `marketCapAt` (price ×
+the index's count); `marketCapOf` takes the count it multiplies, and at the SEED — before the index
+is declared — the generator's count rides a stash (`stashSeedIssuedShares`, scaled with the firm,
+consumed by `registerCompanyEquity` at `openSeededBooks`), which the seed's composite index, its
+EV multiple and its opening allocation read. The company store's `sharesOutstanding` lane is a
+DERIVED column like market cap, total debt and cash — re-derived by the sync mesh, never read off
+an object — so stage 08's kernels are untouched. The four readers that took a `Company` and needed
+its count take the count or a `capOf` reader instead (`companyFairValuePerShare`,
+`decideCorporateFinancing`, `calculateCompositeIndices`, `publicComparableEvMultiple`). `O2`
+compares the register's shares against the index's count — `the-register.md` B2 has a real issued
+side. Byte-identical: every count is written where it was and read where it was, one owner.
+Gates green; no run.
 
 **13-BOOK dIII — THE ETF SHARE HAS ONE KEY, AND THE INDEX IS THE ONLY ISSUER READ.**
 `etfShareInstrumentId` (the clearing book's `ETFSHARE-<fund>`) is deleted: `etf-flows.ts` clears a

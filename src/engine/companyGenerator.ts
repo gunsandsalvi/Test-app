@@ -1,4 +1,5 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, ProductLine, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE, REGION_IDS_SEED_ORDER } from '../types';
+import { stashSeedIssuedShares, seedIssuedSharesOf } from './ledger/instrument-ledger';
 import { stashSeedRing, peekSeedRing } from '../engine2/world';
 import { stashOpeningCash, openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf, seedSovereignBookLocalOf } from './ledger/accounts';
 import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf, industryOfSubUnit } from '../domain/industry-registry';
@@ -637,7 +638,6 @@ export function generateInitialCompanies(
         ebit,
         netIncome,
         eps,
-        sharesOutstanding: tmpl.shares,
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
         debtTranches,
         capex,
@@ -735,6 +735,7 @@ export function generateInitialCompanies(
       stashSeedRing(company, 'rating', [tmpl.initialRating]);
       stashSeedRing(company, 'price', historicalPrices);
       stashOpeningCash(company, tmpl.cashBase); // §5-WIRES A3.1: the seed opens its account with it
+      stashSeedIssuedShares(company, tmpl.shares); // §3.13-BOOK dIV: declared on the index at the seed
       companies.push(company);
     });
     // Flat per region rather than scaled to region size, matching SECTOR_FIRM_COUNT's
@@ -998,7 +999,7 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
   // §3.13c: `satisfies keyof Company` — these are FIELD NAMES in strings, and without the
   // constraint a rename would leave one behind silently, scaling everything but it. Same shape
   // as the lane lists in `company-store.ts`.
-  const SIZED_FIELDS = ['annualRevenue', 'baselineAnnualRevenue', 'sharesOutstanding', 'grossPPELocal',
+  const SIZED_FIELDS = ['annualRevenue', 'baselineAnnualRevenue', 'grossPPELocal',
     'accumulatedDepreciationLocal', 'ebitda', 'ebit', 'netIncome', 'capex', 'maintenanceCapex',
     // `annualInterest` was in this list and is NOT a field — it is DERIVED from the ladder
     // (`front-core.ts:trancheWeekAccrual`), which is scaled below. The string was dead: the scale
@@ -1010,6 +1011,8 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
   ((c.historicalFundamentals as FundamentalSnapshot[] | undefined) ?? [])
     .forEach((snap) => scaleSnapshot(snap as unknown as Record<string, unknown>, k));
   stashOpeningCash(c as unknown as Company, openingCashOf(c as unknown as Company) * k);
+  // §3.13-BOOK dIV: the share count rides its stash to the index; it scales with the firm.
+  stashSeedIssuedShares(c, seedIssuedSharesOf(c) * k);
 }
 
 /**
@@ -1308,7 +1311,7 @@ export function generatePrivateCompanies(
       // where a real one belongs — and a per-share figure that did not divide by it (`eps: 0`).
       // A real listing creates the registry for the first time (`postIssueSharesOutstanding`,
       // HC7), which is the only moment a share count should come into existence.
-      sharesOutstanding: 0, stockPrice: 0, marketCap: 0,
+      stockPrice: 0, marketCap: 0,
       historicalPrices: [], forwardPE: 0,
       currentLiabilities: Math.round(debtBase * 0.2 + revBase * 0.06),
       debtTranches,

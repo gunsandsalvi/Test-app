@@ -129,6 +129,7 @@ import { executeTrade } from "../src/engine/simulation/trade";
 import { isPubliclyListed, isActiveCompany, banksOf } from '../src/domain/company';
 import { ensureV2 } from '../src/engine2/world';
 import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
+import { issuedSharesOf, etfSharesOutstandingOf } from '../src/engine2/instruments';
 import { issuerSpreadAtOnCurve } from '../src/engine/credit-price';
 import { forEachContract } from '../src/engine2/contracts';
 import { sovereignCouponByBond, weeklyInterestExpenseLocal, decomposeGovernmentSpending } from '../src/domain/government';
@@ -980,7 +981,7 @@ const hhModule: HarnessModule = (() => {
         const etfRows = h.etfShares ?? [];
         const sellableLocal = etfRows.reduce((a: number, x) => {
           const f = s.institutionalEntities?.find((e: InstitutionalEntity) => e.id === x.fundId);
-          const sh = f?.etf?.sharesOutstanding ?? 0;
+          const sh = f ? etfSharesOutstandingOf(ensureV2(s), f.id) : 0;
           const nav = sh > 0 && f ? ((f.itemizedHoldings ?? []).reduce((b: number, hh: ItemizedHolding) => b + (hh.quantityOrNotionalLocal ?? 0), 0) + Math.max(0, f ? entityCashOf(ensureV2(s), f) : 0)) / sh : 0;
           return a + (x.shares ?? 0) * nav;
         }, 0);
@@ -2547,8 +2548,9 @@ function runHarness() {
     state.companies.forEach(c => {
       if (!knownTickers.has(c.ticker)) {
         knownTickers.add(c.ticker);
-        if (isPubliclyListed(c) && c.sharesOutstanding && c.sharesOutstanding > 0) {
-          const calcEps = c.netIncome / c.sharesOutstanding;
+        const issuedShares = issuedSharesOf(ensureV2(state), c.id);
+        if (isPubliclyListed(c) && issuedShares > 0) {
+          const calcEps = c.netIncome / issuedShares;
           const diffPct = Math.abs(calcEps - c.eps) / Math.max(0.001, Math.abs(c.eps));
           if (diffPct > 0.15) {
             violations.push({

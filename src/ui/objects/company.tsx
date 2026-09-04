@@ -1,6 +1,7 @@
 /** AU · object: company — a firm, a bank (a company with a sheet), or a fund's manager shell. */
 
 import { Company } from '../../types';
+import { marketCapAt } from '../../engine2/instruments';
 import { bankSovereignBookLocal } from '../../engine/sovereign-register';
 import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf } from '../../domain/banking';
 import { defineObject, PeerColumn } from './registry';
@@ -11,7 +12,6 @@ import { companyOf, companyPriceHistory, companyRatingHistory, companyRevenueHis
 import { materializeLadder, facilityBookOf, ladderTotalLocal } from '../../engine2/tranches';
 import { isActiveCompany } from '../../domain/company';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, ringed, taped } from './common';
-import { marketCapOf } from '../../domain/company';
 import { cashOf, bankReservesOf, stateDepositLines } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 
@@ -41,12 +41,12 @@ export function companyColumns(bank: boolean): PeerColumn<Company>[] {
       { key: 'loans', label: 'loans', render: (r, w) => money(r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet, facilityBookOf(w.v2, r.obj.id)) : undefined), value: (r, w) => (r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet, facilityBookOf(w.v2, r.obj.id)) : 0) },
       { key: 'share', label: 'share', render: (r) => pctLevel(r.obj.bankMarketShare, 0), value: (r) => r.obj.bankMarketShare ?? 0 },
       { key: 'window', label: 'window', render: (r) => money(r.obj.bankBalanceSheet?.srfBorrowingLocal), value: (r) => r.obj.bankBalanceSheet?.srfBorrowingLocal ?? 0 },
-      { key: 'mcap', label: 'mkt cap', render: (r) => money(marketCapOf(r.obj), 1), value: (r) => marketCapOf(r.obj) },
+      { key: 'mcap', label: 'mkt cap', render: (r, w) => money(marketCapAt(w.v2, r.obj), 1), value: (r, w) => marketCapAt(w.v2, r.obj) },
     ];
   }
   return [
     name,
-    { key: 'mcap', label: 'mkt cap', render: (r) => (marketCapOf(r.obj) > 0 ? money(marketCapOf(r.obj), 1) : '—'), value: (r) => marketCapOf(r.obj) },
+    { key: 'mcap', label: 'mkt cap', render: (r, w) => (marketCapAt(w.v2, r.obj) > 0 ? money(marketCapAt(w.v2, r.obj), 1) : '—'), value: (r, w) => marketCapAt(w.v2, r.obj) },
     { key: 'revenue', label: 'revenue', render: (r) => money(r.obj.annualRevenue, 1), value: (r) => r.obj.annualRevenue },
     { key: 'margin', label: 'margin', render: (r) => (r.obj.annualRevenue > 0 ? pctLevel(r.obj.ebitda / r.obj.annualRevenue, 0) : '—'), value: (r) => (r.obj.annualRevenue > 0 ? r.obj.ebitda / r.obj.annualRevenue : -9) },
     { key: 'pe', label: 'p/e', render: (r) => (r.obj.forwardPE > 0 ? num(r.obj.forwardPE, 1) : '—'), value: (r) => r.obj.forwardPE ?? 0 },
@@ -115,7 +115,7 @@ export const company = defineObject<Company>({
     const nextMaturity = ladder.length ? Math.min(...ladder.map((t) => t.maturityWeek)) : undefined;
     const equityHolders = holdersOf(world, c.id).filter((h) => h.instrumentType === 'EQUITY');
     const heldLocal = equityHolders.reduce((a, h) => a + h.usd, 0);
-    const floatShare = marketCapOf(c) > 0 ? heldLocal / marketCapOf(c) : undefined;
+    const floatShare = marketCapAt(ensureV2(world.state), c) > 0 ? heldLocal / marketCapAt(ensureV2(world.state), c) : undefined;
     const cashLocal = cashOf(ensureV2(world.state), c);
     const netDebt = ladderTotalLocal(ensureV2(world.state), c.id) - cashLocal;
     const sheet = c.bankBalanceSheet;
@@ -142,7 +142,7 @@ export const company = defineObject<Company>({
         ) : (
           <StatGrid>
             <Stat label="price" value={c.stockPrice > 0 ? num(c.stockPrice) : 'private'} sub={c.stockPrice > 0 ? <ChangeSub series={prices} /> : `${count(c.employeeCount)} people`} />
-            <Stat label="market cap" value={marketCapOf(c) > 0 ? money(marketCapOf(c)) : '—'} sub={floatShare !== undefined ? `${pctLevel(floatShare, 0)} held by funds` : 'unlisted'} />
+            <Stat label="market cap" value={marketCapAt(ensureV2(world.state), c) > 0 ? money(marketCapAt(ensureV2(world.state), c)) : '—'} sub={floatShare !== undefined ? `${pctLevel(floatShare, 0)} held by funds` : 'unlisted'} />
             <Stat label="rating" value={c.creditRating} sub={`cds ${bps(c.cdsSpreadBps)}bp`} neg={c.creditRating === 'CCC' || c.creditRating === 'D'} />
           </StatGrid>
         )}

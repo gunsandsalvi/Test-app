@@ -1,5 +1,6 @@
 import { V2World } from '../../../engine2/world';
-import { registerCompanyEquity } from '../../ledger/instrument-ledger';
+import { registerCompanyEquity, setIssuedUnits } from '../../ledger/instrument-ledger';
+import { issuedSharesOf, marketCapAt } from '../../../engine2/instruments';
 import { bankCreditParty, companyParty } from '../../../domain/party';
 import { defect } from '../../../domain/defect';
 /**
@@ -42,7 +43,6 @@ import { issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../../credit-price';
 import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche, seedLadder } from '../../ledger/tranche-ledger';
 import { admitParty } from '../../ledger/wire';
-import { marketCapOf } from '../../../domain/company';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, openingCashOf, entityCashOf, poolCashOf, obligationCurrencyOf } from '../../ledger/accounts';
 import { issueHolding } from '../../ledger/holdings-ledger';
@@ -87,14 +87,17 @@ export function publicComparableEvMultiple(
    * than the accident it was when both sides silently took the array.
    */
   debtOf: (c: Company) => number,
+  /** §3.13-BOOK dIV: market cap, read by the caller for the same reason — the index inside a
+   *  week (`marketCapAt`), the generator's stash at the seed. */
+  capOf: (c: Company) => number,
   regionId: RegionId,
   listedCompanies: Company[]
 ): number {
   const inRegion: number[] = [];
   const everywhere: number[] = [];
   listedCompanies.forEach((c) => {
-    if (!isActiveCompany(c) || c.listingStatus === 'PRIVATE' || !(c.ebitda > 0) || !(marketCapOf(c) > 0)) return;
-    const m = (marketCapOf(c) + debtOf(c)) / c.ebitda;
+    if (!isActiveCompany(c) || c.listingStatus === 'PRIVATE' || !(c.ebitda > 0) || !(capOf(c) > 0)) return;
+    const m = (capOf(c) + debtOf(c)) / c.ebitda;
     everywhere.push(m);
     if (c.region === regionId) inRegion.push(m);
   });
@@ -313,7 +316,7 @@ export function runPeLifecycleForRegion(
   // earnings. The purchase price, the exit test and HC4's NAV mark all read it, so a portfolio is
   // never bought on one number and marked on another. No comps at all means no basis on which to
   // price a private company, and therefore no deals this week.
-  const markEvMultiple = publicComparableEvMultiple((c) => ladderTotalLocal(ctx.v2, c.id), regionId, ctx.updatedCompanies);
+  const markEvMultiple = publicComparableEvMultiple((c) => ladderTotalLocal(ctx.v2, c.id), (c) => marketCapAt(ctx.v2, c), regionId, ctx.updatedCompanies);
   if (!(markEvMultiple > 0)) return;
   const pendingIssuers = new Set(ctx.primaryOfferingsWorking.map((o) => o.issuerId));
   // §3.13 row 3: the region's loan market level, taken off the LOANS — each borrower's own
@@ -562,7 +565,7 @@ export function runPeLifecycleForRegion(
         if (c.region !== regionId || !isActiveCompany(c) || c.listingStatus === 'PRIVATE') return false;
         if (c.isBankEntity || c.isInstitutionalEntity) return false;
         if (owned.has(c.id) || c.ownership?.peSponsorId || pendingIssuers.has(c.id)) return false;
-        if (!(ebitdaOf(c) > 0) || !(c.sharesOutstanding > 0) || !(c.stockPrice > 0)) return false;
+        if (!(ebitdaOf(c) > 0) || !(issuedSharesOf(ctx.v2, c.id) > 0) || !(c.stockPrice > 0)) return false;
         return ladderTotalLocal(ctx.v2, c.id) / Math.max(1, ebitdaOf(c)) < LBO_MAX_LEVERAGE - 2;
       });
       if (listedTarget) {
@@ -571,10 +574,10 @@ export function runPeLifecycleForRegion(
         // market a discount.
         const patientValuePerShare = companyFairValuePerShare(
           listedTarget, cashOf(ctx.v2, listedTarget), riskFreeRate, PATIENT_HOLDER_REQUIRED_RETURN,
-          ladderTotalLocal(ctx.v2, listedTarget.id)
+          ladderTotalLocal(ctx.v2, listedTarget.id), issuedSharesOf(ctx.v2, listedTarget.id)
         );
         const takeoutPricePerShare = Math.max(listedTarget.stockPrice, patientValuePerShare);
-        const takeoutValueLocal = takeoutPricePerShare * listedTarget.sharesOutstanding;
+        const takeoutValueLocal = takeoutPricePerShare * issuedSharesOf(ctx.v2, listedTarget.id);
         const debtLocal = Math.min(
           takeoutValueLocal,
           Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(listedTarget) - ladderTotalLocal(ctx.v2, listedTarget.id))
@@ -677,7 +680,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       if (failed) return; // the loan market would not fund it: the company stays public
       const equityLocal = deal.equityLocal ?? 0;
       const pricePerShare = deal.takeoutPricePerShare ?? 0;
-      const shares = comp.sharesOutstanding;
+      const shares = issuedSharesOf(ctx.v2, comp.id);
       if (!(pricePerShare > 0) || !(shares > 0)) return;
       const calledLocal = callCapitalLocal(ctx, lpById, deal.sponsorId, equityLocal);
       if (calledLocal < equityLocal * 0.999) {
@@ -702,7 +705,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       });
       comp.listingStatus = 'PRIVATE';
       comp.stockPrice = 0;
-      comp.sharesOutstanding = 0;
+      setIssuedUnits(ctx.v2, equityInstrumentId(comp.id), 0); // §3.13-BOOK dIV: the register is extinguished
       comp.ownership = {
         founderPct: 0, peSponsorId: deal.sponsorId, peSponsorPct: 1, acquiredWeek: nextWeek,
         entryEvMultiple: comp.ebitda > 0 ? (ladderTotalLocal(ctx.v2, comp.id) + takeoutValueLocal) / comp.ebitda : 0,
@@ -741,7 +744,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       return;
     }
     comp.listingStatus = 'PUBLIC';
-    comp.sharesOutstanding = shares;
+    setIssuedUnits(ctx.v2, equityInstrumentId(comp.id), shares); // §3.13-BOOK dIV: a listing creates the register
     comp.stockPrice = Number(settlement.clearedStat.toFixed(2));
     // The direct `comp.cash += proceeds` that stood here was a DOUBLE CREDIT — primary
     // settlement already pays the issuer for the whole deal by instruction (the CCP for the

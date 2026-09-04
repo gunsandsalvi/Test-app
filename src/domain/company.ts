@@ -342,7 +342,7 @@ export interface Company {
   ebit: number;
   netIncome: number;
   eps: number;
-  sharesOutstanding: number;
+  // §3.13-BOOK dIV: shares in issue are a READ of the instrument index (`issuedSharesOf`), not a field.
   // §5-WIRES A3.1: cash is a READ of the persistent account (`cashOf`, engine/ledger/accounts.ts).
   // §5-WIRES D: total debt is a READ of the ladder (`totalDebtOf`, `ladderTotalLocal`), not a field.
   currentLiabilities: number;
@@ -901,8 +901,10 @@ export function managedEntityIdsOf(comp: { id: EntityId; managesEntityIds?: Enti
  * the read cannot. Market cap is what the market says a firm's shares are worth: its price times
  * its shares — zero for a firm nobody can buy (no price) or with no shares.
  */
-export const marketCapOf = (c: { stockPrice: number; sharesOutstanding: number }): number =>
-  (c.stockPrice > 0 && c.sharesOutstanding > 0 ? c.stockPrice * c.sharesOutstanding : 0);
+/** Price times shares — the shares handed in by the caller that read them (`marketCapAt` reads
+ *  the instrument index; the seed reads its stash). */
+export const marketCapOf = (c: { stockPrice: number }, sharesOutstanding: number): number =>
+  (c.stockPrice > 0 && sharesOutstanding > 0 ? c.stockPrice * sharesOutstanding : 0);
 
 /**
  * Total debt off the OBJECT ARRAY. §3.13-READ C1 left this with exactly three callers, all in the

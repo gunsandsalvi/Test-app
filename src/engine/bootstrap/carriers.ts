@@ -18,6 +18,7 @@
  */
 
 import { Company, CreditRating, Region, RegionId } from '../../types';
+import { stashSeedIssuedShares } from '../ledger/instrument-ledger';
 import { stashOpeningCash } from '../ledger/accounts';
 import { stashSeedRevenueHistory, stashSeedRing } from '../../engine2/world';
 import { INDUSTRY_SUBUNITS } from '../../domain/industry';
@@ -334,7 +335,7 @@ function buildCarrierCompany(
     ebit,
     netIncome: Math.round((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE)),
     eps: Number(((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE) / sharesOutstanding).toFixed(2)),
-    sharesOutstanding, stockPrice, marketCap: stockPrice * sharesOutstanding,
+    stockPrice, marketCap: stockPrice * sharesOutstanding,
     forwardPE: 0,
     currentLiabilities: Math.round(debtBase * 0.2),
     // A FLEET IS FINANCED, AND THE LADDER IS WHERE ITS DEBT LIVES. `totalDebt` stopped being a
@@ -378,5 +379,6 @@ function buildCarrierCompany(
   stashSeedRing(__c, 'rating', [rating]);
   stashSeedRing(__c, 'price', [stockPrice]);
   stashOpeningCash(__c, Math.round(Math.max(0, ebitda) * 0.6)); // §5-WIRES A3.1
+  stashSeedIssuedShares(__c, sharesOutstanding); // §3.13-BOOK dIV
   return __c;
 }

@@ -4,7 +4,6 @@ import { Company, RegionId, Region, Commodity, CompositeBenchmarkIndices, IndexM
 import { generate52WeekHistory } from './utils';
 import { getRegionPopulation, getRegionProductivityPerCapitaLocal, POPULATION_UNIT, PRODUCTIVITY_UNIT_USD } from '../bootstrap/population';
 import { RATING_OAS_SPREADS } from '../pricing';
-import { marketCapOf } from '../../domain/company';
 import { issuerCreditPointsOnCurve } from '../credit-price';
 import { faceWeightedSpreadBps, CreditCurvePoint } from '../../domain/credit-curve';
 
@@ -26,6 +25,10 @@ const HY_OAS_FALLBACK = RATING_OAS_SPREADS.B.baseBps;
 export function calculateCompositeIndices(
   companies: Company[],
   regions: Record<RegionId, Region>,
+  /** §3.13-BOOK dIV: a company's market cap as the caller reads it — the instrument index's
+   *  shares inside a week (`marketCapAt`), the generator's stash at the seed, before the index
+   *  is declared. Named at the call site for the same reason `prevPriceOf` is below. */
+  capOf: (c: Company) => number,
   commodities?: Commodity[],
   prevIndices?: CompositeBenchmarkIndices,
   // II.5 — prices read the ring; absent (the seed call) the len-0 path is the same
@@ -66,17 +69,17 @@ function regionIndexShortName(regionId: RegionId): string {
 const COMMODITY_INDEX_NAME = 'Broad Commodity Index';
 const COMMODITY_INDEX_SHORT_NAME = 'Commodities';
 
-const getCapWeightedAvgPrice = (firms: Company[]) => {
+const getCapWeightedAvgPrice = (capOf: (c: Company) => number, firms: Company[]) => {
     // AN EMPTY MEMBERSHIP MOVES NOTHING. This returned the index's BASE LEVEL — around 1000 —
     // where every caller multiplies the result as a fractional CHANGE, so a region or sector
     // that emptied would have multiplied its index by about 1001 in a single week. There is no
     // move to report when there is nobody left to move.
     if (firms.length === 0) return 0;
-    const totalCap = firms.reduce((sum, f) => sum + marketCapOf(f), 0);
+    const totalCap = firms.reduce((sum, f) => sum + capOf(f), 0);
     const avgChange = firms.reduce((sum, f) => {
       const prevP = prevPriceOf(f);
       const chg = prevP > 0 ? (f.stockPrice - prevP) / prevP : 0;
-      return sum + chg * (marketCapOf(f) / Math.max(1, totalCap));
+      return sum + chg * (capOf(f) / Math.max(1, totalCap));
     }, 0);
     // IDX: no bound. An index is the cap-weighted move of its own constituents, whatever that
     // is — a STATISTIC, not a price and not a level. The +/-15%/wk clamp that stood here only
@@ -85,10 +88,10 @@ const getCapWeightedAvgPrice = (firms: Company[]) => {
     return avgChange;
   };
 
-  const usChange = getCapWeightedAvgPrice(usFirms);
-  const euChange = getCapWeightedAvgPrice(euFirms);
-  const ukChange = getCapWeightedAvgPrice(ukFirms);
-  const jpChange = getCapWeightedAvgPrice(jpFirms);
+  const usChange = getCapWeightedAvgPrice(capOf, usFirms);
+  const euChange = getCapWeightedAvgPrice(capOf, euFirms);
+  const ukChange = getCapWeightedAvgPrice(capOf, ukFirms);
+  const jpChange = getCapWeightedAvgPrice(capOf, jpFirms);
 
   // IDX: sector sub-indices filter to `listed` like the regional ones. They did not, which was
   // harmless only while a private firm's marketCap was 0 — a latent double-count waiting for the
@@ -98,10 +101,10 @@ const getCapWeightedAvgPrice = (firms: Company[]) => {
   const energyFirms = listed.filter(c => c.sector === 'Energy');
   const indFirms = listed.filter(c => c.sector === 'Industrials');
 
-  const techChange = getCapWeightedAvgPrice(techFirms);
-  const finChange = getCapWeightedAvgPrice(finFirms);
-  const energyChange = getCapWeightedAvgPrice(energyFirms);
-  const indChange = getCapWeightedAvgPrice(indFirms);
+  const techChange = getCapWeightedAvgPrice(capOf, techFirms);
+  const finChange = getCapWeightedAvgPrice(capOf, finFirms);
+  const energyChange = getCapWeightedAvgPrice(capOf, energyFirms);
+  const indChange = getCapWeightedAvgPrice(capOf, indFirms);
 
   const prevUS = prevIndices?.usaComposite?.value ?? regionIndexBase('USA');
   const prevEU = prevIndices?.eurComposite?.value ?? regionIndexBase('EUR');

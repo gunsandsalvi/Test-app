@@ -1,4 +1,6 @@
 import { householdDepositsOf, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
+import { ensureV2 } from '../../../engine2/world';
+import { marketCapAt } from '../../../engine2/instruments';
 import { addDepositLines, ZERO_DEPOSIT_LINES, regionLoanBooksLocal } from '../../../domain/banking';
 import { facilityBookOf, materializeGovLadder } from '../../../engine2/tranches';
 /**
@@ -15,7 +17,7 @@ import { evolveRegionMacro } from '../../macro/evolution';
 import { computeOccupationDemand } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
-import { marketCapOf, banksOf } from '../../../domain/company';
+import { banksOf } from '../../../domain/company';
 import { regionBankSovereignValueRecord } from '../../sovereign-register';
 
 /**
@@ -100,11 +102,11 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
 
     // What the region's listed equity actually pays — market-cap-weighted, real state.
     const regionListed = state.companies.filter(
-      (c) => c.region === regionId && !c.isDefaulted && (marketCapOf(c) ?? 0) > 0
+      (c) => c.region === regionId && !c.isDefaulted && (marketCapAt(ensureV2(state), c) ?? 0) > 0
     );
-    const regionMcap = regionListed.reduce((a, c) => a + marketCapOf(c), 0);
+    const regionMcap = regionListed.reduce((a, c) => a + marketCapAt(ensureV2(state), c), 0);
     const regionAvgDividendYield = regionMcap > 0
-      ? regionListed.reduce((a, c) => a + (c.dividendYield ?? 0) * marketCapOf(c), 0) / regionMcap
+      ? regionListed.reduce((a, c) => a + (c.dividendYield ?? 0) * marketCapAt(ensureV2(state), c), 0) / regionMcap
       : 0;
 
     const { updatedRegion, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(

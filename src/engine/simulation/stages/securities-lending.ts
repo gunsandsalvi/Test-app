@@ -15,6 +15,7 @@
  */
 
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
+import { marketCapAt, issuedSharesOf } from '../../../engine2/instruments';
 import { GameState, RegionId, Company } from '../../../types';
 import { ensureV2, ringFill, rowOf } from '../../../engine2/world';
 import {
@@ -33,7 +34,6 @@ import { realizedAnnualVol } from '../../../domain/volatility';
 import { FULL_SIZE_PRICE_DISCOUNT } from './07e-equity-clearing';
 import { medianOf } from '../../../domain/volatility';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
 import type { InstrumentId } from '../../../domain/ids';
@@ -63,7 +63,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
 
     const listed = ctx.prevActiveFirms.filter(
       (c) => c.region === regionId && isActiveCompany(c) && isPubliclyListed(c)
-        && c.sharesOutstanding > 0 && c.stockPrice > 0
+        && issuedSharesOf(ctx.v2, c.id) > 0 && c.stockPrice > 0
     );
     const companyById = new Map<EntityId, Company>(listed.map((c) => [c.id, c]));
     // A company that has left the register entirely still has to be found, to close the loans
@@ -272,9 +272,9 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     const mcapByRegion: Record<string, number> = {};
     (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
       mcapByRegion[r] = ctx.prevActiveFirms
-        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapOf(c) ?? 0), 0);
+        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapAt(ctx.v2, c) ?? 0), 0);
     });
-    const floatValueById = new Map(listed.map((c) => [c.id, c.sharesOutstanding * c.stockPrice]));
+    const floatValueById = new Map(listed.map((c) => [c.id, issuedSharesOf(ctx.v2, c.id) * c.stockPrice]));
     const totalFloatValueLocal = listed.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;
     const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id))]));
     const netInvestmentRateById = new Map(listed.map((c) => [c.id, companyNetInvestmentRate(c)]));
@@ -299,7 +299,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       listed.forEach((c) => {
         const fair = c.isDefaulted ? 0 : fairValuePerShare({
           annualEarningsLocal: c.netIncome,
-          sharesOutstanding: c.sharesOutstanding,
+          sharesOutstanding: issuedSharesOf(ctx.v2, c.id),
           bookEquityLocal: bookEquityById.get(c.id) ?? 0,
           netInvestmentRate: netInvestmentRateById.get(c.id) ?? 0,
           riskFreeRate,

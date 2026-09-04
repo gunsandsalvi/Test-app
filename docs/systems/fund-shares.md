@@ -105,7 +105,7 @@ checked by `scripts/check-atlas.sh`.
 | C2 a redemption: shares back, cash at NAV | `src/engine/ledger/holdings-ledger.ts:retireHolding` | ⚠️ |
 | C2.a and the fund must find the cash: buffer, or sell | `src/engine/simulation/stages/etf-flows.ts:fundCashAvailableLocal` | ⚠️ |
 | **C2.b the forced-seller channel: it sells into a market that must clear** | `src/engine/simulation/stages/etf-demand.ts:investableLocal` | ⚠️ |
-| C3 shares outstanding change; a fund is not fixed-size | `src/domain/etf.ts:sharesOutstanding` | ✅ |
+| C3 shares outstanding change; a fund is not fixed-size | `src/engine2/instruments.ts:etfSharesOutstandingOf` · `src/engine/ledger/instrument-ledger.ts:setIssuedUnits` | ✅ |
 | C4 a timing mismatch between the NAV paid and the sales | `src/engine/simulation/stages/etf-flows.ts:navPerShare` | ⚠️ |
 | C4.a a redemption is a real cost to those who stay | `src/engine/simulation/stages/etf-flows.ts:carryPricePerShare` | ⚠️ |
 | C5 VERIFY Σ created − Σ redeemed = shares outstanding | — | ❌ |

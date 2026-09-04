@@ -7,7 +7,7 @@
 import { journalPayment, partyId, PendingNetCtx } from './settlement';
 import { DESK_BOOK_KIND } from '../../../domain/dealer-desk';
 import { deskRowsOf } from '../../desk-register';
-import { instrumentCurrencyOf } from '../../../engine2/instruments';
+import { instrumentCurrencyOf, issuedSharesOf } from '../../../engine2/instruments';
 import type { EntityId } from '../../../domain/ids';
 import { bankSecuritiesParty, companyPartyOf } from '../../../domain/party';
 import { buildEntityIndex } from '../../ledger/entity-index';
@@ -649,7 +649,7 @@ export function applyPendingCorporateActionSettlements(
         // construction and the `max` is a GUARD rather than a source: a company whose holders do
         // not add up to its issue has a defect in the register, and paying the difference to
         // somebody would hide it. `O2` owns that comparison.
-        const issuedLocal = t === equityRef && issuer ? Math.max(0, issuer.sharesOutstanding) : 0;
+        const issuedLocal = t === equityRef && issuer ? Math.max(0, issuedSharesOf(v2, issuer.id)) : 0;
         const denomLocal = Math.max(registerLocal + deskLocal, issuedLocal);
         if (!(denomLocal > 0)) return;
         denomByPair.set(k, denomLocal);

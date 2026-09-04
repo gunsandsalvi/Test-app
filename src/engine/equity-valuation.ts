@@ -136,12 +136,14 @@ export function companyFairValuePerShare(
   holderRequiredReturn: number,
   /** §5-WIRES D / §3.13-READ C1: the ladder's face, read by the caller. Required — see
    *  `companyBookEquityLocal`; the default this had was last week's mirror. */
-  totalDebtLocal: number
+  totalDebtLocal: number,
+  /** §3.13-BOOK dIV: the shares in issue, read by the caller off the instrument index. */
+  sharesOutstanding: number
 ): number {
   if (comp.isDefaulted) return 0;
   return fairValuePerShare({
     annualEarningsLocal: comp.netIncome,
-    sharesOutstanding: comp.sharesOutstanding,
+    sharesOutstanding,
     bookEquityLocal: companyBookEquityLocal(comp, cashLocal, totalDebtLocal),
     netInvestmentRate: companyNetInvestmentRate(comp),
     riskFreeRate,

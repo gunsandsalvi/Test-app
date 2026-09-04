@@ -97,7 +97,7 @@ checked by `scripts/check-atlas.sh`.
 | **A3 FORBID no holding without a holder** | `src/engine2/holdings.ts:bookHeadOf` | ✅ |
 | **A4 FORBID no holding without an issuer** | `src/engine/ledger/wire.ts:wire` · `src/engine/ledger/wire-world.ts:wireWorldOf` · `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | B1 an instrument has an issued amount | `src/engine2/instruments.ts:InstrumentIndex` · `src/engine/ledger/tranche-ledger.ts:issueTranche` | ✅ |
-| B2 VERIFY Σ holdings = issued amount, per instrument | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
+| B2 VERIFY Σ holdings = issued amount, per instrument | `src/engine2/instruments.ts:issuedSharesOf` · `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | B2.a shortfall = a claim vanished; surplus = one invented | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | **B2.b the tolerance is float dust, never a fraction of the issue** | `src/domain/stated.ts:AUDIT_BOOKS_TOLERANCE` | ❌ |
 | B3 the issuer's liability is a read of the other side | `src/domain/company.ts:totalDebtOf` | ✅ |
@@ -248,7 +248,12 @@ in the money the INSTRUMENT states. §9.13-BOOK dII added the books the adapters
 declared where they are built, with no issuer (`registerBook`), and a private-equity fund's
 interest; a CONTRACT wire resolves against the index too. §9.13-BOOK dIII deleted the ETF share's
 second key and `issuerIdOf`'s fallback: an id the index does not hold is an id nothing issued, at
-the site. What the index does not yet hold: the issued share count (dIV).
+the site. §9.13-BOOK dIV put the ISSUED AMOUNT on it for the kinds no class store counts — a
+company's shares, a fund's — with `setIssuedUnits` the one writer (a listing, a buyback, a
+stock-paid merger, a spin-off, a take-private, a fund's creations and redemptions) and
+`issuedSharesOf` / `etfSharesOutstandingOf` the read; `Company.sharesOutstanding` and
+`EtfFund.sharesOutstanding` are gone, and `O2` compares the register against the index's count —
+B2's issued side is real, and only B2.b's band keeps B2 at ⚠️.
 
 ### ✅ F1 / F1.a — CLOSED: THE ETF SHARE HAS ONE KEY (§9.13-BOOK dIII)
 

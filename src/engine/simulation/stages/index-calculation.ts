@@ -16,6 +16,7 @@
  */
 
 import { GameState, Company } from '../../../types';
+import { marketCapAt, issuedSharesOf } from '../../../engine2/instruments';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import type { EntityId } from '../../../domain/ids';
 import { ensureV2, V2World } from '../../../engine2/world';
@@ -24,7 +25,6 @@ import { clearedPriceOf } from '../../../engine2/prices';
 import { WeeklyStepContext } from './context';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { isInvestmentGrade } from './asset-allocation';
-import { marketCapOf } from '../../../domain/company';
 import {
   INDEX_DEFINITIONS, IndexDefinition, IndexConstituent, MarketIndex,
   LARGE_CAP_CUMULATIVE_SHARE, INDEX_REBALANCE_WEEKS, INDEX_BASE_LEVEL,
@@ -69,8 +69,8 @@ function indexValueLocal(v2: V2World, def: IndexDefinition, comp: Company, week:
   if (def.region && comp.region !== def.region) return 0;
 
   if (def.assetClass === 'EQUITY') {
-    if (!isPubliclyListed(comp) || !(comp.sharesOutstanding > 0) || !(comp.stockPrice > 0)) return 0;
-    return marketCapOf(comp);
+    if (!isPubliclyListed(comp) || !(issuedSharesOf(v2, comp.id) > 0) || !(comp.stockPrice > 0)) return 0;
+    return marketCapAt(v2, comp);
   }
 
   if (def.assetClass === 'LEVERAGED_LOAN') return creditMarketValueLocal(v2, comp, true);

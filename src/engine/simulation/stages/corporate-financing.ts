@@ -30,7 +30,6 @@
 
 import { riskAversionOf } from '../../../domain/preferences';
 import { Company, CreditRating } from '../../../types';
-import { marketCapOf } from '../../../domain/company';
 
 /**
  * The undrawn headroom on a firm's committed line: the extra debt its own earnings can service at
@@ -113,6 +112,8 @@ export interface FinancingDecision {
  */
 export function decideCorporateFinancing(params: {
   comp: Company;
+  /** §3.13-BOOK dIV: the market cap as the caller read it — price × the index's shares in issue. */
+  marketCapLocal: number;
   /** The company's real all-in cost of new debt: risk-free curve plus its own cleared spread. */
   costOfDebtAnnual: number;
   effectiveTaxRate: number;
@@ -123,7 +124,7 @@ export function decideCorporateFinancing(params: {
   cashLocal: number;
   rating: CreditRating;
 }): FinancingDecision {
-  const { comp, costOfDebtAnnual, effectiveTaxRate, ebitdaAnnual, totalDebtLocal, cashLocal, rating } = params;
+  const { comp, marketCapLocal, costOfDebtAnnual, effectiveTaxRate, ebitdaAnnual, totalDebtLocal, cashLocal, rating } = params;
   // §5-BRAINS — the CFO's own risk weight: a risk-averse one needs a wider spread to act,
   // levers up more slowly and pays down faster. The median is the stated rule.
   const ra = riskAversionOf(comp.management);
@@ -160,7 +161,7 @@ export function decideCorporateFinancing(params: {
     // to work: the covenant bounds the STOCK, the deployment pipeline bounds the FLOW.
     const headroomLocal = (covenantCeiling - currentLeverage) * ebitdaAnnual;
     const weeklyDeploymentCapLocal =
-      (Math.max(comp.growthCapex ?? 0, marketCapOf(comp) * 0.02) / 52) * DEPLOYMENT_MULTIPLE;
+      (Math.max(comp.growthCapex ?? 0, marketCapLocal * 0.02) / 52) * DEPLOYMENT_MULTIPLE;
     return {
       netDebtChangeLocal: Math.min(headroomLocal * WEEKLY_ISSUANCE_TAKEUP_RATE / ra, weeklyDeploymentCapLocal),
       reason: 'ISSUE_CHEAP_DEBT',

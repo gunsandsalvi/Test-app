@@ -11,6 +11,8 @@
  */
 
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
+import { equityInstrumentId } from '../domain/instrument-keys';
+import { setIssuedUnits } from '../engine/ledger/instrument-ledger';
 import { sovereignBookLocalOf } from '../engine/sovereign-register';
 import { bankCreditPartyOf, bankPartyOf, companyPartyOf } from '../domain/party';
 import { currencyOf, RegionId } from '../domain/geography';
@@ -1784,6 +1786,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
 
     const financing = decideCorporateFinancing({
       comp,
+      marketCapLocal: L8.stockPrice[row] * L8.sharesOutstanding[row],
       costOfDebtAnnual: costOfNewDebtAnnual,
       effectiveTaxRate: reg.effectiveTaxRate,
       ebitdaAnnual: newEbitda,
@@ -2070,7 +2073,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         { ...comp, netIncome: newNetIncome }, cash.usd,
         reg.zeroRates?.tenor10Y ?? reg.policyRate,
         REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
-        newTotalDebt
+        newTotalDebt,
+        L8.sharesOutstanding[row]
       );
       const isCheap = newStockPrice < estimatedBookValuePerShare || newStockPrice < boardFairValuePerShare * 0.95;
       const buybackShare = isCheap ? 0.60 : 0.25;
@@ -2365,7 +2369,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.eps = newEps;
 
-    comp.sharesOutstanding = round3(updatedSharesOutstanding);
+    // §3.13-BOOK dIV: the shares in issue are the instrument index's; a buyback states the new count there.
+    if (round3(updatedSharesOutstanding) !== L8.sharesOutstanding[row]) setIssuedUnits(v2, equityInstrumentId(L8.companyId[row]), round3(updatedSharesOutstanding));
 
       // Wall Street Phase 1: real per-bank balance sheet computed this week in
       // 02b-bank-diversification.ts (which runs before this stage), carried forward otherwise.

@@ -10,8 +10,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
-import { isRegisteredInstrument, instrumentKindOf, instrumentIssuerOf, instrumentCurrencyOf, registeredInstrumentRefs } from '../src/engine2/instruments';
-import { registerInstrument, registerCompanyEquity, registerFundShares, registerBook } from '../src/engine/ledger/instrument-ledger';
+import { isRegisteredInstrument, instrumentKindOf, instrumentIssuerOf, instrumentCurrencyOf, registeredInstrumentRefs, issuedSharesOf, etfSharesOutstandingOf, marketCapAt } from '../src/engine2/instruments';
+import { registerInstrument, registerCompanyEquity, registerFundShares, registerBook, setIssuedUnits, stashSeedIssuedShares } from '../src/engine/ledger/instrument-ledger';
 import { issuerIdOf } from '../src/engine2/tranches';
 import { seedLadder } from '../src/engine/ledger/tranche-ledger';
 import { newWireJournal, setActiveWireJournal, setActiveWireWorld } from '../src/engine/ledger/wire';
@@ -98,4 +98,22 @@ test('an id the index does not hold has no issuer to name, and a fund share name
   assert.throws(() => issuerIdOf(v2, swapInstrumentId('USA', 's2')), /nobody issued/);
   registerFundShares(v2, { id: asEntityId('INST-ETF-9'), region: 'USA', entityType: 'ETF' });
   assert.equal(issuerIdOf(v2, 'INST-ETF-9'), asEntityId('INST-ETF-9'), 'the share is keyed by the fund and issued by it');
+});
+
+test('the issued amount lives on the index: declared from the seed stash, moved by the ledger, read by everyone', () => {
+  const v2 = world();
+  const acme = { id: asEntityId('USA_ACME'), region: 'USA' as const, stockPrice: 20 };
+  assert.equal(issuedSharesOf(v2, acme.id), 0, 'no register until the equity is declared');
+  stashSeedIssuedShares(acme, 1_000);
+  registerCompanyEquity(v2, acme);
+  assert.equal(issuedSharesOf(v2, acme.id), 1_000);
+  assert.equal(marketCapAt(v2, acme), 20_000);
+  setIssuedUnits(v2, equityInstrumentId(acme.id), 995); // a buyback
+  assert.equal(issuedSharesOf(v2, acme.id), 995);
+  assert.throws(() => setIssuedUnits(v2, equityInstrumentId('USA_NOBODY'), 5), /does not hold/);
+  assert.throws(() => setIssuedUnits(v2, equityInstrumentId(acme.id), -1), /stated as/);
+  registerFundShares(v2, { id: asEntityId('INST-ETF-2'), region: 'USA', entityType: 'ETF' });
+  assert.equal(etfSharesOutstandingOf(v2, 'INST-ETF-2'), 0, 'a fund opens with no shares; creations mint them');
+  setIssuedUnits(v2, asInstrumentId('INST-ETF-2'), 40);
+  assert.equal(etfSharesOutstandingOf(v2, 'INST-ETF-2'), 40);
 });

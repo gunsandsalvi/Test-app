@@ -20,6 +20,7 @@
  */
 
 import { bookHeadOf } from '../../engine2/holdings';
+import { etfSharesOutstandingOf } from '../../engine2/instruments';
 import { internType, internRegion, V2World } from '../../engine2/world';
 import { Company, RegionId } from '../../types';
 import { InstitutionalEntity } from '../../domain/institutions';
@@ -100,10 +101,11 @@ export function householdEtfHoldingsLocal(
   const fundById = new Map(entities.filter((e) => e.entityType === 'ETF' && e.etf).map((e) => [e.id, e]));
   return hs.etfShares.reduce((sum, holding) => {
     const fund = fundById.get(holding.fundId);
-    if (!fund?.etf || !(fund.etf.sharesOutstanding > 0)) return sum;
+    const shares = fund ? etfSharesOutstandingOf(v2, fund.id) : 0;
+    if (!fund?.etf || !(shares > 0)) return sum;
     let heldLocal = 0;
     for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) heldLocal += H.qtyLocal[r];
     const navLocal = heldLocal + Math.max(0, entityCashOf(v2, fund));
-    return sum + holding.shares * (navLocal / fund.etf.sharesOutstanding);
+    return sum + holding.shares * (navLocal / shares);
   }, 0);
 }

@@ -1,4 +1,5 @@
 import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
+import { marketCapAt, etfSharesOutstandingOf } from '../../../engine2/instruments';
 /**
  * The household balance sheet, and the claims that link it to the institutions.
  *
@@ -75,7 +76,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
   });
 
   const fundNavPerShare = (fund: InstitutionalEntity): number => {
-    const shares = fund.etf?.sharesOutstanding ?? 0;
+    const shares = etfSharesOutstandingOf(ctx.v2, fund.id); // §3.13-BOOK dIV: the index's count
     if (!(shares > 0)) return ETF_INCEPTION_NAV_PER_SHARE;
     // holdings flip: row walk on the mirror.
     const H = ctx.v2.holdings;
@@ -120,7 +121,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const institutionalClaimsLocal = institutionalClaims.reduce((a, c) => a + c.valueLocal, 0);
 
     // ---- 4. The rest of the real book, marked from this week's clears. ----
-    const evMultiple = publicComparableEvMultiple((c) => ladderTotalLocal(ctx.v2, c.id), region, ctx.updatedCompanies);
+    const evMultiple = publicComparableEvMultiple((c) => ladderTotalLocal(ctx.v2, c.id), (c) => marketCapAt(ctx.v2, c), region, ctx.updatedCompanies);
     const etfHoldingsLocal = householdEtfHoldingsLocal(ctx.v2, { etfShares }, ctx.updatedInstitutionalEntities);
     const directEquityLocal = householdDirectEquityLocal(ctx.v2, region);
     const privateBusinessEquityLocal = householdPrivateBusinessEquityLocal(ctx.v2, region, ctx.updatedCompanies, evMultiple);

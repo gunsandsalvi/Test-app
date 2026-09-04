@@ -79,7 +79,8 @@ import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAnd
 import { openAccount, openingCashOf, stashOpeningCash, stashSeedHouseholdLine, seedGovLadderOf, seedCentralBankBookOf, stashSeedBankBook, seedBankBookOf, seedBankBookLocalOf, openSectorRow } from '../ledger/accounts';
 import { newWireJournal, setActiveWireJournal, setActiveWireWorld, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { wireWorldOf } from '../ledger/wire-world';
-import { registerCompanyEquity, registerFundShares } from '../ledger/instrument-ledger';
+import { registerCompanyEquity, registerFundShares, seedIssuedSharesOf } from '../ledger/instrument-ledger';
+import { issuedSharesOf } from '../../engine2/instruments';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
 import { buildEntityIndex } from '../ledger/entity-index';
@@ -427,7 +428,7 @@ function openSeededBooks(state: GameState): void {
       const book: ItemizedHolding[] = [];
       state.companies.forEach((c) => {
         if (c.region !== regionId || !isActiveCompany(c) || !isPubliclyListed(c)) return;
-        const shares = c.sharesOutstanding - (heldShares.get(c.id) ?? 0);
+        const shares = issuedSharesOf(v2, c.id) - (heldShares.get(c.id) ?? 0);
         if (!(shares > 0) || !(c.stockPrice > 0)) return;
         book.push({
           instrumentId: equityInstrumentId(c.id), instrumentType: 'EQUITY', issuerRegion: regionId,
@@ -632,7 +633,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // P3 / P4: Populate initial dollar holdings for institutional sectors from shares
     const regionCompanies = companies.filter(c => c.region === regionId);
 
-    const totalMarketCap = regionCompanies.reduce((s, c) => s + marketCapOf(c), 0);
+    const totalMarketCap = regionCompanies.reduce((s, c) => s + marketCapOf(c, seedIssuedSharesOf(c)), 0);
     // FRM: the ratio is measured now, and it is seeded from the stack macro/initialization built
     // — so this reads the same number rather than the walked field it used to.
 
@@ -648,7 +649,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       id: equityInstrumentId(c.id),
       type: 'EQUITY',
       region: regionId,
-      outstandingLocal: marketCapOf(c)
+      outstandingLocal: marketCapOf(c, seedIssuedSharesOf(c))
     }));
 
     // §3.13: keyed by TRANCHE, which is what 07b now clears and what the register names, so the
@@ -1065,7 +1066,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // clearing fill from here on settles against this balance.
         // §5-CLOSE O2: plus the equity budget the issue could not absorb (see equityFillRatio).
         equityCapitalLocal,
-        sharesOutstanding: comp.sharesOutstanding,
         stockPrice: comp.stockPrice,
         itemizedHoldings,
         assetAllocationTarget: targetFor(role, comp.hedgeFundStrategy),
@@ -1118,14 +1118,14 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       comp.ebitda = ebitdaLocal;
       comp.ebit = Math.max(1, ebitdaLocal);
       comp.netIncome = comp.ebit * (1 - INSTITUTIONAL_EFFECTIVE_TAX_RATE);
-      comp.eps = comp.sharesOutstanding > 0 ? Number((comp.netIncome / comp.sharesOutstanding).toFixed(2)) : 0;
+      comp.eps = seedIssuedSharesOf(comp) > 0 ? Number((comp.netIncome / seedIssuedSharesOf(comp)).toFixed(2)) : 0;
     });
     // §5-CLOSE O2: THE REGISTER CANNOT EXCEED THE ISSUE. Every entity's equity was allocated
     // from its own budget in proportion to the caps, and the budgets together can exceed the
     // stock that exists (measured: 2.6x the issue of the biggest names, 242 firms over-held, 94B
     // of stock nobody issued at week 0). What the issue cannot absorb stays as the entity's CASH.
     {
-      const issuedById = new Map(regionCompanies.map((c) => [c.id, c.sharesOutstanding]));
+      const issuedById = new Map(regionCompanies.map((c) => [c.id, seedIssuedSharesOf(c)]));
       const heldById = new Map<string, number>();
       institutionalEntities.forEach((e) => { if (e.region !== regionId) return; e.itemizedHoldings.forEach((h) => { if (h.instrumentType === 'EQUITY' && h.quantityShares) heldById.set(h.instrumentId, (heldById.get(h.instrumentId) ?? 0) + h.quantityShares); }); });
       institutionalEntities.forEach((e) => {
@@ -1447,7 +1447,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
 
   // G3b: the dealers the player trades with ARE the named banks' desks.
   const dealers = dealersFromBanks(seedV2, (b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.id), (b) => seedBankBookLocalOf(b.bankBalanceSheet!), companies);
-  const compositeIndices = calculateCompositeIndices(companies, regions, commodities, undefined, seedV2, 1);
+  const compositeIndices = calculateCompositeIndices(companies, regions, (c) => marketCapOf(c, seedIssuedSharesOf(c)), commodities, undefined, seedV2, 1);
   const recentIPOs: { ticker: Ticker; name: string; category: string; week: number }[] = [];
   const recentMergers: { acquirerTicker: Ticker; acquirerName: string; targetTicker: Ticker; targetName: string; week: number; dealValueLocal: number }[] = [];
 
@@ -1519,7 +1519,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // §3.13-READ C1: THE OBJECT, DELIBERATELY. This runs inside `buildSeededGameState`, before
     // `openSeededBooks` opens the tranche store, so `debtTranches` is not a mirror here — it is
     // what the generator wrote, and what the store is about to be filled FROM.
-    const seedEvMultiple = publicComparableEvMultiple(totalDebtOf, regionId, companies);
+    const seedEvMultiple = publicComparableEvMultiple(totalDebtOf, (c) => marketCapOf(c, seedIssuedSharesOf(c)), regionId, companies);
     const stakeValue = (f: Company) => Math.max(0, seedEvMultiple * f.ebitda - totalDebtOf(f)) * 0.75;
 
     // WS7: one money market fund per region. Born EMPTY — no fabricated share stock (§7.4's
@@ -1534,7 +1534,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       region: regionId,
       entityType: 'MONEY_MARKET_FUND',
       equityCapitalLocal: 0,
-      sharesOutstanding: 1,
       stockPrice: 0,
       itemizedHoldings: [],
       assetAllocationTarget: allocationTargetFor('MONEY_MARKET_FUND'),
@@ -1572,7 +1571,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           region: regionId,
           entityType: 'ETF',
           equityCapitalLocal: 0,
-          sharesOutstanding: 0,
           stockPrice: 0,
           itemizedHoldings: [],
               assetAllocationTarget: allocationTargetFor('ETF'),
@@ -1581,7 +1579,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           etf: {
             indexId: def.id,
             sponsorEntityId: sponsor.id,
-            sharesOutstanding: 0,
             expenseRatioAnnual: ETF_EXPENSE_RATIO_ANNUAL[expenseClass],
             unmetFlowShare: 0,
           },
@@ -1612,7 +1609,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         region: regionId,
         entityType: 'PRIVATE_EQUITY',
         equityCapitalLocal: investedLocal,
-        sharesOutstanding: 1,
         stockPrice: 0,
         itemizedHoldings: [],
           assetAllocationTarget: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },

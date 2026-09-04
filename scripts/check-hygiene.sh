@@ -103,7 +103,7 @@ fi
 # §3.13-BOOK (dI) — the same boundary for the instrument index: `writeInstrumentRow` is the
 # instrument ledger's implementation (engine/ledger/instrument-ledger.ts); a declaration anywhere
 # else is a second writer.
-IX_STRAY=$(grep -rnE "import \{[^}]*\bwriteInstrumentRow\b[^}]*\} from '[^']*engine2/instruments(\.ts)?'" src --include=*.ts --include=*.tsx 2>/dev/null \
+IX_STRAY=$(grep -rnE "import \{[^}]*\b(writeInstrumentRow|writeIssuedUnits)\b[^}]*\} from '[^']*engine2/instruments(\.ts)?'" src --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE '^src/engine/ledger/|^src/engine2/' || true)
 if [ -n "$IX_STRAY" ]; then
   echo "ERROR: a file writes the instrument index directly — declare through engine/ledger/instrument-ledger.ts:"

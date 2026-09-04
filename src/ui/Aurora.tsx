@@ -13,6 +13,8 @@
  */
 
 import { stateDepositLines } from '../engine/ledger/accounts';
+import { ensureV2 } from '../engine2/world';
+import { marketCapAt } from '../engine2/instruments';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameState, InstitutionalEntity } from '../types';
 import { createInitialGameState } from '../engine/simulation';
@@ -27,7 +29,6 @@ import { Nav, T, mono, Hint, Card } from './ui';
 import { formatDate } from './calendar';
 import { storiesFor, Story } from './functions/news';
 import { isActiveCompany, banksOf } from '../domain/company';
-import { marketCapOf } from '../domain/company';
 import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
 
 interface Frame { ref: ObjectRef; fn: string; args: Record<string, string> }
@@ -353,7 +354,7 @@ function ObjectChip({ world, refv, nav, text, dense }: { world: World; refv: Obj
 function Home({ world, nav, recents, onRecent, stepMs }: { world: World; nav: Nav; recents: string[]; onRecent: (r: string) => void; stepMs?: number }) {
   const regions = Object.keys(world.state.regions);
   const banks = banksOf(world.state.companies).sort((a, b) => stateDepositLines(world.state, b).householdLocal - stateDepositLines(world.state, a).householdLocal);
-  const biggest = [...world.state.companies].filter((c) => isActiveCompany(c) && !c.isBankEntity && c.listingStatus !== 'PRIVATE').sort((a, b) => marketCapOf(b) - marketCapOf(a)).slice(0, 6);
+  const biggest = [...world.state.companies].filter((c) => isActiveCompany(c) && !c.isBankEntity && c.listingStatus !== 'PRIVATE').sort((a, b) => marketCapAt(ensureV2(world.state), b) - marketCapAt(ensureV2(world.state), a)).slice(0, 6);
   const assetsOf = (e: InstitutionalEntity) => institutionTotalAssetsFromState(world.state, e);
   const funds = [...world.state.institutionalEntities].filter((e) => !e.isDefaulted).sort((a, b) => assetsOf(b) - assetsOf(a)).slice(0, 6);
   const live = world.state.companies.filter((c) => isActiveCompany(c)).length;

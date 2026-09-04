@@ -143,7 +143,7 @@ export interface InstitutionalEntity {
   lastAnnualUnderwritingResultLocal?: number;
   /** HH1c — PENSION_FUND: benefits paid out over the last year, against the promises it holds. */
   lastAnnualBenefitOutflowLocal?: number;
-  sharesOutstanding: number;
+  // §3.13-BOOK dIV: a fund's shares in issue live on the instrument index, never here.
   stockPrice: number;
   itemizedHoldings: ItemizedHolding[];
   /**

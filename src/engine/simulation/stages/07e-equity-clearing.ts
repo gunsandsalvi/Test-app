@@ -28,6 +28,7 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
+import { marketCapAt, issuedSharesOf } from '../../../engine2/instruments';
 import { companyParty } from '../../../domain/party';
 import { isActiveCompany, isPubliclyListed, banksOf } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
@@ -49,7 +50,6 @@ import { indexFundDemand, indexFundsForBook, bookIndexIdsOf, indexFundsSeatedIn 
 import { fairValuePerShare, companyBookEquityLocal, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
 import { equityInstrumentId } from '../../../domain/instrument-keys';
@@ -91,7 +91,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // now reads their own balance sheet rather than an operating company's PP&E arithmetic.
     const listedCompanies = ctx.prevActiveFirms.filter(
       (c) => c.region === regionId && isActiveCompany(c) && isPubliclyListed(c)
-        && c.sharesOutstanding > 0 && c.stockPrice > 0
+        && issuedSharesOf(ctx.v2, c.id) > 0 && c.stockPrice > 0
     );
     // HC7: a LISTING issuer is in this book precisely because it is not listed yet — no float and
     // no prior print, so it enters on its own price talk and its whole book is the offering.
@@ -111,7 +111,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const mcapByRegion: Record<string, number> = {};
     (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
       mcapByRegion[r] = ctx.prevActiveFirms
-        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapOf(c) ?? 0), 0);
+        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapAt(ctx.v2, c) ?? 0), 0);
     });
     const regionEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.entityType !== 'ETF'
@@ -138,7 +138,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const liveSharesOf = (c: Company) => {
       const o = offeringsByIssuerId.get(c.id);
       if (o?.postIssueSharesOutstanding) return o.postIssueSharesOutstanding;
-      return c.sharesOutstanding + (o?.sizeLocal ?? 0);
+      return issuedSharesOf(ctx.v2, c.id) + (o?.sizeLocal ?? 0);
     };
     /** The shares this book must find owners for: the register that will exist once a deal prices. */
     const liveTradableSharesOf = (c: Company) => liveSharesOf(c);
@@ -147,8 +147,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: equityInstrumentId(c.id),
-      outstandingLocal: c.sharesOutstanding,
-      tradableFloatLocal: c.sharesOutstanding,
+      outstandingLocal: issuedSharesOf(ctx.v2, c.id),
+      tradableFloatLocal: issuedSharesOf(ctx.v2, c.id),
       currentStat: refPriceOf(c),
       statKind: 'PRICE_LIKE',
       durationYears: 0,

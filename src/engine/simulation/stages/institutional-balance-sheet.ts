@@ -1,4 +1,5 @@
 import { entityCashOf } from '../../ledger/accounts';
+import { marketCapAt } from '../../../engine2/instruments';
 /**
  * The institutional balance sheet: the link between the money in the system and the price of
  * assets (plan ).
@@ -198,7 +199,7 @@ function comparableMultiple(v2: V2World, memoKey: object, region: RegionId, list
   let m = evMultipleMemo.get(memoKey);
   if (!m) { m = new Map(); evMultipleMemo.set(memoKey, m); }
   let v = m.get(region);
-  if (v === undefined) { v = publicComparableEvMultiple((c) => ladderTotalLocal(v2, c.id), region, listed); m.set(region, v); }
+  if (v === undefined) { v = publicComparableEvMultiple((c) => ladderTotalLocal(v2, c.id), (c) => marketCapAt(v2, c), region, listed); m.set(region, v); }
   return v;
 }
 

@@ -105,7 +105,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.a ranks below all debt | `src/engine/simulation/stages/estate-resolution.ts:CLAIM_SENIORITY` | ✅ |
 | A1.b value can be zero, not negative | `src/engine2/stage08-back.ts:newStockPrice` | ✅ |
 | A2 counted in SHARES | `src/domain/banking.ts:quantityShares` | ✅ |
-| A2.a a share count changed only by a named event | `src/engine2/stage08-back.ts:sharesToRetire` | ✅ |
+| A2.a a share count changed only by a named event | `src/engine/ledger/instrument-ledger.ts:setIssuedUnits` · `src/engine2/stage08-back.ts:sharesToRetire` | ✅ |
 | A3 a currency it is quoted in | `src/domain/geography.ts:currencyOf` | ⚠️ |
 | A4 PERPETUAL — no maturity, no redemption | `src/domain/assets/index.ts:HoldingType` | ✅ |
 | **A5 CONTROL rides with it: a vote per share** | `src/domain/company.ts:ownership` | ⚠️ |

@@ -1,4 +1,5 @@
 import { entityCashOf, householdDepositsOf, obligationCurrencyOf } from '../../ledger/accounts';
+import { marketCapAt } from '../../../engine2/instruments';
 import { defect } from '../../../domain/defect';
 /**
  * ETF FLOWS — who buys the index, how the shares come into existence, and what the dealers do
@@ -47,11 +48,11 @@ import { ringFill, rowOf } from '../../../engine2/world';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 
 import { etfShareId } from '../../../domain/instrument-keys';
-import { instrumentIssuerOf } from '../../../engine2/instruments';
+import { instrumentIssuerOf, etfSharesOutstandingOf } from '../../../engine2/instruments';
+import { setIssuedUnits } from '../../ledger/instrument-ledger';
 import type { InstrumentId } from '../../../domain/ids';
 import type { EntityId } from '../../../domain/ids';
 /** An entity's money for one asset class, from its own mandate weights. */
@@ -202,9 +203,9 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     if (!hs) return;
 
     const listed = ctx.updatedCompanies.filter(
-      (c) => c.region === region && isActiveCompany(c) && isPubliclyListed(c) && marketCapOf(c) > 0
+      (c) => c.region === region && isActiveCompany(c) && isPubliclyListed(c) && marketCapAt(ctx.v2, c) > 0
     );
-    const capLocal = listed.reduce((a2, c) => a2 + marketCapOf(c), 0);
+    const capLocal = listed.reduce((a2, c) => a2 + marketCapAt(ctx.v2, c), 0);
     const earningsLocal = listed.reduce((a2, c) => a2 + c.netIncome, 0);
     const earningsYield = capLocal > 0 ? earningsLocal / capLocal : 0;
     // What household cash earns as an alternative: the region's money fund's own cleared net
@@ -338,7 +339,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   funds.forEach((fund) => {
     const desired = desiredByFund.get(fund.id)!;
     const navLocal = navByFundId.get(fund.id) ?? 0;
-    const sharesOutstanding = fund.etf!.sharesOutstanding;
+    const sharesOutstanding = etfSharesOutstandingOf(ctx.v2, fund.id);
     const navPerShare = sharesOutstanding > 0 && navLocal > 0
       ? navLocal / sharesOutstanding
       : ETF_INCEPTION_NAV_PER_SHARE;
@@ -406,7 +407,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const plan = flowPlanByFund.get(fund.id);
     if (!plan) return;
     const { navPerShare, wantDelta: wantDeltaByInvestor, grossCreateLocal, grossRedeemLocal, householdLocal } = plan;
-    const sharesOutstanding = fund.etf!.sharesOutstanding;
+    const sharesOutstanding = etfSharesOutstandingOf(ctx.v2, fund.id);
     const netLocal = grossCreateLocal - grossRedeemLocal;
     const capacityLocal = capacityByFund.get(fund.id) ?? 0;
     const absorbedLocal = Math.min(Math.abs(netLocal), capacityLocal);
@@ -524,9 +525,10 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     executedByInvestor.forEach((usd) => { executedNetLocal += usd; });
     const createdShares = executedNetLocal / navPerShare;
     const unabsorbedLocal = Math.abs(netLocal) - absorbedLocal;
+    // §3.13-BOOK dIV: the creations and redemptions state the fund's new count on the index.
+    setIssuedUnits(ctx.v2, etfShareId(fund.id), Math.max(0, sharesOutstanding + createdShares));
     fund.etf = {
       ...fund.etf!,
-      sharesOutstanding: Math.max(0, sharesOutstanding + createdShares),
       // The share of THIS WEEK'S FLOW the arbitrage could not carry — bounded in [-1, 1] because
       // it is a fraction of the flow, not of the fund.
       unmetFlowShare: Math.abs(netLocal) > 0 ? (Math.sign(netLocal) * unabsorbedLocal) / Math.abs(netLocal) : 0,
@@ -705,7 +707,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
 
     const instrument: ClearingInstrument = {
       id: instrumentId,
-      outstandingLocal: fund.etf!.sharesOutstanding,
+      outstandingLocal: etfSharesOutstandingOf(ctx.v2, fund.id),
       tradableFloatLocal: floatShares,
       currentStat: fund.etf!.marketPricePerShare && fund.etf!.marketPricePerShare > 0
         ? fund.etf!.marketPricePerShare : navPerShare,
@@ -799,7 +801,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // is the only number about it that exists.
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.entityType !== 'ETF' || !e.etf) return;
-    const shares = e.etf.sharesOutstanding;
+    const shares = etfSharesOutstandingOf(ctx.v2, e.id);
     const navPerShare = shares > 0 ? fundNavLocal(ctx.v2, e) / shares : ETF_INCEPTION_NAV_PER_SHARE;
     const marketPrice = e.etf.marketPricePerShare;
     finalNavPerShareByFund.set(e.id, marketPrice && marketPrice > 0 ? marketPrice : navPerShare);

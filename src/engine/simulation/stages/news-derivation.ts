@@ -14,6 +14,7 @@
  */
 
 import { GameState, Company, RegionId } from '../../../types';
+import { marketCapAt } from '../../../engine2/instruments';
 import type { EntityId } from '../../../domain/ids';
 import { companyParty } from '../../../domain/party';
 import { buildEntityIndex } from '../../ledger/entity-index';
@@ -25,7 +26,6 @@ import { partyId, partyOf, PartyRef } from '../../ledger/party';
 import { reasonText } from './settlement';
 import { isActiveCompany, banksOf } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { marketCapOf } from '../../../domain/company';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 
@@ -184,7 +184,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       title: `${a.name} acquires ${t.name}`,
       description: `${m.acquirerTicker} takes ${m.targetTicker} (${t.sector}, ${t.region}; ${M(t.annualRevenue)} of revenue, ${N(t.employeeCount)} people) into a group with ${M(a.annualRevenue)} of revenue and ${M(ladderTotalLocal(ctx.v2, a.id))} of debt.`,
       refs: [company(a), company(t), region(a.region)],
-      materialityLocal: marketCapOf(t) > 0 ? marketCapOf(t) : t.annualRevenue,
+      materialityLocal: marketCapAt(ctx.v2, t) > 0 ? marketCapAt(ctx.v2, t) : t.annualRevenue,
       impactRegion: a.region, impactSector: a.sector, affectedTicker: m.acquirerTicker,
     });
   });

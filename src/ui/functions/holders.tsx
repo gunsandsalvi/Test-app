@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react';
+import { marketCapAt } from '../../engine2/instruments';
 import { FunctionModule } from '../fn';
 import { Card, Hint, Link, Table, Tabs, T } from '../ui';
 import { money, pctLevel, count } from '../format';
@@ -14,7 +15,6 @@ import { centralBankBookLocal, bankSovereignBookLocal } from '../../engine/sover
 import { refOfIdentifier, labelOf } from '../objects';
 import { instrumentName } from '../objects/book';
 import { banksOf } from '../../domain/company';
-import { marketCapOf } from '../../domain/company';
 import { institutionTotalAssetsFromState } from '../../engine/simulation/stages/institutional-balance-sheet';
 import { entityCashOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
@@ -64,7 +64,7 @@ function CompanyHolders({ world, id, nav, tab }: { world: World; id: string; nav
     ? rows.filter((r) => r.instrumentType === 'EQUITY').map((r) => ({ holderId: r.holderId, kind: 'equity', usd: r.usd, shares: r.shares }))
     : [...rows.filter((r) => r.instrumentType !== 'EQUITY').map((r) => ({ holderId: r.holderId, kind: typeWord(r.instrumentType), usd: r.usd, shares: NaN })), ...facilities.map((f) => ({ holderId: f.holderId, kind: 'facility', usd: f.usd, shares: NaN }))];
   const total = list.reduce((a, r) => a + r.usd, 0);
-  const denom = active === 'equity' ? marketCapOf(c) : ladderTotalLocal(ensureV2(world.state), c.id);
+  const denom = active === 'equity' ? marketCapAt(ensureV2(world.state), c) : ladderTotalLocal(ensureV2(world.state), c.id);
   const sorted = [...list].sort((a, b) => (sort === 'holder' ? a.holderId.localeCompare(b.holderId) : b.usd - a.usd));
   return (<>
     <Tabs items={kinds} active={active} onPick={(t) => nav.go('holders', { tab: t })} />

@@ -22,13 +22,13 @@
  */
 
 import { ensureV2, regionOf, typeOf } from '../../../engine2/world';
+import { marketCapAt } from '../../../engine2/instruments';
 import { ladderRowsOf, facilityRowsOf, materializeGovLadder } from '../../../engine2/tranches';
 import { bookHeadOf, materializeBook } from '../../../engine2/holdings';
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../domain/assets';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { REGION_IDS } from '../../../domain/geography';
-import { marketCapOf } from '../../../domain/company';
 import { entityCashOf } from '../../ledger/accounts';
 import { sovereignHeldByClass, bankSovereignPositions } from '../../sovereign-register';
 
@@ -292,7 +292,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     const a = acc(c.region);
     if (!a) return;
     if (isActiveCompany(c)) {
-      if (isPubliclyListed(c)) a.equity.outstandingLocal += Math.max(0, marketCapOf(c) ?? 0);
+      if (isPubliclyListed(c)) a.equity.outstandingLocal += Math.max(0, marketCapAt(v2hv, c) ?? 0);
     }
     {
       // Ladder read on rows (fold order = chain order = array order).

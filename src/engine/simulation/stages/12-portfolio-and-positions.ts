@@ -8,6 +8,7 @@
  */
 
 import { GameState, Position } from '../../../types';
+import { marketCapAt } from '../../../engine2/instruments';
 import { ringFill, rowOf, ensureV2 } from '../../../engine2/world';
 import { trancheIdOf, ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { isActiveCompany } from '../../../domain/company';
@@ -35,6 +36,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
   ctx.updatedCompositeIndices = calculateCompositeIndices(
     updatedCompanies,
     updatedRegions,
+    (c) => marketCapAt(v2, c),
     updatedCommodities,
     state.compositeIndices,
     v2,
