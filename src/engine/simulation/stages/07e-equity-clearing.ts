@@ -31,7 +31,7 @@ import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { isActiveCompany, isPubliclyListed, banksOf } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { entityRequiredReturn, maxOverweightMultipleOf } from './asset-allocation';
-import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
@@ -259,11 +259,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // a desk is sized against the live float, so leaving `tradableFloatLocal` at the whole share
     // count until after the desk build gave every desk capacity against shares that are not for
     // sale (and a float of zero hands back no desk at all).
-    const heldByInstitutionsShares = new Map<string, number>();
-    currentSharesByEntity.forEach((byCompany) => byCompany.forEach((shares, companyId) => {
-      if (shares > 0) heldByInstitutionsShares.set(companyId, (heldByInstitutionsShares.get(companyId) ?? 0) + shares);
-    }));
-    instruments.forEach((inst) => { inst.tradableFloatLocal = heldByInstitutionsShares.get(inst.id) ?? 0; });
+    const heldByInstitutionsShares = positionsByInstrument(currentSharesByEntity.values());
+    setTradableFloat(instruments, heldByInstitutionsShares);
 
     // G3a/G3e: the banks' equity desks, and the float they and the other participants make up.
     const regionBanks = banksOf(ctx.prevActiveFirms, regionId);
@@ -280,13 +277,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // week (§6). Founders, households and corporates on the register do not bid, so their shares
     // were never for sale; the same carve-out 07c and 07f already make, computed the same way —
     // off what the real holders actually hold rather than a stated passive share.
-    const deskHeldShares = new Map<string, number>();
-    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((shares, companyId) => {
-      if (shares > 0) deskHeldShares.set(companyId, (deskHeldShares.get(companyId) ?? 0) + shares);
-    }));
-    instruments.forEach((inst) => {
-      inst.tradableFloatLocal = (heldByInstitutionsShares.get(inst.id) ?? 0) + (deskHeldShares.get(inst.id) ?? 0);
-    });
+    const deskHeldShares = positionsByInstrument(deskParticipants.map((d) => d.currentHoldingsByInstrumentId));
+    setTradableFloat(instruments, heldByInstitutionsShares, deskHeldShares);
 
     // §7.281 — THE HOUSEHOLD DIRECT-EQUITY SELL CHANNEL. Until now the households' listed shares
     // were never for sale at any price — "a holding that cannot be sold is not a holding"

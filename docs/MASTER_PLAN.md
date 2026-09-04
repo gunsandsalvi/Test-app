@@ -434,7 +434,6 @@ written from here):
     **C. THE SECOND ANSWERS — DONE, all five, in §9.**
 
     **D. THE RULES WRITTEN MORE THAN ONCE — collapse, and the branding then becomes small.**
-    D4. The float build, both halves: 5 + 5 copies.
     D5. The credit demand build: 2 copies × ~80 lines. **The divergence is fixed (§9); the
         COLLAPSE is what is left**, and the two are now word-for-word equal, which is the state
         §5 says to collapse from.
@@ -1648,6 +1647,16 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ D4 — THE FLOAT, TEN COPIES OF ONE SUM.** Every clearing book sets `tradableFloatLocal`
+twice: once from the INSTITUTIONS' claimed rows before the desks are built, and again once the
+desks exist, adding what they carry. The ORDER is the part that is not obvious and the reason all
+ten copies exist in the shape they do — a desk is sized against the LIVE float, so leaving the
+float at the whole outstanding until after the desk build hands every desk capacity against paper
+that is not for sale, and a float of zero hands back no desk at all. Five books wrote both halves
+themselves: ten copies of "sum positive positions by instrument, then assign".
+`positionsByInstrument` and `setTradableFloat` are the two lines now, and the rule about ordering
+is written down once beside them instead of paraphrased in five comments. 22 code lines out.
 
 **13-READ D5 (the divergence) + D6 — TWO BOOKS HAD EACH LOST A RULE THE OTHER KEPT.**
 

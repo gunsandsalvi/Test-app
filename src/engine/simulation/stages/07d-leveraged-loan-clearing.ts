@@ -68,7 +68,7 @@ import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, par
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
-import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
@@ -368,11 +368,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // it is known here. It is set before the desks are built rather than after, because a desk is
     // sized against the LIVE float — and a float of zero makes `buildDealerDeskParticipants` hand
     // back no desk at all.
-    const heldByInstitutionsLocal = new Map<string, number>();
-    claimedByEntity.forEach((claimed) => claimed.forEach((faceLocal, id) => {
-      if (faceLocal > 0 && loanFaceById.has(id)) heldByInstitutionsLocal.set(id, (heldByInstitutionsLocal.get(id) ?? 0) + faceLocal);
-    }));
-    instruments.forEach((inst) => { inst.tradableFloatLocal = heldByInstitutionsLocal.get(inst.id) ?? 0; });
+    const heldByInstitutionsLocal = positionsByInstrument(claimedByEntity.values(), (id) => loanFaceById.has(id));
+    setTradableFloat(instruments, heldByInstitutionsLocal);
 
     // XB1: each entity's own book decides its target — assets x loan allocation x mandate.
     const rawEntityTargets = new Map<string, number>(
@@ -535,13 +532,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // OWN7, second half: the desks' own books join the float now that they exist. A holder outside
     // this book keeps its position, so its paper was never for sale — and the residual no named
     // book holds at all was never for sale either, because there is no seller to decrement.
-    const deskHeldLocal = new Map<string, number>();
-    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((faceLocal, id) => {
-      if (faceLocal > 0) deskHeldLocal.set(id, (deskHeldLocal.get(id) ?? 0) + faceLocal);
-    }));
-    instruments.forEach((inst) => {
-      inst.tradableFloatLocal = (heldByInstitutionsLocal.get(inst.id) ?? 0) + (deskHeldLocal.get(inst.id) ?? 0);
-    });
+    const deskHeldLocal = positionsByInstrument(deskParticipants.map((d) => d.currentHoldingsByInstrumentId));
+    setTradableFloat(instruments, heldByInstitutionsLocal, deskHeldLocal);
 
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
     const result = clearFinancialAsset(instruments, allParticipants, priorDealerInventoryById, {

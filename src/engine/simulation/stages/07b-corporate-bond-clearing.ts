@@ -97,7 +97,7 @@ import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, par
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
-import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
@@ -422,11 +422,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // sized against the LIVE float — leaving `tradableFloatLocal` at the whole outstanding until
     // after the desk build gave every desk capacity against an issue that is not for sale, and a
     // float of zero makes `buildDealerDeskParticipants` hand back no desk at all.
-    const heldByInstitutionsLocal = new Map<InstrumentId, number>();
-    claimedByEntity.forEach((claimed) => claimed.forEach((faceLocal, id) => {
-      if (faceLocal > 0 && bondFaceById.has(id)) heldByInstitutionsLocal.set(id, (heldByInstitutionsLocal.get(id) ?? 0) + faceLocal);
-    }));
-    instruments.forEach((inst) => { inst.tradableFloatLocal = heldByInstitutionsLocal.get(inst.id) ?? 0; });
+    const heldByInstitutionsLocal = positionsByInstrument(claimedByEntity.values(), (id) => bondFaceById.has(id));
+    setTradableFloat(instruments, heldByInstitutionsLocal);
 
     // XB1: each entity's target is ITS OWN book — assets x its corporate-credit allocation x
     // what its mandate allows in this issuer's market. The imposed institutional share,
@@ -607,13 +604,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // OWN7, second half: the desks' own books join the float now that they exist. A holder
     // outside this book keeps its position, so its paper was never for sale — and the residual no
     // named book holds at all was never for sale either, because there is no seller to decrement.
-    const deskHeldLocal = new Map<InstrumentId, number>();
-    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((faceLocal, id) => {
-      if (faceLocal > 0) deskHeldLocal.set(id, (deskHeldLocal.get(id) ?? 0) + faceLocal);
-    }));
-    instruments.forEach((inst) => {
-      inst.tradableFloatLocal = (heldByInstitutionsLocal.get(inst.id) ?? 0) + (deskHeldLocal.get(inst.id) ?? 0);
-    });
+    const deskHeldLocal = positionsByInstrument(deskParticipants.map((d) => d.currentHoldingsByInstrumentId));
+    setTradableFloat(instruments, heldByInstitutionsLocal, deskHeldLocal);
 
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
     const result = clearFinancialAsset(instruments, allParticipants, priorDealerInventoryById, {

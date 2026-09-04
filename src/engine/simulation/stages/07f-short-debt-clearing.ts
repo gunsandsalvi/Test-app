@@ -49,7 +49,7 @@ import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetLocal, accrue
 import type { CreditRating } from '../../../domain/company';
 import { priceFromYield, zeroRateAt } from '../../../domain/pricing';
 import type { PaperTerms } from '../../../domain/pricing';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityLocal } from './repo-clearing';
 import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
@@ -344,11 +344,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // OWN7, first half: the float that every bidder EXCEPT the desks makes up, set before the
       // desks are built — a desk is sized against the live float, so leaving it at the whole
       // outstanding until after gave every desk capacity against paper that is not for sale.
-      const heldByBiddersLocal = new Map<string, number>();
-      participants.forEach((p) => p.currentHoldingsByInstrumentId.forEach((usd, id) => {
-        if (usd > 0) heldByBiddersLocal.set(id, (heldByBiddersLocal.get(id) ?? 0) + usd);
-      }));
-      instruments.forEach((inst) => { inst.tradableFloatLocal = heldByBiddersLocal.get(inst.id) ?? 0; });
+      const heldByBiddersLocal = positionsByInstrument(participants.map((p) => p.currentHoldingsByInstrumentId));
+      setTradableFloat(instruments, heldByBiddersLocal);
 
       // G3a: the banks' bill desks — the same market makers, a different book.
       const deskParticipants = buildDealerDeskParticipants({
@@ -359,13 +356,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // OWN7, second half: the desks' own books join the float now that they exist. Every bidder
       // is a real holder, so what they hold between them is what is genuinely in play; everything
       // else on the register keeps its position.
-      const deskHeldLocal = new Map<string, number>();
-      deskParticipants.forEach((p) => p.currentHoldingsByInstrumentId.forEach((usd, id) => {
-        if (usd > 0) deskHeldLocal.set(id, (deskHeldLocal.get(id) ?? 0) + usd);
-      }));
-      instruments.forEach((inst) => {
-        inst.tradableFloatLocal = (heldByBiddersLocal.get(inst.id) ?? 0) + (deskHeldLocal.get(inst.id) ?? 0);
-      });
+      const deskHeldLocal = positionsByInstrument(deskParticipants.map((p) => p.currentHoldingsByInstrumentId));
+      setTradableFloat(instruments, heldByBiddersLocal, deskHeldLocal);
 
       // PUB — and what NO book holds is the treasury's OFFERING, not a reservation. Stage 11
       // issues bills into the ladder every week; nothing ever bought them, and the treasury then
@@ -1054,11 +1046,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         return;
       }
 
-      const heldByInstitutionsLocal = new Map<InstrumentId, number>();
-      heldByTrancheByEntity.forEach((byTranche) => byTranche.forEach((faceLocal, id) => {
-        if (faceLocal > 0 && cpFaceById.has(id)) heldByInstitutionsLocal.set(id, (heldByInstitutionsLocal.get(id) ?? 0) + faceLocal);
-      }));
-      cpInstruments.forEach((inst) => { inst.tradableFloatLocal = heldByInstitutionsLocal.get(inst.id) ?? 0; });
+      const heldByInstitutionsLocal = positionsByInstrument(heldByTrancheByEntity.values(), (id) => cpFaceById.has(id));
+      setTradableFloat(cpInstruments, heldByInstitutionsLocal);
 
       // ---- 3. THE BUYERS. The money funds and the cash sleeves that already run through the
       // bill and repo books, plus the banks' own desks. Credit policy is a SIZE, never a veto
@@ -1123,14 +1112,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const cpDeskTickers = deskTickersOf(cpDeskParticipants);
 
       // OWN7: and now the desks' own books join the float, which is complete once they exist.
-      const cpDeskHeldLocal = new Map<string, number>();
-      cpDeskParticipants.forEach((p) =>
-        p.currentHoldingsByInstrumentId.forEach((faceLocal, id) => {
-          if (faceLocal > 0) cpDeskHeldLocal.set(id, (cpDeskHeldLocal.get(id) ?? 0) + faceLocal);
-        }));
-      cpInstruments.forEach((inst) => {
-        inst.tradableFloatLocal = (heldByInstitutionsLocal.get(inst.id) ?? 0) + (cpDeskHeldLocal.get(inst.id) ?? 0);
-      });
+      const cpDeskHeldLocal = positionsByInstrument(cpDeskParticipants.map((p) => p.currentHoldingsByInstrumentId));
+      setTradableFloat(cpInstruments, heldByInstitutionsLocal, cpDeskHeldLocal);
 
       const cpAllParticipants = [...cpParticipants, ...cpDeskParticipants];
       const cpResult = clearFinancialAsset(cpInstruments, cpAllParticipants, new Map(), {

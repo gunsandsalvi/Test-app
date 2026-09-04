@@ -43,6 +43,44 @@
 // exactly as before — there is no emitted require, and the worker resolver never sees it.
 import type { InstrumentId } from '../../../domain/ids';
 
+/**
+ * §3.13-READ D4 — THE FLOAT IS WHAT THIS BOOK'S HOLDERS HOLD, in two halves and five books.
+ *
+ * Every clearing book sets `tradableFloatLocal` twice: once from the INSTITUTIONS' claimed rows,
+ * BEFORE the desks are built, and again once the desks exist, adding what they carry. The order
+ * matters and is not obvious — a desk is sized against the LIVE float, so leaving the float at
+ * the whole outstanding until after the desk build hands every desk capacity against paper that
+ * is not for sale, and a float of zero hands back no desk at all. Five books wrote both halves
+ * themselves: ten copies of "sum positive positions by instrument, then assign".
+ */
+export function positionsByInstrument(
+  books: Iterable<ReadonlyMap<InstrumentId, number>>,
+  /** 07b and 07d count only paper THIS session priced; the others count everything held. */
+  include?: (instrumentId: InstrumentId) => boolean
+): Map<InstrumentId, number> {
+  const out = new Map<InstrumentId, number>();
+  for (const book of books) {
+    book.forEach((amount, id) => {
+      if (!(amount > 0)) return;
+      if (include && !include(id)) return;
+      out.set(id, (out.get(id) ?? 0) + amount);
+    });
+  }
+  return out;
+}
+
+/** Set each instrument's float to the sum of what the named books hold of it. */
+export function setTradableFloat(
+  instruments: readonly { id: InstrumentId; tradableFloatLocal: number }[],
+  ...books: readonly ReadonlyMap<InstrumentId, number>[]
+): void {
+  instruments.forEach((inst) => {
+    let floatLocal = 0;
+    for (const book of books) floatLocal += book.get(inst.id) ?? 0;
+    inst.tradableFloatLocal = floatLocal;
+  });
+}
+
 export interface ClearingInstrument {
   /** §3.13-BOOK slice (a): what this book is pricing, in the INSTRUMENT id space. */
   id: InstrumentId;
