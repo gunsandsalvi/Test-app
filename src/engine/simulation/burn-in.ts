@@ -35,6 +35,7 @@ import { GameState } from '../../types';
 import { productionLeadWeeksOf } from '../../domain/industry-registry';
 import { INDUSTRY_SUBUNITS } from '../../domain/industry';
 import { REGION_IDS } from '../../domain/geography';
+import { isActiveCompany } from '../../domain/company';
 
 /** One quantity §7.4 is about: what the seed asserted, and where the engine took it. */
 export interface SteadyStateProbe {
@@ -90,7 +91,7 @@ export function probeSteadyState(s: GameState): Record<string, number> {
   }
   out['USA CPI level'] = Number(s.regions.USA.consumerPriceIndex) || 0;
   out['USA unemployment'] = Number(s.regions.USA.unemploymentRate) || 0;
-  out['active firms'] = s.companies.filter((c) => !c.isDefaulted && !(c as { mergerAcquired?: boolean }).mergerAcquired).length;
+  out['active firms'] = s.companies.filter(isActiveCompany).length;
   // The week's casualties and the plant taken offline — the two stock responses whose clocks
   // the trace has to show.
   out['defaults this week'] = s.companies.filter((c) => c.defaultedWeek === s.currentWeek).length;

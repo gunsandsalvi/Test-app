@@ -18,6 +18,7 @@ import { facilityBookOf, facilitiesOfBorrower, issuerIdOf, trancheRowOf, TR_FACI
 import { registerBooks } from '../engine/ledger/holdings-ledger';
 import { forEachSovereignPosition } from '../engine/sovereign-register';
 import { asInstrumentId } from '../domain/ids';
+import { isActiveCompany } from '../domain/company';
 
 export type { ObjectRef, ObjectType, ObjectLabel, Series } from './types';
 export { refKey, sameRef } from './types';
@@ -57,7 +58,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     arr.push(v !== undefined && Number.isFinite(v) ? v : NaN);
   };
   let firms = 0; let defaults = 0;
-  for (const c of state.companies) { if (!c.isDefaulted && !c.mergerAcquired) firms++; if (c.defaultedWeek === week) defaults++; }
+  for (const c of state.companies) { if (isActiveCompany(c)) firms++; if (c.defaultedWeek === week) defaults++; }
   put('world:active firms', firms);
   put('world:defaults', defaults);
   REGION_IDS.forEach((r) => {

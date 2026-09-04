@@ -1253,7 +1253,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // and the bank balance-sheet ratios); what gets reported, compared year-over-year and fed to
     // the Taylor rule is the real bottom-up measure, and it has to start where the real economy
     // starts or the difference is read as growth.
-    const regionFirms = regionCompanies.filter(c => !c.isDefaulted && !c.mergerAcquired);
+    const regionFirms = regionCompanies.filter(isActiveCompany);
     const trackedInvestmentLocal = regionFirms.reduce((sum, c) => sum + c.maintenanceCapex + c.growthCapex, 0);
     const trackedEmployment = regionFirms.reduce((sum, c) => sum + c.employeeCount, 0);
     const privateEmployment = (reg.smePools || []).reduce((sum, seg) => sum + seg.employment, 0);

@@ -437,8 +437,6 @@ written from here):
     D5. The credit demand build: 2 copies × ~80 lines. **The divergence is fixed (§9); the
         COLLAPSE is what is left**, and the two are now word-for-word equal, which is the state
         §5 says to collapse from.
-    D7. `isActiveCompany` written longhand 6×, and `harness:2589` checks no liveness at all — a
-        resolved bank's sheet is reconciled against a book it no longer owns.
     D9. Lookup maps rebuilt from the same source: **38 construction sites**, including three alive
         in one scope in `wires.ts` and two rebuilt inside a `forEach`. Home: memoised on `ctx`.
     D10. `derivativePartyKey` hand-built 10×; `repoLenderParty` 3×; `partyRegionOf` twice in one
@@ -1647,6 +1645,16 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ D7 — THE HARNESS RECONCILED A BANK THAT NO LONGER EXISTS.** `isActiveCompany` is one
+line, and it was written out longhand six times — three in `src`, three in the harness — plus five
+harness bank filters that spelled the whole "this region's live banks with a sheet" predicate by
+hand, which `banksOf` had already replaced everywhere in `src` (D8). One of the harness copies
+checked **no liveness at all**: the secured-borrowing reconciliation compared a bank's
+`repoBorrowedLocal` against the repo contracts naming it, over every company with `isBankEntity`
+and a sheet — so a bank the engine had already resolved or merged away had its STALE sheet
+reconciled against a repo book it no longer owns, and the harness reported a violation against a
+bank that does not exist. Every one of them reads `banksOf` or `isActiveCompany` now.
 
 **13-READ D4 — THE FLOAT, TEN COPIES OF ONE SUM.** Every clearing book sets `tradableFloatLocal`
 twice: once from the INSTITUTIONS' claimed rows before the desks are built, and again once the

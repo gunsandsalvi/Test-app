@@ -126,7 +126,7 @@ import { GovDebtTranche, OccupationPool } from '../src/domain/region-macro';
 import { ProductLine } from '../src/domain/company';
 import { HouseholdLoanPool, MortgageVintage } from '../src/domain/banking';
 import { executeTrade } from "../src/engine/simulation/trade";
-import { isPubliclyListed, isActiveCompany } from '../src/domain/company';
+import { isPubliclyListed, isActiveCompany, banksOf } from '../src/domain/company';
 import { ensureV2 } from '../src/engine2/world';
 import { issuerSpreadAtOnCurve } from '../src/engine/credit-price';
 import { forEachContract } from '../src/engine2/contracts';
@@ -468,8 +468,7 @@ function checkCentralBankIdentity(state: GameState, week: number) {
   REGION_IDS_SEED_ORDER.forEach((region) => {
     const cb = state.regions[region]?.centralBankSheet;
     if (!cb) return;
-    const reserves = state.companies
-      .filter((c) => c.region === region && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
+    const reserves = banksOf(state.companies, region)
       .reduce((a, c) => a + bankReservesOf(ensureV2(state), c.ticker), 0);
     // XB5: the asset side is the sovereign book PLUS the FX reserves. Leaving the reserves out
     // here while the engine counts them made the identity fail by exactly their size — 231 of
@@ -596,8 +595,7 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
     // HH4d: ONE household deposit stock. The household state's line plus the in-flight ETF
     // settlement must equal the named banks' summed household-deposit lines — the 418B drift
     // between two formula-fed representations is the defect this check keeps dead.
-    const bankDepositsLocal = state.companies
-      .filter((c) => c.region === region && c.isBankEntity && !c.isDefaulted && !c.mergerAcquired && c.bankBalanceSheet)
+    const bankDepositsLocal = banksOf(state.companies, region)
       .reduce((a, c) => a + householdDepositsAt(ensureV2(state), c.ticker, currencyOf(c.region)), 0);
     if (bankDepositsLocal > 0) {
       const hsView = householdDepositsOf(ensureV2(state), region);
@@ -949,8 +947,7 @@ const hhModule: HarnessModule = (() => {
         const nwGap = Math.abs(nwParts - (hs.netWorthLocal ?? 0)) / Math.max(1, Math.abs(hs.netWorthLocal ?? 1));
         const tierSum = Object.values(reg.wealthDistribution).reduce((a: number, t: { shareOfNetWorthLocal: number }) => a + t.shareOfNetWorthLocal, 0);
         const tierGap = Math.abs(tierSum - (hs.netWorthLocal ?? 0)) / Math.max(1, Math.abs(hs.netWorthLocal ?? 1));
-        const bankDeposits = s.companies
-          .filter(c => c.region === r && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
+        const bankDeposits = banksOf(s.companies, r)
           .reduce((a, c) => a + householdDepositsAt(ensureV2(s), c.ticker, currencyOf(c.region)), 0);
         const depGap = Math.abs(householdDepositsOf(ensureV2(s), r) - bankDeposits) / Math.max(1, bankDeposits);
         out.push(`  ${r}: instLiab=${B(instLiab)} held=${B(held)} (gap ${pct(gap)}) | netWorth parts gap ${pct(nwGap)} | tier-sum gap ${pct(tierGap)} | deposits-vs-banks gap ${pct(depGap)}`);
@@ -1110,8 +1107,7 @@ function couponReceipts(s: GameState, region: RegionId) {
   const reg = s.regions[region];
   const cb = sovereignCouponByBond(materializeGovLadder(ensureV2(s), region));
   const rate = (id: string) => cb[id] ?? 0;
-  const banks = s.companies
-    .filter((c: Company) => c.region === region && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
+  const banks = banksOf(s.companies, region)
     .reduce((a: number, c: Company) => a + Object.entries(c.bankBalanceSheet!.sovereignBondHoldingsByBond || {})
       .reduce((x: number, [k, v]) => x + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0), 0);
   const insts = s.institutionalEntities
@@ -2052,8 +2048,7 @@ const spiralModule: HarnessModule = {
     // where each cohort's ratio sits against the [0.05, 0.35] band, weekly.
     if (process.env.BANKCAP === '1') {
       REGION_IDS_SEED_ORDER.forEach((region) => {
-        state.companies
-          .filter((c) => c.region === region && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
+        banksOf(state.companies, region)
           .forEach((c) => {
             const bs = c.bankBalanceSheet!;
             const facilityBookLocal = facilityBookOf(ensureV2(state), c.ticker);
@@ -2328,9 +2323,8 @@ function runHarness() {
     // rounding). Before the flow ledger this identity was broken by -138.9B (USA, week 0) and
     // a Math.max plug hid it; if this drifts again, some flow is missing a leg — find it,
     // never plug it.
-    state.companies.forEach((c: Company) => {
-      if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted || c.mergerAcquired) return;
-      const bs = c.bankBalanceSheet;
+    banksOf(state.companies).forEach((c: Company) => {
+      const bs = c.bankBalanceSheet!;
       const reservesLocal = bankReservesOf(ensureV2(state), c.ticker);
       const lines = stateDepositLines(state, c.ticker);
       const sovLocal = Object.values((bs.sovereignBondHoldingsByBond || {}) as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
@@ -2397,9 +2391,8 @@ function runHarness() {
     REGION_IDS.forEach((regionId) => {
       const reg = state.regions?.[regionId];
       if (!reg) return;
-      const bankHeldLocal = state.companies.reduce((a: number, c: Company) => (
-        c.isBankEntity && c.bankBalanceSheet && c.region === regionId && !c.isDefaulted && !c.mergerAcquired
-          ? a + (c.bankBalanceSheet.sovereignAccruedCouponLocal ?? 0) : a), 0);
+      const bankHeldLocal = banksOf(state.companies, regionId)
+        .reduce((a: number, c: Company) => a + (c.bankBalanceSheet!.sovereignAccruedCouponLocal ?? 0), 0);
       if (bankHeldLocal - (reg.sovereignCouponPayableLocal ?? 0) > 5e6) {
         violations.push({
           week: w,
@@ -2467,9 +2460,11 @@ function runHarness() {
           violations.push({ week: w, message: `${regionId} repo contract ${c.id} is malformed (principal ${c.principalLocal}, ${c.struckWeek}->${c.maturityWeek})` });
         }
       });
-      state.companies.forEach((c: Company) => {
-        if (!c.isBankEntity || c.region !== regionId || !c.bankBalanceSheet) return;
-        const bs = c.bankBalanceSheet;
+      // §3.13-READ D7: this one checked NO liveness at all, so a bank the engine had already
+      // resolved or merged away had its stale sheet reconciled against a repo book it no longer
+      // owns — a violation reported against a bank that does not exist.
+      banksOf(state.companies, regionId).forEach((c: Company) => {
+        const bs = c.bankBalanceSheet!;
         const derivedLocal = borrowedBy.get(c.ticker) ?? 0;
         const sheetLocal = (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0);
         if (Math.abs(derivedLocal - sheetLocal) > 5e6) {
@@ -2492,9 +2487,8 @@ function runHarness() {
       });
     });
 
-    state.companies.forEach((c: Company) => {
-      if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted || c.mergerAcquired) return;
-      const bs = c.bankBalanceSheet;
+    banksOf(state.companies).forEach((c: Company) => {
+      const bs = c.bankBalanceSheet!;
       const sovLocal = Object.values((bs.sovereignBondHoldingsByBond || {}) as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
       // §7.246: the ONE pledge tolerance (domain/collateral.ts, $1) — this line sat at 1e6 one
       // screen below the unified per-bucket check, the §7.230 split-tolerance shape surviving in
