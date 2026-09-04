@@ -19,10 +19,11 @@ import { deliverGoods, receiveInputLot, scrapGoods, consumeGoods } from '../../l
 import { RegionId } from '../../../types';
 import { PartyRef } from '../../ledger/party';
 import { purchaseKindOf, commissioningLeadWeeksOf } from '../../../domain/industry-registry';
+import type { Ticker } from '../../../domain/ids';
 
 /** A consignment bought, paid for, and still on its way. */
 export interface InTransitShipment {
-  buyerTicker: string;
+  buyerTicker: Ticker;
   sellerKey: string;
   subUnitId: string;
   units: number;
@@ -31,7 +32,7 @@ export interface InTransitShipment {
   arrivalWeek: number;
   /** Who holds the consignment while it moves — a named carrier, or the origin
    *  region's transport pool (no ticker) on a lane no named fleet serves. */
-  carrierTicker?: string;
+  carrierTicker?: Ticker;
   carrierRegion?: RegionId;
 }
 
@@ -44,8 +45,8 @@ export interface InTransitShipment {
  */
 export function reassignConsignments(
   state: GameState,
-  from: { ticker: string; id: string },
-  to: { ticker: string; id: string }
+  from: { ticker: Ticker; id: string },
+  to: { ticker: Ticker; id: string }
 ): void {
   (state.goodsInTransit ?? []).forEach((sh) => {
     if (sh.buyerTicker === from.ticker) sh.buyerTicker = to.ticker;
@@ -71,13 +72,13 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
   // anti-pattern, and it made a stage that hands boxes to
   // their owners cost 99ms a week. Public firms first so a duplicate ticker resolves the same
   // way the sequential find did (tickers are unique by construction; this is belt and braces).
-  const firmByTicker = new Map<string, (typeof ctx.prevActiveFirms)[number]>();
+  const firmByTicker = new Map<Ticker, (typeof ctx.prevActiveFirms)[number]>();
   ctx.prevActivePrivateFirms.forEach(c => firmByTicker.set(c.ticker, c));
   ctx.prevActiveFirms.forEach(c => firmByTicker.set(c.ticker, c));
   // A dead buyer with an OPEN estate still takes delivery — the receiver
   // liquidates what arrives (the workout sells input lots to peers as it sells finished stock).
   const openEstateIds = new Set((ctx.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
-  const estateByTicker = new Map<string, (typeof ctx.updatedCompanies)[number]>();
+  const estateByTicker = new Map<Ticker, (typeof ctx.updatedCompanies)[number]>();
   ctx.updatedCompanies.forEach((c) => { if (c.isDefaulted && openEstateIds.has(c.id)) estateByTicker.set(c.ticker, c); });
 
   inFlight.forEach(shipment => {

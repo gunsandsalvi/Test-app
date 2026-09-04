@@ -9,23 +9,23 @@
 
 import { RegionId, Industry } from '../../types';
 import { defect } from '../../domain/defect';
-import type { EntityId } from '../../domain/ids';
+import type { EntityId, Ticker } from '../../domain/ids';
 import { asEntityId } from '../../domain/ids';
 
 export type PartyRef =
-  | { kind: 'COMPANY'; ticker: string }
-  | { kind: 'BANK'; ticker: string }
+  | { kind: 'COMPANY'; ticker: Ticker }
+  | { kind: 'BANK'; ticker: Ticker }
   /** SETL2b — the bank's own CREDIT, not its reserves. A loan does not move money from anywhere:
    *  the bank writes a loan on one side and a deposit on the other, and both appear at once. So
    *  a drawdown paid by BANK_CREDIT creates the borrower's balance WITHOUT any reserve leaving
    *  the lender — endogenous money, and the reason a banking system can fund itself. Reserves
    *  move only when the borrower then SPENDS it to a customer of another bank, which happens as
    *  an ordinary payment. (The loan asset stays owned by bank-lending.ts — one writer.) */
-  | { kind: 'BANK_CREDIT'; ticker: string }
+  | { kind: 'BANK_CREDIT'; ticker: Ticker }
   /** SETL6 — a bank settling its OWN securities trade. Reserves move and equity does NOT: the
    *  security is the other leg and the clearing stage books it in the same pass (rule 5).
    *  `BANK` above is the income case, where nothing else arrives and equity is the other side. */
-  | { kind: 'BANK_SECURITIES'; ticker: string }
+  | { kind: 'BANK_SECURITIES'; ticker: Ticker }
   /** SETL6 — the central counterparty a cleared book settles through. Every participant, the
    *  dealer and the fee-earning desks settle against it, so it is flat by construction: a
    *  non-zero net is a leg some book forgot to name, reported rather than absorbed. */

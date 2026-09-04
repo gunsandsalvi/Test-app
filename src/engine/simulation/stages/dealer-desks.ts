@@ -26,6 +26,7 @@ import { clearedBookDelta, HoldingKind } from '../../ledger/holdings-ledger';
 import { defect } from '../../../domain/defect';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
 import type { InstrumentId } from '../../../domain/ids';
+import type { Ticker } from '../../../domain/ids';
 
 /** W2: the register kind each desk book carries — the wire's asset kind. */
 const DESK_BOOK_KIND: Record<string, HoldingKind> = {
@@ -331,7 +332,7 @@ export function totalDeskCapacityLocal(ctx: WeeklyStepContext, banks: Company[],
  */
 export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book: string) {
   const freeLocal = new Map<string, number>();
-  const lentByBankByBorrower = new Map<string, Map<string, number>>();
+  const lentByBankByBorrower = new Map<Ticker, Map<string, number>>();
   banks.forEach((bank) => {
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
@@ -356,22 +357,22 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
       freeCapacityLocal: freeLocal.get(bank.ticker) ?? 0,
     })),
     /** The winner's desk is that much less able to win the next one. */
-    award: (ticker: string, sizeLocal: number) => {
+    award: (ticker: Ticker, sizeLocal: number) => {
       freeLocal.set(ticker, Math.max(0, (freeLocal.get(ticker) ?? 0) - Math.max(0, sizeLocal)));
     },
   };
 }
 
 /** Route a desk's participant id to the bank whose reserves fund it. */
-export function dealerDeskPartyOf(participantId: string, deskTickers: Set<string>): PartyRef | undefined {
+export function dealerDeskPartyOf(participantId: string, deskTickers: ReadonlySet<Ticker>): PartyRef | undefined {
   const ticker = dealerDeskTicker(participantId);
   if (ticker === undefined || !deskTickers.has(ticker)) return undefined;
   return { kind: 'BANK_SECURITIES', ticker };
 }
 
 /** The tickers whose desks were built, for the settle pass's routing. */
-export function deskTickersOf(participants: ClearingParticipant[]): Set<string> {
-  const out = new Set<string>();
+export function deskTickersOf(participants: ClearingParticipant[]): Set<Ticker> {
+  const out = new Set<Ticker>();
   participants.forEach((p) => {
     const t = dealerDeskTicker(p.id);
     if (t !== undefined) out.add(t);

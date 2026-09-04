@@ -42,6 +42,7 @@ import { facilitiesOfBorrower, issuerIdOf } from '../../../engine2/tranches';
 import type { InstrumentId } from '../../../domain/ids';
 import { regionOf, typeOf } from '../../../engine2/world';
 import type { EntityId } from '../../../domain/ids';
+import type { Ticker } from '../../../domain/ids';
 
 /** How many resolutions the realised recovery rate averages over before it displaces the prior. */
 export const RECOVERY_HISTORY_LENGTH = 24;
@@ -72,7 +73,7 @@ const holderRef = (c: EstateClaim): PartyRef =>
 interface EstateIndex {
   v2: import('../../../engine2/world').V2World;
   entityById: Map<string, InstitutionalEntity>;
-  bankByTicker: Map<string, Company>;
+  bankByTicker: Map<Ticker, Company>;
   companyById: Map<string, Company>;
   /** SCALE (retired: receivables are the real invoice book now; kept doc for history)
    *  per ticker but each miss scanned the whole book, so the cost was
@@ -92,7 +93,7 @@ interface EstateIndex {
 function buildEstateIndex(ctx: WeeklyStepContext): EstateIndex {
   const entityById = new Map<EntityId, InstitutionalEntity>();
   ctx.updatedInstitutionalEntities.forEach((e) => entityById.set(e.id, e));
-  const bankByTicker = new Map<string, Company>();
+  const bankByTicker = new Map<Ticker, Company>();
   const companyById = new Map<EntityId, Company>();
   ctx.updatedCompanies.forEach((c) => {
     companyById.set(c.id, c);
@@ -291,9 +292,9 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
  * scrapped where they sit, by the carrier that holds them. Only the buyer side was swept before,
  * so a dead SELLER's consignments sailed on for ever against a firm that no longer exists.
  */
-function scrapConsignmentsOf(state: GameState, ticker: string, companyId: string): void {
+function scrapConsignmentsOf(state: GameState, ticker: Ticker, companyId: string): void {
   const inFlight = state.goodsInTransit ?? [];
-  const isDead = (sh: { buyerTicker: string; sellerKey?: unknown }): boolean =>
+  const isDead = (sh: { buyerTicker: Ticker; sellerKey?: unknown }): boolean =>
     sh.buyerTicker === ticker || String(sh.sellerKey ?? '').replace(/^.*:/, '') === companyId
     || String(sh.sellerKey ?? '').replace(/^.*:/, '') === ticker;
   if (!inFlight.some(isDead)) return;

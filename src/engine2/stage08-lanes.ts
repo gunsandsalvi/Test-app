@@ -24,6 +24,7 @@ import { CompanyStore } from './company-store';
 import { V2World } from './world';
 import { facilityMarginBpsFor } from '../engine/simulation/stages/bank-lending';
 import { patienceWeeksOf, riskAversionOf } from '../domain/preferences';
+import type { Ticker, EntityId } from '../domain/ids';
 
 export interface BackLanes {
   n: number;
@@ -105,10 +106,12 @@ export interface BackLanes {
   publiclyListed: Uint8Array;
   creditRating: string[];
   name: string[];
-  companyId: string[];
-  homeBankTicker: (string | undefined)[];
+  /** §3.13-BOOK slice (c2c): the lanes hold entity ids and tickers, and say which. */
+  companyId: EntityId[];
+  homeBankTicker: (Ticker | undefined)[];
   // --- strings for diagnostics and the bridge tranche (main-side only) ---
-  ticker: string[];
+  /** §3.13-BOOK slice (c2c): the lane holds tickers, so it says so. */
+  ticker: Ticker[];
   region: Company['region'][];
   sector: Company['sector'][];
 }
@@ -162,8 +165,8 @@ export function buildBackLanes(
     carrierFreightRevenueLocal: f(), channelMarginRevenueLocal: f(),
     wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
     creditRating: T.creditRating as string[], name: T.name as string[],
-    companyId: T.id as string[], homeBankTicker: T.homeBankTicker,
-    ticker: T.ticker as string[], region: T.region as Company['region'][], sector: T.sector as Company['sector'][],
+    companyId: T.id as EntityId[], homeBankTicker: T.homeBankTicker as (Ticker | undefined)[],
+    ticker: T.ticker as Ticker[], region: T.region as Company['region'][], sector: T.sector as Company['sector'][],
   };
   const NaN_ = Number.NaN;
   for (let i = 0; i < n; i++) {

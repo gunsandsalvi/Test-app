@@ -525,7 +525,9 @@ written from here):
        is a lie the compiler then enforces. So c2 is:
          · **c2a** `Company.id` alone — **DONE, in §9.**
          · **c2b** `InstitutionalEntity.id` and `PartyRef`'s INSTITUTION arm — **DONE, in §9.**
-         · **c2c** the stages, one file at a time.
+         · **c2c** THE TICKER — **DONE, in §9.** (The "stages, one file at a time" this originally
+           said had already been absorbed: c2a and c2b fixed at the SOURCE, so the stages came out
+           green. What was actually left of (c) was the OTHER identity a firm has.)
        Each small enough that every site is read rather than pattern-matched. The measurement that
        says this is necessary: 128 `ByTicker` maps and 756 `.ticker` references are the real size of
        (c), and nothing about it is mechanical.
@@ -1626,6 +1628,36 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c2c) — `Ticker` WAS MINTED IN SLICE (a) AND NEVER APPLIED, AND THAT IS WHY THE
+FIRST ATTEMPT AT (c) FAILED.** The type existed with ZERO uses: `Company.ticker` was still
+`string`, and `asTicker` was called nowhere. So the plan's own diagnosis — *"the compiler cannot
+tell an ENTITY id from a PARTICIPANT id or from a REGION"* — was missing its largest term. The
+ticker is the THIRD confusable space and by far the biggest: 844 references and 155 `ByTicker` maps.
+While both identities were `string`, nothing could tell the compiler which of the two a site meant,
+and `c-then`'s collapse of the ByTicker maps could not be attempted safely.
+
+**It opened at 20 errors and peaked at 148.** That shape is the work: each source branded exposes
+its consumers, until the front reaches the true PRODUCERS and collapses. The producers turned out
+to be few — `generateUniqueTicker` (the mint: every ticker in the world is generated there or
+cloned from a template that was), the intern table's `tickerOf` door, `chooseLeadBank` /
+`mandateAllocator.pick`, and the participant-key readers. Branding those, plus ~40 fields and ~30
+maps that key by ticker, took it to zero.
+
+**PartyRef is now fully branded** — the four ticker arms and the entity arm — which is what
+`c-then` needs before it can make it a VIEW of the entity store rather than a parallel union.
+
+**Three things the brand made visible and each is written down at its site.** The treasury has NO
+ticker: `governmentIssuer` puts its ENTITY id in the ticker field, and that stand-in is now stated
+rather than implied by both being `string`. `chooseLeadBank` returns `''` for "nobody won the
+mandate" — every caller tests it, so the empty ticker is admitted at the one site rather than the
+return type widened to `Ticker | undefined`, which would change control flow everywhere. And the
+double auction's keys are OPAQUE to it: it matches whatever strings the caller supplied, so 05 is
+where they become tickers again, and the auction stays a generic matcher rather than learning
+about firms.
+
+Sixty `asTicker` admissions in all, of which 18 are test fixtures and 7 are the goods auction's
+boundary. Zero errors, five gates green.
 
 **13-BOOK slice (c2b) — THE INSTITUTION'S ID, `PartyRef`'S INSTITUTION ARM, AND FOUR SIBLING
 UNIONS.** `InstitutionalEntity.id` alone opened at 11 errors. Branding `PartyRef`'s INSTITUTION arm

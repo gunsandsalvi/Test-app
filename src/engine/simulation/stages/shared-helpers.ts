@@ -163,6 +163,7 @@ import { cashOf, entityCashOf, obligationCurrencyOf } from '../../ledger/account
 import { asInstrumentId, type InstrumentId, asEntityId } from '../../../domain/ids';
 import type { TypeRef, InstrRef } from '../../../engine2/refs';
 import { equityIssuerId } from '../../../domain/instrument-keys';
+import type { Ticker } from '../../../domain/ids';
 
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
@@ -420,7 +421,7 @@ function holderPayee(holderId: string): import('./settlement').PartyRef {
  * on its securities account and nothing leaves the book, so equity has to move with it or the
  * sheet stops closing. The principal legs beside it need no such write — paper out, cash in.
  */
-function bookDeskIncome(companies: Company[] | undefined, byTicker: Map<string, number>, reason: string): void {
+function bookDeskIncome(companies: Company[] | undefined, byTicker: Map<Ticker, number>, reason: string): void {
   if (byTicker.size === 0) return;
   companies?.forEach((bank) => {
     const deltaLocal = byTicker.get(bank.ticker);
@@ -485,7 +486,8 @@ export function applyPendingCorporateActionSettlements(
   // COMPOSITE of the two, and it stays valid only while an instrument ref fits in 22 bits.
   const pairOf = (t: TypeRef, i: InstrRef): number => t * 0x400000 + i;
   // An instrument is a tranche or its issuer; the issuer's ticker is one read either way.
-  const issuerTickerOf = (instrumentId: string): string | undefined => ctx.issuerTickerById?.get(issuerIdOf(v2, instrumentId));
+  const issuerTickerOf = (instrumentId: string): Ticker | undefined =>
+    ctx.issuerTickerById?.get(issuerIdOf(v2, instrumentId)) as Ticker | undefined;
   const pairKeyOf = (r: number): number => pairOf(H.typeRef[r], H.instrRef[r]);
   const toPairs = (byType: Map<string, Map<string, number>>): Map<number, number> => {
     const out = new Map<number, number>();
@@ -601,7 +603,7 @@ export function applyPendingCorporateActionSettlements(
   // the payment and their share went to the other holders; and the households were paid by
   // subtraction, under a second name, because they had no rows to be paid on.
   const denomByPair = new Map<number, number>();
-  const deskIncomeByTicker = new Map<string, number>();
+  const deskIncomeByTicker = new Map<Ticker, number>();
   if (hasCash && ctx.updatedCompanies) {
     const companyById = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
     pendingCashByType.forEach((byId, type) => {
@@ -1087,7 +1089,7 @@ export function applyHolderInterestAccruals(
     return;
   }
   // Only the instruments whose coupon falls due this week, and only their own holders.
-  const deskCouponByTicker = new Map<string, number>();
+  const deskCouponByTicker = new Map<Ticker, number>();
   payouts.forEach((instrumentKey) => {
     const byHolder = ctx.holderAccruedInterestLocal.get(instrumentKey);
     if (!byHolder) return;

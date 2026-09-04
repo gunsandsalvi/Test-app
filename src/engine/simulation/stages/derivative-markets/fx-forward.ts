@@ -47,6 +47,7 @@ import { facilityBookOf } from '../../../../engine2/tranches';
 
 import { fxBasisInstrumentId } from '../../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../../domain/ids';
+import type { Ticker } from '../../../../domain/ids';
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
 
 /** What this entity holds in each foreign region, split by how much of it its mandate hedges. */
@@ -93,7 +94,7 @@ function corporateExposureByRegion(
   const currencyRegion = new Map<string, RegionId>();
   REGION_IDS.forEach((r) => currencyRegion.set(invoiceCurrencyOf(r), r));
   const out = new Map<string, Map<RegionId, number>>();
-  const add = (ticker: string, region: RegionId, usd: number) => {
+  const add = (ticker: Ticker, region: RegionId, usd: number) => {
     let byRegion = out.get(ticker);
     if (!byRegion) { byRegion = new Map(); out.set(ticker, byRegion); }
     byRegion.set(region, (byRegion.get(region) ?? 0) + usd);
@@ -127,7 +128,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   // Every dealer's desk, opened at what its LIVE book leaves it — contracts that matured released
   // their notional and their margin in the settle before this market, which is what frees
   // capacity.
-  const desks = new Map<string, DeskState>();
+  const desks = new Map<Ticker, DeskState>();
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
     // The LIVE sheet, not a snapshot some earlier stage parked in companyUpdates: the desk's
@@ -149,7 +150,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     desk.book.initialMarginHeldLocal += initialMarginLocal(c);
   }
   // The dealers a holder in each region can face, in the order the roster lists them.
-  const dealerBanksByRegion = new Map<RegionId, string[]>();
+  const dealerBanksByRegion = new Map<RegionId, Ticker[]>();
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c) || !desks.has(c.ticker)) return;
     const list = dealerBanksByRegion.get(c.region) ?? [];
@@ -198,8 +199,8 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   // for the fund managers, which is what a shared dealer balance sheet means.
   const corporateExposure = corporateExposureByRegion(
     [...(state.tradeInvoices ?? []), ...ctx.tradeInvoicesBooked], week);
-  const corpGapByTicker = new Map<string, Map<RegionId, number>>();
-  const corpToleranceByTicker = new Map<string, Map<RegionId, number>>();
+  const corpGapByTicker = new Map<Ticker, Map<RegionId, number>>();
+  const corpToleranceByTicker = new Map<Ticker, Map<RegionId, number>>();
   ctx.updatedCompanies.forEach((c) => {
     if (c.isBankEntity || !isActiveCompany(c)) return;
     const exposure = corporateExposure.get(c.ticker);
@@ -432,8 +433,8 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
  * because a desk that is full stops quoting and the flow goes elsewhere. That is how one desk
  * filling up widens the price for everyone rather than silently absorbing infinite size.
  */
-function pickDealerBank(regionDealers: string[] | undefined, desks: Map<string, DeskState>): string | null {
-  let best: string | null = null;
+function pickDealerBank(regionDealers: Ticker[] | undefined, desks: Map<Ticker, DeskState>): Ticker | null {
+  let best: Ticker | null = null;
   let bestCapacity = 0;
   if (!regionDealers) return best;
   for (const ticker of regionDealers) {

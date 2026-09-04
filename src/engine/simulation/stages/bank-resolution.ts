@@ -37,6 +37,7 @@ import { ladderRowsOf, facilityBookOf } from '../../../engine2/tranches';
 import { moveFacilityLender } from '../../ledger/tranche-ledger';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../../domain/banking';
 import { moveSectorRowsToBank, bankReservesOf, bankDepositLines, heldCurrenciesOf } from '../../ledger/accounts';
+import type { Ticker } from '../../../domain/ids';
 
 const sheetLinesLocal = (s: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number): number =>
   Math.abs(lines.householdLocal) + Math.abs(lines.corporateLocal) + Math.abs(lines.institutionalLocal)
@@ -47,8 +48,8 @@ const sheetLinesLocal = (s: BankingSector, cashLocal: number, lines: DepositLine
   + Math.abs(s.sovereignAccruedCouponLocal ?? 0) + Math.abs(s.primeBrokerageLoansLocal ?? 0);
 
 /** Every link in the world that names the failed bank now names the assuming one. */
-export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionId: RegionId, from: string, to: string): void {
-  const rekey = (t: string | undefined) => (t === from ? to : t);
+export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionId: RegionId, from: Ticker, to: Ticker): void {
+  const rekey = (t: Ticker | undefined) => (t === from ? to : t);
   ctx.updatedCompanies.forEach((c) => { if (c.homeBankTicker === from) c.homeBankTicker = to; });
   ctx.prevActivePrivateFirms.forEach((c) => { if (c.homeBankTicker === from) c.homeBankTicker = to; });
   ctx.updatedInstitutionalEntities.forEach((e) => { if (e.homeBankTicker === from) e.homeBankTicker = to; });
@@ -62,14 +63,14 @@ export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionI
   if (reg?.repoBook) {
     reg.repoBook = reg.repoBook.map((c) => ({
       ...c,
-      borrowerTicker: rekey(c.borrowerTicker) as string,
-      lender: c.lender.kind === 'BANK' ? { ...c.lender, ticker: rekey(c.lender.ticker) as string } : c.lender,
+      borrowerTicker: rekey(c.borrowerTicker) ?? c.borrowerTicker,
+      lender: c.lender.kind === 'BANK' ? { ...c.lender, ticker: rekey(c.lender.ticker) ?? c.lender.ticker } : c.lender,
     }));
   }
   if (reg?.primeBrokerageBook) {
-    reg.primeBrokerageBook = reg.primeBrokerageBook.map((l) => ({ ...l, brokerTicker: rekey(l.brokerTicker) as string }));
+    reg.primeBrokerageBook = reg.primeBrokerageBook.map((l) => ({ ...l, brokerTicker: rekey(l.brokerTicker) ?? l.brokerTicker }));
   }
-  ctx.primaryOfferingsWorking = ctx.primaryOfferingsWorking.map((o) => ({ ...o, leadBankTicker: rekey(o.leadBankTicker) as string }));
+  ctx.primaryOfferingsWorking = ctx.primaryOfferingsWorking.map((o) => ({ ...o, leadBankTicker: rekey(o.leadBankTicker) ?? o.leadBankTicker }));
   // The treasury's accrued-coupon ledger is keyed by holder; the failed bank's accruals are the
   // assuming bank's receivable now (its sheet already carries them).
   const fromKey = `|${partyKey({ kind: 'BANK_SECURITIES', ticker: from })}`;

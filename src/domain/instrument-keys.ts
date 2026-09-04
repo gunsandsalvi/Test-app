@@ -31,6 +31,7 @@
 import { asInstrumentId, asEntityId, type InstrumentId, type EntityId } from './ids';
 import type { RegionId } from './geography';
 import { peFundEntityId } from './entity-keys';
+import type { Ticker } from './ids';
 
 /**
  * A company's listed equity. The id IS the issuer's id — see the header: this is the crossing,
@@ -114,14 +115,14 @@ export const repoTermInstrumentId = (regionId: RegionId): InstrumentId =>
  * One rung of a company's debt ladder. The rung number is 1-based and stable for the life of the
  * ladder; `tranche-ledger.ts` is the only writer of the rows this keys.
  */
-export const corporateTrancheId = (ticker: string, rung: number): InstrumentId =>
+export const corporateTrancheId = (ticker: Ticker, rung: number): InstrumentId =>
   asInstrumentId(`${ticker}-T${rung}`);
 
 /**
  * The bridge a company draws to fund the maintenance capex its cash flow could not — a real
  * tranche on a real bank's book, and priced wide because that is what a bridge costs.
  */
-export const maintenanceBridgeTrancheId = (ticker: string, week: number): InstrumentId =>
+export const maintenanceBridgeTrancheId = (ticker: Ticker, week: number): InstrumentId =>
   asInstrumentId(`${ticker}-MAINT-${week}`);
 
 /** A revolver draw taken because the borrower ran out of cash this week. */
@@ -141,7 +142,7 @@ export const calledRefinanceTrancheId = (companyId: string, week: number, called
   asInstrumentId(`${companyId}-CALL-${week}-${calledId}`);
 
 /** One week's commercial-paper issue by one borrower — short, unsecured, and its own tranche. */
-export const commercialPaperTrancheId = (ticker: string, week: number): InstrumentId =>
+export const commercialPaperTrancheId = (ticker: Ticker, week: number): InstrumentId =>
   asInstrumentId(`${ticker}-CP-${week}`);
 
 /**
@@ -156,7 +157,7 @@ export const assumedDebtTrancheId = (idPrefix: string, week: number, bucketIndex
  * A target tranche that has become the acquirer's. The OLD id stays inside the new one: the paper
  * did not cease to exist, it changed obligor, and its lineage is the only record of that.
  */
-export const acquiredTrancheId = (acquirerTicker: string, week: number, oldId: string): InstrumentId =>
+export const acquiredTrancheId = (acquirerTicker: Ticker, week: number, oldId: string): InstrumentId =>
   asInstrumentId(`${acquirerTicker}-ACQ${week}-${oldId}`);
 
 /** One region's stock-borrow book on one name: its price is the borrow fee, not the share price. */

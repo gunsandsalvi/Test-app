@@ -28,6 +28,7 @@ import { StandingBook } from '../../../domain/derivatives/standing-book';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
 import { creditRecoveryRate } from './shared-helpers';
+import type { Ticker } from '../../../domain/ids';
 
 /** Legs under a dollar are dust; every book skipped them and the ledger need not carry them. */
 const MIN_LEG_LOCAL = 1;
@@ -68,7 +69,7 @@ export function standingBookOf(ctx: WeeklyStepContext, state: GameState): Standi
 }
 
 /** A desk's standing PFE charge against the one budget, off the live book (registry.ts). */
-export function deskStandingPfeChargeLocal(ctx: WeeklyStepContext, state: GameState, ticker: string): number {
+export function deskStandingPfeChargeLocal(ctx: WeeklyStepContext, state: GameState, ticker: Ticker): number {
   return standingBookOf(ctx, state).pfeChargeLocal(bankPartyKey(ticker));
 }
 
@@ -83,7 +84,7 @@ export type DerivativeLifecycleView = ReturnType<typeof buildDerivativeMarketVie
  * "absent" is a default for a reference and a vanishing for a party.
  */
 export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMarketView & { partyState(p: DerivativeParty): PartyState } {
-  const companyByTicker = new Map<string, { isDefaulted?: boolean; isActive: boolean; cdsSpreadBps?: number }>();
+  const companyByTicker = new Map<Ticker, { isDefaulted?: boolean; isActive: boolean; cdsSpreadBps?: number }>();
   const companyById = new Map<string, { isDefaulted?: boolean; cdsSpreadBps?: number; creditRating?: CreditRating }>();
   for (const c of ctx.updatedCompanies) {
     companyByTicker.set(c.ticker, { isDefaulted: c.isDefaulted, isActive: isActiveCompany(c), cdsSpreadBps: c.cdsSpreadBps });

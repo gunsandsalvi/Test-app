@@ -7,10 +7,11 @@ import { marketCapOf } from '../../domain/company';
 import { cashOf } from '../ledger/accounts';
 import { V2World } from '../../engine2/world';
 import { ladderTotalLocal } from '../../engine2/tranches';
+import type { Ticker } from '../../domain/ids';
 
 export interface MergerCandidate {
-  acquirerTicker: string;
-  targetTicker: string;
+  acquirerTicker: Ticker;
+  targetTicker: Ticker;
   title: string;
   description: string;
 }

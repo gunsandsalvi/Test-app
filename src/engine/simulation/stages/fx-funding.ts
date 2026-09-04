@@ -41,6 +41,7 @@ import { balanceOf, homeCurrencyOf } from '../../ledger/accounts';
 import { PartyRef, partyOf } from '../../ledger/party';
 import { WeeklyStepContext } from './context';
 import { PaymentJournal, pay, rowDue } from './settlement';
+import type { Ticker } from '../../../domain/ids';
 
 /** One quote, shared with every other FX charge in the model (`domain/dealer-desk.ts`). */
 const FX_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK.fx;
@@ -48,7 +49,7 @@ const FX_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK.fx;
 const MIN_TRADE = 1e-6;
 
 /** The desks a region's conversions go through: its banks, pro rata by market share. */
-function deskSharesOf(firms: readonly Company[], region: RegionId): { ticker: string; share: number }[] {
+function deskSharesOf(firms: readonly Company[], region: RegionId): { ticker: Ticker; share: number }[] {
   const banks = banksOf(firms, region);
   const total = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
   if (banks.length === 0) return [];
@@ -100,7 +101,7 @@ export function fundForeignCurrencyShortfalls(
 ): void {
   const net = netByPartyAndCurrency(journal, week);
   if (net.size === 0) return;
-  const desksByRegion = new Map<RegionId, { ticker: string; share: number }[]>();
+  const desksByRegion = new Map<RegionId, { ticker: Ticker; share: number }[]>();
   const desksFor = (region: RegionId) => {
     let d = desksByRegion.get(region);
     if (!d) { d = deskSharesOf(ctx.updatedCompanies, region); desksByRegion.set(region, d); }
@@ -108,7 +109,7 @@ export function fundForeignCurrencyShortfalls(
   };
 
   /** The client buys `amount` of `cur` and pays for it in `home`, plus the desk's spread. */
-  const buy = (client: PartyRef, desks: { ticker: string; share: number }[], cur: CurrencyCode, home: CurrencyCode, amount: number) => {
+  const buy = (client: PartyRef, desks: { ticker: Ticker; share: number }[], cur: CurrencyCode, home: CurrencyCode, amount: number) => {
     const costHome = convert(amount, cur, home, ctx.fx) * (1 + FX_SPREAD_BPS / 10000);
     desks.forEach(({ ticker, share }) => {
       if (share <= 0) return;

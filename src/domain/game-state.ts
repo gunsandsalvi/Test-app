@@ -19,6 +19,7 @@ import { CompositeBenchmarkIndices } from './markets';
 import { Portfolio, ReturnAttribution } from './portfolio';
 import { NewsItem, DiagnosticsLog } from './events';
 import { Region } from './region-macro';
+import type { Ticker } from './ids';
 
 export interface GameState {
   /** ENGINE V2 (§7.304) — the persistent columnar world: tables land here as mechanisms port.
@@ -156,8 +157,8 @@ export interface GameState {
    *  futures, FX forwards), one shape, one lifecycle. Born empty (§7.44). */
   derivativesBook?: import('./derivatives/contract').DerivativeContract[];
   compositeIndices: CompositeBenchmarkIndices;
-  recentIPOs: { ticker: string; name: string; category: string; week: number }[];
-  recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueLocal: number }[];
+  recentIPOs: { ticker: Ticker; name: string; category: string; week: number }[];
+  recentMergers: { acquirerTicker: Ticker; acquirerName: string; targetTicker: Ticker; targetName: string; week: number; dealValueLocal: number }[];
   marketVolPremium?: number;
   dealers: Dealer[];
   portfolio: Portfolio;
@@ -169,8 +170,8 @@ export interface GameState {
     interestIncomeLocal: number;
     financingCostLocal: number;
     defaultedCompanies: string[];
-    ratingsChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[];
-    earningsReported: { ticker: string; name: string; actualEps: number; consensusEps: number; surprisePct: number }[];
+    ratingsChanges: { ticker: Ticker; from: CreditRating; to: CreditRating; name: string }[];
+    earningsReported: { ticker: Ticker; name: string; actualEps: number; consensusEps: number; surprisePct: number }[];
     marginAlert: string | null;
     attribution: ReturnAttribution;
   } | null;

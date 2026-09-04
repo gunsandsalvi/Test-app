@@ -15,6 +15,7 @@
 
 import { RegionId, CurrencyCode } from '../geography';
 import type { EntityId } from '../ids';
+import type { Ticker } from '../ids';
 
 /**
  * The subset of the ledger's parties that can stand on a bilateral derivative. The arms are
@@ -22,8 +23,8 @@ import type { EntityId } from '../ids';
  * directly — one encoding of who owes whom (§1.4).
  */
 export type DerivativeParty =
-  | { kind: 'COMPANY'; ticker: string }
-  | { kind: 'BANK'; ticker: string }
+  | { kind: 'COMPANY'; ticker: Ticker }
+  | { kind: 'BANK'; ticker: Ticker }
   | { kind: 'INSTITUTION'; id: EntityId };
 
 export function derivativePartyKey(p: DerivativeParty): string {
@@ -41,8 +42,8 @@ export function derivativePartyKey(p: DerivativeParty): string {
  * and the party hedges again on top of what it already has, silently and every week. A format
  * whose failure mode is a plausible number is a format that needs a constructor.
  */
-export const bankPartyKey = (ticker: string): string => derivativePartyKey({ kind: 'BANK', ticker });
-export const companyPartyKey = (ticker: string): string => derivativePartyKey({ kind: 'COMPANY', ticker });
+export const bankPartyKey = (ticker: Ticker): string => derivativePartyKey({ kind: 'BANK', ticker });
+export const companyPartyKey = (ticker: Ticker): string => derivativePartyKey({ kind: 'COMPANY', ticker });
 export const institutionPartyKey = (id: EntityId): string => derivativePartyKey({ kind: 'INSTITUTION', id });
 
 /** The classes the registry knows. A new derivative adds a member here and a profile module. */

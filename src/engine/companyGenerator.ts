@@ -18,6 +18,7 @@ import { seedLoanBookLocal } from './macro/initialization';
 import { corporateTrancheId } from '../domain/instrument-keys';
 import { asInstrumentId } from '../domain/ids';
 import { companyEntityId, privateCompanyEntityId } from '../domain/entity-keys';
+import type { Ticker } from '../domain/ids';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
@@ -351,7 +352,7 @@ function seedAgeFraction(trancheId: string): number {
   return h / 0x100000000;
 }
 
-export function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating, policyRate: number = 0.045, rank: number = 0): DebtTranche[] {
+export function generateDebtTranches(ticker: Ticker, debtBase: number, initialRating: CreditRating, policyRate: number = 0.045, rank: number = 0): DebtTranche[] {
   const fixedShare = FIXED_SHARE_BY_RATING[initialRating] ?? 0.5;
   const { weights: trancheWeights, maturityWeeks } = debtLadderShape(rank);
   const baseSpreadBps = RATING_OAS_SPREADS[initialRating]?.baseBps ?? 150;
@@ -424,7 +425,7 @@ export function generateInitialCompanies(
   // Shared across every region's seed generation so tickers/names are globally unique, not
   // just unique within one region — a per-region Set let e.g. USA and UK each independently
   // generate a firm named "TCGP".
-  const existingSeedTickers = new Set<string>();
+  const existingSeedTickers = new Set<Ticker>();
   const existingSeedNames = new Set<string>();
 
   regions.forEach((region) => {
@@ -1257,7 +1258,7 @@ export function generatePrivateCompanies(
   region: RegionId,
   seeds: PrivateFirmSeed[],
   regionPolicyRate: number,
-  existingTickers: Set<string>,
+  existingTickers: Set<Ticker>,
   existingNames: Set<string>
 ): Company[] {
   return seeds.map((seed, idx) => {

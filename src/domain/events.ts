@@ -3,6 +3,7 @@
 import { RegionId } from './geography';
 import { Sector } from './company';
 import { TradeableInstrument } from './instruments';
+import type { Ticker } from './ids';
 
 export interface NewsItem {
   id: string;
@@ -13,7 +14,7 @@ export interface NewsItem {
   impactBadge: string;
   impactRegion?: RegionId;
   impactSector?: Sector;
-  affectedTicker?: string;
+  affectedTicker?: Ticker;
   urgent: boolean;
   tradeShortcut?: TradeableInstrument;
   /** §5-NEWS — a DERIVED story cites the state it derives from: the objects it names (every
@@ -32,7 +33,7 @@ export interface NewsItem {
  * row (rule 4: one representation per real thing).
  */
 export interface EarningsReport {
-  ticker: string;
+  ticker: Ticker;
   name: string;
   actualEps: number;
   consensusEps: number;
@@ -57,7 +58,7 @@ export interface ChartModalData {
   isOpen: boolean;
   title: string;
   subtitle?: string;
-  ticker?: string;
+  ticker?: Ticker;
   unit: string;
   currentVal: number;
   change1W: number;

@@ -17,8 +17,9 @@
 
 import { RegionId } from './geography';
 import { PrimaryOfferingType } from './assets';
-import { asInstrumentId, type InstrumentId } from './ids';
+import { asInstrumentId, type InstrumentId, asTicker } from './ids';
 import type { EntityId } from './ids';
+import type { Ticker } from './ids';
 
 export type PrimaryOfferingInstrumentType = PrimaryOfferingType;
 
@@ -50,7 +51,7 @@ export interface PrimaryOffering {
   id: string;
   /** §3.13-BOOK slice (c2a): the firm or treasury bringing the deal. */
   issuerId: EntityId;
-  issuerTicker: string;
+  issuerTicker: Ticker;
   region: RegionId;
   instrumentType: PrimaryOfferingInstrumentType;
   purpose: PrimaryOfferingPurpose;
@@ -79,7 +80,7 @@ export interface PrimaryOffering {
   rateType?: 'FIXED' | 'FLOATING';
   /** MAINTENANCE_TERM_OUT: the bridge tranche ids this offering retires at settlement. */
   refinancesTrancheIds?: string[];
-  leadBankTicker: string;
+  leadBankTicker: Ticker;
   announcedWeek: number;
   /**
    * HC Wave 2 — the DEAL this financing is for, carried on the offering itself. An earlier
@@ -190,7 +191,7 @@ export function oneWeekPriceRiskBps(args: {
  * breaks an exact tie, so the choice is stable across a week's passes.
  */
 export interface LeadBankCandidate {
-  ticker: string;
+  ticker: Ticker;
   bankMarketShare?: number;
   /** What this bank already lends this issuer — the relationship, measured. */
   relationshipLocal?: number;
@@ -198,8 +199,12 @@ export interface LeadBankCandidate {
   freeCapacityLocal?: number;
 }
 
-export function chooseLeadBank(issuerId: string, banks: LeadBankCandidate[]): string {
-  if (banks.length === 0) return '';
+export function chooseLeadBank(issuerId: string, banks: LeadBankCandidate[]): Ticker {
+  // §3.13-BOOK slice (c2c): NO BANK. An empty ticker is how this has always said 'nobody won
+  // the mandate' — every caller tests it — so the brand is admitted here rather than the
+  // return type widened to `Ticker | undefined`, which would be the honest shape and is a
+  // change to every caller's control flow rather than to its types.
+  if (banks.length === 0) return asTicker('');
   let hash = 0;
   for (let i = 0; i < issuerId.length; i++) hash = ((hash << 5) - hash + issuerId.charCodeAt(i)) | 0;
   const tieBreak = (hash >>> 0) % banks.length;
@@ -227,10 +232,10 @@ export function chooseLeadBank(issuerId: string, banks: LeadBankCandidate[]): st
  * banks in proportion to the balance sheet each actually has — the same quantity that decides
  * whether a bank could serve the client at all, in place of a hash of the client's id.
  */
-export function mandateAllocator(banks: { ticker: string; bankMarketShare?: number; capacityLocal: number }[]) {
+export function mandateAllocator(banks: { ticker: Ticker; bankMarketShare?: number; capacityLocal: number }[]) {
   const freeLocal = new Map(banks.map((b) => [b.ticker, Math.max(0, b.capacityLocal)]));
   return {
-    pick(clientId: string, sizeLocal: number, relationshipLocal?: (ticker: string) => number): string {
+    pick(clientId: string, sizeLocal: number, relationshipLocal?: (ticker: Ticker) => number): Ticker {
       const ticker = chooseLeadBank(clientId, banks.map((b) => ({
         ticker: b.ticker,
         bankMarketShare: b.bankMarketShare,
@@ -254,19 +259,20 @@ export function mandateAllocator(banks: { ticker: string; bankMarketShare?: numb
  * first copy was written, in two loops, with the second one re-testing a `homeBankTicker` the
  * first had just set on every row.
  */
-export function assignHouseBanks<T extends { id: string; homeBankTicker?: string }>(
+export function assignHouseBanks<T extends { id: string; homeBankTicker?: Ticker | undefined }>(
   parties: readonly T[],
-  allocator: { pick: (clientId: string, sizeLocal: number) => string },
+  allocator: { pick: (clientId: string, sizeLocal: number) => Ticker },
   openingCashOf: (party: T) => number,
   /** True for the LATE pass, which exists to catch whoever was created after the earlier ones. */
   onlyUnbanked = false
 ): Map<string, number> {
-  const byBank = new Map<string, number>();
+  const byBank = new Map<Ticker, number>();
   parties.forEach((p) => {
     if (onlyUnbanked && p.homeBankTicker) return;
     const cashLocal = Math.max(0, openingCashOf(p));
-    p.homeBankTicker = allocator.pick(p.id, cashLocal);
-    byBank.set(p.homeBankTicker, (byBank.get(p.homeBankTicker) ?? 0) + cashLocal);
+    const won = allocator.pick(p.id, cashLocal);
+    (p as { homeBankTicker?: Ticker }).homeBankTicker = won;
+    byBank.set(won, (byBank.get(won) ?? 0) + cashLocal);
   });
   return byBank;
 }

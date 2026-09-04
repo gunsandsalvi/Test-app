@@ -47,10 +47,11 @@ import { dealerDeskPartyOf } from './dealer-desks';
 import { CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import type { ItemizedHolding } from '../../../domain/banking';
 import { isKnownEntity } from '../../../domain/ids';
-import type { EntityId } from '../../../domain/ids';
+import type { EntityId, Ticker } from '../../../domain/ids';
+import { asTicker } from '../../../domain/ids';
 
 /** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
-export interface FeeDesk { ticker: string; share: number }
+export interface FeeDesk { ticker: Ticker; share: number }
 
 /**
  * Settle one region's session of one book.
@@ -210,9 +211,9 @@ export function participantPartyOf(args: {
   /** The institutions this book admitted, by their own entity ids. */
   entityIds: ReadonlySet<EntityId>;
   /** The banks whose market-making desks this book built. */
-  deskTickers: Set<string>;
+  deskTickers: ReadonlySet<Ticker>;
   /** 07c only: banks that bid under their plain ticker rather than `bankParticipantId`. */
-  bankTickers?: ReadonlySet<string>;
+  bankTickers?: ReadonlySet<Ticker>;
 }): (participantId: string) => PartyRef | undefined {
   const { regionId, entityIds, deskTickers, bankTickers } = args;
   return (id: string): PartyRef | undefined => {
@@ -225,7 +226,8 @@ export function participantPartyOf(args: {
     if (bank !== undefined) return { kind: 'BANK_SECURITIES', ticker: bank };
     const treasury = treasuryTickerOfParticipant(id);
     if (treasury !== undefined) return { kind: 'COMPANY', ticker: treasury };
-    if (bankTickers?.has(id)) return { kind: 'BANK_SECURITIES', ticker: id };
+    // 07c seats a bank under its bare ticker; membership of that set is the proof.
+    if (bankTickers?.has(asTicker(id))) return { kind: 'BANK_SECURITIES', ticker: asTicker(id) };
     return dealerDeskPartyOf(id, deskTickers);
   };
 }

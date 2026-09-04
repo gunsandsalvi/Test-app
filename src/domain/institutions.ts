@@ -5,6 +5,7 @@ import { RegionId } from './geography';
 import { ItemizedHolding } from './banking';
 import { FinancialStatementProfile } from './company';
 import type { EntityId } from './ids';
+import type { Ticker } from './ids';
 
 export interface InstitutionalSector {
   corpBondHoldingsLocal: number;
@@ -91,12 +92,12 @@ export interface InstitutionalEntity {
    */
   id: EntityId;
   name: string;
-  ticker: string;
+  ticker: Ticker;
   region: RegionId;
   /** The bank this entity's cash sits at. An institution's balance is a bank's liability
    * like anyone else's; without this its money lived outside the banking system, which is the
    * blind spot that hid a 64B double-count. */
-  homeBankTicker?: string;
+  homeBankTicker?: Ticker;
   entityType: InstitutionalEntityType;
   /** HF1 — set on HEDGE_FUND entities only; decides which markets this fund is actually in. */
   hedgeFundStrategy?: HedgeFundStrategy;

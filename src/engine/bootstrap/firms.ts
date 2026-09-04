@@ -14,9 +14,10 @@ import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financ
 import { GENERATED_COMMODITIES } from './commodities-and-fx';
 import { random } from '../rng';
 import { SEED_FIRM_CONCENTRATION_DECAY, SEED_INSURER_INSTITUTIONAL_SHARE } from '../../domain/stated';
+import { asTicker, type Ticker } from '../../domain/ids';
 
 export interface FirmSeedTemplate {
-  ticker: string;
+  ticker: Ticker;
   name: string;
   sector: Sector;
   revBase: number;
@@ -82,19 +83,22 @@ export function generateUniqueName(baseName: string, sector: string, existingNam
   return `${baseName} ${Math.floor(random() * 10000)} Corp`;
 }
 
-export function generateUniqueTicker(existingTickers: Set<string>): string {
+/** §3.13-BOOK slice (c2c): THE MINT. Every ticker in the world is generated here or cloned
+ *  from a template that was, so this is where the brand is admitted for the whole space. */
+export function generateUniqueTicker(existingTickers: ReadonlySet<Ticker>): Ticker {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   let attempt = 0;
   while (attempt < 100) {
-    let t = '';
-    for (let i = 0; i < 4; i++) t += chars.charAt(Math.floor(random() * chars.length));
+    let raw = '';
+    for (let i = 0; i < 4; i++) raw += chars.charAt(Math.floor(random() * chars.length));
+    const t = asTicker(raw);
     if (!existingTickers.has(t)) {
-      existingTickers.add(t);
+      (existingTickers as Set<Ticker>).add(t);
       return t;
     }
     attempt++;
   }
-  return 'XXXX';
+  return asTicker('XXXX');
 }
 
 // A firm's rank within its sector (0 = largest) sets its scale via a Pareto/Zipf decay —
@@ -223,7 +227,7 @@ function buildTemplate(
   region: RegionId,
   sector: Sector,
   rank: number,
-  existingTickers: Set<string>,
+  existingTickers: Set<Ticker>,
   existingNames: Set<string>,
   extra?: Partial<FirmSeedTemplate>
 ): FirmSeedTemplate {
@@ -297,7 +301,7 @@ const COMMODITY_PRODUCERS_PER_CATEGORY = 2; // per generic commodity id, per reg
 
 export function generateFirmSeeds(
   region: RegionId,
-  existingTickers: Set<string> = new Set<string>(),
+  existingTickers: Set<Ticker> = new Set<Ticker>(),
   existingNames: Set<string> = new Set<string>()
 ): FirmSeedTemplate[] {
   const seeds: FirmSeedTemplate[] = [];

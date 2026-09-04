@@ -26,6 +26,7 @@ import { forgetClearedPrice } from './prices';
 import { defect } from '../domain/defect';
 import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type TickerRef, type EntityRef } from './refs';
 import { governmentEntityId } from '../domain/entity-keys';
+import type { Ticker } from '../domain/ids';
 
 export const TR_FLOATING = 1;
 export const TR_CP = 2;
@@ -390,7 +391,7 @@ export const trancheWireOf = (v2: V2World, r: number): number => v2.tranches.wir
  *  syncs (O4 lived on that drift). The facility row on the ladder IS the loan, seen from the
  *  lender: one scan of the store, in row order. */
 export interface FacilityRow {
-  row: number; borrowerId: string; bankTicker: string; trancheId: string; principalLocal: number;
+  row: number; borrowerId: string; bankTicker: Ticker; trancheId: string; principalLocal: number;
   /** The tranche's floating margin; a facility with none stated rides the 350bp the mirror used. */
   marginBps: number; originationWeek: number; maturityWeek: number;
 }
@@ -404,7 +405,7 @@ function facilityRowOf(v2: V2World, r: number): FacilityRow {
   };
 }
 /** Every live facility a bank has lent, across every borrower's ladder. */
-export function facilityRowsOf(v2: V2World, bankTicker: string): FacilityRow[] {
+export function facilityRowsOf(v2: V2World, bankTicker: Ticker): FacilityRow[] {
   const S = v2.tranches;
   const ref = tickerRefOf(v2, bankTicker);
   const out: FacilityRow[] = [];
@@ -415,7 +416,7 @@ export function facilityRowsOf(v2: V2World, bankTicker: string): FacilityRow[] {
   return out;
 }
 /** The bank's facility book: Σ face of every facility it has lent. */
-export function facilityBookOf(v2: V2World, bankTicker: string): number {
+export function facilityBookOf(v2: V2World, bankTicker: Ticker): number {
   const S = v2.tranches;
   const ref = tickerRefOf(v2, bankTicker);
   if (ref < 0) return 0;

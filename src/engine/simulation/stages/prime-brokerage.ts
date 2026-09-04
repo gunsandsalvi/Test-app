@@ -29,6 +29,7 @@ import { trancheIdOf, facilityBookOf, ladderRowsOf } from '../../../engine2/tran
 import { weeklyPriceMoveOf } from '../../../engine2/prices';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { sovereignTenorResolver } from '../../../domain/government';
+import type { Ticker } from '../../../domain/ids';
 
 /**
  * The haircut a broker takes on each kind of collateral: the most that market's own clearing
@@ -253,7 +254,7 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
     const book: PrimeBrokerageLine[] = reg.primeBrokerageBook ?? [];
-    const drawnByBroker = new Map<string, number>();
+    const drawnByBroker = new Map<Ticker, number>();
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
       if (fund.region !== regionId || fund.entityType !== 'HEDGE_FUND' || fund.isDefaulted) return fund;
       const brokerTicker = fund.homeBankTicker;

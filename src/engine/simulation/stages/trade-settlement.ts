@@ -21,6 +21,7 @@ import { TradeInvoice } from '../../../domain/trade-invoice';
 import { WeeklyStepContext } from './context';
 import { getFxToUsd } from './06-fx-and-trade';
 import { pay } from './settlement';
+import type { Ticker } from '../../../domain/ids';
 
 export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext): void {
   ctx.tradeInvoiceFxGainLocal = 0;
@@ -32,7 +33,7 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
   (Object.keys(CURRENCY_BY_REGION) as RegionId[]).forEach(r => {
     usdPerCurrency[CURRENCY_BY_REGION[r]] = getFxToUsd(state.fxPairs, r);
   });
-  const activeByTicker = new Map<string, boolean>();
+  const activeByTicker = new Map<Ticker, boolean>();
   state.companies.forEach(c => activeByTicker.set(c.ticker, isActiveCompany(c)));
 
   const stillOutstanding: TradeInvoice[] = [];

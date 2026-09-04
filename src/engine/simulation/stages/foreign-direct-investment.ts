@@ -35,6 +35,7 @@ import { TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../../../domain/comp
 import { PrivateFirmSeed } from '../../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { cashOf, openingCashOf } from '../../ledger/accounts';
+import type { Ticker } from '../../../domain/ids';
 
 /** A year of losing the merit order is structural — the same measured hold as */
 const FDI_SUSTAINED_WEEKS = ANTITRUST_SUSTAINED_WEEKS;
@@ -74,7 +75,7 @@ export function runForeignDirectInvestment(
   ctx: WeeklyStepContext,
   nextWeek: number,
   generate: (regionId: RegionId, seeds: PrivateFirmSeed[],
-             policyRate: number, tickers: Set<string>, names: Set<string>) => Company[]
+             policyRate: number, tickers: Set<Ticker>, names: Set<string>) => Company[]
 ): Company[] {
   const born: Company[] = [];
   const subsidiaryExists = (parent: Company, region: RegionId): boolean =>

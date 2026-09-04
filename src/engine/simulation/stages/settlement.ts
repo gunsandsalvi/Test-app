@@ -50,6 +50,8 @@ import { assertNever } from '../../../domain/defect';
 import { banksOf } from '../../../domain/company';
 import type { Company, InstitutionalEntity } from '../../../types';
 import type { EntityId } from '../../../domain/ids';
+import type { Ticker } from '../../../domain/ids';
+import { asTicker } from '../../../domain/ids';
 
 export interface PaymentInstruction {
   payer: PartyRef;
@@ -538,7 +540,7 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
  * builds in one stage, which is not worth an invariant.
  */
 export interface PartyIndex {
-  companyByTicker: ReadonlyMap<string, Company>;
+  companyByTicker: ReadonlyMap<Ticker, Company>;
   entityById: ReadonlyMap<string, InstitutionalEntity>;
 }
 
@@ -736,7 +738,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     banksOf(ctx.updatedCompanies).map((c) => [c.ticker, c])
   );
   report.bankEquityDeltaByBank.forEach((equityDeltaLocal, ticker) => {
-    const bank = bankByTicker.get(ticker);
+    const bank = bankByTicker.get(asTicker(ticker));
     if (!bank?.bankBalanceSheet) { report.unresolvedLocal += equityDeltaLocal; return; }
     if (equityDeltaLocal !== 0) bank.bankBalanceSheet = { ...bank.bankBalanceSheet, bankEquityLocal: bank.bankBalanceSheet.bankEquityLocal + equityDeltaLocal };
   });

@@ -14,7 +14,7 @@ import {
   ensureV2, internInstrument, internType, internRegion, internEntity, internTicker,
   instrumentOf, typeOf, regionOf, entityOf, tickerOf, instrumentRefOf, typeRefOf,
 } from '../src/engine2/world';
-import { asInstrumentId } from '../src/domain/ids';
+import { asInstrumentId, asTicker } from '../src/domain/ids';
 import { NO_REF, ABSENT_REF } from '../src/engine2/refs';
 
 const world = () => ensureV2({} as Parameters<typeof ensureV2>[0]);
@@ -49,9 +49,9 @@ test('interning in one space does not shift refs already handed out in another',
   const v2 = world();
   const t = internType(v2, 'CORP_BOND');
   for (let n = 0; n < 50; n++) internInstrument(v2, asInstrumentId(`ACME-T${n}`));
-  internTicker(v2, 'ACME');
+  internTicker(v2, asTicker('ACME'));
   assert.equal(typeOf(v2, t), 'CORP_BOND');
-  assert.equal(tickerOf(v2, internTicker(v2, 'ACME')), 'ACME');
+  assert.equal(tickerOf(v2, internTicker(v2, asTicker('ACME'))), 'ACME');
 });
 
 test('a read never appends — a miss answers NO_REF and leaves the table alone', () => {
@@ -75,7 +75,7 @@ test('the instrument table is the list of every instrument, and holds nothing el
   internType(v2, 'EQUITY');
   internRegion(v2, 'EUR');
   internEntity(v2, 'EUR_ACME');
-  internTicker(v2, 'ACME');
+  internTicker(v2, asTicker('ACME'));
   internInstrument(v2, asInstrumentId('EUR-GOV-2Y-INIT'));
   internInstrument(v2, asInstrumentId('ACME-T1'));
   assert.deepEqual(v2.refs.instruments.strings, ['EUR-GOV-2Y-INIT', 'ACME-T1']);

@@ -57,6 +57,7 @@ import { facilityBookOf } from '../../../engine2/tranches';
 import { fxSpotInstrumentId } from '../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../domain/ids';
 import { regionOf } from '../../../engine2/world';
+import type { Ticker } from '../../../domain/ids';
 const REGIONS = REGION_IDS;
 
 const pairKey = (base: RegionId, quote: RegionId) => `${base}/${quote}`;
@@ -142,7 +143,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   // ---- What the bank FX desks can still commit, which is what bounds the arbitrage — and,
   // per desk, the share of the market-making residual each one warehouses below. ----
   let arbitrageCapacityLocal = 0;
-  const deskCapacityByTicker = new Map<string, number>();
+  const deskCapacityByTicker = new Map<Ticker, number>();
   ctx.updatedCompanies.forEach((c) => {
     const sheet = c.bankBalanceSheet;
     if (!sheet) return;
@@ -172,7 +173,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
    * else would (clients net sellers), or sold that nobody else offered (clients net buyers). */
   const dealerLongBaseByPair = new Map<string, number>();
   /** XB6: what each desk took on this week, by currency, out of its own posted schedule. */
-  const deskFillByTicker = new Map<string, Partial<Record<RegionId, number>>>();
+  const deskFillByTicker = new Map<Ticker, Partial<Record<RegionId, number>>>();
 
   pairs.forEach((fx) => {
     const key = pairKey(fx.base, fx.quote);

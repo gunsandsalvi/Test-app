@@ -12,6 +12,7 @@ import { PartyRef, partyId, partyOf } from './party';
 import { CurrencyCode, CURRENCY_CODES, NUMERAIRE } from '../../domain/geography';
 import { FxTable, PARITY_FX, toNumeraire } from '../../domain/currency';
 import { isVehicleClaim } from '../../domain/assets';
+import type { Ticker } from '../../domain/ids';
 
 export type AssetKind =
   | 'MONEY' | 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER'
@@ -192,7 +193,7 @@ export interface WireSummary {
  * four monies have to be brought to the numéraire before they can be added. Every other kind's
  * price is already in one money by construction (an instrument has one quote currency).
  */
-export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number; byCurrency: Record<string, number> } = { numeraire: 0, byCurrency: {} }, regionOfIssuer?: (ticker: string) => string | undefined, reasonTextOf?: (id: number) => string, fx: FxTable = PARITY_FX): WireSummary {
+export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number; byCurrency: Record<string, number> } = { numeraire: 0, byCurrency: {} }, regionOfIssuer?: (ticker: Ticker) => string | undefined, reasonTextOf?: (id: number) => string, fx: FxTable = PARITY_FX): WireSummary {
   const moneyPendingLocal = moneyPending.numeraire;
   const moneyPendingByCurrency = moneyPending.byCurrency;
   const byKind: Record<string, number> = {}; const valueUSDByKind: Record<string, number> = {};

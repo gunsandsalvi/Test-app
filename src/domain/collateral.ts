@@ -1,4 +1,5 @@
 import type { InstrumentId } from './ids';
+import type { Ticker } from './ids';
 
 /**
  * §5-STRUCT step 3 — PLEDGED COLLATERAL, AS AN OBJECT.
@@ -30,7 +31,7 @@ export interface CollateralPosition {
 
 /** Total face pledged in one bond across every contract this borrower has open. */
 export function pledgedFaceByBond(
-  contracts: { borrowerTicker: string; collateral: Pledge[] }[],
+  contracts: { borrowerTicker: Ticker; collateral: Pledge[] }[],
   ticker: string
 ): Map<InstrumentId, number> {
   const out = new Map<InstrumentId, number>();

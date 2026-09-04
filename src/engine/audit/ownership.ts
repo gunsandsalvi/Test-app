@@ -17,7 +17,7 @@ import { isTrancheKind } from '../../domain/assets';
 import { bookHeadOf } from '../../engine2/holdings';
 import type { Company, InstitutionalEntity } from '../../types';
 import { equityIssuerId } from '../../domain/instrument-keys';
-import { asEntityId } from '../../domain/ids';
+import { asEntityId, asTicker } from '../../domain/ids';
 import type { Ticker } from '../../domain/ids';
 import type { EntityId } from '../../domain/ids';
 
@@ -40,7 +40,7 @@ const O1_BUCKET_BY_TRANCHE_KIND: Partial<Record<
  */
 interface AuditPartyIndex {
   companyById: ReadonlyMap<string, Company>;
-  companyByTicker: ReadonlyMap<string, Company>;
+  companyByTicker: ReadonlyMap<Ticker, Company>;
   entityById: ReadonlyMap<string, InstitutionalEntity>;
 }
 const AUDIT_PARTY_INDEX = new WeakMap<GameState, AuditPartyIndex>();
@@ -48,7 +48,7 @@ function partyIndexOfState(state: GameState): AuditPartyIndex {
   const hit = AUDIT_PARTY_INDEX.get(state);
   if (hit) return hit;
   const companyById = new Map<string, Company>();
-  const companyByTicker = new Map<string, Company>();
+  const companyByTicker = new Map<Ticker, Company>();
   for (const c of state.companies) { companyById.set(c.id, c); companyByTicker.set(c.ticker, c); }
   const entityById = new Map((state.institutionalEntities ?? []).map((e) => [e.id, e]));
   const index: AuditPartyIndex = { companyById, companyByTicker, entityById };
@@ -386,7 +386,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
   let deadParty = 0, deadRef = 0;
   (state.derivativesBook ?? []).forEach((c) => {
     ([c.a, c.b] as { kind: string; ticker?: Ticker | string; id?: EntityId }[]).forEach((p) => {
-      const ok = p.kind === 'INSTITUTION' ? entityIds.has(p.id!) : tickers.has(p.ticker!);
+      const ok = p.kind === 'INSTITUTION' ? entityIds.has(p.id!) : tickers.has(asTicker(p.ticker!));
       if (!ok) deadParty++;
     });
     // A CDS names the issuer it is written on by COMPANY ID; the futures and FX classes name a
@@ -423,7 +423,7 @@ function o5(state: GameState, week: number): AuditFinding[] {
   const { companyByTicker: tickers, entityById: ents } = partyIndexOfState(state);
   let deadParty = 0, deadLocal = 0;
   (state.derivativesBook ?? []).forEach((k) => {
-    const alive = (p: { kind: string; ticker?: string; id?: string }) => p.kind === 'INSTITUTION' ? !!ents.get(p.id!) && !ents.get(p.id!)!.isDefaulted : !!tickers.get(p.ticker!) && isActiveCompany(tickers.get(p.ticker!)!);
+    const alive = (p: { kind: string; ticker?: Ticker; id?: EntityId }) => p.kind === 'INSTITUTION' ? !!ents.get(p.id!) && !ents.get(p.id!)!.isDefaulted : !!tickers.get(p.ticker!) && isActiveCompany(tickers.get(p.ticker!)!);
     if (!alive(k.a as never) || !alive(k.b as never)) { deadParty++; deadLocal += k.notional; }
   });
   if (deadParty) out.push({ family: 'O', check: 'O5 contracts have two live parties', week, usd: deadLocal, message: `${deadParty} contracts (${B(deadLocal)}) have a dead or missing party` });
@@ -439,7 +439,7 @@ function o5(state: GameState, week: number): AuditFinding[] {
   // SELLER is a shipment that is perfectly deliverable — the goods left before the firm died and
   // the live buyer will receive them — so a count there is a question about the check.
   let deadBuyerShip = 0, deadSellerShip = 0;
-  const idOrTicker = (key: string) => tickers.get(key) ?? state.companies.find((c) => c.id === key);
+  const idOrTicker = (key: string) => tickers.get(asTicker(key)) ?? state.companies.find((c) => c.id === key);
   // A dead buyer with an OPEN estate still takes delivery — the receiver liquidates it.
   const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   const estateOf = new Map((state.estates ?? []).map((e) => [e.companyId, e]));

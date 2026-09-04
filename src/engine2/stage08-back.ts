@@ -61,7 +61,7 @@ import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../domain/primary-m
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/stated';
 import { trancheWeekAccrual } from './front-core';
 import { maintenanceBridgeTrancheId, liquidityRevolverTrancheId, maturityRevolverTrancheId, calledRefinanceTrancheId } from '../domain/instrument-keys';
-import type { InstrumentId } from '../domain/ids';
+import type { InstrumentId, Ticker } from '../domain/ids';
 import { asEntityId } from '../domain/ids';
 
 /**
@@ -117,7 +117,7 @@ export interface BackKernelDeps {
   mmfSweepBooks: ReturnType<typeof openCorporateSweepBooks>;
   primarySettlementByIssuerId: Map<string, { offering: PrimaryOffering; clearedStat: number; struckTerms?: { couponRate: number; maturityWeek: number }; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>;
   pendingOfferingIssuerIds: Set<string>;
-  leadBankFor: (comp: Company, sizeLocal: number) => string;
+  leadBankFor: (comp: Company, sizeLocal: number) => Ticker;
   enqueueOffering: (o: PrimaryOffering) => void;
   /** Appends to the stage's refinance-news accumulator (swapped by the shard machinery). */
   pushNews: (n: NewsItem) => void;
@@ -171,7 +171,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   capexCommissionedThisWeekLocal: number;
   nextWeek: number;
   priorOccupationMixDrift: Company['occupationMixDrift'];
-  homeBankTicker: string | undefined;
+  homeBankTicker: Ticker | undefined;
   /** §3.13: what a bridge on this borrower costs, in bps over the curve. It arrives as an
    *  argument because it is a read of the borrower's OWN printed paper and this core is
    *  lane-only by design (§7.317: no world reads, so it stays worker-safe). */
@@ -369,7 +369,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
 /** §7.317 — the closure-wide cash primitive as a FACTORY: one mutable cash box, one ledger,
  *  one post; the walk and every later block write through the same instance, exactly as the
  *  closure binding did. */
-function makeCashPoster(ticker: string, region: Company['region'], cashLocal: number, ctx: WeeklyStepContext, retainCashLedger: boolean): {
+function makeCashPoster(ticker: Ticker, region: Company['region'], cashLocal: number, ctx: WeeklyStepContext, retainCashLedger: boolean): {
   post: (label: string, amountLocal: number, counterparty?: PartyRef, settle?: boolean) => void;
   cash: { usd: number };
   cashLedger: { label: string; amountLocal: number }[];
@@ -438,10 +438,10 @@ function runCashWalk(args: {
   // §7.317 step 1.4 — the walk reads NO company object: identity strings and the few
   // object-derived scalars arrive resolved (from the seam lanes at the call site).
   companyId: string;
-  ticker: string;
+  ticker: Ticker;
   region: string;
   isBanksSector: boolean;
-  homeBankTicker: string | undefined;
+  homeBankTicker: Ticker | undefined;
   carrierFreightRevenueLocal: number;
   channelMarginRevenueLocal: number;
   declaredDividendYield: number;
@@ -1739,7 +1739,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           // together). Register paper keeps its own path (settleCorporateActionOnHolders pays
           // the holders); its cash line stays report-only. Before this, a prepaid facility left
           // the ladder while the bank kept the loan and nobody received the cash.
-          const facilityRepaidByBank = new Map<string, number>();
+          const facilityRepaidByBank = new Map<Ticker, number>();
           let facilityRepaidLocal = 0;
           // Cheapest debt to be rid of first, and only paper that is actually worth retiring.
           // SCALE — the economics are computed ONCE per tranche (they read only per-dollar

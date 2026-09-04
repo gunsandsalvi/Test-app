@@ -14,7 +14,7 @@ import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, standingPfeChargeLocal, 
   from '../src/domain/derivatives/registry';
 import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivatives/hedging';
 import { StandingBook } from '../src/domain/derivatives/standing-book';
-import { asEntityId } from '../src/domain/ids';
+import { asEntityId, asTicker } from '../src/domain/ids';
 
 const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView => ({
   week: 10,
@@ -32,7 +32,7 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
 
 const base = (over: Partial<DerivativeContract>): DerivativeContract => ({
   id: 'c', classId: 'IRS', regionId: 'USA', currency: 'USD',
-  a: { kind: 'BANK', ticker: 'AAA' }, b: { kind: 'INSTITUTION', id: asEntityId('INS1') },
+  a: { kind: 'BANK', ticker: asTicker('AAA') }, b: { kind: 'INSTITUTION', id: asEntityId('INS1') },
   notional: 1_000_000, strike: 0.05, referenceId: '', termKey: 's5',
   struckWeek: 0, maturityWeek: 260, ...over,
 });
@@ -92,9 +92,9 @@ test('FX forward: the holder short the foreign currency gains when it falls; the
 
 test('one capacity budget across every class: what the CDS desk wrote consumes what the FX desk can write', () => {
   const book: DerivativeContract[] = [
-    base({ classId: 'CDS', a: { kind: 'BANK', ticker: 'HEDGER' }, b: { kind: 'BANK', ticker: 'DESK' }, notional: 100 }),
-    base({ classId: 'FX_FORWARD', a: { kind: 'INSTITUTION', id: asEntityId('X') }, b: { kind: 'BANK', ticker: 'DESK' }, notional: 500 }),
-    base({ classId: 'IRS', a: { kind: 'BANK', ticker: 'DESK' }, notional: 1000, maturityWeek: 5 }), // matured: no charge
+    base({ classId: 'CDS', a: { kind: 'BANK', ticker: asTicker('HEDGER') }, b: { kind: 'BANK', ticker: asTicker('DESK') }, notional: 100 }),
+    base({ classId: 'FX_FORWARD', a: { kind: 'INSTITUTION', id: asEntityId('X') }, b: { kind: 'BANK', ticker: asTicker('DESK') }, notional: 500 }),
+    base({ classId: 'IRS', a: { kind: 'BANK', ticker: asTicker('DESK') }, notional: 1000, maturityWeek: 5 }), // matured: no charge
   ];
   const charged = standingPfeChargeLocal(book, 'BANK:DESK', 10);
   assert.ok(Math.abs(charged - (100 * 0.10 + 500 * 0.02)) < 1e-9);
@@ -105,7 +105,7 @@ test('one capacity budget across every class: what the CDS desk wrote consumes w
 });
 
 test('standing cover nets exactly one side of one party, live contracts only, by reference and tenor', () => {
-  const me = { kind: 'COMPANY', ticker: 'ME' } as const;
+  const me = { kind: 'COMPANY' as const, ticker: asTicker('ME') };
   const book: DerivativeContract[] = [
     base({ classId: 'IRS', a: me, termKey: 's5', notional: 10 }),
     base({ classId: 'IRS', a: me, termKey: 's10', notional: 20 }),
@@ -140,7 +140,7 @@ test('every registered class states both roles and admissible facts — the comp
 });
 
 test('the standing-book index answers exactly what the per-participant walks answered, and follows a strike', () => {
-  const me = { kind: 'BANK', ticker: 'ME' } as const;
+  const me = { kind: 'BANK' as const, ticker: asTicker('ME') };
   const you = { kind: 'INSTITUTION' as const, id: asEntityId('YOU') };
   const book: DerivativeContract[] = [
     base({ id: '1', a: me, b: you, notional: 10, termKey: 's5' }),

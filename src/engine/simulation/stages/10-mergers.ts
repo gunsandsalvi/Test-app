@@ -35,6 +35,7 @@ import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { assumedDebtTrancheId, acquiredTrancheId, equityInstrumentId } from '../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../domain/ids';
 import { spinOffEntityId } from '../../../domain/entity-keys';
+import { asTicker } from '../../../domain/ids';
 
 /**
  * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
@@ -123,8 +124,9 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     const share = Math.max(0.05, Math.min(0.9, line.revenueShare ?? 0));
 
     const tickers = new Set(ctx.updatedCompanies.map((c) => c.ticker));
-    let ticker = `${parent.ticker}SP`;
-    for (let n = 2; tickers.has(ticker); n++) ticker = `${parent.ticker}SP${n}`;
+    // §3.13-BOOK slice (c2c): a spin-off's ticker is minted here, from its parent's.
+    let ticker = asTicker(`${parent.ticker}SP`);
+    for (let n = 2; tickers.has(ticker); n++) ticker = asTicker(`${parent.ticker}SP${n}`);
     const spinMcapLocal = Math.max(1, marketCapOf(parent) * share);
     // One spin-co share per parent share — the classic ratio, so a holder's fraction of the
     // parent IS its fraction of the spin-co and the mint below is one multiplication.

@@ -82,6 +82,8 @@ import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
 import { distributeMoneyFundIncome } from './stages/money-market-fund';
 import { REGION_IDS } from '../../domain/geography';
 import { equityIssuerId } from '../../domain/instrument-keys';
+import type { Ticker } from '../../domain/ids';
+import { asTicker } from '../../domain/ids';
 
 export { computeOccupationDemand } from './stages/shared-helpers';
 
@@ -186,8 +188,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     } finally {
       if (trace) { trace.end(); ctx = baseCtx; }
       if (process.env.ALIAS_TRACE === '1' && stage === '01-macro-feedback') {
-        const scan = (label: string, list: { ticker: string; id: string; debtTranches?: unknown }[]): void => {
-          const seen = new Map<object, { ticker: string; id: string }>();
+        const scan = (label: string, list: { ticker: Ticker; id: string; debtTranches?: unknown }[]): void => {
+          const seen = new Map<object, { ticker: Ticker; id: string }>();
           let pairs = 0; let cloneFam = 0; const ex: string[] = [];
           for (const c of list) {
             if (!c.debtTranches) continue;
@@ -514,7 +516,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         const byRegion = (m: Map<string, number>): Record<string, number> => {
           const out: Record<string, number> = {};
           m.forEach((v, ticker) => {
-            const r = regionOfBank.get(ticker);
+            const r = regionOfBank.get(asTicker(ticker));
             if (r) out[r] = (out[r] ?? 0) + v; else unmappedLocal += v;
           });
           return out;

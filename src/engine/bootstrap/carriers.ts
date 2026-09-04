@@ -37,6 +37,7 @@ import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../equ
 import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financing';
 import { generateUniqueTicker, generateUniqueName } from './firms';
 import { carrierEntityId } from '../../domain/entity-keys';
+import type { Ticker } from '../../domain/ids';
 
 /**
  * How many carrier firms each region gets. Shipping is a concentrated industry everywhere — a
@@ -155,7 +156,7 @@ export function generateCarriers(
   regions: Record<RegionId, Region>,
   unitMassTonnes: Record<string, number>,
   fxToUsd: FxToUsd,
-  existingTickers: Set<string>,
+  existingTickers: Set<Ticker>,
   existingNames: Set<string>
 ): Company[] {
   const { tonnesByLane, bookings } = seedFreightDemand(regions, unitMassTonnes, fxToUsd);
@@ -224,7 +225,7 @@ function buildCarrierCompany(
   unitMassTonnes: Record<string, number>,
   clearedWeeklyRevenueLocal: number,
   clearedWeeklyTonnesCarried: number,
-  existingTickers: Set<string>,
+  existingTickers: Set<Ticker>,
   existingNames: Set<string>
 ): Company {
   const ticker = generateUniqueTicker(existingTickers);

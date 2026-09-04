@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { overPledgedByBond, isFullyBacked, pledgedFaceByBond, PLEDGE_ROUNDING_TOLERANCE_LOCAL }
   from '../src/domain/collateral';
-import { asInstrumentId } from '../src/domain/ids';
+import { asInstrumentId, asTicker } from '../src/domain/ids';
 
 /** §3.13-BOOK slice (a): a fixture is where a literal legitimately BECOMES an instrument id. */
 const id = asInstrumentId;
@@ -42,9 +42,9 @@ test('holding more than is pledged is never a violation', () => {
 
 test('pledges sum across every contract a borrower has open', () => {
   const book = [
-    { borrowerTicker: 'XIVF', collateral: [{ bondId: id('USA-GOV-B13-4'), faceLocal: 100 }] },
-    { borrowerTicker: 'XIVF', collateral: [{ bondId: id('USA-GOV-B13-4'), faceLocal: 250 }] },
-    { borrowerTicker: 'OTHR', collateral: [{ bondId: id('USA-GOV-B13-4'), faceLocal: 999 }] },
+    { borrowerTicker: asTicker('XIVF'), collateral: [{ bondId: id('USA-GOV-B13-4'), faceLocal: 100 }] },
+    { borrowerTicker: asTicker('XIVF'), collateral: [{ bondId: id('USA-GOV-B13-4'), faceLocal: 250 }] },
+    { borrowerTicker: asTicker('OTHR'), collateral: [{ bondId: id('USA-GOV-B13-4'), faceLocal: 999 }] },
   ];
-  assert.equal(pledgedFaceByBond(book, 'XIVF').get(id('USA-GOV-B13-4')), 350);
+  assert.equal(pledgedFaceByBond(book, asTicker('XIVF')).get(id('USA-GOV-B13-4')), 350);
 });

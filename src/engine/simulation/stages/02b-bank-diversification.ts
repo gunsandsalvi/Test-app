@@ -48,6 +48,7 @@ import { materializeGovLadder } from '../../../engine2/tranches';
 import { sovereignTenorResolver } from '../../../domain/government';
 import { overdraftFacilityTrancheId } from '../../../domain/instrument-keys';
 import { banksOf } from '../../../domain/company';
+import type { Ticker } from '../../../domain/ids';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBook: Record<string, number> = {};
@@ -192,7 +193,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // catches share drift and any balance moved outside instructions, with the reserve leg).
 
     // The week's real household-credit flows, per bank, for the region roll-up below.
-    const householdFlowsByBank = new Map<string, {
+    const householdFlowsByBank = new Map<Ticker, {
       interestLocal: number; debtServicePrincipalLocal: number; principalLocal: number;
       mortgageOriginationLocal: number; mortgageDischargeLocal: number; mortgageRateQuotedAnnual: number; turnoverRateAnnual: number; mortgageBookLocal: number;
       consumerCreditOriginationLocal: number;
@@ -203,7 +204,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     // What each bank owes and is owed on contracts that come due this week.
     const dueThisWeek = maturingAt(reg.repoBook ?? [], ctx.nextWeek);
-    const maturingRepo = (ticker: string) => {
+    const maturingRepo = (ticker: Ticker) => {
       let borrowPrincipalLocal = 0, borrowInterestLocal = 0, lendPrincipalLocal = 0, lendInterestLocal = 0;
       dueThisWeek.forEach((c) => {
         const interestLocal = repoInterestToMaturityLocal(c);
@@ -417,7 +418,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // lend, and the SRF sits in the book as the posted-rate seat of last resort — so there is
     // no separate "facility draw" step to run afterwards, and the region's overnight rate is
     // whatever this session cleared.
-    const sheetByTicker = new Map<string, BankingSector>(newSheets.map(({ bank, sheet }) => [bank.ticker, sheet]));
+    const sheetByTicker = new Map<Ticker, BankingSector>(newSheets.map(({ bank, sheet }) => [bank.ticker, sheet]));
     const session = runRegionalRepoSession(regionId, reg, banks, sheetByTicker, ctx);
     reg.repoRateAnnual = Number(session.repoRateAnnual.toFixed(6));
     // GUARD: what the session had to fund and what it actually lent, so the harness can tell a

@@ -29,6 +29,7 @@ import { wire, AssetKind } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { LADDER_FACE_DUST_LOCAL } from '../../domain/stated';
 import { defect } from '../../domain/defect';
+import type { Ticker, EntityId } from '../../domain/ids';
 
 /**
  * §3.13-SOV — WHO OWES THE PAPER, AND WHAT KIND OF PARTY THEY ARE.
@@ -43,7 +44,9 @@ import { defect } from '../../domain/defect';
  * COMPANY. What it buys is that the next commit can seed the sovereign ladder into this store
  * without the wire naming a company that does not exist.
  */
-export interface TrancheIssuer { id: string; ticker: string; region: RegionId; kind?: 'COMPANY' | 'GOVERNMENT' }
+/** §3.13-BOOK slice (c2c): a firm issues under its ticker; the treasury's `governmentIssuer`
+ *  puts its ENTITY id in both fields, which is what `GOV_<region>` being a party means. */
+export interface TrancheIssuer { id: EntityId; ticker: Ticker; region: RegionId; kind?: 'COMPANY' | 'GOVERNMENT' }
 
 const issuerParty = (i: TrancheIssuer): PartyRef =>
   i.kind === 'GOVERNMENT' ? { kind: 'GOVERNMENT', region: i.region } : { kind: 'COMPANY', ticker: i.ticker };
@@ -128,7 +131,7 @@ export function rebuildLadder(v2: V2World, issuer: TrancheIssuer, ladder: DebtTr
 }
 
 /** A resolved bank's facilities on this firm's ladder move to the assuming bank, one wire each. */
-export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromTicker: string, toTicker: string, reason: string): number {
+export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromTicker: Ticker, toTicker: Ticker, reason: string): number {
   const S = mutableTranches(v2);
   const fromRef = tickerRefOf(v2, fromTicker);
   if (fromRef < 0) return 0;

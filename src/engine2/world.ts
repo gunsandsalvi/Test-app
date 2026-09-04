@@ -21,8 +21,9 @@ import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
 import { newPriceStore, ReadonlyPriceStore } from './prices';
 import { CurrencyCode, CURRENCY_CODES } from '../domain/geography';
 import { FxTable, PARITY_FX } from '../domain/currency';
-import { asInstrumentId, type InstrumentId, asEntityId, type EntityId } from '../domain/ids';
+import { asInstrumentId, type InstrumentId, asEntityId, type EntityId, asTicker } from '../domain/ids';
 import { newRefColumn, NO_REF, type RefColumn, type InstrRef, type EntityRef, type RegionRef, type TypeRef, type TickerRef, type AccountRef, type PartyKeyRef } from './refs';
+import type { Ticker } from '../domain/ids';
 
 export interface V2World {
   /** Company id -> table row. Rows are addressing only — order carries no economics. */
@@ -262,7 +263,7 @@ export const internRegion = (v2: V2World, id: string): RegionRef => intern(v2.re
 /** Intern an instrument KIND tag. */
 export const internType = (v2: V2World, tag: string): TypeRef => intern(v2.refs.types, tag) as TypeRef;
 /** Intern a company ticker — its party address, not its id. */
-export const internTicker = (v2: V2World, ticker: string): TickerRef => intern(v2.refs.tickers, ticker) as TickerRef;
+export const internTicker = (v2: V2World, ticker: Ticker): TickerRef => intern(v2.refs.tickers, ticker) as TickerRef;
 /** Intern an account key (`accounts.ts:accountKey` — a party and a currency). */
 export const internAccount = (v2: V2World, key: string): AccountRef => intern(v2.refs.accountKeys, key) as AccountRef;
 /** Intern a party key (`party.ts:partyKey` — the ledger's address, not the entity id). */
@@ -277,7 +278,7 @@ export const instrumentRefOf = (v2: V2World, id: InstrumentId): InstrRef => look
 export const entityRefOf = (v2: V2World, id: string): EntityRef => look(v2.refs.entities, id) as EntityRef;
 export const regionRefOf = (v2: V2World, id: string): RegionRef => look(v2.refs.regions, id) as RegionRef;
 export const typeRefOf = (v2: V2World, tag: string): TypeRef => look(v2.refs.types, tag) as TypeRef;
-export const tickerRefOf = (v2: V2World, ticker: string): TickerRef => look(v2.refs.tickers, ticker) as TickerRef;
+export const tickerRefOf = (v2: V2World, ticker: Ticker): TickerRef => look(v2.refs.tickers, ticker) as TickerRef;
 export const accountRefOf = (v2: V2World, key: string): AccountRef => look(v2.refs.accountKeys, key) as AccountRef;
 export const partyKeyRefOf = (v2: V2World, key: string): PartyKeyRef => look(v2.refs.partyKeys, key) as PartyKeyRef;
 
@@ -290,7 +291,9 @@ export const instrumentOf = (v2: V2World, ref: InstrRef): InstrumentId => asInst
 export const entityOf = (v2: V2World, ref: EntityRef): EntityId => asEntityId(v2.refs.entities.strings[ref]);
 export const regionOf = (v2: V2World, ref: RegionRef): string => v2.refs.regions.strings[ref];
 export const typeOf = (v2: V2World, ref: TypeRef): string => v2.refs.types.strings[ref];
-export const tickerOf = (v2: V2World, ref: TickerRef): string => v2.refs.tickers.strings[ref];
+/** §3.13-BOOK slice (c2c): the TICKER door returns the brand, as the instrument and entity doors
+ *  do. `internTicker` is its only writer, so the table holds tickers by construction. */
+export const tickerOf = (v2: V2World, ref: TickerRef): Ticker => asTicker(v2.refs.tickers.strings[ref]);
 export const partyKeyOf = (v2: V2World, ref: PartyKeyRef): string => v2.refs.partyKeys.strings[ref];
 export const accountKeyOf = (v2: V2World, ref: AccountRef): string => v2.refs.accountKeys.strings[ref];
 

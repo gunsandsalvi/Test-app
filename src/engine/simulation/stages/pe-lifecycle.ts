@@ -44,6 +44,7 @@ import { issueHolding } from '../../ledger/holdings-ledger';
 import { bumpRegister } from './register-index';
 import { equityInstrumentId, birthFacilityTrancheId } from '../../../domain/instrument-keys';
 import type { EntityId } from '../../../domain/ids';
+import type { Ticker } from '../../../domain/ids';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -819,7 +820,7 @@ export function runFirmBirthsForRegion(
   ctx: WeeklyStepContext,
   nextWeek: number,
   generate: (regionId: RegionId, seeds: import('../../bootstrap/private-firms').PrivateFirmSeed[],
-             policyRate: number, tickers: Set<string>, names: Set<string>) => Company[]
+             policyRate: number, tickers: Set<Ticker>, names: Set<string>) => Company[]
 ): Company[] {
   // Quarterly, like every other structural event in this simulation.
   if (nextWeek % 13 !== 0) return [];

@@ -4,7 +4,7 @@
  *  output inventories it holds. No parallel firm type anywhere (§7.33). */
 
 import { riskAversionOf } from './preferences';
-import { InstrumentId, type EntityId } from './ids';
+import { InstrumentId, type EntityId, type Ticker } from './ids';
 import { RegionId } from './geography';
 import { defect } from './defect';
 import { Industry } from './industry';
@@ -106,7 +106,7 @@ export interface DebtTranche {
    */
   isBankFacility?: boolean;
   /** G2: the named bank holding this facility (the issuer's house bank at origination). */
-  facilityBankTicker?: string;
+  facilityBankTicker?: Ticker;
   /**
    * What it costs to retire this tranche early — see `domain/call-protection.ts`. Stamped at
    * issuance from what the issue IS (floating paper gets a soft call, high yield a non-call
@@ -269,7 +269,14 @@ export interface Company {
    * so the brand is applied where the id is MINTED rather than cast at a read.
    */
   id: EntityId;
-  ticker: string;
+  /**
+   * §3.13-BOOK slice (c2c) — THE FIRM'S OTHER IDENTITY, branded. `PartyRef` keys COMPANY and the
+   * three BANK arms by this and INSTITUTION by `id`, which is the inconsistency `c-then` ends —
+   * and it could not be ended safely while both were `string`, because nothing could tell the
+   * compiler which of the two a given site meant. This is the third confusable space (the others
+   * being the entity id and the clearing participant id) and by far the largest.
+   */
+  ticker: Ticker;
   name: string;
   region: RegionId;
   sector: Sector;
@@ -283,7 +290,7 @@ export interface Company {
    * named parent (founderPct 0 keeps it out of the household private-business residual, OWN4).
    * Consolidation is a VIEW over this link, never a second set of books.
    */
-  parentTicker?: string;
+  parentTicker?: Ticker;
   /** §5-PROD — Wright's-law learning state: cumulative output, the unit-labour multiplier
    *  (heads needed = baseline heads ÷ multiplier), and this week's own annualized learning
    *  rate — the number the firm's labour demand nets out in place of the deleted uniform
@@ -408,7 +415,7 @@ export interface Company {
   lastOpportunisticOfferingWeek?: number;
   /** G2: the bank where this company's operating cash IS a deposit — one representation: the
    * company's S5 cash and the bank's corporate-deposit line are two views of the same money. */
-  homeBankTicker?: string;
+  homeBankTicker?: Ticker;
   // ---- HC Wave 2 lifecycle state. Each `pending*` field marks a deal whose FINANCING is in
   // the WS8 queue this week; settlement (or withdrawal) clears it — a deal whose market says
   // no simply does not happen. ----
@@ -445,7 +452,7 @@ export interface Company {
   // §4.C II.5 — ratingHistory lives on v2.ratingRing (codes; world.ts).
   isDefaulted: boolean;
   mergerAcquired?: boolean; // Set true when company is acquired in M&A (disjoint from isDefaulted)
-  acquiredByTicker?: string; // Ticker of acquiring company
+  acquiredByTicker?: Ticker; // Ticker of acquiring company
   recoveryRate: number;
   baselineRecoveryRate: number;
 

@@ -31,6 +31,8 @@ import { trustCompanyStore, checkCompanyStore, syncCompanyRow } from '../../../e
 import { backWorkerCount, dispatchBackA, collectBackA } from '../../../engine2/back-pool';
 import type { BackAShardOut } from '../../../engine2/back-worker';
 import type { EntityId } from '../../../domain/ids';
+import type { Ticker } from '../../../domain/ids';
+import { asTicker } from '../../../domain/ids';
 
 /** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
  *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
@@ -137,7 +139,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // that holds the goods recognises the revenue in the same week the firms holding costs are
   // charged. Doing it inside the per-firm loop would have booked a distributor's income out of
   // whichever firms happened to be processed before it.
-  const carryingCostByTicker = new Map<string, number>();
+  const carryingCostByTicker = new Map<Ticker, number>();
   prevActiveFirms.forEach(c => {
     let total = 0;
     Object.entries(c.outputInventoryBySubUnit || {}).forEach(([su, inv]) => {
@@ -174,12 +176,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     ));
   });
   /** Who leads this issuer's deal — re-asked every time, so the mandate can be lost. */
-  const leadBankFor = (comp: Company, sizeLocal: number): string => {
+  const leadBankFor = (comp: Company, sizeLocal: number): Ticker => {
     const alloc = leadAllocatorByRegion.get(comp.region);
-    if (!alloc) return comp.homeBankTicker ?? '';
+    if (!alloc) return comp.homeBankTicker ?? asTicker('');
     const ticker = chooseLeadBank(comp.id, alloc.candidatesFor(comp.id));
     if (ticker) alloc.award(ticker, sizeLocal);
-    return ticker || (comp.homeBankTicker ?? '');
+    return ticker || (comp.homeBankTicker ?? asTicker(''));
   };
   const enqueueOffering = (o: PrimaryOffering) => {
     ctx.primaryOfferingsWorking.push(o);
@@ -246,7 +248,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const updatedCompanies: Company[] = new Array(companyRows.length);
 
   interface CompanyShardAccumulators {
-    defaulted: string[];
+    defaulted: Ticker[];
     ratings: WeeklyStepContext['ratingChanges'];
     earnings: EarningsReport[];
     offerings: PrimaryOffering[];

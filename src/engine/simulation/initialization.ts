@@ -113,6 +113,8 @@ import { seedInstitutionTotalAssetsLocal } from '../../domain/institutions';
 import { equityInstrumentId, peFundInterestId, equityIssuerId } from '../../domain/instrument-keys';
 import type { InstrumentId } from '../../domain/ids';
 import { governmentIssuer, indexFundEntityId, moneyFundEntityId, peFundEntityId } from '../../domain/entity-keys';
+import type { Ticker } from '../../domain/ids';
+import { asTicker } from '../../domain/ids';
 
 /**
  * Build a world. The same seed always builds the same world and, stepped the same number of
@@ -403,7 +405,7 @@ function openSeededMirrors(state: GameState): void {
     // it wired exactly as any week is. There are no payments at the seed, so the pending money it
     // is netted against is zero.
     const regionByTicker = new Map(state.companies.map((c) => [c.ticker, c.region]));
-    state.lastWires = summarizeWires(j, { numeraire: 0, byCurrency: {} }, (t: string) => regionByTicker.get(t), reasonText, v2.fx);
+    state.lastWires = summarizeWires(j, { numeraire: 0, byCurrency: {} }, (t: Ticker) => regionByTicker.get(t), reasonText, v2.fx);
     (state as { nextWireId?: number }).nextWireId = j.base + j.n;
   } finally {
     setActiveWireJournal(undefined);
@@ -1258,7 +1260,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // §3.13c: the world opens at the seed's rates, so the very first payment across a border
   // converts at a real number rather than the parity the table opens at.
   publishFxRatesNow(seedV2, fxPairs);
-  const carrierTickers = new Set<string>(companies.map(c => c.ticker));
+  const carrierTickers = new Set<Ticker>(companies.map(c => c.ticker));
   const carrierNames = new Set<string>(companies.map(c => c.name));
   const carriers = generateCarriers(regions, seededUnitMassTonnes, seedFxToUsd, carrierTickers, carrierNames);
   companies.push(...carriers);
@@ -1380,8 +1382,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // G3b: the dealers the player trades with ARE the named banks' desks.
   const dealers = dealersFromBanks((b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.ticker), companies);
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities, undefined, seedV2, 1);
-  const recentIPOs: { ticker: string; name: string; category: string; week: number }[] = [];
-  const recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueLocal: number }[] = [];
+  const recentIPOs: { ticker: Ticker; name: string; category: string; week: number }[] = [];
+  const recentMergers: { acquirerTicker: Ticker; acquirerName: string; targetTicker: Ticker; targetName: string; week: number; dealValueLocal: number }[] = [];
 
   const startingCash = 25_000_000; // $25M USD Hedge Fund Starting Capital
   const portfolio: Portfolio = {
@@ -1462,7 +1464,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     institutionalEntities.push({
       id: moneyFundEntityId(regionId),
       name: `${regionId} Government Money Market Fund`,
-      ticker: `MMF1`,
+      ticker: asTicker('MMF1'),
       region: regionId,
       entityType: 'MONEY_MARKET_FUND',
       equityCapitalLocal: 0,
@@ -1500,7 +1502,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         institutionalEntities.push({
           id: indexFundEntityId(def.id),
           name: `${def.name} Index Fund`,
-          ticker: `${def.id.replace(/_/g, '').slice(0, 5)}X`,
+          ticker: asTicker(`${def.id.replace(/_/g, '').slice(0, 5)}X`),
           region: regionId,
           entityType: 'ETF',
           equityCapitalLocal: 0,
@@ -1540,7 +1542,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       institutionalEntities.push({
         id: fundId,
         name: `${regionId} Capital Partners ${['I', 'II'][fundIdx]}`,
-        ticker: `PEF${fundIdx + 1}`,
+        ticker: asTicker(`PEF${fundIdx + 1}`),
         region: regionId,
         entityType: 'PRIVATE_EQUITY',
         equityCapitalLocal: investedLocal,

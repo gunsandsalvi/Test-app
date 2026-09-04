@@ -31,6 +31,8 @@ import { LaneBooking, SOURCING_REGION_IDS } from './sourcing-intent';
 import { WeeklyStepContext } from './context';
 import { getFxToUsd } from './06-fx-and-trade';
 import { clearDoubleAuction, AuctionBid, AuctionOffer } from './double-auction';
+import type { Ticker } from '../../../domain/ids';
+import { asTicker } from '../../../domain/ids';
 
 /** The good a ship burns. Its cleared price per tonne IS the bunker price. */
 export const FUEL_SUBUNIT_ID = 'refined_products';
@@ -51,7 +53,8 @@ export interface FreightClearing {
   shippedShareByLaneSubUnit: Map<string, number>;
   /** Each carrier's share of a lane's cleared tonnage, so what actually ships can be paid to
    *  the operators that carried it: lane key -> ticker -> share. */
-  carrierShareByLane: Map<string, Map<string, number>>;
+  /** §3.13-BOOK slice (c2c): lane key → CARRIER TICKER → share of that lane's freight. */
+  carrierShareByLane: Map<string, Map<Ticker, number>>;
   /** Capacity offered and taken, for the diagnostics a freight market is judged on. */
   laneCapacityTonnes: Record<string, number>;
   laneBookedTonnes: Record<string, number>;
@@ -242,8 +245,8 @@ export function runFreightClearing(args: {
     // What each carrier carried, earned, and burned doing it.
     const distanceNm = laneDistanceNm(...(key.split('>') as [RegionId, RegionId]));
     if (cleared.clearedQuantity > 0) {
-      const shares = new Map<string, number>();
-      cleared.sales.forEach((fill, ticker) => shares.set(ticker, fill.quantity / cleared.clearedQuantity));
+      const shares = new Map<Ticker, number>();
+      cleared.sales.forEach((fill, ticker) => shares.set(asTicker(ticker), fill.quantity / cleared.clearedQuantity));
       result.carrierShareByLane.set(key, shares);
     }
     if (FREIGHT_TRACE) {

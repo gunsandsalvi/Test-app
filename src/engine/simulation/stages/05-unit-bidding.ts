@@ -56,6 +56,8 @@ import { weeklyWageBillLocal, getBaseAnnualWageLocal } from '../../bootstrap/lab
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { cashOf } from '../../ledger/accounts';
 import { type PartyKeyRef } from '../../../engine2/refs';
+import type { Ticker } from '../../../domain/ids';
+import { asTicker } from '../../../domain/ids';
 
 /** SCALE / DECLARED RELABEL: decimal rounding by arithmetic
  *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
@@ -298,7 +300,7 @@ interface RegionMarketIndex {
  * silently drop the foreign leg — the contract would survive and transfer nothing.
  */
 interface GlobalFirmLookup {
-  byTicker: Map<string, Company>;
+  byTicker: Map<Ticker, Company>;
   byId: Map<string, Company>;
   /** One probe for a key that may be a ticker OR an id (contracts store either).
    * Ids are inserted first and tickers after, so on any collision the ticker wins — exactly
@@ -331,7 +333,8 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
     if (!index) return;
     lookup.byTicker.set(c.ticker, c);
     lookup.byId.set(c.id, c);
-    if (!lookup.byTicker.has(c.id)) lookup.byKey.set(c.id, c);
+    // A firm whose ID collides with no ticker also answers to its id in the loose `byKey` map.
+    if (!lookup.byTicker.has(asTicker(c.id))) lookup.byKey.set(c.id, c);
     lookup.byKey.set(c.ticker, c);
     index.activeFirms.push(c);
     if ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0) > 0) index.capexBuyers.push(c);
@@ -377,7 +380,7 @@ interface SourcingContext {
   /** Per-week memoisation: the buyer's structural PD is deterministic within a week and the lot
    *  loop asked for it once per LOT — ~14k evaluations for ~2k distinct buyers. Same inputs,
    *  same answers, byte-identical world. (Invoice-region memoisation lives per sub-unit pass.) */
-  buyerAnnualPdByTicker: Map<string, number>;
+  buyerAnnualPdByTicker: Map<Ticker, number>;
 }
 
 /**
@@ -454,7 +457,7 @@ interface BookResult {
   purchasesByKey: Map<string, AuctionFill>;
   householdFillUnitsByRegion: Record<string, number>;
   governmentSpendUSDByRegion: Record<string, number>;
-  lotsByBuyer: Map<string, { sellerKey: string; sellerRegion: RegionId; units: number }[]>;
+  lotsByBuyer: Map<string, { sellerKey: Ticker; sellerRegion: RegionId; units: number }[]>;
   inMoneyBidKeys: Set<string>;
   inMoneyOfferKeys: Set<string>;
 }
@@ -514,7 +517,10 @@ function clearBook(
 
   cleared.lotsByBuyer.forEach((lots, buyerKey) => {
     result.lotsByBuyer.set(buyerKey, lots.map(l => ({
-      sellerKey: l.sellerKey,
+      // §3.13-BOOK slice (c2c): the double auction's keys are OPAQUE to it — it matches whatever
+      // strings the caller supplied. This caller supplied tickers, so this is where they become
+      // tickers again, and the auction stays a generic matcher rather than learning about firms.
+      sellerKey: asTicker(l.sellerKey),
       sellerRegion: offerRegionByKey.get(l.sellerKey) ?? (bidRegionByKey.get(buyerKey) as RegionId),
       units: l.quantity,
     })));
@@ -540,7 +546,7 @@ interface WeekResolution {
   updateOf: (comp: Company) => import('./context').CompanyWeekUpdate;
   /** Settlement pid for any seller key (company, segment, aggregate), per origin. */
   pidOfSeller: (key: string, origin: RegionId) => number;
-  pidOfCarrier: (ticker: string) => number;
+  pidOfCarrier: (ticker: Ticker) => number;
   hhPid: Map<RegionId, number>;
   govPid: Map<RegionId, number>;
 }
@@ -1910,7 +1916,7 @@ function runSubUnitMarkets(
   });
   // The lane's carriers with pid and region resolved ONCE — built lazily at the lane's first
   // paying lot, so pid interning keeps the old first-use order.
-  const laneCarrierCache = new Map<string, { share: number; ticker: string; pid: number; region: RegionId | undefined }[] | undefined>();
+  const laneCarrierCache = new Map<string, { share: number; ticker: Ticker; pid: number; region: RegionId | undefined }[] | undefined>();
   demandPlans.forEach(plan => {
     if (!plan.company || !plan.key) return;
     if (!purchasedKeys.has(plan.key)) return;
@@ -2029,7 +2035,7 @@ function runSubUnitMarkets(
             consignedUnits += units;
             deliverGoods(sellerParty, { kind: 'COMPANY', ticker: carrierTicker }, subUnitId, units, perUnit, 'goods sold: consigned to the carrier');
             ctx.shipmentsDispatched.push({
-              buyerTicker: comp.ticker, sellerKey: l.sellerKey, subUnitId,
+              buyerTicker: comp.ticker, sellerKey: asTicker(l.sellerKey), subUnitId,
               units, landedCostPerUnit: perUnit, arrivalWeek, carrierTicker, carrierRegion: carrierRegion ?? origin,
             });
           });
@@ -2037,7 +2043,7 @@ function runSubUnitMarkets(
           if (poolUnits > 1e-9) {
             deliverGoods(sellerParty, { kind: 'SEGMENT', region: origin, industry: 'AutomotiveTransport' }, subUnitId, poolUnits, perUnit, 'goods sold: consigned to the carrier');
             ctx.shipmentsDispatched.push({
-              buyerTicker: comp.ticker, sellerKey: l.sellerKey, subUnitId,
+              buyerTicker: comp.ticker, sellerKey: asTicker(l.sellerKey), subUnitId,
               units: poolUnits, landedCostPerUnit: perUnit, arrivalWeek, carrierRegion: origin,
             });
           }
@@ -2164,7 +2170,7 @@ function runSubUnitMarkets(
   // The mirror on the sellers: revenue is recognised at delivery in full; what is deferred is the
   // CASH, which stage 08's ledger backs out until the invoice settles.
   deferredSaleKeyed.forEach((amount, sellerKey) => {
-    const seller = lookup.byTicker.get(sellerKey);
+    const seller = lookup.byTicker.get(asTicker(sellerKey));
     if (!seller || !(amount > 0)) return;
     const sellerUpdate = wk.updateOf(seller);
     sellerUpdate.tradeReceivableBookedLocal = (sellerUpdate.tradeReceivableBookedLocal ?? 0) + amount;
@@ -2241,7 +2247,7 @@ function runSubUnitMarkets(
 
   // The sellers' revenue, read off what they were paid rather than off the auction's own book.
   paidToSellerByKey.forEach((usd, sellerKey) => {
-    const seller = lookup.byTicker.get(sellerKey);
+    const seller = lookup.byTicker.get(asTicker(sellerKey));
     if (!seller || !(usd > 0)) return;
     const up = wk.updateOf(seller);
     up.salesLocal = (up.salesLocal ?? 0) + usd;
@@ -2351,7 +2357,7 @@ function runSubUnitMarkets(
 /** Which region a settlement key buys for. Company tickers are globally unique; the aggregate
  *  and private-segment keys carry their region in the key itself. */
 function buyerRegionOfKey(key: string, lookup: GlobalFirmLookup): RegionId | undefined {
-  const company = lookup.byTicker.get(key);
+  const company = lookup.byTicker.get(asTicker(key));
   if (company) return company.region as RegionId;
   const parts = key.split(':');
   if (parts.length >= 2) {
@@ -2511,7 +2517,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   const pidByComp = new Map<Company, number>();
   const updByComp = new Map<Company, import('./context').CompanyWeekUpdate>();
   const sellerPidByKey = new Map<string, number>();
-  const carrierPidByTicker = new Map<string, number>();
+  const carrierPidByTicker = new Map<Ticker, number>();
   const hhPid = new Map<RegionId, number>();
   const govPid = new Map<RegionId, number>();
   MARKET_REGION_IDS.forEach((r) => {

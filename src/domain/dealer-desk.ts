@@ -45,7 +45,8 @@
  * week's take shrinking the base for the next, converging on the entire balance sheet — a
  * commitment has to be measured against the whole sheet or it is not a commitment.
  */
-import type { InstrumentId } from './ids';
+import type { InstrumentId, Ticker } from './ids';
+import { asTicker } from './ids';
 
 export const DEALER_DESK_SHARE_OF_BALANCE_SHEET = 0.25;
 
@@ -102,14 +103,14 @@ const DESK_SUFFIX = '::DESK';
 
 /** The clearing-participant id of a bank's desk — distinct from the bank's own investment book,
  *  which participates under the plain ticker (07c) and is a genuinely different business. */
-export function dealerDeskParticipantId(ticker: string): string {
+export function dealerDeskParticipantId(ticker: Ticker): string {
   return `${ticker}${DESK_SUFFIX}`;
 }
 
 /** The owning bank's ticker, or undefined if this participant is not a desk. */
-export function dealerDeskTicker(participantId: string): string | undefined {
+export function dealerDeskTicker(participantId: string): Ticker | undefined {
   return participantId.endsWith(DESK_SUFFIX)
-    ? participantId.slice(0, -DESK_SUFFIX.length)
+    ? asTicker(participantId.slice(0, -DESK_SUFFIX.length))
     : undefined;
 }
 

@@ -17,6 +17,7 @@ import { GameState } from '../../../types';
 import { ensureV2 } from '../../../engine2/world';
 import { forEachContract } from '../../../engine2/contracts';
 import { WeeklyStepContext } from './context';
+import type { Ticker } from '../../../domain/ids';
 
 /** A counterparty share above this is a real dependency worth flagging. */
 const CONCENTRATION_FLAG_THRESHOLD = 0.40;
@@ -60,7 +61,7 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
 
   const flagsFor = (
     index: Map<string, PartyExposure>,
-    ticker: string,
+    ticker: Ticker,
     id: string,
     describe: (counterpartyName: string, sharePct: number) => string,
     out: string[]
@@ -83,7 +84,7 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
   // how much of a firm's revenue one customer is and how much of its inputs one supplier is. A
   // bank's large-exposure limit is a different concentration over a different book and is
   // measured where that book lives (07h); neither number stands in for the other.
-  const topShare = (index: Map<string, PartyExposure>, ticker: string, id: string): number => {
+  const topShare = (index: Map<string, PartyExposure>, ticker: Ticker, id: string): number => {
     let top = 0;
     [index.get(ticker), index.get(id)].forEach(entry => {
       if (!entry || !(entry.totalLocal > 0)) return;

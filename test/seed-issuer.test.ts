@@ -20,16 +20,16 @@ import { ensureV2 } from '../src/engine2/world';
 import { issuerIdOf, syncLadderRows } from '../src/engine2/tranches';
 import { issuerOfHoldingRow } from '../src/engine/ledger/holdings-ledger';
 import type { ItemizedHolding } from '../src/domain/banking';
-import { asEntityId, asInstrumentId } from '../src/domain/ids';
+import { asEntityId, asInstrumentId, asTicker } from '../src/domain/ids';
 
 test('a tranche id and its issuer company id are never the same string', () => {
   // The two grammars that were being compared. If these ever coincide the defect hides again.
-  assert.notEqual(corporateTrancheId('ACME', 1) as string, 'USA_ACME');
+  assert.notEqual(corporateTrancheId(asTicker('ACME'), 1) as string, 'USA_ACME');
 });
 
 test('the issuer of a corporate tranche is its company, not the tranche itself', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
-  const id = corporateTrancheId('ACME', 1);
+  const id = corporateTrancheId(asTicker('ACME'), 1);
   // The mirror rather than the ledger: `issueTranche` wires, and a wire needs a journal. What is
   // under test is the issuer READ, which reads the rows either way puts there.
   syncLadderRows(v2, asEntityId('USA_ACME'), [{
@@ -51,12 +51,12 @@ test('an instrument that is not a tranche is its own issuer', () => {
 
 test('a seeded CORPORATE BOND row is issued by its company, not by a party that does not exist', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
-  const id = corporateTrancheId('ACME', 1);
+  const id = corporateTrancheId(asTicker('ACME'), 1);
   syncLadderRows(v2, asEntityId('USA_ACME'), [{
     id, principalLocal: 1_000_000, rateType: 'FIXED', couponRate: 0.05,
     originationWeek: 0, maturityWeek: 260, seniority: 'SENIOR',
   }]);
-  const tickerById = new Map([['USA_ACME', 'ACME']]);
+  const tickerById = new Map([[asEntityId('USA_ACME'), asTicker('ACME')]]);
   const row: ItemizedHolding = {
     instrumentId: id, instrumentType: 'CORP_BOND', issuerRegion: 'USA',
     quantityOrNotionalLocal: 1_000, units: 1_000,
@@ -67,7 +67,7 @@ test('a seeded CORPORATE BOND row is issued by its company, not by a party that 
 
 test('a seeded FUND SHARE row is still issued by the fund itself', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
-  const tickerById = new Map([['USA_ACME', 'ACME']]);
+  const tickerById = new Map([[asEntityId('USA_ACME'), asTicker('ACME')]]);
   const row: ItemizedHolding = {
     instrumentId: asInstrumentId('USA_ETF_1'), instrumentType: 'ETF_SHARE', issuerRegion: 'USA',
     quantityOrNotionalLocal: 1_000, units: 1_000,

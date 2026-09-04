@@ -42,6 +42,7 @@ import { issuerSpreadAtOnCurve } from '../../../credit-price';
 import { cdsInstrumentId } from '../../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../../domain/ids';
 import { asEntityId } from '../../../../domain/ids';
+import { asTicker } from '../../../../domain/ids';
 function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
   const v2cds = ensureV2(state);
   const companyById = new Map<string, Company>(
@@ -241,7 +242,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
           // §3.13-BOOK (c2b): a participant id is its own space. A `CDSDESK-` seat is a bank's
           // desk; anything else in this book is an institution bidding under its entity id.
           const seller: DerivativeParty = participantId.startsWith('CDSDESK-')
-            ? { kind: 'BANK', ticker: participantId.slice('CDSDESK-'.length) }
+            ? { kind: 'BANK', ticker: asTicker(participantId.slice('CDSDESK-'.length)) }
             : { kind: 'INSTITUTION', id: asEntityId(participantId) };
           struck.push({
             id: `${regionId}-CDS-${issuer.id}-${week}-${seq++}`,

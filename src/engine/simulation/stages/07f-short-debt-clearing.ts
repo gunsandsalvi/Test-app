@@ -32,7 +32,7 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
-import { asInstrumentId, InstrumentId } from '../../../domain/ids';
+import { asInstrumentId, InstrumentId, asTicker } from '../../../domain/ids';
 
 import { ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf, trancheRowOf, trancheScheduleOf, trancheIdOf } from '../../../engine2/tranches';
@@ -76,6 +76,7 @@ import { governmentIssuer } from '../../../domain/entity-keys';
 import { forEachSovereignPosition } from '../../sovereign-register';
 import { bankParticipantId, treasuryParticipantId } from '../../../domain/participant-keys';
 import type { EntityId } from '../../../domain/ids';
+import type { Ticker } from '../../../domain/ids';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
@@ -295,7 +296,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             const treasuryBidders = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
         (c) => c.region === regionId && isActiveCompany(c) && !c.isBankEntity && !c.isInstitutionalEntity
       );
-      const treasuryByTicker = new Map<string, typeof treasuryBidders[number]>();
+      const treasuryByTicker = new Map<Ticker, typeof treasuryBidders[number]>();
       treasuryBidders.forEach((comp) => {
         const heldByBond = new Map<string, number>();
         (comp.treasuryHoldings || []).forEach((h) => {
@@ -799,7 +800,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // A DESK IS A HOLDER, and its paper matures like anyone else's. Scaling only the
       // institutions left the desks carrying a claim on CP that had already been repaid, and the
       // ledger check caught it immediately: holders at 117% of the EUR stock by week ten.
-      const deskCpRows = new Map<string, { instrumentId: InstrumentId; inventoryLocal: number; units?: number }[]>();
+      const deskCpRows = new Map<Ticker, { instrumentId: InstrumentId; inventoryLocal: number; units?: number }[]>();
       cpBanks.forEach((bank) => {
         const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
         if (sheet?.dealerDeskInventory?.[CP_BOOK]) deskCpRows.set(bank.ticker, sheet.dealerDeskInventory[CP_BOOK]);
@@ -1195,7 +1196,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             facilityBankTicker: iss.comp.homeBankTicker,
           } as DebtTranche, 'revolver draw: commercial paper roll failed');
           pay(ctx, {
-            payer: { kind: 'BANK_CREDIT', ticker: iss.comp.homeBankTicker ?? '' },
+            payer: { kind: 'BANK_CREDIT', ticker: iss.comp.homeBankTicker ?? asTicker('') },
             payee: { kind: 'COMPANY', ticker: iss.comp.ticker },
             amount: revolverLocal,
             currency: currencyOf(iss.comp.region),

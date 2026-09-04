@@ -20,6 +20,8 @@ import {
 import { isActiveCompany, isPubliclyListed, CreditRating } from '../../../domain/company';
 import { DiagnosticsLog, EarningsReport } from '../../../domain/events';
 import type { InstrumentId } from '../../../domain/ids';
+import type { Ticker } from '../../../domain/ids';
+import type { EntityId } from '../../../domain/ids';
 export type { EarningsReport };
 
 /**
@@ -119,15 +121,15 @@ export interface WeeklyStepContext {
   /** Active PRIVATE companies (HC Wave 1) — consumed only by stages that have explicitly taken
    * the handover; see the note on prevActiveFirms below. */
   prevActivePrivateFirms: Company[];
-  recentIPOs: { ticker: string; name: string; category: string; week: number }[];
-  recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueLocal: number }[];
+  recentIPOs: { ticker: Ticker; name: string; category: string; week: number }[];
+  recentMergers: { acquirerTicker: Ticker; acquirerName: string; targetTicker: Ticker; targetName: string; week: number; dealValueLocal: number }[];
   diagnosticLogs: DiagnosticsLog[];
   newsItems: NewsItem[];
   rateChanges: { region: RegionId; deltaBps: number }[];
-  ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[];
+  ratingChanges: { ticker: Ticker; from: CreditRating; to: CreditRating; name: string }[];
   /** What each firm reported this week — written by stage 08's kernel, read by the news stage. */
   earningsReportedThisTurn: EarningsReport[];
-  defaultedTickers: string[];
+  defaultedTickers: Ticker[];
   /** §6 damper diagnostic: instrument ids whose print was held away from its solve this week,
    * accumulated across every clearing stage; lands on GameState.lastWeekDamperBoundIds so the
    * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
@@ -138,7 +140,8 @@ export interface WeeklyStepContext {
    * a quiet pass (§7.102's shape). Asserted empty by the harness. */
   deadCeilingBooks: string[];
   /** SETL3/4 — issuer id → ticker, so the register's payments name a real payer. */
-  issuerTickerById: Map<string, string>;
+  /** §3.13-BOOK slice (c2c): entity id → ticker, which is the crossing `c-then` collapses. */
+  issuerTickerById: Map<EntityId, Ticker>;
   /** CASH/SETL1 — the week's payment instructions. Stages record; the settlement stage executes
    * (see stages/settlement.ts). A stage must not move money any other way. */
   /** SCALE phase 2: the register as typed-array columns, invalidated with the index above. */
@@ -299,7 +302,8 @@ export interface WeeklyStepContext {
   channelMarginRevenue: Record<string, number>;
   /** IND16 — who runs the channel in each region, and each firm's share of it, by the size of its
    * own distribution line. Built once a week; the settlement legs read it per lot. */
-  channelShareByRegion: Record<string, Map<string, number>>;
+  /** §3.13-BOOK slice (c2c): region → DISTRIBUTOR TICKER → its share of that channel. */
+  channelShareByRegion: Record<string, Map<Ticker, number>>;
   carrierTonneNm: Record<string, number>;
   /** XB3a-4 — units that completed transit this week. */
   goodsArrivedUnits: number;
@@ -504,7 +508,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
  */
 export function updateBankSheet(
   ctx: WeeklyStepContext,
-  ticker: string,
+  ticker: Ticker,
   sheet: import('../../../domain/banking').BankingSector
 ): void {
   if (ctx.bankSheetChannelClosed) {

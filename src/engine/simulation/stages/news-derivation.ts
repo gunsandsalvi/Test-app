@@ -25,6 +25,7 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import type { Ticker } from '../../../domain/ids';
 
 type Ref = NonNullable<NewsItem['refs']>[number];
 
@@ -50,7 +51,7 @@ function partyLabel(p: PartyRef): string {
     default: return p.kind.toLowerCase().replace(/_/g, ' ');
   }
 }
-function partyRef(p: PartyRef, byTicker: Map<string, Company>): Ref | undefined {
+function partyRef(p: PartyRef, byTicker: Map<Ticker, Company>): Ref | undefined {
   if (p.kind === 'COMPANY' || p.kind === 'BANK' || p.kind === 'BANK_CREDIT' || p.kind === 'BANK_SECURITIES') {
     const c = byTicker.get(p.ticker);
     return c ? { type: 'company', id: c.id } : undefined;
@@ -61,7 +62,7 @@ function partyRef(p: PartyRef, byTicker: Map<string, Company>): Ref | undefined 
 }
 
 /** The week's largest outflows of one payer, by reason, off the journal — the WHY a death cites. */
-function outflowsOf(ctx: WeeklyStepContext, party: PartyRef, byTicker: Map<string, Company>, top = 3): { text: string; refs: Ref[] } {
+function outflowsOf(ctx: WeeklyStepContext, party: PartyRef, byTicker: Map<Ticker, Company>, top = 3): { text: string; refs: Ref[] } {
   const j = ctx.paymentJournal;
   const id = partyId(party);
   const byReason = new Map<string, { usd: number; payee: number }>();
@@ -89,9 +90,9 @@ function company(c: Company): Ref { return { type: 'company', id: c.id }; }
 export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext): void {
   const week = ctx.nextWeek;
   const out: NewsItem[] = [];
-  const byTicker = new Map<string, Company>();
+  const byTicker = new Map<Ticker, Company>();
   ctx.updatedCompanies.forEach((c) => byTicker.set(c.ticker, c));
-  const prevByTicker = new Map<string, Company>();
+  const prevByTicker = new Map<Ticker, Company>();
   state.companies.forEach((c) => prevByTicker.set(c.ticker, c));
   const bankRef = (c: Company): Ref | undefined => {
     const b = c.homeBankTicker ? byTicker.get(c.homeBankTicker) : undefined;

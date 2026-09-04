@@ -28,6 +28,7 @@ import { centralBankAssetsLocal, centralBankLiabilitiesLocal } from '../../../do
 import { bankReservesOf, treasuryAccountOf, waysAndMeansOf, stateDepositLines } from '../../ledger/accounts';
 import { depositsOf } from '../../../domain/banking';
 import { banksOf } from '../../../domain/company';
+import type { Ticker } from '../../../domain/ids';
 
 /** Below this the move is float dust on a sum of billions, not a revaluation (rule 7). */
 const MIN_MARK = 1e-6;
@@ -37,7 +38,7 @@ const MIN_MARK = 1e-6;
  * and the only liability is what its depositors hold there. Every other line on the sheet is a
  * stored local-money number and does not move with a rate.
  */
-const bankNetOf = (state: GameState, ticker: string): number => {
+const bankNetOf = (state: GameState, ticker: Ticker): number => {
   const sheet = state.companies.find((c) => c.ticker === ticker)?.bankBalanceSheet;
   if (!sheet) return 0;
   return bankReservesOf(state.v2!, ticker) - depositsOf(sheet, stateDepositLines(state, ticker));

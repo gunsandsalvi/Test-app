@@ -15,6 +15,7 @@ import { AuditFinding, B, M, sum } from './types';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { ensureV2, currencyOfId } from '../../engine2/world';
 import { facilityBookOf } from '../../engine2/tranches';
+import type { Ticker } from '../../domain/ids';
 
 /** M1 — the central bank's balance sheet closes EXACTLY: assets = reserves + treasury account + currency
  *  + the households' money in transit to their banks (settled this week, on a bank's book next — the
@@ -89,7 +90,7 @@ function m3(state: GameState, week: number): AuditFinding[] {
   // A house bank that has no sheet (resolved, merged away) is no bank —
   // the link is re-keyed at both events, and this is the measurement that it was.
   const liveBanks = new Set(banksOf(state.companies).map((b) => b.ticker));
-  const banked = (t: string | undefined) => !!t && liveBanks.has(t);
+  const banked = (t: Ticker | undefined) => !!t && liveBanks.has(t);
   const orphanCorp = sum(state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c) && !banked(c.homeBankTicker)), (c) => cashOf(v2, c));
   const orphanInst = sum(state.institutionalEntities.filter((e) => !e.isDefaulted && !banked(e.homeBankTicker)), (e) => entityCashOf(v2, e));
   if (Math.abs(orphanCorp) + Math.abs(orphanInst) > 1e6) out.push({ family: 'M', check: 'M3 balances with no bank', week, usd: orphanCorp + orphanInst, message: `${B(orphanCorp)} of firm cash and ${B(orphanInst)} of fund cash sit with no live house bank` });

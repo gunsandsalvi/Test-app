@@ -21,9 +21,10 @@
 import { RegionId } from './geography';
 import type { InstrumentId } from './ids';
 import type { EntityId } from './ids';
+import type { Ticker } from './ids';
 
 export type RepoParty =
-  | { kind: 'BANK'; ticker: string }
+  | { kind: 'BANK'; ticker: Ticker }
   | { kind: 'INSTITUTION'; id: EntityId }
   /** The standing facility. A posted-rate seat in the auction, and a real counterparty here. */
   | { kind: 'CENTRAL_BANK' };
@@ -41,7 +42,7 @@ export interface RepoContract {
   regionId: RegionId;
   lender: RepoParty;
   /** Borrowers are named banks: nothing else in the model funds itself secured yet. */
-  borrowerTicker: string;
+  borrowerTicker: Ticker;
   principalLocal: number;
   /** Annualised decimal, struck at this session's cleared level (rule 8). */
   rateAnnual: number;
@@ -66,7 +67,7 @@ export function repoInterestToMaturityLocal(c: RepoContract): number {
   return (c.principalLocal * c.rateAnnual * weeks) / 52;
 }
 
-export function repoBorrowedLocal(book: RepoContract[], ticker: string): number {
+export function repoBorrowedLocal(book: RepoContract[], ticker: Ticker): number {
   return book.reduce((a, c) => a + (c.borrowerTicker === ticker ? c.principalLocal : 0), 0);
 }
 
@@ -76,7 +77,7 @@ export function repoLentLocal(book: RepoContract[], party: RepoParty): number {
 }
 
 /** What the central bank's window has outstanding to one bank — the sheet's `srfBorrowingLocal`. */
-export function srfBorrowedLocal(book: RepoContract[], ticker: string): number {
+export function srfBorrowedLocal(book: RepoContract[], ticker: Ticker): number {
   return book.reduce(
     (a, c) => a + (c.borrowerTicker === ticker && c.lender.kind === 'CENTRAL_BANK' ? c.principalLocal : 0), 0
   );
@@ -87,7 +88,7 @@ export function srfBorrowedLocal(book: RepoContract[], ticker: string): number {
  * bank has pledged, bond by bond, at face: 07c and 07f read it as a floor on the bonds they
  * actually touch, so pledging thirty-year paper stops constraining the two-year book.
  */
-export function encumberedFaceByBond(book: RepoContract[], ticker: string): Map<InstrumentId, number> {
+export function encumberedFaceByBond(book: RepoContract[], ticker: Ticker): Map<InstrumentId, number> {
   const byBond = new Map<InstrumentId, number>();
   book.forEach((c) => {
     if (c.borrowerTicker !== ticker) return;
@@ -97,7 +98,7 @@ export function encumberedFaceByBond(book: RepoContract[], ticker: string): Map<
 }
 
 /** Total face pledged by one bank across every bond. */
-export function encumberedFaceLocal(book: RepoContract[], ticker: string): number {
+export function encumberedFaceLocal(book: RepoContract[], ticker: Ticker): number {
   let faceLocal = 0;
   encumberedFaceByBond(book, ticker).forEach((v) => { faceLocal += v; });
   return faceLocal;

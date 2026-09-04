@@ -61,6 +61,7 @@ import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO } from '../../
 import { repoOvernightInstrumentId, repoTermInstrumentId } from '../../../domain/instrument-keys';
 import { instrumentEntries, type InstrumentId, asEntityId } from '../../../domain/ids';
 import { bankParticipantId, bankTickerOfParticipant, repoInstitutionSeatId, repoInstitutionIdOfSeat } from '../../../domain/participant-keys';
+import type { Ticker } from '../../../domain/ids';
 /** The zero curve's own points, at the tenors they are quoted for — a curve HAS points, and this
  *  is the one place that says where they sit. Not a grouping of holdings: nothing is keyed by it. */
 const CURVE_POINT_YEARS: [('tenor3M' | 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y'), number][] = [
@@ -272,7 +273,7 @@ export interface RepoSessionResult {
 export function runRegionalRepoSession(
   regionId: RegionId,
   reg: Region,
-  banks: { ticker: string; region: RegionId }[],
+  banks: { ticker: Ticker; region: RegionId }[],
   sheetByTicker: Map<string, BankingSector>,
   ctx: WeeklyStepContext
 ): RepoSessionResult {
@@ -320,7 +321,7 @@ export function runRegionalRepoSession(
   });
 
   // What each bank still has pledged against contracts that did NOT mature.
-  const encumberedByTicker = new Map<string, Map<InstrumentId, number>>();
+  const encumberedByTicker = new Map<Ticker, Map<InstrumentId, number>>();
   banks.forEach((b) => encumberedByTicker.set(b.ticker, encumberedFaceByBond(carriedBook, b.ticker)));
 
   // ---- Borrowers: real shortfall to the buffer, bounded by unencumbered collateral. ----
@@ -329,10 +330,10 @@ export function runRegionalRepoSession(
   // is structural funding and belongs at term; the increment on top of it is this week's cash
   // dip and belongs overnight. A treasury that funds a permanent book overnight is running the
   // maturity mismatch a funding squeeze is made of, and this is what lets it.
-  const rolledByTicker = new Map<string, number>();
+  const rolledByTicker = new Map<Ticker, number>();
   maturedNow.forEach((c) => rolledByTicker.set(c.borrowerTicker, (rolledByTicker.get(c.borrowerTicker) ?? 0) + c.principalLocal));
 
-  const needByTicker = new Map<string, { onLocal: number; termLocal: number }>();
+  const needByTicker = new Map<Ticker, { onLocal: number; termLocal: number }>();
   let totalOnNeedLocal = 0;
   let totalTermNeedLocal = 0;
   banks.forEach((bank) => {
@@ -418,7 +419,7 @@ export function runRegionalRepoSession(
   });
 
   /** Available lender cash this session, decremented as each book takes it. */
-  const bankSurplusLocal = new Map<string, number>();
+  const bankSurplusLocal = new Map<Ticker, number>();
   banks.forEach((bank) => {
     const sheet = sheetByTicker.get(bank.ticker);
     if (!sheet) return;
@@ -560,7 +561,7 @@ export function runRegionalRepoSession(
     totalLentLocal: number,
     rateAnnual: number,
     termWeeks: number,
-    needOf: (t: string) => number,
+    needOf: (t: Ticker) => number,
     totalNeedForBookLocal: number
   ) => {
     if (totalLentLocal <= 0 || totalNeedForBookLocal <= 0) return 0;

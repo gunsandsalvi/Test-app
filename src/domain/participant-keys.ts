@@ -16,6 +16,8 @@
  * and they drift.
  */
 import type { RegionId } from './geography';
+import type { Ticker } from './ids';
+import { asTicker } from './ids';
 
 const BANK_PREFIX = 'BANK-';
 const TREASURY_PREFIX = 'TREASURY-';
@@ -24,10 +26,10 @@ const INST_PREFIX = 'INST-';
 
 /** A bank bidding for its own book (07f's bills, the repo book) — distinct from its market-making
  *  desk, which bids under `dealerDeskParticipantId` and is a different business. */
-export const bankParticipantId = (ticker: string): string => `${BANK_PREFIX}${ticker}`;
+export const bankParticipantId = (ticker: Ticker): string => `${BANK_PREFIX}${ticker}`;
 /** The bank's ticker, or undefined if this participant is not a bank's own book. */
-export const bankTickerOfParticipant = (id: string): string | undefined =>
-  (id.startsWith(BANK_PREFIX) ? id.slice(BANK_PREFIX.length) : undefined);
+export const bankTickerOfParticipant = (id: string): Ticker | undefined =>
+  (id.startsWith(BANK_PREFIX) ? asTicker(id.slice(BANK_PREFIX.length)) : undefined);
 
 /** An institution bidding in the repo book, where the seat id is prefixed rather than bare —
  *  the repo book seats banks and institutions side by side and needs them distinguishable. */
@@ -36,9 +38,9 @@ export const repoInstitutionIdOfSeat = (id: string): string | undefined =>
   (id.startsWith(INST_PREFIX) ? id.slice(INST_PREFIX.length) : undefined);
 
 /** A company's treasury parking cash in its government's short paper (07f). */
-export const treasuryParticipantId = (ticker: string): string => `${TREASURY_PREFIX}${ticker}`;
-export const treasuryTickerOfParticipant = (id: string): string | undefined =>
-  (id.startsWith(TREASURY_PREFIX) ? id.slice(TREASURY_PREFIX.length) : undefined);
+export const treasuryParticipantId = (ticker: Ticker): string => `${TREASURY_PREFIX}${ticker}`;
+export const treasuryTickerOfParticipant = (id: string): Ticker | undefined =>
+  (id.startsWith(TREASURY_PREFIX) ? asTicker(id.slice(TREASURY_PREFIX.length)) : undefined);
 
 /** A region's household sector bidding as one participant (07e). */
 export const householdParticipantId = (region: RegionId): string => `${HOUSEHOLD_PREFIX}${region}`;

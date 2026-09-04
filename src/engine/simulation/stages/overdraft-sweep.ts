@@ -20,6 +20,7 @@ import { cashOf, poolCashOf } from '../../ledger/accounts';
 import { entityCashOf } from '../../ledger/accounts';
 import { overdraftFacilityTrancheId } from '../../../domain/instrument-keys';
 import { banksOf } from '../../../domain/company';
+import type { Ticker } from '../../../domain/ids';
 
 /** What a broker charges over its standing line for a balance it did not agree to fund. */
 export const OVERDRAFT_PENALTY_BPS = 200;
@@ -70,7 +71,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     // morning struck it is still funded — the money is already spent — at a penalty the next
     // morning's re-strike replaces with proper terms. ----
     const book: PrimeBrokerageLine[] = reg.primeBrokerageBook ?? [];
-    const drawnByBroker = new Map<string, number>();
+    const drawnByBroker = new Map<Ticker, number>();
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
       if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankTicker) return fund;
       const brokerTicker = fund.homeBankTicker;
@@ -111,7 +112,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     // deposits (the split settlement itself uses for a SEGMENT balance). ----
     const banks = banksOf(ctx.updatedCompanies, regionId);
     const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
-    const smeDrawByBank = new Map<string, { industry: string; poolId: string; usd: number }[]>();
+    const smeDrawByBank = new Map<Ticker, { industry: string; poolId: string; usd: number }[]>();
     (reg.smePools ?? []).forEach((seg) => {
       const balanceLocal = poolCashOf(ctx.v2, regionId, seg.industry) + pendingLocal({ kind: 'SEGMENT', region: regionId, industry: seg.industry });
       if (balanceLocal >= -1 || !(totalShare > 0)) return;

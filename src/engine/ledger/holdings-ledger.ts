@@ -28,6 +28,7 @@ import { RegionId } from '../../domain/geography';
 import { defect } from '../../domain/defect';
 import { issuerIdOf } from '../../engine2/tranches';
 import { holdingClassOf } from '../../domain/assets';
+import type { Ticker } from '../../domain/ids';
 
 export type HoldingKind = ItemizedHolding['instrumentType'];
 
@@ -95,7 +96,7 @@ const holderIdOf = (p: PartyRef): string | undefined => (
  * rule are two places for it to rot, and these two rotted together.
  */
 export function issuerOfHoldingRow(
-  v2: V2World, h: ItemizedHolding, tickerByEntityId: ReadonlyMap<string, string>,
+  v2: V2World, h: ItemizedHolding, tickerByEntityId: ReadonlyMap<EntityId, Ticker>,
 ): PartyRef {
   // The registry says which kinds are sovereign; this does not switch on the kind itself.
   if (holdingClassOf(h.instrumentType) === 'SOVEREIGN') return { kind: 'GOVERNMENT', region: h.issuerRegion };

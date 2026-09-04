@@ -1,3 +1,4 @@
+import type { Ticker } from '../domain/ids';
 /**
  * High-Precision Institutional Financial Formatter Engine
  * Eliminates raw floats, turn notation, unparsed LaTeX, and provides uniform calendar timelines across the platform.
@@ -50,7 +51,7 @@ export function formatQuarterFilingDate(quarterIndex: number, startYear: number 
   return `Q${qNum} '${shortYear} (${quarterDates[qNum]})`;
 }
 
-export function formatBondName(ticker: string, couponRate: number | undefined, maturityWeek: number, currentWeek: number, rateType: 'FIXED' | 'FLOATING'): string {
+export function formatBondName(ticker: Ticker, couponRate: number | undefined, maturityWeek: number, currentWeek: number, rateType: 'FIXED' | 'FLOATING'): string {
   const yearsRemaining = Math.max(0, (maturityWeek - currentWeek) / 52);
   const maturityYear = getSimulationDate(currentWeek).getFullYear() + Math.round(yearsRemaining);
   if (rateType === 'FIXED') {

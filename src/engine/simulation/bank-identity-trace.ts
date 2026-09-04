@@ -27,6 +27,7 @@ import { reasonText } from './stages/settlement';
 import { entityCashOf, bankReservesOf, bankDepositLines } from '../ledger/accounts';
 import { DepositLines } from '../../domain/banking';
 import { facilityBookOf } from '../../engine2/tranches';
+import { asTicker } from '../../domain/ids';
 
 const TOLERANCE_LOCAL = 5e6; // the harness's own threshold
 const NOISE_FLOOR_LOCAL = 1e5; // per-stage deltas below this are rounding, not a leg
@@ -101,7 +102,8 @@ export class BankIdentityTrace {
   private signedLast = new Map<string, number>();
   private open = new Map<string, number>();
   private contributions = new Map<string, Map<string, number>>();
-  private focusTicker = process.env.BANK_IDENTITY_TRACE_BANK || undefined;
+  private focusTicker = process.env.BANK_IDENTITY_TRACE_BANK
+    ? asTicker(process.env.BANK_IDENTITY_TRACE_BANK) : undefined;
   private focusFields: ReturnType<typeof fieldsOf> | undefined;
   /** INSTITUTION focus: journal net by reason plus the cash stock, per stage — for the
    *  overdraft family (a fund spending money it does not have). */

@@ -153,6 +153,7 @@ import { DERIVATIVE_CLASSES } from '../src/domain/derivatives/registry';
 import { auditWeek, auditSeed, auditSummary, AuditFinding } from '../src/engine/audit';
 import { ownershipCoverage } from '../src/engine/audit/ownership';
 import { instrumentEntries, type InstrumentId, asEntityId } from '../src/domain/ids';
+import type { Ticker } from '../src/domain/ids';
 
 interface Violation {
   week: number;
@@ -1738,8 +1739,8 @@ const indModule: HarnessModule = (() => {
     out.push('--- IND12: trade credit, and who carries it ---');
     const invoices = s.tradeInvoices ?? [];
     let domesticLocal = 0, crossLocal = 0, termSum = 0;
-    const receivableByTicker = new Map<string, number>();
-    const payableByTicker = new Map<string, number>();
+    const receivableByTicker = new Map<Ticker, number>();
+    const payableByTicker = new Map<Ticker, number>();
     invoices.forEach(iv => {
       const usd = iv.amountCurrency * iv.bookedUsdPerCurrency;
       if (iv.sellerRegion === iv.buyerRegion) domesticLocal += usd; else crossLocal += usd;

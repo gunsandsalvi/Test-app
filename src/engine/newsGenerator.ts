@@ -1,5 +1,6 @@
 import { Company, CreditRating, NewsItem, Region, RegionId, TradeableInstrument } from '../types';
 import { EarningsReport } from '../domain/events';
+import type { Ticker } from '../domain/ids';
 
 /** Rule 4: the row is `domain/events.ts:EarningsReport`. This name is kept for its callers. */
 export type EarningsReportEvent = EarningsReport;
@@ -17,8 +18,8 @@ export function generateWeeklyNews(
   regions: Record<RegionId, Region>,
   companies: Company[],
   rateChanges: { region: RegionId; deltaBps: number }[],
-  ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[],
-  defaults: string[],
+  ratingChanges: { ticker: Ticker; from: CreditRating; to: CreditRating; name: string }[],
+  defaults: Ticker[],
   earningsReports: EarningsReportEvent[] = [],
   commodities: { id: string; name: string; symbol: string; unit: string; spotPrice: number }[] = []
 ): { newsItems: NewsItem[] } {

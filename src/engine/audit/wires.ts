@@ -9,7 +9,7 @@ import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey, regi
 import { isTrancheKind } from '../../domain/assets';
 import { ensureV2 } from '../../engine2/world';
 import { issuerIdOf } from '../../engine2/tranches';
-import { asEntityId } from '../../domain/ids';
+import { asEntityId, asTicker } from '../../domain/ids';
 
 export function auditWires(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
@@ -92,7 +92,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
         const d = (nowT[key] ?? 0) - (prev.ladderUSDByTicker![key] ?? 0);
         const wired = w.issuerNetUSDByTicker?.[key] ?? 0;
         if (isTrancheKind(key.split('|')[1]) && Math.abs(d - wired) > 1e4) {
-          const tk = key.split('|')[0]; const c = byTicker.get(tk);
+          const tk = asTicker(key.split('|')[0]); const c = byTicker.get(tk); // key is `<ticker>|<kind>`
           const tag = !(key in prev.ladderUSDByTicker!) && !(key.split('|')[0] in prev.ladderUSDByTicker!) ? 'NEW' : !c ? 'GONE' : c.isDefaulted ? 'DEFAULTED' : (c as { bornWeek?: number }).bornWeek === week ? 'BORN' : '';
           rows.push([key, d - wired, tag]);
         }
@@ -134,13 +134,13 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
         if (rg === 'USA' && sb === 'electricity') {
           const byTicker = new Map(state.companies.map((c) => [c.ticker, c]));
           const inBy: Record<string, number> = {}; const reasonsBy: Record<string, Set<string>> = {};
-          Object.entries(w.goodsInByTicker ?? {}).forEach(([k, u]) => { const [tk, s2, rs] = k.split('|'); if (s2 !== sb) return; const c = byTicker.get(tk); if (c?.region !== rg) return; inBy[tk] = (inBy[tk] ?? 0) + u; (reasonsBy[tk] ??= new Set()).add(rs); });
+          Object.entries(w.goodsInByTicker ?? {}).forEach(([k, u]) => { const [tkRaw, s2, rs] = k.split('|'); const tk = asTicker(tkRaw); if (s2 !== sb) return; const c = byTicker.get(tk); if (c?.region !== rg) return; inBy[tk] = (inBy[tk] ?? 0) + u; (reasonsBy[tk] ??= new Set()).add(rs); });
           const recBy: Record<string, number> = {};
           Object.entries((state as { lotReceiptsTrace?: Record<string, number> }).lotReceiptsTrace ?? {}).forEach(([k, u]) => { const [cid, s2] = k.split('|'); if (s2 !== sb) return; const c = byId.get(asEntityId(cid)); if (c?.region === rg) recBy[c.ticker] = (recBy[c.ticker] ?? 0) + u; });
           const rows = Object.keys({ ...inBy, ...recBy }).map((tk) => [tk, (inBy[tk] ?? 0) - (recBy[tk] ?? 0)] as [string, number]).filter(([, d]) => Math.abs(d) > 1).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
           const kinds = Object.entries(w.goodsInByTicker ?? {}).filter(([k]) => k.startsWith(`${rg}|${sb}|KIND:`)).map(([k, u]) => `${k.split('KIND:')[1]} ${u.toFixed(1)}`).join(', ');
           console.log(`  [goods-kind-trace] in by holder kind: ${kinds}; in transit now: ${(state.goodsInTransit ?? []).filter((s2) => s2.subUnitId === sb).length} consignments`);
-          console.log(`  [goods-firm-trace] ${rows.length} firms off: ` + rows.slice(0, 6).map(([tk, d]) => `${tk} ${d.toFixed(1)} in ${(inBy[tk] ?? 0).toFixed(1)} rec ${(recBy[tk] ?? 0).toFixed(1)} [${[...(reasonsBy[tk] ?? [])].join(',')}] ${byTicker.get(tk)?.isDefaulted ? 'DEAD' : ''}${byTicker.get(tk)?.sector ?? ''}`).join(' | '));
+          console.log(`  [goods-firm-trace] ${rows.length} firms off: ` + rows.slice(0, 6).map(([tk, d]: [string, number]) => `${tk} ${d.toFixed(1)} in ${(inBy[tk] ?? 0).toFixed(1)} rec ${(recBy[tk] ?? 0).toFixed(1)} [${[...(reasonsBy[tk] ?? [])].join(',')}] ${byTicker.get(asTicker(tk))?.isDefaulted ? 'DEAD' : ''}${byTicker.get(asTicker(tk))?.sector ?? ''}`).join(' | '));
         }
         console.log(`  [goods-trace] w${week} ${key.replace('|', ' ')}: wires in ${(w.goodsInUnitsByKey?.[key] ?? 0).toFixed(1)} out ${(w.goodsOutUnitsByKey?.[key] ?? 0).toFixed(1)} delivered ${(w.goodsDeliveredByKey?.[key] ?? 0).toFixed(1)} | lot receipts ${receipts.toFixed(1)} | gap ${g.toFixed(1)} | stock prev ${(prev.goodsUnitsByKey![key] ?? 0).toFixed(1)} now ${(now[key] ?? 0).toFixed(1)} (out ${pn[0].toFixed(1)} lots ${pn[1].toFixed(1)} transit ${pn[2].toFixed(1)}) | produced ${(f?.producedUnits ?? 0).toFixed(1)} consumed ${(f?.consumedUnits ?? 0).toFixed(1)} scrapped ${(f?.scrappedUnits ?? 0).toFixed(1)} | wires net ${(nets[key] ?? 0).toFixed(1)}`);
       });
