@@ -2,7 +2,6 @@ import { riskAversionOf } from '../../domain/preferences';
 import { zeroRateAt } from '../../domain/pricing';
 import { loanBooksOf, DepositLines } from '../../domain/banking';
 import { BankingSector, householdBookRwaLocal, CONSUMER_CREDIT_RISK_WEIGHT, WHOLESALE_FUNDING_SPREAD_BPS } from '../../types';
-import { dealerDeskGrossLocal } from '../../domain/dealer-desk';
 import { instrumentEntries, type InstrumentId } from '../../domain/ids';
 
 /**
@@ -89,24 +88,24 @@ export function bankCashBufferRatioOf(bank: { management?: import('../../domain/
 export const BASEL_MIN_LEVERAGE_RATIO = 0.03;
 
 /** Unweighted total assets — the leverage ratio's denominator. */
-export function bankTotalAssetsLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, sovLocal: number): number {
-  // §3.13-BOOK d3b: the sovereign book is the bank's REGISTER ROWS (`bankSovereignBookLocal`),
-  // handed in like the facility book — this file reads no store.
-  // G3a: the desks' inventory is an asset the bank OWNS and finances, and a cash security
-  // consumes the leverage ratio one-for-one. Before the desks had owners it consumed nothing,
-  // which is precisely what let a book with no capital behind it absorb any imbalance.
-  return loanBooksOf(sheet, facilityBookLocal) + sovLocal
+export function bankTotalAssetsLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, bookAssetsLocal: number): number {
+  // §3.13-BOOK d3b/d3d: the bank's REGISTER BOOKS — its own sovereign book at the mark plus its
+  // desks' GROSS inventory (`bankBookAssetsLocal`) — are handed in like the facility book; this
+  // file reads no store. G3a: a desk's inventory is an asset the bank OWNS and finances, and a
+  // cash security consumes the leverage ratio one-for-one, a short as much as a long. Before the
+  // desks had owners it consumed nothing, which is precisely what let a book with no capital
+  // behind it absorb any imbalance.
+  return loanBooksOf(sheet, facilityBookLocal) + bookAssetsLocal
     + Math.max(0, cashLocal) + (sheet.repoLentLocal ?? 0)
     // CAL: a coupon earned and not yet paid is an asset the bank holds against the treasury.
     + (sheet.sovereignAccruedCouponLocal ?? 0)
-    + dealerDeskGrossLocal(sheet.dealerDeskInventory)
     // HF1: a margin loan to a fund consumes the leverage ratio like any other loan.
     + (sheet.primeBrokerageLoansLocal ?? 0);
 }
 
 /** How much balance sheet the bank's equity still supports under the leverage floor. */
-export function leverageHeadroomLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, sovLocal: number): number {
-  return Math.max(0, sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsLocal(sheet, cashLocal, facilityBookLocal, sovLocal));
+export function leverageHeadroomLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, bookAssetsLocal: number): number {
+  return Math.max(0, sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsLocal(sheet, cashLocal, facilityBookLocal, bookAssetsLocal));
 }
 
 /**
@@ -169,8 +168,9 @@ export function liquidityDrivenSovereignFloorLocal(sheet: BankingSector, cashLoc
  * securities book is bounded by what it can FINANCE, and a funding market is what makes that
  * bound real rather than notional.
  */
-export function sovereignBookCapacityLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, sovLocal: number): number {
-  return Math.max(0, sovLocal) + leverageHeadroomLocal(sheet, cashLocal, facilityBookLocal, sovLocal);
+export function sovereignBookCapacityLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, sovLocal: number, deskGrossLocal = 0): number {
+  // §3.13-BOOK d3d: the headroom is against every register book, the desks' gross included.
+  return Math.max(0, sovLocal) + leverageHeadroomLocal(sheet, cashLocal, facilityBookLocal, sovLocal + deskGrossLocal);
 }
 
 /**
@@ -532,10 +532,9 @@ export function evolveBankingSector(
     repoLentLocal: survivingRepoLentLocal,
     repoBorrowedLocal: survivingRepoBorrowedLocal,
     repoEncumberedCollateralLocal: prevBanking.repoEncumberedCollateralLocal ?? 0,
-    // G3a: the desks' inventory persists across weeks; only real fills move it, in the stages
-    // that own it. This return rebuilds the sheet from a fixed field list, so leaving it out
-    // deleted every desk's book every week with no cash leg.
-    dealerDeskInventory: prevBanking.dealerDeskInventory,
+    // §3.13-BOOK d3d: the desks' paper is register rows; the one desk line still on the sheet is
+    // the player's derivative use of it (trade.ts), carried through untouched.
+    deskDerivativesUseLocal: prevBanking.deskDerivativesUseLocal,
     // HF1: the margin book is owned by the prime-brokerage stage; carried through untouched.
     primeBrokerageLoansLocal: prevBanking.primeBrokerageLoansLocal ?? 0,
     // G2: the itemized book and the corporate-deposit view are owned by the G2 stages

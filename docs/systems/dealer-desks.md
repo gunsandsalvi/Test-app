@@ -88,7 +88,7 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a named party, a bank's trading arm with its own sheet inside a bank's | `src/domain/dealer-desk.ts:dealerDeskParticipantId` | ✅ |
 | A2 it quotes a buy price and a sell price, and will do either | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ⚠️ |
-| A3 it holds inventory | `src/domain/dealer-desk.ts:DealerDeskInventory` | ✅ |
+| A3 it holds inventory | `src/engine/desk-register.ts:deskRowsOf` | ✅ |
 | A4 it earns the spread and loses on the inventory | `src/engine/simulation/stages/dealer-desks.ts:applyDealerDeskFills` | ✅ |
 | B1 it expects two-way flow arriving at different times | `src/domain/dealer-desk.ts:DealerDeskPosition` | ✅ |
 | B2 it has information from seeing the flow | — | ❌ |
@@ -96,12 +96,12 @@ checked by `scripts/check-atlas.sh`.
 | **B4 FORBID it does not quote because the mechanism needs somebody to** | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
 | C1 the quote comes from the desk's own state: inventory, funds, limit, view | `src/engine/simulation/stages/dealer-desks.ts:neutralFraction` | ⚠️ |
 | C2 inventory skews the quote | `src/engine/simulation/stages/dealer-desks.ts:priorPositions` | ✅ |
-| C2.a it mean-reverts its book without being told to | `src/domain/dealer-desk.ts:regionalDeskView` | ✅ |
+| C2.a it mean-reverts its book without being told to | `src/engine/desk-register.ts:regionalDeskViewOf` | ✅ |
 | **C3 risk widens the quote** | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
 | **C4 adverse selection widens it** | — | ❌ |
 | **C5 the bid–offer is the OUTPUT of C1–C4** | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
 | **C5.a FORBID no spread applied to a mid** | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ❌ |
-| D1 a position limit per instrument and in aggregate | `src/domain/dealer-desk.ts:dealerDeskGrossLocal` | ✅ |
+| D1 a position limit per instrument and in aggregate | `src/engine/desk-register.ts:deskGrossLocal` | ✅ |
 | D2 a capital charge on what it holds, and it is real | `src/engine/macro/banking.ts:bankTotalAssetsLocal` | ✅ |
 | D3 a funding cost on the inventory, paid every week it holds it | `src/engine/macro/banking.ts:leverageHeadroomLocal` | ⚠️ |
 | **D4 when a limit binds it widens, shrinks size, or stops quoting** | `src/domain/dealer-desk.ts:DEALER_DESK_SHARE_OF_BALANCE_SHEET` | ⚠️ |
@@ -119,6 +119,15 @@ checked by `scripts/check-atlas.sh`.
 ---
 
 ## 3. THE DIFF
+
+### ✅ A3 — CLOSED: THE INVENTORY IS REGISTER ROWS (§9.13-BOOK d3d)
+
+A desk's inventory was `bankBalanceSheet.dealerDeskInventory`, a record per market name beside the
+register — the one holder class the register did not hold (`the-register.md` A1.a). It is rows on
+the bank's securities book now (`deskRowsOf`), SIGNED because a market maker is short when it has
+sold what it did not have, and every fill, paydown, maturity, corporate action, resolution and
+player trade is a wire that moves a row. The register marks them at the close like every other
+row, and the O-family audits see them by construction rather than by a second walk.
 
 ### ❌ C5 / C5.a / C3 / C4 — THE BID–OFFER IS A CONSTANT TABLE, AND IT IS CHARGED AS A FEE ON A MID
 
@@ -212,9 +221,9 @@ just each participant's net fill.
 
 ### ⚠️ D3 — INVENTORY CONSUMES CASH AND CAPITAL, AND IS NEVER CHARGED RENT
 
-The desk's two real constraints are both present and both good: `bankTotalAssetsLocal:99` adds
-`dealerDeskGrossLocal(sheet.dealerDeskInventory)` to the leverage denominator one-for-one (D2 `✅`,
-F2 `✅`), and `buildDealerDeskParticipants:121` limits net purchases to reserves above the bank's
+The desk's two real constraints are both present and both good: `bankTotalAssetsLocal` adds the
+bank's book assets — its desks' GROSS off the register (`bankBookAssetsLocal`, §9.13-BOOK d3d), a
+short charged like a long — to the leverage denominator one-for-one (D2 `✅`, F2 `✅`), and `buildDealerDeskParticipants:121` limits net purchases to reserves above the bank's
 deposit buffer, so a well-capitalised desk can still be unable to bid.
 
 What is missing is D3's **weekly cost**. Nothing charges a desk for carrying a position from one

@@ -22,8 +22,7 @@ import { buildEntityIndex } from '../../ledger/entity-index';
 import { bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { PrimaryOffering, UNDERWRITING_FEE_BPS } from '../../../domain/primary-market';
-import { DealerDeskInventory } from '../../../domain/dealer-desk';
-import { WeeklyStepContext, updateBankSheet } from './context';
+import { WeeklyStepContext } from './context';
 import { ClearingResult } from './financial-clearing-engine';
 import { pay } from './settlement';
 import { transferHolding, issueHolding, HoldingSpec } from '../../ledger/holdings-ledger';
@@ -143,32 +142,9 @@ export function settlePricedOfferings(
       }
     }
     if (lead && deskBook && residualLocal > 0) {
-      const existingSheet = ctx.companyUpdates[lead.ticker]?.bankBalanceSheet ?? lead.bankBalanceSheet!;
-      const inventory: DealerDeskInventory = { ...(existingSheet.dealerDeskInventory ?? {}) };
-      const rows = [...(inventory[deskBook] ?? [])];
-      const at = rows.findIndex((r) => r.instrumentId === instrumentId);
-      // The position carries its UNITS. An equity book clears in shares, so a residual stored
-      // as dollars alone is read back as a share count by every units-aware consumer (desk
-      // build, fee mark) — inventoryLocal-as-units at a $40 price is a 40x phantom position.
-      // Credit clears in dollars, where units and money are the same number.
-      // §3.13: a book that clears a PRICE says what a unit costs, so the residual's units are its
-      // money over that price for credit exactly as they always were for equity.
-      const unitPrice = Math.max(1e-9, options.unitPriceOfStat
-        ? options.unitPriceOfStat(outcome.clearedStat)
-        : (instrumentType === 'EQUITY' ? outcome.clearedStat : 1));
-      const residualUnits = residualLocal / unitPrice;
-      if (at >= 0) {
-        const prevUnits = rows[at].units ?? rows[at].inventoryLocal / unitPrice;
-        rows[at] = {
-          instrumentId,
-          inventoryLocal: rows[at].inventoryLocal + residualLocal,
-          units: prevUnits + residualUnits,
-        };
-      } else {
-        rows.push({ instrumentId, inventoryLocal: residualLocal, units: residualUnits });
-      }
-      inventory[deskBook] = rows;
-      updateBankSheet(ctx, lead.ticker, { ...existingSheet, dealerDeskInventory: inventory });
+      // §3.13-BOOK d3d: the lead's desk is register rows — the wire below IS the position; nothing
+      // is written on the sheet. The row carries its UNITS: a book that clears a PRICE says what a
+      // unit costs, so the residual's units are its money over that price.
       // The residual is paper that MOVED, and it moves ONCE. For the credit books the issuer
       // delivered the whole deal to the clearing house when its tranche was issued and the
       // book's fills took the market's share, so the lead takes the rest from the house; for
@@ -176,10 +152,14 @@ export function settlePricedOfferings(
       // only the take. Wiring it a second time off the house — which this did, unconditionally
       // and with the same spec — debited the house twice for one delivery, and on the equity
       // side attributed one movement to two different senders.
+      const unitPrice = Math.max(1e-9, options.unitPriceOfStat
+        ? options.unitPriceOfStat(outcome.clearedStat)
+        : (instrumentType === 'EQUITY' ? outcome.clearedStat : 1));
+      const residualUnits = residualLocal / unitPrice;
       const leadDesk: PartyRef = bankSecuritiesParty(lead);
       const spec: HoldingSpec = heldInShares(instrumentType)
         ? { instrumentType, instrumentId, issuerRegion: regionId, valueLocal: residualLocal, shares: residualUnits }
-        : { instrumentType, instrumentId, issuerRegion: regionId, valueLocal: residualLocal };
+        : { instrumentType, instrumentId, issuerRegion: regionId, valueLocal: residualLocal, units: residualUnits };
       if (heldInShares(instrumentType)) issueHolding(ctx.v2, companyParty(issuerCompany!), leadDesk, spec, 'underwriting residual taken by the lead');
       else transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: regionId }, leadDesk, spec, 'underwriting residual taken by the lead');
     }

@@ -509,23 +509,15 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d3. **THE OUTSIDE BOOKS COME IN — 13-OUTSIDE, moved up from (f).** The desks' inventories
-        become register rows (the central bank's book, the banks' own books and the companies'
-        treasury books already have — d3a, d3b and d3c in §9), so
-        `sovereign-register.ts` collapses from a two-store walk to a filter and the last book that
-        stores a VALUE with no quantity (`sovereign-credit.md` E3) stops existing. This one moves
-        numbers (the marks meet the audit), and that is the finding. **Split 2026-09-04 into one
-        holder class per commit, because a holder arm in `holderIdOf` and its store's migration
-        must land together** — every existing `transferHolding` that names a company or a desk as
-        a party would otherwise debit an EMPTY register book and defect at the site (found
-        writing d3a: the issuer side of a merger's share exchange is a `companyParty` too):
-        d3d. **THE DESKS' INVENTORIES.** `dealerDeskInventory[book]` and the regional roll-ups
-            (`sovBondDealerInventory`, `corpBondDealerInventory`, …) → rows on the desk's book
-            (`BANK_SECURITIES` party). Writers: `applyDealerDeskFills` in every clearing book,
-            `dealer-desks.ts`, `trade.ts` (the player's fills), `regionalDeskView`. The desk's
-            participant id (`<ticker>::DESK`) stays the clearing seat; its BOOK is keyed by the
-            party. The accrual and corporate-action passes then read desks off the register instead
-            of `deskHoldingsByInstrument`, and `holderPayee`'s desk arm goes.
+    d3e. **THE REGIONAL DESK ROLL-UPS DIE.** `bankingSector.sovBondDealerInventory`,
+        `corpBondDealerInventory` and `loanDealerInventory` are a second representation of the
+        desks' register rows — 02b rebuilds them every week off `regionalDeskViewOf` and, its own
+        comment says, nothing decides off them. Every reader asks `desk-register.ts` instead, the
+        three fields and `domain/dealer-desk.ts:regionalDeskView` are deleted, and 02b's rebuild
+        loses the three lines. With them goes the last seat-keyed desk read: the accrual and
+        corporate-action passes key a desk's holdings by its clearing seat (`<ticker>::DESK`) and
+        cross back to the party through `holderPayee`'s desk arm; keyed by the BANK off the rows,
+        the arm goes. Byte-identical.
     d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
        share and contract gets a row: kind, issuer, **currency**, issued units, and nothing else.
        Terms stay in the class store, so the index copies no quantity and cannot drift.
@@ -1734,6 +1726,34 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d3d — THE DESKS' INVENTORIES ARE REGISTER ROWS.** `BankingSector.dealerDeskInventory`
+is deleted, and with it the last holder class outside the register. A desk's paper is rows on the
+bank's SECURITIES book (`holdings-ledger.ts:deskBookId`, the `BANK_SECURITIES` party; read through
+`engine/desk-register.ts`), and the rows are SIGNED — a market maker is short when it has sold what
+it did not have, so the ledger's desk arm (`adjustDeskRow`) adds and subtracts on one row per
+instrument rather than debiting a long it does not hold. A book is a market name; the register
+stores the KIND (`DESK_BOOK_KIND`), the two sovereign books share `GOV_BOND`, and a session tells
+its bills from its bonds by the instruments it clears. Writers: every clearing book's
+`applyDealerDeskFills` is a `transferHolding` per instrument against the house, re-marking the
+prior rows with `markHolding` first; the lead's underwriting residual is the wire it always was,
+with the sheet write beside it gone; stage 11's maturities `retireHolding` the desk's sovereign
+rows with the treasury repaying face (and a desk SHORT the bucket pays it — a redemption it owed
+used to be a negative payment); the paydowns, coupon splits and corporate actions read
+`deskRowsOf`; a resolution moves the rows by wire (a short by the same |value| the other way);
+the player's fills open their own journal and world in `trade.ts` and wire desk↔house, the
+derivative and commodity exposure — a PFE use of the sheet, not a holding — staying as one scalar,
+`deskDerivativesUseLocal`. Readers: the leverage denominator takes the bank's BOOK assets
+(`bankBookAssetsLocal` = sovereign book at the mark + desks' gross) where it took the sovereign
+book alone, the desks' capacity, the dealers' axes, the audits (`M5` signed, `O6` face), the
+identity trace and the UI ask the register; `forEachSovereignPosition` is a filter over
+`registerBooks` (class `DESK` off the `BANK_SECURITIES` payee) with no second store. Numbers
+MOVE: a desk's sovereign paper matures out of a signed row in face rather than by a fraction of
+its money; the register marks desk rows at `units × price` at the close; and a desk's rows are
+in the register walks, so `O1`/`O6` see them by construction. Two leftovers, in §3 as d3e: the
+three regional roll-ups 02b still rebuilds off `regionalDeskViewOf`, and the accrual pass keying
+desks by seat through `holderPayee`. The player-trade journal is not audited by W1–W5 (opened
+per trade, not per week): 37-SMALL. Gates green; no run.
 
 **13-BOOK d3c — A COMPANY'S TREASURY BOOK IS REGISTER ROWS.** `Company.treasuryHoldings` is
 deleted. A firm's own book (bills, since it bids for them in 07f) is rows on the entity's register

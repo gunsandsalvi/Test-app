@@ -128,6 +128,7 @@ import { HouseholdLoanPool, MortgageVintage } from '../src/domain/banking';
 import { executeTrade } from "../src/engine/simulation/trade";
 import { isPubliclyListed, isActiveCompany, banksOf } from '../src/domain/company';
 import { ensureV2 } from '../src/engine2/world';
+import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
 import { issuerSpreadAtOnCurve } from '../src/engine/credit-price';
 import { forEachContract } from '../src/engine2/contracts';
 import { sovereignCouponByBond, weeklyInterestExpenseLocal, decomposeGovernmentSpending } from '../src/domain/government';
@@ -279,12 +280,12 @@ function printOwnershipTraces(state: GameState, week: number): void {
     const deskFace: Record<string, { corp: number; loan: number; cp: number }> = {};
     regionIds.forEach((r) => { deskFace[r] = { corp: 0, loan: 0, cp: 0 }; });
     state.companies.forEach((c) => {
-      const inv = c.bankBalanceSheet?.dealerDeskInventory; if (!inv || !deskFace[c.region]) return;
-      const face = (book: string): number =>
-        (inv[book] ?? []).reduce((a, p) => a + (p.units ?? p.inventoryLocal), 0);
-      deskFace[c.region].corp += face('corporate bond');
-      deskFace[c.region].loan += face('leveraged loan');
-      deskFace[c.region].cp += face('commercial paper');
+      if (!c.bankBalanceSheet || !deskFace[c.region]) return;
+      // §3.13-BOOK d3d: the desk's rows off the register, in face.
+      const face = (kind: string): number => deskRowsOf(ensureV2(state), c.id, kind).reduce((a, p) => a + p.units, 0);
+      deskFace[c.region].corp += face('CORP_BOND');
+      deskFace[c.region].loan += face('LEVERAGED_LOAN');
+      deskFace[c.region].cp += face('COMMERCIAL_PAPER');
     });
     // `held` already folds the desks in; the named desks are shown inside it.
     console.log(`  [own-trace] w${week}: ` + regionIds.map((r) => `${r} corp ${(held[r].corp / 1e9).toFixed(2)} (desks ${(deskFace[r].corp / 1e9).toFixed(2)}) of ${(outstanding[r].corp / 1e9).toFixed(2)}B | loan ${(held[r].loan / 1e9).toFixed(2)} (desks ${(deskFace[r].loan / 1e9).toFixed(2)}) of ${(outstanding[r].loan / 1e9).toFixed(2)}B | cp ${(held[r].cp / 1e9).toFixed(2)} (desks ${(deskFace[r].cp / 1e9).toFixed(2)}) of ${(outstanding[r].cp / 1e9).toFixed(2)}B`).join(' || '));
@@ -2054,8 +2055,7 @@ const spiralModule: HarnessModule = {
             const bs = c.bankBalanceSheet!;
             const facilityBookLocal = facilityBookOf(ensureV2(state), c.id);
             const rwa = businessLoanBookOf(bs, facilityBookLocal) * 1.0 + householdBookRwaLocal(bs.householdLoans);
-            const deskLocal = Object.values(bs.dealerDeskInventory ?? {})
-              .reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0);
+            const deskLocal = deskGrossLocal(ensureV2(state), c.id);
             console.log(`  [cap] w${w} ${region}:${c.ticker}`
               + ` eq ${(bs.bankEquityLocal / 1e9).toFixed(2)}B rwa ${(rwa / 1e9).toFixed(2)}B`
               + ` ratio ${(rwa > 0 ? bs.bankEquityLocal / rwa : 0).toFixed(4)}`
@@ -2346,9 +2346,9 @@ function runHarness() {
         // CAL: a sovereign coupon earned and not yet paid is this bank's asset against the
         // treasury, and the treasury carries the same balance as its payable.
         - (bs.sovereignAccruedCouponLocal ?? 0)
-        // G3a: the desks' own inventory is this bank's asset, bought with its own reserves.
-        - Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryLocal: number }[]>)
-            .reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0)
+        // G3a: the desks' own inventory is this bank's asset, bought with its own reserves
+        // (§3.13-BOOK d3d: register rows, at gross).
+        - deskGrossLocal(ensureV2(state), c.id)
         // HF1: margin loans to hedge funds are this bank's asset too.
         - (bs.primeBrokerageLoansLocal ?? 0);
       const idTraced = (process.env.BANK_ID_TRACE ?? '').split(',').includes(c.ticker);

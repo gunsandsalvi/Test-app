@@ -31,7 +31,8 @@ import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
-import { regionalDeskView } from '../../../domain/dealer-desk';
+import { DESK_BOOK_KIND } from '../../../domain/dealer-desk';
+import { regionalDeskViewOf } from '../../desk-register';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { sovereignCouponByBond } from '../../../domain/government';
 import { payHoldersCash } from './shared-helpers';
@@ -497,8 +498,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // other way around.
     const sumField = (f: (s: BankingSector) => number) => newSheets.reduce((s, { sheet }) => s + f(sheet), 0);
     // The region's view of one dealer book — every named desk's position, summed by name.
+    // §3.13-BOOK d3d: read off the desks' register rows, by the book's KIND.
     const deskView = (book: string) =>
-      Array.from(regionalDeskView(newSheets.map(({ sheet }) => sheet.dealerDeskInventory), book).entries())
+      Array.from(regionalDeskViewOf(ctx.v2, newSheets.map(({ bank }) => bank.id), DESK_BOOK_KIND[book]).entries())
         .filter(([, usd]) => Math.abs(usd) > 1);
     const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.id)) + bankSovereignBookLocal(ctx.v2, bank.id) + bankReservesOf(ctx.v2, bank.id);
     const totalAssets = newSheets.reduce((s, e) => s + assetsOf(e), 0);
@@ -537,8 +539,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       corpBondDealerInventory: deskView('corporate bond').map(([instrumentId, inventoryLocal]) => ({ instrumentId, inventoryLocal })),
       sovBondDealerInventory: [
         // §3.13-SOV row 3: the desk row names the BOND (the field is still called bondId).
+        // The bills and the bonds share one register kind, so one read covers both books.
         ...deskView('sovereign bond').map(([instrumentId, inventoryLocal]) => ({ bondId: instrumentId, inventoryLocal })),
-        ...deskView('bill').map(([instrumentId, inventoryLocal]) => ({ bondId: instrumentId, inventoryLocal })),
       ],
       loanDealerInventory: deskView('leveraged loan').map(([instrumentId, inventoryLocal]) => ({ instrumentId, inventoryLocal })),
       // The region's overnight book is the sum of the named banks' real positions. The
@@ -561,10 +563,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       corporateDepositInterestWeeklyLocal: sumField((s) => s.corporateDepositInterestWeeklyLocal ?? 0),
       dividendWeeklyLocal: sumField((s) => s.dividendWeeklyLocal ?? 0),
       depositRateAnnual: Number(weightedAvg((s) => s.depositRateAnnual ?? 0).toFixed(6)),
-      // Per-bank-only books: a desk position and an FX book belong to the bank that took them; a
-      // regional copy would be a second ledger. Declared, not omitted, so the satisfies holds.
+      // Per-bank-only books: an FX book and the player's derivative use of a desk belong to the
+      // bank that took them; a regional copy would be a second ledger. Declared, not omitted, so
+      // the satisfies holds.
       fxDealerBook: undefined,
-      dealerDeskInventory: undefined,
+      deskDerivativesUseLocal: undefined,
     } satisfies { [K in keyof Required<BankingSector>]: BankingSector[K] };
 
     // HH: what the region's banks actually paid household depositors this week — measured, so

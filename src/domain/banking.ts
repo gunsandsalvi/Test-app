@@ -11,7 +11,6 @@ import { InstrumentId } from './ids';
 import { RegionId } from './geography';
 import { ItemizedHoldingType } from './assets';
 import { FxDealerBook } from './dealer-derivatives';
-import { DealerDeskInventory } from './dealer-desk';
 
 /**
  * A POSITION: how many UNITS of what. Nothing else.
@@ -183,7 +182,11 @@ export interface BankingSector {
    * owned position, sized by the bank's own leverage headroom, funded out of its own reserves,
    * and decided by a schedule it posts in the auction. See domain/dealer-desk.ts.
    */
-  dealerDeskInventory?: DealerDeskInventory;
+  /** §3.13-BOOK d3d: the desk's PAPER is register rows on the bank's SECURITIES book
+   *  (`engine/desk-register.ts`, the `BANK_SECURITIES` party); what stays on the sheet is the
+   *  balance-sheet use of its DERIVATIVES and commodity exposure — a PFE add-on on gross
+   *  notional (`trade.ts`), which is a capital charge and not a holding. */
+  deskDerivativesUseLocal?: number;
   /**
    * G2 slice 1 — the ITEMIZED business loan book: every dollar of `businessLoanBookLocal` is one
    * of these, with a named borrower. Two real borrower classes today: the SME segment pools

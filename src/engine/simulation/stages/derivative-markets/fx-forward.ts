@@ -18,7 +18,7 @@
  */
 
 import { riskAversionOf } from '../../../../domain/preferences';
-import { bankSovereignBookLocal } from '../../../sovereign-register';
+import { bankBookAssetsLocal } from '../../../desk-register';
 import type { EntityId } from '../../../../domain/ids';
 import { bankPartyOf, bankSecuritiesPartyOf, companyParty } from '../../../../domain/party';
 import { RegionId } from '../../../../types';
@@ -136,7 +136,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     const sheet = c.bankBalanceSheet;
     desks.set(c.id, {
       book: emptyFxDealerBook(),
-      headroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.id), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id)),
+      headroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.id), facilityBookOf(ctx.v2, c.id), bankBookAssetsLocal(ctx.v2, c.id)),
       chargedPfeLocal: standing.pfeChargeLocal(bankPartyKey(c.id)),
       marginReceivedLocal: 0,
     });

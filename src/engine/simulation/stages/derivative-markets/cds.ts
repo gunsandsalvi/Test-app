@@ -19,7 +19,7 @@
  */
 
 import { bankReservesOf } from '../../../ledger/accounts';
-import { bankSovereignBookLocal } from '../../../sovereign-register';
+import { bankBookAssetsLocal } from '../../../desk-register';
 import { buildEntityIndex } from '../../../ledger/entity-index';
 import { bankParty, bankPartyOf } from '../../../../domain/party';
 import { RegionId } from '../../../../types';
@@ -142,7 +142,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
       const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       const capacityLocal = deskNotionalCapacityLocal(
-        leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id)), standing.pfeChargeLocal(bankPartyKey(bank.id)), 'CDS');
+        leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankBookAssetsLocal(ctx.v2, bank.id)), standing.pfeChargeLocal(bankPartyKey(bank.id)), 'CDS');
       if (!(capacityLocal > 0)) return;
       referenceIssuers.forEach((c) => {
         const annualPd = pdByIssuerId.get(c.id)!;

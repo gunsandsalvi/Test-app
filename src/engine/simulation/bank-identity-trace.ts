@@ -20,6 +20,7 @@
 
 import { WeeklyStepContext } from './stages/context';
 import { bankSovereignBookLocal } from '../sovereign-register';
+import { deskGrossLocal, deskSignedLocal } from '../desk-register';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../domain/banking';
 import { GameState } from '../../types';
 import { BankingSector } from '../../domain/banking';
@@ -58,7 +59,7 @@ const FIELD_SIGNS: Record<keyof ReturnType<typeof fieldsOf>, 1 | -1> = {
 /** §3.13c: the return type is INFERRED, so its keys are a literal union and `FIELD_SIGNS` below
  *  is checked against them. Annotated `Record<string, number>` it was not: `keyof string-record`
  *  is `string`, so every key matched and nothing was verified. */
-export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number) {
+export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, deskGrossLocal: number) {
   return {
     depositsLocal: lines.householdLocal, corporateDepositsLocal: lines.corporateLocal,
     institutionalDepositsLocal: lines.institutionalLocal,
@@ -70,13 +71,13 @@ export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLin
     cashReservesLocal: cashLocal, repoLentLocal: bs.repoLentLocal ?? 0,
     onRrpLendingLocal: bs.onRrpLendingLocal ?? 0,
     sovereignAccruedCouponLocal: bs.sovereignAccruedCouponLocal ?? 0,
-    deskInventoryAbsLocal: Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryLocal: number }[]>)
-      .reduce((a: number, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0),
+    // §3.13-BOOK d3d: the desks' rows, off the register (`deskGrossLocal`), handed in like the book.
+    deskInventoryAbsLocal: deskGrossLocal,
     primeBrokerageLoansLocal: bs.primeBrokerageLoansLocal ?? 0,
   };
 }
 
-export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, signedDesk = false): number {
+export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, deskLocal: number): number {
   return (
     lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
     + (bs.clientMarginLocal ?? 0) + lines.smeLocal + (bs.centralBankLoanLocal ?? 0)
@@ -86,11 +87,10 @@ export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositL
     - (bs.sovereignAccruedCouponLocal ?? 0)
     // The harness counts a desk row at Math.abs — a SHORT counted as an asset. trade.ts books
     // cash on the SIGNED delta, so if a desk sits net short the two conventions differ by twice
-    // the short. `signedDesk` computes the signed variant so a run can print both and show
-    // whether the episodic M-scale breaks are exactly that convention gap.
-    - Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryLocal: number }[]>)
-        .reduce((a: number, rows) => a + rows.reduce(
-          (b, r) => b + (signedDesk ? r.inventoryLocal : Math.abs(r.inventoryLocal)), 0), 0)
+    // the short. The caller hands in whichever it wants (`deskGrossLocal` / `deskSignedLocal`,
+    // §3.13-BOOK d3d) so a run can print both and show whether the episodic M-scale breaks are
+    // exactly that convention gap.
+    - deskLocal
     - (bs.primeBrokerageLoansLocal ?? 0)
   );
 }
@@ -129,8 +129,8 @@ export class BankIdentityTrace {
       if (!sheet) return;
       const lines = bankDepositLines(ctx, c);
       const facilityBookLocal = facilityBookOf(ctx.v2, c.id);
-      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id)));
-      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), true));
+      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id)));
+      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), deskSignedLocal(ctx.v2, c.id)));
     });
     return out;
   }
@@ -142,7 +142,7 @@ export class BankIdentityTrace {
     const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[this.focusTicker]?.bankBalanceSheet)
       || c?.bankBalanceSheet;
     if (!sheet || !c) return;
-    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id));
+    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id));
     if (this.focusFields) {
       const parts: string[] = [];
       let residualDelta = 0;

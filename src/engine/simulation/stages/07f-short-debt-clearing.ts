@@ -32,6 +32,7 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
+import { deskRowsOf, deskGrossLocal } from '../../desk-register';
 import { asEntityId } from '../../../domain/ids';
 import { bankCreditPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf, bankPartyOf, companyParty } from '../../../domain/party';
 import { asInstrumentId, InstrumentId } from '../../../domain/ids';
@@ -227,6 +228,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // §3.13-BOOK d3b: the bank's own book is its register rows, read in face by bond.
         const heldFaceByBond = bankSovereignFaceByBond(ctx.v2, bank.id);
         const sovLocal = bankSovereignBookLocal(ctx.v2, bank.id);
+        // §3.13-BOOK d3d: the leverage ratio charges every register book, the desks' gross included.
+        const deskLocal = deskGrossLocal(ctx.v2, bank.id);
         const settledCashLocal = reservesLocal
           + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
         // REPO2: the floor is the face of THIS BILL actually pledged, not a blended share.
@@ -234,9 +237,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const fundableLocal = Math.min(
           Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityLocal(sheet, heldFaceByBond, repoHaircuts, encumberedFace),
-          leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal, sovLocal)
+          leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal, sovLocal + deskLocal)
         );
-        const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal, sovLocal);
+        const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal, sovLocal, deskLocal);
         const liquidityFloorLocal = liquidityDrivenSovereignFloorLocal(sheet, reservesLocal, bankDepositLines(ctx, bank));
         activeBills.forEach((b) => {
           const heldLocal = heldFaceByBond.get(b.key) ?? 0;
@@ -799,10 +802,11 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // A DESK IS A HOLDER, and its paper matures like anyone else's. Scaling only the
       // institutions left the desks carrying a claim on CP that had already been repaid, and the
       // ledger check caught it immediately: holders at 117% of the EUR stock by week ten.
-      const deskCpRows = new Map<Ticker, { instrumentId: InstrumentId; inventoryLocal: number; units?: number }[]>();
+      // §3.13-BOOK d3d: the desks' CP rows, off the register.
+      const deskCpRows = new Map<Ticker, { instrumentId: InstrumentId; inventoryLocal: number; units: number }[]>();
       cpBanks.forEach((bank) => {
-        const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
-        if (sheet?.dealerDeskInventory?.[CP_BOOK]) deskCpRows.set(bank.ticker, sheet.dealerDeskInventory[CP_BOOK]);
+        const rows = deskRowsOf(ctx.v2, bank.id, 'COMMERCIAL_PAPER');
+        if (rows.length > 0) deskCpRows.set(bank.ticker, rows);
       });
 
       const issuerPartyOfInstrument = (instrumentId: InstrumentId): PartyRef | undefined => {
@@ -818,12 +822,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           // it holds and `inventoryLocal` is that face at the last price the book printed — and now
           // that CP prints a price other than par the two are different numbers. Paying the mark
           // would pocket the pull-to-par on the issuer's behalf.
-          let repaidLocal = 0;
+          let repaidLocal = 0, markedLocal = 0;
           rows.forEach((r) => {
             if (r.instrumentId !== instrumentId) return;
-            repaidLocal += r.units ?? r.inventoryLocal;
-            r.inventoryLocal = 0;
-            if (r.units !== undefined) r.units = 0;
+            repaidLocal += r.units; markedLocal += r.inventoryLocal;
           });
           if (repaidLocal > 0) {
             pay(ctx, {
@@ -836,7 +838,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             // Step 13 (W2): the matured paper leaves the desk by wire, to the house (the ladder's
             // retirement wire meets it there).
             transferHolding(ctx.v2, bankSecuritiesPartyOf(bankIdOfTicker(ticker) ?? asEntityId(ticker)), { kind: 'CLEARING_HOUSE', region: regionId },
-              { instrumentType: 'COMMERCIAL_PAPER', instrumentId, issuerRegion: regionId, valueLocal: repaidLocal }, 'commercial paper redeemed: desk paper matured');
+              { instrumentType: 'COMMERCIAL_PAPER', instrumentId, issuerRegion: regionId, valueLocal: markedLocal, units: repaidLocal }, 'commercial paper redeemed: desk paper matured');
           }
         });
         heldByTrancheByEntity.forEach((byTranche, entityId) => {
@@ -874,19 +876,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           } else kept.push(r);
         }
         if (retiredAny) commitLadder(v2Mirror, cpIssuer, kept);
-      });
-
-      deskCpRows.forEach((rows, ticker) => {
-        const bank = cpBanks.find((b) => b.ticker === ticker);
-        if (!bank) return;
-        const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-        updateBankSheet(ctx, ticker, {
-          ...sheet,
-          dealerDeskInventory: {
-            ...(sheet.dealerDeskInventory ?? {}),
-            [CP_BOOK]: rows.filter((r) => Math.abs(r.inventoryLocal) > 1),
-          },
-        });
       });
 
       const cpHoldingRow = parHoldingRow('COMMERCIAL_PAPER', regionId);

@@ -16,6 +16,7 @@ import { centralBankBookLocal, bankSovereignBookLocal } from '../sovereign-regis
 import { AuditFinding, B, M, sum } from './types';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { ensureV2, currencyOfId } from '../../engine2/world';
+import { deskSignedLocal } from '../desk-register';
 import { facilityBookOf } from '../../engine2/tranches';
 
 /** M1 — the central bank's balance sheet closes EXACTLY: assets = reserves + treasury account + currency
@@ -128,7 +129,7 @@ function m5(state: GameState, week: number): AuditFinding[] {
   banksOf(state.companies).forEach((b) => {
     const bs = b.bankBalanceSheet!;
     const sov = bankSovereignBookLocal(ensureV2(state), b.id); // §3.13-BOOK d3b: register rows
-    const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryLocal));
+    const desks = deskSignedLocal(ensureV2(state), b.id); // §3.13-BOOK d3d: register rows, signed
     const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.id)) + sov + bankReservesOf(ensureV2(state), b.id) + (bs.repoLentLocal ?? 0) + (bs.sovereignAccruedCouponLocal ?? 0) + desks + (bs.primeBrokerageLoansLocal ?? 0);
     const liabilities = depositsOf(bs, stateDepositLines(state, b)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0);
     const residual = assets - liabilities - bs.bankEquityLocal;

@@ -1439,7 +1439,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   });
 
   // G3b: the dealers the player trades with ARE the named banks' desks.
-  const dealers = dealersFromBanks((b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.id), (b) => seedBankBookLocalOf(b.bankBalanceSheet!), companies);
+  const dealers = dealersFromBanks(seedV2, (b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.id), (b) => seedBankBookLocalOf(b.bankBalanceSheet!), companies);
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities, undefined, seedV2, 1);
   const recentIPOs: { ticker: Ticker; name: string; category: string; week: number }[] = [];
   const recentMergers: { acquirerTicker: Ticker; acquirerName: string; targetTicker: Ticker; targetName: string; week: number; dealValueLocal: number }[] = [];

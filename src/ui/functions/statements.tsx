@@ -22,6 +22,7 @@ import { bankRwaLocal } from '../../domain/bank-pricing';
 
 import { cashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
+import { deskGrossLocal } from '../../engine/desk-register';
 import { entityCashOf } from '../../engine/ledger/accounts';
 import { facilityBookOf, ladderTotalLocal } from '../../engine2/tranches';
 
@@ -63,7 +64,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     const sov = bankSovereignBookLocal(ensureV2(world.state), c.id);
     const lines = stateDepositLines(world.state, c);
     const deposits = lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.smeLocal;
-    const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0);
+    const desks = deskGrossLocal(ensureV2(world.state), c.id); // §3.13-BOOK d3d: register rows
     const reservesLocal = bankReservesOf(ensureV2(world.state), c.id);
     const facilityBookLocal = facilityBookOf(ensureV2(world.state), c.id);
     const assets = loanBooksOf(bank, facilityBookLocal) + sov + reservesLocal + (bank.repoLentLocal ?? 0) + (bank.sovereignAccruedCouponLocal ?? 0) + desks + (bank.primeBrokerageLoansLocal ?? 0);

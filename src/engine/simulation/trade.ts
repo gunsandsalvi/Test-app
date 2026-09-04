@@ -1,7 +1,13 @@
 import { GameState, Position } from '../../types';
 import { random } from '../rng';
 import { DESK_BOOK_BY_ASSET_TYPE } from '../dealers';
-import { regionalDeskView } from '../../domain/dealer-desk';
+import { DESK_BOOK_KIND } from '../../domain/dealer-desk';
+import { regionalDeskViewOf } from '../desk-register';
+import { transferHolding } from '../ledger/holdings-ledger';
+import { newWireJournal, setActiveWireJournal, setActiveWireWorld } from '../ledger/wire';
+import { wireWorldOf } from '../ledger/wire-world';
+import { bankSecuritiesPartyOf } from '../../domain/party';
+import { clearedPriceOf } from '../../engine2/prices';
 import { bookPnL } from '../ledger/bank-book';
 import { adjustBankReserves } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
@@ -78,33 +84,49 @@ export function executeTrade(
         : (posData.direction === 'LONG' ? -balanceSheetUseLocal : balanceSheetUseLocal);
       const incomeLocal = executionDetails.counterpartyFeeLocal + executionDetails.spreadCostLocal;
 
-      const inventory = { ...(sheet.dealerDeskInventory ?? {}) };
-      const rows = [...(inventory[book] ?? [])];
-      const at = rows.findIndex((r) => r.instrumentId === instrumentId);
-      if (at >= 0) rows[at] = { instrumentId, inventoryLocal: rows[at].inventoryLocal + inventoryDeltaLocal };
-      else rows.push({ instrumentId, inventoryLocal: inventoryDeltaLocal });
-      inventory[book] = rows.filter((r) => Math.abs(r.inventoryLocal) > 1);
-
-      updatedCompanies = [...state.companies];
-      updatedCompanies[bankIndex] = {
-        ...bank,
-        bankBalanceSheet: {
-          ...bookPnL(sheet, incomeLocal, 'player trade fee/spread', bank.ticker),
-          dealerDeskInventory: inventory,
-        },
-      };
+      // §3.13-BOOK d3d: the desk's paper is REGISTER ROWS, so the player's fill is a transfer
+      // between the desk and the clearing house — the player's own portfolio lives outside the
+      // register (`state.portfolio`), so the house is the far side of the wire. A derivative or a
+      // commodity exposure consumes the desk through a PFE add-on and holds no paper: that stays a
+      // scalar on the sheet. The trade runs between weeks, so it opens a journal of its own.
+      const v2 = ensureV2(state);
+      const kind = book === 'derivatives' || book === 'commodity' ? undefined : DESK_BOOK_KIND[book];
+      const sheetAfter = bookPnL(sheet, incomeLocal, 'player trade fee/spread', bank.ticker);
+      if (kind === undefined) {
+        updatedCompanies = [...state.companies];
+        updatedCompanies[bankIndex] = { ...bank, bankBalanceSheet: { ...sheetAfter, deskDerivativesUseLocal: (sheetAfter.deskDerivativesUseLocal ?? 0) + inventoryDeltaLocal } };
+      } else {
+        const px = kind === 'EQUITY'
+          ? Math.max(1e-9, state.companies.find((c) => c.id === posData.symbol)?.stockPrice ?? 1)
+          : Math.max(1e-9, clearedPriceOf(v2, instrumentId) ?? 1);
+        const units = Math.abs(inventoryDeltaLocal) / px;
+        const j = newWireJournal((state as { nextWireId?: number }).nextWireId ?? 1, state.currentWeek);
+        setActiveWireJournal(j);
+        setActiveWireWorld(wireWorldOf(v2, state.companies, state.institutionalEntities ?? []));
+        try {
+          const desk = bankSecuritiesPartyOf(bank.id);
+          const house = { kind: 'CLEARING_HOUSE' as const, region: posData.region };
+          const spec = { instrumentType: kind, instrumentId, issuerRegion: posData.region, valueLocal: Math.abs(inventoryDeltaLocal), ...(kind === 'EQUITY' ? { shares: units } : { units }) };
+          if (inventoryDeltaLocal > 0) transferHolding(v2, house, desk, spec, 'player trade: desk fill');
+          else if (inventoryDeltaLocal < 0) transferHolding(v2, desk, house, spec, 'player trade: desk fill');
+        } finally {
+          setActiveWireJournal(undefined);
+          setActiveWireWorld(undefined);
+        }
+        (state as { nextWireId?: number }).nextWireId = j.base + j.n;
+        updatedCompanies = [...state.companies];
+        updatedCompanies[bankIndex] = { ...bank, bankBalanceSheet: sheetAfter };
+      }
       // A3.6: the desk pays for inventory from the bank's account and the fee lands on it.
-      adjustBankReserves(ensureV2(state), bank.id, -inventoryDeltaLocal + incomeLocal);
+      adjustBankReserves(v2, bank.id, -inventoryDeltaLocal + incomeLocal);
 
       // The region's view of that book, kept in step for the readers that want one aggregate.
       const region = updatedRegions[posData.region];
       if (region) {
         // §3.13: both credit books are keyed by the PAPER — 07b and 07d clear per tranche — so
         // the shared walk hands back ids and each line names its own.
-        const view = (b: string) => Array.from(regionalDeskView(
-          banksOf(updatedCompanies, posData.region)
-            .map((c) => c.bankBalanceSheet?.dealerDeskInventory),
-          b
+        const view = (b: string) => Array.from(regionalDeskViewOf(
+          ensureV2(state), banksOf(updatedCompanies, posData.region).map((c) => c.id), DESK_BOOK_KIND[b]
         ).entries()).filter(([, usd]) => Math.abs(usd) > 1);
         updatedRegions[posData.region] = {
           ...region,

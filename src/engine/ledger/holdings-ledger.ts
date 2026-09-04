@@ -16,7 +16,7 @@
  *                     P retires it when value becomes price × quantity by construction)
  */
 import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
-import { companyParty, bankPartyOf } from '../../domain/party';
+import { companyParty, bankPartyOf, bankSecuritiesPartyOf } from '../../domain/party';
 import {
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
@@ -70,6 +70,11 @@ export const householdBookId = (region: string): string => `HOUSEHOLD-${region}`
  * clearing-participant id, which is why it keeps its own shape.
  */
 export const centralBankBookId = (region: RegionId): string => partyKey({ kind: 'CENTRAL_BANK', region });
+/** §3.13-BOOK d3d — A BANK'S DESK BOOK: its trading inventory, keyed by the securities party's own
+ *  key. A desk is a market maker, so this is the one book the register lets go SHORT: a row here
+ *  carries a signed position (`adjustDeskRow`), never a debit refused. */
+export const deskBookId = (bankId: EntityId): string => partyKey(bankSecuritiesPartyOf(bankId));
+const isDeskBook = (bookId: string): boolean => bookId.startsWith('BANK_SECURITIES:');
 
 /**
  * The register's own read of a party as a holder.
@@ -102,6 +107,8 @@ const holderIdOf = (v2: V2World, p: PartyRef, spec?: { instrumentId: InstrumentI
         // §3.13-BOOK d3b: a bank's OWN book (its liquidity buffer) is the entity's book, under the
         // party whose money buys it — its reserves. Its desk (`BANK_SECURITIES`) is d3d's.
         : p.kind === 'BANK' ? p.id
+          // §3.13-BOOK d3d: the desk's inventory, signed.
+          : p.kind === 'BANK_SECURITIES' ? deskBookId(p.id)
           : p.kind === 'COMPANY' ? (spec !== undefined && (issuerIdOf(v2, spec.instrumentId) as string) !== (p.id as string) ? p.id : undefined)
             : undefined);
 
@@ -150,6 +157,8 @@ export function registerBooks(entityIds: readonly EntityId[], companies: readonl
     // §3.13-BOOK d3b/d3c: every company's own book — a bank's liquidity buffer, paid as the bank
     // (its reserves); any other firm's treasury book, paid as the company.
     ...companies.map((c) => ({ id: c.id as string, payee: (c.isBankEntity && c.bankBalanceSheet ? bankPartyOf(c.id) : companyParty(c)) as PartyRef })),
+    // §3.13-BOOK d3d: and each bank's DESK, paid as its securities party.
+    ...companies.filter((c) => c.isBankEntity && c.bankBalanceSheet).map((c) => ({ id: deskBookId(c.id), payee: bankSecuritiesPartyOf(c.id) as PartyRef })),
     ...REGION_IDS.map((region) => ({ id: householdBookId(region), payee: { kind: 'HOUSEHOLD' as const, region } })),
     // §3.13-BOOK d3a: and the central banks' books — consolidated and marked with everyone else's.
     ...REGION_IDS.map((region) => ({ id: centralBankBookId(region), payee: { kind: 'CENTRAL_BANK' as const, region } })),
@@ -192,6 +201,42 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
     instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
     quantityOrNotionalLocal: spec.valueLocal, quantityShares: spec.shares,
     units: unitsOf(spec),
+  });
+}
+
+/**
+ * §3.13-BOOK d3d — A DESK ROW IS SIGNED. A market maker's inventory in a name is one number that
+ * can be long or short: it sells what it does not have and buys it back. So the desk's book takes
+ * a credit and a debit as the same operation with a sign, on the one row of that (kind,
+ * instrument), and a row that returns to exactly nothing leaves the chain. Everyone else's debit
+ * stays a debit (`debitRow`), which refuses to go below zero — that is C4 ("no short by
+ * accident"), and this is the deliberate short the node allows for.
+ */
+function adjustDeskRow(v2: V2World, holderId: string, spec: HoldingSpec, sign: 1 | -1): void {
+  const H = mutableHoldings(v2);
+  const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
+  const dValue = sign * spec.valueLocal;
+  const dUnits = sign * unitsOf(spec);
+  for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
+    if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
+    const priorUnits = rowUnits(H, r);
+    H.qtyLocal[r] += dValue;
+    if (spec.shares !== undefined) H.shares[r] = (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]) + sign * spec.shares;
+    H.units[r] = priorUnits + dUnits;
+    markBookDirty(v2, holderId);
+    const flat = Math.abs(H.qtyLocal[r]) < 1e-6 && Math.abs(H.units[r]) < 1e-9 && (Number.isNaN(H.shares[r]) || Math.abs(H.shares[r]) < 1e-9);
+    if (flat) {
+      H.qtyLocal[r] = 0; H.units[r] = 0; if (!Number.isNaN(H.shares[r])) H.shares[r] = 0;
+      const kept: number[] = [];
+      for (let k = bookHeadOf(v2, holderId); k >= 0; k = H.next[k]) if (k !== r) kept.push(k);
+      relinkBook(v2, holderId, kept);
+    }
+    return;
+  }
+  pushBookRow(v2, holderId, {
+    instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
+    quantityOrNotionalLocal: dValue, quantityShares: spec.shares === undefined ? undefined : sign * spec.shares,
+    units: dUnits,
   });
 }
 
@@ -297,8 +342,8 @@ export function transferHolding(v2: V2World, from: PartyRef, to: PartyRef, spec:
   if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const fromId = holderIdOf(v2, from, spec), toId = holderIdOf(v2, to, spec);
   const n = wireHolding(from, to, spec, reason);
-  if (fromId) debitRow(v2, fromId, spec);
-  if (toId) creditRow(v2, toId, spec);
+  if (fromId) { if (isDeskBook(fromId)) adjustDeskRow(v2, fromId, spec, -1); else debitRow(v2, fromId, spec); }
+  if (toId) { if (isDeskBook(toId)) adjustDeskRow(v2, toId, spec, 1); else creditRow(v2, toId, spec); }
   return n;
 }
 
@@ -313,7 +358,7 @@ export function issueHolding(v2: V2World, issuer: PartyRef, holder: PartyRef, sp
   if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const n = wireHolding(issuer, holder, spec, reason);
   const toId = holderIdOf(v2, holder, spec);
-  if (toId) creditRow(v2, toId, spec);
+  if (toId) { if (isDeskBook(toId)) adjustDeskRow(v2, toId, spec, 1); else creditRow(v2, toId, spec); }
   return n;
 }
 
@@ -356,7 +401,7 @@ export function retireHolding(v2: V2World, holder: PartyRef, issuer: PartyRef, s
   if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const n = wireHolding(holder, issuer, spec, reason);
   const fromId = holderIdOf(v2, holder, spec);
-  if (fromId) debitRow(v2, fromId, spec);
+  if (fromId) { if (isDeskBook(fromId)) adjustDeskRow(v2, fromId, spec, -1); else debitRow(v2, fromId, spec); }
   return n;
 }
 

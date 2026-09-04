@@ -88,7 +88,7 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 a holding is holder + instrument + quantity | `src/engine2/holdings.ts:HoldingStore` · `src/domain/banking.ts:ItemizedHolding` | ✅ |
-| A1.a the holder exists and can be paid | `src/engine/ledger/holdings-ledger.ts:holderIdOf` | ⚠️ |
+| A1.a the holder exists and can be paid | `src/engine/ledger/holdings-ledger.ts:holderIdOf` | ✅ |
 | A1.b the instrument is one the issuer issued | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | A1.c the quantity is in the instrument's own unit | `src/engine2/holdings.ts:HoldingStore` | ✅ |
 | A2 a holding is a claim on a named issuer | `src/engine2/holdings.ts:pushBookRow` | ✅ |
@@ -374,15 +374,16 @@ that writes rows directly. The clearing kernel cannot produce a negative fill ei
 (`financial-clearing-engine.ts:812`). A deliberate short exists only as a borrowed position in
 `securities-lending`, which is what the node asks for.
 
-### ⚠️ A1.a — A NODE THAT IS A BOUNDARY RATHER THAN A CONSTRUCTION
+### ✅ A1.a — CLOSED: EVERY HOLDER CLASS IS ON THE REGISTER (§9.13-BOOK d3d)
 
 `holderIdOf` answers for `INSTITUTION`, `HOUSEHOLD` (§9.13-EQUITY), the `CENTRAL_BANK` (§9.13-BOOK
-d3a), the `BANK` — a bank's own sovereign book (d3b) — and the `COMPANY` for paper somebody else
-issued — its treasury book (d3c); the desks' inventories (`BANK_SECURITIES`) are the one holder
-class still held OUTSIDE this register, in a field on the bank's sheet. The O-family checks then
-reconcile that store against the ladders (O1, O6, O7) rather than the register doing it by
-construction. A statement of the tree's boundary, and §3.13-BOOK d3d is what moves it; recorded so
-the next reader does not assume `A1` covers every holder in the world.
+d3a), the `BANK` — a bank's own sovereign book (d3b) — the `COMPANY` for paper somebody else
+issued — its treasury book (d3c) — and, since d3d, `BANK_SECURITIES`: a desk's inventory is rows
+on the bank's securities book (`deskBookId`), SIGNED, because a market maker is short when it has
+sold what it did not have (`adjustDeskRow` is the desk arm of every ledger op). No holder class is
+held outside this register any more, `registerBooks` lists every book there is, and the O-family
+checks reconcile the register against the ladders — not a second store against the register. The
+boundary this node used to record is gone.
 
 ### Also marked, briefly
 

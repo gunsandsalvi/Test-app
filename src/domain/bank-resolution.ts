@@ -18,7 +18,6 @@
 
 import { BankingSector, HouseholdLoanPool , loanBooksOf, DepositLines } from './banking';
 import { bankRwaLocal, BANK_WORKING_CAPITAL_RATIO } from './bank-pricing';
-import { dealerDeskGrossLocal, DealerDeskInventory } from './dealer-desk';
 
 /** Prompt corrective action: the ratio at which a bank is closed — well above zero, because a
  *  bank at zero book capital has long been insolvent at market values. Real supervision closes
@@ -39,12 +38,12 @@ export function isBankUnderPca(sheet: BankingSector, facilityBookLocal: number):
 }
 
 /** Every asset on the sheet, cash included — the one asset side the identity counts. */
-export function bankSheetAssetsLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, sovLocal: number): number {
-  // §3.13-BOOK d3b: the sovereign book is register rows, handed in like the facility book.
-  return loanBooksOf(sheet, facilityBookLocal) + sovLocal + cashLocal
+export function bankSheetAssetsLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, bookAssetsLocal: number): number {
+  // §3.13-BOOK d3b/d3d: the register books — the sovereign book at the mark plus the desks'
+  // gross (`bankBookAssetsLocal`) — are handed in like the facility book.
+  return loanBooksOf(sheet, facilityBookLocal) + bookAssetsLocal + cashLocal
     + (sheet.repoLentLocal ?? 0) + (sheet.onRrpLendingLocal ?? 0)
     + (sheet.sovereignAccruedCouponLocal ?? 0)
-    + dealerDeskGrossLocal(sheet.dealerDeskInventory)
     + (sheet.primeBrokerageLoansLocal ?? 0);
 }
 
@@ -90,10 +89,10 @@ export interface BankResolutionPlan {
  * its holders take their loss through the estate, like any other issuer's bondholders.
  */
 export function planBankResolution(
-  sheet: BankingSector, ownLadderPrincipalLocal: number, acquirerCapitalLocal: number, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number,
+  sheet: BankingSector, ownLadderPrincipalLocal: number, acquirerCapitalLocal: number, cashLocal: number, lines: DepositLines, facilityBookLocal: number, bookAssetsLocal: number,
 ): BankResolutionPlan {
   const centralBankLoanLocal = Math.max(0, sheet.centralBankLoanLocal ?? 0);
-  const netBookLocal = bankSheetAssetsLocal(sheet, cashLocal, facilityBookLocal, sovLocal) - bankAssumedLiabilitiesLocal(sheet, lines) - centralBankLoanLocal;
+  const netBookLocal = bankSheetAssetsLocal(sheet, cashLocal, facilityBookLocal, bookAssetsLocal) - bankAssumedLiabilitiesLocal(sheet, lines) - centralBankLoanLocal;
   const capitalLocal = Math.max(0, acquirerCapitalLocal);
   const estateLocal = Math.max(0, netBookLocal - capitalLocal);
   const shortfallLocal = Math.max(0, capitalLocal - netBookLocal);
@@ -138,28 +137,6 @@ export function mergeHouseholdPool(mine: HouseholdLoanPool, theirs: HouseholdLoa
   if (margin !== undefined) out.marginBps = Math.round(margin);
   const wam = blend(mine.wamWeeks, theirs.wamWeeks);
   if (wam !== undefined) out.wamWeeks = Math.round(wam);
-  return out;
-}
-
-/** Two desks become one: a desk holds ONE position per name (the clearing stages write it back
- *  per name — a second row for the same instrument is a phantom they cannot see), so rows of
- *  the same instrument in the same book sum. */
-export function mergeDesks(mine: DealerDeskInventory | undefined, theirs: DealerDeskInventory | undefined): DealerDeskInventory | undefined {
-  if (!theirs) return mine;
-  const out: DealerDeskInventory = { ...(mine ?? {}) };
-  Object.entries(theirs).forEach(([book, rows]) => {
-    const merged = [...(out[book] ?? [])];
-    rows.forEach((r) => {
-      const i = merged.findIndex((m) => m.instrumentId === r.instrumentId);
-      if (i < 0) { merged.push({ ...r }); return; }
-      const m = merged[i];
-      merged[i] = {
-        ...m, inventoryLocal: m.inventoryLocal + r.inventoryLocal,
-        ...(m.units !== undefined || r.units !== undefined ? { units: (m.units ?? 0) + (r.units ?? 0) } : {}),
-      };
-    });
-    out[book] = merged;
-  });
   return out;
 }
 

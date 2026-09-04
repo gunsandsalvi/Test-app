@@ -24,7 +24,8 @@ import { centralBankPositions, centralBankBookLocal, bankSovereignPositions, sov
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay, dueToPayee, partyId, internReason, CORPORATE_TAX_REASON, settlementWeek } from './settlement';
-import { retireHolding } from '../../ledger/holdings-ledger';
+import { retireHolding, issueHolding } from '../../ledger/holdings-ledger';
+import { deskRowsOf } from '../../desk-register';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { internType, internRegion } from '../../../engine2/world';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
@@ -309,39 +310,48 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         };
       });
 
-      // G3a: A DESK IS A HOLDER. Its sovereign and bill inventory sits on the bank's own
-      // `dealerDeskInventory`, keyed by the bucket instrument id, and nothing here redeemed it —
-      // so a desk kept a claim on paper that had matured and the treasury paid somebody else's
-      // share of it to the boundary.
-      ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
-        if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
-        const sheet = c.bankBalanceSheet;
-        const inv = sheet.dealerDeskInventory;
-        if (!inv) return c;
-        let redeemedLocal = 0;
-        const newInv: typeof inv = { ...inv };
-        (['sovereign bond', 'bill'] as const).forEach(book => {
-          const rows = inv[book];
-          if (!rows) return;
-          newInv[book] = rows.map(r => {
-            const fraction = redeemedFractionByBond.get(r.instrumentId) ?? 0;
-            if (fraction <= 0) return r;
-            redeemedLocal += r.inventoryLocal * fraction;
-            return { ...r, inventoryLocal: r.inventoryLocal * (1 - fraction) };
-          }).filter(r => Math.abs(r.inventoryLocal) > 1);
+      // G3a: A DESK IS A HOLDER. §3.13-BOOK d3d: its sovereign inventory is register rows on the
+      // bank's securities book (the bills and the bonds share one kind), and a matured slice
+      // retires to the treasury by wire like the bank's own book, the treasury repaying FACE to
+      // the securities account that bought it. A desk that is SHORT the bucket owes the face
+      // instead: the treasury's redemption closes its row and the desk pays.
+      ctx.updatedCompanies.forEach((c) => {
+        if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return;
+        let redeemedLocal = 0, owedLocal = 0;
+        deskRowsOf(ctx.v2, c.id, 'GOV_BOND').forEach((p) => {
+          const fraction = redeemedFractionByBond.get(p.instrumentId) ?? 0;
+          if (!(fraction > 0)) return;
+          const faceLocal = Math.abs(p.units) * fraction;
+          if (!(faceLocal > 0)) return;
+          const spec = { instrumentType: 'GOV_BOND' as const, instrumentId: p.instrumentId, issuerRegion: regionId, valueLocal: Math.abs(p.inventoryLocal) * fraction, units: faceLocal };
+          if (p.units < 0) {
+            issueHolding(ctx.v2, { kind: 'GOVERNMENT', region: regionId }, bankSecuritiesParty(c), spec, 'sovereign redemption: short covered');
+            owedLocal += faceLocal;
+          } else {
+            retireHolding(ctx.v2, bankSecuritiesParty(c), { kind: 'GOVERNMENT', region: regionId }, spec, 'sovereign redemption');
+            redeemedLocal += faceLocal;
+          }
         });
-        if (!(Math.abs(redeemedLocal) > 0)) return c;
-        redemptionPaidLocal += redeemedLocal;
-        pay(ctx, {
-          payer: { kind: 'GOVERNMENT', region: regionId },
-          payee: bankSecuritiesParty(c),
-          amount: redeemedLocal,
-          currency: currencyOf(regionId),
-          reason: 'sovereign redemption',
-        });
-        // The write goes on `updatedCompanies`, not `companyUpdates`: stage 08 has already
-        // rebuilt the array from that map and nothing reads it again this week.
-        return { ...c, bankBalanceSheet: { ...sheet, dealerDeskInventory: newInv } };
+        if (redeemedLocal > 0) {
+          redemptionPaidLocal += redeemedLocal;
+          pay(ctx, {
+            payer: { kind: 'GOVERNMENT', region: regionId },
+            payee: bankSecuritiesParty(c),
+            amount: redeemedLocal,
+            currency: currencyOf(regionId),
+            reason: 'sovereign redemption',
+          });
+        }
+        if (owedLocal > 0) {
+          redemptionPaidLocal -= owedLocal;
+          pay(ctx, {
+            payer: bankSecuritiesParty(c),
+            payee: { kind: 'GOVERNMENT', region: regionId },
+            amount: owedLocal,
+            currency: currencyOf(regionId),
+            reason: 'sovereign redemption',
+          });
+        }
       });
 
       // CASH: and the CORPORATE TREASURIES, which hold bills since they started bidding for them

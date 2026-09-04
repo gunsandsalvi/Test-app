@@ -1,6 +1,7 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
+import { deskRowsOf } from '../desk-register';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, sum } from './types';
@@ -118,12 +119,11 @@ export function ownershipCoverage(
     // money — so the check read one representation for the corporate books and another for CP,
     // and neither could report a face. A desk carries its book AT MARKET, so its face is `units`,
     // and O6 has always read the per-bank books; now both sides of the O family agree.
-    const desk = bs.dealerDeskInventory;
-    const deskFace = (book: string): number =>
-      (desk?.[book] ?? []).reduce((a, p) => a + (p.units ?? p.inventoryLocal), 0);
-    held[c.region].cp += deskFace('commercial paper');
-    held[c.region].corp += deskFace('corporate bond');
-    held[c.region].loan += deskFace('leveraged loan');
+    // §3.13-BOOK d3d: the desk's rows, off the register, in face.
+    const deskFace = (kind: string): number => deskRowsOf(v2o1, c.id, kind).reduce((a, p) => a + p.units, 0);
+    held[c.region].cp += deskFace('COMMERCIAL_PAPER');
+    held[c.region].corp += deskFace('CORP_BOND');
+    held[c.region].loan += deskFace('LEVERAGED_LOAN');
   });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r]; if (!reg) return;
@@ -282,10 +282,11 @@ function o6(state: GameState, week: number): AuditFinding[] {
       add(held, `${regionOf(v2, H.regionRef[r])}|${k}`, rowUnits(H, r));
     }
   });
-  const DESK_BOOKS: Record<string, typeof KINDS[number]> = { 'corporate bond': 'CORP_BOND', 'leveraged loan': 'LEVERAGED_LOAN', 'commercial paper': 'COMMERCIAL_PAPER' };
+  const DESK_KINDS: readonly (typeof KINDS[number])[] = ['CORP_BOND', 'LEVERAGED_LOAN', 'COMMERCIAL_PAPER'];
   state.companies.forEach((b) => {
-    const inv = b.bankBalanceSheet?.dealerDeskInventory; if (!inv || !isActiveCompany(b)) return;
-    Object.entries(DESK_BOOKS).forEach(([book, k]) => (inv[book] ?? []).forEach((p) => add(held, `${b.region}|${k}`, p.units ?? p.inventoryLocal)));
+    if (!b.bankBalanceSheet || !isActiveCompany(b)) return;
+    // §3.13-BOOK d3d: the desk's rows, off the register, in face.
+    DESK_KINDS.forEach((k) => deskRowsOf(v2, b.id, k).forEach((p) => add(held, `${b.region}|${k}`, p.units)));
   });
   const gaps: string[] = []; let gapLocal = 0;
   new Set([...issued.keys(), ...held.keys()]).forEach((key) => {
@@ -375,12 +376,12 @@ function o8(state: GameState, week: number): AuditFinding[] {
   const entityIds = new Set(state.institutionalEntities.map((e) => e.id));
 
   // 1. The desks' credit books against the register's key.
-  const CREDIT_BOOKS = ['corporate bond', 'leveraged loan', 'commercial paper'];
+  const CREDIT_KINDS = ['CORP_BOND', 'LEVERAGED_LOAN', 'COMMERCIAL_PAPER'];
   let issuerKeyed = 0, issuerKeyedLocal = 0, trancheKeyed = 0, trancheKeyedLocal = 0;
   state.companies.forEach((b) => {
-    const inv = b.bankBalanceSheet?.dealerDeskInventory;
-    if (!inv || !isActiveCompany(b)) return;
-    CREDIT_BOOKS.forEach((book) => (inv[book] ?? []).forEach((p) => {
+    if (!b.bankBalanceSheet || !isActiveCompany(b)) return;
+    // §3.13-BOOK d3d: the desk's rows, off the register.
+    CREDIT_KINDS.forEach((k) => deskRowsOf(v2, b.id, k).forEach((p) => {
       if (isTrancheId(v2, p.instrumentId)) { trancheKeyed++; trancheKeyedLocal += p.inventoryLocal; }
       else { issuerKeyed++; issuerKeyedLocal += p.inventoryLocal; }
     }));

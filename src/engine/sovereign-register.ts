@@ -59,10 +59,11 @@ export function forEachSovereignPosition(
   const govRef = typeRefOf(v2, 'GOV_BOND');
   const regRef = regionRefOf(v2, regionId);
 
-  // 1. THE REGISTER — the institutions, the household sector and the central banks, whatever
-  //    books it holds today (`registerBooks` is the one statement of that, §9.13-EQUITY). A
-  //    central bank's book is its own holder class here, because the ownership shares and the
-  //    UI report it as one; the row is the same shape as anyone else's.
+  // THE REGISTER — every book it holds today (`registerBooks` is the one statement of that,
+  // §9.13-EQUITY): the institutions, the household sector, the central banks, the banks' own
+  // books, the companies' treasuries and, since §3.13-BOOK d3d, the banks' DESKS. A central
+  // bank's book is its own holder class here, because the ownership shares and the UI report
+  // it as one; the row is the same shape as anyone else's, and so is a desk's.
   // A bank's book reports under its TICKER (the key every consumer of this walk has always seen
   // for a bank), and a bank holds its OWN sovereign as its liquidity buffer (07c's domestic
   // mandate), so the row's region test is the issuer's, as for every other book.
@@ -71,8 +72,12 @@ export function forEachSovereignPosition(
   if (govRef >= 0 && regRef >= 0) {
     registerBooks((state.institutionalEntities ?? []).filter((e) => !e.isDefaulted).map((e) => e.id), activeCompanies)
       .forEach((b) => {
-        const holderClass: SovereignHolderClass = b.payee.kind === 'CENTRAL_BANK' ? 'CENTRAL_BANK' : b.payee.kind === 'BANK' ? 'BANK' : b.payee.kind === 'COMPANY' ? 'TREASURY' : 'REGISTER';
-        const holderKey = holderClass === 'CENTRAL_BANK' ? 'CB' : (holderClass === 'BANK' || holderClass === 'TREASURY') ? (tickerById.get(b.id) ?? b.id) : b.id;
+        const holderClass: SovereignHolderClass = b.payee.kind === 'CENTRAL_BANK' ? 'CENTRAL_BANK' : b.payee.kind === 'BANK' ? 'BANK' : b.payee.kind === 'BANK_SECURITIES' ? 'DESK' : b.payee.kind === 'COMPANY' ? 'TREASURY' : 'REGISTER';
+        // A bank's and a desk's book report under the bank's TICKER (a desk's book id is the
+        // securities party's key; the owning bank is the party's id).
+        const holderKey = holderClass === 'CENTRAL_BANK' ? 'CB'
+          : holderClass === 'DESK' ? (tickerById.get(b.payee.kind === 'BANK_SECURITIES' ? (b.payee.id as string) : b.id) ?? b.id)
+            : (holderClass === 'BANK' || holderClass === 'TREASURY') ? (tickerById.get(b.id) ?? b.id) : b.id;
         for (let r = bookHeadOf(v2, b.id); r >= 0; r = H.next[r]) {
           if (H.typeRef[r] !== govRef || H.regionRef[r] !== regRef) continue;
           const faceLocal = rowUnits(H, r);
@@ -80,23 +85,6 @@ export function forEachSovereignPosition(
         }
       });
   }
-
-  // 2. THE DESKS' inventory — still outside the register (§3.13-BOOK d3d).
-  state.companies.forEach((c) => {
-    if (!isActiveCompany(c)) return;
-    const sheet = c.bankBalanceSheet;
-    if (!sheet) return;
-    if (c.region !== regionId) return;
-    // The DESKS off the banks that carry them, not off `bankingSector.sovBondDealerInventory` —
-    // that regional array is a derived roll-up (`regionalDeskView`) which keeps only the money,
-    // so it cannot report a face at all (§9.13-CREDIT row 5b found `O1` reading it for one).
-    (['sovereign bond', 'bill'] as const).forEach((book) => {
-      (sheet.dealerDeskInventory?.[book] ?? []).forEach((p) => {
-        const faceLocal = p.units ?? p.inventoryLocal;
-        if (faceLocal !== 0) visit({ bondId: p.instrumentId, holderKey: c.ticker, holderClass: 'DESK', faceLocal });
-      });
-    });
-  });
 
 }
 

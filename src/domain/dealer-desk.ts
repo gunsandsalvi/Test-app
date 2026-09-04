@@ -45,6 +45,7 @@
  * week's take shrinking the base for the next, converging on the entire balance sheet — a
  * commitment has to be measured against the whole sheet or it is not a commitment.
  */
+import type { ItemizedHolding } from './banking';
 import type { InstrumentId, Ticker } from './ids';
 import { asTicker } from './ids';
 
@@ -96,8 +97,14 @@ export interface DealerDeskPosition {
   units?: number;
 }
 
-/** A bank's market-making inventory, by book ('corporate bond', 'sovereign bond', ...). */
-export type DealerDeskInventory = Record<string, DealerDeskPosition[]>;
+/** §3.13-BOOK d3d: the register kind each desk book carries — the wire's asset kind, and the
+ *  row's type on the bank's securities book. A desk's inventory is no longer a field on the
+ *  sheet (`engine/desk-register.ts` reads the rows); a BOOK is a market name, a KIND is what the
+ *  register stores, and the two sovereign books share one kind. */
+export const DESK_BOOK_KIND: Record<string, ItemizedHolding['instrumentType']> = {
+  'corporate bond': 'CORP_BOND', 'sovereign bond': 'GOV_BOND', bill: 'GOV_BOND',
+  'leveraged loan': 'LEVERAGED_LOAN', equity: 'EQUITY', 'commercial paper': 'COMMERCIAL_PAPER',
+};
 
 const DESK_SUFFIX = '::DESK';
 
@@ -112,18 +119,6 @@ export function dealerDeskTicker(participantId: string): Ticker | undefined {
   return participantId.endsWith(DESK_SUFFIX)
     ? asTicker(participantId.slice(0, -DESK_SUFFIX.length))
     : undefined;
-}
-
-/** Gross inventory a bank's desks carry across every book — what its capital is already renting
- *  out. Gross, not net: a short is a position too, and it consumes the same balance sheet. */
-export function dealerDeskGrossLocal(inventory: DealerDeskInventory | undefined, exceptBook?: string): number {
-  if (!inventory) return 0;
-  let grossLocal = 0;
-  Object.entries(inventory).forEach(([book, positions]) => {
-    if (book === exceptBook) return;
-    positions.forEach((p) => { grossLocal += Math.abs(p.inventoryLocal); });
-  });
-  return grossLocal;
 }
 
 /**
@@ -141,12 +136,15 @@ export function dealerDeskGrossLocal(inventory: DealerDeskInventory | undefined,
 export function dealerDeskCapacityLocal(args: {
   balanceSheetCapacityLocal: number;
   leverageHeadroomLocal: number;
-  inventory: DealerDeskInventory | undefined;
-  book: string;
+  /** §3.13-BOOK d3d: what the bank's desks carry across every book, gross (a short is a
+   *  position too, and it consumes the same balance sheet) — `deskGrossLocal` off the register. */
+  grossLocal: number;
+  /** The part of that gross in the book being cleared now, netted out of both bounds. */
+  thisBookGrossLocal: number;
 }): number {
   const committedLocal = Math.max(0, args.balanceSheetCapacityLocal) * DEALER_DESK_SHARE_OF_BALANCE_SHEET;
-  const otherBooksLocal = dealerDeskGrossLocal(args.inventory, args.book);
-  const thisBookLocal = Math.max(0, dealerDeskGrossLocal(args.inventory) - otherBooksLocal);
+  const thisBookLocal = Math.max(0, args.thisBookGrossLocal);
+  const otherBooksLocal = Math.max(0, args.grossLocal - thisBookLocal);
   return Math.max(0, Math.min(
     committedLocal - otherBooksLocal,
     Math.max(0, args.leverageHeadroomLocal) + thisBookLocal
@@ -156,12 +154,12 @@ export function dealerDeskCapacityLocal(args: {
 /** The regional view a UI (and the pre-G3 readers) still want: every desk's position in one
  *  book, summed by name. Derived — no one writes it, and nothing may decide off it. */
 export function regionalDeskView(
-  inventories: (DealerDeskInventory | undefined)[],
-  book: string
+  /** §3.13-BOOK d3d: each desk's rows in the book (`deskRowsOf`), one array per bank. */
+  positionsByBank: readonly (readonly DealerDeskPosition[])[],
 ): Map<InstrumentId, number> {
   const byInstrument = new Map<InstrumentId, number>();
-  inventories.forEach((inv) => {
-    (inv?.[book] ?? []).forEach((p) => {
+  positionsByBank.forEach((positions) => {
+    positions.forEach((p) => {
       byInstrument.set(p.instrumentId, (byInstrument.get(p.instrumentId) ?? 0) + p.inventoryLocal);
     });
   });

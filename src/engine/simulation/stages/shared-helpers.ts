@@ -5,6 +5,8 @@
  */
 
 import { journalPayment, partyId, PendingNetCtx } from './settlement';
+import { DESK_BOOK_KIND } from '../../../domain/dealer-desk';
+import { deskRowsOf } from '../../desk-register';
 import type { EntityId } from '../../../domain/ids';
 import { bankSecuritiesParty, bankSecuritiesPartyOf, companyPartyOf } from '../../../domain/party';
 import { buildEntityIndex } from '../../ledger/entity-index';
@@ -386,18 +388,21 @@ const DESK_BOOK_BY_TYPE: Record<string, string> = {
  * wrong split ever since. `units` is the paper.
  */
 function deskHoldingsByInstrument(
+  v2: V2World,
   companies: Company[] | undefined,
   book: string | undefined
 ): Map<string, Map<string, number>> {
   const out = new Map<string, Map<string, number>>();
   if (!book) return out;
+  const kind = DESK_BOOK_KIND[book];
+  if (kind === undefined) return out;
   companies?.forEach((bank) => {
-    const rows = bank.bankBalanceSheet?.dealerDeskInventory?.[book];
-    if (!bank.isBankEntity || !rows) return;
+    if (!bank.isBankEntity || !bank.bankBalanceSheet) return;
     const deskId = dealerDeskParticipantId(bank.ticker);
-    rows.forEach((p) => {
+    // §3.13-BOOK d3d: the desk's rows of this book's kind, off the register.
+    deskRowsOf(v2, bank.id, kind).forEach((p) => {
       if (!(p.inventoryLocal > 0)) return;
-      const faceLocal = p.units ?? p.inventoryLocal;
+      const faceLocal = p.units;
       if (!(faceLocal > 0)) return;
       let byDesk = out.get(p.instrumentId);
       if (!byDesk) { byDesk = new Map(); out.set(p.instrumentId, byDesk); }
@@ -533,20 +538,20 @@ export function applyPendingCorporateActionSettlements(
     pendingByType.forEach((byId, type) => {
       const book = type === 'CORP_BOND' || type === 'LEVERAGED_LOAN' ? DESK_BOOK_BY_TYPE[type] : undefined;
       if (!book) return;
+      const deskKind = DESK_BOOK_KIND[book];
       ctx.updatedCompanies!.forEach((bank) => {
-        const sheet = bank.bankBalanceSheet; const rows = sheet?.dealerDeskInventory?.[book];
-        if (!bank.isBankEntity || !sheet || !rows || rows.length === 0) return;
-        let touched = false;
-        const newRows = rows.map((p) => {
+        if (!bank.isBankEntity || !bank.bankBalanceSheet || deskKind === undefined) return;
+        // §3.13-BOOK d3d: the desk's rows, off the register — the transfer IS the row's move.
+        deskRowsOf(ctx.v2, bank.id, deskKind).forEach((p) => {
           const ratio = byId.get(p.instrumentId);
-          if (ratio === undefined || !(p.inventoryLocal > 0) || Math.abs(ratio - 1) < 1e-9) return p;
+          if (ratio === undefined || !(p.inventoryLocal > 0) || Math.abs(ratio - 1) < 1e-9) return;
           const issuerTicker = issuerPartyIdOf(p.instrumentId);
           const issuerRegion = companyById.get(issuerIdOf(v2, p.instrumentId))?.region;
-          if (!issuerTicker || !issuerRegion) return p;
+          if (!issuerTicker || !issuerRegion) return;
           const deltaLocal = p.inventoryLocal * (ratio - 1);
           const house = { kind: 'CLEARING_HOUSE' as const, region: issuerRegion };
           const desk = bankSecuritiesParty(bank);
-          const spec = { instrumentType: type as ItemizedHolding['instrumentType'], instrumentId: p.instrumentId, issuerRegion, valueLocal: Math.abs(deltaLocal) };
+          const spec = { instrumentType: type as ItemizedHolding['instrumentType'], instrumentId: p.instrumentId, issuerRegion, valueLocal: Math.abs(deltaLocal), units: Math.abs(p.units * (ratio - 1)) };
           if (deltaLocal < 0) {
             journalPayment(ctx, { payer: companyPartyOf(issuerTicker), payee: desk, amount: -deltaLocal, currency: currencyOf(issuerRegion), reason: 'principal redeemed to holder of record' });
             transferHolding(ctx.v2, desk, house, spec, 'corporate action: desk paper retired pro rata');
@@ -554,10 +559,7 @@ export function applyPendingCorporateActionSettlements(
             journalPayment(ctx, { payer: desk, payee: companyPartyOf(issuerTicker), amount: deltaLocal, currency: currencyOf(issuerRegion), reason: 'placement paid by holder of record' });
             transferHolding(ctx.v2, house, desk, spec, 'corporate action: desk paper placed pro rata');
           }
-          touched = true;
-          return { ...p, inventoryLocal: p.inventoryLocal * ratio, units: p.units !== undefined ? p.units * ratio : undefined };
         });
-        if (touched) bank.bankBalanceSheet = { ...sheet, dealerDeskInventory: { ...sheet.dealerDeskInventory, [book]: newRows } };
       });
     });
   }
@@ -579,7 +581,7 @@ export function applyPendingCorporateActionSettlements(
   const deskByInstrumentByType = new Map<string, Map<string, Map<string, number>>>();
   if (hasCash) {
     pendingCashByType.forEach((_byId, type) => {
-      deskByInstrumentByType.set(type, deskHoldingsByInstrument(ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
+      deskByInstrumentByType.set(type, deskHoldingsByInstrument(v2, ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
     });
   }
   // §9.13-EQUITY — THE WALK IS OVER REGISTER BOOKS, NOT OVER INSTITUTIONS. The household sector
@@ -986,7 +988,7 @@ export function applyHolderInterestAccruals(
     // order — and to the same value — whichever pass reads it.
     const deskHoldings = new Map<string, Map<string, Map<string, number>>>();
     accrualsByType.forEach((_byId, type) => {
-      deskHoldings.set(type, deskHoldingsByInstrument(ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
+      deskHoldings.set(type, deskHoldingsByInstrument(ctx.v2, ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
     });
     const holdings = getHoldingsTable(ctx);
     const entities = ctx.updatedInstitutionalEntities;

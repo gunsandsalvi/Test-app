@@ -16,8 +16,10 @@
  */
 
 import { AssetType, Company, Dealer } from '../types';
+import type { V2World } from '../engine2/world';
+import { deskRowsOf, deskGrossLocal } from './desk-register';
 import { assertNever } from '../domain/defect';
-import { dealerDeskCapacityLocal, dealerDeskGrossLocal, DESK_SPREAD_BPS_BY_BOOK } from '../domain/dealer-desk';
+import { dealerDeskCapacityLocal, DESK_SPREAD_BPS_BY_BOOK, DESK_BOOK_KIND } from '../domain/dealer-desk';
 
 export { DESK_SPREAD_BPS_BY_BOOK };
 import { BASEL_MIN_LEVERAGE_RATIO, leverageHeadroomLocal } from './macro/banking';
@@ -45,29 +47,32 @@ const ALL_ASSET_CLASSES = Object.keys(DESK_BOOK_BY_ASSET_TYPE) as AssetType[];
 
 /** The region's named banks, as the desks a player can deal with. Derived every week. */
 export function dealersFromBanks(
+  /** §3.13-BOOK d3d: the world whose register the desks' rows live on. */
+  v2: V2World,
   /** A3.6c: a bank's reserves — its account in the week (`bankReservesOf`), its opening stash at the seed. */
   reservesOf: (bank: Company) => number,
   /** Step 10: the bank's facility book — its rows on the borrowers' ladders (`facilityBookOf`). */
   facilityBookOf: (bank: Company) => number,
-  /** §3.13-BOOK d3b: the bank's own sovereign book — its register rows (`bankSovereignBookLocal`). */
-  sovereignBookOf: (bank: Company) => number,
+  /** §3.13-BOOK d3b/d3d: what the bank's register books put on its sheet — its own sovereign
+   *  book at the mark plus its desks' gross (`bankBookAssetsLocal`; the seed's stash before). */
+  bookAssetsOf: (bank: Company) => number,
   banks: Company[]
 ): Dealer[] {
   return banksOf(banks)
     .map((bank, i) => {
       const sheet = bank.bankBalanceSheet!;
-      const grossLocal = dealerDeskGrossLocal(sheet.dealerDeskInventory);
+      const grossLocal = deskGrossLocal(v2, bank.id);
       const capacityLocal = dealerDeskCapacityLocal({
         balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-        leverageHeadroomLocal: leverageHeadroomLocal(sheet, reservesOf(bank), facilityBookOf(bank), sovereignBookOf(bank)),
-        inventory: sheet.dealerDeskInventory,
-        book: '',
+        leverageHeadroomLocal: leverageHeadroomLocal(sheet, reservesOf(bank), facilityBookOf(bank), bookAssetsOf(bank)),
+        grossLocal,
+        thisBookGrossLocal: 0,
       });
       // The axe: the books this desk is genuinely long, so the classes it can fill from stock.
+      const netByKind = new Map<string, number>();
+      deskRowsOf(v2, bank.id).forEach((r) => netByKind.set(r.kind, (netByKind.get(r.kind) ?? 0) + r.inventoryLocal));
       const longBooks = new Set(
-        Object.entries(sheet.dealerDeskInventory ?? {})
-          .filter(([, rows]) => rows.reduce((a, r) => a + r.inventoryLocal, 0) > 0)
-          .map(([book]) => book)
+        Object.entries(DESK_BOOK_KIND).filter(([, kind]) => (netByKind.get(kind) ?? 0) > 0).map(([book]) => book)
       );
       const axeAssetClasses = ALL_ASSET_CLASSES.filter((a) => longBooks.has(DESK_BOOK_BY_ASSET_TYPE[a]));
       return {
@@ -88,9 +93,10 @@ export function dealersFromBanks(
 }
 
 /** What this desk holds of one instrument right now. */
-export function deskInventoryLocal(bank: Company | undefined, book: string, instrumentId: string): number {
-  const rows = bank?.bankBalanceSheet?.dealerDeskInventory?.[book] ?? [];
-  return rows.filter((r) => r.instrumentId === instrumentId).reduce((a, r) => a + r.inventoryLocal, 0);
+export function deskInventoryLocal(v2: V2World, bank: Company | undefined, book: string, instrumentId: string): number {
+  const kind = DESK_BOOK_KIND[book];
+  if (!bank || kind === undefined) return 0;
+  return deskRowsOf(v2, bank.id, kind).filter((r) => r.instrumentId === instrumentId).reduce((a, r) => a + r.inventoryLocal, 0);
 }
 
 /**

@@ -13,7 +13,7 @@ import {
   bankAssumedLiabilitiesLocal, bankSheetAssetsLocal, chooseAssumingBank, isBankUnderPca,
   mergeHouseholdPool, planBankResolution, PCA_CAPITAL_RATIO,
 } from '../src/domain/bank-resolution';
-import { asInstrumentId, asEntityId } from '../src/domain/ids';
+import { asEntityId } from '../src/domain/ids';
 import { ensureV2 } from '../src/engine2/world';
 
 // Step 10: a bank's facility book is its rows on the borrowers' ladders, read by the caller and
@@ -88,25 +88,26 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
   const F = sheet({
     householdLoans: [{ kind: 'MORTGAGE', principalLocal: 40, vintages: [{ principalLocal: 40, originationCollateralLocal: 60, originationHomePriceLocal: 300000, rateAnnual: 0.05, wamWeeks: 900, fixedForWeeks: 100, originatedWeek: 0 }], wacAnnual: 0.05 }],
     sovereignAccruedCouponLocal: 1,
-    dealerDeskInventory: { 'corporate bond': [{ instrumentId: asInstrumentId('x'), inventoryLocal: 4 }] },
     primeBrokerageLoansLocal: 2, repoBorrowedLocal: 6, bankEquityLocal: 1,
   });
-  // assets 100+40+20+10+1+4+2 = 177; assumed 120+15+5+6 = 146; wholesale 30; equity 1 → identity
+  // §3.13-BOOK d3d: the desks' inventory is register rows too, stated beside the sheet with the
+  // sovereign book as the bank's BOOK assets — 4 of desk paper here, 1 at the acquirer.
+  let fBook = SOV + 4, aBook = SOV + 1;
+  // assets 100+40+(20+4)+10+1+2 = 177; assumed 120+15+5+6 = 146; wholesale 30; equity 1 → identity
   const fLines = linesOf({ householdLocal: 120, institutionalLocal: 5 });
-  assert.equal(identityResidual(F, CASH, fLines), 0);
+  assert.equal(identityResidual(F, CASH, fLines, FAC, fBook), 0);
   const A = sheet({
     householdLoans: [{ kind: 'MORTGAGE', principalLocal: 10, vintages: [{ principalLocal: 10, originationCollateralLocal: 15, originationHomePriceLocal: 250000, rateAnnual: 0.04, wamWeeks: 800, fixedForWeeks: 50, originatedWeek: 0 }], wacAnnual: 0.04 }],
-    bankEquityLocal: 6, dealerDeskInventory: { 'corporate bond': [{ instrumentId: asInstrumentId('x'), inventoryLocal: 1 }] },
+    bankEquityLocal: 6,
   });
-  assert.equal(identityResidual(A, CASH, linesOf({ householdLocal: 90 })), 0);
+  assert.equal(identityResidual(A, CASH, linesOf({ householdLocal: 90 }), FAC, aBook), 0);
   let fCash = CASH, aCash = CASH; // the two accounts, moved here as the pass would
-  // §3.13-BOOK d3b: the sovereign books are register rows, moved by wire at the stage; here they
-  // are stated beside the sheets and moved by hand, as the cash is.
-  let fSov = SOV, aSov = SOV;
-  const plan = planBankResolution(F, 0, 3, fCash, fLines, FAC, fSov);
+  // §3.13-BOOK d3b/d3d: the register books are moved by wire at the stage; here they are stated
+  // beside the sheets and moved by hand, as the cash is.
+  const plan = planBankResolution(F, 0, 3, fCash, fLines, FAC, fBook);
   const cash = fCash;
   absorbBankSheet(ensureV2({}), asEntityId('A'), asEntityId('F'), A, F, plan.centralBankLoanAssumedLocal);
-  aSov += fSov; fSov = 0;
+  aBook += fBook; fBook = 0;
   A.bankEquityLocal += plan.netBookLocal - cash;
   F.bankEquityLocal = cash;
   // The cash leg is a payment (reserves and equity on both sides); replay it here.
@@ -116,18 +117,17 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
   const fLeft: DepositLines = { householdLocal: 0, corporateLocal: 0, institutionalLocal: 0, smeLocal: 0 };
   // The facilities follow the books: the ladders now name the acquirer as lender (moveFacilityLender at the stage).
   const aFac = FAC + FAC, fFac = 0;
-  assert.ok(Math.abs(identityResidual(A, aCash, aLines, aFac, aSov)) < 1e-9, `acquirer residual ${identityResidual(A, aCash, aLines, aFac, aSov)}`);
+  assert.ok(Math.abs(identityResidual(A, aCash, aLines, aFac, aBook)) < 1e-9, `acquirer residual ${identityResidual(A, aCash, aLines, aFac, aBook)}`);
   // The guarantee and the receivership payment are flows on the acquirer's own account.
   aCash += plan.guaranteeLocal - plan.estateLocal; A.bankEquityLocal += plan.guaranteeLocal - plan.estateLocal;
-  assert.ok(Math.abs(identityResidual(A, aCash, aLines, aFac, aSov)) < 1e-9);
+  assert.ok(Math.abs(identityResidual(A, aCash, aLines, aFac, aBook)) < 1e-9);
   assert.ok(Math.abs(A.bankEquityLocal - (6 + plan.acquirerCapitalLocal)) < 1e-9, 'the acquirer gains exactly the capital the book needs');
-  assert.equal(bankSheetAssetsLocal(F, fCash, fFac, fSov), 0);
+  assert.equal(bankSheetAssetsLocal(F, fCash, fFac, fBook), 0);
   assert.equal(bankAssumedLiabilitiesLocal(F, fLeft) + F.bankEquityLocal, 0);
   const mortgage = A.householdLoans.find((p) => p.kind === 'MORTGAGE')!;
   assert.equal(mortgage.vintages!.length, 2);
   assert.equal(mortgage.principalLocal, 50);
   assert.equal(consumerLoanBookOf(A), 50);
-  assert.deepEqual(A.dealerDeskInventory!['corporate bond'].map((r) => r.inventoryLocal), [5]);
 });
 
 test('mergeHouseholdPool blends terms by principal and keeps every vintage', () => {

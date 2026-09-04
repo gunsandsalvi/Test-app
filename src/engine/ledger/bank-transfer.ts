@@ -9,10 +9,11 @@
 import { BankingSector } from '../../domain/banking';
 import type { V2World } from '../../engine2/world';
 import type { EntityId } from '../../domain/ids';
-import { bankPartyOf } from '../../domain/party';
-import { transferHolding } from './holdings-ledger';
+import { bankPartyOf, bankSecuritiesPartyOf } from '../../domain/party';
+import { transferHolding, type HoldingSpec, type HoldingKind } from './holdings-ledger';
+import { deskRowsOf } from '../desk-register';
 import { bankSovereignPositions } from '../sovereign-register';
-import { BankResolutionPlan, mergeDesks, mergeHouseholdPool } from '../../domain/bank-resolution';
+import { BankResolutionPlan, mergeHouseholdPool } from '../../domain/bank-resolution';
 
 /**
  * Every non-cash line moves and the target's copy is zeroed. The central bank's loan moves by
@@ -52,8 +53,21 @@ export function absorbBankSheet(v2: V2World, acquirerId: EntityId, targetId: Ent
       'bank resolution: sovereign book assumed');
   });
   acquirer.sovereignAccruedCouponLocal = (acquirer.sovereignAccruedCouponLocal ?? 0) + (target.sovereignAccruedCouponLocal ?? 0); target.sovereignAccruedCouponLocal = 0;
-  acquirer.dealerDeskInventory = mergeDesks(acquirer.dealerDeskInventory, target.dealerDeskInventory);
-  target.dealerDeskInventory = undefined;
+  // §3.13-BOOK d3d: the desks' inventory is register rows on the securities book and moves the
+  // same way, row by row, by wire. A SHORT row (a market maker that sold what it did not have) is
+  // assumed by the same |value| wired the other way: the failed desk ends flat and the assuming
+  // desk carries the short.
+  deskRowsOf(v2, targetId).forEach((p) => {
+    const spec: HoldingSpec = {
+      instrumentType: p.kind as HoldingKind, instrumentId: p.instrumentId, issuerRegion: p.issuerRegion,
+      valueLocal: Math.abs(p.inventoryLocal), units: Math.abs(p.units),
+      ...(p.shares !== undefined ? { shares: Math.abs(p.shares) } : {}),
+    };
+    const [from, to] = p.inventoryLocal < 0 || (p.inventoryLocal === 0 && p.units < 0)
+      ? [bankSecuritiesPartyOf(acquirerId), bankSecuritiesPartyOf(targetId)]
+      : [bankSecuritiesPartyOf(targetId), bankSecuritiesPartyOf(acquirerId)];
+    transferHolding(v2, from, to, spec, 'bank resolution: desk assumed');
+  });
   if (target.fxDealerBook) {
     const mine = acquirer.fxDealerBook ?? { netNotionalByRegion: {}, initialMarginHeldLocal: 0, grossNotionalLocal: 0 };
     const net = { ...mine.netNotionalByRegion };

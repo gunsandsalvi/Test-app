@@ -70,7 +70,7 @@ import { runTradeSettlementStage } from './stages/trade-settlement';
 import './stages/clearing-worker-pool';
 import { ensureV2, typeRefOf } from '../../engine2/world';
 import { wireWorldOf } from '../ledger/wire-world';
-import { bankSovereignBookLocal } from '../sovereign-register';
+import { bankBookAssetsLocal } from '../desk-register';
 import { materializeLadder, facilityBookOf } from '../../engine2/tranches';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
@@ -463,7 +463,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     lastCashOverdraftLocal: ctx.cashOverdraftLocal,
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.
-    dealers: dealersFromBanks((b) => bankReservesOf(ctx.v2, b.id), (b) => facilityBookOf(ctx.v2, b.id), (b) => bankSovereignBookLocal(ctx.v2, b.id), nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, damperBindStreakById: rollDamperStreaks(state.damperBindStreakById, ctx.damperBoundInstrumentIds), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
+    dealers: dealersFromBanks(ctx.v2, (b) => bankReservesOf(ctx.v2, b.id), (b) => facilityBookOf(ctx.v2, b.id), (b) => bankBookAssetsLocal(ctx.v2, b.id), nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, damperBindStreakById: rollDamperStreaks(state.damperBindStreakById, ctx.damperBoundInstrumentIds), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
     // SETL2: the week's settlement, decomposed. §6 watches the boundary line DOWN, and a number
     // you cannot attribute is a number you cannot watch — this carries what hit it and why.
     lastSettlement: ctx.lastSettlementReport && {

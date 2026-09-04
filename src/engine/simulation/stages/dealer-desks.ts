@@ -8,16 +8,15 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
-import { bankSovereignBookLocal } from '../../sovereign-register';
 import type { EntityId } from '../../../domain/ids';
 import { bankSecuritiesParty, bankSecuritiesPartyOf } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { bankCashBufferRatioOf } from '../../macro/banking';
 import { Company, RegionId } from '../../../types';
 import {
-  DealerDeskInventory, DealerDeskPosition, dealerDeskCapacityLocal, dealerDeskParticipantId,
-  dealerDeskTicker, regionalDeskView,
+  dealerDeskCapacityLocal, dealerDeskParticipantId, dealerDeskTicker, DESK_BOOK_KIND,
 } from '../../../domain/dealer-desk';
+import { deskRowsOf, deskGrossLocal, regionalDeskViewOf, bankBookAssetsLocal, type DeskRow } from '../../desk-register';
 import { LeadBankCandidate } from '../../../domain/primary-market';
 import { leverageHeadroomLocal, BASEL_MIN_LEVERAGE_RATIO } from '../../macro/banking';
 import { ClearingInstrument, ClearingParticipant, ClearingResult, ParticipantDemand } from './financial-clearing-engine';
@@ -25,17 +24,11 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { pendingSettlementLocal } from './settlement';
 import { PartyRef } from './settlement';
-import { clearedBookDelta, HoldingKind } from '../../ledger/holdings-ledger';
+import { transferHolding, markHolding, deskBookId } from '../../ledger/holdings-ledger';
 import { defect } from '../../../domain/defect';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
 import type { InstrumentId } from '../../../domain/ids';
 import type { Ticker } from '../../../domain/ids';
-
-/** W2: the register kind each desk book carries — the wire's asset kind. */
-const DESK_BOOK_KIND: Record<string, HoldingKind> = {
-  'corporate bond': 'CORP_BOND', 'sovereign bond': 'GOV_BOND', bill: 'GOV_BOND',
-  'leveraged loan': 'LEVERAGED_LOAN', equity: 'EQUITY', 'commercial paper': 'COMMERCIAL_PAPER',
-};
 
 /** The bank's own working sheet this week — a stage before this one may already have moved it. */
 function sheetOf(ctx: WeeklyStepContext, bank: Company) {
@@ -43,25 +36,33 @@ function sheetOf(ctx: WeeklyStepContext, bank: Company) {
 }
 
 /**
- * ONE THING, ONE KEY — and after §9.13-CREDIT row 4 there is only one key.
+ * ONE THING, ONE KEY — and after §9.13-CREDIT row 4 there is only one key: a desk's row is stored
+ * under the paper it holds, and every book it makes a market in PRICES that same paper, so the
+ * register's key and the auction's key are one string and this is a plain lookup.
  *
- * A desk's inventory is stored under the paper it holds, and every book it makes a market in now
- * PRICES that same paper: the sovereign and the bills per tranche (§9.13-SOV rows 3–4), corporate
- * bonds (row 1), leveraged loans (row 3), commercial paper (row 4), equity per company. So the
- * store's key and the auction's key are the same string and this is a plain lookup.
- *
- * What stood here was `clearingKeyOf`, which mapped a stored tranche position back to its ISSUER
- * because the credit books cleared one instrument per borrower — and it OUTLIVED the books it was
- * written for. Once a book priced tranches, the roll-up handed the auction a key
- * (`KRLN`, `GOV_USA`) that was not among its instruments, so `prior.get(inst.id)` missed every
- * position: a desk entered each session declaring itself flat in paper it was carrying, and
- * `applyDealerDeskFills` then saw the same key as uncleared and marked none of it. Rows 1 and 3
- * left it standing; it goes with the last book that needed it.
+ * §3.13-BOOK d3d: the positions are the desk's REGISTER ROWS of this book's kind. The two
+ * sovereign books share the kind, so a session narrows to the names it clears (`only`) — a bill
+ * session does not see the bond desk's rows as its own, and vice versa.
  */
-function priorPositions(inv: DealerDeskInventory | undefined, book: string): Map<InstrumentId, DealerDeskPosition> {
-  const byId = new Map<InstrumentId, DealerDeskPosition>();
-  (inv?.[book] ?? []).forEach((p) => byId.set(p.instrumentId, p));
+function priorPositions(v2: WeeklyStepContext['v2'], bankId: string, book: string, only?: ReadonlySet<InstrumentId>): Map<InstrumentId, DeskRow> {
+  const kind = DESK_BOOK_KIND[book] ?? defect(`desk book '${book}' names no register kind`);
+  const byId = new Map<InstrumentId, DeskRow>();
+  deskRowsOf(v2, bankId, kind).forEach((p) => { if (only === undefined || only.has(p.instrumentId)) byId.set(p.instrumentId, p); });
   return byId;
+}
+
+/** The desk's capacity in one book: the bank's commitment less its other desks, bounded by the
+ *  leverage floor — both off the register's gross (§3.13-BOOK d3d). */
+function deskCapacityLocal(ctx: WeeklyStepContext, bank: Company, sheet: NonNullable<Company['bankBalanceSheet']>, book: string, only?: ReadonlySet<InstrumentId>): number {
+  const kind = DESK_BOOK_KIND[book];
+  let thisBookGrossLocal = 0;
+  if (kind !== undefined) deskRowsOf(ctx.v2, bank.id, kind).forEach((p) => { if (only === undefined || only.has(p.instrumentId)) thisBookGrossLocal += Math.abs(p.inventoryLocal); });
+  return dealerDeskCapacityLocal({
+    balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
+    leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankBookAssetsLocal(ctx.v2, bank.id)),
+    grossLocal: deskGrossLocal(ctx.v2, bank.id),
+    thisBookGrossLocal,
+  });
 }
 
 /**
@@ -90,16 +91,13 @@ export function buildDealerDeskParticipants(args: {
   if (totalFloatLocal <= 0) return [];
 
   const participants: ClearingParticipant[] = [];
+  const sessionIds = new Set(instruments.map((i) => i.id));
+  const narrow = DESK_BOOK_KIND[book] === 'GOV_BOND' ? sessionIds : undefined;
   banks.forEach((bank) => {
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
-    const prior = priorPositions(sheet.dealerDeskInventory, book);
-    const capacityLocal = dealerDeskCapacityLocal({
-      balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id)),
-      inventory: sheet.dealerDeskInventory,
-      book,
-    });
+    const prior = priorPositions(ctx.v2, bank.id, book, narrow);
+    const capacityLocal = deskCapacityLocal(ctx, bank, sheet, book, narrow);
     let priorTotalLocal = 0;
     prior.forEach((p) => { priorTotalLocal += Math.abs(p.inventoryLocal); });
     if (capacityLocal <= 0 && priorTotalLocal <= 0) return;
@@ -117,7 +115,7 @@ export function buildDealerDeskParticipants(args: {
       const priorPos = prior.get(inst.id);
       const px = unitPrice(i);
       // Carried at market: the position is the UNITS it holds, valued at this week's level.
-      const priorUnits = Math.max(0, priorPos?.units ?? (priorPos ? priorPos.inventoryLocal / px : 0));
+      const priorUnits = Math.max(0, priorPos?.units ?? 0);
       const priorLocal = priorUnits * px;
       // A DESK'S EXISTING POSITION IS A FACT, not a function of this week's float, and it is
       // declared before any float test. It used to sit BELOW the `liveFloatLocal[i] <= 0` guard, so
@@ -192,45 +190,61 @@ export function applyDealerDeskFills(args: {
 }): Map<InstrumentId, number> {
   const { ctx, banks, book, result } = args;
   const unitPrice = (id: InstrumentId) => Math.max(1e-9, args.unitPriceOf ? args.unitPriceOf(id) : 1);
-  const inventories: (DealerDeskInventory | undefined)[] = [];
+  const kind = DESK_BOOK_KIND[book] ?? defect(`desk book '${book}' names no register kind — its fills cannot be wired`);
+  const inUnits = args.unitPriceOf !== undefined;
+  const clearedIds = new Set(args.instruments.map((i) => i.id));
+  const bankIds: string[] = [];
   banks.forEach((bank) => {
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
+    bankIds.push(bank.id);
     const deskId = dealerDeskParticipantId(bank.ticker);
     const dpi = args.piById?.get(deskId);
-    if (args.piById !== undefined && dpi === undefined) { inventories.push(sheet.dealerDeskInventory); return; }
+    if (args.piById !== undefined && dpi === undefined) return;
     const fills = args.piById !== undefined ? undefined : result.newParticipantHoldings.get(deskId);
-    if (args.piById === undefined && !fills) { inventories.push(sheet.dealerDeskInventory); return; }
+    if (args.piById === undefined && !fills) return;
 
-    const clearedIds = new Set(args.instruments.map((i) => i.id));
-    const prior = priorPositions(sheet.dealerDeskInventory, book);
+    // §3.13-BOOK d3d: the desk's positions in the names this session priced are its register
+    // rows of the book's kind (narrowed to the session's names — the two sovereign books share
+    // a kind). A stage may only rewrite the instruments it cleared: a position in a name that
+    // carried no float this week is a row this pass never touches.
+    const desk = bankSecuritiesParty(bank);
+    const house = { kind: 'CLEARING_HOUSE' as const, region: bank.region };
+    const prior = priorPositions(ctx.v2, bank.id, book, clearedIds);
     // The book is carried at MARKET: what it held, valued at this week's level. The change from
-    // last week's carrying value is real trading P&L and hits equity. Without the mark, the
-    // difference between the cost the position was booked at and the price this week's cash leg
-    // used showed up as a phantom fee, and the per-bank identity drifted by exactly it.
+    // last week's carrying value is real trading P&L and hits equity, and the row is re-marked
+    // here before the fills land on it. Without the mark, the difference between the cost the
+    // position was booked at and the price this week's cash leg used showed up as a phantom fee.
     let prevMarkedLocal = 0;
     let markToMarketLocal = 0;
-    const positions: DealerDeskPosition[] = [];
     prior.forEach((p, instrumentId) => {
-      // Carried forward VERBATIM, on the key it is stored under; only the test of whether this
-      // session priced it resolves to the auction's instrument.
-      if (!clearedIds.has(instrumentId)) { positions.push(p); return; }
-      const units = p.units ?? p.inventoryLocal;
-      const markedLocal = units * unitPrice(instrumentId);
+      const markedLocal = p.units * unitPrice(instrumentId);
       prevMarkedLocal += markedLocal;
       markToMarketLocal += markedLocal - p.inventoryLocal;
+      if (markedLocal !== p.inventoryLocal) markHolding(ctx.v2, deskBookId(bank.id), p.row, markedLocal);
     });
     let newLocal = 0;
-    // A fill names the paper it bought, so it is stored under that name — the register's key and
-    // the desk's are one string (`priorPositions`). The split that used to stand here, spreading
-    // an ISSUER-level fill across that borrower's tranches by face, went with the last book that
-    // cleared per issuer (§9.13-CREDIT row 4, and the split file with it).
+    const filledIds = new Set<InstrumentId>();
+    // W2: THE DESK'S FILLS ARE WIRES, and since d3d the wire IS the row's move: its position
+    // after the session against the one before, per cleared name, transferred against the
+    // clearing house — bought or sold, one signed row each. A unit book (equity) moves shares at
+    // the cleared price; a par book moves face.
+    const settle = (afterUnits: number, instrumentId: InstrumentId): void => {
+      const px = unitPrice(instrumentId);
+      const priorUnits = prior.get(instrumentId)?.units ?? 0;
+      const dUnits = afterUnits - priorUnits;
+      if (!(Math.abs(dUnits * px) > 1)) return;
+      const spec = { instrumentType: kind, instrumentId, issuerRegion: bank.region, valueLocal: Math.abs(dUnits) * px, ...(inUnits ? { shares: Math.abs(dUnits) } : { units: Math.abs(dUnits) }) };
+      if (dUnits > 0) transferHolding(ctx.v2, house, desk, spec, `${book} desk fill`);
+      else transferHolding(ctx.v2, desk, house, spec, `${book} desk fill`);
+    };
     const applyFill = (units: number, instrumentId: InstrumentId): void => {
       if (!clearedIds.has(instrumentId)) return;
+      filledIds.add(instrumentId);
       const inventoryLocal = units * unitPrice(instrumentId);
-      if (Math.abs(inventoryLocal) <= 1) return;
-      positions.push({ instrumentId, inventoryLocal, units });
-      newLocal += inventoryLocal;
+      const afterUnits = Math.abs(inventoryLocal) > 1 ? units : 0;
+      if (afterUnits !== 0) newLocal += inventoryLocal;
+      settle(afterUnits, instrumentId);
     };
     if (dpi !== undefined) {
       const nI = result.nInstruments;
@@ -242,6 +256,9 @@ export function applyDealerDeskFills(args: {
     } else {
       fills!.forEach(applyFill);
     }
+    // A cleared name the engine reports no holding in: the desk is out of it — sold to the house,
+    // exactly as the before/after wire recorded it when the book was rebuilt from the fills.
+    prior.forEach((_p, instrumentId) => { if (!filledIds.has(instrumentId)) settle(0, instrumentId); });
     const cashDeltaLocal = args.cashDeltaOf
       ? args.cashDeltaOf(deskId)
       : (result.netCashDeltaByParticipantId.get(deskId) ?? 0);
@@ -251,30 +268,6 @@ export function applyDealerDeskFills(args: {
     // discarded — cash arriving on the securities account with no entry against it, and the
     // per-bank identity drifting by exactly that.
     const residualLocal = cashDeltaLocal + (newLocal - prevMarkedLocal);
-
-    // W2: THE DESK'S FILLS ARE WIRES. Its position after the session against the one
-    // before, per cleared name, against the clearing house — bought or sold, one number each.
-    // A unit book (equity) wires shares at the cleared price; a par book wires face at 1.
-    {
-      const kind = DESK_BOOK_KIND[book] ?? defect(`desk book '${book}' names no register kind — its fills cannot be wired`);
-      const inUnits = args.unitPriceOf !== undefined;
-      const toEntry = (units: number, instrumentId: InstrumentId) =>
-        inUnits ? { valueLocal: units * unitPrice(instrumentId), shares: units } : { valueLocal: units };
-      const before = new Map<InstrumentId, { valueLocal: number; shares?: number }>();
-      prior.forEach((p, instrumentId) => {
-        if (clearedIds.has(instrumentId)) before.set(instrumentId, toEntry(p.units ?? p.inventoryLocal, instrumentId));
-      });
-      const after = new Map<InstrumentId, { valueLocal: number; shares?: number }>();
-      positions.forEach((p) => {
-        if (clearedIds.has(p.instrumentId)) after.set(p.instrumentId, toEntry(p.units ?? p.inventoryLocal, p.instrumentId));
-      });
-      clearedBookDelta(bankSecuritiesParty(bank), bank.region, kind, before, after,
-        (id) => unitPrice(id), `${book} desk fill`);
-    }
-
-    const inventory: DealerDeskInventory = { ...(sheet.dealerDeskInventory ?? {}) };
-    if (positions.length > 0) inventory[book] = positions;
-    else delete inventory[book];
     // DESK_TRACE=1 instrument: the desk's whole leg for one book in one line — the fee formula
     // charges equity with any cash that left without inventory arriving, so a books-vs-cash
     // disagreement in the clearing engine lands HERE as a phantom fee. Print it where it books.
@@ -287,12 +280,9 @@ export function applyDealerDeskFills(args: {
       console.log(`  [desk] w${ctx.nextWeek} ${bank.ticker} ${book}: prevMarked ${(prevMarkedLocal / 1e6).toFixed(1)}M`
         + ` new ${(newLocal / 1e6).toFixed(1)}M cash ${(cashDeltaLocal / 1e6).toFixed(1)}M`
         + ` residual ${(residualLocal / 1e6).toFixed(1)}M mtm ${(markToMarketLocal / 1e6).toFixed(1)}M :: ${fillsStr}`);
-      // The wiped-name decomposition: each cleared prior position, whether the fills map came
-      // back with the name, and the name's float in this clearing — the three facts that decide
-      // whether its removal had a cash leg.
       const floatById = new Map(args.instruments.map((i2) => [i2.id, i2.tradableFloatLocal]));
       prior.forEach((p, instrumentId) => {
-        if (!clearedIds.has(instrumentId) || Math.abs(p.inventoryLocal) < 25e6) return;
+        if (Math.abs(p.inventoryLocal) < 25e6) return;
         console.log(`    [desk-prior] ${bank.ticker} ${instrumentId} held ${(p.inventoryLocal / 1e6).toFixed(1)}M`
           + ` -> fill ${dbgFills.has(instrumentId) ? (((dbgFills.get(instrumentId) ?? 0) * unitPrice(instrumentId)) / 1e6).toFixed(1) + 'M' : 'NONE'}`
           + ` float ${((floatById.get(instrumentId) ?? 0) / 1e6).toFixed(1)}M`);
@@ -301,11 +291,9 @@ export function applyDealerDeskFills(args: {
     updateBankSheet(ctx, bank.ticker, {
       ...bookPnL(bookPnL(sheet, residualLocal, `desk trading result: ${book}`, bank.ticker),
         markToMarketLocal, `desk mark-to-market: ${book}`, bank.ticker),
-      dealerDeskInventory: inventory,
     });
-    inventories.push(inventory);
   });
-  return regionalDeskView(inventories, book);
+  return regionalDeskViewOf(ctx.v2, bankIds, kind, clearedIds.size > 0 && kind === 'GOV_BOND' ? clearedIds : undefined);
 }
 
 /** The dealer capacity live in one book across a region's banks — what a new deal can be
@@ -316,12 +304,7 @@ export function totalDeskCapacityLocal(ctx: WeeklyStepContext, banks: Company[],
   banks.forEach((bank) => {
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
-    capacityLocal += dealerDeskCapacityLocal({
-      balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id)),
-      inventory: sheet.dealerDeskInventory,
-      book,
-    });
+    capacityLocal += deskCapacityLocal(ctx, bank, sheet, book);
   });
   return capacityLocal;
 }
@@ -339,12 +322,7 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
   banks.forEach((bank) => {
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
-    freeLocal.set(bank.ticker, dealerDeskCapacityLocal({
-      balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id)),
-      inventory: sheet.dealerDeskInventory,
-      book,
-    }));
+    freeLocal.set(bank.ticker, deskCapacityLocal(ctx, bank, sheet, book));
     const byBorrower = new Map<string, number>();
     // The relationship is the facilities this bank has lent — its rows on the ladders.
     facilityRowsOf(ctx.v2, bank.id).forEach((l) => {

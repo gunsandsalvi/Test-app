@@ -14,7 +14,7 @@ import { V2World, ensureV2, rowOf, ringFill, revHistFill, regionOf as regionCode
 import { bookHeadOf, instrumentIdAt } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
 import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
-import { facilityBookOf, facilitiesOfBorrower, issuerIdOf, trancheRowOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../engine2/tranches';
+import { facilityBookOf, facilitiesOfBorrower, issuerIdOf } from '../engine2/tranches';
 import { registerBooks } from '../engine/ledger/holdings-ledger';
 import { forEachSovereignPosition, centralBankBookLocal } from '../engine/sovereign-register';
 import { asInstrumentId } from '../domain/ids';
@@ -217,40 +217,9 @@ export function holdersOf(world: World, instrumentId: string): RegisterRow[] {
       });
     }
   });
-  // The desks hold the same paper on their banks' sheets rather than in the register (`the-
-  // register.md` A1.a is that boundary), so they are read from there and shown beside it.
-  world.state.companies.forEach((bank) => {
-    const inv = bank.bankBalanceSheet?.dealerDeskInventory;
-    if (!inv) return;
-    Object.values(inv).forEach((positions) => {
-      positions.forEach((p) => {
-        if (!(Math.abs(p.inventoryLocal) > 1)) return;
-        if (p.instrumentId !== instrumentId && issuerIdOf(world.v2, p.instrumentId) !== instrumentId) return;
-        out.push({
-          holderId: bank.id,
-          instrumentId: p.instrumentId,
-          instrumentType: instrumentTypeOfDeskRow(world, p.instrumentId),
-          region: bank.region,
-          usd: p.inventoryLocal,
-          shares: p.units ?? NaN,
-        });
-      });
-    });
-  });
+  // §3.13-BOOK d3d: the desks' books are register books (`registerBooks` lists them), so they
+  // are in the walk above under their securities-party id.
   return out;
-}
-
-/** What kind of paper a desk position names, read off the world rather than off the book it sat
- *  in — a desk's books are named by MARKET ('corporate bond'), the register by KIND. */
-function instrumentTypeOfDeskRow(world: World, instrumentId: string): string {
-  const row = trancheRowOf(world.v2, instrumentId);
-  if (row === undefined) return 'EQUITY';
-  const S = world.v2.tranches;
-  const f = S.flags[row];
-  if (issuerIdOf(world.v2, instrumentId).startsWith('GOV_')) return 'GOV_BOND';
-  if (f & TR_FACILITY) return 'BANK_FACILITY';
-  if (f & TR_CP) return 'COMMERCIAL_PAPER';
-  return (f & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND';
 }
 
 /**

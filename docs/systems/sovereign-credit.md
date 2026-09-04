@@ -199,7 +199,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | E2.d foreign official — reserves | — | ❌ |
 | E2.e funds — relative value | — | ❌ |
 | E2.f households and corporates, holding it DIRECTLY | `src/engine/simulation/stages/07f-short-debt-clearing.ts:treasuryParticipantId` | ⚠️ |
-| **E3 marked at the cleared price** | `src/engine/simulation/stages/register-marking.ts:markRegisterToMarket` | ⚠️ |
+| **E3 marked at the cleared price** | `src/engine/simulation/stages/register-marking.ts:markRegisterToMarket` | ✅ |
 | E4 pledgeable, at a haircut | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
 | E5 a zero risk weight, which is *why* E2.a holds it | `src/engine/macro/banking.ts:riskWeightedAssetsLocal` | ✅ |
 | F1 the coupon accrues and is paid to the holder on the date | `src/engine/simulation/stages/sovereign-calendar.ts:runSovereignCalendarStage` | ✅ |
@@ -222,7 +222,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 
 ## 3. THE DIFF
 
-**68 rows: 31 ✅, 12 ⚠️, 25 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
+**68 rows: 32 ✅, 11 ⚠️, 25 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
 drifted three times by hand (25/15/27 against 28/12/27, then 30/13/25 against 31/12/25 in the very
 paragraph that lectured about drift): `check-atlas.sh` proves a citation RESOLVES and can say
 nothing about whether a mark is TRUE, which is §5's lesson, and the test is the answer to it.
@@ -232,14 +232,15 @@ The mapping is still the weakest of the four credit trees, and the reason is one
 half — D1, D2, E1 and the five parallel structures — and the whole of G and half of A remain, out
 of the second.
 
-### ⚠️ E1.a — A SOVEREIGN HOLDING LIVES IN FIVE STORES, AND NOW ONE WALK KNOWS ALL FIVE
+### ✅ E1.a — CLOSED: A SOVEREIGN HOLDING LIVES IN ONE STORE, AND ONE WALK ANSWERS
 
 E1 asks who holds how much of WHICH LINE, and §3.13-SOV row 3 answered it: every store keys by the
-bond's own tranche id. What row 3 did not give them is one SHAPE. A government holding sits in the
+bond's own tranche id. What row 3 did not give them is one SHAPE. A government holding sat in the
 register (institutions, since §9.13-EQUITY households, since §9.13-BOOK d3a the CENTRAL BANK,
-since d3b the BANKS' OWN BOOKS and since d3c the companies' TREASURY BOOKS) and in each bank's
-desk inventory — because one holder class is not in the register yet (`the-register.md` A1.a, the
-tree's own statement of its boundary; §3.13-BOOK d3d brings it in).
+since d3b the BANKS' OWN BOOKS, since d3c the companies' TREASURY BOOKS) and in each bank's desk
+inventory — the one holder class the register did not hold. Since §9.13-BOOK d3d it is ONE store:
+the desks are rows on their banks' securities books, and `forEachSovereignPosition` is a filter
+over `registerBooks` that classifies a row by its book's payee (`DESK` off `BANK_SECURITIES`).
 
 **Five places open-coded the walk over those stores**: the seed's stock reconciliation,
 `holdings-view`'s ownership shares, `O1`'s sovereign arm, `O11`'s stray-id check and the UI's
@@ -335,7 +336,7 @@ calendar week asks for more. A3.a is ⚠️ for the same reason: the account is 
 and "low" has no consequence. H4 is the same fact from the monetary side: the node says this model
 draws the monetary-financing line at A3.b, and it does not draw it.
 
-### ✅ F2 — CLOSED: A BILL'S RETURN IS THE DISCOUNT ITS OWN AUCTION PRINTED (⚠️ E3 is what is left)
+### ✅ F2 / E3 — CLOSED: A BILL'S RETURN IS THE DISCOUNT ITS OWN AUCTION PRINTED, AND EVERY HOLDER'S BILL IS MARKED
 
 **What this said, and what it got half right.** `bill-accretion` accreted a held bill at whatever
 `tenor3M` said THIS week — an interpolated point on a fitted curve — so a holder that bought a
@@ -355,14 +356,11 @@ whatever path the price took, because it ends at par, and that is precisely the 
 And a bill that CHANGES HANDS is right — under the locked-rate reading the buyer would accrete at
 the ISSUER's original yield rather than at the price it actually paid.
 
-**⚠️ E3 is what is left of this, and it is a storage finding.** The register marks a bill at
-`units × price` like every other row — the central bank's bills and the banks' own since
-§9.13-BOOK d3a and d3b put their books on the register. What still stores a VALUE with no quantity
-of its own is a desk's `dealerDeskInventory` row (`units` where a session wrote it, `inventoryLocal`
-where none did), which is §3.13-BOOK d3d.
-
-**§3 step 13-BOOK (d3)** — small, and it folds naturally into 13-SOV, which has
-to give the bill a stored issue price anyway to become a `DebtTranche`.
+**E3 closed with it (§9.13-BOOK d3d).** The register marks a bill at `units × price` like every
+other row — the central bank's bills and the banks' own since §9.13-BOOK d3a and d3b, the
+treasuries' since d3c, and the desks' since d3d, when the last store that kept a VALUE with no
+quantity of its own (`dealerDeskInventory`, `inventoryLocal` where no session had written `units`)
+stopped existing. Every holder's bill is a register row with a face and a mark.
 
 ### ❌ C1.a / C3.a / C3.b / C4 / ⚠️ C3 — THE AUCTION HAS NO CALENDAR, NO PRIMARY DEALERS AND NO STATISTICS
 

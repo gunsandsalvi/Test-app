@@ -21,10 +21,10 @@
  */
 
 import { Company, RegionId } from '../../../types';
+import { deskRowsOf } from '../../desk-register';
 import { bankSecuritiesParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
-import { WeeklyStepContext, updateBankSheet } from './context';
-import { DealerDeskInventory } from '../../../domain/dealer-desk';
+import { WeeklyStepContext } from './context';
 import { pay, pendingSettlementLocal, PartyRef } from './settlement';
 import { cashOf } from '../../ledger/accounts';
 import { transferHolding, HoldingKind } from '../../ledger/holdings-ledger';
@@ -69,12 +69,13 @@ export function reconcileHolderPrincipal(args: {
     const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
     return { bank, sheet };
   });
-  deskSheets.forEach(({ sheet }) => {
-    (sheet?.dealerDeskInventory?.[deskBook] ?? []).forEach((p) => {
+  deskSheets.forEach(({ bank }) => {
+    // §3.13-BOOK d3d: the desk's rows of this book's kind, off the register.
+    deskRowsOf(ctx.v2, bank.id, instrumentType).forEach((p) => {
       // §9.13-CREDIT row 5: the outstanding this is compared against is a LADDER's face, so the
       // desk's side of it is the paper it holds (`units`), not what that paper is marked at.
       if (p.inventoryLocal > 0 && outstandingByInstrumentId.has(p.instrumentId)) {
-        heldByInstrument.set(p.instrumentId, (heldByInstrument.get(p.instrumentId) ?? 0) + (p.units ?? p.inventoryLocal));
+        heldByInstrument.set(p.instrumentId, (heldByInstrument.get(p.instrumentId) ?? 0) + p.units);
       }
     });
   });
@@ -129,38 +130,24 @@ export function reconcileHolderPrincipal(args: {
   });
   deskSheets.forEach(({ bank, sheet }) => {
     if (!sheet) return;
-    const rows = sheet.dealerDeskInventory?.[deskBook];
-    if (!rows || rows.length === 0) return;
-    let touched = false;
-    const newRows = rows.map((p) => {
+    // §3.13-BOOK d3d: the desk's rows, off the register — the paydown leaves each by wire and the
+    // ledger debits the row; nothing is rewritten on the sheet.
+    deskRowsOf(ctx.v2, bank.id, instrumentType).forEach((p) => {
       const factor = factorByInstrument.get(p.instrumentId);
-      if (factor === undefined || !(p.inventoryLocal > 0)) return p;
+      if (factor === undefined || !(p.inventoryLocal > 0)) return;
       // A repayment of principal pays FACE, so what the desk is paid is the face it loses.
-      const paidLocal = (p.units ?? p.inventoryLocal) * (1 - factor);
-      if (paidLocal > 1) {
-        const payer = payerOf(p.instrumentId);
-        if (payer) {
-          // The desk's principal comes back as reserves against the position it loses — an
-          // asset swap on the securities account, exactly like a sale (rule 5).
-          pay(ctx, { payer, payee: bankSecuritiesParty(bank), amount: paidLocal, currency: currencyOf(args.regionId), reason });
-          // Step 13 (W2): the paper paid down leaves the desk by wire, to the house (the ladder's
-          // own retirement wire met it there; the register's share is wired at its write-back).
-          transferHolding(ctx.v2, bankSecuritiesParty(bank), { kind: 'CLEARING_HOUSE', region: args.regionId },
-            { instrumentType, instrumentId: p.instrumentId, issuerRegion: args.regionId, valueLocal: paidLocal }, `${reason}: desk paper paid down`);
-        }
-      }
-      touched = true;
-      return {
-        ...p,
-        inventoryLocal: p.inventoryLocal * factor,
-        units: p.units !== undefined ? p.units * factor : undefined,
-      };
+      const paidLocal = p.units * (1 - factor);
+      if (!(paidLocal > 1)) return;
+      const payer = payerOf(p.instrumentId);
+      if (!payer) return;
+      // The desk's principal comes back as reserves against the position it loses — an
+      // asset swap on the securities account, exactly like a sale (rule 5).
+      pay(ctx, { payer, payee: bankSecuritiesParty(bank), amount: paidLocal, currency: currencyOf(args.regionId), reason });
+      // Step 13 (W2): the paper paid down leaves the desk by wire, to the house (the ladder's
+      // own retirement wire met it there; the register's share is wired at its write-back).
+      transferHolding(ctx.v2, bankSecuritiesParty(bank), { kind: 'CLEARING_HOUSE', region: args.regionId },
+        { instrumentType, instrumentId: p.instrumentId, issuerRegion: args.regionId, valueLocal: p.inventoryLocal * (1 - factor), units: paidLocal }, `${reason}: desk paper paid down`);
     });
-    if (touched) {
-      const inventory: DealerDeskInventory = { ...(sheet.dealerDeskInventory ?? {}) };
-      inventory[deskBook] = newRows;
-      updateBankSheet(ctx, bank.ticker, { ...sheet, dealerDeskInventory: inventory });
-    }
   });
 
 }

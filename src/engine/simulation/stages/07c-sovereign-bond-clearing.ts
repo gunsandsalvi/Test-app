@@ -80,6 +80,7 @@ import { facilityBookOf } from '../../../engine2/tranches';
 import { asInstrumentId, type InstrumentId } from '../../../domain/ids';
 import { governmentIssuer } from '../../../domain/entity-keys';
 import { sovereignHeldByBond, centralBankPositions, bankSovereignFaceByBond, bankSovereignBookLocal, sovereignRowsOf } from '../../sovereign-register';
+import { deskGrossLocal } from '../../desk-register';
 
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
@@ -458,12 +459,14 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const reservesLocal = bankReservesOf(ctx.v2, bank.id);
       const facilityBookLocal = facilityBookOf(ctx.v2, bank.id);
       const sovLocal = bankSovereignBookLocal(ctx.v2, bank.id);
+      // §3.13-BOOK d3d: the leverage ratio charges every register book, the desks' gross included.
+      const deskLocal = deskGrossLocal(ctx.v2, bank.id);
       const settledCashLocal = reservesLocal
         + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
       const fundableLocal = Math.min(
         Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
           + unencumberedBorrowingCapacityLocal(sheet, bankSovereignFaceByBond(ctx.v2, bank.id), repoHaircuts, encumberedFace),
-        leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal, sovLocal)
+        leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal, sovLocal + deskLocal)
       );
       // REPO2: collateral already pledged cannot simultaneously be sold, and the pledge names
       // the paper. The floor is now the face of THIS BOND that is actually encumbered — a
@@ -474,7 +477,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // bonds-versus-reserves choice that anchors the front end, now expressed as a price rather
       // than as a scaling factor on a quantity target.
       const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
-      const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal, sovLocal);
+      const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal, sovLocal, deskLocal);
       const liquidityFloorLocal = liquidityDrivenSovereignFloorLocal(sheet, reservesLocal, bankDepositLines(ctx, bank));
       bonds.forEach((b) => {
         const shareOfMarket = b.outstandingLocal / totalOutstandingLocal;
