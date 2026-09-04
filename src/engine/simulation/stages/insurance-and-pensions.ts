@@ -61,14 +61,14 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
  */
 
 /** What a firm has to lose, and therefore insures: its plant and the revenue that runs through it. */
-const corporateInsurableBaseUSD = (c: Company) => Math.max(0, c.grossPPELocal ?? 0) + Math.max(0, c.annualRevenue);
+const corporateInsurableBaseLocal = (c: Company) => Math.max(0, c.grossPPELocal ?? 0) + Math.max(0, c.annualRevenue);
 
 export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepContext): void {
   // This stage moved every one of its flows by DIRECT balance mutation — `comp.cash`,
   // entity `cashLocal`, household deposits — with zero payment instructions in the file, so no bank
   // ever saw the deposits move and 02b's reconcile invented the reserves behind them. Every leg
   // below is now a `pay` instruction settled by the close pass, exactly like every other
-  // post-08 flow. The two liability-STOCK updates (beneficiaryLiabilityUSD and the two annual
+  // post-08 flow. The two liability-STOCK updates (beneficiaryLiabilityLocal and the two annual
   // stat annotations) are not money movements and stay.
   const underwritingByEntityId = new Map<string, number>();
   const benefitsByEntityId = new Map<string, number>();
@@ -82,8 +82,8 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     const insurers = ctx.updatedCompanies.filter(
       (c) => c.region === region && c.institutionalEntityType === 'INSURER' && isActiveCompany(c)
     );
-    const weeklyPremiumsUSD = insurers.reduce((a, c) => a + (c.insurancePremiumsWrittenUSD ?? 0) / 52, 0);
-    const weeklyClaimsUSD = insurers.reduce((a, c) => a + (c.insuranceClaimsPaidUSD ?? 0) / 52, 0);
+    const weeklyPremiumsLocal = insurers.reduce((a, c) => a + (c.insurancePremiumsWrittenLocal ?? 0) / 52, 0);
+    const weeklyClaimsLocal = insurers.reduce((a, c) => a + (c.insuranceClaimsPaidLocal ?? 0) / 52, 0);
     // IND19/IND-R4 — THE EXPENSE RATIO IS GONE, AND ITS ABSENCE HERE IS THE POINT.
     //
     // This line used to subtract `premiums x INSURER_EXPENSE_RATIO`, and its own comment gave the
@@ -98,44 +98,44 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     const operating = ctx.updatedCompanies.filter(
       (c) => c.region === region && isActiveCompany(c) && !c.isBankEntity && !c.isInstitutionalEntity
     );
-    const corporateBaseUSD = operating.reduce((a, c) => a + corporateInsurableBaseUSD(c), 0);
-    const householdBaseUSD = Math.max(0, hs.netWorthUSD) + Math.max(0, reg.estimatedHouseholdIncomeLocal);
-    const totalBaseUSD = corporateBaseUSD + householdBaseUSD;
-    if (!(totalBaseUSD > 0) || !(weeklyPremiumsUSD > 0)) return;
+    const corporateBaseLocal = operating.reduce((a, c) => a + corporateInsurableBaseLocal(c), 0);
+    const householdBaseLocal = Math.max(0, hs.netWorthLocal) + Math.max(0, reg.estimatedHouseholdIncomeLocal);
+    const totalBaseLocal = corporateBaseLocal + householdBaseLocal;
+    if (!(totalBaseLocal > 0) || !(weeklyPremiumsLocal > 0)) return;
 
-    const corporateShare = corporateBaseUSD / totalBaseUSD;
-    const corporatePremiumsUSD = weeklyPremiumsUSD * corporateShare;
-    const householdPremiumsUSD = weeklyPremiumsUSD - corporatePremiumsUSD;
-    const claimRecoveryRate = weeklyPremiumsUSD > 0 ? weeklyClaimsUSD / weeklyPremiumsUSD : 0;
+    const corporateShare = corporateBaseLocal / totalBaseLocal;
+    const corporatePremiumsLocal = weeklyPremiumsLocal * corporateShare;
+    const householdPremiumsLocal = weeklyPremiumsLocal - corporatePremiumsLocal;
+    const claimRecoveryRate = weeklyPremiumsLocal > 0 ? weeklyClaimsLocal / weeklyPremiumsLocal : 0;
 
     // ---- The insurers that carry the pool, pro-rata by their capital. ----
     const insurerEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === region && e.entityType === 'INSURER' && !e.isDefaulted
     );
-    const insurerCapitalUSD = insurerEntities.reduce((a, e) => a + Math.max(0, e.equityCapitalLocal), 0) || 1;
+    const insurerCapitalLocal = insurerEntities.reduce((a, e) => a + Math.max(0, e.equityCapitalLocal), 0) || 1;
     const insurerShares = insurerEntities.map((e) => ({
-      id: e.id, share: Math.max(0, e.equityCapitalLocal) / insurerCapitalUSD,
+      id: e.id, share: Math.max(0, e.equityCapitalLocal) / insurerCapitalLocal,
     }));
     if (insurerShares.length === 0) return;
 
     // ---- Companies: a real operating expense, and the claims that come back against it. ----
     operating.forEach((comp) => {
-      const share = corporateInsurableBaseUSD(comp) / Math.max(1, corporateBaseUSD);
-      const premiumUSD = corporatePremiumsUSD * share;
-      if (!(premiumUSD > 0)) return;
-      const claimUSD = premiumUSD * claimRecoveryRate;
+      const share = corporateInsurableBaseLocal(comp) / Math.max(1, corporateBaseLocal);
+      const premiumLocal = corporatePremiumsLocal * share;
+      if (!(premiumLocal > 0)) return;
+      const claimLocal = premiumLocal * claimRecoveryRate;
       insurerShares.forEach(({ id, share: insurerShare }) => {
         pay(ctx, {
           payer: { kind: 'COMPANY', ticker: comp.ticker },
           payee: { kind: 'INSTITUTION', id },
-          amount: premiumUSD * insurerShare,
+          amount: premiumLocal * insurerShare,
           currency: currencyOf(comp.region),
           reason: 'insurance premium',
         });
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id },
           payee: { kind: 'COMPANY', ticker: comp.ticker },
-          amount: claimUSD * insurerShare,
+          amount: claimLocal * insurerShare,
           currency: currencyOf(comp.region),
           reason: 'insurance claim',
         });
@@ -144,11 +144,11 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
 
     // ---- Insurers: record what the float cost them (a stat, not a cash move — the cash
     //      arrived through the premium/claim legs above). ----
-    const underwritingResultUSD = weeklyPremiumsUSD - weeklyClaimsUSD;
+    const underwritingResultLocal = weeklyPremiumsLocal - weeklyClaimsLocal;
     insurerShares.forEach(({ id, share }) => {
       // Recorded for `entityRequiredReturn`: what the float COST this insurer, which is what
       // decides how hard its assets have to work.
-      underwritingByEntityId.set(id, underwritingResultUSD * share * 52);
+      underwritingByEntityId.set(id, underwritingResultLocal * share * 52);
     });
 
     // ---- Households: their premium and claim legs, against the same insurers. ----
@@ -156,14 +156,14 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       pay(ctx, {
         payer: { kind: 'HOUSEHOLD', region },
         payee: { kind: 'INSTITUTION', id },
-        amount: householdPremiumsUSD * share,
+        amount: householdPremiumsLocal * share,
         currency: currencyOf(region),
         reason: 'insurance premium',
       });
       pay(ctx, {
         payer: { kind: 'INSTITUTION', id },
         payee: { kind: 'HOUSEHOLD', region },
-        amount: householdPremiumsUSD * claimRecoveryRate * share,
+        amount: householdPremiumsLocal * claimRecoveryRate * share,
         currency: currencyOf(region),
         reason: 'insurance claim',
       });
@@ -176,32 +176,32 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     // The contribution IS the life-cycle saving the cohorts decided on — measured, squeezed
     // by each cohort's own budget, and already excluding retirees because it is a share of the
     // WORKING population's disposable income (household-cohorts.ts).
-    const weeklyContributionsUSD = Math.max(0, reg.householdState?.lifeCycleSavingAnnualUSD ?? 0) / 52;
+    const weeklyContributionsLocal = Math.max(0, reg.householdState?.lifeCycleSavingAnnualLocal ?? 0) / 52;
     const pensionEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === region && e.entityType === 'PENSION_FUND' && !e.isDefaulted
     );
-    const entitlementsUSD = pensionEntities.reduce((a, e) => a + (e.beneficiaryLiabilityUSD ?? 0), 0);
+    const entitlementsLocal = pensionEntities.reduce((a, e) => a + (e.beneficiaryLiabilityLocal ?? 0), 0);
     // AND THE DRAWDOWN IS THE RETIREE'S OWN REMAINING LIFE, not a stated 5%.
     //
     // `PENSION_BENEFIT_RATE_ANNUAL = 0.05` asserted a twenty-year retirement and could not change
     // when the population aged — the exact shape rule 2 forbids. A fund pays its entitlement out
     // over the years its members actually have, which the Gompertz hazard now says.
     const drawdownYears = remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS);
-    const weeklyBenefitsUSD = (entitlementsUSD / drawdownYears) / 52;
-    if (pensionEntities.length > 0 && entitlementsUSD > 0) {
+    const weeklyBenefitsLocal = (entitlementsLocal / drawdownYears) / 52;
+    if (pensionEntities.length > 0 && entitlementsLocal > 0) {
       pensionEntities.forEach((e) => {
-        const share = (e.beneficiaryLiabilityUSD ?? 0) / entitlementsUSD;
+        const share = (e.beneficiaryLiabilityLocal ?? 0) / entitlementsLocal;
         pay(ctx, {
           payer: { kind: 'HOUSEHOLD', region },
           payee: { kind: 'INSTITUTION', id: e.id },
-          amount: weeklyContributionsUSD * share,
+          amount: weeklyContributionsLocal * share,
           currency: currencyOf(region),
           reason: 'pension contribution',
         });
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id: e.id },
           payee: { kind: 'HOUSEHOLD', region },
-          amount: weeklyBenefitsUSD * share,
+          amount: weeklyBenefitsLocal * share,
           currency: currencyOf(region),
           reason: 'pension benefit',
         });
@@ -215,27 +215,27 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
         // Contributions in, benefits out. What the money EARNS on the way is credited in one
         // place for every kind whose beneficiaries are households (the household sheet), so a
         // pension is not the only one whose members own their fund's return.
-        e.beneficiaryLiabilityUSD = Math.max(0, (e.beneficiaryLiabilityUSD ?? 0)
-          + (weeklyContributionsUSD - weeklyBenefitsUSD) * share);
-        benefitsByEntityId.set(e.id, weeklyBenefitsUSD * share * 52);
+        e.beneficiaryLiabilityLocal = Math.max(0, (e.beneficiaryLiabilityLocal ?? 0)
+          + (weeklyContributionsLocal - weeklyBenefitsLocal) * share);
+        benefitsByEntityId.set(e.id, weeklyBenefitsLocal * share * 52);
       });
     }
 
     // The household side of every leg above now travels through the same instructions — the
     // insurer's payroll reaches households through the wage bill the profile caller charges it,
     // and premiums, claims, contributions and benefits settle like every other payment. No
-    // direct write to `depositsLocal` or `pendingBankSettlementUSD` survives here: settlement's
+    // direct write to `depositsLocal` or `pendingBankSettlementLocal` survives here: settlement's
     // HOUSEHOLD case maintains both, which is the invariant the hand-kept version could break.
   });
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-    const underwritingUSD = underwritingByEntityId.get(e.id);
-    const benefitsUSD = benefitsByEntityId.get(e.id);
-    if (underwritingUSD === undefined && benefitsUSD === undefined) return e;
+    const underwritingLocal = underwritingByEntityId.get(e.id);
+    const benefitsLocal = benefitsByEntityId.get(e.id);
+    if (underwritingLocal === undefined && benefitsLocal === undefined) return e;
     return {
       ...e,
-      ...(underwritingUSD !== undefined ? { lastAnnualUnderwritingResultUSD: underwritingUSD } : {}),
-      ...(benefitsUSD !== undefined ? { lastAnnualBenefitOutflowUSD: benefitsUSD } : {}),
+      ...(underwritingLocal !== undefined ? { lastAnnualUnderwritingResultLocal: underwritingLocal } : {}),
+      ...(benefitsLocal !== undefined ? { lastAnnualBenefitOutflowLocal: benefitsLocal } : {}),
     };
   });
 }

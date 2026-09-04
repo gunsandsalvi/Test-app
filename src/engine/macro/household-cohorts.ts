@@ -155,7 +155,7 @@ const TIER_TRANSFER_WEIGHT: Record<WealthTier, number> = {
  */
 function tierShareOfMeasured(
   wealthDistribution: Record<WealthTier, WealthTierData>,
-  field: 'debtLocal' | 'institutionalClaimsUSD'
+  field: 'debtLocal' | 'institutionalClaimsLocal'
 ): Record<WealthTier, number> {
   const raw = {} as Record<WealthTier, number>;
   let total = 0;
@@ -169,9 +169,9 @@ function tierShareOfMeasured(
     return raw;
   }
   let incomeTotal = 0;
-  WEALTH_TIERS.forEach((t) => { incomeTotal += Math.max(0, wealthDistribution[t]?.shareOfIncomeUSD ?? 0); });
+  WEALTH_TIERS.forEach((t) => { incomeTotal += Math.max(0, wealthDistribution[t]?.shareOfIncomeLocal ?? 0); });
   WEALTH_TIERS.forEach((t) => {
-    raw[t] = incomeTotal > 0 ? Math.max(0, wealthDistribution[t]?.shareOfIncomeUSD ?? 0) / incomeTotal : 0.25;
+    raw[t] = incomeTotal > 0 ? Math.max(0, wealthDistribution[t]?.shareOfIncomeLocal ?? 0) / incomeTotal : 0.25;
   });
   return raw;
 }
@@ -241,10 +241,10 @@ export const BUFFER_TARGET_WEEKS = 12;
 
 export function tierWealthMpc(tier: WealthTierData | undefined): number {
   if (!tier) return 0;
-  const netWorth = Math.max(1, tier.shareOfNetWorthUSD);
-  const illiquidUSD = Math.max(0, tier.homeEquityUSD ?? 0)
+  const netWorth = Math.max(1, tier.shareOfNetWorthLocal);
+  const illiquidLocal = Math.max(0, tier.homeEquityLocal ?? 0)
     + Math.max(0, tier.equityExposureShare) * netWorth;
-  const liquidShare = Math.max(0, Math.min(1, 1 - illiquidUSD / netWorth));
+  const liquidShare = Math.max(0, Math.min(1, 1 - illiquidLocal / netWorth));
   const consumePropensity = Math.max(0, Math.min(1, 1 - tier.savingsRate));
   return (consumePropensity * liquidShare) / WEALTH_SPENDDOWN_YEARS;
 }
@@ -253,7 +253,7 @@ export interface CohortBuildInputs {
   /** §5-BRAINS — which region's cohorts these are: the key each cohort's brain is drawn from. */
   regionId?: string;
   occupationPools: Record<OccupationType, OccupationPool>;
-  baseAnnualWageUSD: Record<OccupationType, number>;
+  baseAnnualWageLocal: Record<OccupationType, number>;
   /** Labor force per occupation (employed + unemployed), the same figure the benefits sum uses. */
   laborForceByOccupation: Record<OccupationType, number>;
   /**
@@ -265,7 +265,7 @@ export interface CohortBuildInputs {
    */
   firmWagePremiums?: { shareOfWorkers: number; premium: number }[];
   /** PUB3b: the government's REAL weekly transfer obligation — the one number the budget owns. */
-  governmentTransfersWeeklyUSD: number;
+  governmentTransfersWeeklyLocal: number;
   /**
    * DIST/MAC — the household sector's LIQUID assets (deposits + money-fund shares), which the
    * saving decision below reads per tier.
@@ -276,7 +276,7 @@ export interface CohortBuildInputs {
    * decomposition of it, so no tier could ever disagree with the whole — which is top-down, and
    * the opposite of what a cross-section is for.
    */
-  liquidAssetsUSD: number;
+  liquidAssetsLocal: number;
   /**
    * DEM/DIST — the share of the population that is RETIRED, from the real age structure.
    *
@@ -288,12 +288,12 @@ export interface CohortBuildInputs {
    */
   retiredShareOfPopulation: number;
   /** HH3's real weekly debt service (interest + required principal), annualized inside. */
-  weeklyDebtServiceUSD: number;
+  weeklyDebtServiceLocal: number;
   /** HH — the region's MEASURED disposable household income (annual): the sum of what households
    *  were actually paid, less what they actually remitted. The cross-section below is scaled to
    *  it, so the decomposition and the aggregate are one number rather than two derivations.
    *  Absent at the cold start, where the seed identity still sets the level (§7.4). */
-  measuredDisposableIncomeUSD?: number;
+  measuredDisposableIncomeLocal?: number;
   /**
    * HH4b — the capital receipts that recycle debt service back into the budget, ANNUAL USD,
    * in three components because their INCIDENCE differs and the incidence is the point:
@@ -301,9 +301,9 @@ export interface CohortBuildInputs {
    * where the equity exposure is (the top). §5-CLOSE C5: there is no residual — both are the
    * payments households received.
    */
-  annualCapitalReceiptsUSD: {
-    depositInterestUSD: number;
-    dividendsUSD: number;
+  annualCapitalReceiptsLocal: {
+    depositInterestLocal: number;
+    dividendsLocal: number;
   };
   /** Prior wealth distribution, for the capital-income allocation weights (one-week lag, like
    * every mark this stage reads). */
@@ -313,13 +313,13 @@ export interface CohortBuildInputs {
 export interface CohortBuildResult {
   cohorts: HouseholdCohort[];
   /** Σ consumption budgets — stage 03's household demand pool C, annual USD. */
-  totalConsumptionBudgetUSD: number;
+  totalConsumptionBudgetLocal: number;
   /** Σ disposable — must equal the aggregate national-accounts derivation to the dollar. */
-  totalDisposableIncomeUSD: number;
-  /** Σ disposable by tier — what wealthDistribution.shareOfIncomeUSD is derived from now. */
-  tierDisposableUSD: Record<WealthTier, number>;
+  totalDisposableIncomeLocal: number;
+  /** Σ disposable by tier — what wealthDistribution.shareOfIncomeLocal is derived from now. */
+  tierDisposableLocal: Record<WealthTier, number>;
   /** Σ savings by tier (the λ-normalized cross-section of the aggregate saving flow). */
-  tierSavingsUSD: Record<WealthTier, number>;
+  tierSavingsLocal: Record<WealthTier, number>;
   /** Budget-weighted spend shares — the region's staple/standard/luxury split, derived. */
   spendShares: { staple: number; standard: number; luxury: number };
   /**
@@ -327,16 +327,16 @@ export interface CohortBuildResult {
    * the years they will not earn. It is the PENSION CONTRIBUTION, and it is carried out of here
    * so that the pension stage stops applying a flat rate to the whole sector's income.
    */
-  lifeCycleSavingAnnualUSD: number;
+  lifeCycleSavingAnnualLocal: number;
   /** The same flow by tier, so the wealth distribution can put it where it actually goes. */
-  tierLifeCycleSavingUSD: Record<WealthTier, number>;
+  tierLifeCycleSavingLocal: Record<WealthTier, number>;
 }
 
 export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildResult {
   const {
-    occupationPools, baseAnnualWageUSD, laborForceByOccupation, firmWagePremiums,
-    governmentTransfersWeeklyUSD, liquidAssetsUSD, retiredShareOfPopulation, weeklyDebtServiceUSD,
-    wealthDistribution, measuredDisposableIncomeUSD, regionId,
+    occupationPools, baseAnnualWageLocal, laborForceByOccupation, firmWagePremiums,
+    governmentTransfersWeeklyLocal, liquidAssetsLocal, retiredShareOfPopulation, weeklyDebtServiceLocal,
+    wealthDistribution, measuredDisposableIncomeLocal, regionId,
   } = inputs;
 
   // ---- 1. Membership: transpose the tier→occupation mixes into per-occupation tier weights,
@@ -355,7 +355,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   // ---- 2. Wage and benefit flows per cell, occupation bills preserved exactly. ----
   interface Cell {
     occ: OccupationType; tier: WealthTier; employed: number; unemployed: number;
-    wageUSD: number; benefitsUSD: number;
+    wageLocal: number; benefitsLocal: number;
   }
   const cells: Cell[] = [];
   OCCUPATIONS.forEach((occ) => {
@@ -363,7 +363,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     if (!pool) return;
     const weights = tierWeightInOcc(occ);
     const unemployedInPool = Math.max(0, (laborForceByOccupation[occ] ?? 0) - pool.employed);
-    const occWage = baseAnnualWageUSD[occ] * pool.wageIndex;
+    const occWage = baseAnnualWageLocal[occ] * pool.wageIndex;
     // DIST: what each tier's earners make inside THIS occupation, measured off the two
     // cross-sections that produce wage dispersion — the firm's premium and the worker's own
     // experience — laid on one axis and banded by the tiers' own population shares. The seed
@@ -380,69 +380,69 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
       if (!(w > 0)) return;
       // PUB1c: the occupation wage is TOTAL COMPENSATION; households are paid it net of the
       // employer's payroll tax, exactly as the aggregate derivation nets it.
-      const cellWage = splitWageBill(occWage * (multiplier[tier] / multNorm)).grossWagesUSD;
+      const cellWage = splitWageBill(occWage * (multiplier[tier] / multNorm)).grossWagesLocal;
       const employed = pool.employed * w;
       const unemployed = unemployedInPool * w;
       cells.push({
         occ, tier, employed, unemployed,
-        wageUSD: employed * cellWage,
-        benefitsUSD: unemployed * cellWage * UNEMPLOYMENT_REPLACEMENT_RATE,
+        wageLocal: employed * cellWage,
+        benefitsLocal: unemployed * cellWage * UNEMPLOYMENT_REPLACEMENT_RATE,
       });
     });
   });
 
-  const totalWageUSD = cells.reduce((a, c) => a + c.wageUSD, 0);
-  const totalBenefitsUSD = cells.reduce((a, c) => a + c.benefitsUSD, 0);
+  const totalWageLocal = cells.reduce((a, c) => a + c.wageLocal, 0);
+  const totalBenefitsLocal = cells.reduce((a, c) => a + c.benefitsLocal, 0);
 
   // ---- 3. Transfers and capital income, allocated: the aggregate is the national-accounts
   // number (max of the transfer share and benefits — same asymmetry as the aggregate formula);
   // the excess over benefits is means-tested down the distribution. Capital income follows the
   // prior week's tier equity exposure — where the claims actually sit. ----
-  const aggregateTransfersUSD = Math.max(
-    governmentTransfersWeeklyUSD * 52, totalBenefitsUSD
+  const aggregateTransfersLocal = Math.max(
+    governmentTransfersWeeklyLocal * 52, totalBenefitsLocal
   );
-  const excessTransfersUSD = aggregateTransfersUSD - totalBenefitsUSD;
+  const excessTransfersLocal = aggregateTransfersLocal - totalBenefitsLocal;
   // Keyed off TOTAL COMPENSATION, matching the aggregate derivation — capital income is a share
   // of output and does not shrink because the employer's payroll tax was split out of wages.
-  const totalCapitalUSD = totalWageUSD * (1 + EMPLOYER_PAYROLL_TAX_RATE) * HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR;
+  const totalCapitalLocal = totalWageLocal * (1 + EMPLOYER_PAYROLL_TAX_RATE) * HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR;
 
   const earnersByTier = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => { earnersByTier[t] = 0; });
   cells.forEach((c) => { earnersByTier[c.tier] += c.employed + c.unemployed; });
   const transferNorm = WEALTH_TIERS.reduce((a, t) => a + earnersByTier[t] * TIER_TRANSFER_WEIGHT[t], 0) || 1;
   const capitalNorm = WEALTH_TIERS.reduce(
-    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25),
+    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthLocal ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25),
     0
   ) || 1;
-  const tierCapitalUSD = {} as Record<WealthTier, number>;
+  const tierCapitalLocal = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => {
-    tierCapitalUSD[t] = totalCapitalUSD
-      * (Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25)) / capitalNorm;
+    tierCapitalLocal[t] = totalCapitalLocal
+      * (Math.max(0, wealthDistribution[t]?.shareOfNetWorthLocal ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25)) / capitalNorm;
   });
 
   // ---- 4. Progressive tax, renormalized to the flat aggregate rate to the dollar. ----
   const grossOf = (c: Cell) => {
     const tierEarners = earnersByTier[c.tier] || 1;
     const share = (c.employed + c.unemployed) / tierEarners;
-    return c.wageUSD + c.benefitsUSD
-      + excessTransfersUSD * (TIER_TRANSFER_WEIGHT[c.tier] * (c.employed + c.unemployed)) / transferNorm
-      + tierCapitalUSD[c.tier] * share;
+    return c.wageLocal + c.benefitsLocal
+      + excessTransfersLocal * (TIER_TRANSFER_WEIGHT[c.tier] * (c.employed + c.unemployed)) / transferNorm
+      + tierCapitalLocal[c.tier] * share;
   };
-  const totalGrossUSD = cells.reduce((a, c) => a + grossOf(c), 0);
-  const taxMultNorm = totalGrossUSD > 0
-    ? cells.reduce((a, c) => a + grossOf(c) * TIER_TAX_RATE_MULTIPLIER[c.tier], 0) / totalGrossUSD
+  const totalGrossLocal = cells.reduce((a, c) => a + grossOf(c), 0);
+  const taxMultNorm = totalGrossLocal > 0
+    ? cells.reduce((a, c) => a + grossOf(c) * TIER_TAX_RATE_MULTIPLIER[c.tier], 0) / totalGrossLocal
     : 1;
 
   // ---- 5. Savings cross-section, λ-normalized to the aggregate behavioural rate; debt service
   // allocated; consumption the residual. ----
-  const annualDebtServiceUSD = Math.max(0, weeklyDebtServiceUSD) * 52;
+  const annualDebtServiceLocal = Math.max(0, weeklyDebtServiceLocal) * 52;
   // RULE 19 — the split is MEASURED (see `tierShareOfMeasured`).
   const debtShareByTier = tierShareOfMeasured(wealthDistribution, 'debtLocal');
 
   // HH: the cohorts DISTRIBUTE household income; they do not re-derive it. The cross-section —
   // who earns what, relative to whom — is built above from real employment, real occupation
   // wages, real benefits and the tier tax ladder. The LEVEL is the measured sum of what
-  // households were actually paid (`measuredDisposableIncomeUSD`), so the decomposition cannot
+  // households were actually paid (`measuredDisposableIncomeLocal`), so the decomposition cannot
   // disagree with the aggregate it decomposes. It used to compute its own total from the same
   // three imposed constants the aggregate used, which made the identity hold only for as long as
   // both derivations stayed identical — they stopped the moment income became a measured sum
@@ -450,20 +450,20 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   const rawPreliminary = cells.map((c) => {
     const grossLocal = grossOf(c);
     const taxRate = HOUSEHOLD_EFFECTIVE_TAX_RATE * (TIER_TAX_RATE_MULTIPLIER[c.tier] / taxMultNorm);
-    const taxUSD = grossLocal * taxRate;
-    return { c, grossLocal, taxUSD, dispUSD: grossLocal - taxUSD };
+    const taxLocal = grossLocal * taxRate;
+    return { c, grossLocal, taxLocal, dispLocal: grossLocal - taxLocal };
   });
-  const rawDisposableUSD = rawPreliminary.reduce((a, x) => a + x.dispUSD, 0);
-  const incomeScale = (measuredDisposableIncomeUSD !== undefined && rawDisposableUSD > 0)
-    ? measuredDisposableIncomeUSD / rawDisposableUSD
+  const rawDisposableLocal = rawPreliminary.reduce((a, x) => a + x.dispLocal, 0);
+  const incomeScale = (measuredDisposableIncomeLocal !== undefined && rawDisposableLocal > 0)
+    ? measuredDisposableIncomeLocal / rawDisposableLocal
     : 1;
   const preliminary = rawPreliminary.map((x) => ({
     c: x.c,
     grossLocal: x.grossLocal * incomeScale,
-    taxUSD: x.taxUSD * incomeScale,
-    dispUSD: x.dispUSD * incomeScale,
+    taxLocal: x.taxLocal * incomeScale,
+    dispLocal: x.dispLocal * incomeScale,
   }));
-  const totalDisposableIncomeUSD = preliminary.reduce((a, x) => a + x.dispUSD, 0);
+  const totalDisposableIncomeLocal = preliminary.reduce((a, x) => a + x.dispLocal, 0);
 
   // ---- DIST/MAC: SAVING IS WHAT IS LEFT OVER, NOT WHAT WAS ASSUMED. ----
   //
@@ -490,7 +490,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   //
   // WHERE THE POLICY RATE WENT. It used to be a coefficient on the aggregate. It is now the two
   // real things a rate does to a household budget, both already per-tier: it raises DEBT SERVICE
-  // for the indebted (measured, and already netted out of `dispUSD`) and it raises DEPOSIT
+  // for the indebted (measured, and already netted out of `dispLocal`) and it raises DEPOSIT
   // INTEREST for savers (measured, and already in capital receipts). That is a distributional
   // transmission instead of a scalar one, and it runs the right way round for each tier.
   //
@@ -502,37 +502,37 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   // this week; a house and a pension are not it, and using the total made every tier look as
   // liquid as its saving history rather than as its portfolio.
   const liquidOf = (t: WealthTier): number => Math.max(0,
-    wealthDistribution[t]?.liquidSavingsUSD ?? wealthDistribution[t]?.accumulatedSavingsUSD ?? 0);
+    wealthDistribution[t]?.liquidSavingsLocal ?? wealthDistribution[t]?.accumulatedSavingsLocal ?? 0);
   const accumulatedNorm = WEALTH_TIERS.reduce((a, t) => a + liquidOf(t), 0);
   // Who holds the liquid assets is whose saving accumulated (§7.144's own finding). Before any
   // saving has accumulated there is nothing to split by, so it follows income — which is what
   // the opening weeks of a cold start look like (§7.4).
-  // Both branches must return a SHARE. `shareOfIncomeUSD` is a DOLLAR AMOUNT despite reading
-  // like a fraction — it holds `tierDisposableUSD[t]` — so it is normalised here. Using it raw
+  // Both branches must return a SHARE. `shareOfIncomeLocal` is a DOLLAR AMOUNT despite reading
+  // like a fraction — it holds `tierDisposableLocal[t]` — so it is normalised here. Using it raw
   // was the actual cause of §7.158's blow-up: a 346B liquid stock multiplied by a 1.5e11
   // "share", which is a units error of the §7.149 family and not the story that record told.
   const incomeNorm = WEALTH_TIERS.reduce(
-    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfIncomeUSD ?? 0), 0);
+    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfIncomeLocal ?? 0), 0);
   const tierLiquidShare = (t: WealthTier): number => accumulatedNorm > 0
     ? liquidOf(t) / accumulatedNorm
-    : (incomeNorm > 0 ? Math.max(0, wealthDistribution[t]?.shareOfIncomeUSD ?? 0) / incomeNorm : 0.25);
-  const tierIncomeUSD = {} as Record<WealthTier, number>;
-  WEALTH_TIERS.forEach((t) => { tierIncomeUSD[t] = 0; });
-  preliminary.forEach((x) => { tierIncomeUSD[x.c.tier] += x.dispUSD; });
+    : (incomeNorm > 0 ? Math.max(0, wealthDistribution[t]?.shareOfIncomeLocal ?? 0) / incomeNorm : 0.25);
+  const tierIncomeLocal = {} as Record<WealthTier, number>;
+  WEALTH_TIERS.forEach((t) => { tierIncomeLocal[t] = 0; });
+  preliminary.forEach((x) => { tierIncomeLocal[x.c.tier] += x.dispLocal; });
   // COH2 — the LIFE-CYCLE half of the plan, kept separately because it is a different flow with a
   // different destination: it is the pension contribution (insurance-and-pensions.ts), where the
   // buffer half stays in the household's own liquid stock.
-  const cohortLifeCycleSavingUSD: number[] = [];
-  const cohortSavingsUSD = preliminary.map((x) => {
+  const cohortLifeCycleSavingLocal: number[] = [];
+  const cohortSavingsLocal = preliminary.map((x) => {
     const tier = x.c.tier;
     // This cohort's slice of its tier's liquid assets, by its slice of its tier's income.
-    const shareOfTier = tierIncomeUSD[tier] > 0 ? x.dispUSD / tierIncomeUSD[tier] : 0;
-    const liquidUSD = Math.max(0, liquidAssetsUSD) * tierLiquidShare(tier) * shareOfTier;
+    const shareOfTier = tierIncomeLocal[tier] > 0 ? x.dispLocal / tierIncomeLocal[tier] : 0;
+    const liquidLocal = Math.max(0, liquidAssetsLocal) * tierLiquidShare(tier) * shareOfTier;
     // §5-BRAINS — this cohort's own two numbers, drawn from its identity (a cohort is rebuilt
     // weekly, so the draw is re-struck from the same key and is the same brain every week): a
     // risk-averse cohort wants a bigger buffer, a patient one closes the gap over more years.
     const brain = drawPreferences(`hh:${regionId ?? '?'}:${x.c.occ}:${tier}`, 0);
-    const targetBufferUSD = (x.dispUSD / 52) * BUFFER_TARGET_WEEKS * riskAversionOf(brain);
+    const targetBufferLocal = (x.dispLocal / 52) * BUFFER_TARGET_WEEKS * riskAversionOf(brain);
     // DEM/DIST — THE LIFE-CYCLE, and it is the last piece of the savings rate.
     //
     // The buffer term alone has no motive that survives a stationary economy: once the stock is
@@ -540,86 +540,86 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     // opened above target. A household also saves to fund the years it will not earn, and that
     // rate is exactly the retired share of the population (§7.169) — no coefficient, and it comes
     // from the real age structure now that one exists.
-    const lifeCycleSavingUSD = x.dispUSD * Math.max(0, Math.min(1, retiredShareOfPopulation));
-    cohortLifeCycleSavingUSD.push(lifeCycleSavingUSD);
-    return lifeCycleSavingUSD + (targetBufferUSD - liquidUSD)
+    const lifeCycleSavingLocal = x.dispLocal * Math.max(0, Math.min(1, retiredShareOfPopulation));
+    cohortLifeCycleSavingLocal.push(lifeCycleSavingLocal);
+    return lifeCycleSavingLocal + (targetBufferLocal - liquidLocal)
       / (WEALTH_SPENDDOWN_YEARS * (patienceWeeksOf(brain) / PATIENCE_MEDIAN_WEEKS));
   });
 
-  const tierDisposableUSD = {} as Record<WealthTier, number>;
-  const tierSavingsUSD = {} as Record<WealthTier, number>;
-  let lifeCycleSavingAnnualUSD = 0;
-  const tierLifeCycleSavingUSD = {} as Record<WealthTier, number>;
-  WEALTH_TIERS.forEach((t) => { tierDisposableUSD[t] = 0; tierSavingsUSD[t] = 0; tierLifeCycleSavingUSD[t] = 0; });
+  const tierDisposableLocal = {} as Record<WealthTier, number>;
+  const tierSavingsLocal = {} as Record<WealthTier, number>;
+  let lifeCycleSavingAnnualLocal = 0;
+  const tierLifeCycleSavingLocal = {} as Record<WealthTier, number>;
+  WEALTH_TIERS.forEach((t) => { tierDisposableLocal[t] = 0; tierSavingsLocal[t] = 0; tierLifeCycleSavingLocal[t] = 0; });
 
   const exposureNorm = WEALTH_TIERS.reduce(
-    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25),
+    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthLocal ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25),
     0
   ) || 1;
   const netWorthNorm = WEALTH_TIERS.reduce(
-    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0), 0
+    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthLocal ?? 0), 0
   ) || 1;
-  const tierReceiptsUSD = {} as Record<WealthTier, number>;
+  const tierReceiptsLocal = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => {
-    const nw = Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0);
+    const nw = Math.max(0, wealthDistribution[t]?.shareOfNetWorthLocal ?? 0);
     const exp = wealthDistribution[t]?.equityExposureShare ?? 0.25;
-    tierReceiptsUSD[t] =
-      Math.max(0, inputs.annualCapitalReceiptsUSD.depositInterestUSD) * (nw / netWorthNorm)
-      + Math.max(0, inputs.annualCapitalReceiptsUSD.dividendsUSD) * ((nw * exp) / exposureNorm);
+    tierReceiptsLocal[t] =
+      Math.max(0, inputs.annualCapitalReceiptsLocal.depositInterestLocal) * (nw / netWorthNorm)
+      + Math.max(0, inputs.annualCapitalReceiptsLocal.dividendsLocal) * ((nw * exp) / exposureNorm);
   });
-  const cohorts: HouseholdCohort[] = preliminary.map(({ c, grossLocal, taxUSD, dispUSD }, i) => {
+  const cohorts: HouseholdCohort[] = preliminary.map(({ c, grossLocal, taxLocal, dispLocal }, i) => {
     const tierEarners = earnersByTier[c.tier] || 1;
     const share = (c.employed + c.unemployed) / tierEarners;
-    const plannedSavingsUSD = cohortSavingsUSD[i];
-    const debtServiceUSD = annualDebtServiceUSD * debtShareByTier[c.tier] * share;
-    const capitalReceiptsUSD = tierReceiptsUSD[c.tier] * share;
-    const budgetBeforeFloorUSD = dispUSD - plannedSavingsUSD - debtServiceUSD + capitalReceiptsUSD;
-    const squeezedSavingsUSD = budgetBeforeFloorUSD < 0
-      ? Math.max(0, plannedSavingsUSD + budgetBeforeFloorUSD)
-      : plannedSavingsUSD;
+    const plannedSavingsLocal = cohortSavingsLocal[i];
+    const debtServiceLocal = annualDebtServiceLocal * debtShareByTier[c.tier] * share;
+    const capitalReceiptsLocal = tierReceiptsLocal[c.tier] * share;
+    const budgetBeforeFloorLocal = dispLocal - plannedSavingsLocal - debtServiceLocal + capitalReceiptsLocal;
+    const squeezedSavingsLocal = budgetBeforeFloorLocal < 0
+      ? Math.max(0, plannedSavingsLocal + budgetBeforeFloorLocal)
+      : plannedSavingsLocal;
     // A cohort cannot pay more debt service than it has: the effective payment is capped at
     // what remains after (already-squeezed) savings, and the unpayable slice is ARREARS — the
     // delinquency the banks' consumer loss rates already price on the other side of the same
     // loans. The cohort's recorded burden is what it actually pays.
-    const effectiveDebtServiceUSD = Math.min(
-      debtServiceUSD, Math.max(0, dispUSD - squeezedSavingsUSD + capitalReceiptsUSD)
+    const effectiveDebtServiceLocal = Math.min(
+      debtServiceLocal, Math.max(0, dispLocal - squeezedSavingsLocal + capitalReceiptsLocal)
     );
-    tierDisposableUSD[c.tier] += dispUSD;
-    tierSavingsUSD[c.tier] += squeezedSavingsUSD;
+    tierDisposableLocal[c.tier] += dispLocal;
+    tierSavingsLocal[c.tier] += squeezedSavingsLocal;
     // The squeeze falls on the whole plan, so the life-cycle half is scaled by what survived it:
     // a cohort that cannot save cannot contribute either, which is what a contribution holiday IS.
-    const cohortLifeCycleAfterSqueezeUSD = plannedSavingsUSD > 0
-      ? cohortLifeCycleSavingUSD[i] * (squeezedSavingsUSD / plannedSavingsUSD)
+    const cohortLifeCycleAfterSqueezeLocal = plannedSavingsLocal > 0
+      ? cohortLifeCycleSavingLocal[i] * (squeezedSavingsLocal / plannedSavingsLocal)
       : 0;
-    lifeCycleSavingAnnualUSD += cohortLifeCycleAfterSqueezeUSD;
-    tierLifeCycleSavingUSD[c.tier] += cohortLifeCycleAfterSqueezeUSD;
+    lifeCycleSavingAnnualLocal += cohortLifeCycleAfterSqueezeLocal;
+    tierLifeCycleSavingLocal[c.tier] += cohortLifeCycleAfterSqueezeLocal;
     return {
       occupation: c.occ,
       tier: c.tier,
       earnerCount: Math.round(c.employed + c.unemployed),
       employedCount: Math.round(c.employed),
-      wageIncomeUSD: Math.round(c.wageUSD),
-      unemploymentBenefitsUSD: Math.round(c.benefitsUSD),
-      transferIncomeUSD: Math.round((excessTransfersUSD * (TIER_TRANSFER_WEIGHT[c.tier] * (c.employed + c.unemployed)) / transferNorm)),
-      capitalIncomeUSD: Math.round((tierCapitalUSD[c.tier] * share)),
-      grossIncomeUSD: Math.round(grossLocal),
-      taxUSD: Math.round(taxUSD),
-      disposableIncomeUSD: Math.round(dispUSD),
-      debtServiceUSD: Math.round(effectiveDebtServiceUSD),
+      wageIncomeLocal: Math.round(c.wageLocal),
+      unemploymentBenefitsLocal: Math.round(c.benefitsLocal),
+      transferIncomeLocal: Math.round((excessTransfersLocal * (TIER_TRANSFER_WEIGHT[c.tier] * (c.employed + c.unemployed)) / transferNorm)),
+      capitalIncomeLocal: Math.round((tierCapitalLocal[c.tier] * share)),
+      grossIncomeLocal: Math.round(grossLocal),
+      taxLocal: Math.round(taxLocal),
+      disposableIncomeLocal: Math.round(dispLocal),
+      debtServiceLocal: Math.round(effectiveDebtServiceLocal),
       // HH4b: debt service DEBITS the budget and the capital receipts CREDIT it — both sides of
       // the loop together (one alone is the HH1c leak). At seed the two net to zero by the
       // residual's construction; from week 1 they diverge with rates, which is the household
       // rate channel: a hike raises the middle's debt service now while receipts follow banks'
       // payouts later and land mostly at the top. A cohort whose obligations exceed its budget
-      // STOPS SAVING before it stops eating (squeezedSavingsUSD below) — the real order of a
+      // STOPS SAVING before it stops eating (squeezedSavingsLocal below) — the real order of a
       // distressed household's cuts.
-      savingsUSD: Math.round(squeezedSavingsUSD),
+      savingsLocal: Math.round(squeezedSavingsLocal),
       // PUB1c: consumption tax is a wedge inside the budget — the cohort's money is unchanged,
       // what it buys is smaller, and the difference is remitted by merchants. Recorded so the
       // treasury can collect it; the budget below is what actually reaches the goods market.
-      consumptionTaxUSD: Math.round((Math.max(0, dispUSD - squeezedSavingsUSD - effectiveDebtServiceUSD + capitalReceiptsUSD)
+      consumptionTaxLocal: Math.round((Math.max(0, dispLocal - squeezedSavingsLocal - effectiveDebtServiceLocal + capitalReceiptsLocal)
         * (CONSUMPTION_TAX_RATE / (1 + CONSUMPTION_TAX_RATE)))),
-      consumptionBudgetUSD: Math.round((Math.max(0, dispUSD - squeezedSavingsUSD - effectiveDebtServiceUSD + capitalReceiptsUSD)
+      consumptionBudgetLocal: Math.round((Math.max(0, dispLocal - squeezedSavingsLocal - effectiveDebtServiceLocal + capitalReceiptsLocal)
         / (1 + CONSUMPTION_TAX_RATE))),
     };
   });
@@ -628,15 +628,15 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   let staple = 0; let standard = 0; let luxury = 0; let budget = 0;
   cohorts.forEach((ch) => {
     const mix = TIER_SPEND_MIX[ch.tier];
-    staple += ch.consumptionBudgetUSD * mix.staple;
-    standard += ch.consumptionBudgetUSD * mix.standard;
-    luxury += ch.consumptionBudgetUSD * mix.luxury;
-    budget += ch.consumptionBudgetUSD;
+    staple += ch.consumptionBudgetLocal * mix.staple;
+    standard += ch.consumptionBudgetLocal * mix.standard;
+    luxury += ch.consumptionBudgetLocal * mix.luxury;
+    budget += ch.consumptionBudgetLocal;
   });
   const spendShares = budget > 0
     ? { staple: staple / budget, standard: standard / budget, luxury: luxury / budget }
     : { staple: 0.35, standard: 0.50, luxury: 0.15 };
 
-  const totalConsumptionBudgetUSD = cohorts.reduce((a, c) => a + c.consumptionBudgetUSD, 0);
-  return { cohorts, totalConsumptionBudgetUSD, totalDisposableIncomeUSD, tierDisposableUSD, tierSavingsUSD, spendShares, lifeCycleSavingAnnualUSD, tierLifeCycleSavingUSD };
+  const totalConsumptionBudgetLocal = cohorts.reduce((a, c) => a + c.consumptionBudgetLocal, 0);
+  return { cohorts, totalConsumptionBudgetLocal, totalDisposableIncomeLocal, tierDisposableLocal, tierSavingsLocal, spendShares, lifeCycleSavingAnnualLocal, tierLifeCycleSavingLocal };
 }

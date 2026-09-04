@@ -142,7 +142,7 @@ export class HoldingsStore {
    * array did not change until that pass applied), in original order, plus every appended fill
    * row so far, in append order. Same rows, same floating-point accumulation order.
    */
-  currentHoldingsUSD(entityId: string): number {
+  currentHoldingsLocal(entityId: string): number {
     const slot = this.slots.get(entityId);
     if (!slot) return 0;
     let sum = 0;

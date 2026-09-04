@@ -33,7 +33,7 @@ import { entityCashOf } from '../ledger/accounts';
  * comparable listed earnings — the same number HC4's NAV mark and HC6's deal arithmetic read, so
  * a private company is worth one thing no matter who is holding it.
  */
-export function householdPrivateBusinessEquityUSD(
+export function householdPrivateBusinessEquityLocal(
   regionId: RegionId,
   companies: Company[],
   evMultiple: number
@@ -63,27 +63,27 @@ export function householdPrivateBusinessEquityUSD(
  * up holding it, never an input to what the book may trade.
  */
 // Reads the persistent rows — mid-week the object books are a stale view.
-export function householdDirectEquityUSD(
+export function householdDirectEquityLocal(
   v2: import('../../engine2/world').V2World,
   regionId: RegionId,
   companies: Company[],
   entities: InstitutionalEntity[],
   /** The banks' equity desks, by company — 07e creates their inventory as real bank-owned
    *  shares, so what a desk holds is not part of the float. */
-  deskHeldUSD?: Map<string, number>
+  deskHeldLocal?: Map<string, number>
 ): number {
   const H = v2.holdings;
   const equityRef = internString(v2, 'EQUITY');
   const regionRef = internString(v2, regionId);
-  const institutionallyHeldUSD = new Map<string, number>();
+  const institutionallyHeldLocal = new Map<string, number>();
   entities.forEach((e) => {
     if (e.isDefaulted) return;
     for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
       if (H.typeRef[r] !== equityRef || H.regionRef[r] !== regionRef) continue;
       const instrumentId = v2.internedStrings[H.instrRef[r]];
-      institutionallyHeldUSD.set(
+      institutionallyHeldLocal.set(
         instrumentId,
-        (institutionallyHeldUSD.get(instrumentId) ?? 0) + H.qtyLocal[r]
+        (institutionallyHeldLocal.get(instrumentId) ?? 0) + H.qtyLocal[r]
       );
     }
   });
@@ -93,14 +93,14 @@ export function householdDirectEquityUSD(
     // both come out. Subtracting only the register counted the desks' whole equity book as
     // household net worth — and 07e computes the same residual the other way, with the desks
     // out, so the two disagreed by exactly that.
-    const namedUSD = (institutionallyHeldUSD.get(c.id) ?? 0) + (deskHeldUSD?.get(c.id) ?? 0);
-    return sum + Math.max(0, Math.max(0, marketCapOf(c)) - namedUSD);
+    const namedLocal = (institutionallyHeldLocal.get(c.id) ?? 0) + (deskHeldLocal?.get(c.id) ?? 0);
+    return sum + Math.max(0, Math.max(0, marketCapOf(c)) - namedLocal);
   }, 0);
 }
 
 /** Marked value of the household's index-fund shares, at each fund's current net asset value. */
 // The fund's basket is read off the rows.
-export function householdEtfHoldingsUSD(
+export function householdEtfHoldingsLocal(
   v2: import('../../engine2/world').V2World,
   hs: Pick<HouseholdState, 'etfShares'>,
   entities: InstitutionalEntity[]
@@ -113,7 +113,7 @@ export function householdEtfHoldingsUSD(
     if (!fund?.etf || !(fund.etf.sharesOutstanding > 0)) return sum;
     let heldLocal = 0;
     for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) heldLocal += H.qtyLocal[r];
-    const navUSD = heldLocal + Math.max(0, entityCashOf(v2, fund));
-    return sum + holding.shares * (navUSD / fund.etf.sharesOutstanding);
+    const navLocal = heldLocal + Math.max(0, entityCashOf(v2, fund));
+    return sum + holding.shares * (navLocal / fund.etf.sharesOutstanding);
   }, 0);
 }

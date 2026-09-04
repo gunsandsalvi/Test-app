@@ -73,7 +73,7 @@ export interface SecurityLoan {
 }
 
 /** One week of the borrow fee, on what the position is worth now. */
-export function loanWeeklyFeeUSD(loan: SecurityLoan, pricePerShare: number): number {
+export function loanWeeklyFeeLocal(loan: SecurityLoan, pricePerShare: number): number {
   return (loan.shares * Math.max(0, pricePerShare) * (loan.feeBps / 10000)) / 52;
 }
 
@@ -141,15 +141,15 @@ export function shortSizeShares(args: {
  * with the mark — which is precisely the short's profit and loss, and the reason it has to be
  * carried at all.
  */
-export function stockLoanNetUSD(
+export function stockLoanNetLocal(
   book: SecurityLoan[],
   entityId: string,
   priceOf: (instrumentId: string) => number
 ): number {
   return book.reduce((a, l) => {
-    const markUSD = l.shares * Math.max(0, priceOf(l.instrumentId));
-    if (l.lender.id === entityId) return a + markUSD - l.collateralLocal;
-    if (l.borrower.id === entityId) return a + l.collateralLocal - markUSD;
+    const markLocal = l.shares * Math.max(0, priceOf(l.instrumentId));
+    if (l.lender.id === entityId) return a + markLocal - l.collateralLocal;
+    if (l.borrower.id === entityId) return a + l.collateralLocal - markLocal;
     return a;
   }, 0);
 }

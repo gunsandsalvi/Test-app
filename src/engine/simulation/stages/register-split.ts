@@ -42,27 +42,27 @@ export function liveTranchesOf(v2: V2World, issuerId: string, kind: CreditKind):
  */
 export function splitAcrossTranches(
   v2: V2World, issuerId: string, kind: CreditKind, totalLocal: number,
-  primary?: { trancheId: string; sliceUSD: number }
+  primary?: { trancheId: string; sliceLocal: number }
 ): { instrumentId: string; usd: number }[] {
   if (!(totalLocal > 0)) return [];
   const out: { instrumentId: string; usd: number }[] = [];
-  let leftUSD = totalLocal;
-  if (primary && primary.sliceUSD > 0) {
-    const usd = Math.min(leftUSD, primary.sliceUSD);
+  let leftLocal = totalLocal;
+  if (primary && primary.sliceLocal > 0) {
+    const usd = Math.min(leftLocal, primary.sliceLocal);
     out.push({ instrumentId: primary.trancheId, usd });
-    leftUSD -= usd;
+    leftLocal -= usd;
   }
-  if (leftUSD <= 0) return out;
+  if (leftLocal <= 0) return out;
   const live = liveTranchesOf(v2, issuerId, kind).filter((t) => t.id !== primary?.trancheId);
   const faceLocal = live.reduce((a, t) => a + t.faceLocal, 0);
   if (!(faceLocal > 0)) {
     if (process.env.SPLIT_TRACE === '1') console.log(`  [split-fallback] ${issuerId} ${kind} total ${(totalLocal / 1e6).toFixed(1)}M ladderRows ${ladderRowsOf(v2, issuerId).length} rowById ${v2.rowById.get(issuerId)} primary ${primary?.trancheId ?? '-'}`);
     // Nothing live of this kind: the primary carries it when there is one, else the issuer's id.
-    if (primary) { const p = out.find((x) => x.instrumentId === primary.trancheId); if (p) p.usd += leftUSD; else out.push({ instrumentId: primary.trancheId, usd: leftUSD }); }
-    else out.push({ instrumentId: issuerId, usd: leftUSD });
+    if (primary) { const p = out.find((x) => x.instrumentId === primary.trancheId); if (p) p.usd += leftLocal; else out.push({ instrumentId: primary.trancheId, usd: leftLocal }); }
+    else out.push({ instrumentId: issuerId, usd: leftLocal });
     return out;
   }
-  live.forEach((t) => { const usd = leftUSD * (t.faceLocal / faceLocal); if (usd > 0) out.push({ instrumentId: t.id, usd }); });
+  live.forEach((t) => { const usd = leftLocal * (t.faceLocal / faceLocal); if (usd > 0) out.push({ instrumentId: t.id, usd }); });
   return out;
 }
 
@@ -70,7 +70,7 @@ export function splitAcrossTranches(
  * Each participant's slice of an issuer's primary take: what it bought this session, scaled so the
  * slices sum to the take (the same rule 07f's bill rebates use).
  */
-export function primarySliceOf(boughtUSD: number, totalBoughtUSD: number, takeUSD: number): number {
-  if (!(boughtUSD > 0) || !(totalBoughtUSD > 0) || !(takeUSD > 0)) return 0;
-  return boughtUSD * Math.min(1, takeUSD / totalBoughtUSD);
+export function primarySliceOf(boughtLocal: number, totalBoughtLocal: number, takeLocal: number): number {
+  if (!(boughtLocal > 0) || !(totalBoughtLocal > 0) || !(takeLocal > 0)) return 0;
+  return boughtLocal * Math.min(1, takeLocal / totalBoughtLocal);
 }

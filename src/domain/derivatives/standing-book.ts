@@ -31,7 +31,7 @@ const sideIndex = (classId: DerivativeClassId, side: 'a' | 'b'): number =>
 
 export class StandingBook {
   private readonly books = new Map<string, (SideBook | undefined)[]>();
-  private readonly chargeUSD = new Map<string, number>();
+  private readonly chargeLocal = new Map<string, number>();
   /** How many contracts of the book the index has folded; `extend` resumes from here. */
   indexed = 0;
 
@@ -56,9 +56,9 @@ export class StandingBook {
     this.addCover(this.sideBook(aKey, sideIndex(c.classId, 'a')), c.referenceId, c.termKey, c.notional, units);
     this.addCover(this.sideBook(bKey, sideIndex(c.classId, 'b')), c.referenceId, c.termKey, c.notional, units);
     // Charged on either side, once per contract (a party standing on both sides is one charge).
-    const chargeUSD = c.notional * pfeAddOnRateOf(c, this.isInvestmentGrade);
-    this.chargeUSD.set(aKey, (this.chargeUSD.get(aKey) ?? 0) + chargeUSD);
-    if (bKey !== aKey) this.chargeUSD.set(bKey, (this.chargeUSD.get(bKey) ?? 0) + chargeUSD);
+    const chargeLocal = c.notional * pfeAddOnRateOf(c, this.isInvestmentGrade);
+    this.chargeLocal.set(aKey, (this.chargeLocal.get(aKey) ?? 0) + chargeLocal);
+    if (bKey !== aKey) this.chargeLocal.set(bKey, (this.chargeLocal.get(bKey) ?? 0) + chargeLocal);
   }
 
   private sideBook(partyKey: string, idx: number): SideBook {
@@ -92,8 +92,8 @@ export class StandingBook {
     return termKey === undefined ? ref : ref?.byTerm.get(termKey);
   }
 
-  /** `standingCoverUSD` (contract.ts) answered from the index: live notional on one side. */
-  coverUSD(classId: DerivativeClassId, side: 'a' | 'b', partyKey: string, referenceId?: string, termKey?: string): number {
+  /** `standingCoverLocal` (contract.ts) answered from the index: live notional on one side. */
+  coverLocal(classId: DerivativeClassId, side: 'a' | 'b', partyKey: string, referenceId?: string, termKey?: string): number {
     return this.cover(classId, side, partyKey, referenceId, termKey)?.usd ?? 0;
   }
 
@@ -102,9 +102,9 @@ export class StandingBook {
     return this.cover(classId, side, partyKey, referenceId, termKey)?.units ?? 0;
   }
 
-  /** `standingPfeChargeUSD` (registry.ts) with the reference's grade: what a party's standing
+  /** `standingPfeChargeLocal` (registry.ts) with the reference's grade: what a party's standing
    *  book already charges against the one desk budget, every class at its own add-on. */
-  pfeChargeUSD(partyKey: string): number {
-    return this.chargeUSD.get(partyKey) ?? 0;
+  pfeChargeLocal(partyKey: string): number {
+    return this.chargeLocal.get(partyKey) ?? 0;
   }
 }

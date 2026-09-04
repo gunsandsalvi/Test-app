@@ -41,14 +41,14 @@ export interface EstateClaim {
   instrumentType: EstateClaimType;
   seniority: number;
   principalLocal: number;
-  recoveredUSD: number;
+  recoveredLocal: number;
 }
 
 export interface EstateAssets {
   cashLocal: number;
-  receivablesUSD: number;
+  receivablesLocal: number;
   inventoryLocal: number;
-  ppeUSD: number;
+  ppeLocal: number;
 }
 
 export interface Estate {
@@ -59,14 +59,14 @@ export interface Estate {
   assets: EstateAssets;
   claims: EstateClaim[];
   /** What has been paid out so far — the waterfall's own running total. */
-  distributedUSD: number;
+  distributedLocal: number;
   /** Set when the assets are exhausted and the residual claims are written off. */
   closedWeek?: number;
 }
 
-export function estateAssetsUSD(a: EstateAssets): number {
-  return Math.max(0, a.cashLocal) + Math.max(0, a.receivablesUSD)
-    + Math.max(0, a.inventoryLocal) + Math.max(0, a.ppeUSD);
+export function estateAssetsLocal(a: EstateAssets): number {
+  return Math.max(0, a.cashLocal) + Math.max(0, a.receivablesLocal)
+    + Math.max(0, a.inventoryLocal) + Math.max(0, a.ppeLocal);
 }
 
 export function claimsAtSeniority(estate: Estate, seniority: number): EstateClaim[] {
@@ -75,7 +75,7 @@ export function claimsAtSeniority(estate: Estate, seniority: number): EstateClai
 
 /** What a class is still owed after everything paid to it so far. */
 export function outstandingLocal(claims: EstateClaim[]): number {
-  return claims.reduce((a, c) => a + Math.max(0, c.principalLocal - c.recoveredUSD), 0);
+  return claims.reduce((a, c) => a + Math.max(0, c.principalLocal - c.recoveredLocal), 0);
 }
 
 /**
@@ -84,7 +84,7 @@ export function outstandingLocal(claims: EstateClaim[]): number {
  */
 export function realisedDebtRecoveryRate(estate: Estate): number | undefined {
   const debt = estate.claims.filter((c) => c.seniority < CLAIM_SENIORITY.EQUITY);
-  const owedUSD = debt.reduce((a, c) => a + c.principalLocal, 0);
-  if (!(owedUSD > 0)) return undefined;
-  return Math.max(0, Math.min(1, debt.reduce((a, c) => a + c.recoveredUSD, 0) / owedUSD));
+  const owedLocal = debt.reduce((a, c) => a + c.principalLocal, 0);
+  if (!(owedLocal > 0)) return undefined;
+  return Math.max(0, Math.min(1, debt.reduce((a, c) => a + c.recoveredLocal, 0) / owedLocal));
 }

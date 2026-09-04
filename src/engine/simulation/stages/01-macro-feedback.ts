@@ -18,7 +18,7 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
   const { prevActiveFirms } = ctx;
 
   // GUARD deleted `regionFloatingPrincipal` here: a full-universe tranche sweep every week to
-  // feed `evolveBankingSector`'s `businessLoanBookInputUSD`, a parameter declared and never read
+  // feed `evolveBankingSector`'s `businessLoanBookInputLocal`, a parameter declared and never read
   // since G2 made business lending the itemized stage's decision. It also counted bank
   // facilities, the double-count 07d exists to avoid.
   REGION_IDS.forEach(rid => {

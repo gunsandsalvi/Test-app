@@ -100,7 +100,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 money is a liability of somebody | `src/engine/ledger/accounts.ts:accountKey` | ✅ |
 | A1.a a deposit is a named bank's liability | `src/engine/ledger/accounts.ts:depositLinesAt` | ✅ |
 | A1.b a reserve is the central bank's liability to a bank | `src/engine/ledger/accounts.ts:reserveRowOf` | ✅ |
-| A1.c currency in circulation | `src/engine/bootstrap/close-seed.ts:currencyInCirculationUSD` | ❌ |
+| A1.c currency in circulation | `src/engine/bootstrap/close-seed.ts:currencyInCirculationLocal` | ❌ |
 | **A1.d FORBID no money without an issuer** | `src/engine/ledger/accounts.ts:applySettledRow` | ✅ |
 | A2 money is denominated | `src/engine2/world.ts:CURRENCY_ID` | ✅ |
 | A2.a a holder's own money | `src/engine/ledger/accounts.ts:homeCurrencyOf` | ✅ |
@@ -113,7 +113,7 @@ checked by `scripts/check-atlas.sh`.
 | B2 a balance is carried and changes only by a named movement | `src/engine/ledger/accounts.ts:projectBooks` | ✅ |
 | B3 a balance can be negative | `src/engine/ledger/accounts.ts:treasuryNetOf` | ✅ |
 | B3.a a customer overdrawn is borrowing — a **credit decision** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
-| B3.b a bank overdrawn at the CB borrows, priced by the corridor | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanUSD` | ⚠️ |
+| B3.b a bank overdrawn at the CB borrows, priced by the corridor | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ⚠️ |
 | **B3.c FORBID an overdraft is never a silent negative** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ✅ |
 | C1 a payment is an instruction | `src/engine/simulation/stages/settlement.ts:PaymentInstruction` | ✅ |
 | C1.a it names both sides | `src/engine/ledger/wire.ts:wirePush` | ✅ |
@@ -126,7 +126,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 a cross-currency payment is two amounts and a rate | `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ✅ |
 | C4 the money creators are enumerable and few | `src/engine/ledger/party.ts:PARTY_KINDS` | ✅ |
 | C4.a a bank writing a loan creates a deposit | `src/engine/ledger/accounts.ts:creditCreatedByBank` | ✅ |
-| C4.b the central bank creates reserves | `src/engine/ledger/accounts.ts:centralBankIssuanceUSD` | ✅ |
+| C4.b the central bank creates reserves | `src/engine/ledger/accounts.ts:centralBankIssuanceLocal` | ✅ |
 | C4.c VERIFY Δ money stock = C4.a + C4.b and nothing else | `src/engine/audit/money.ts:m6` | ⚠️ |
 | D1 every asset move is a numbered instruction | `src/engine/ledger/wire.ts:WireInstruction` | ✅ |
 | D1.a numbered, so a position can be replayed | `src/engine/ledger/wire.ts:wirePush` | ✅ |
@@ -145,8 +145,8 @@ checked by `scripts/check-atlas.sh`.
 | F1.a treasury, household, bank, pool statements | `src/engine/simulation/stages/settlement.ts:treasuryFlowsByRegion` | ✅ |
 | **F1.b FORBID a per-book statement is never a sum across currencies** | `src/engine/simulation/stages/settlement.ts:grossByCurrency` | ✅ |
 | F2 the gross and the net are both reported | `src/engine/simulation/stages/settlement.ts:grossLocal` | ✅ |
-| F3 VERIFY the clearing house's residual is zero | `src/engine/simulation/stages/settlement.ts:clearingHouseResidualUSD` | ✅ |
-| F4 VERIFY money on a holder with no account is counted | `src/engine/simulation/stages/settlement.ts:unresolvedUSD` | ✅ |
+| F3 VERIFY the clearing house's residual is zero | `src/engine/simulation/stages/settlement.ts:clearingHouseResidualLocal` | ✅ |
+| F4 VERIFY money on a holder with no account is counted | `src/engine/simulation/stages/settlement.ts:unresolvedLocal` | ✅ |
 
 ---
 

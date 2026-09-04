@@ -125,11 +125,11 @@ export function underwritingFeeBps(args: {
   /** What the paper's PRICE can move against the underwriter in one week, in bps. */
   oneWeekPriceRiskBps: number;
   /** The deal, against the dealer capacity live in this book right now. */
-  dealSizeUSD: number;
-  deskCapacityUSD: number;
+  dealSizeLocal: number;
+  deskCapacityLocal: number;
 }): number {
-  const residualShare = args.dealSizeUSD > 0
-    ? args.dealSizeUSD / (args.dealSizeUSD + Math.max(0, args.deskCapacityUSD))
+  const residualShare = args.dealSizeLocal > 0
+    ? args.dealSizeLocal / (args.dealSizeLocal + Math.max(0, args.deskCapacityLocal))
     : 0;
   return Math.max(1, args.bookSpreadBps + residualShare * Math.max(0, args.oneWeekPriceRiskBps));
 }
@@ -179,9 +179,9 @@ export interface LeadBankCandidate {
   ticker: string;
   bankMarketShare?: number;
   /** What this bank already lends this issuer — the relationship, measured. */
-  relationshipUSD?: number;
+  relationshipLocal?: number;
   /** What its desk could still underwrite; the caller decrements it as mandates are won. */
-  freeCapacityUSD?: number;
+  freeCapacityLocal?: number;
 }
 
 export function chooseLeadBank(issuerId: string, banks: LeadBankCandidate[]): string {
@@ -190,8 +190,8 @@ export function chooseLeadBank(issuerId: string, banks: LeadBankCandidate[]): st
   for (let i = 0; i < issuerId.length; i++) hash = ((hash << 5) - hash + issuerId.charCodeAt(i)) | 0;
   const tieBreak = (hash >>> 0) % banks.length;
   const rank = (b: LeadBankCandidate, i: number): number[] => [
-    Math.max(0, b.relationshipUSD ?? 0),
-    Math.max(0, b.freeCapacityUSD ?? 0),
+    Math.max(0, b.relationshipLocal ?? 0),
+    Math.max(0, b.freeCapacityLocal ?? 0),
     b.bankMarketShare ?? 0,
     banks.length - ((i - tieBreak + banks.length) % banks.length),
   ];
@@ -214,16 +214,16 @@ export function chooseLeadBank(issuerId: string, banks: LeadBankCandidate[]): st
  * whether a bank could serve the client at all, in place of a hash of the client's id.
  */
 export function mandateAllocator(banks: { ticker: string; bankMarketShare?: number; capacityLocal: number }[]) {
-  const freeUSD = new Map(banks.map((b) => [b.ticker, Math.max(0, b.capacityLocal)]));
+  const freeLocal = new Map(banks.map((b) => [b.ticker, Math.max(0, b.capacityLocal)]));
   return {
-    pick(clientId: string, sizeLocal: number, relationshipUSD?: (ticker: string) => number): string {
+    pick(clientId: string, sizeLocal: number, relationshipLocal?: (ticker: string) => number): string {
       const ticker = chooseLeadBank(clientId, banks.map((b) => ({
         ticker: b.ticker,
         bankMarketShare: b.bankMarketShare,
-        relationshipUSD: relationshipUSD ? relationshipUSD(b.ticker) : 0,
-        freeCapacityUSD: freeUSD.get(b.ticker) ?? 0,
+        relationshipLocal: relationshipLocal ? relationshipLocal(b.ticker) : 0,
+        freeCapacityLocal: freeLocal.get(b.ticker) ?? 0,
       })));
-      if (ticker) freeUSD.set(ticker, Math.max(0, (freeUSD.get(ticker) ?? 0) - Math.max(0, sizeLocal)));
+      if (ticker) freeLocal.set(ticker, Math.max(0, (freeLocal.get(ticker) ?? 0) - Math.max(0, sizeLocal)));
       return ticker;
     },
   };

@@ -22,40 +22,40 @@ export function runNewsAndTurnSummaryStage(state: GameState, ctx: WeeklyStepCont
   // now reaches a NAMED lead bank's balance sheet instead of the region aggregate that 02b
   // overwrites the following week (§7.30's "a write to a derived view is a write to nothing").
 
-  const cashAfterWeek = state.portfolio.cashLocal + ctx.weeklyInterestIncomeUSD + ctx.weeklyRealizedPnL + ctx.weeklyRealizedCashUSD - ctx.weeklyFinancingCostUSD;
-  const navUSD = cashAfterWeek + updatedPositions.reduce((s, p) => s + p.unrealizedPnL, 0);
+  const cashAfterWeek = state.portfolio.cashLocal + ctx.weeklyInterestIncomeLocal + ctx.weeklyRealizedPnL + ctx.weeklyRealizedCashLocal - ctx.weeklyFinancingCostLocal;
+  const navLocal = cashAfterWeek + updatedPositions.reduce((s, p) => s + p.unrealizedPnL, 0);
   const updatedPortfolio: Portfolio = {
     ...state.portfolio,
     cashLocal: cashAfterWeek,
     positions: updatedPositions,
-    navUSD,
-    totalRequiredMarginUSD: ctx.totalRequiredMarginUSD,
-    maintenanceMarginUSD: ctx.maintenanceMarginUSD,
-    marginUtilizationPct: navUSD > 0 ? Math.round((ctx.totalRequiredMarginUSD / navUSD) * 100) : 100,
-    isMarginCall: navUSD < ctx.maintenanceMarginUSD,
+    navLocal,
+    totalRequiredMarginLocal: ctx.totalRequiredMarginLocal,
+    maintenanceMarginLocal: ctx.maintenanceMarginLocal,
+    marginUtilizationPct: navLocal > 0 ? Math.round((ctx.totalRequiredMarginLocal / navLocal) * 100) : 100,
+    isMarginCall: navLocal < ctx.maintenanceMarginLocal,
   };
   // §5-NEWS — a quarter of stories (the derived feed runs ~30–60 a week); the UI reads nothing older.
   const updatedNewsFeed = [...state.newsFeed, ...ctx.newsItems].slice(-600);
   const updatedDiagnosticsLogs = [...state.diagnosticsLogs, ...ctx.diagnosticLogs].slice(-100);
   const year = state.year + (currentWeekMod13 === 13 && nextWeek % 52 === 0 ? 1 : 0);
 
-  const pnlDeltaUSD = navUSD - state.portfolio.navUSD;
+  const pnlDeltaLocal = navLocal - state.portfolio.navLocal;
   const turnSummary: GameState['turnSummary'] = {
     week: nextWeek,
-    pnlDeltaUSD,
-    pnlDeltaPct: state.portfolio.navUSD > 0 ? Number(((pnlDeltaUSD / state.portfolio.navUSD) * 100).toFixed(2)) : 0,
-    interestIncomeUSD: ctx.weeklyInterestIncomeUSD,
-    financingCostLocal: ctx.weeklyFinancingCostUSD,
+    pnlDeltaLocal,
+    pnlDeltaPct: state.portfolio.navLocal > 0 ? Number(((pnlDeltaLocal / state.portfolio.navLocal) * 100).toFixed(2)) : 0,
+    interestIncomeLocal: ctx.weeklyInterestIncomeLocal,
+    financingCostLocal: ctx.weeklyFinancingCostLocal,
     defaultedCompanies: ctx.defaultedTickers,
     ratingsChanges: ctx.ratingChanges,
     earningsReported: ctx.earningsReportedThisTurn,
     marginAlert: updatedPortfolio.isMarginCall ? 'ACCOUNT IN MARGIN CALL: required maintenance margin exceeds NAV.' : null,
     attribution: {
-      carryUSD: ctx.attributionCarry,
-      macroRatesUSD: ctx.attributionMacroRates,
-      creditSpreadUSD: ctx.attributionCreditSpread,
-      equityDeltaUSD: ctx.attributionEquityDelta,
-      volThetaUSD: ctx.attributionVolTheta,
+      carryLocal: ctx.attributionCarry,
+      macroRatesLocal: ctx.attributionMacroRates,
+      creditSpreadLocal: ctx.attributionCreditSpread,
+      equityDeltaLocal: ctx.attributionEquityDelta,
+      volThetaLocal: ctx.attributionVolTheta,
     },
   };
 

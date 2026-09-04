@@ -20,12 +20,12 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const share = comp.bankMarketShare ?? 0.25;
   const own = comp.bankBalanceSheet;
   const bs = own ?? reg.bankingSector;
-  const sovUSD = own
+  const sovLocal = own
     ? Object.values(own.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0)
     : reg.bankingSector.sovereignBondHoldingsLocal * share;
   // §5-WIRES D: the credit books are the sheet's rows; a bank with no sheet holds no rows.
-  const creditBookUSD = own ? loanBooksOf(own, facilityBookOf(ensureV2(input.state), comp.ticker)) : 0;
-  const totalAssets = creditBookUSD + sovUSD;
+  const creditBookLocal = own ? loanBooksOf(own, facilityBookOf(ensureV2(input.state), comp.ticker)) : 0;
+  const totalAssets = creditBookLocal + sovLocal;
   const weeklyNim = bs.netInterestMarginPct / 52;
   const impliedNimRev = totalAssets * weeklyNim;
   // IND-R4: the bank's OWN measured loss experience. `loanLossProvisionRateAnnualPct` is what
@@ -39,7 +39,7 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // first week and shed their entire workforce to the one-employee floor by week 3 (§7.108).
   // Credit loss belongs to the books that carry credit, at the rate this bank actually
   // experienced. (Removing the `random()` draw relabels the RNG stream — declared.)
-  const loanLosses = (creditBookUSD * (bs.loanLossProvisionRateAnnualPct ?? 0)) / 52;
+  const loanLosses = (creditBookLocal * (bs.loanLossProvisionRateAnnualPct ?? 0)) / 52;
   // Smooth against last week's OWN revenue for noise damping (85/15, same order as other
   // week-to-week smoothing in this file) rather than a 98/2 blend anchored on this
   // company's original generation-time seed — that seed comes from the same small-scale
@@ -55,5 +55,5 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // A bank's cost base is credit losses (below, its own measured experience), its people
   // (payroll, common) and its premises and technology (its profile input basket, common). All
   // three are real now, so the margin is what is left — an outcome, like every other firm's.
-  return { newRevenue, profileCostsAnnualUSD: loanLosses * 52 };
+  return { newRevenue, profileCostsAnnualLocal: loanLosses * 52 };
 };

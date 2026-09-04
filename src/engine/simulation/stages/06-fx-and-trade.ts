@@ -65,20 +65,20 @@ export function runFxAndTradeStage(state: GameState, ctx: WeeklyStepContext): vo
   publishFxRates(ctx.v2, ctx.updatedFxPairs);
 
   MARKET_REGION_IDS.forEach(regionId => {
-    let exportsWeeklyUSD = 0;
-    let importsWeeklyUSD = 0;
+    let exportsWeeklyLocal = 0;
+    let importsWeeklyLocal = 0;
     MARKET_REGION_IDS.forEach(counterparty => {
       if (counterparty === regionId) return;
-      exportsWeeklyUSD += ctx.bilateralTradeWeeklyUSD[regionId][counterparty];
-      importsWeeklyUSD += ctx.bilateralTradeWeeklyUSD[counterparty][regionId];
+      exportsWeeklyLocal += ctx.bilateralTradeWeeklyLocal[regionId][counterparty];
+      importsWeeklyLocal += ctx.bilateralTradeWeeklyLocal[counterparty][regionId];
     });
     const reg = ctx.updatedRegions[regionId];
     // ANNUALISED, because that is the periodicity every consumer of these fields already reads
     // them at — the GDP identity's net-exports component in stage 11, and fx-clearing's own
     // `/52` back to a weekly flow. The measurement underneath is a real week of settled
     // cross-border sales; the x52 is the run-rate, and it is named as such (rule 8).
-    reg.exportsUSD = exportsWeeklyUSD * 52;
-    reg.importsUSD = importsWeeklyUSD * 52;
-    reg.tradeBalance = reg.exportsUSD - reg.importsUSD;
+    reg.exportsLocal = exportsWeeklyLocal * 52;
+    reg.importsLocal = importsWeeklyLocal * 52;
+    reg.tradeBalance = reg.exportsLocal - reg.importsLocal;
   });
 }

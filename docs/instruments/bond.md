@@ -97,11 +97,11 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 | N6 · corp a PERIODICITY and an accrual convention | `src/domain/company.ts:paymentsPerYear` | ✅ |
 | N6 · sov a PERIODICITY and an accrual convention | `src/domain/government.ts:sovereignCouponDueShare` | ⚠️ |
 | **N7 · corp a PRICE per unit of par it changes hands at** | — | ❌ |
-| **N7 · sov a PRICE per unit of par it changes hands at** | `src/domain/government.ts:discountBillProceedsUSD` | ❌ |
+| **N7 · sov a PRICE per unit of par it changes hands at** | `src/domain/government.ts:discountBillProceedsLocal` | ❌ |
 | N7.a · corp cleared from real demand against real supply | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ⚠️ |
 | N7.a · sov cleared from real demand against real supply | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ⚠️ |
 | **N7.b · corp FORBID the price is never derived from the spread** | `src/domain/pricing/bond.ts:priceFromSpreadBps` | ❌ |
-| **N7.b · sov FORBID the price is never derived from the yield** | `src/domain/government.ts:discountBillProceedsUSD` | ❌ |
+| **N7.b · sov FORBID the price is never derived from the yield** | `src/domain/government.ts:discountBillProceedsLocal` | ❌ |
 | N8 · corp a HOLDER OF RECORD: who owns how many units | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
 | **N8 · sov a HOLDER OF RECORD: who owns how many units** | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ❌ |
 | N8.a · corp VERIFY Σ units held = units issued | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |

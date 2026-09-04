@@ -40,10 +40,10 @@ const LOSS_MAKER_NET_ASSET_HAIRCUT = 0.55;
 
 export interface EquityValuationInputs {
   /** Annual net income, in dollars. Real, off the income statement. */
-  annualEarningsUSD: number;
+  annualEarningsLocal: number;
   sharesOutstanding: number;
   /** Real book equity — the balance sheet's shareholders' equity where one exists. */
-  bookEquityUSD: number;
+  bookEquityLocal: number;
   /**
    * The rate at which the business is really adding productive capacity: net investment (growth
    * capex less depreciation) over the net PP&E it already runs. This is the same primitive stage
@@ -72,16 +72,16 @@ export function fairValuePerShare(inputs: EquityValuationInputs): number {
     inputs.riskFreeRate + inputs.beta * EQUITY_RISK_PREMIUM + inputs.holderRequiredReturn * 0.25
   );
 
-  if (!(inputs.annualEarningsUSD > 0)) {
+  if (!(inputs.annualEarningsLocal > 0)) {
     // No earnings to capitalise: what the equity is worth is what the business owns net of what
     // it owes, at a distress haircut. This is what retires pricing.ts's negative-EPS branch,
     // which priced a BIGGER loss HIGHER (|eps| x PE x 0.4).
-    return Math.max(0, (Math.max(0, inputs.bookEquityUSD) * LOSS_MAKER_NET_ASSET_HAIRCUT) / shares);
+    return Math.max(0, (Math.max(0, inputs.bookEquityLocal) * LOSS_MAKER_NET_ASSET_HAIRCUT) / shares);
   }
 
   const growth = Math.max(0, Math.min(MAX_CAPITALISED_GROWTH, inputs.netInvestmentRate));
   const discount = Math.max(0.015, requiredReturn - growth);
-  return Math.max(0.01, (inputs.annualEarningsUSD / shares) / discount);
+  return Math.max(0.01, (inputs.annualEarningsLocal / shares) / discount);
 }
 
 /**
@@ -93,12 +93,12 @@ export function fairValuePerShare(inputs: EquityValuationInputs): number {
 export function companyNetInvestmentRate(comp: Company): number {
   const grossPPE = comp.grossPPELocal ?? 0;
   const netPPE = Math.max(1, grossPPE - (comp.accumulatedDepreciationLocal ?? 0));
-  const annualDepreciationUSD = grossPPE / (SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12);
-  return ((comp.growthCapex ?? 0) - annualDepreciationUSD) / netPPE;
+  const annualDepreciationLocal = grossPPE / (SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12);
+  return ((comp.growthCapex ?? 0) - annualDepreciationLocal) / netPPE;
 }
 
 /** Real book equity: the balance sheet's own shareholders' equity where a filing exists. */
-export function companyBookEquityUSD(comp: Company, cashLocal: number, totalDebtUSD: number = totalDebtOf(comp)): number {
+export function companyBookEquityLocal(comp: Company, cashLocal: number, totalDebtLocal: number = totalDebtOf(comp)): number {
   // A BANK's book equity is the equity line of its own balance sheet, not a PP&E-and-cash
   // reckoning built for an operating company. Its assets are loans, securities and reserves and
   // its liabilities are deposits and borrowings; the generic formula below sees almost none of
@@ -108,7 +108,7 @@ export function companyBookEquityUSD(comp: Company, cashLocal: number, totalDebt
   const latest = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
   const filed = latest?.balanceSheet?.shareholdersEquity;
   if (filed !== undefined && isFinite(filed)) return filed;
-  return (comp.grossPPELocal ?? 0) - (comp.accumulatedDepreciationLocal ?? 0) + cashLocal - totalDebtUSD;
+  return (comp.grossPPELocal ?? 0) - (comp.accumulatedDepreciationLocal ?? 0) + cashLocal - totalDebtLocal;
 }
 
 /**
@@ -126,13 +126,13 @@ export function companyFairValuePerShare(
   holderRequiredReturn: number,
   /** §5-WIRES D: the ladder's face as the caller knows it mid-week (stage 08's fresh total);
    *  the week-end view otherwise. */
-  totalDebtUSD: number = totalDebtOf(comp)
+  totalDebtLocal: number = totalDebtOf(comp)
 ): number {
   if (comp.isDefaulted) return 0;
   return fairValuePerShare({
-    annualEarningsUSD: comp.netIncome,
+    annualEarningsLocal: comp.netIncome,
     sharesOutstanding: comp.sharesOutstanding,
-    bookEquityUSD: companyBookEquityUSD(comp, cashLocal, totalDebtUSD),
+    bookEquityLocal: companyBookEquityLocal(comp, cashLocal, totalDebtLocal),
     netInvestmentRate: companyNetInvestmentRate(comp),
     riskFreeRate,
     beta: comp.beta ?? 1,

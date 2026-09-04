@@ -92,7 +92,7 @@ checked by `scripts/check-atlas.sh`.
 | A3 owner and occupier can differ, and then there is rent | `src/engine/macro/initialization.ts:HOME_OWNERSHIP_RATE` | ⚠️ |
 | **A4 the stock is finite and changes slowly** | `src/engine/macro/evolution.ts:owningHouseholdsCount` | ❌ |
 | A5 it depreciates and needs maintenance | — | ❌ |
-| B1 it clears between buyers and sellers, per location | `src/engine/macro/evolution.ts:marginalPriceUSD` | ⚠️ |
+| B1 it clears between buyers and sellers, per location | `src/engine/macro/evolution.ts:marginalPriceLocal` | ⚠️ |
 | B2 demand is governed by what the buyer can borrow | `src/engine/macro/evolution.ts:affordabilityByTier` | ✅ |
 | B2.a the mortgage rate and the lending standard dominate | `src/engine/macro/evolution.ts:annuityFactorForPricing` | ✅ |
 | B3 supply is inelastic in the short run | `src/engine/macro/evolution.ts:supplyUnitsThisWeek` | ✅ |
@@ -100,22 +100,22 @@ checked by `scripts/check-atlas.sh`.
 | B4.a VERIFY a transaction index measures a changing sample | — | ❌ |
 | **B5 rent and price are linked; the yield is a read** | — | ❌ |
 | C1 a loan from a named lender secured on the house | `src/domain/banking.ts:MortgageVintage` | ⚠️ |
-| C2 term, rate, amortisation; interest AND principal | `src/domain/banking.ts:annuityWeeklyPrincipalUSD` | ✅ |
+| C2 term, rate, amortisation; interest AND principal | `src/domain/banking.ts:annuityWeeklyPrincipalLocal` | ✅ |
 | **C3 LTV is a read that moves when the price moves** | `src/domain/banking.ts:vintageCurrentLtv` | ✅ |
-| C4 the borrower defaults; the lender takes and sells the house | `src/engine/simulation/stages/bank-lending.ts:vLossUSD` | ⚠️ |
+| C4 the borrower defaults; the lender takes and sells the house | `src/engine/simulation/stages/bank-lending.ts:vLossLocal` | ⚠️ |
 | C4.a the recovery is what it fetches, and losses correlate | `src/domain/banking.ts:mortgageSeverityAtLtv` | ⚠️ |
 | **C5 the lender's standard is a DECISION, and it tightens** | `src/domain/banking.ts:MORTGAGE_DSTI_LIMIT` | ❌ |
 | C5.a which feeds back into B2.a — the housing cycle | `src/engine/simulation/stages/bank-lending.ts:affordabilityGate` | ⚠️ |
 | C6 mortgages can be pooled and sold to a named holder | — | ❌ |
-| D1 house price changes are household wealth changes | `src/engine/simulation/stages/household-balance-sheet.ts:housingStockUSD` | ✅ |
+| D1 house price changes are household wealth changes | `src/engine/simulation/stages/household-balance-sheet.ts:housingStockLocal` | ✅ |
 | D2 housing construction is investment and employment | `src/domain/industry-registry.ts:residential_construction` | ✅ |
 | D3 rent is a large component of the consumer price level | `src/engine/simulation/stages/price-index.ts:buildCpiBasket` | ✅ |
-| D4 mortgage debt is the largest household liability | `src/engine/simulation/stages/bank-lending.ts:mortgageDebtUSD` | ✅ |
+| D4 mortgage debt is the largest household liability | `src/engine/simulation/stages/bank-lending.ts:mortgageDebtLocal` | ✅ |
 | D5 VERIFY the rate reaches consumption by two distinguishable channels | — | ❌ |
 | **E1 FORBID no house without an owner in the register** | `src/engine/ledger/wire.ts:HOUSE` | ❌ |
-| **E2 FORBID no exogenous house price path** | `src/engine/macro/evolution.ts:newMedianHomePriceUSD` | ✅ |
+| **E2 FORBID no exogenous house price path** | `src/engine/macro/evolution.ts:newMedianHomePriceLocal` | ✅ |
 | E3 FORBID no mortgage without a lender's balance sheet | `src/engine/simulation/stages/bank-lending.ts:HouseholdLoanPool` | ✅ |
-| E4 VERIFY Σ owed = Σ held, exactly | `src/engine/simulation/stages/02b-bank-diversification.ts:mortgageDebtUSD` | ✅ |
+| E4 VERIFY Σ owed = Σ held, exactly | `src/engine/simulation/stages/02b-bank-diversification.ts:mortgageDebtLocal` | ✅ |
 
 ---
 

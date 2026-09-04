@@ -76,7 +76,7 @@ export interface SourcingIntent {
 }
 
 /** What a good costs to move one unit on a lane, in the lane's own money, at a given rate. */
-export function freightPerUnitUSD(
+export function freightPerUnitLocal(
   subUnitId: string,
   from: RegionId,
   to: RegionId,
@@ -157,7 +157,7 @@ export function computeSourcingIntent(args: {
         // foreign quote and a domestic one are the same kind of number. A lane is quoted in its
         // ORIGIN's money, because that is where the carrier's fuel and crew are paid.
         const exWorksInBuyerMoney = convertLocal(exWorks, origin, buyer, fxToUsd);
-        const freightOriginMoney = freightPerUnitUSD(subUnitId, origin, buyer, massTonnes, expectedRate(origin, buyer));
+        const freightOriginMoney = freightPerUnitLocal(subUnitId, origin, buyer, massTonnes, expectedRate(origin, buyer));
         const freightInBuyerMoney = convertLocal(freightOriginMoney, origin, buyer, fxToUsd);
         // XB3a-4: a distant source is dearer than its price and freight, because everything
         // ordered from it sits in a pipeline the buyer has paid for and cannot yet use. Five

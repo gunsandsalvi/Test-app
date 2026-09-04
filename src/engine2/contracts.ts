@@ -37,9 +37,9 @@ export interface ContractTable {
   weeksRemaining: Int32Array;
   backlogUnits: Float64Array;
   shortWeeks: Int32Array;
-  prepaidUSD: Float64Array;
+  prepaidLocal: Float64Array;
   /** 0 = a fixed-price contract (the old field's absent case). */
-  escalationBaseUSD: Float64Array;
+  escalationBaseLocal: Float64Array;
   next: Int32Array;
   /** Per region key: chain head/tail per sub-unit index, and the bucket order (see header). */
   headByRegion: Record<string, Int32Array>;
@@ -61,8 +61,8 @@ export function newContractTable(): ContractTable {
     weeksRemaining: new Int32Array(cap),
     backlogUnits: new Float64Array(cap),
     shortWeeks: new Int32Array(cap),
-    prepaidUSD: new Float64Array(cap),
-    escalationBaseUSD: new Float64Array(cap),
+    prepaidLocal: new Float64Array(cap),
+    escalationBaseLocal: new Float64Array(cap),
     next: new Int32Array(cap).fill(-1),
     headByRegion: {},
     tailByRegion: {},
@@ -82,8 +82,8 @@ function grow(T: ContractTable): void {
   T.weeksRemaining = gi(T.weeksRemaining);
   T.backlogUnits = gf(T.backlogUnits);
   T.shortWeeks = gi(T.shortWeeks);
-  T.prepaidUSD = gf(T.prepaidUSD);
-  T.escalationBaseUSD = gf(T.escalationBaseUSD);
+  T.prepaidLocal = gf(T.prepaidLocal);
+  T.escalationBaseLocal = gf(T.escalationBaseLocal);
   T.next = gi(T.next, -1);
   T.cap = cap;
 }
@@ -103,7 +103,7 @@ function regionTables(T: ContractTable, region: string): { head: Int32Array; tai
 export function formContractRow(
   v2: V2World, region: string, subUnitId: string,
   supplierKey: string, customerKey: string,
-  priceLocal: number, qtyPerWeek: number, weeksRemaining: number, escalationBaseUSD: number
+  priceLocal: number, qtyPerWeek: number, weeksRemaining: number, escalationBaseLocal: number
 ): void {
   const T = v2.contracts;
   const subIdx = SUBUNIT_INDEX.get(subUnitId);
@@ -119,8 +119,8 @@ export function formContractRow(
   T.weeksRemaining[r] = weeksRemaining | 0;
   T.backlogUnits[r] = 0;
   T.shortWeeks[r] = 0;
-  T.prepaidUSD[r] = 0;
-  T.escalationBaseUSD[r] = escalationBaseUSD;
+  T.prepaidLocal[r] = 0;
+  T.escalationBaseLocal[r] = escalationBaseLocal;
   T.next[r] = -1;
   const { head, tail, suOrder } = regionTables(T, region);
   if (tail[subIdx] >= 0) {

@@ -55,24 +55,24 @@ export interface InstitutionProfile {
   /** §7.347 — the first per-kind BEHAVIOUR field: the hurdle a liability-driven kind derives
    *  from its own liabilities (an insurer's cost of float, a pension's benefit need), or
    *  undefined when the flows have not been struck yet and the stated hurdle stands. */
-  readonly liabilityHurdle?: (entity: InstitutionalEntity, statedHurdle: number, totalAssetsUSD: number) => number | undefined;
+  readonly liabilityHurdle?: (entity: InstitutionalEntity, statedHurdle: number, totalAssetsLocal: number) => number | undefined;
 }
 
 /** An insurer's hurdle is what its float costs it: the underwriting result over the reserves. */
 function insurerHurdle(entity: InstitutionalEntity, stated: number): number | undefined {
-  const liabilityUSD = entity.beneficiaryLiabilityUSD ?? 0;
-  if (!(liabilityUSD > 0) || entity.lastAnnualUnderwritingResultUSD === undefined) return undefined;
-  const costOfFloatAnnual = -entity.lastAnnualUnderwritingResultUSD / liabilityUSD;
+  const liabilityLocal = entity.beneficiaryLiabilityLocal ?? 0;
+  if (!(liabilityLocal > 0) || entity.lastAnnualUnderwritingResultLocal === undefined) return undefined;
+  const costOfFloatAnnual = -entity.lastAnnualUnderwritingResultLocal / liabilityLocal;
   return Math.max(0.02, Math.min(0.30, stated + costOfFloatAnnual));
 }
 /** A pension's hurdle is the return its benefit outflow needs on the assets it has, scaled by
  *  how far funded it is. */
-function pensionHurdle(entity: InstitutionalEntity, _stated: number, totalAssetsUSD: number): number | undefined {
-  const liabilityUSD = entity.beneficiaryLiabilityUSD ?? 0;
-  const benefitOutflowAnnual = entity.lastAnnualBenefitOutflowUSD ?? 0;
-  if (!(liabilityUSD > 0) || !(benefitOutflowAnnual > 0)) return undefined;
-  const fundedRatio = totalAssetsUSD / liabilityUSD;
-  const need = (benefitOutflowAnnual / Math.max(1, totalAssetsUSD)) / Math.max(0.2, fundedRatio);
+function pensionHurdle(entity: InstitutionalEntity, _stated: number, totalAssetsLocal: number): number | undefined {
+  const liabilityLocal = entity.beneficiaryLiabilityLocal ?? 0;
+  const benefitOutflowAnnual = entity.lastAnnualBenefitOutflowLocal ?? 0;
+  if (!(liabilityLocal > 0) || !(benefitOutflowAnnual > 0)) return undefined;
+  const fundedRatio = totalAssetsLocal / liabilityLocal;
+  const need = (benefitOutflowAnnual / Math.max(1, totalAssetsLocal)) / Math.max(0.2, fundedRatio);
   return Math.max(0.02, Math.min(0.30, need));
 }
 

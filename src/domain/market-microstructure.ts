@@ -13,7 +13,7 @@ export interface UnitBid {
    *  accounting — which side of a border each fill crossed. */
   regionId: RegionId;
   quantityUnits: number;
-  maxPriceUSD: number;
+  maxPriceLocal: number;
 }
 
 export interface UnitOffer {
@@ -21,7 +21,7 @@ export interface UnitOffer {
   /** XB3a: which region this supply comes FROM. See UnitBid.regionId. */
   regionId: RegionId;
   quantityUnits: number;
-  minPriceUSD: number;
+  minPriceLocal: number;
 }
 
 export interface SupplyContract {
@@ -45,7 +45,7 @@ export interface SupplyContract {
    * it, so input-cost inflation passes through instead of being silently assigned to one side.
    * Absent = a fixed-price contract, which assigns it to the seller.
    */
-  escalationBaseUSD?: number;
+  escalationBaseLocal?: number;
   /**
    * IND17 — WHAT THE CUSTOMER HAS PAID AHEAD. A long-cycle order is funded as the work is done,
    * not on handover: the buyer's money pays for the steel before the ship exists. It is the
@@ -53,7 +53,7 @@ export interface SupplyContract {
    * bilateral object because it is one obligation — negative working capital, and a real
    * funding source for exactly the firms whose production ties up the most cash.
    */
-  prepaidUSD?: number;
+  prepaidLocal?: number;
 }
 
 export interface CategoryDemandState {
@@ -61,11 +61,11 @@ export interface CategoryDemandState {
   demandGrowthAnnual: number;
   demandHistory: number[];
   crowdingIntensity: number;
-  inventoryLevelUSD: number;
+  inventoryLevelLocal: number;
   inputCostPressure: number;
   /** This category's unit price at initialization — the FIXED baseline clearedInputPriceIndex is
    *  measured against. Stored once and never rewritten (S8). */
-  baseUnitPriceUSD?: number;
+  baseUnitPriceLocal?: number;
   clearedInputPriceIndex: number; // 1.0 = baseline; this category's own real auction clearing price vs its baseline unit price — set unconditionally every week by 05-unit-bidding.ts for every category
   // 04-input-output.ts's OWN smoothed upstream scarcity/glut index for its input-category
   // categories (upstream_extraction, specialty_metals) — kept separate from
@@ -73,7 +73,7 @@ export interface CategoryDemandState {
   // field with an unrelated same-week auction price ratio for every category, corrupting
   // stage04's own smoothed self-reference the following week).
   upstreamScarcityIndex?: number;
-  lastWeekInventoryLevelUSD: number; // explicit lag anchor — bidders always react to this, never same-week inventory
+  lastWeekInventoryLevelLocal: number; // explicit lag anchor — bidders always react to this, never same-week inventory
   /**
    * What this good actually cost in this region this week: the volume-weighted average of every
    * price its buyers paid, across the local book AND their fills in the world book (XB3a). It is
@@ -89,10 +89,10 @@ export interface CategoryDemandState {
    * `unitPriceLocal` is what a business pays delivered, and this is what is on the shelf. Recipes
    * and input costs keep reading the landed one, because that is genuinely what a firm pays.
    */
-  shelfUnitPriceUSD?: number;
+  shelfUnitPriceLocal?: number;
   /** The local book's own last cleared price — its anchor next week (XB3a). */
-  localUnitPriceUSD?: number;
-  smoothedUnitPriceUSD?: number; // Slow-moving average of the LOCAL book's cleared price, which its suppliers set production against (see 05-unit-bidding.ts) — damps the cobweb-cycle instability of reacting to the raw last-cleared price
+  localUnitPriceLocal?: number;
+  smoothedUnitPriceLocal?: number; // Slow-moving average of the LOCAL book's cleared price, which its suppliers set production against (see 05-unit-bidding.ts) — damps the cobweb-cycle instability of reacting to the raw last-cleared price
   /** §7.249 — the category's own published price, one entry per week (last 13), so a firm's
    *  nominal growth can be deflated by the price of what IT sells over the SAME window. */
   priceHistory?: number[];
@@ -105,16 +105,16 @@ export interface CategoryDemandState {
    *  unanchored one: in any category with persistent excess demand it ratchets the household's
    *  reservation up with the price it itself set — measured as the EUR electricity runaway
    *  (price ×119 in ten weeks while unit shortage IMPROVED). A budget is a level in money. */
-  householdDemandUSD?: number;
+  householdDemandLocal?: number;
   // This category's real corporate-only demand share this week (see 03-category-demand.ts) —
   // stage05-unit-bidding.ts distributes this as real named corporate bids across every
   // potential buyer company, weighted by revenue share, instead of a hand-picked per-category
   // intensity constant that only covered a handful of categories.
-  corporateDemandUSD?: number;
+  corporateDemandLocal?: number;
   /** IND16: what the producer received at the factory gate this week — the first of the three
-   *  price levels (ex-works → landed `unitPriceLocal` → `shelfUnitPriceUSD`). Written by stage 05;
+   *  price levels (ex-works → landed `unitPriceLocal` → `shelfUnitPriceLocal`). Written by stage 05;
    *  currently recorded only (no reader) — surfaced from behind an `as any` by §7.241's Tier 0. */
-  exWorksUnitPriceUSD?: number;
+  exWorksUnitPriceLocal?: number;
   _fulfillmentRatio?: number; // transient, read by AA3 same week, not persisted
   totalUnitsSuppliedThisWeek?: number;
   totalUnitsDemandedThisWeek?: number;
@@ -131,23 +131,23 @@ export function createSeedCategoryDemandState(
   demandLevelAnnualLocal: number,
   demandGrowthAnnual: number,
   unitPriceLocal: number
-): CategoryDemandState & { upstreamScarcityIndex: number; lastWeekInventoryLevelUSD: number; unitPriceLocal: number } {
+): CategoryDemandState & { upstreamScarcityIndex: number; lastWeekInventoryLevelLocal: number; unitPriceLocal: number } {
   return {
     demandLevelAnnualLocal,
     demandGrowthAnnual,
     demandHistory: [demandLevelAnnualLocal],
     crowdingIntensity: 0.1,
-    inventoryLevelUSD: demandLevelAnnualLocal * 0.10,
+    inventoryLevelLocal: demandLevelAnnualLocal * 0.10,
     inputCostPressure: 0,
     clearedInputPriceIndex: 1.0,
     upstreamScarcityIndex: 1.0,
-    lastWeekInventoryLevelUSD: demandLevelAnnualLocal * 0.10,
+    lastWeekInventoryLevelLocal: demandLevelAnnualLocal * 0.10,
     unitPriceLocal,
     // XB3a: both books open on the bootstrap price, so week 1 is the first week either of them
     // moves. Seeding the local book anywhere else would be a §7.4 cold start — a step change on
     // the opening week that reads as an economic event.
-    localUnitPriceUSD: unitPriceLocal,
-    smoothedUnitPriceUSD: unitPriceLocal,
+    localUnitPriceLocal: unitPriceLocal,
+    smoothedUnitPriceLocal: unitPriceLocal,
     // XB3a-3: the week's real quantities, which the sourcing intent reads to decide where to buy
     // and how much freight to book. Seeded at the bootstrap demand a week represents, so the
     // opening week forms an intent against the same observables every later week does (§7.4).
@@ -163,7 +163,7 @@ export interface SupplyRelationship {
   supplierCompanyId: string;
   customerCompanyId: string;
   category: string;
-  weeklyVolumeUSD: number;
+  weeklyVolumeLocal: number;
   relationshipStrength: number;
 }
 

@@ -93,7 +93,7 @@ checked by `scripts/check-atlas.sh`.
 | B1 it expects two-way flow arriving at different times | `src/domain/dealer-desk.ts:DealerDeskPosition` | ✅ |
 | B2 it has information from seeing the flow | — | ❌ |
 | B3 the client pays for immediacy | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ⚠️ |
-| **B4 FORBID it does not quote because the mechanism needs somebody to** | `src/domain/dealer-desk.ts:dealerDeskCapacityUSD` | ✅ |
+| **B4 FORBID it does not quote because the mechanism needs somebody to** | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
 | C1 the quote comes from the desk's own state: inventory, funds, limit, view | `src/engine/simulation/stages/dealer-desks.ts:neutralFraction` | ⚠️ |
 | C2 inventory skews the quote | `src/engine/simulation/stages/dealer-desks.ts:priorPositions` | ✅ |
 | C2.a it mean-reverts its book without being told to | `src/domain/dealer-desk.ts:regionalDeskView` | ✅ |
@@ -101,8 +101,8 @@ checked by `scripts/check-atlas.sh`.
 | **C4 adverse selection widens it** | — | ❌ |
 | **C5 the bid–offer is the OUTPUT of C1–C4** | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
 | **C5.a FORBID no spread applied to a mid** | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ❌ |
-| D1 a position limit per instrument and in aggregate | `src/domain/dealer-desk.ts:dealerDeskGrossUSD` | ✅ |
-| D2 a capital charge on what it holds, and it is real | `src/engine/macro/banking.ts:bankTotalAssetsUSD` | ✅ |
+| D1 a position limit per instrument and in aggregate | `src/domain/dealer-desk.ts:dealerDeskGrossLocal` | ✅ |
+| D2 a capital charge on what it holds, and it is real | `src/engine/macro/banking.ts:bankTotalAssetsLocal` | ✅ |
 | D3 a funding cost on the inventory, paid every week it holds it | `src/engine/macro/banking.ts:leverageHeadroomLocal` | ⚠️ |
 | **D4 when a limit binds it widens, shrinks size, or stops quoting** | `src/domain/dealer-desk.ts:DEALER_DESK_SHARE_OF_BALANCE_SHEET` | ⚠️ |
 | **D4.a which is what makes a failed auction possible at all** | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
@@ -112,7 +112,7 @@ checked by `scripts/check-atlas.sh`.
 | E2 the hedge is imperfect, and the residual is basis risk it carries | — | ❌ |
 | E3 desks face each other — an interdealer market exists | `src/engine/simulation/stages/fx-squaring.ts:squareInterbankFxPositions` | ⚠️ |
 | E4 VERIFY Σ desk inventory = what the rest of the world does not hold | `src/engine/audit/ownership.ts:o1` | ⚠️ |
-| F1 FORBID no infinite balance sheet | `src/domain/dealer-desk.ts:dealerDeskCapacityUSD` | ✅ |
+| F1 FORBID no infinite balance sheet | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
 | F2 FORBID no desk exempt from its own bank's capital and funding | `src/engine/simulation/stages/dealer-desks.ts:sheetOf` | ✅ |
 | F3 FORBID no desk whose P&L is the spread times volume | `src/engine/ledger/bank-book.ts:bookPnL` | ⚠️ |
 

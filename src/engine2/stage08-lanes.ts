@@ -30,21 +30,21 @@ export interface BackLanes {
   // --- capital block inputs (comp scalars; NaN = the field was undefined) ---
   grossPPELocal: Float64Array;
   accumulatedDepreciationLocal: Float64Array;
-  ppeDefaultUSD: Float64Array;          // annualRevenue × sector intensity, the ?? fallback
+  ppeDefaultLocal: Float64Array;          // annualRevenue × sector intensity, the ?? fallback
   annualRevenueLocal: Float64Array;
   cashLocal: Float64Array;
-  currentLiabilitiesUSD: Float64Array;
-  maintenanceCapexUSD: Float64Array;    // NaN = undefined
-  growthCapexUSD: Float64Array;         // NaN = undefined
-  capexUSD: Float64Array;
+  currentLiabilitiesLocal: Float64Array;
+  maintenanceCapexLocal: Float64Array;    // NaN = undefined
+  growthCapexLocal: Float64Array;         // NaN = undefined
+  capexLocal: Float64Array;
   maintenanceShortfallStreak: Float64Array; // NaN = undefined
   baselineGrowthCapexToRevenueRatio: Float64Array; // NaN = undefined
-  marketCapUSD: Float64Array;
-  totalDebtUSD: Float64Array;
+  marketCapLocal: Float64Array;
+  totalDebtLocal: Float64Array;
   cumulativeOutputUnits: Float64Array;  // NaN = undefined (the seeding test)
   learningMultiplier: Float64Array;     // NaN = undefined
   lastLearningGrowthAnnual: Float64Array; // NaN = undefined
-  rndExpenseUSD: Float64Array;          // NaN = undefined
+  rndExpenseLocal: Float64Array;          // NaN = undefined
   oasSpreadBps: Float64Array;
   idleStreakWeeks: Float64Array;        // NaN = undefined
   mothballedPpeShare: Float64Array;     // NaN = undefined
@@ -55,13 +55,13 @@ export interface BackLanes {
   plantCapacityUnitsThisWeek: Float64Array;
   idleLineRevenueShare: Float64Array;
   demandSlackRevenueShare: Float64Array;
-  wuSalesUSD: Float64Array;
-  wuPurchasesUSD: Float64Array;
-  wuTradeReceivableBookedUSD: Float64Array;
-  wuTradeReceivableCollectedUSD: Float64Array;
-  wuTradePayableBookedUSD: Float64Array;
-  wuTradePayableSettledUSD: Float64Array;
-  wuCapexPurchasesUSD: Float64Array;
+  wuSalesLocal: Float64Array;
+  wuPurchasesLocal: Float64Array;
+  wuTradeReceivableBookedLocal: Float64Array;
+  wuTradeReceivableCollectedLocal: Float64Array;
+  wuTradePayableBookedLocal: Float64Array;
+  wuTradePayableSettledLocal: Float64Array;
+  wuCapexPurchasesLocal: Float64Array;
   // --- seam reductions over nested structures, in the inline fold order ---
   addressableGrowthAnnual: Float64Array;
   categoryShortfall: Float64Array;
@@ -81,7 +81,7 @@ export interface BackLanes {
   eps: Float64Array;
   cdsSpreadBps: Float64Array;
   beta: Float64Array;                   // NaN = undefined
-  baselineAnnualRevenueUSD: Float64Array;
+  baselineAnnualRevenueLocal: Float64Array;
   lastOpportunisticOfferingWeek: Float64Array; // NaN = undefined
   employeeCount: Float64Array;
   employeeCountUpdate: Float64Array;       // NaN = no update / no field (the ?? fallback)
@@ -98,9 +98,9 @@ export interface BackLanes {
   // §5-BRAINS — the management's two primitives, resolved at the seam (median when undrawn).
   mgmtPatienceWeeks: Float64Array;
   mgmtRiskAversion: Float64Array;
-  expectedEbitdaUSD: Float64Array;         // NaN = no expectation yet
-  carrierFreightRevenueUSD: Float64Array;  // ctx maps, read-frozen during the loop (§7.318)
-  channelMarginRevenueUSD: Float64Array;
+  expectedEbitdaLocal: Float64Array;         // NaN = no expectation yet
+  carrierFreightRevenueLocal: Float64Array;  // ctx maps, read-frozen during the loop (§7.318)
+  channelMarginRevenueLocal: Float64Array;
   wasDefaulted: Uint8Array;
   wasMergerAcquired: Uint8Array;
   publiclyListed: Uint8Array;
@@ -134,24 +134,24 @@ export function buildBackLanes(
   const N = S.num, T = S.str;
   const L: BackLanes = {
     n,
-    grossPPELocal: N.grossPPELocal, accumulatedDepreciationLocal: N.accumulatedDepreciationLocal, ppeDefaultUSD: f(),
-    annualRevenueLocal: N.annualRevenue, cashLocal: N.cash, currentLiabilitiesUSD: N.currentLiabilities,
-    maintenanceCapexUSD: N.maintenanceCapex, growthCapexUSD: N.growthCapex, capexUSD: N.capex,
+    grossPPELocal: N.grossPPELocal, accumulatedDepreciationLocal: N.accumulatedDepreciationLocal, ppeDefaultLocal: f(),
+    annualRevenueLocal: N.annualRevenue, cashLocal: N.cash, currentLiabilitiesLocal: N.currentLiabilities,
+    maintenanceCapexLocal: N.maintenanceCapex, growthCapexLocal: N.growthCapex, capexLocal: N.capex,
     maintenanceShortfallStreak: N.maintenanceShortfallStreak, baselineGrowthCapexToRevenueRatio: N.baselineGrowthCapexToRevenueRatio,
-    marketCapUSD: N.marketCap, totalDebtUSD: N.totalDebt,
+    marketCapLocal: N.marketCap, totalDebtLocal: N.totalDebt,
     cumulativeOutputUnits: N.cumulativeOutputUnits, learningMultiplier: N.learningMultiplier, lastLearningGrowthAnnual: N.lastLearningGrowthAnnual,
-    rndExpenseUSD: N.rndExpense, oasSpreadBps: N.oasSpreadBps,
+    rndExpenseLocal: N.rndExpense, oasSpreadBps: N.oasSpreadBps,
     idleStreakWeeks: N.idleStreakWeeks, mothballedPpeShare: N.mothballedPpeShare, mothballedStreakWeeks: N.mothballedStreakWeeks,
     usefulLifeYears: f(),
     producedUnitsThisWeek: f(), plantCapacityUnitsThisWeek: f(), idleLineRevenueShare: f(), demandSlackRevenueShare: f(),
-    wuSalesUSD: f(), wuPurchasesUSD: f(), wuTradeReceivableBookedUSD: f(),
-    wuTradeReceivableCollectedUSD: f(), wuTradePayableBookedUSD: f(),
-    wuTradePayableSettledUSD: f(), wuCapexPurchasesUSD: f(),
+    wuSalesLocal: f(), wuPurchasesLocal: f(), wuTradeReceivableBookedLocal: f(),
+    wuTradeReceivableCollectedLocal: f(), wuTradePayableBookedLocal: f(),
+    wuTradePayableSettledLocal: f(), wuCapexPurchasesLocal: f(),
     addressableGrowthAnnual: f(), categoryShortfall: f(), avgCompetitiveness: f(),
     isBanksSector: new Uint8Array(n), rndShareOfGrowthCapex: f(), investmentGrade: new Uint8Array(n), facilityMarginBps: f(),
     sharesOutstanding: N.sharesOutstanding, stockPrice: N.stockPrice, baselineDividendYield: N.baselineDividendYield, dividendYield: N.dividendYield,
     earningsWeekModulo: N.earningsWeekModulo, eps: N.eps, cdsSpreadBps: N.cdsSpreadBps, beta: N.beta,
-    baselineAnnualRevenueUSD: N.baselineAnnualRevenue, lastOpportunisticOfferingWeek: N.lastOpportunisticOfferingWeek,
+    baselineAnnualRevenueLocal: N.baselineAnnualRevenue, lastOpportunisticOfferingWeek: N.lastOpportunisticOfferingWeek,
     employeeCount: N.employeeCount, employeeCountUpdate: f(),
     bankCapitalRatio: f(),
     bankEquityLocal: f(),
@@ -159,8 +159,8 @@ export function buildBackLanes(
     customerConcentration: N.customerConcentration, supplierConcentration: N.supplierConcentration,
     hasVehicle: new Uint8Array(n), boundaryTraceKey: new Array(n),
     occupationMixDrift: new Array(n), maxPayoutRatio: f(),
-    mgmtPatienceWeeks: f(), mgmtRiskAversion: f(), expectedEbitdaUSD: N.expectedEbitdaUSD,
-    carrierFreightRevenueUSD: f(), channelMarginRevenueUSD: f(),
+    mgmtPatienceWeeks: f(), mgmtRiskAversion: f(), expectedEbitdaLocal: N.expectedEbitdaLocal,
+    carrierFreightRevenueLocal: f(), channelMarginRevenueLocal: f(),
     wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
     creditRating: T.creditRating as string[], name: T.name as string[],
     companyId: T.id as string[], homeBankTicker: T.homeBankTicker,
@@ -171,19 +171,19 @@ export function buildBackLanes(
     const c = companies[i];
     const reg = updatedRegions[c.region];
     const wu = companyUpdates[c.ticker];
-    L.ppeDefaultUSD[i] = c.annualRevenue * (SECTOR_PPE_INTENSITY[c.sector] ?? 0.5);
+    L.ppeDefaultLocal[i] = c.annualRevenue * (SECTOR_PPE_INTENSITY[c.sector] ?? 0.5);
     L.usefulLifeYears[i] = SECTOR_PPE_USEFUL_LIFE_YEARS[c.sector] ?? 12;
     L.producedUnitsThisWeek[i] = wu?.producedUnitsThisWeek ?? 0;
     L.plantCapacityUnitsThisWeek[i] = wu?.plantCapacityUnitsThisWeek ?? 0;
     L.idleLineRevenueShare[i] = wu?.idleLineRevenueShare ?? 0;
     L.demandSlackRevenueShare[i] = wu?.demandSlackRevenueShare ?? 0;
-    L.wuSalesUSD[i] = wu?.salesUSD ?? 0;
-    L.wuPurchasesUSD[i] = wu?.purchasesUSD ?? 0;
-    L.wuTradeReceivableBookedUSD[i] = wu?.tradeReceivableBookedUSD ?? 0;
-    L.wuTradeReceivableCollectedUSD[i] = wu?.tradeReceivableCollectedUSD ?? 0;
-    L.wuTradePayableBookedUSD[i] = wu?.tradePayableBookedUSD ?? 0;
-    L.wuTradePayableSettledUSD[i] = wu?.tradePayableSettledUSD ?? 0;
-    L.wuCapexPurchasesUSD[i] = wu?.capexPurchasesUSD ?? 0;
+    L.wuSalesLocal[i] = wu?.salesLocal ?? 0;
+    L.wuPurchasesLocal[i] = wu?.purchasesLocal ?? 0;
+    L.wuTradeReceivableBookedLocal[i] = wu?.tradeReceivableBookedLocal ?? 0;
+    L.wuTradeReceivableCollectedLocal[i] = wu?.tradeReceivableCollectedLocal ?? 0;
+    L.wuTradePayableBookedLocal[i] = wu?.tradePayableBookedLocal ?? 0;
+    L.wuTradePayableSettledLocal[i] = wu?.tradePayableSettledLocal ?? 0;
+    L.wuCapexPurchasesLocal[i] = wu?.capexPurchasesLocal ?? 0;
     // the three folds, in the inline block's exact order
     const lines = c.productLines || [];
     let addr = 0;
@@ -227,8 +227,8 @@ export function buildBackLanes(
     L.maxPayoutRatio[i] = primaryIndustry ? financingProfileOf(primaryIndustry).maxPayoutRatio : 0.6;
     L.mgmtPatienceWeeks[i] = patienceWeeksOf(c.management);
     L.mgmtRiskAversion[i] = riskAversionOf(c.management);
-    L.carrierFreightRevenueUSD[i] = carrierFreightRevenue[c.ticker] ?? 0;
-    L.channelMarginRevenueUSD[i] = channelMarginRevenue[c.ticker] ?? 0;
+    L.carrierFreightRevenueLocal[i] = carrierFreightRevenue[c.ticker] ?? 0;
+    L.channelMarginRevenueLocal[i] = channelMarginRevenue[c.ticker] ?? 0;
     L.boundaryTraceKey[i] = `${c.region}:${c.financialStatementProfile ?? c.sector ?? '?'}:${c.ticker}`;
     L.wasDefaulted[i] = c.isDefaulted ? 1 : 0;
     L.wasMergerAcquired[i] = c.mergerAcquired ? 1 : 0;

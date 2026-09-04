@@ -85,7 +85,7 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 named parties with accounts and registers | `src/domain/institutions.ts:InstitutionalEntity` | ✅ |
-| A2 a real liability: stated amounts at stated future times | `src/domain/institutions.ts:beneficiaryLiabilityUSD` | ⚠️ |
+| A2 a real liability: stated amounts at stated future times | `src/domain/institutions.ts:beneficiaryLiabilityLocal` | ⚠️ |
 | **A2.a a liability of the institution, not a fund share** | `src/engine/simulation/stages/household-balance-sheet.ts:institutionalClaims` | ❌ |
 | A2.b except where the contract says it IS a fund share | `src/domain/institution-profiles.ts:beneficiariesAreHouseholds` | ⚠️ |
 | A3 equity = assets − liabilities, and it can go negative | `src/engine/simulation/stages/household-balance-sheet.ts:equityCapitalLocal` | ⚠️ |
@@ -93,7 +93,7 @@ checked by `scripts/check-atlas.sh`.
 | **B1 the liability has a schedule** | — | ❌ |
 | **B2 its present value depends on a market discount rate** | — | ❌ |
 | B2.a falling rates raise the liability | — | ❌ |
-| **B2.b FORBID no fixed discount rate** | `src/engine/simulation/stages/insurance-and-pensions.ts:beneficiaryLiabilityUSD` | ❌ |
+| **B2.b FORBID no fixed discount rate** | `src/engine/simulation/stages/insurance-and-pensions.ts:beneficiaryLiabilityLocal` | ❌ |
 | B3 the schedule is uncertain | `src/engine/bootstrap/population.ts:remainingLifeExpectancyYears` | ⚠️ |
 | B4 claims are correlated and lumpy | — | ❌ |
 | C1 the portfolio is a decision with reasons | `src/domain/institution-profiles.ts:targets` | ✅ |
@@ -102,15 +102,15 @@ checked by `scripts/check-atlas.sh`.
 | C3 it can hold illiquid assets | — | ❌ |
 | C4 it lends securities | `src/engine/simulation/stages/securities-lending.ts:runSecuritiesLendingStage` | ✅ |
 | C5 a buyer of credit whose mandate limits which credits | `src/domain/institution-profiles.ts:subInvestmentGradeSizeFactor` | ⚠️ |
-| D1 the mismatch is measurable in duration and cash flow | `src/engine/simulation/stages/derivative-markets/irs.ts:durationGapUSD` | ⚠️ |
+| D1 the mismatch is measurable in duration and cash flow | `src/engine/simulation/stages/derivative-markets/irs.ts:durationGapLocal` | ⚠️ |
 | D2 the mismatch moves equity when rates move | — | ❌ |
 | D3 a funding shortfall has consequences | `src/domain/institution-profiles.ts:pensionHurdle` | ⚠️ |
 | D4 it can hedge, and hedging costs money | `src/engine/simulation/stages/derivative-markets/irs.ts:runSwapMarket` | ⚠️ |
 | **D4.a a leveraged hedge turns solvency into liquidity** | `src/domain/derivatives/classes/irs.ts:initialMarginRate` | ❌ |
 | D5 VERIFY the asymmetry on a large rate move | — | ❌ |
-| E1 FORBID no liability without beneficiaries | `src/engine/simulation/stages/household-balance-sheet.ts:institutionalClaimsUSD` | ✅ |
+| E1 FORBID no liability without beneficiaries | `src/engine/simulation/stages/household-balance-sheet.ts:institutionalClaimsLocal` | ✅ |
 | E2 FORBID no asset that is not somebody's liability or a real thing | `src/domain/institutions.ts:institutionTotalAssetsLocal` | ✅ |
-| **E3 FORBID no solvency against a stored liability value** | `src/domain/institutions.ts:beneficiaryLiabilityUSD` | ❌ |
+| **E3 FORBID no solvency against a stored liability value** | `src/domain/institutions.ts:beneficiaryLiabilityLocal` | ❌ |
 | E4 VERIFY holdings + every other holder = issued | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 
 ---

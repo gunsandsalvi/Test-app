@@ -50,11 +50,11 @@ export function paymentTermWeeks(args: {
   recoveryRate: number;
   sellerMarginShare: number;
   /** The seller's own cash, and what a week of its sales costs it to carry. */
-  sellerCashUSD: number;
-  sellerWeeklySalesUSD: number;
+  sellerCashLocal: number;
+  sellerWeeklySalesLocal: number;
 }): number {
   const { buyerAnnualDefaultProbability, recoveryRate, sellerMarginShare,
-    sellerCashUSD, sellerWeeklySalesUSD } = args;
+    sellerCashLocal, sellerWeeklySalesLocal } = args;
 
   // What the seller can afford to LOSE: terms stop where the margin stops covering the expected
   // credit loss over them.
@@ -69,8 +69,8 @@ export function paymentTermWeeks(args: {
   // many weeks of its own sales as its cash covers. Without this the arithmetic above hands a
   // near-riskless buyer terms of 4.4e17 weeks — which is not generous credit, it is a missing
   // mechanism (rule 6: find what should compensate, do not clamp the symptom).
-  const fundingAffordableWeeks = sellerWeeklySalesUSD > 0
-    ? Math.max(0, sellerCashUSD) / sellerWeeklySalesUSD
+  const fundingAffordableWeeks = sellerWeeklySalesLocal > 0
+    ? Math.max(0, sellerCashLocal) / sellerWeeklySalesLocal
     : 0;
 
   const weeks = Math.min(creditAffordableWeeks, fundingAffordableWeeks);

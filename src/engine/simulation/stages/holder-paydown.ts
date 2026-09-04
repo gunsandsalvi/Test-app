@@ -24,7 +24,7 @@ import { Company, RegionId } from '../../../types';
 import { currencyOf } from '../../../domain/geography';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { DealerDeskInventory } from '../../../domain/dealer-desk';
-import { pay, pendingSettlementUSD, PartyRef } from './settlement';
+import { pay, pendingSettlementLocal, PartyRef } from './settlement';
 import { cashOf } from '../../ledger/accounts';
 import { transferHolding, HoldingKind } from '../../ledger/holdings-ledger';
 
@@ -87,10 +87,10 @@ export function reconcileHolderPrincipal(args: {
     // holders' books until G2 unifies the roll with its modeled holders; it crosses the $1M
     // slack rarely (twice in eight weeks across all banks).
     if (issuer.isBankEntity) return;
-    const desiredBurnUSD = heldLocal - outstandingLocal;
-    const availableUSD = Math.max(0, cashOf(ctx.v2, issuer) + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: issuer.ticker }));
-    const burnUSD = Math.min(desiredBurnUSD, availableUSD);
-    if (burnUSD > 1) factorByIssuer.set(issuerId, (heldLocal - burnUSD) / heldLocal);
+    const desiredBurnLocal = heldLocal - outstandingLocal;
+    const availableLocal = Math.max(0, cashOf(ctx.v2, issuer) + pendingSettlementLocal(ctx, { kind: 'COMPANY', ticker: issuer.ticker }));
+    const burnLocal = Math.min(desiredBurnLocal, availableLocal);
+    if (burnLocal > 1) factorByIssuer.set(issuerId, (heldLocal - burnLocal) / heldLocal);
   });
   if (factorByIssuer.size === 0) return;
 

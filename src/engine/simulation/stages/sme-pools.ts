@@ -55,19 +55,19 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // ---- 1. The week's measured P&L. Receipts are what the pool was paid; costs are what it
       // paid out, excluding the two flows that are not costs: borrowed money arriving, and
       // capital leaving with a firm that was born out of the pool. ----
-      let receiptsUSD = 0;
-      let operatingCostUSD = 0;
+      let receiptsLocal = 0;
+      let operatingCostLocal = 0;
       byReason?.forEach((amountLocal, reason) => {
         if (reason.includes('origination') || reason.includes('firm birth')) return;
-        if (amountLocal > 0) receiptsUSD += amountLocal;
-        else operatingCostUSD += -amountLocal;
+        if (amountLocal > 0) receiptsLocal += amountLocal;
+        else operatingCostLocal += -amountLocal;
       });
 
       // ---- 2. Margin, measured. A pool that cannot cover its wage bill out of its receipts is
       // making a loss, and the number says so — there is no reversion to a "realistic baseline"
       // pulling it back, which is what the old formula did. ----
-      if (receiptsUSD > 0) {
-        const measuredMargin = (receiptsUSD - operatingCostUSD) / receiptsUSD;
+      if (receiptsLocal > 0) {
+        const measuredMargin = (receiptsLocal - operatingCostLocal) / receiptsLocal;
         pool.marginPct = Number((
           pool.marginPct * (1 - MARGIN_MEASUREMENT_WEIGHT) + measuredMargin * MARGIN_MEASUREMENT_WEIGHT
         ).toFixed(4));
@@ -78,16 +78,16 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // ignored every service it sold — so the number it divided its costs by was the wrong one.
       // Smoothed for the same reason the margin is: one week of clearing is not a year of trade.
       // ----
-      if (receiptsUSD > 0) {
+      if (receiptsLocal > 0) {
         pool.annualRevenueLocal = Math.max(1, Math.round((
           pool.annualRevenueLocal * (1 - MARGIN_MEASUREMENT_WEIGHT)
-          + (receiptsUSD * 52) * MARGIN_MEASUREMENT_WEIGHT
+          + (receiptsLocal * 52) * MARGIN_MEASUREMENT_WEIGHT
         )));
       }
 
       // The revenue history the labor market hires against — the pool's own measured output, so
       // its hiring reads the same series a named firm's does.
-      pool.revenueHistoryUSD = [...(pool.revenueHistoryUSD ?? []).slice(-12), pool.annualRevenueLocal];
+      pool.revenueHistoryLocal = [...(pool.revenueHistoryLocal ?? []).slice(-12), pool.annualRevenueLocal];
 
       // ---- 4. Investment under a real budget constraint. A pool invests out of what it has:
       // the target share of revenue, but never more than the cash it holds above the payroll
@@ -95,25 +95,25 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // budget behind it — borrowed money raises the cash, which raises what can be invested,
       // and a pool with no cash cannot invest whatever its revenue says. ----
       const cashLocal = poolCashOf(ctx.v2, regionId, pool.industry);
-      const weeklyWageBillUSD = operatingCostUSD > 0 ? operatingCostUSD : 0;
-      const bufferUSD = weeklyWageBillUSD * TARGET_CASH_WEEKS_OF_WAGES;
-      const investableUSD = Math.max(0, cashLocal - bufferUSD);
-      pool.capexUSD = Math.round(Math.max(0, Math.min(
+      const weeklyWageBillLocal = operatingCostLocal > 0 ? operatingCostLocal : 0;
+      const bufferLocal = weeklyWageBillLocal * TARGET_CASH_WEEKS_OF_WAGES;
+      const investableLocal = Math.max(0, cashLocal - bufferLocal);
+      pool.capexLocal = Math.round(Math.max(0, Math.min(
         pool.annualRevenueLocal * TARGET_CAPEX_TO_REVENUE,
-        investableUSD * 52
+        investableLocal * 52
       )));
 
       // ---- 5. Distress, measured in cash. A pool short of its payroll buffer is a pool whose
       // firms are failing, and its pooled default rate is what the banks lending to it price
       // against (bank-lending.ts reads it). Coverage is the pool's own measured earnings against
       // the debt service the banks' real loans imply. ----
-      const annualEarningsUSD = pool.annualRevenueLocal * pool.marginPct;
+      const annualEarningsLocal = pool.annualRevenueLocal * pool.marginPct;
       // The pool's cost of debt is its own loans' blended margin, derived by 02b from
       // the banks' real quoted marginBps — not an invented +300bp. A credit tightening that
       // widens quoted margins now reaches measured pool distress, which is the default rate the
       // banks price against: the transmission loop is closed where it used to be open.
       const poolDebtRateAnnual = reg.policyRate + (pool.blendedMarginBps ?? 300) / 10000;
-      const cashCoverWeeks = weeklyWageBillUSD > 0 ? cashLocal / weeklyWageBillUSD : TARGET_CASH_WEEKS_OF_WAGES;
+      const cashCoverWeeks = weeklyWageBillLocal > 0 ? cashLocal / weeklyWageBillLocal : TARGET_CASH_WEEKS_OF_WAGES;
 
       // DIST — THE DEFAULT RATE IS AN INTEGRAL OVER THE POOL, NOT A FUNCTION OF ITS MEAN.
       //
@@ -131,16 +131,16 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // point; a weighted sum of a bounded per-stratum function needs no second bound.
       const strata = pool.strata && pool.strata.length > 0
         ? pool.strata
-        : [{ weight: 1, leverageMultiple: annualEarningsUSD > 0 ? pool.debtLocal / annualEarningsUSD : 0 }];
-      const meanLeverage = annualEarningsUSD > 0 ? pool.debtLocal / annualEarningsUSD : 0;
+        : [{ weight: 1, leverageMultiple: annualEarningsLocal > 0 ? pool.debtLocal / annualEarningsLocal : 0 }];
+      const meanLeverage = annualEarningsLocal > 0 ? pool.debtLocal / annualEarningsLocal : 0;
       const strataMean = strata.reduce((a, st) => a + st.weight * st.leverageMultiple, 0);
       // Re-centre on the pool's CURRENT leverage each week: the shape is the cross-section's, the
       // level is the pool's own book. Without this the strata would drift away from the debt they
       // are supposed to describe (rule 4).
       const recentre = strataMean > 0 ? meanLeverage / strataMean : 0;
       const coverageOf = (lev: number) => {
-        const debtService = lev * recentre * annualEarningsUSD * poolDebtRateAnnual;
-        return debtService > 0 ? annualEarningsUSD / debtService : Number.POSITIVE_INFINITY;
+        const debtService = lev * recentre * annualEarningsLocal * poolDebtRateAnnual;
+        return debtService > 0 ? annualEarningsLocal / debtService : Number.POSITIVE_INFINITY;
       };
       const coverageDistress = strata.reduce(
         (a, st) => a + st.weight * Math.max(0, 1 - coverageOf(st.leverageMultiple)), 0);

@@ -21,7 +21,7 @@ export interface NewsItem {
    *  through the ledger. Items without these are the older generator's. */
   kind?: string;
   refs?: { type: 'company' | 'institution' | 'region'; id: string }[];
-  materialityUSD?: number;
+  materialityLocal?: number;
   cause?: string;
 }
 

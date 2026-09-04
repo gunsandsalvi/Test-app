@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare }
+import { creditMetrics, revolverDrawLocal, isInDefault, maturityWallShare }
   from '../src/domain/company-week/credit-standing';
 
 /** A bank sheet at a given capital ratio, with equity and a loss rate the rest of the world
@@ -16,49 +16,49 @@ const bankSheet = (bankCapitalRatio: number) =>
 
 test('coverage is unbounded, because a bound is not a measurement', () => {
   // The old [-50, 50] clamp destroyed the information that a firm has no earnings at all.
-  const wrecked = creditMetrics({ isBank: false, totalDebtUSD: 1e9, revenueLocal: 1e9,
-    ebitdaLocal: 1, ebitUSD: -2e8, annualInterestUSD: 1e6, ...bankSheet(0.1) });
+  const wrecked = creditMetrics({ isBank: false, totalDebtLocal: 1e9, revenueLocal: 1e9,
+    ebitdaLocal: 1, ebitLocal: -2e8, annualInterestLocal: 1e6, ...bankSheet(0.1) });
   assert.ok(wrecked.coverage < -50, `coverage ${wrecked.coverage} should not be clamped`);
 });
 
 test('a firm with no earnings still reports a finite leverage', () => {
-  const m = creditMetrics({ isBank: false, totalDebtUSD: 1e9, revenueLocal: 0,
-    ebitdaLocal: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(0.1) });
+  const m = creditMetrics({ isBank: false, totalDebtLocal: 1e9, revenueLocal: 0,
+    ebitdaLocal: 0, ebitLocal: 0, annualInterestLocal: 0, ...bankSheet(0.1) });
   assert.ok(isFinite(m.leverage) && isFinite(m.coverage));
   assert.ok(m.leverage > 0);
 });
 
 test('a bank is rated on its capital, not on an EBITDA it does not report', () => {
-  const thin = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueLocal: 1e9,
-    ebitdaLocal: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(0.04) });
-  const sound = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueLocal: 1e9,
-    ebitdaLocal: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(0.12) });
+  const thin = creditMetrics({ isBank: true, totalDebtLocal: 1e9, revenueLocal: 1e9,
+    ebitdaLocal: 0, ebitLocal: 0, annualInterestLocal: 0, ...bankSheet(0.04) });
+  const sound = creditMetrics({ isBank: true, totalDebtLocal: 1e9, revenueLocal: 1e9,
+    ebitdaLocal: 0, ebitLocal: 0, annualInterestLocal: 0, ...bankSheet(0.12) });
   assert.ok(thin.coverage < sound.coverage);
 });
 
 test("a bank's coverage is a continuum, not a step: every ratio has its own number", () => {
-  const at = (ratio: number) => creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueLocal: 1e9,
-    ebitdaLocal: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(ratio) }).coverage;
+  const at = (ratio: number) => creditMetrics({ isBank: true, totalDebtLocal: 1e9, revenueLocal: 1e9,
+    ebitdaLocal: 0, ebitLocal: 0, annualInterestLocal: 0, ...bankSheet(ratio) }).coverage;
   const ladder = [0.09, 0.10, 0.11, 0.12, 0.13];
   const seen = ladder.map(at);
   assert.equal(new Set(seen).size, ladder.length, `two-valued coverage: ${seen.join(', ')}`);
   for (let i = 1; i < seen.length; i++) assert.ok(seen[i] > seen[i - 1]);
   // And a worse loan book buys fewer years of buffer at the same capital.
-  const risky = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueLocal: 1e9, ebitdaLocal: 0,
-    ebitUSD: 0, annualInterestUSD: 0, bankCapitalRatio: 0.12, bankEquityLocal: 1e8,
+  const risky = creditMetrics({ isBank: true, totalDebtLocal: 1e9, revenueLocal: 1e9, ebitdaLocal: 0,
+    ebitLocal: 0, annualInterestLocal: 0, bankCapitalRatio: 0.12, bankEquityLocal: 1e8,
     bankLossRateAnnual: 0.04 }).coverage;
   assert.ok(risky < at(0.12));
 });
 
 test('a firm whose earnings cannot carry another dollar of interest gets nothing', () => {
   // The case the default trigger is FOR: the line closes exactly when a lender would stop.
-  assert.equal(revolverDrawUSD({ cashShortfallUSD: 5e8, headroomUSD: 0, alreadyDrawnUSD: 0 }), 0);
+  assert.equal(revolverDrawLocal({ cashShortfallLocal: 5e8, headroomLocal: 0, alreadyDrawnLocal: 0 }), 0);
 });
 
 test('a draw never exceeds the shortfall or the remaining headroom', () => {
-  assert.equal(revolverDrawUSD({ cashShortfallUSD: 100, headroomUSD: 1e9, alreadyDrawnUSD: 0 }), 100);
-  assert.equal(revolverDrawUSD({ cashShortfallUSD: 1e9, headroomUSD: 500, alreadyDrawnUSD: 200 }), 300);
-  assert.equal(revolverDrawUSD({ cashShortfallUSD: 1e9, headroomUSD: 100, alreadyDrawnUSD: 900 }), 0);
+  assert.equal(revolverDrawLocal({ cashShortfallLocal: 100, headroomLocal: 1e9, alreadyDrawnLocal: 0 }), 100);
+  assert.equal(revolverDrawLocal({ cashShortfallLocal: 1e9, headroomLocal: 500, alreadyDrawnLocal: 200 }), 300);
+  assert.equal(revolverDrawLocal({ cashShortfallLocal: 1e9, headroomLocal: 100, alreadyDrawnLocal: 900 }), 0);
 });
 
 test('default needs BOTH cash exhausted and coverage below the floor', () => {

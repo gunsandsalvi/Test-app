@@ -17,9 +17,9 @@ import { currencyOf } from '../../../domain/geography';
 import { measuredWeeklyMove, measuredWeeklyBpsMove, medianOf } from '../../../domain/volatility';
 import { ringFill, rowOf } from '../../../engine2/world';
 import { computeSovereignRepoHaircuts } from './repo-clearing';
-import { PrimeBrokerageLine, maxDrawnUSD, drawnByFund, lentByBroker } from '../../../domain/prime-brokerage';
+import { PrimeBrokerageLine, maxDrawnLocal, drawnByFund, lentByBroker } from '../../../domain/prime-brokerage';
 import { WeeklyStepContext, updateBankSheet } from './context';
-import { pay, pendingSettlementUSD } from './settlement';
+import { pay, pendingSettlementLocal } from './settlement';
 import { leverageHeadroomLocal } from '../../macro/banking';
 import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
@@ -59,13 +59,13 @@ function measuredHaircutsFor(ctx: WeeklyStepContext, regionId: RegionId, reg: Re
   // bucket labels or the five-year one standing in for the class.
   const sovLadder = materializeGovLadder(v2, regionId);
   const sovHaircutOf = computeSovereignRepoHaircuts(reg, sovereignTenorResolver(sovLadder, ctx.nextWeek));
-  let sovFaceUSD = 0, sovWeightedUSD = 0;
+  let sovFaceLocal = 0, sovWeightedLocal = 0;
   sovLadder.forEach((t) => {
     const h = sovHaircutOf(t.id);
     if (h === undefined || !(t.principalLocal > 0)) return;
-    sovFaceUSD += t.principalLocal; sovWeightedUSD += t.principalLocal * h;
+    sovFaceLocal += t.principalLocal; sovWeightedLocal += t.principalLocal * h;
   });
-  const sovBlended = sovFaceUSD > 0 ? sovWeightedUSD / sovFaceUSD : 0;
+  const sovBlended = sovFaceLocal > 0 ? sovWeightedLocal / sovFaceLocal : 0;
   const equity = 2 * (medianOf(priceMoves) ?? 0);
   const credit = 2 * ((medianOf(spreadMovesBps) ?? 0) / 10000) * CREDIT_COLLATERAL_DURATION_YEARS + sovBlended;
   return { EQUITY: equity, CORP_BOND: credit, LEVERAGED_LOAN: credit, GOV_BOND: sovBlended, DEFAULT: Math.max(equity, credit, sovBlended) };
@@ -129,23 +129,23 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       // widened by how concentrated the book is. A concentrated position is not just riskier, it
       // is slower to sell, and the broker is the one who would have to sell it.
       let bookLocal = 0;
-      let weightedHaircutUSD = 0;
-      let largestUSD = 0;
+      let weightedHaircutLocal = 0;
+      let largestLocal = 0;
       (fund.itemizedHoldings || []).forEach((h) => {
         const usd = Math.max(0, h.quantityOrNotionalLocal ?? 0);
         if (usd <= 0) return;
         bookLocal += usd;
-        weightedHaircutUSD += usd * (haircuts[h.instrumentType] ?? haircuts.DEFAULT);
-        if (usd > largestUSD) largestUSD = usd;
+        weightedHaircutLocal += usd * (haircuts[h.instrumentType] ?? haircuts.DEFAULT);
+        if (usd > largestLocal) largestLocal = usd;
       });
-      const baseHaircut = bookLocal > 0 ? weightedHaircutUSD / bookLocal : haircuts.DEFAULT;
-      const concentration = bookLocal > 0 ? largestUSD / bookLocal : 1;
+      const baseHaircut = bookLocal > 0 ? weightedHaircutLocal / bookLocal : haircuts.DEFAULT;
+      const concentration = bookLocal > 0 ? largestLocal / bookLocal : 1;
       const haircutRate = Math.min(1, baseHaircut * (1 + concentration));
 
       // What the fund's OWN capital supports at that haircut, and what the broker can carry.
-      const fundEquityUSD = Math.max(0, institutionTotalAssetsLocal(ctx, fund) - drawnLocal);
-      const brokerRoomUSD = Math.max(0, leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, brokerTicker), facilityBookOf(ctx.v2, brokerTicker))) + lentByBroker(priorBook, brokerTicker);
-      const lineUSD = Math.min(maxDrawnUSD(fundEquityUSD, haircutRate), brokerRoomUSD);
+      const fundEquityLocal = Math.max(0, institutionTotalAssetsLocal(ctx, fund) - drawnLocal);
+      const brokerRoomLocal = Math.max(0, leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, brokerTicker), facilityBookOf(ctx.v2, brokerTicker))) + lentByBroker(priorBook, brokerTicker);
+      const lineLocal = Math.min(maxDrawnLocal(fundEquityLocal, haircutRate), brokerRoomLocal);
 
       // The price: what the broker's own money costs it, plus the return it needs on the capital
       // the exposure consumes. The uncollateralised sliver IS the haircut, so that is the weight.
@@ -162,10 +162,10 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       // above it repays — so a fund that spent its cash on securities last week draws to fund
       // them, and one sitting on cash does not borrow at all. The line is a constraint on that,
       // never a driver of it, which is what a credit line is.
-      const sleeveTargetUSD = Math.max(0, fund.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, institutionTotalAssetsLocal(ctx, fund));
-      const cashGapUSD = sleeveTargetUSD - Math.max(0, entityCashOf(ctx.v2, fund));
-      const targetDrawnUSD = Math.max(0, Math.min(lineUSD, drawnLocal + cashGapUSD));
-      const deltaLocal = targetDrawnUSD - drawnLocal;
+      const sleeveTargetLocal = Math.max(0, fund.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, institutionTotalAssetsLocal(ctx, fund));
+      const cashGapLocal = sleeveTargetLocal - Math.max(0, entityCashOf(ctx.v2, fund));
+      const targetDrawnLocal = Math.max(0, Math.min(lineLocal, drawnLocal + cashGapLocal));
+      const deltaLocal = targetDrawnLocal - drawnLocal;
       if (Math.abs(deltaLocal) > 1) {
         if (deltaLocal > 0) {
           pay(ctx, {
@@ -189,15 +189,15 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       // the line has been cut below what the sweep needs, there is none and the fund is short,
       // which the clearing books will see as real selling this week.
       ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) =>
-        e.id === fund.id ? { ...e, primeBrokerageAvailableUSD: Math.max(0, lineUSD - targetDrawnUSD) } : e
+        e.id === fund.id ? { ...e, primeBrokerageAvailableLocal: Math.max(0, lineLocal - targetDrawnLocal) } : e
       );
-      if (targetDrawnUSD > 1) {
+      if (targetDrawnLocal > 1) {
         nextBook.push({
           id: `${regionId}-PB-${fund.id}`,
           regionId,
           brokerTicker,
           fundId: fund.id,
-          drawnLocal: Math.round(targetDrawnUSD),
+          drawnLocal: Math.round(targetDrawnLocal),
           haircutRate: Number(haircutRate.toFixed(4)),
           rateAnnual: Number(rateAnnual.toFixed(6)),
           struckWeek: ctx.nextWeek,
@@ -243,28 +243,28 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
       if (fund.region !== regionId || fund.entityType !== 'HEDGE_FUND' || fund.isDefaulted) return fund;
       const brokerTicker = fund.homeBankTicker;
       if (!brokerTicker) return fund;
-      const cashPlusPendingUSD = entityCashOf(ctx.v2, fund)
-        + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id });
-      if (cashPlusPendingUSD >= -1) return fund;
-      const drawUSD = Math.min(fund.primeBrokerageAvailableUSD ?? 0, -cashPlusPendingUSD);
-      if (drawUSD <= 1) return fund;
+      const cashPlusPendingLocal = entityCashOf(ctx.v2, fund)
+        + pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: fund.id });
+      if (cashPlusPendingLocal >= -1) return fund;
+      const drawLocal = Math.min(fund.primeBrokerageAvailableLocal ?? 0, -cashPlusPendingLocal);
+      if (drawLocal <= 1) return fund;
       pay(ctx, {
         payer: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
         payee: { kind: 'INSTITUTION', id: fund.id },
-        amount: drawUSD,
+        amount: drawLocal,
         currency: currencyOf(fund.region),
         reason: 'prime brokerage drawdown',
       });
       const line = book.find((l) => l.fundId === fund.id);
       if (line) {
-        line.drawnLocal = Math.round(line.drawnLocal + drawUSD);
+        line.drawnLocal = Math.round(line.drawnLocal + drawLocal);
       } else {
         book.push({
           id: `${regionId}-PB-${fund.id}`,
           regionId,
           brokerTicker,
           fundId: fund.id,
-          drawnLocal: Math.round(drawUSD),
+          drawnLocal: Math.round(drawLocal),
           // An emergency draw on a line the morning struck at zero balance carries the standing
           // terms for one week; the next morning's re-strike prices the whole balance properly.
           haircutRate: measuredHaircutsFor(ctx, regionId, reg).DEFAULT,
@@ -272,8 +272,8 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
           struckWeek: ctx.nextWeek,
         });
       }
-      drawnByBroker.set(brokerTicker, (drawnByBroker.get(brokerTicker) ?? 0) + drawUSD);
-      return { ...fund, primeBrokerageAvailableUSD: Math.max(0, (fund.primeBrokerageAvailableUSD ?? 0) - drawUSD) };
+      drawnByBroker.set(brokerTicker, (drawnByBroker.get(brokerTicker) ?? 0) + drawLocal);
+      return { ...fund, primeBrokerageAvailableLocal: Math.max(0, (fund.primeBrokerageAvailableLocal ?? 0) - drawLocal) };
     });
     reg.primeBrokerageBook = book;
     if (drawnByBroker.size > 0) {

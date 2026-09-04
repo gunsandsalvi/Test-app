@@ -100,13 +100,13 @@ export function smoothedPriceAt(history: readonly number[], index: number, weigh
 /** The revenue window a growth signal is measured over: up to 12 weeks of the firm's own history.
  *  Null when there is no usable history — no signal, not a zero signal. */
 export function revenueGrowthWindow(
-  history: number[] | undefined, currentRevenueUSD: number
+  history: number[] | undefined, currentRevenueLocal: number
 ): { windowWeeks: number; nominalGrowthAnnual: number } | null {
   if (!history || history.length < 2) return null;
   const windowWeeks = Math.min(12, history.length - 1);
   const past = history[history.length - 1 - windowWeeks];
-  if (!(past > 0) || !(currentRevenueUSD > 0)) return null;
-  return { windowWeeks, nominalGrowthAnnual: (currentRevenueUSD / past - 1) * (52 / windowWeeks) };
+  if (!(past > 0) || !(currentRevenueLocal > 0)) return null;
+  return { windowWeeks, nominalGrowthAnnual: (currentRevenueLocal / past - 1) * (52 / windowWeeks) };
 }
 
 /** Labor demand grows with real output net of what productivity delivers for free — and the

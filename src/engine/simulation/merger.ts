@@ -30,15 +30,15 @@ export function checkForMerger(
   // SCALE — the volume-weighted reliability per (customer, input) in ONE pass over the list,
   // in list order (the same float accumulation order as the per-acquirer rescan it replaces,
   // which walked all ~165k relationships once per acquirer — O(R²) on a quarterly week).
-  const reliabilityByCustomerInput = new Map<string, { volUSD: number; relSum: number }>();
+  const reliabilityByCustomerInput = new Map<string, { volLocal: number; relSum: number }>();
   supplyRelationships.forEach((r) => {
     const sup = byId.get(r.supplierCompanyId);
     if (!sup) return;
     const k = `${r.customerCompanyId}|${r.category}`;
     let acc = reliabilityByCustomerInput.get(k);
-    if (!acc) { acc = { volUSD: 0, relSum: 0 }; reliabilityByCustomerInput.set(k, acc); }
-    acc.volUSD += r.weeklyVolumeUSD;
-    acc.relSum += r.weeklyVolumeUSD * (sup.deliveryReliability ?? 1);
+    if (!acc) { acc = { volLocal: 0, relSum: 0 }; reliabilityByCustomerInput.set(k, acc); }
+    acc.volLocal += r.weeklyVolumeLocal;
+    acc.relSum += r.weeklyVolumeLocal * (sup.deliveryReliability ?? 1);
   });
 
   for (const acquirer of activeCompanies) {
@@ -59,7 +59,7 @@ export function checkForMerger(
       if (!supplier) continue;
       // The acquirer's volume-weighted reliability experience for this input (precomputed above).
       const acc = reliabilityByCustomerInput.get(`${acquirer.id}|${rel.category}`);
-      if (!acc || !(acc.volUSD > 0) || acc.relSum / acc.volUSD >= 0.5) continue;
+      if (!acc || !(acc.volLocal > 0) || acc.relSum / acc.volLocal >= 0.5) continue;
       // Own a producer of the failing input: the most reliable one it can afford in its region.
       const candidates = activeCompanies.filter((t) =>
         t.ticker !== acquirer.ticker && isActiveCompany(t) && t.region === acquirer.region

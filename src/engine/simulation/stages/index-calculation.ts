@@ -42,7 +42,7 @@ const INDEXABLE_EXCLUDED = TR_FACILITY | TR_CP;
  * cleared curve plus this issuer's cleared spread, which is the same arithmetic the make-whole
  * uses. Floating paper reads the price 07d already clears for it.
  */
-function fixedMarketValueUSD(v2: V2World, comp: Company, curve: NelsonSiegelParams, week: number): number {
+function fixedMarketValueLocal(v2: V2World, comp: Company, curve: NelsonSiegelParams, week: number): number {
   const S = v2.tranches;
   let sum = 0;
   for (const r of ladderRowsOf(v2, comp.id)) {
@@ -58,7 +58,7 @@ function fixedMarketValueUSD(v2: V2World, comp: Company, curve: NelsonSiegelPara
   return sum;
 }
 
-function floatingMarketValueUSD(v2: V2World, comp: Company): number {
+function floatingMarketValueLocal(v2: V2World, comp: Company): number {
   // 07d clears a price to par for every loan it quotes; par is the honest fallback for a tranche
   // whose issuer has no quote yet (a debut in its first week).
   const pricePerDollar = (comp.leveragedLoan?.pricePar ?? 100) / 100;
@@ -75,7 +75,7 @@ function floatingMarketValueUSD(v2: V2World, comp: Company): number {
  * What each eligible name contributes to this index, at this week's cleared prices — market cap
  * for equity, outstanding principal for credit. Zero means not eligible.
  */
-function indexValueUSD(v2: V2World, def: IndexDefinition, comp: Company, curveOf: (r: RegionId) => NelsonSiegelParams, week: number): number {
+function indexValueLocal(v2: V2World, def: IndexDefinition, comp: Company, curveOf: (r: RegionId) => NelsonSiegelParams, week: number): number {
   if (!isActiveCompany(comp)) return 0;
   if (def.region && comp.region !== def.region) return 0;
 
@@ -84,13 +84,13 @@ function indexValueUSD(v2: V2World, def: IndexDefinition, comp: Company, curveOf
     return marketCapOf(comp);
   }
 
-  if (def.assetClass === 'LEVERAGED_LOAN') return floatingMarketValueUSD(v2, comp);
+  if (def.assetClass === 'LEVERAGED_LOAN') return floatingMarketValueLocal(v2, comp);
 
   // Corporate bonds, split by the issuer's own cleared rating.
   const ig = isInvestmentGrade(comp.creditRating);
   if (def.tier === 'IG' && !ig) return 0;
   if (def.tier === 'HY' && ig) return 0;
-  return fixedMarketValueUSD(v2, comp, curveOf(comp.region), week);
+  return fixedMarketValueLocal(v2, comp, curveOf(comp.region), week);
 }
 
 /**
@@ -100,7 +100,7 @@ function indexValueUSD(v2: V2World, def: IndexDefinition, comp: Company, curveOf
  */
 function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], curveOf: (r: RegionId) => NelsonSiegelParams, week: number): IndexConstituent[] {
   const eligible = companies
-    .map((c) => ({ instrumentId: c.id, valueLocal: indexValueUSD(v2, def, c, curveOf, week) }))
+    .map((c) => ({ instrumentId: c.id, valueLocal: indexValueLocal(v2, def, c, curveOf, week) }))
     .filter((x) => x.valueLocal > 0)
     .sort((a, b) => b.valueLocal - a.valueLocal);
   if (eligible.length === 0) return [];
@@ -116,16 +116,16 @@ function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], curv
     }
     members = def.tier === 'LARGE_CAP' ? eligible.slice(0, cut) : eligible.slice(cut);
   }
-  const memberTotalUSD = members.reduce((s, x) => s + x.valueLocal, 0);
-  if (!(memberTotalUSD > 0)) return [];
-  return members.map((x) => ({ instrumentId: x.instrumentId, weight: x.valueLocal / memberTotalUSD }));
+  const memberTotalLocal = members.reduce((s, x) => s + x.valueLocal, 0);
+  if (!(memberTotalLocal > 0)) return [];
+  return members.map((x) => ({ instrumentId: x.instrumentId, weight: x.valueLocal / memberTotalLocal }));
 }
 
 /** This week's aggregate value of a fixed membership, at cleared prices. */
-function basketValueUSD(v2: V2World, def: IndexDefinition, constituents: IndexConstituent[], byId: Map<string, Company>, curveOf: (r: RegionId) => NelsonSiegelParams, week: number): number {
+function basketValueLocal(v2: V2World, def: IndexDefinition, constituents: IndexConstituent[], byId: Map<string, Company>, curveOf: (r: RegionId) => NelsonSiegelParams, week: number): number {
   return constituents.reduce((sum, c) => {
     const comp = byId.get(c.instrumentId);
-    return comp ? sum + indexValueUSD(v2, def, comp, curveOf, week) : sum;
+    return comp ? sum + indexValueLocal(v2, def, comp, curveOf, week) : sum;
   }, 0);
 }
 
@@ -147,21 +147,21 @@ export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContex
         constituents,
         lastRebalanceWeek: week,
         level: prior?.level ?? INDEX_BASE_LEVEL,
-        totalValueUSD: basketValueUSD(v2, def, constituents, byId, curveOf, week),
+        totalValueLocal: basketValueLocal(v2, def, constituents, byId, curveOf, week),
       };
     }
 
     // Level FIRST, on the membership that was in force all week — the return the basket actually
     // delivered. Doing this after a rebalance would credit the index with the difference between
     // two different baskets, which is a return no holder could have earned.
-    const heldValueUSD = basketValueUSD(v2, def, prior.constituents, byId, curveOf, week);
-    const level = prior.totalValueUSD > 0
-      ? prior.level * (heldValueUSD / prior.totalValueUSD)
+    const heldValueLocal = basketValueLocal(v2, def, prior.constituents, byId, curveOf, week);
+    const level = prior.totalValueLocal > 0
+      ? prior.level * (heldValueLocal / prior.totalValueLocal)
       : prior.level;
 
     const due = week - prior.lastRebalanceWeek >= INDEX_REBALANCE_WEEKS;
     if (!due) {
-      return { ...prior, level, totalValueUSD: heldValueUSD };
+      return { ...prior, level, totalValueLocal: heldValueLocal };
     }
     // Rebalance: new membership, and the value line re-based onto it so next week's level change
     // is measured against what the index now holds.
@@ -171,7 +171,7 @@ export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContex
       constituents,
       lastRebalanceWeek: week,
       level,
-      totalValueUSD: basketValueUSD(v2, def, constituents, byId, curveOf, week),
+      totalValueLocal: basketValueLocal(v2, def, constituents, byId, curveOf, week),
     };
   });
 }

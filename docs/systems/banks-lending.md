@@ -92,9 +92,9 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a bilateral contract, named bank and named borrower | `src/domain/banking.ts:BankLoan` | ✅ |
 | A1.a not a security, no market price | `src/engine/audit/ownership.ts:isBankFacility` | ✅ |
-| A1.b carried differently | `src/domain/banking.ts:annuityWeeklyPrincipalUSD` | ✅ |
+| A1.b carried differently | `src/domain/banking.ts:annuityWeeklyPrincipalLocal` | ✅ |
 | A2 terms fixed at origination | `src/domain/banking.ts:BankLoan` | ✅ |
-| A3 a drawdown structure: term loan or facility | `src/engine/simulation/stages/corporate-financing.ts:committedLineHeadroomUSD` | ⚠️ |
+| A3 a drawdown structure: term loan or facility | `src/engine/simulation/stages/corporate-financing.ts:committedLineHeadroomLocal` | ⚠️ |
 | **A3.a an undrawn commitment consumes something** | — | ❌ |
 | A3.b VERIFY undrawn commitments are visible | — | ❌ |
 | A4 security: named collateral, or unsecured | `src/domain/banking.ts:MortgageVintage` | ⚠️ |
@@ -103,7 +103,7 @@ checked by `scripts/check-atlas.sh`.
 | B1.a no reserve leaves at origination | `src/engine/ledger/party.ts:BANK_CREDIT` | ✅ |
 | B1.b reserves move when the borrower spends it | `src/engine/simulation/stages/settlement.ts:runSettlementStage` | ✅ |
 | B1.c FORBID it does not lend out of deposits or reserves | `src/engine/simulation/stages/bank-lending.ts:runBankWeeklyLending` | ✅ |
-| B2 the bank is constrained, and the constraints are separate | `src/domain/bank-pricing.ts:bankRwaUSD` | ⚠️ |
+| B2 the bank is constrained, and the constraints are separate | `src/domain/bank-pricing.ts:bankRwaLocal` | ⚠️ |
 | B2.a capital: the loan consumes it | `src/domain/bank-pricing.ts:BANK_MIN_CAPITAL_RATIO` | ✅ |
 | **B2.b liquidity: it must fund the deposit it created** | — | ❌ |
 | B2.c its own risk appetite | `src/engine/simulation/stages/bank-lending.ts:bankRequiredReturnAnnual` | ⚠️ |
@@ -115,22 +115,22 @@ checked by `scripts/check-atlas.sh`.
 | C1.d an operating cost of making the loan | `src/domain/banking.ts:MORTGAGE_OPERATING_COST_BPS` | ⚠️ |
 | C2 the borrower accepts or refuses, and can go elsewhere | `src/engine/simulation/stages/bank-lending.ts:appetite` | ⚠️ |
 | C2.a so the rate is a negotiation, not a schedule | `src/engine/simulation/stages/bank-lending.ts:currentMortgageRateAnnual` | ⚠️ |
-| C3 the bank can decline | `src/engine/simulation/stages/bank-lending.ts:declinedOriginationUSD` | ✅ |
-| C3.a VERIFY declined volume is visible | `src/engine/simulation/stages/context.ts:g2DeclinedOriginationUSD` | ⚠️ |
+| C3 the bank can decline | `src/engine/simulation/stages/bank-lending.ts:declinedOriginationLocal` | ✅ |
+| C3.a VERIFY declined volume is visible | `src/engine/simulation/stages/context.ts:g2DeclinedOriginationLocal` | ⚠️ |
 | C4 FORBID one PD model per borrower | `src/engine/simulation/stages/shared-helpers.ts:computeAnnualDefaultProbability` | ✅ |
-| D1 held at amortised cost | `src/domain/banking.ts:annuityWeeklyPrincipalUSD` | ✅ |
+| D1 held at amortised cost | `src/domain/banking.ts:annuityWeeklyPrincipalLocal` | ✅ |
 | **D2 a provision against expected loss, charged to income** | `src/domain/banking.ts:loanLossProvisionRateAnnualPct` | ❌ |
 | D2.a it moves when the assessment moves | — | ❌ |
 | D2.b FORBID a provision is never a quiet reserve | `src/engine/ledger/bank-book.ts:bookPnL` | ✅ |
-| D3 interest accrues and is received; non-payment observable | `src/engine/simulation/stages/bank-lending.ts:loanInterestWeeklyUSD` | ⚠️ |
+| D3 interest accrues and is received; non-payment observable | `src/engine/simulation/stages/bank-lending.ts:loanInterestWeeklyLocal` | ⚠️ |
 | **D4 a loan can be sold or syndicated** | `src/engine/ledger/tranche-ledger.ts:moveFacilityLender` | ⚠️ |
-| **D5 it can be pledged to the central bank or in repo** | `src/engine/simulation/stages/repo-clearing.ts:collateralCapacityUSD` | ❌ |
+| **D5 it can be pledged to the central bank or in repo** | `src/engine/simulation/stages/repo-clearing.ts:collateralCapacityLocal` | ❌ |
 | **E1 a missed payment or covenant breach is an EVENT** | — | ❌ |
 | **E2 the loan is reclassified: performing → impaired** | `src/domain/banking.ts:status` | ❌ |
 | E3 workout: restructure, extend or enforce | `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ⚠️ |
 | E4 enforcement: the collateral is realised | `src/domain/banking.ts:FORECLOSURE_COST_SHARE` | ⚠️ |
 | E5 the write-off: the loss hits capital | `src/engine/ledger/bank-book.ts:bookPnL` | ✅ |
-| E5.a VERIFY loss = principal − recovery − provisions taken | `src/engine/simulation/stages/bank-lending.ts:loanLossWeeklyUSD` | ⚠️ |
+| E5.a VERIFY loss = principal − recovery − provisions taken | `src/engine/simulation/stages/bank-lending.ts:loanLossWeeklyLocal` | ⚠️ |
 | E6 losses are correlated because they share a cause | `src/domain/bank-pricing.ts:consumerAnnualLossRate` | ✅ |
 | F1 the book is Σ named loans | `src/domain/banking.ts:businessLoanBookOf` | ✅ |
 | F1.a FORBID no loan-book number that is not Σ(loans) | `src/domain/banking.ts:consumerLoanBookOf` | ✅ |

@@ -94,5 +94,5 @@ export interface MarketIndex {
   /** Level, base 100 at inception, moved weekly by the constituents' own cleared prices. */
   level: number;
   /** Aggregate value of the constituents at this week's cleared prices — the fund's benchmark. */
-  totalValueUSD: number;
+  totalValueLocal: number;
 }

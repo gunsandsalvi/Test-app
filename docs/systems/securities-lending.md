@@ -81,7 +81,7 @@ checked by `scripts/check-atlas.sh`.
 | A2 legal title passes — the borrower can sell it | `src/engine/simulation/stages/securities-lending.ts:runSecuritiesLendingStage` | ✅ |
 | **A3 the economics stay with the lender (a manufactured payment)** | — | ❌ |
 | A4 recallable, and it terminates | `src/domain/securities-lending.ts:recalledWeek` | ✅ |
-| A5 the borrower pays a fee, and the fee is a price | `src/domain/securities-lending.ts:loanWeeklyFeeUSD` | ✅ |
+| A5 the borrower pays a fee, and the fee is a price | `src/domain/securities-lending.ts:loanWeeklyFeeLocal` | ✅ |
 | A5.a it clears: scarce paper is dear | `src/domain/securities-lending.ts:lendingReservationFeeBps` | ✅ |
 | **A5.b a rebate when the collateral is cash** | — | ❌ |
 | B1 the borrower needs the security | `src/domain/institution-profiles.ts:shortsEquity` | ✅ |
@@ -90,7 +90,7 @@ checked by `scripts/check-atlas.sh`.
 | **B3 an agent may sit in the middle** | — | ❌ |
 | B4 VERIFY the lendable pool is a read, and caps the short | `src/engine/simulation/stages/securities-lending.ts:deliverable` | ✅ |
 | **C1 the collateral is worth MORE than the loan — a haircut** | `src/engine/simulation/stages/securities-lending.ts:collateralLocal` | ⚠️ |
-| C2 both sides marked, and the difference is posted | `src/engine/simulation/stages/securities-lending.ts:marginCallUSD` | ✅ |
+| C2 both sides marked, and the difference is posted | `src/engine/simulation/stages/securities-lending.ts:marginCallLocal` | ✅ |
 | C2.a the margin flow is real money between named parties | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
 | C3 cash collateral is reinvested, and that is a position | `src/engine/simulation/stages/repo-clearing.ts:CASH_SLEEVE_OVERNIGHT_SHARE` | ⚠️ |
 | C4 FORBID no collateral that is not held | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
@@ -100,7 +100,7 @@ checked by `scripts/check-atlas.sh`.
 | D2.a VERIFY a consequence of B4 and C, never scripted | `src/domain/company.ts:shortInterestShares` | ✅ |
 | D3 a recall forces the borrower to find it or close | `src/engine/simulation/stages/securities-lending.ts:soldByLender` | ✅ |
 | E1 FORBID no short without a borrow | `src/domain/securities-lending.ts:SecurityLoan` | ✅ |
-| E2 FORBID no double-counting the loaned security | `src/domain/securities-lending.ts:stockLoanNetUSD` | ✅ |
+| E2 FORBID no double-counting the loaned security | `src/domain/securities-lending.ts:stockLoanNetLocal` | ✅ |
 | E3 FORBID no free borrow | `src/engine/simulation/stages/securities-lending.ts:clearedBps` | ✅ |
 
 Counts: 17 `✅` · 4 `⚠️` · 4 `❌`.

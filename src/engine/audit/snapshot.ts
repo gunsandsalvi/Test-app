@@ -8,7 +8,7 @@ import { materializeGovLadder } from '../../engine2/tranches';
 import { GameState, RegionId } from '../../types';
 import { loanBooksOf, spendableDepositsOf } from '../../domain/banking';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
-import { centralBankAssetsUSD } from '../../domain/central-bank';
+import { centralBankAssetsLocal } from '../../domain/central-bank';
 import { isActiveCompany } from '../../domain/company';
 import { trancheKindOf } from '../../domain/assets';
 import { V2World, ensureV2 } from '../../engine2/world';
@@ -23,37 +23,37 @@ import { ASSET_KINDS } from '../ledger/wire';
 const isOwnAssetKind = (t: string): boolean => (ASSET_KINDS as readonly string[]).includes(t);
 
 export interface RegionSnapshot {
-  treasuryAccountUSD: number;
-  waysAndMeansUSD: number;
-  centralBankAssetsUSD: number;
-  sovereignOutstandingUSD: number;
-  bankDepositsUSD: number;
+  treasuryAccountLocal: number;
+  waysAndMeansLocal: number;
+  centralBankAssetsLocal: number;
+  sovereignOutstandingLocal: number;
+  bankDepositsLocal: number;
   /** The part of those deposits that is client margin — a line on the bank's SHEET rather than a
    *  row in the account store, so it moves without any settled row moving. */
   clientMarginLocal: number;
-  bankLoansUSD: number;
+  bankLoansLocal: number;
 }
-export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number; /** §3.13c: the dated tail per currency, for the exact form of W1 */ moneyPendingByCurrency?: Record<string, number>; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number>; /** W5: register shares held per asset kind */ registerQtyByKind?: Record<string, number>; /** W5_TRACE=1: per `holderId|kind` */ registerQtyByHolder?: Record<string, number> };
+export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingLocal?: number; /** §3.13c: the dated tail per currency, for the exact form of W1 */ moneyPendingByCurrency?: Record<string, number>; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number>; /** W5: register shares held per asset kind */ registerQtyByKind?: Record<string, number>; /** W5_TRACE=1: per `holderId|kind` */ registerQtyByHolder?: Record<string, number> };
 
 export function snapshotOf(state: GameState): AuditSnapshot {
-  const out: AuditSnapshot = { moneyPendingUSD: state.lastWires?.moneyPendingUSD ?? 0, moneyPendingByCurrency: state.lastWires?.moneyPendingByCurrency ?? {}, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined, goodsUnitsByKey: goodsUnitsByKey(state), registerQtyByKind: registerQtyByKind(state), registerQtyByHolder: process.env.W5_TRACE === '1' ? registerQtyByHolder(state) : undefined };
+  const out: AuditSnapshot = { moneyPendingLocal: state.lastWires?.moneyPendingLocal ?? 0, moneyPendingByCurrency: state.lastWires?.moneyPendingByCurrency ?? {}, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined, goodsUnitsByKey: goodsUnitsByKey(state), registerQtyByKind: registerQtyByKind(state), registerQtyByHolder: process.env.W5_TRACE === '1' ? registerQtyByHolder(state) : undefined };
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
     if (!reg || !cb) return;
     const banks = state.companies.filter((c) => c.region === r && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet);
     out[r] = {
-      treasuryAccountUSD: treasuryAccountOf(ensureV2(state), r),
-      waysAndMeansUSD: waysAndMeansOf(ensureV2(state), r),
-      centralBankAssetsUSD: centralBankAssetsUSD(cb, waysAndMeansOf(ensureV2(state), r), currencyOf(r), ensureV2(state).fx),
+      treasuryAccountLocal: treasuryAccountOf(ensureV2(state), r),
+      waysAndMeansLocal: waysAndMeansOf(ensureV2(state), r),
+      centralBankAssetsLocal: centralBankAssetsLocal(cb, waysAndMeansOf(ensureV2(state), r), currencyOf(r), ensureV2(state).fx),
       // §3.13-SOV row 2: read from the ONE store, not the array beside it. The audit runs after
       // the whole week, so the reconcile in 11-fiscal has already run and the two agree.
-      sovereignOutstandingUSD: materializeGovLadder(ensureV2(state), r).reduce((a, t) => a + t.principalLocal, 0),
+      sovereignOutstandingLocal: materializeGovLadder(ensureV2(state), r).reduce((a, t) => a + t.principalLocal, 0),
       // The SAME read M6 takes at week end — every deposit class BUT the margin line, which is
       // a bank liability and not spendable money (`spendableDepositsOf`).
-      bankDepositsUSD: banks.reduce((a, b) => a + spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker)), 0),
+      bankDepositsLocal: banks.reduce((a, b) => a + spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker)), 0),
       clientMarginLocal: banks.reduce((a, b) => a + (b.bankBalanceSheet!.clientMarginLocal ?? 0), 0),
-      bankLoansUSD: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!, facilityBookOf(ensureV2(state), b.ticker)), 0),
+      bankLoansLocal: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!, facilityBookOf(ensureV2(state), b.ticker)), 0),
     };
   });
   return out;

@@ -72,27 +72,27 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashLocal: n
       .map((t) => [t.id, Math.max(1 / 52, (t.maturityWeek - week) / 52)] as const)
   );
   const billByTenor: Record<string, number> = {};
-  let billUSD = 0;
+  let billLocal = 0;
   entity.itemizedHoldings.forEach((h) => {
     if (holdingClassOf(h.instrumentType) !== 'SOVEREIGN') return;
     if (!billTenorById.has(h.instrumentId)) return;
     billByTenor[h.instrumentId] = (billByTenor[h.instrumentId] ?? 0) + h.quantityOrNotionalLocal;
-    billUSD += h.quantityOrNotionalLocal;
+    billLocal += h.quantityOrNotionalLocal;
   });
-  const billYieldAnnual = billUSD > 0
+  const billYieldAnnual = billLocal > 0
     ? computeSovereignBookAnnualYield(billByTenor, reg.zeroRates, (id) => billTenorById.get(id))
     : 0;
 
   const repoLentLocal = entity.repoLentLocal ?? 0;
   // What is parked at the reverse repo window earns the floor; the cash still on the account
   // earns nothing until the next session decides where it goes.
-  const rrpLentUSD = entity.rrpLentUSD ?? 0;
-  const idleCashUSD = Math.max(0, cashLocal);
-  const totalLocal = billUSD + repoLentLocal + rrpLentUSD + idleCashUSD;
+  const rrpLentLocal = entity.rrpLentLocal ?? 0;
+  const idleCashLocal = Math.max(0, cashLocal);
+  const totalLocal = billLocal + repoLentLocal + rrpLentLocal + idleCashLocal;
   if (totalLocal <= 0) return Math.max(0, rrpRateAnnual - MMF_FEE_ANNUAL);
 
   const grossAnnual =
-    (billUSD * billYieldAnnual + repoLentLocal * repoRateAnnual + rrpLentUSD * rrpRateAnnual) / totalLocal;
+    (billLocal * billYieldAnnual + repoLentLocal * repoRateAnnual + rrpLentLocal * rrpRateAnnual) / totalLocal;
   return Math.max(0, grossAnnual - MMF_FEE_ANNUAL);
 }
 
@@ -104,19 +104,19 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashLocal: n
 export function divertHouseholdSavingsToMmf(
   regionId: RegionId,
   reg: Region,
-  weeklySavingsDepositInflowUSD: number,
+  weeklySavingsDepositInflowLocal: number,
   ctx: WeeklyStepContext
 ): number {
   const mmf = findRegionMmf(ctx.updatedInstitutionalEntities, regionId);
-  if (!mmf || weeklySavingsDepositInflowUSD <= 0) return 0;
+  if (!mmf || weeklySavingsDepositInflowLocal <= 0) return 0;
   // What the banks actually decided to pay this week, not a second copy of a retired
   // beta. One number, one writer — the depositor's choice is between this and the fund's yield.
   const depositRateAnnual = reg.bankingSector.depositRateAnnual ?? 0;
   const gap = (mmf.mmfNetYieldAnnual ?? 0) - depositRateAnnual;
   if (gap <= 0) return 0;
   const divertedShare = Math.min(1, gap / DEPOSIT_MMF_FULL_SWITCH_GAP);
-  const divertedUSD = weeklySavingsDepositInflowUSD * divertedShare;
-  if (divertedUSD <= 0) return 0;
+  const divertedLocal = weeklySavingsDepositInflowLocal * divertedShare;
+  if (divertedLocal <= 0) return 0;
 
   // A REAL payment now. The household's deposit and the pending bank leg move at
   // settlement (T+1 to the banks, the same convention every post-bank-pass household flow
@@ -127,7 +127,7 @@ export function divertHouseholdSavingsToMmf(
   pay(ctx, {
     payer: { kind: 'HOUSEHOLD', region: regionId },
     payee: { kind: 'INSTITUTION', id: mmf.id },
-    amount: divertedUSD,
+    amount: divertedLocal,
     currency: currencyOf(regionId),
     reason: 'household savings into money fund',
   });
@@ -135,10 +135,10 @@ export function divertHouseholdSavingsToMmf(
     if (e.id !== mmf.id) return e;
     return {
       ...e,
-      mmfSharesOutstandingUSD: (e.mmfSharesOutstandingUSD ?? 0) + divertedUSD,
+      mmfSharesOutstandingLocal: (e.mmfSharesOutstandingLocal ?? 0) + divertedLocal,
     };
   });
-  return divertedUSD;
+  return divertedLocal;
 }
 
 /** Refresh each fund's quoted yield off its post-money-market-session book (02b, weekly). */
@@ -151,8 +151,8 @@ export function refreshMmfQuotes(regionId: RegionId, reg: Region, ctx: WeeklySte
 
 export interface CorporateSweepBook {
   /** Cash the fund can pay out to redeeming treasuries this week — its real available cash. */
-  redeemableUSD: number;
-  netInflowUSD: number;
+  redeemableLocal: number;
+  netInflowLocal: number;
 }
 
 /** Build the per-region redemption capacity before stage 08's company loop runs. */
@@ -161,7 +161,7 @@ export function openCorporateSweepBooks(ctx: WeeklyStepContext): Map<RegionId, C
   REGION_IDS.forEach((regionId) => {
     const mmf = findRegionMmf(ctx.updatedInstitutionalEntities, regionId);
     if (!mmf) return;
-    books.set(regionId, { redeemableUSD: Math.max(0, entityCashOf(ctx.v2, mmf)), netInflowUSD: 0 });
+    books.set(regionId, { redeemableLocal: Math.max(0, entityCashOf(ctx.v2, mmf)), netInflowLocal: 0 });
   });
   return books;
 }
@@ -173,32 +173,32 @@ export function openCorporateSweepBooks(ctx: WeeklyStepContext): Map<RegionId, C
  */
 export function corporateSweepDecision(
   comp: Company,
-  cashAfterOperationsUSD: number,
+  cashAfterOperationsLocal: number,
   book: CorporateSweepBook | undefined
-): { cashDeltaUSD: number; shareDeltaUSD: number } {
-  if (!book) return { cashDeltaUSD: 0, shareDeltaUSD: 0 };
-  const bufferUSD = comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
-  const sharesUSD = comp.mmfSharesLocal ?? 0;
+): { cashDeltaLocal: number; shareDeltaLocal: number } {
+  if (!book) return { cashDeltaLocal: 0, shareDeltaLocal: 0 };
+  const bufferLocal = comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
+  const sharesLocal = comp.mmfSharesLocal ?? 0;
 
-  if (cashAfterOperationsUSD > bufferUSD) {
-    const sweepUSD = cashAfterOperationsUSD - bufferUSD;
-    book.netInflowUSD += sweepUSD;
+  if (cashAfterOperationsLocal > bufferLocal) {
+    const sweepLocal = cashAfterOperationsLocal - bufferLocal;
+    book.netInflowLocal += sweepLocal;
     // (user-authorized declared change): a sweep-in credits the fund's SHARE register and
     // settles as cash, but is NOT intraday liquidity to other redeemers — the redeemable pool is
     // the fund's OPENING cash, drawn down by redemptions only, and sweep money joins it at next
     // week's open (T+1, as a real corporate sweep deposit behaves). This is also what unhooks
     // the back kernel's redemption barrier from the post phase.
-    return { cashDeltaUSD: -sweepUSD, shareDeltaUSD: sweepUSD };
+    return { cashDeltaLocal: -sweepLocal, shareDeltaLocal: sweepLocal };
   }
-  if (cashAfterOperationsUSD < bufferUSD && sharesUSD > 0) {
-    const wantedUSD = Math.min(sharesUSD, bufferUSD - cashAfterOperationsUSD);
-    const paidLocal = Math.min(wantedUSD, book.redeemableUSD);
-    if (paidLocal <= 0) return { cashDeltaUSD: 0, shareDeltaUSD: 0 };
-    book.netInflowUSD -= paidLocal;
-    book.redeemableUSD -= paidLocal;
-    return { cashDeltaUSD: paidLocal, shareDeltaUSD: -paidLocal };
+  if (cashAfterOperationsLocal < bufferLocal && sharesLocal > 0) {
+    const wantedLocal = Math.min(sharesLocal, bufferLocal - cashAfterOperationsLocal);
+    const paidLocal = Math.min(wantedLocal, book.redeemableLocal);
+    if (paidLocal <= 0) return { cashDeltaLocal: 0, shareDeltaLocal: 0 };
+    book.netInflowLocal -= paidLocal;
+    book.redeemableLocal -= paidLocal;
+    return { cashDeltaLocal: paidLocal, shareDeltaLocal: -paidLocal };
   }
-  return { cashDeltaUSD: 0, shareDeltaUSD: 0 };
+  return { cashDeltaLocal: 0, shareDeltaLocal: 0 };
 }
 
 /** Settle the region books onto the funds after the company loop. */
@@ -207,14 +207,14 @@ export function settleCorporateSweepBooks(books: Map<RegionId, CorporateSweepBoo
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.entityType !== 'MONEY_MARKET_FUND') return e;
     const book = books.get(e.region);
-    if (!book || book.netInflowUSD === 0) return e;
+    if (!book || book.netInflowLocal === 0) return e;
     // The CASH leg is settlement's now — the sweeping company names this fund as its
     // counterparty, so the money moves once. Crediting it here as well credited the fund and
     // left the payment at the boundary too, creating the amount twice over. What belongs here
     // is the SHARE register: the fund issues shares against the money it received.
     return {
       ...e,
-      mmfSharesOutstandingUSD: Math.max(0, (e.mmfSharesOutstandingUSD ?? 0) + book.netInflowUSD),
+      mmfSharesOutstandingLocal: Math.max(0, (e.mmfSharesOutstandingLocal ?? 0) + book.netInflowLocal),
     };
   });
 }
@@ -237,7 +237,7 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   const feeByRegion = new Map<RegionId, number>();
   const feePayerByRegion = new Map<RegionId, string>();
   // WHO THE NEW SHARES ARE ISSUED TO. This paid the yield by growing
-  // `mmfSharesOutstandingUSD` and credited NO holder, so the fund's liability rose every week
+  // `mmfSharesOutstandingLocal` and credited NO holder, so the fund's liability rose every week
   // while every holder's asset stood still: a one-sided flow (rule 5), measured at 2.5% of the
   // fund and compounding (41.39B outstanding against 40.34B held by week 6). The module's own
   // note says it closed an assets-versus-shares divergence — it closed it on the fund's side and
@@ -247,9 +247,9 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.entityType !== 'MONEY_MARKET_FUND') return e;
     // holdings flip: row walk on the mirror.
-    let holdingsUSD = 0;
-    for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyLocal[r];
-    const bookLocal = entityCashOf(ctx.v2, e) + holdingsUSD + (e.repoLentLocal ?? 0) + (e.rrpLentUSD ?? 0);
+    let holdingsLocal = 0;
+    for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) holdingsLocal += H.qtyLocal[r];
+    const bookLocal = entityCashOf(ctx.v2, e) + holdingsLocal + (e.repoLentLocal ?? 0) + (e.rrpLentLocal ?? 0);
     if (bookLocal <= 0) return e;
     const feeLocal = (bookLocal * MMF_FEE_ANNUAL) / 52;
     // A STABLE-NAV FUND DISTRIBUTES WHAT IT EARNED, NOT WHAT IT QUOTED.
@@ -261,15 +261,15 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     // income. Distributing exactly that keeps book = shares by construction; a genuine LOSS
     // leaves book below shares and distributes nothing, which is what breaking the buck looks
     // like and exactly what the harness's departure check should catch.
-    const paidToHoldersUSD = Math.max(0, bookLocal - feeLocal - (e.mmfSharesOutstandingUSD ?? 0));
+    const paidToHoldersLocal = Math.max(0, bookLocal - feeLocal - (e.mmfSharesOutstandingLocal ?? 0));
     feeByRegion.set(e.region, (feeByRegion.get(e.region) ?? 0) + feeLocal);
     feePayerByRegion.set(e.region, e.id);
-    issuedByRegion.set(e.region, (issuedByRegion.get(e.region) ?? 0) + paidToHoldersUSD);
+    issuedByRegion.set(e.region, (issuedByRegion.get(e.region) ?? 0) + paidToHoldersLocal);
     // The fee's cash leg is a payment now (fund → manager, below); only the SHARE
     // register — not money — is written here.
     return {
       ...e,
-      mmfSharesOutstandingUSD: Math.max(0, (e.mmfSharesOutstandingUSD ?? 0) + paidToHoldersUSD),
+      mmfSharesOutstandingLocal: Math.max(0, (e.mmfSharesOutstandingLocal ?? 0) + paidToHoldersLocal),
     };
   });
 
@@ -277,22 +277,22 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   // region's corporate treasuries by their own `mmfSharesLocal` and the household sector by its.
   // A stable-NAV fund distributes income as SHARES, so a holder's dollar becomes 1.0004 dollars
   // of shares; that is a real claim arriving on a real book, not a number growing on the fund's.
-  issuedByRegion.forEach((issuedUSD, regionId) => {
-    if (!(issuedUSD > 0)) return;
+  issuedByRegion.forEach((issuedLocal, regionId) => {
+    if (!(issuedLocal > 0)) return;
     const reg = ctx.updatedRegions[regionId];
-    const hhSharesUSD = Math.max(0, reg?.householdState?.mmfSharesLocal ?? 0);
-    const corpSharesUSD = ctx.updatedCompanies.reduce(
+    const hhSharesLocal = Math.max(0, reg?.householdState?.mmfSharesLocal ?? 0);
+    const corpSharesLocal = ctx.updatedCompanies.reduce(
       (a, c) => a + (c.region === regionId ? Math.max(0, c.mmfSharesLocal ?? 0) : 0), 0);
-    const totalHeldUSD = hhSharesUSD + corpSharesUSD;
-    if (totalHeldUSD <= 0) return;
+    const totalHeldLocal = hhSharesLocal + corpSharesLocal;
+    if (totalHeldLocal <= 0) return;
     ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
       if (c.region !== regionId) return c;
       const held = Math.max(0, c.mmfSharesLocal ?? 0);
       if (held <= 0) return c;
-      return Object.assign(c, { mmfSharesLocal: held + issuedUSD * (held / totalHeldUSD) });
+      return Object.assign(c, { mmfSharesLocal: held + issuedLocal * (held / totalHeldLocal) });
     });
-    if (reg?.householdState && hhSharesUSD > 0) {
-      reg.householdState.mmfSharesLocal = hhSharesUSD + issuedUSD * (hhSharesUSD / totalHeldUSD);
+    if (reg?.householdState && hhSharesLocal > 0) {
+      reg.householdState.mmfSharesLocal = hhSharesLocal + issuedLocal * (hhSharesLocal / totalHeldLocal);
     }
   });
 

@@ -34,7 +34,7 @@ export interface CompanyWeekUpdate {
   offeredWageIndex?: number;
   unfilledVacancyShare?: number;
   /** §5-BRAINS — the labour stage's adaptive earnings expectation for this firm. */
-  expectedEbitdaUSD?: number;
+  expectedEbitdaLocal?: number;
   /** §7.345 — units sold this week by product line (contracts + auction), the record next
    *  week's production decision reads. */
   salesUnitsBySubUnit?: Record<string, number>;
@@ -42,9 +42,9 @@ export interface CompanyWeekUpdate {
    *  below capacity), integrated by the capacity-retirement rule like `idleLineRevenueShare`. */
   demandSlackRevenueShare?: number;
   /** IND — what stage 05's auction actually cleared for this firm, both sides. */
-  salesUSD?: number;
-  purchasesUSD?: number;
-  capexPurchasesUSD?: number;
+  salesLocal?: number;
+  purchasesLocal?: number;
+  capexPurchasesLocal?: number;
   /** The same two flows in UNITS, which the goods market needs and the P&L does not — the type
    *  found these: a read-side survey of stage 08 missed them because only stage 05 uses them. */
   salesUnits?: number;
@@ -65,10 +65,10 @@ export interface CompanyWeekUpdate {
    *  anchor basis, so a throttled first week cannot under-seed the curve (§7.301). */
   plantCapacityUnitsThisWeek?: number;
   /** IND12 — trade credit, both legs, booked and settled. */
-  tradeReceivableBookedUSD?: number;
-  tradeReceivableCollectedUSD?: number;
-  tradePayableBookedUSD?: number;
-  tradePayableSettledUSD?: number;
+  tradeReceivableBookedLocal?: number;
+  tradeReceivableCollectedLocal?: number;
+  tradePayableBookedLocal?: number;
+  tradePayableSettledLocal?: number;
   /** IND10/IND13 — the stocks stage 05 moved: warehouse, input lots, the production pipeline and
    *  capital delivered but not yet commissioned. */
   outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }>;
@@ -119,7 +119,7 @@ export interface WeeklyStepContext {
    * the handover; see the note on prevActiveFirms below. */
   prevActivePrivateFirms: Company[];
   recentIPOs: { ticker: string; name: string; category: string; week: number }[];
-  recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[];
+  recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueLocal: number }[];
   diagnosticLogs: DiagnosticsLog[];
   newsItems: NewsItem[];
   rateChanges: { region: RegionId; deltaBps: number }[];
@@ -152,7 +152,7 @@ export interface WeeklyStepContext {
   wireJournal: import('../../ledger/wire').WireJournal;
   /** SETL6 — the running net of those instructions per party: what each has committed to pay or
    * is due to receive before the settlement pass runs. Read through
-   * `pendingSettlementUSD` (stages/settlement.ts); maintained by `pay`. */
+   * `pendingSettlementLocal` (stages/settlement.ts); maintained by `pay`. */
   /** SCALE: the week's running net, dense by party id (stages/settlement.ts). Was a
    *  `Map<string, number>` keyed by a string rebuilt on every one of ~580,000 lookups a week. */
   pendingNetById: number[];
@@ -197,12 +197,12 @@ export interface WeeklyStepContext {
   /** G2: credit demand the banks DECLINED this week for want of capital — a real credit
    * crunch, measurable rather than an index. Read by the diagnostics and (post-MS) by the
    * demand side that lost the funding. */
-  g2DeclinedOriginationUSD: Record<import('../../../types').RegionId, number>;
-  /** `issuedUSD` is the paper that came into EXISTENCE — the whole deal under firm commitment,
-   *  whatever the book took — while `marketTakeUSD` is only the part the book bought. They differ
+  g2DeclinedOriginationLocal: Record<import('../../../types').RegionId, number>;
+  /** `issuedLocal` is the paper that came into EXISTENCE — the whole deal under firm commitment,
+   *  whatever the book took — while `marketTakeLocal` is only the part the book bought. They differ
    *  by the residual the lead is left holding, and creating the tranche at the take instead of at
    *  the issue is how the lead came to hold paper that did not exist (a ledger minting claims). */
-  primarySettlements: Map<string, { offering: import('../../../domain/primary-market').PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; issuedUSD: number; proceedsUSD: number }>;
+  primarySettlements: Map<string, { offering: import('../../../domain/primary-market').PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>;
 
   // Main working state, threaded and reassigned stage to stage
   updatedRegions: Record<RegionId, Region>;
@@ -226,7 +226,7 @@ export interface WeeklyStepContext {
    * rata to holders of record in the same single pass, so the money the issuer's ledger posts
    * out arrives on somebody's book instead of vanishing.
    */
-  pendingHolderCashUSD: Map<string, number>;
+  pendingHolderCashLocal: Map<string, number>;
   /**
    * HH1 — index-fund shares households bought this week, by fund, handed from `etf-flows.ts` (the
    * flow) to `household-balance-sheet.ts` (the books).
@@ -235,7 +235,7 @@ export interface WeeklyStepContext {
    *  settles shares at the SAME price the cash leg paid (one transaction, one price; the fund's
    *  book is mid-flight when the register stage reads it, so re-deriving there divided by an
    *  empty week-one book). */
-  householdEtfPurchasesUSD: Map<string, { spentUSD: number; navPerShare: number }>;
+  householdEtfPurchasesLocal: Map<string, { spentLocal: number; navPerShare: number }>;
   /** ETF slice 1 — this week's published indexes (`stages/index-calculation.ts`). */
   updatedMarketIndexes: import('../../../domain/indexes').MarketIndex[];
   updatedCommodities: Commodity[];
@@ -264,14 +264,14 @@ export interface WeeklyStepContext {
   getFxToUsd: (regionId: RegionId) => number;
   /** WS9/XB2d: each currency's cleared value in USD. Every pair is derived from two of these,
    * so no set of pair moves can violate triangular arbitrage. */
-  currencyValueUSD?: Record<string, number>;
+  currencyValueLocal?: Record<string, number>;
   /**
    * XB3a — who bought from whom this week, in USD: `[exporter][importer]`. Set by stage 05 from
    * the world book's own fills (a lot whose two sides sit in different regions IS an export) and
    * published as each region's trade position by stage 06. WEEKLY, unlike the annualised
-   * `Region.exportsUSD` it feeds — rule 8.
+   * `Region.exportsLocal` it feeds — rule 8.
    */
-  bilateralTradeWeeklyUSD: Record<RegionId, Record<RegionId, number>>;
+  bilateralTradeWeeklyLocal: Record<RegionId, Record<RegionId, number>>;
   /** XB3a-3 — where each region intends to source each good this week, set by the sourcing-intent
    *  stage and read by the goods auction. key: `${buyerRegion}|${subUnitId}`. */
   sourcingSplitByRegionSubUnit: Map<string, import('./sourcing-intent').SourcingSplit>;
@@ -305,8 +305,8 @@ export interface WeeklyStepContext {
   /** CAL — this week's interest accruals to distribute over the register, by instrument. */
   /** CASH — balances that are NEGATIVE and clamped to zero by the deposit reconciliation: a
    *  holder spending money it does not have, which the plug then hides. Not unrouted flow. */
-  cashOverdraftUSD: number;
-  pendingHolderAccrualUSD: Map<string, number>;
+  cashOverdraftLocal: number;
+  pendingHolderAccrualLocal: Map<string, number>;
   /** CAL — the instruments whose coupon falls due this week: their accrued balances become cash. */
   pendingHolderAccrualPayout: Set<string>;
   /** What each institution means to park at the reverse repo window this week, decided in the
@@ -321,13 +321,13 @@ export interface WeeklyStepContext {
   /** CAL — what each holder has EARNED and not yet been paid, by (instrument, holder). The
    *  receivable that sits between an accrual and a coupon date, and the reason a bond can change
    *  hands mid-period without moving the interest to the wrong party. */
-  holderAccruedInterestUSD: Map<string, Map<string, number>>;
+  holderAccruedInterestLocal: Map<string, Map<string, number>>;
   /** CAL — the same receivable for GOVERNMENT paper, keyed `<region>|<bucket>|<partyKey>` because
    *  its holders are not all on the institutional register: a bank holds sovereigns directly, per
    *  tenor, on its own balance sheet, and so do the central bank and the corporate treasuries. */
-  sovereignAccruedInterestUSD: Map<string, number>;
-  tradeInvoiceFxGainUSD: number;
-  tradeInvoiceWriteOffUSD: number;
+  sovereignAccruedInterestLocal: Map<string, number>;
+  tradeInvoiceFxGainLocal: number;
+  tradeInvoiceWriteOffLocal: number;
   /** XB3a-2 — what the freight market cleared, read by stage 08 for the carriers' P&L. */
   freightClearing?: import('./freight-clearing').FreightClearing;
   /** §3.13-SOV row 5 / §3.25 — what the week's sovereign sessions actually cleared, per region:
@@ -336,16 +336,16 @@ export interface WeeklyStepContext {
   sovereignCurvePoints: Map<RegionId, { tenorYears: number; yield: number }[]>;
 
   // Stage 11 output, read by stage 13
-  weeklyInterestIncomeUSD: number;
-  weeklyFinancingCostUSD: number;
-  weeklyRealizedCashUSD: number;
+  weeklyInterestIncomeLocal: number;
+  weeklyFinancingCostLocal: number;
+  weeklyRealizedCashLocal: number;
   weeklyRealizedPnL: number;
-  totalRequiredMarginUSD: number;
-  maintenanceMarginUSD: number;
-  netDeltaUSD: number;
-  netGammaUSD: number;
-  netVegaUSD: number;
-  netDV01USD: number;
+  totalRequiredMarginLocal: number;
+  maintenanceMarginLocal: number;
+  netDeltaLocal: number;
+  netGammaLocal: number;
+  netVegaLocal: number;
+  netDV01Local: number;
   attributionCarry: number;
   attributionMacroRates: number;
   attributionCreditSpread: number;
@@ -411,7 +411,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     wireJournal: newWireJournal((state as { nextWireId?: number }).nextWireId ?? 1, state.currentWeek + 1),
     pendingTouchedIds: [],
     issuerTickerById: new Map(state.companies.map((c) => [c.id, c.ticker])),
-    g2DeclinedOriginationUSD: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
+    g2DeclinedOriginationLocal: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],
     primarySettlements: new Map(),
 
@@ -421,8 +421,8 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     updatedInstitutionalEntities: [...state.institutionalEntities],
     pendingHolderSettlements: new Map<string, number>(),
     pendingHolderReplacements: new Map<string, string>(),
-    pendingHolderCashUSD: new Map<string, number>(),
-    householdEtfPurchasesUSD: new Map<string, { spentUSD: number; navPerShare: number }>(),
+    pendingHolderCashLocal: new Map<string, number>(),
+    householdEtfPurchasesLocal: new Map<string, { spentLocal: number; navPerShare: number }>(),
     updatedMarketIndexes: [...(state.marketIndexes ?? [])],
     updatedCommodities: [...state.commodities],
     updatedCompositeIndices: { ...state.compositeIndices },
@@ -438,8 +438,8 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     marketVolComponent: 0,
     fx: ensureV2(state).fx,
     getFxToUsd: () => 1.0,
-    currencyValueUSD: undefined,
-    bilateralTradeWeeklyUSD: {
+    currencyValueLocal: undefined,
+    bilateralTradeWeeklyLocal: {
       USA: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
       EUR: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
       UK: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
@@ -457,27 +457,27 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     shipmentsDispatched: [],
     tradeInvoicesBooked: [],
     estates: state.estates,
-    cashOverdraftUSD: 0,
-    pendingHolderAccrualUSD: new Map(),
+    cashOverdraftLocal: 0,
+    pendingHolderAccrualLocal: new Map(),
     pendingHolderAccrualPayout: new Set(),
     rrpIntendedByEntity: new Map(),
     rrpRateAnnualByRegion: new Map(),
-    holderAccruedInterestUSD: state.holderAccruedInterestUSD,
-    sovereignAccruedInterestUSD: state.sovereignAccruedInterestUSD,
-    tradeInvoiceFxGainUSD: 0,
-    tradeInvoiceWriteOffUSD: 0,
+    holderAccruedInterestLocal: state.holderAccruedInterestLocal,
+    sovereignAccruedInterestLocal: state.sovereignAccruedInterestLocal,
+    tradeInvoiceFxGainLocal: 0,
+    tradeInvoiceWriteOffLocal: 0,
     sovereignCurvePoints: new Map(),
 
-    weeklyInterestIncomeUSD: 0,
-    weeklyFinancingCostUSD: 0,
-    weeklyRealizedCashUSD: 0,
+    weeklyInterestIncomeLocal: 0,
+    weeklyFinancingCostLocal: 0,
+    weeklyRealizedCashLocal: 0,
     weeklyRealizedPnL: 0,
-    totalRequiredMarginUSD: 0,
-    maintenanceMarginUSD: 0,
-    netDeltaUSD: 0,
-    netGammaUSD: 0,
-    netVegaUSD: 0,
-    netDV01USD: 0,
+    totalRequiredMarginLocal: 0,
+    maintenanceMarginLocal: 0,
+    netDeltaLocal: 0,
+    netGammaLocal: 0,
+    netVegaLocal: 0,
+    netDV01Local: 0,
     attributionCarry: 0,
     attributionMacroRates: 0,
     attributionCreditSpread: 0,

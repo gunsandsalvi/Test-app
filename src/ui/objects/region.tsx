@@ -49,7 +49,7 @@ export const region = defineObject<Region>({
       { key: 'infl', label: 'inflation', render: (r) => pctLevel(r.obj.inflation), value: (r) => r.obj.inflation },
       { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRate, 2), value: (r) => r.obj.policyRate },
       { key: '10y', label: '10y', render: (r) => pctLevel(r.obj.zeroRates?.tenor10Y, 2), value: (r) => r.obj.zeroRates?.tenor10Y ?? 0 },
-      { key: 'gdp', label: 'gdp', render: (r) => money(r.obj.derivedNominalGdpUSD ?? r.obj.estimatedNominalGdpLocal), value: (r) => r.obj.derivedNominalGdpUSD ?? r.obj.estimatedNominalGdpLocal ?? 0 },
+      { key: 'gdp', label: 'gdp', render: (r) => money(r.obj.derivedNominalGdpLocal ?? r.obj.estimatedNominalGdpLocal), value: (r) => r.obj.derivedNominalGdpLocal ?? r.obj.estimatedNominalGdpLocal ?? 0 },
     ],
   },
   overview({ world, obj: r, nav }) {
@@ -72,12 +72,12 @@ export const region = defineObject<Region>({
           <Stat label="policy rate" value={pctLevel(r.policyRate, 2)} sub={`10y ${pctLevel(r.zeroRates?.tenor10Y, 2)} · 2y ${pctLevel(r.zeroRates?.tenor2Y, 2)}`} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
-          <KV k="gdp, annualised" hint={gdp.filter(Number.isFinite).length > 1 ? <ChangeSub series={gdp} /> : undefined} v={money(r.derivedNominalGdpUSD ?? r.estimatedNominalGdpLocal)} />
+          <KV k="gdp, annualised" hint={gdp.filter(Number.isFinite).length > 1 ? <ChangeSub series={gdp} /> : undefined} v={money(r.derivedNominalGdpLocal ?? r.estimatedNominalGdpLocal)} />
           <KV k="price level" hint={cpi.length > 1 ? <ChangeSub series={cpi} /> : 'seed = 100'} v={num(r.consumerPriceIndex, 1)} />
           <KV k="labour market" hint="tightness · wage growth" v={`${num(r.laborMarketTightness, 2)} · ${pctLevel(r.wageGrowth)}`} />
           <KV k="banks" hint="capital · margin" v={`${pctLevel(r.bankingSector?.bankCapitalRatio, 1)} · ${pctLevel(r.bankingSector?.netInterestMarginPct, 2)}`} onTap={() => nav.go('banks')} />
-          <KV k="households" hint="deposits · net worth" v={`${money(householdDepositsOf(ensureV2(world.state), r.id as RegionId))} · ${money(r.householdState?.netWorthUSD)}`} onTap={() => nav.go('statements', { tab: 'households' })} />
-          <KV k="treasury" hint="revenue · outlays, weekly" v={`${money(r.governmentRevenueUSD)} · ${money(r.governmentOutlaysUSD ?? r.governmentSpendingWeeklyUSD)}`} onTap={() => nav.go('statements', { tab: 'treasury' })} />
+          <KV k="households" hint="deposits · net worth" v={`${money(householdDepositsOf(ensureV2(world.state), r.id as RegionId))} · ${money(r.householdState?.netWorthLocal)}`} onTap={() => nav.go('statements', { tab: 'households' })} />
+          <KV k="treasury" hint="revenue · outlays, weekly" v={`${money(r.governmentRevenueLocal)} · ${money(r.governmentOutlaysLocal ?? r.governmentSpendingWeeklyLocal)}`} onTap={() => nav.go('statements', { tab: 'treasury' })} />
           <KV k="population" v={count(Math.round(r.totalPopulation))} />
         </Card>
         <FunctionTiles nav={nav} tiles={[

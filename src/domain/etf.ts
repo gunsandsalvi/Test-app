@@ -109,10 +109,10 @@ export const ETF_EXPENSE_RATIO_ANNUAL: Record<'EQUITY' | 'CORP_BOND' | 'LEVERAGE
  * by the clearing engine — so this cap is a second-order friction that should bite in stress and
  * not otherwise, which is exactly what a real AP constraint does.
  */
-export function apWeeklyCapacityUSD(args: { dealerEquityUSD: number; bookWeeklyMove: number }): number {
+export function apWeeklyCapacityLocal(args: { dealerEquityLocal: number; bookWeeklyMove: number }): number {
   // §5-CLOSE: the equity book's MEASURED weekly move (its median realised volatility), not a cap.
   const move = Math.max(0.0001, args.bookWeeklyMove);
-  return Math.max(0, args.dealerEquityUSD) / move;
+  return Math.max(0, args.dealerEquityLocal) / move;
 }
 
 /** A fund's shares are struck at this NAV when it first issues them. */

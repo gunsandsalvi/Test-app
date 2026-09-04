@@ -102,10 +102,10 @@ export const market = defineObject<Market>({
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="who buys" hint="hh · firms · gov" v={mix ? `${pctLevel(mix.HOUSEHOLD, 0)} · ${pctLevel(mix.CORPORATE, 0)} · ${pctLevel(mix.GOVERNMENT, 0)}` : '—'} />
-          <KV k="household spend" hint="annualised" v={money(d.householdDemandUSD)} />
-          <KV k="corporate spend" hint="annualised" v={money(d.corporateDemandUSD)} />
-          <KV k="ex-works price" hint="before freight" v={num(d.exWorksUnitPriceUSD)} />
-          <KV k="stock in warehouses" v={money(d.inventoryLevelUSD)} />
+          <KV k="household spend" hint="annualised" v={money(d.householdDemandLocal)} />
+          <KV k="corporate spend" hint="annualised" v={money(d.corporateDemandLocal)} />
+          <KV k="ex-works price" hint="before freight" v={num(d.exWorksUnitPriceLocal)} />
+          <KV k="stock in warehouses" v={money(d.inventoryLevelLocal)} />
           <KV k="input cost pressure" v={num(d.inputCostPressure, 2)} />
           <KV k="named sellers" v={count(sellers.length)} onTap={() => nav.go('sellers')} />
         </Card>

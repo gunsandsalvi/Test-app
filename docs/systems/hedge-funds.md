@@ -76,7 +76,7 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 a named party with investors, a register and accounts | `src/domain/institutions.ts:InstitutionalEntity` | ✅ |
-| **A2 investor capital is equity: the investors bear the result** | `src/engine/simulation/stages/household-balance-sheet.ts:beneficiaryLiabilityUSD` | ⚠️ |
+| **A2 investor capital is equity: the investors bear the result** | `src/engine/simulation/stages/household-balance-sheet.ts:beneficiaryLiabilityLocal` | ⚠️ |
 | A3 a manager on a management fee and a performance fee | `src/engine/simulation/stages/profiles/asset-manager.ts:managementFeeRate` | ⚠️ |
 | A4 a wide mandate: long, short, levered, many markets | `src/domain/institution-profiles.ts:HEDGE_FUND_STRATEGY_PROFILES` | ✅ |
 | A5 everything marked to market, so its equity moves | `src/engine/simulation/stages/institutional-balance-sheet.ts:institutionTotalAssetsLocal` | ✅ |
@@ -84,15 +84,15 @@ checked by `scripts/check-atlas.sh`.
 | **B1.a leverage is a fact about a LOAN, never a property of the fund** | `src/domain/institution-profiles.ts:leverage` | ✅ |
 | B2 it also levers through derivatives | `src/engine/simulation/stages/derivative-markets/commodity-future.ts:capacityLocal` | ⚠️ |
 | **B3 and through repo, against the securities it holds** | — | ❌ |
-| B4 the amount available is the lender's decision, and it changes | `src/engine/simulation/stages/prime-brokerage.ts:lineUSD` | ✅ |
+| B4 the amount available is the lender's decision, and it changes | `src/engine/simulation/stages/prime-brokerage.ts:lineLocal` | ✅ |
 | B5 VERIFY gross, net and equity are three different reads | — | ❌ |
 | C1 it takes positions for reasons | `src/engine/simulation/stages/asset-allocation.ts:computeReservationSpreadBps` | ✅ |
 | C2 the buyer when others are forced sellers, with a limit | `src/domain/institution-profiles.ts:convictionMultiple` | ✅ |
 | C3 it shorts, which requires a borrow | `src/domain/securities-lending.ts:shortSizeShares` | ✅ |
 | C4 real trades with real counterparties at cleared prices | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
-| D1 a loss reduces equity and leverage rises | `src/domain/prime-brokerage.ts:maxDrawnUSD` | ✅ |
-| D2 the lender calls margin | `src/engine/simulation/stages/prime-brokerage.ts:targetDrawnUSD` | ✅ |
-| **D3 meeting the call requires SELLING, which moves prices** | `src/engine/simulation/stages/overdraft-sweep.ts:withinLineUSD` | ❌ |
+| D1 a loss reduces equity and leverage rises | `src/domain/prime-brokerage.ts:maxDrawnLocal` | ✅ |
+| D2 the lender calls margin | `src/engine/simulation/stages/prime-brokerage.ts:targetDrawnLocal` | ✅ |
+| **D3 meeting the call requires SELLING, which moves prices** | `src/engine/simulation/stages/overdraft-sweep.ts:withinLineLocal` | ❌ |
 | D4 the price move hits other levered holders of the same positions | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ⚠️ |
 | D4.a the loop must be emergent, never a contagion parameter | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | **D5 investor redemptions arrive at the same time** | — | ❌ |
@@ -100,7 +100,7 @@ checked by `scripts/check-atlas.sh`.
 | **D6 the fund can fail; the broker eats the shortfall** | — | ❌ |
 | D7 VERIFY the chain from one fund's loss to another's call | — | ❌ |
 | E1 FORBID no leverage without a lender | `src/domain/institution-profiles.ts:leverage` | ✅ |
-| E2 FORBID no position that does not mark | `src/engine/simulation/stages/institutional-balance-sheet.ts:institutionBookUSD` | ✅ |
+| E2 FORBID no position that does not mark | `src/engine/simulation/stages/institutional-balance-sheet.ts:institutionBookLocal` | ✅ |
 | **E3 FORBID no fund that cannot fail** | `src/domain/institutions.ts:isDefaulted` | ❌ |
 
 Counts: 15 `✅` · 4 `⚠️` · 8 `❌`.

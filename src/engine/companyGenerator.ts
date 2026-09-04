@@ -8,13 +8,13 @@ import { isInvestmentGrade } from './simulation/stages/asset-allocation';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS } from './pricing';
 import { getInitialRegions, CORPORATE_TAX_RATE_BY_REGION } from './macro/initialization';
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
-import { getRegionProductivityPerCapitaUSD } from './bootstrap/population';
+import { getRegionProductivityPerCapitaLocal } from './bootstrap/population';
 import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from './simulation/constants';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from './equity-valuation';
 import { UNIVERSE_SCALE, PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
 import { random } from './rng';
-import { seedLoanBookUSD } from './macro/initialization';
+import { seedLoanBookLocal } from './macro/initialization';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
@@ -27,7 +27,7 @@ const DEFAULT_PPE_INTENSITY = 0.5;
 // the accumulated-depreciation fraction of gross PP&E used at that seed point.
 const INITIAL_ACCUM_DEPRECIATION_FRACTION = 0.45;
 
-export function getCategoryDemandSeedUSD(
+export function getCategoryDemandSeedLocal(
   category: string,
   region: RegionId,
   // hoist: callers inside generation pass the world they already built; rebuilding four
@@ -81,7 +81,7 @@ export function getCategoryDemandSeedUSD(
  * tier carries — read from the SAME demand vector the product lines are dealt against, so supply
  * and demand are one statement about the economy rather than two.
  */
-export function producingSectorNamedTierDemandUSD(
+export function producingSectorNamedTierDemandLocal(
   sector: string,
   region: RegionId,
   initialRegions: Record<RegionId, import('../types').Region>
@@ -99,9 +99,9 @@ export function producingSectorNamedTierDemandUSD(
   return total;
 }
 
-export function deriveInitialRevenueUSD(
+export function deriveInitialRevenueLocal(
   category: ProductCategory,
-  regionCategoryDemandSeedUSD: number,
+  regionCategoryDemandSeedLocal: number,
   companyRankInCategory: number,
   totalCompaniesInCategory: number
 ): number {
@@ -116,9 +116,9 @@ export function deriveInitialRevenueUSD(
   const industry = INDUSTRY_REGISTRY[category as Industry]
     ? (category as unknown as Industry)
     : industryOfSubUnit(category as string);
-  if (!industry) defect(`deriveInitialRevenueUSD: ${String(category)} is neither an industry nor a sub-unit`);
+  if (!industry) defect(`deriveInitialRevenueLocal: ${String(category)} is neither an industry nor a sub-unit`);
   const namedTierShare = 1 - INDUSTRY_REGISTRY[industry].smeShareOfActivity;
-  return regionCategoryDemandSeedUSD * (rankWeight / totalRankWeight) * namedTierShare;
+  return regionCategoryDemandSeedLocal * (rankWeight / totalRankWeight) * namedTierShare;
 }
 
 
@@ -130,10 +130,10 @@ export function deriveInitialRevenueUSD(
 // per-week locals stage 08 already computes to move the blended EBITDA margin, so "where the
 // costs are going" reconciles to genuine simulation signals rather than a flat formula.
 export interface CogsCostDrivers {
-  wagePressureUSD: number;
-  inputPriceCostUSD: number;
-  capacityDecayCostUSD: number;
-  crowdingCostUSD: number;
+  wagePressureLocal: number;
+  inputPriceCostLocal: number;
+  capacityDecayCostLocal: number;
+  crowdingCostLocal: number;
 }
 
 export function buildQuarterlyFundamentalSnapshot(
@@ -146,8 +146,8 @@ export function buildQuarterlyFundamentalSnapshot(
   eps: number,
   cash: number,
   totalDebt: number,
-  treasuryHoldingsUSD: number = 0,
-  finishedGoodsInventoryUSD: number = 0,
+  treasuryHoldingsLocal: number = 0,
+  finishedGoodsInventoryLocal: number = 0,
   maintenanceCapex: number = 0,
   growthCapex: number = 0,
   oasSpreadBps: number = 150,
@@ -168,7 +168,7 @@ export function buildQuarterlyFundamentalSnapshot(
   costDrivers?: CogsCostDrivers,
   // Real current-portion-of-debt split from this company's own debt tranche maturities, when
   // the caller has them (it always does once tranches exist) — replaces a flat 15/85 guess.
-  shortTermDebtUSD?: number,
+  shortTermDebtLocal?: number,
   // Real per-tranche interest (sum of each tranche's own coupon/floating rate x principal) —
   // the same figure the caller already used to compute net income, so this statement's interest
   // expense actually reconciles to it instead of re-deriving a second, disconnected number from
@@ -177,7 +177,7 @@ export function buildQuarterlyFundamentalSnapshot(
   // 1$ is 1$ Phase 6: real held raw-material/input inventory value, as of this filing date (sum
   // of InputLot.unitsHeld * unitPriceLocal) — genuine asset value the balance sheet previously had
   // no line for at all, defaulting to 0 for the synthetic pre-history seed snapshots below.
-  rawMaterialsInventoryUSD: number = 0,
+  rawMaterialsInventoryLocal: number = 0,
 ): FundamentalSnapshot {
   const revQ = annualRevenue / 4;
   const ebitdaQ = ebitda / 4;
@@ -195,21 +195,21 @@ export function buildQuarterlyFundamentalSnapshot(
   // Decompose COGS into the real drivers that moved this company's margin this quarter, plus a
   // residual "base cost of production" — never invented, always reconciles exactly to `cogs`.
   const rawDriverSum = costDrivers
-    ? (costDrivers.wagePressureUSD + costDrivers.inputPriceCostUSD + costDrivers.capacityDecayCostUSD + costDrivers.crowdingCostUSD)
+    ? (costDrivers.wagePressureLocal + costDrivers.inputPriceCostLocal + costDrivers.capacityDecayCostLocal + costDrivers.crowdingCostLocal)
     : 0;
   const driverScale = rawDriverSum > 0 && rawDriverSum > cogs * 0.9 ? (cogs * 0.9) / rawDriverSum : 1;
   const cogsBreakdown: QuarterlyIncomeStatement['cogsBreakdown'] = costDrivers ? {
-    wagePressureUSD: costDrivers.wagePressureUSD * driverScale,
-    inputPriceCostUSD: costDrivers.inputPriceCostUSD * driverScale,
-    capacityDecayCostUSD: costDrivers.capacityDecayCostUSD * driverScale,
-    crowdingCostUSD: costDrivers.crowdingCostUSD * driverScale,
-    baseCostUSD: cogs - rawDriverSum * driverScale,
+    wagePressureLocal: costDrivers.wagePressureLocal * driverScale,
+    inputPriceCostLocal: costDrivers.inputPriceCostLocal * driverScale,
+    capacityDecayCostLocal: costDrivers.capacityDecayCostLocal * driverScale,
+    crowdingCostLocal: costDrivers.crowdingCostLocal * driverScale,
+    baseCostLocal: cogs - rawDriverSum * driverScale,
   } : {
-    wagePressureUSD: 0,
-    inputPriceCostUSD: 0,
-    capacityDecayCostUSD: 0,
-    crowdingCostUSD: 0,
-    baseCostUSD: cogs,
+    wagePressureLocal: 0,
+    inputPriceCostLocal: 0,
+    capacityDecayCostLocal: 0,
+    crowdingCostLocal: 0,
+    baseCostLocal: cogs,
   };
 
   const incomeStatement: QuarterlyIncomeStatement = {
@@ -228,24 +228,24 @@ export function buildQuarterlyFundamentalSnapshot(
     eps: epsQ,
   };
 
-  const workingCapitalUSD = annualRevenue * 0.08;
-  const accountsReceivable = workingCapitalUSD * 0.6;
-  const accountsPayable = workingCapitalUSD * 0.4;
+  const workingCapitalLocal = annualRevenue * 0.08;
+  const accountsReceivable = workingCapitalLocal * 0.6;
+  const accountsPayable = workingCapitalLocal * 0.4;
   const grossPPE = grossPPELocal ?? (annualRevenue * DEFAULT_PPE_INTENSITY / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION));
   const accumulatedDepreciation = accumulatedDepreciationLocal ?? (grossPPE * INITIAL_ACCUM_DEPRECIATION_FRACTION);
   const netPPE = grossPPE - accumulatedDepreciation;
-  const totalAssets = cash + accountsReceivable + finishedGoodsInventoryUSD + rawMaterialsInventoryUSD + netPPE;
-  const shortTermDebt = shortTermDebtUSD ?? (totalDebt * 0.15);
+  const totalAssets = cash + accountsReceivable + finishedGoodsInventoryLocal + rawMaterialsInventoryLocal + netPPE;
+  const shortTermDebt = shortTermDebtLocal ?? (totalDebt * 0.15);
   const longTermDebt = totalDebt - shortTermDebt;
   const totalLiabilities = accountsPayable + totalDebt;
   const shareholdersEquity = totalAssets - totalLiabilities;
 
   const balanceSheet: QuarterlyBalanceSheet = {
     cash,
-    treasuryHoldingsUSD,
+    treasuryHoldingsLocal,
     accountsReceivable,
-    finishedGoodsInventoryUSD,
-    rawMaterialsInventoryUSD,
+    finishedGoodsInventoryLocal,
+    rawMaterialsInventoryLocal,
     grossPPE,
     accumulatedDepreciation,
     netPPE,
@@ -258,14 +258,14 @@ export function buildQuarterlyFundamentalSnapshot(
   };
 
   const prevWC = prevSnapshot
-    ? prevSnapshot.balanceSheet.accountsReceivable + prevSnapshot.balanceSheet.finishedGoodsInventoryUSD + prevSnapshot.balanceSheet.rawMaterialsInventoryUSD - prevSnapshot.balanceSheet.accountsPayable
-    : workingCapitalUSD;
-  const currentWC = accountsReceivable + finishedGoodsInventoryUSD + rawMaterialsInventoryUSD - accountsPayable;
+    ? prevSnapshot.balanceSheet.accountsReceivable + prevSnapshot.balanceSheet.finishedGoodsInventoryLocal + prevSnapshot.balanceSheet.rawMaterialsInventoryLocal - prevSnapshot.balanceSheet.accountsPayable
+    : workingCapitalLocal;
+  const currentWC = accountsReceivable + finishedGoodsInventoryLocal + rawMaterialsInventoryLocal - accountsPayable;
   const changeInWorkingCapital = -(currentWC - prevWC);
   const cashFromOperations = netIncQ + daQuarterly + changeInWorkingCapital;
 
-  const prevTreasury = prevSnapshot?.balanceSheet.treasuryHoldingsUSD ?? 0;
-  const treasuryPurchases = -(treasuryHoldingsUSD - prevTreasury);
+  const prevTreasury = prevSnapshot?.balanceSheet.treasuryHoldingsLocal ?? 0;
+  const treasuryPurchases = -(treasuryHoldingsLocal - prevTreasury);
   const cashFromInvesting = -maintenanceCapex / 4 - growthCapex / 4 + treasuryPurchases;
 
   const dividendsPaid = -(dividendYield * marketCap / 4);
@@ -426,7 +426,7 @@ export function generateInitialCompanies(
 
   regions.forEach((region) => {
     const regionPolicyRate = initialRegions[region]?.policyRate ?? 0.045;
-    const regionProductivityPerCapita = getRegionProductivityPerCapitaUSD(region);
+    const regionProductivityPerCapita = getRegionProductivityPerCapitaLocal(region);
     const templates: FirmSeedTemplate[] = generateFirmSeeds(region, existingSeedTickers, existingSeedNames);
 
 
@@ -457,8 +457,8 @@ export function generateInitialCompanies(
       const rankInCategory = group.findIndex(t => t.ticker === rawTmpl.ticker);
       const totalInCategory = group.length;
 
-      const regionDemandSeed = getCategoryDemandSeedUSD(primaryCat, region, initialRegions);
-      let derivedRevBase = deriveInitialRevenueUSD(primaryCat, regionDemandSeed, rankInCategory >= 0 ? rankInCategory : 0, totalInCategory || 1);
+      const regionDemandSeed = getCategoryDemandSeedLocal(primaryCat, region, initialRegions);
+      let derivedRevBase = deriveInitialRevenueLocal(primaryCat, regionDemandSeed, rankInCategory >= 0 ? rankInCategory : 0, totalInCategory || 1);
 
       if (rawTmpl.sector === 'Banks') {
         // The seed share is the cohort's own firm-size curve (bootstrap/firms.ts) and it
@@ -468,7 +468,7 @@ export function generateInitialCompanies(
         if (initReg?.bankingSector) {
           const bs = initReg.bankingSector;
           // D: the seed's stated loan books size the opening revenue; nothing stores them.
-          const totalAssets = seedLoanBookUSD(initReg.lastWeekNominalGdpUSD, 'business') + seedLoanBookUSD(initReg.lastWeekNominalGdpUSD, 'consumer') + bs.sovereignBondHoldingsLocal;
+          const totalAssets = seedLoanBookLocal(initReg.lastWeekNominalGdpLocal, 'business') + seedLoanBookLocal(initReg.lastWeekNominalGdpLocal, 'consumer') + bs.sovereignBondHoldingsLocal;
           derivedRevBase = bs.netInterestMarginPct * totalAssets * bankShare * 2.2;
         }
       }
@@ -478,8 +478,8 @@ export function generateInitialCompanies(
       const derivedDebtBase = derivedRevBase * debtRatio;
       const derivedCashBase = derivedRevBase * cashRatio;
 
-      const rank0RevenueUSD = deriveInitialRevenueUSD(primaryCat, regionDemandSeed, 0, totalInCategory || 1);
-      const revenueScaleVsRank0 = rank0RevenueUSD > 0 ? derivedRevBase / rank0RevenueUSD : 1;
+      const rank0RevenueLocal = deriveInitialRevenueLocal(primaryCat, regionDemandSeed, 0, totalInCategory || 1);
+      const revenueScaleVsRank0 = rank0RevenueLocal > 0 ? derivedRevBase / rank0RevenueLocal : 1;
 
       const tmpl: FirmSeedTemplate = {
         ...rawTmpl,
@@ -541,14 +541,14 @@ export function generateInitialCompanies(
       // shape). The old `eps x sector basePE` capitalised earnings at ~1.5% net of growth while
       // every holder in 07e's auction capitalises them at 4-10%, so week 1 opened ~4x above any
       // real bid and the whole market spent ten weeks falling at its damping limit to get back.
-      const seedGrossPPEUSD = tmpl.revBase * (SECTOR_PPE_INTENSITY[tmpl.sector] ?? DEFAULT_PPE_INTENSITY) / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
-      const seedNetPPEUSD = seedGrossPPEUSD * (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
+      const seedGrossPPELocal = tmpl.revBase * (SECTOR_PPE_INTENSITY[tmpl.sector] ?? DEFAULT_PPE_INTENSITY) / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
+      const seedNetPPELocal = seedGrossPPELocal * (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
       const stockPrice = Number(fairValuePerShare({
-        annualEarningsUSD: netIncome,
+        annualEarningsLocal: netIncome,
         sharesOutstanding: tmpl.shares,
         // Book equity at the seed is the same identity the first filed balance sheet computes.
-        bookEquityUSD: derivedCashBase + tmpl.revBase * 0.08 * 0.6 + seedNetPPEUSD - (tmpl.revBase * 0.08 * 0.4 + derivedDebtBase),
-        netInvestmentRate: (growthCapex - seedGrossPPEUSD / (SECTOR_PPE_USEFUL_LIFE_YEARS[tmpl.sector] ?? 12)) / Math.max(1, seedNetPPEUSD),
+        bookEquityLocal: derivedCashBase + tmpl.revBase * 0.08 * 0.6 + seedNetPPELocal - (tmpl.revBase * 0.08 * 0.4 + derivedDebtBase),
+        netInvestmentRate: (growthCapex - seedGrossPPELocal / (SECTOR_PPE_USEFUL_LIFE_YEARS[tmpl.sector] ?? 12)) / Math.max(1, seedNetPPELocal),
         riskFreeRate: regionPolicyRate,
         beta: tmpl.beta,
         holderRequiredReturn: REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
@@ -564,24 +564,24 @@ export function generateInitialCompanies(
       // intensity x revenue), not off its debt — debt is a financing choice, unrelated to what
       // the asset side of the balance sheet actually is.
       const ppeIntensity = SECTOR_PPE_INTENSITY[tmpl.sector] ?? DEFAULT_PPE_INTENSITY;
-      const initialGrossPPEUSD = tmpl.revBase * ppeIntensity / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
-      const initialAccumulatedDepreciationUSD = initialGrossPPEUSD * INITIAL_ACCUM_DEPRECIATION_FRACTION;
+      const initialGrossPPELocal = tmpl.revBase * ppeIntensity / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
+      const initialAccumulatedDepreciationLocal = initialGrossPPELocal * INITIAL_ACCUM_DEPRECIATION_FRACTION;
 
       // Real debt tranches (with genuine maturities) generated once and reused for both the
       // seed snapshots' short/long-term split and the company's own capital structure — so a
       // freshly-generated company's "current portion of long-term debt" reflects its actual
       // ladder rather than a flat 15% guess.
       const debtTranches = generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating, regionPolicyRate, tmpl.rank);
-      const initialShortTermDebtUSD = debtTranches.filter(t => t.maturityWeek <= 52).reduce((s, t) => s + t.principalLocal, 0);
+      const initialShortTermDebtLocal = debtTranches.filter(t => t.maturityWeek <= 52).reduce((s, t) => s + t.principalLocal, 0);
       // Real per-tranche interest from the same ladder, not a flat spread-over-totalDebt guess.
       const initialAnnualInterest = debtTranches.reduce((s, t) => s + (t.rateType === 'FIXED'
         ? t.principalLocal * (t.couponRate ?? 0.05)
         : t.principalLocal * (regionPolicyRate + (t.floatingMarginBps ?? 200) / 10000)), 0);
 
-      const snapQ1 = buildQuarterlyFundamentalSnapshot(-3, "Q1 '25", 'Mar 31, 2025', tmpl.revBase * 0.94, ebitda * 0.93, netIncome * 0.91, eps * 0.92, tmpl.cashBase * 0.95, tmpl.debtBase * 1.02, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, undefined, 0, 0, 0, initialGrossPPEUSD, initialAccumulatedDepreciationUSD, undefined, undefined, initialShortTermDebtUSD, initialAnnualInterest);
-      const snapQ2 = buildQuarterlyFundamentalSnapshot(-2, "Q2 '25", 'Jun 30, 2025', tmpl.revBase * 0.96, ebitda * 0.95, netIncome * 0.94, eps * 0.95, tmpl.cashBase * 0.97, tmpl.debtBase * 1.01, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ1, 0, 0, 0, initialGrossPPEUSD, initialAccumulatedDepreciationUSD, undefined, undefined, initialShortTermDebtUSD, initialAnnualInterest);
-      const snapQ3 = buildQuarterlyFundamentalSnapshot(-1, "Q3 '25", 'Sep 30, 2025', tmpl.revBase * 0.98, ebitda * 0.97, netIncome * 0.97, eps * 0.98, tmpl.cashBase * 0.99, tmpl.debtBase * 1.00, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ2, 0, 0, 0, initialGrossPPEUSD, initialAccumulatedDepreciationUSD, undefined, undefined, initialShortTermDebtUSD, initialAnnualInterest);
-      const snapQ4 = buildQuarterlyFundamentalSnapshot(1, "Q4 '25", 'Dec 31, 2025', tmpl.revBase, ebitda, netIncome, eps, tmpl.cashBase, tmpl.debtBase, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ3, 0, 0, 0, initialGrossPPEUSD, initialAccumulatedDepreciationUSD, undefined, undefined, initialShortTermDebtUSD, initialAnnualInterest);
+      const snapQ1 = buildQuarterlyFundamentalSnapshot(-3, "Q1 '25", 'Mar 31, 2025', tmpl.revBase * 0.94, ebitda * 0.93, netIncome * 0.91, eps * 0.92, tmpl.cashBase * 0.95, tmpl.debtBase * 1.02, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, undefined, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, undefined, undefined, initialShortTermDebtLocal, initialAnnualInterest);
+      const snapQ2 = buildQuarterlyFundamentalSnapshot(-2, "Q2 '25", 'Jun 30, 2025', tmpl.revBase * 0.96, ebitda * 0.95, netIncome * 0.94, eps * 0.95, tmpl.cashBase * 0.97, tmpl.debtBase * 1.01, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ1, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, undefined, undefined, initialShortTermDebtLocal, initialAnnualInterest);
+      const snapQ3 = buildQuarterlyFundamentalSnapshot(-1, "Q3 '25", 'Sep 30, 2025', tmpl.revBase * 0.98, ebitda * 0.97, netIncome * 0.97, eps * 0.98, tmpl.cashBase * 0.99, tmpl.debtBase * 1.00, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ2, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, undefined, undefined, initialShortTermDebtLocal, initialAnnualInterest);
+      const snapQ4 = buildQuarterlyFundamentalSnapshot(1, "Q4 '25", 'Dec 31, 2025', tmpl.revBase, ebitda, netIncome, eps, tmpl.cashBase, tmpl.debtBase, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ3, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, undefined, undefined, initialShortTermDebtLocal, initialAnnualInterest);
 
       const historicalFundamentals = [snapQ1, snapQ2, snapQ3, snapQ4];
 
@@ -610,13 +610,13 @@ export function generateInitialCompanies(
       
       const company: Company = {
         financialStatementProfile,
-        technicalReservesUSD: financialStatementProfile === 'INSURER' ? tmpl.revBase * 4 : undefined,
-        insurancePremiumsWrittenUSD: financialStatementProfile === 'INSURER' ? tmpl.revBase : undefined,
-        insuranceClaimsPaidUSD: financialStatementProfile === 'INSURER' ? tmpl.revBase * 0.70 : undefined,
+        technicalReservesLocal: financialStatementProfile === 'INSURER' ? tmpl.revBase * 4 : undefined,
+        insurancePremiumsWrittenLocal: financialStatementProfile === 'INSURER' ? tmpl.revBase : undefined,
+        insuranceClaimsPaidLocal: financialStatementProfile === 'INSURER' ? tmpl.revBase * 0.70 : undefined,
         // A hedge fund earns the same fee dollars off roughly a third of the assets: a 2-and-20
         // load is ~3x a long-only manager's flat fee, so the same revenue base implies far less
         // AUM. Modelled as the same fee-revenue profile with the real fee/AUM ratio inverted.
-        aumUSD: financialStatementProfile === 'ASSET_MANAGER' ? tmpl.revBase * (tmpl.institutionalRole === 'HEDGE_FUND' ? 20 : 60) : undefined,
+        aumLocal: financialStatementProfile === 'ASSET_MANAGER' ? tmpl.revBase * (tmpl.institutionalRole === 'HEDGE_FUND' ? 20 : 60) : undefined,
         managementFeeRate: financialStatementProfile === 'ASSET_MANAGER' ? (tmpl.institutionalRole === 'HEDGE_FUND' ? 0.0225 : 0.0075) : undefined,
         id: `${region}_${tmpl.ticker}`,
         ticker: tmpl.ticker,
@@ -639,8 +639,8 @@ export function generateInitialCompanies(
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
         debtTranches,
         capex,
-        grossPPELocal: initialGrossPPEUSD,
-        accumulatedDepreciationLocal: initialAccumulatedDepreciationUSD,
+        grossPPELocal: initialGrossPPELocal,
+        accumulatedDepreciationLocal: initialAccumulatedDepreciationLocal,
         maintenanceCapex,
         growthCapex,
         baselineGrowthCapexToRevenueRatio: growthCapex / Math.max(1, tmpl.revBase),
@@ -702,8 +702,8 @@ export function generateInitialCompanies(
             netInterestMarginPct: bs.netInterestMarginPct,
             loanLossProvisionRateAnnualPct: bs.loanLossProvisionRateAnnualPct,
             creditConditionsIndex: bs.creditConditionsIndex,
-            centralBankReservesUSD: bs.centralBankReservesUSD * share,
-            moneySupplyM2USD: bs.moneySupplyM2USD * share,
+            centralBankReservesLocal: bs.centralBankReservesLocal * share,
+            moneySupplyM2Local: bs.moneySupplyM2Local * share,
             itemizedHoldings: [],
             srfBorrowingLocal: 0,
             onRrpLendingLocal: 0,
@@ -713,7 +713,7 @@ export function generateInitialCompanies(
             loanDealerInventory: [],
             repoLentLocal: 0,
             repoBorrowedLocal: 0,
-            repoEncumberedCollateralUSD: 0,
+            repoEncumberedCollateralLocal: 0,
             businessLoans: [],
             householdLoans: [],
           };
@@ -779,11 +779,11 @@ export function generateInitialCompanies(
       
       const newCompany = {
         financialStatementProfile: parent.financialStatementProfile,
-        technicalReservesUSD: parent.technicalReservesUSD,
-        aumUSD: parent.aumUSD,
+        technicalReservesLocal: parent.technicalReservesLocal,
+        aumLocal: parent.aumLocal,
         managementFeeRate: parent.managementFeeRate,
-        insurancePremiumsWrittenUSD: parent.insurancePremiumsWrittenUSD,
-        insuranceClaimsPaidUSD: parent.insuranceClaimsPaidUSD,
+        insurancePremiumsWrittenLocal: parent.insurancePremiumsWrittenLocal,
+        insuranceClaimsPaidLocal: parent.insuranceClaimsPaidLocal,
 
         ...parent,
         // The spread copies every object field BY REFERENCE, so all padding clones
@@ -846,7 +846,7 @@ export function generateInitialCompanies(
         (c) => c.region === region && !c.isBankEntity && !c.institutionalRole);
       const keepCount = Math.max(4, Math.round(roster.length * UNIVERSE_SCALE));
       if (keepCount < roster.length) {
-        const totalRevenueUSD = roster.reduce((a, c) => a + (c.annualRevenue || 0), 0);
+        const totalRevenueLocal = roster.reduce((a, c) => a + (c.annualRevenue || 0), 0);
         // Every m-th name in the order they were generated: a stride, not the largest, so the
         // size distribution the roster carries is sampled rather than truncated at the top.
         const stride = roster.length / keepCount;
@@ -860,8 +860,8 @@ export function generateInitialCompanies(
         for (let i = companies.length - 1; i >= 0; i--) {
           if (droppedIds.has(companies[i].id)) companies.splice(i, 1);
         }
-        const keptRevenueUSD = kept.reduce((a, c) => a + (c.annualRevenue || 0), 0);
-        const lift = keptRevenueUSD > 0 ? totalRevenueUSD / keptRevenueUSD : 1;
+        const keptRevenueLocal = kept.reduce((a, c) => a + (c.annualRevenue || 0), 0);
+        const lift = keptRevenueLocal > 0 ? totalRevenueLocal / keptRevenueLocal : 1;
         // The cap is price × shares, so the lift is more of the firm at the market's price and
         // the SHARES lift with everything else.
         kept.forEach((c) => scaleFirmSize(c, lift));
@@ -886,7 +886,7 @@ export function generateInitialCompanies(
  * A SECTOR IS AS BIG AS WHAT IT HAS TO SUPPLY.
  *
  * Every firm's revenue is sized off ONE hand-named industry per sector, through
- * `getCategoryDemandSeedUSD` — a switch of stated shares of household income that nothing else in
+ * `getCategoryDemandSeedLocal` — a switch of stated shares of household income that nothing else in
  * the model reads. So Tech's firms divide the SOFTWARE slice and are blind to semiconductors and
  * telecoms, which are most of what Tech actually makes. MEASURED at the seed:
  * Tech's named firms held 41% of the revenue their own demand implies and Consumer's held 145%,
@@ -918,10 +918,10 @@ export function normalizeProducingSectorRevenue(
   companies: Company[],
   demandLevelAnnualLocal: (subUnitId: string) => number,
   /** What the SME tier of a sub-unit's industry ACTUALLY carries in this region. */
-  smeRevenueForSubUnitUSD: (subUnitId: string) => number
+  smeRevenueForSubUnitLocal: (subUnitId: string) => number
 ): void {
   const producingSectors = Object.keys(subUnitsByProducingSector()) as ProducingSector[];
-  const namedTierDemandUSD = (sector: string): number => {
+  const namedTierDemandLocal = (sector: string): number => {
     const list = (subUnitsByProducingSector() as Record<string, { su: { unitId: string } }[]>)[sector];
     if (!list) return 0;
     // What the NAMED tier is left to supply: this sector's demand less what its SME pools
@@ -934,33 +934,33 @@ export function normalizeProducingSectorRevenue(
     for (const { su } of list) {
       const demandLocal = demandLevelAnnualLocal(su.unitId);
       if (!(demandLocal > 0)) continue;
-      total += Math.max(0, demandLocal - Math.max(0, smeRevenueForSubUnitUSD(su.unitId)));
+      total += Math.max(0, demandLocal - Math.max(0, smeRevenueForSubUnitLocal(su.unitId)));
     }
     return total;
   };
 
   const cohortBySector = new Map<string, Company[]>();
   const demandBySector = new Map<string, number>();
-  let producingRevenueUSD = 0;
-  let producingDemandUSD = 0;
+  let producingRevenueLocal = 0;
+  let producingDemandLocal = 0;
   producingSectors.forEach((sector) => {
     const cohort = companies.filter(
       (c) => c.sector === sector && !c.isBankEntity && !(c as { institutionalRole?: string }).institutionalRole);
     if (cohort.length === 0) return;
-    const demandLocal = namedTierDemandUSD(sector);
+    const demandLocal = namedTierDemandLocal(sector);
     if (!(demandLocal > 0)) return;
     cohortBySector.set(sector, cohort);
     demandBySector.set(sector, demandLocal);
-    producingRevenueUSD += cohort.reduce((a, c) => a + (c.annualRevenue || 0), 0);
-    producingDemandUSD += demandLocal;
+    producingRevenueLocal += cohort.reduce((a, c) => a + (c.annualRevenue || 0), 0);
+    producingDemandLocal += demandLocal;
   });
-  if (!(producingRevenueUSD > 0) || !(producingDemandUSD > 0)) return;
+  if (!(producingRevenueLocal > 0) || !(producingDemandLocal > 0)) return;
 
   cohortBySector.forEach((cohort, sector) => {
-    const targetUSD = producingRevenueUSD * ((demandBySector.get(sector) ?? 0) / producingDemandUSD);
-    const actualUSD = cohort.reduce((a, c) => a + (c.annualRevenue || 0), 0);
-    if (!(actualUSD > 0)) return;
-    const lift = targetUSD / actualUSD;
+    const targetLocal = producingRevenueLocal * ((demandBySector.get(sector) ?? 0) / producingDemandLocal);
+    const actualLocal = cohort.reduce((a, c) => a + (c.annualRevenue || 0), 0);
+    if (!(actualLocal > 0)) return;
+    const lift = targetLocal / actualLocal;
     if (!(lift > 0) || !isFinite(lift) || Math.abs(lift - 1) < 1e-9) return;
     cohort.forEach((c) => scaleFirmSize(c, lift));
   });
@@ -1012,8 +1012,8 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
     // `annualInterest` was in this list and is NOT a field — it is DERIVED from the ladder
     // (`front-core.ts:trancheWeekAccrual`), which is scaled below. The string was dead: the scale
     // no-ops on `undefined`, so nothing happened and nothing said so.
-    'growthCapex', 'currentLiabilities', 'technicalReservesUSD', 'aumUSD',
-    'insurancePremiumsWrittenUSD', 'insuranceClaimsPaidUSD'] as const satisfies readonly (keyof Company)[];
+    'growthCapex', 'currentLiabilities', 'technicalReservesLocal', 'aumLocal',
+    'insurancePremiumsWrittenLocal', 'insuranceClaimsPaidLocal'] as const satisfies readonly (keyof Company)[];
   SIZED_FIELDS.forEach(scale);
   ((c.debtTranches as DebtTranche[] | undefined) ?? []).forEach((t) => { t.principalLocal *= k; });
   ((c.historicalFundamentals as FundamentalSnapshot[] | undefined) ?? [])
@@ -1051,7 +1051,7 @@ export function dealProductLinesAndHeadcount(
   /** What the SME pools ACTUALLY carry of a sub-unit in this region (discipline: the
    *  registry share is what they were sized from, not what they hold). Absent at the placeholder
    *  deal, where the stated share stands in. */
-  smeRevenueForSubUnitUSD?: (region: RegionId, subUnitId: string) => number
+  smeRevenueForSubUnitLocal?: (region: RegionId, subUnitId: string) => number
 ): void {
   const categories: string[] = [];
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
@@ -1084,12 +1084,12 @@ export function dealProductLinesAndHeadcount(
       const sectorSubUnits = (subUnitsByProducingSector()[sector as ProducingSector] ?? [])
         .map(({ industry, su }) => ({
           industry, unitId: su.unitId,
-          weightUSD: Math.max(0, demandLevelAnnualLocal(_regionId as RegionId, su.unitId)),
+          weightLocal: Math.max(0, demandLevelAnnualLocal(_regionId as RegionId, su.unitId)),
         }))
-        .filter(x => x.weightUSD > 0);
-      const totalWeightUSD = sectorSubUnits.reduce((a, x) => a + x.weightUSD, 0);
-      const assignedUSD = new Map<string, number>();
-      let assignedTotalUSD = 0;
+        .filter(x => x.weightLocal > 0);
+      const totalWeightLocal = sectorSubUnits.reduce((a, x) => a + x.weightLocal, 0);
+      const assignedLocal = new Map<string, number>();
+      let assignedTotalLocal = 0;
 
       comps.forEach((c) => {
         let lines: ProductLine[] = [];
@@ -1114,25 +1114,25 @@ export function dealProductLinesAndHeadcount(
         // `bankProfile`, which never accounts for producing anything, so the supply was real to
         // the auction and invisible to the producer's own P&L. Financial revenue comes from the
         // profiles, which is what they are for.
-        if (lines.length === 0 && sectorSubUnits.length > 0 && totalWeightUSD > 0
+        if (lines.length === 0 && sectorSubUnits.length > 0 && totalWeightLocal > 0
             && sector !== 'Financials' && sector !== 'Banks') {
           const k = Math.min(3, sectorSubUnits.length);
           const scored = sectorSubUnits.map((x, idx) => ({
             x, idx,
-            deficitUSD: (x.weightUSD / totalWeightUSD) * (assignedTotalUSD + c.baselineAnnualRevenue) - (assignedUSD.get(x.unitId) ?? 0),
+            deficitLocal: (x.weightLocal / totalWeightLocal) * (assignedTotalLocal + c.baselineAnnualRevenue) - (assignedLocal.get(x.unitId) ?? 0),
           }));
-          scored.sort((a, b) => (b.deficitUSD - a.deficitUSD) || (a.idx - b.idx));
+          scored.sort((a, b) => (b.deficitLocal - a.deficitLocal) || (a.idx - b.idx));
           const picked = scored.slice(0, k);
-          const pickedWeightUSD = picked.reduce((a, e) => a + e.x.weightUSD, 0) || 1;
+          const pickedWeightLocal = picked.reduce((a, e) => a + e.x.weightLocal, 0) || 1;
           // `categoryMarketShare` is an OUTCOME and is computed below over the whole roster; it
           // opens at zero, which is also what that pass writes for a category with no demand.
           lines = picked.map(e => ({
             industry: e.x.industry, subUnitId: e.x.unitId,
-            revenueShare: e.x.weightUSD / pickedWeightUSD, competitiveness: 0, categoryMarketShare: 0,
+            revenueShare: e.x.weightLocal / pickedWeightLocal, competitiveness: 0, categoryMarketShare: 0,
           }));
-          picked.forEach(e => assignedUSD.set(e.x.unitId,
-            (assignedUSD.get(e.x.unitId) ?? 0) + (e.x.weightUSD / pickedWeightUSD) * c.baselineAnnualRevenue));
-          assignedTotalUSD += c.baselineAnnualRevenue;
+          picked.forEach(e => assignedLocal.set(e.x.unitId,
+            (assignedLocal.get(e.x.unitId) ?? 0) + (e.x.weightLocal / pickedWeightLocal) * c.baselineAnnualRevenue));
+          assignedTotalLocal += c.baselineAnnualRevenue;
         }
 
         c.productLines = lines;
@@ -1154,21 +1154,21 @@ export function dealProductLinesAndHeadcount(
     // carries the rest. Exact where the roster can reach it, monotone where it cannot (a
     // single-line firm holds its line).
     {
-      const targetUSD = new Map<string, number>();
+      const targetLocal = new Map<string, number>();
       categories.forEach((unitId) => {
         const industry = industryOfSubUnit(unitId);
         const smeShare = industry ? (INDUSTRY_REGISTRY[industry]?.smeShareOfActivity ?? 0) : 0;
         const demandLocal = Math.max(0, demandLevelAnnualLocal(_regionId as RegionId, unitId));
-        const smeLocal = smeRevenueForSubUnitUSD
-          ? Math.max(0, smeRevenueForSubUnitUSD(_regionId as RegionId, unitId))
+        const smeLocal = smeRevenueForSubUnitLocal
+          ? Math.max(0, smeRevenueForSubUnitLocal(_regionId as RegionId, unitId))
           : demandLocal * Math.max(0, smeShare);
-        targetUSD.set(unitId, Math.max(0, demandLocal - smeLocal));
+        targetLocal.set(unitId, Math.max(0, demandLocal - smeLocal));
       });
       for (let round = 0; round < 24; round++) {
-        const currentUSD = new Map<string, number>();
+        const currentLocal = new Map<string, number>();
         regionComps.forEach((c) => {
           (c.productLines || []).forEach((line) => {
-            currentUSD.set(line.subUnitId, (currentUSD.get(line.subUnitId) ?? 0) + line.revenueShare * c.baselineAnnualRevenue);
+            currentLocal.set(line.subUnitId, (currentLocal.get(line.subUnitId) ?? 0) + line.revenueShare * c.baselineAnnualRevenue);
           });
         });
         let maxMove = 0;
@@ -1176,8 +1176,8 @@ export function dealProductLinesAndHeadcount(
           const lines = c.productLines || [];
           if (lines.length < 2) return;
           const weights = lines.map((line) => {
-            const target = targetUSD.get(line.subUnitId) ?? 0;
-            const current = currentUSD.get(line.subUnitId) ?? 0;
+            const target = targetLocal.get(line.subUnitId) ?? 0;
+            const current = currentLocal.get(line.subUnitId) ?? 0;
             const ratio = current > 0 && target > 0 ? Math.min(4, Math.max(0.25, target / current)) : 1;
             return line.revenueShare * ratio;
           });
@@ -1231,10 +1231,10 @@ export function dealProductLinesAndHeadcount(
       // attempt). Revenue rises, value added does not, and employment follows value added.
       const lines = c.productLines || [];
       if (lines.length > 0) {
-        const productivityPerWorkerUSD = getRegionProductivityPerCapitaUSD(_regionId as RegionId);
-        const valueAddedUSD = lines.reduce((sum, line) =>
+        const productivityPerWorkerLocal = getRegionProductivityPerCapitaLocal(_regionId as RegionId);
+        const valueAddedLocal = lines.reduce((sum, line) =>
           sum + c.annualRevenue * (line.revenueShare ?? 1) * (1 - recipeIntensityOf(line.subUnitId)), 0);
-        c.employeeCount = Math.max(100, Math.round(valueAddedUSD / Math.max(1, productivityPerWorkerUSD)));
+        c.employeeCount = Math.max(100, Math.round(valueAddedLocal / Math.max(1, productivityPerWorkerLocal)));
         c.baselineEmployeeCount = c.employeeCount;
       }
     });
@@ -1349,13 +1349,13 @@ export function generatePrivateCompanies(
       // public supply cost 10-22% of growth), and it is not SEG's to reverse in passing.
       productLines: (() => {
         const mix = seed.productMixBySubUnit;
-        const mixTotalUSD = mix ? Object.values(mix).reduce((a, v) => a + Math.max(0, v), 0) : 0;
-        if (!mix || mixTotalUSD <= 0) return [];
+        const mixTotalLocal = mix ? Object.values(mix).reduce((a, v) => a + Math.max(0, v), 0) : 0;
+        if (!mix || mixTotalLocal <= 0) return [];
         return Object.entries(mix)
           .filter(([, v]) => v > 0)
           .map(([subUnitId, v]) => ({
             industry: seed.industry, subUnitId,
-            revenueShare: v / mixTotalUSD,
+            revenueShare: v / mixTotalLocal,
             competitiveness: 0,
             // Set against the real market by the caller once the firm exists; a line with an
             // undefined share reads as NaN to every consumer of it.

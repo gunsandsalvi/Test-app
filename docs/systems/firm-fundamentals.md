@@ -88,7 +88,7 @@ checked by `scripts/check-atlas.sh`.
 | A2 a region and a sector, both load-bearing | `src/domain/industry-registry.ts:firmInputIntensities` | ✅ |
 | A3 heterogeneous in size, cost and leverage | `src/engine/companyGenerator.ts:generateInitialCompanies` | ✅ |
 | A4 an owner or owners holding the residual | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
-| B1 revenue is quantity × price from named buyers | `src/engine2/front-core.ts:unitRevenueUSD` | ✅ |
+| B1 revenue is quantity × price from named buyers | `src/engine2/front-core.ts:unitRevenueLocal` | ✅ |
 | B1.a a consequence of a market, not a growth rate | `src/engine/simulation/stages/05-unit-bidding.ts:runUnitBiddingStage` | ✅ |
 | B2 input costs at the prices actually paid | `src/domain/company-week/inventory.ts:consumeLotsFifo` | ✅ |
 | B3 labour costs paid to named households | `src/domain/company-week/payroll.ts:payrollWeek` | ✅ |
@@ -114,7 +114,7 @@ checked by `scripts/check-atlas.sh`.
 | E6 every decision from its own state and prices | `src/engine2/stage08-back.ts:runBackCoreA` | ✅ |
 | F1 FORBID no revenue without a buyer | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
 | **F2 FORBID no exogenous earnings path** | `src/engine2/stage08-back.ts:trendWeeklyGrowth` | ⚠️ |
-| F3 FORBID no firm that cannot run out of cash | `src/domain/company-week/credit-standing.ts:revolverDrawUSD` | ✅ |
+| F3 FORBID no firm that cannot run out of cash | `src/domain/company-week/credit-standing.ts:revolverDrawLocal` | ✅ |
 | F4 the sector aggregate is Σ(firms) | `src/engine/companyGenerator.ts:normalizeProducingSectorRevenue` | ⚠️ |
 
 ---

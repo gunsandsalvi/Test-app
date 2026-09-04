@@ -20,10 +20,10 @@ export interface FxDealerBook {
   /** Net notional the desk is long in each foreign currency (negative = short). */
   netNotionalByRegion: Record<string, number>;
   /** Initial margin held from clients — the desk's cash, and its liability back to them. */
-  initialMarginHeldUSD: number;
+  initialMarginHeldLocal: number;
   /** Gross notional outstanding — a measurement of the one derivative book, kept beside the
    *  net so the spot desk reads one struct. */
-  grossNotionalUSD: number;
+  grossNotionalLocal: number;
 }
 
 /**
@@ -35,7 +35,7 @@ export const DEALER_QUOTE_WIDTH_BPS = 150;
 
 /** An empty desk, for a bank that has not written a forward yet. */
 export function emptyFxDealerBook(): FxDealerBook {
-  return { netNotionalByRegion: {}, initialMarginHeldUSD: 0, grossNotionalUSD: 0 };
+  return { netNotionalByRegion: {}, initialMarginHeldLocal: 0, grossNotionalLocal: 0 };
 }
 
 export type { RegionId };

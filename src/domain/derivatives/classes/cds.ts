@@ -30,13 +30,13 @@ export const LARGE_EXPOSURE_LIMIT_OF_CAPITAL = 0.25;
  * What a lender must lay off: the exposure to one name beyond what its capital lets it carry,
  * net of protection it has already bought. A measurement of the bank's own book, not a view.
  */
-export function protectionNeedUSD(args: {
-  exposureUSD: number;
+export function protectionNeedLocal(args: {
+  exposureLocal: number;
   bankEquityLocal: number;
-  alreadyHedgedUSD: number;
+  alreadyHedgedLocal: number;
 }): number {
-  const carryableUSD = Math.max(0, args.bankEquityLocal) * LARGE_EXPOSURE_LIMIT_OF_CAPITAL;
-  return Math.max(0, args.exposureUSD - carryableUSD - Math.max(0, args.alreadyHedgedUSD));
+  const carryableLocal = Math.max(0, args.bankEquityLocal) * LARGE_EXPOSURE_LIMIT_OF_CAPITAL;
+  return Math.max(0, args.exposureLocal - carryableLocal - Math.max(0, args.alreadyHedgedLocal));
 }
 
 export const CDS_PROFILE: DerivativeClassProfile = {
@@ -60,8 +60,8 @@ export const CDS_PROFILE: DerivativeClassProfile = {
   eventTermination: (c, m) => {
     if (!m.isIssuerDefaulted(c.referenceId)) return null;
     const recovery = Math.max(0, Math.min(1, m.recoveryRate(c.regionId)));
-    const payoutUSD = c.notional * Math.max(0, 1 - recovery);
-    return payoutUSD > 0 ? { usdToB: -payoutUSD, reason: 'CDS credit event settled' } : { usdToB: 0, reason: 'CDS credit event settled' };
+    const payoutLocal = c.notional * Math.max(0, 1 - recovery);
+    return payoutLocal > 0 ? { usdToB: -payoutLocal, reason: 'CDS credit event settled' } : { usdToB: 0, reason: 'CDS credit event settled' };
   },
   // Replacement value to the buyer: the spread move since striking, over the remaining life —
   // the premium it would now save (or newly pay) replacing the contract at the current print.

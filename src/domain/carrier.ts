@@ -70,7 +70,7 @@ export const FREIGHT_ASSET_SPEC: Record<FreightMode, {
   fuelTonnesPerNm: number;
   crewCount: number;
   /** What one costs to build, in USD. Real equipment prices. */
-  capitalCostUSD: number;
+  capitalCostLocal: number;
   /** Years of service before it is scrapped. */
   usefulLifeYears: number;
 }> = {
@@ -80,7 +80,7 @@ export const FREIGHT_ASSET_SPEC: Record<FreightMode, {
     // 30 t/day over 14 knots x 24 h = 336 nm/day.
     fuelTonnesPerNm: 30 / (14 * 24),
     crewCount: 20,
-    capitalCostUSD: 35_000_000,
+    capitalCostLocal: 35_000_000,
     usefulLifeYears: 25,
   },
   ROAD: {
@@ -89,7 +89,7 @@ export const FREIGHT_ASSET_SPEC: Record<FreightMode, {
     // 35 L/100 km, diesel ~0.84 t/m3, and 100 km = 54 nm.
     fuelTonnesPerNm: (35 * 0.00084) / 54,
     crewCount: 1,
-    capitalCostUSD: 150_000,
+    capitalCostLocal: 150_000,
     usefulLifeYears: 10,
   },
 };
@@ -124,7 +124,7 @@ export function weeklyCapacityTonnes(asset: FreightAsset, distanceNm: number): n
  * What it costs the carrier to move one tonne one nautical mile — the level below which it will
  * not offer, because it would be paying to carry the cargo.
  *
- * SHORT-RUN ONLY: fuel and crew, no capital. The vessel's own cost (`capitalCostUSD` over
+ * SHORT-RUN ONLY: fuel and crew, no capital. The vessel's own cost (`capitalCostLocal` over
  * `usefulLifeYears`) is booked as PP&E and depreciated on the carrier's P&L, but it is not in
  * this floor — so in a balanced market freight clears at a level that never returns the fleet's
  * capital and no carrier can rationally replace a ship. Correct as a marginal cost; wrong as the
@@ -136,24 +136,24 @@ export function weeklyCapacityTonnes(asset: FreightAsset, distanceNm: number): n
  * negligible per tonne; for a truck it is the reverse. That is why a fuel spike reprices ocean
  * freight and a wage rise reprices haulage.
  */
-export function marginalCostPerTonneNmUSD(args: {
+export function marginalCostPerTonneNmLocal(args: {
   asset: FreightAsset;
   fuelPriceUsdPerTonne: number;
-  annualCrewWageUSD: number;
+  annualCrewWageLocal: number;
   distanceNm: number;
   /** CAP — this asset's share of its owner's weekly capital charge (cost of capital on net
    *  PP&E). Absent = the old fuel-and-crew floor, which cannot replace a ship. */
-  weeklyCapitalChargeUSD?: number;
+  weeklyCapitalChargeLocal?: number;
 }): number {
-  const { asset, fuelPriceUsdPerTonne, annualCrewWageUSD, distanceNm } = args;
+  const { asset, fuelPriceUsdPerTonne, annualCrewWageLocal, distanceNm } = args;
   const fuelPerTonneNm = (asset.fuelTonnesPerNm * fuelPriceUsdPerTonne) / Math.max(1, asset.capacityTonnes);
 
   // Crew is paid by the week whatever the ship does, so its cost per tonne-mile is the weekly
   // wage bill spread over the tonne-miles a week of that voyage actually delivers.
   const weeklyTonnes = weeklyCapacityTonnes(asset, distanceNm);
   const weeklyTonneNm = weeklyTonnes * distanceNm;
-  const weeklyCrewCostUSD = (asset.crewCount * annualCrewWageUSD) / 52;
-  const crewPerTonneNm = weeklyTonneNm > 0 ? weeklyCrewCostUSD / weeklyTonneNm : 0;
+  const weeklyCrewCostLocal = (asset.crewCount * annualCrewWageLocal) / 52;
+  const crewPerTonneNm = weeklyTonneNm > 0 ? weeklyCrewCostLocal / weeklyTonneNm : 0;
 
   // CAP — AND THE CAPITAL THAT DOES THE WORK. Fuel and crew alone are what a ship costs to SAIL,
   // not what it costs to HAVE: a floor built from them clears a balanced freight market at a
@@ -161,7 +161,7 @@ export function marginalCostPerTonneNmUSD(args: {
   // says so. The charge is the same arithmetic LAB already runs on labour — the return the
   // capital requires — spread over the tonne-miles that capital delivers.
   const capitalPerTonneNm = weeklyTonneNm > 0
-    ? (args.weeklyCapitalChargeUSD ?? 0) / weeklyTonneNm : 0;
+    ? (args.weeklyCapitalChargeLocal ?? 0) / weeklyTonneNm : 0;
 
   return fuelPerTonneNm + crewPerTonneNm + capitalPerTonneNm;
 }
@@ -173,7 +173,7 @@ export interface CarrierFleet {
   fuelInventoryTonnes: number;
   /** Tonne-miles actually carried last week, and what it was paid for them. */
   lastWeekTonneNm: number;
-  lastWeekFreightRevenueUSD: number;
+  lastWeekFreightRevenueLocal: number;
   /** Tonnes of bunker the fleet physically burned last week, at its own utilisation. The fleet's
    *  real demand for refined product — measured here, and the number a bunker bid should
    *  eventually be sized from rather than from a share of revenue. */
@@ -181,7 +181,7 @@ export interface CarrierFleet {
 }
 
 export function emptyCarrierFleet(): CarrierFleet {
-  return { assets: [], fuelInventoryTonnes: 0, lastWeekTonneNm: 0, lastWeekFreightRevenueUSD: 0 };
+  return { assets: [], fuelInventoryTonnes: 0, lastWeekTonneNm: 0, lastWeekFreightRevenueLocal: 0 };
 }
 
 /** A directed lane key, e.g. "USA>EUR". Directed because a head-haul and a back-haul are not the

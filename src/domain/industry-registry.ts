@@ -36,7 +36,7 @@ export type ProducingSector = 'Tech' | 'Energy' | 'Industrials' | 'Consumer';
  * `UNIT_SALE` — recognised on delivery, and what is not sold this week is not revenue this
  *   week. Every good in the model behaved this way, whatever it was.
  * `SUBSCRIPTION` — the sale buys a CONTRACT, not a unit. It keeps paying until it churns, so
- *   the seller carries a recurring base (`recurringRevenueBaseUSD`) that survives a quarter with
+ *   the seller carries a recurring base (`recurringRevenueBaseLocal`) that survives a quarter with
  *   no new sales, and a week it cannot ship does not cost it the contract. This is the whole
  *   difference between a software company and a steel mill, and the model could not express it.
  *
@@ -985,9 +985,9 @@ export function industryRecipeIntensity(industry: Industry): number {
  * The SME productivity gap is not stated here and should not be: it is an OUTCOME of the pools'
  * own measured P&L (rule 2, and says so).
  */
-export function smePoolEmployment(industry: Industry, annualRevenueLocal: number, productivityPerWorkerUSD: number): number {
-  const valueAddedUSD = annualRevenueLocal * (1 - industryRecipeIntensity(industry));
-  return Math.max(1, Math.round(valueAddedUSD / Math.max(1, productivityPerWorkerUSD)));
+export function smePoolEmployment(industry: Industry, annualRevenueLocal: number, productivityPerWorkerLocal: number): number {
+  const valueAddedLocal = annualRevenueLocal * (1 - industryRecipeIntensity(industry));
+  return Math.max(1, Math.round(valueAddedLocal / Math.max(1, productivityPerWorkerLocal)));
 }
 
 /**
@@ -1217,10 +1217,10 @@ export function smePoolSubUnits(industry: Industry): SubUnitSpec[] {
  */
 export function smePoolRecipeInputs(
   industry: Industry,
-  salesBySubUnitUSD?: Record<string, number>
+  salesBySubUnitLocal?: Record<string, number>
 ): Record<string, number> {
   const subUnits = INDUSTRY_REGISTRY[industry].subUnits;
-  const weights = subUnits.map(su => Math.max(0, salesBySubUnitUSD?.[su.unitId] ?? 0));
+  const weights = subUnits.map(su => Math.max(0, salesBySubUnitLocal?.[su.unitId] ?? 0));
   const total = weights.reduce((a, b) => a + b, 0);
   const blend: Record<string, number> = {};
   subUnits.forEach((su, i) => {

@@ -45,9 +45,9 @@ export interface PrimeBrokerageLine {
  * therefore shrinks the permitted position faster than it shrinks the loan, which is exactly why
  * a margin call is violent.
  */
-export function maxDrawnUSD(fundEquityUSD: number, haircutRate: number): number {
+export function maxDrawnLocal(fundEquityLocal: number, haircutRate: number): number {
   const h = Math.max(0.01, Math.min(1, haircutRate));
-  return Math.max(0, fundEquityUSD) * (1 / h - 1);
+  return Math.max(0, fundEquityLocal) * (1 / h - 1);
 }
 
 export function drawnByFund(book: PrimeBrokerageLine[], fundId: string): number {
@@ -59,6 +59,6 @@ export function lentByBroker(book: PrimeBrokerageLine[], brokerTicker: string): 
 }
 
 /** One week's financing on a line, at the rate it was struck at. */
-export function weeklyFinancingUSD(line: PrimeBrokerageLine): number {
+export function weeklyFinancingLocal(line: PrimeBrokerageLine): number {
   return (line.drawnLocal * line.rateAnnual) / 52;
 }

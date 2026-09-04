@@ -5,9 +5,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dividendDecision, sustainableDividendWeeklyUSD } from '../src/domain/company-week/distributions';
+import { dividendDecision, sustainableDividendWeeklyLocal } from '../src/domain/company-week/distributions';
 
-const base = { declaredYield: 0.03, marketCapUSD: 30e9, netIncomeUSD: 400e6,
+const base = { declaredYield: 0.03, marketCapLocal: 30e9, netIncomeLocal: 400e6,
   maxPayoutRatio: 0.4, weekOfQuarter: 1, weeksInQuarter: 13 };
 
 test('earnings bind when the declared yield outruns them', () => {
@@ -15,20 +15,20 @@ test('earnings bind when the declared yield outruns them', () => {
   // what it earns.
   const d = dividendDecision(base);
   assert.equal(d.boundBy, 'earnings');
-  assert.ok(Math.abs(d.accrualWeeklyUSD - 160e6 / 52) < 1e-6);
+  assert.ok(Math.abs(d.accrualWeeklyLocal - 160e6 / 52) < 1e-6);
 });
 
 test('a loss-making company pays nothing, with no clamp anywhere', () => {
   // §1.6: it falls out of sizing on earnings rather than on capitalisation.
-  assert.equal(dividendDecision({ ...base, netIncomeUSD: -1e9 }).accrualWeeklyUSD, 0);
-  assert.equal(dividendDecision({ ...base, netIncomeUSD: 0 }).accrualWeeklyUSD, 0);
-  assert.equal(sustainableDividendWeeklyUSD(-5e9, 0.9), 0);
+  assert.equal(dividendDecision({ ...base, netIncomeLocal: -1e9 }).accrualWeeklyLocal, 0);
+  assert.equal(dividendDecision({ ...base, netIncomeLocal: 0 }).accrualWeeklyLocal, 0);
+  assert.equal(sustainableDividendWeeklyLocal(-5e9, 0.9), 0);
 });
 
 test('the declared yield binds when earnings comfortably cover it', () => {
-  const d = dividendDecision({ ...base, netIncomeUSD: 100e9 });
+  const d = dividendDecision({ ...base, netIncomeLocal: 100e9 });
   assert.equal(d.boundBy, 'declared-yield');
-  assert.ok(Math.abs(d.accrualWeeklyUSD - (0.03 * 30e9) / 52) < 1e-6);
+  assert.ok(Math.abs(d.accrualWeeklyLocal - (0.03 * 30e9) / 52) < 1e-6);
 });
 
 test('thirteen weeks of dividend leave in one week and nothing in the other twelve', () => {
@@ -37,17 +37,17 @@ test('thirteen weeks of dividend leave in one week and nothing in the other twel
   let totalPaid = 0;
   for (let w = 1; w <= 13; w++) {
     const d = dividendDecision({ ...base, weekOfQuarter: w });
-    if (d.cashThisWeekUSD > 0) { paidWeeks++; totalPaid += d.cashThisWeekUSD; }
+    if (d.cashThisWeekLocal > 0) { paidWeeks++; totalPaid += d.cashThisWeekLocal; }
   }
   assert.equal(paidWeeks, 1, 'exactly one payment date a quarter');
-  const accrued = dividendDecision(base).accrualWeeklyUSD * 13;
+  const accrued = dividendDecision(base).accrualWeeklyLocal * 13;
   assert.ok(Math.abs(totalPaid - accrued) < 1e-6, 'and the cash equals the quarter of accrual');
 });
 
 test('a company with no declared yield pays nothing however profitable', () => {
-  assert.equal(dividendDecision({ ...base, declaredYield: 0, netIncomeUSD: 1e12 }).accrualWeeklyUSD, 0);
+  assert.equal(dividendDecision({ ...base, declaredYield: 0, netIncomeLocal: 1e12 }).accrualWeeklyLocal, 0);
 });
 
 test('a negative declared yield is not a reverse dividend', () => {
-  assert.equal(dividendDecision({ ...base, declaredYield: -0.05 }).accrualWeeklyUSD, 0);
+  assert.equal(dividendDecision({ ...base, declaredYield: -0.05 }).accrualWeeklyLocal, 0);
 });

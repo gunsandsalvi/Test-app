@@ -85,38 +85,38 @@ checked by `scripts/check-atlas.sh`.
 | A2 it is layered, and the layers absorb in order | `src/domain/company.ts:seniority` | ⚠️ |
 | A2.a equity absorbs first and fully | `src/engine/ledger/bank-transfer.ts:assumeBankBooks` | ✅ |
 | **A2.b subordinated debt absorbs next** | — | ❌ |
-| A2.c senior creditors and depositors last, only in resolution | `src/domain/bank-resolution.ts:ladderBailedInUSD` | ⚠️ |
+| A2.c senior creditors and depositors last, only in resolution | `src/domain/bank-resolution.ts:ladderBailedInLocal` | ⚠️ |
 | A3 it grows by retained earnings and by issuance | `src/engine/macro/banking.ts:evolveBankingSector` | ⚠️ |
-| A4 it falls by losses and by distributions | `src/engine/macro/banking.ts:dividendWeeklyUSD` | ✅ |
-| B1 a requirement expressed against risk-weighted assets | `src/domain/bank-pricing.ts:bankRwaUSD` | ✅ |
-| B1.a risk weights differ by asset | `src/domain/banking.ts:householdBookRwaUSD` | ✅ |
+| A4 it falls by losses and by distributions | `src/engine/macro/banking.ts:dividendWeeklyLocal` | ✅ |
+| B1 a requirement expressed against risk-weighted assets | `src/domain/bank-pricing.ts:bankRwaLocal` | ✅ |
+| B1.a risk weights differ by asset | `src/domain/banking.ts:householdBookRwaLocal` | ✅ |
 | B1.b a leverage constraint as a backstop | `src/engine/macro/banking.ts:BASEL_MIN_LEVERAGE_RATIO` | ✅ |
 | B1.c VERIFY which binds is an outcome | — | ❌ |
 | B2 a buffer above the requirement the bank chooses | `src/domain/bank-pricing.ts:BANK_WORKING_CAPITAL_RATIO` | ⚠️ |
 | B3 breaching triggers consequences before failure | `src/engine/macro/banking.ts:targetPayoutRatio` | ✅ |
-| B3.a VERIFY a bank near the line behaves differently | `src/engine/simulation/stages/bank-lending.ts:headroomUSD` | ⚠️ |
+| B3.a VERIFY a bank near the line behaves differently | `src/engine/simulation/stages/bank-lending.ts:headroomLocal` | ⚠️ |
 | **C1 insolvency is assets < liabilities, distinct from illiquidity** | `src/domain/bank-resolution.ts:isBankUnderPca` | ⚠️ |
 | **C1.a solvent and illiquid, or insolvent and liquid** | — | ❌ |
-| C2 recapitalisation first, if somebody will provide it | `src/engine/simulation/stages/bank-resolution.ts:injectionUSD` | ⚠️ |
+| C2 recapitalisation first, if somebody will provide it | `src/engine/simulation/stages/bank-resolution.ts:injectionLocal` | ⚠️ |
 | **C2.a existing holders diluted, new money priced** | — | ❌ |
 | C2.b it can fail — nobody has to buy | — | ❌ |
 | C3 RESOLUTION: the bank stops being a going concern | `src/engine/simulation/stages/bank-resolution.ts:runBankResolutionStage` | ✅ |
 | C3.a a trigger somebody applies, on an observable | `src/domain/bank-resolution.ts:PCA_CAPITAL_RATIO` | ✅ |
 | C3.b not bankruptcy: deposits keep working | `src/engine/ledger/bank-transfer.ts:absorbBankSheet` | ✅ |
-| **D1 a valuation: what the assets are actually worth** | `src/domain/bank-resolution.ts:bankSheetAssetsUSD` | ❌ |
-| D1.a and the hole is the difference | `src/domain/bank-resolution.ts:guaranteeUSD` | ⚠️ |
+| **D1 a valuation: what the assets are actually worth** | `src/domain/bank-resolution.ts:bankSheetAssetsLocal` | ❌ |
+| D1.a and the hole is the difference | `src/domain/bank-resolution.ts:guaranteeLocal` | ⚠️ |
 | D2 the hierarchy is respected | `src/domain/bank-resolution.ts:planBankResolution` | ⚠️ |
 | D2.a VERIFY no creditor worse off than in liquidation | — | ❌ |
 | D3 an acquirer takes the book, or there is none | `src/domain/bank-resolution.ts:chooseAssumingBank` | ✅ |
-| D3.a it takes assets AND liabilities, and pays the difference | `src/domain/bank-resolution.ts:estateUSD` | ✅ |
+| D3.a it takes assets AND liabilities, and pays the difference | `src/domain/bank-resolution.ts:estateLocal` | ✅ |
 | **D3.b the acquirer is CHOOSING, and can decline** | `src/domain/bank-resolution.ts:chooseAssumingBank` | ❌ |
-| D4 deposit insurance pays; the insurer becomes a creditor | `src/engine/simulation/stages/bank-resolution.ts:guaranteeUSD` | ⚠️ |
+| D4 deposit insurance pays; the insurer becomes a creditor | `src/engine/simulation/stages/bank-resolution.ts:guaranteeLocal` | ⚠️ |
 | D5 the public purse is the last resort, with a payer | `src/engine/simulation/stages/bank-resolution.ts:runBankResolutionStage` | ✅ |
 | D5.a which lands in the treasury as real money | `src/engine/ledger/accounts.ts:treasuryNetOf` | ✅ |
 | **D6 the failed bank's positions do not vanish — contagion** | `src/engine/simulation/stages/bank-resolution.ts:rekeyBankLinks` | ⚠️ |
 | E1 the estate is realised over time | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ⚠️ |
 | E2 the surviving system is more concentrated | `src/engine/simulation/stages/bank-resolution.ts:bankMarketShare` | ✅ |
-| E3 VERIFY the resolution conserves | `src/engine/simulation/stages/bank-resolution.ts:sheetLinesUSD` | ✅ |
+| E3 VERIFY the resolution conserves | `src/engine/simulation/stages/bank-resolution.ts:sheetLinesLocal` | ✅ |
 
 ---
 

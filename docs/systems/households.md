@@ -90,38 +90,38 @@ checked by `scripts/check-atlas.sh`.
 | A2.c by employment state | `src/domain/region-macro.ts:HouseholdCohort` | ✅ |
 | **A2.d FORBID never a single representative agent** | `src/engine/simulation/stages/05-unit-bidding.ts:slices` | ⚠️ |
 | A3 a named party in the ledger with an account | `src/engine/ledger/accounts.ts:householdDepositsOf` | ⚠️ |
-| B1 wages from named employers | `src/engine/bootstrap/labor-and-wages.ts:weeklyWageBillUSD` | ✅ |
+| B1 wages from named employers | `src/engine/bootstrap/labor-and-wages.ts:weeklyWageBillLocal` | ✅ |
 | B2 transfers from the government to named recipients | `src/engine/simulation/stages/03-category-demand.ts:runCategoryDemandStage` | ✅ |
-| B3 investment income from named payers | `src/engine/macro/household-cohorts.ts:annualCapitalReceiptsUSD` | ✅ |
-| B3.a FORBID income not received is not income | `src/engine/macro/household-cohorts.ts:totalCapitalUSD` | ⚠️ |
+| B3 investment income from named payers | `src/engine/macro/household-cohorts.ts:annualCapitalReceiptsLocal` | ✅ |
+| B3.a FORBID income not received is not income | `src/engine/macro/household-cohorts.ts:totalCapitalLocal` | ⚠️ |
 | B4 income is taxed, and remitted by somebody | `src/engine/bootstrap/national-accounts.ts:HOUSEHOLD_EFFECTIVE_TAX_RATE` | ⚠️ |
 | B5 VERIFY income is Σ what households were paid | `src/engine/simulation/stages/02-region-macro.ts:householdWeekOf` | ✅ |
-| C1 it decides how much to spend | `src/engine/macro/household-cohorts.ts:consumptionBudgetUSD` | ✅ |
-| C1.a current income | `src/engine/macro/household-cohorts.ts:measuredDisposableIncomeUSD` | ✅ |
+| C1 it decides how much to spend | `src/engine/macro/household-cohorts.ts:consumptionBudgetLocal` | ✅ |
+| C1.a current income | `src/engine/macro/household-cohorts.ts:measuredDisposableIncomeLocal` | ✅ |
 | C1.b wealth | `src/engine/macro/household-cohorts.ts:tierWealthMpc` | ✅ |
 | C1.c expectations and confidence | `src/engine/macro/evolution.ts:cciReversion` | ⚠️ |
 | C1.d liquidity | `src/engine/macro/household-cohorts.ts:BUFFER_TARGET_WEEKS` | ✅ |
-| C2 the residual is saving | `src/engine/macro/household-cohorts.ts:cohortSavingsUSD` | ✅ |
+| C2 the residual is saving | `src/engine/macro/household-cohorts.ts:cohortSavingsLocal` | ✅ |
 | C3 allocated across goods by preference and relative price | `src/domain/industry.ts:budgetDemandLadder` | ⚠️ |
-| C4 it buys at a price it pays — tax and margin included | `src/domain/distribution.ts:shelfPriceUSD` | ✅ |
+| C4 it buys at a price it pays — tax and margin included | `src/domain/distribution.ts:shelfPriceLocal` | ✅ |
 | C5 VERIFY consumption is Σ bought, reaching named sellers | `src/engine/simulation/stages/05-unit-bidding.ts:R_HH_GOODS` | ✅ |
 | D1 assets: deposits, securities, fund shares, pensions, housing | `src/engine/simulation/stages/household-balance-sheet.ts:runHouseholdBalanceSheetStage` | ✅ |
-| D1.a each a real claim on a named issuer, in a register | `src/engine/macro/household-portfolio.ts:householdDirectEquityUSD` | ⚠️ |
+| D1.a each a real claim on a named issuer, in a register | `src/engine/macro/household-portfolio.ts:householdDirectEquityLocal` | ⚠️ |
 | D2 liabilities, and they are somebody's asset | `src/engine/simulation/stages/bank-lending.ts:HouseholdLoanPool` | ✅ |
-| **D3 net worth is D1 − D2, a read and never stored** | `src/engine/simulation/stages/household-balance-sheet.ts:netWorthUSD` | ⚠️ |
-| D4 it revalues, and the revaluation is not income | `src/engine/simulation/stages/household-balance-sheet.ts:priorNetWorthUSD` | ✅ |
+| **D3 net worth is D1 − D2, a read and never stored** | `src/engine/simulation/stages/household-balance-sheet.ts:netWorthLocal` | ⚠️ |
+| D4 it revalues, and the revaluation is not income | `src/engine/simulation/stages/household-balance-sheet.ts:priorNetWorthLocal` | ✅ |
 | D5 the portfolio allocation is a decision | `src/engine/simulation/stages/etf-flows.ts:equityShareOfSaving` | ✅ |
-| D5.a deposit vs money fund vs bills is a real substitution | `src/engine/simulation/stages/money-market-fund.ts:hhSharesUSD` | ❌ |
-| E1 it borrows for reasons | `src/engine/simulation/stages/bank-lending.ts:affordableLoanUSD` | ✅ |
-| E2 a lender decides to lend, on affordability and collateral | `src/engine/simulation/stages/bank-lending.ts:grantedUSD` | ✅ |
-| E3 it services the debt out of income | `src/engine/macro/household-cohorts.ts:effectiveDebtServiceUSD` | ✅ |
-| E3.a interest plus principal | `src/domain/banking.ts:annuityWeeklyPrincipalUSD` | ✅ |
+| D5.a deposit vs money fund vs bills is a real substitution | `src/engine/simulation/stages/money-market-fund.ts:hhSharesLocal` | ❌ |
+| E1 it borrows for reasons | `src/engine/simulation/stages/bank-lending.ts:affordableLoanLocal` | ✅ |
+| E2 a lender decides to lend, on affordability and collateral | `src/engine/simulation/stages/bank-lending.ts:grantedLocal` | ✅ |
+| E3 it services the debt out of income | `src/engine/macro/household-cohorts.ts:effectiveDebtServiceLocal` | ✅ |
+| E3.a interest plus principal | `src/domain/banking.ts:annuityWeeklyPrincipalLocal` | ✅ |
 | **E4 default depends on the distribution, not the mean** | `src/engine/macro/evolution.ts:arrivalRate` | ⚠️ |
 | E4.a with a consequence: collateral, record, loss to the lender | `src/domain/banking.ts:mortgageSeverityAtLtv` | ⚠️ |
-| E5 VERIFY the debt-service burden can become unpayable | `src/engine/macro/household-cohorts.ts:squeezedSavingsUSD` | ✅ |
+| E5 VERIFY the debt-service burden can become unpayable | `src/engine/macro/household-cohorts.ts:squeezedSavingsLocal` | ✅ |
 | F1 households form, age and dissolve | `src/engine/macro/evolution.ts:mortalityHazardAnnual` | ✅ |
 | F2 wealth transfers on dissolution, to somewhere named | — | ❌ |
-| F3 retirement: wages give way to drawdown | `src/engine/simulation/stages/insurance-and-pensions.ts:weeklyBenefitsUSD` | ✅ |
+| F3 retirement: wages give way to drawdown | `src/engine/simulation/stages/insurance-and-pensions.ts:weeklyBenefitsLocal` | ✅ |
 | F4 VERIFY the composition changes and the aggregate follows | `src/engine/macro/household-cohorts.ts:retiredShareOfPopulation` | ✅ |
 
 ---

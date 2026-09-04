@@ -44,7 +44,7 @@ export function ensureManagements(companies: Company[], entities: InstitutionalE
  *  the labour stage's) over what it sells. NaN when there is nothing to judge. */
 function judgedMarginOf(c: Company): number {
   if (!(c.annualRevenue > 0)) return NaN;
-  const earnings = Number.isFinite(c.expectedEbitdaUSD as number) ? (c.expectedEbitdaUSD as number) : c.ebitda;
+  const earnings = Number.isFinite(c.expectedEbitdaLocal as number) ? (c.expectedEbitdaLocal as number) : c.ebitda;
   return earnings / c.annualRevenue;
 }
 

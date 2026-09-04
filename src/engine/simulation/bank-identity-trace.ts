@@ -28,8 +28,8 @@ import { entityCashOf, bankReservesOf, bankDepositLines } from '../ledger/accoun
 import { DepositLines } from '../../domain/banking';
 import { facilityBookOf } from '../../engine2/tranches';
 
-const TOLERANCE_USD = 5e6; // the harness's own threshold
-const NOISE_FLOOR_USD = 1e5; // per-stage deltas below this are rounding, not a leg
+const TOLERANCE_LOCAL = 5e6; // the harness's own threshold
+const NOISE_FLOOR_LOCAL = 1e5; // per-stage deltas below this are rounding, not a leg
 
 export function bankIdentityTraceEnabled(): boolean {
   return process.env.BANK_IDENTITY_TRACE === '1';
@@ -48,8 +48,8 @@ export function bankIdentityTraceEnabled(): boolean {
 const FIELD_SIGNS: Record<keyof ReturnType<typeof fieldsOf>, 1 | -1> = {
   depositsLocal: 1, corporateDepositsLocal: 1, institutionalDepositsLocal: 1, clientMarginLocal: 1,
   smeDepositsLocal: 1, centralBankLoanLocal: 1, bankEquityLocal: 1, srfBorrowingLocal: 1, repoBorrowedLocal: 1,
-  businessLoanBookLocal: -1, consumerLoanBookLocal: -1, sovHoldingsUSD: -1, cashReservesUSD: -1,
-  repoLentLocal: -1, onRrpLendingLocal: -1, sovereignAccruedCouponLocal: -1, deskInventoryAbsUSD: -1,
+  businessLoanBookLocal: -1, consumerLoanBookLocal: -1, sovHoldingsLocal: -1, cashReservesLocal: -1,
+  repoLentLocal: -1, onRrpLendingLocal: -1, sovereignAccruedCouponLocal: -1, deskInventoryAbsLocal: -1,
   primeBrokerageLoansLocal: -1,
 };
 
@@ -64,25 +64,25 @@ export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLin
     centralBankLoanLocal: bs.centralBankLoanLocal ?? 0, bankEquityLocal: bs.bankEquityLocal,
     srfBorrowingLocal: bs.srfBorrowingLocal ?? 0, repoBorrowedLocal: bs.repoBorrowedLocal ?? 0,
     businessLoanBookLocal: businessLoanBookOf(bs, facilityBookLocal), consumerLoanBookLocal: consumerLoanBookOf(bs),
-    sovHoldingsUSD: Object.values(bs.sovereignBondHoldingsByBond || {})
+    sovHoldingsLocal: Object.values(bs.sovereignBondHoldingsByBond || {})
       .reduce((a: number, v) => a + (Number(v) || 0), 0),
-    cashReservesUSD: cashLocal, repoLentLocal: bs.repoLentLocal ?? 0,
+    cashReservesLocal: cashLocal, repoLentLocal: bs.repoLentLocal ?? 0,
     onRrpLendingLocal: bs.onRrpLendingLocal ?? 0,
     sovereignAccruedCouponLocal: bs.sovereignAccruedCouponLocal ?? 0,
-    deskInventoryAbsUSD: Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryLocal: number }[]>)
+    deskInventoryAbsLocal: Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryLocal: number }[]>)
       .reduce((a: number, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0),
     primeBrokerageLoansLocal: bs.primeBrokerageLoansLocal ?? 0,
   };
 }
 
 export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, signedDesk = false): number {
-  const sovUSD = Object.values(bs.sovereignBondHoldingsByBond || {})
+  const sovLocal = Object.values(bs.sovereignBondHoldingsByBond || {})
     .reduce((a: number, v) => a + (Number(v) || 0), 0);
   return (
     lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
     + (bs.clientMarginLocal ?? 0) + lines.smeLocal + (bs.centralBankLoanLocal ?? 0)
     + bs.bankEquityLocal + (bs.srfBorrowingLocal ?? 0) + (bs.repoBorrowedLocal ?? 0)
-    - businessLoanBookOf(bs, facilityBookLocal) - consumerLoanBookOf(bs) - sovUSD - cashLocal
+    - businessLoanBookOf(bs, facilityBookLocal) - consumerLoanBookOf(bs) - sovLocal - cashLocal
     - (bs.repoLentLocal ?? 0) - (bs.onRrpLendingLocal ?? 0)
     - (bs.sovereignAccruedCouponLocal ?? 0)
     // The harness counts a desk row at Math.abs — a SHORT counted as an asset. trade.ts books
@@ -238,7 +238,7 @@ export class BankIdentityTrace {
     const now = this.residuals(state, ctx);
     now.forEach((r, ticker) => {
       const delta = r - (this.last.get(ticker) ?? 0);
-      if (Math.abs(delta) < NOISE_FLOOR_USD) return;
+      if (Math.abs(delta) < NOISE_FLOOR_LOCAL) return;
       const byStage = this.contributions.get(ticker) ?? new Map<string, number>();
       byStage.set(stage, (byStage.get(stage) ?? 0) + delta);
       this.contributions.set(ticker, byStage);
@@ -248,7 +248,7 @@ export class BankIdentityTrace {
 
   report(week: number): void {
     this.last.forEach((finalResidual, ticker) => {
-      if (Math.abs(finalResidual) <= TOLERANCE_USD) return;
+      if (Math.abs(finalResidual) <= TOLERANCE_LOCAL) return;
       const openResidual = this.open.get(ticker) ?? 0;
       const byStage = Array.from((this.contributions.get(ticker) ?? new Map()).entries())
         .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))

@@ -47,7 +47,7 @@ export const DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM = 0.25;
  * contract it stands on, at its class's add-on. Charged on EITHER side — a hedger's leverage is
  * consumed by its hedges exactly as a writer's is by what it wrote.
  */
-export function standingPfeChargeUSD(
+export function standingPfeChargeLocal(
   book: DerivativeContract[],
   partyKey: string,
   week: number,
@@ -76,12 +76,12 @@ export function pfeAddOnRateOf(c: DerivativeContract, isInvestmentGrade?: (refer
  * class's add-on. Zero when the budget is spent — a desk at zero is why a hedge can be
  * unavailable at any price, which no formula-priced hedge can express.
  */
-export function deskNotionalCapacityUSD(
+export function deskNotionalCapacityLocal(
   leverageHeadroomLocal: number,
-  standingChargeUSD: number,
+  standingChargeLocal: number,
   classId: DerivativeClassId
 ): number {
-  const budgetUSD = Math.max(0, leverageHeadroomLocal) * DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM;
-  return Math.max(0, budgetUSD - Math.max(0, standingChargeUSD))
+  const budgetLocal = Math.max(0, leverageHeadroomLocal) * DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM;
+  return Math.max(0, budgetLocal - Math.max(0, standingChargeLocal))
     / DERIVATIVE_CLASSES[classId].pfeAddOnRate;
 }

@@ -13,7 +13,7 @@
  */
 
 import { RegionId } from '../../types';
-import { getRegionProductivityPerCapitaUSD } from './population';
+import { getRegionProductivityPerCapitaLocal } from './population';
 
 export type GeneratedCommodityCategory = 'Energy' | 'Metals' | 'Agriculture';
 
@@ -104,7 +104,7 @@ export const GENERATED_FX_PAIR_LEGS: { base: RegionId; quote: RegionId }[] = [
  * than an observed spot rate.
  */
 export function getInitialFxRate(base: RegionId, quote: RegionId): number {
-  const baseLevel = getRegionProductivityPerCapitaUSD(base);
-  const quoteLevel = getRegionProductivityPerCapitaUSD(quote);
+  const baseLevel = getRegionProductivityPerCapitaLocal(base);
+  const quoteLevel = getRegionProductivityPerCapitaLocal(quote);
   return Number((quoteLevel / baseLevel).toFixed(4));
 }

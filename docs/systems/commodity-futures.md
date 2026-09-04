@@ -88,12 +88,12 @@ checked by `scripts/check-atlas.sh`.
 | A2 standardised, and the delivery terms are part of the instrument | `src/domain/derivatives/classes/commodity-future.ts:futuresTermKey` | ⚠️ |
 | A3 an expiry, and a series of them — so a curve | `src/domain/derivatives/classes/commodity-future.ts:FUTURES_TENOR_MONTHS` | ⚠️ |
 | A4 margined daily, so a price move is cash today | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ✅ |
-| B1 a producer hedging output it will have | `src/engine/simulation/stages/corporate-financing.ts:exposureToHedgeUSD` | ✅ |
+| B1 a producer hedging output it will have | `src/engine/simulation/stages/corporate-financing.ts:exposureToHedgeLocal` | ✅ |
 | B2 a consumer hedging input it will need | `src/domain/instruments.ts:COMMODITY_CATEGORY_LINKAGE` | ✅ |
 | B3 an investor taking a view, or wanting exposure without storage | `src/domain/institution-profiles.ts:tradesCommodityFutures` | ✅ |
 | B3.a it must roll, and the roll's cost is set by the curve | — | ❌ |
 | B4 an arbitrageur who can actually store and finance | `src/domain/derivatives/classes/commodity-future.ts:costOfCarryPrice` | ⚠️ |
-| B5 a dealer | `src/domain/derivatives/registry.ts:deskNotionalCapacityUSD` | ⚠️ |
+| B5 a dealer | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ⚠️ |
 | C1 the futures/spot relation is a consequence of storage, financing, scarcity | `src/domain/derivatives/classes/commodity-future.ts:PHYSICAL_STORAGE_COST_ANNUAL` | ✅ |
 | C1.a contango bounded above by cost of carry, because B4 arbitrages it | `src/engine/simulation/stages/derivative-markets/commodity-future.ts:contractId` | ⚠️ |
 | C1.b backwardation unbounded below — the asymmetry is real | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |

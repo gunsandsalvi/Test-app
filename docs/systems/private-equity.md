@@ -79,12 +79,12 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 a fund with committed capital from named investors | `src/domain/institutions.ts:lpCommitments` | ✅ |
-| **A2 capital is CALLED — a real payment the investor cannot refuse** | `src/engine/simulation/stages/pe-lifecycle.ts:callCapitalUSD` | ⚠️ |
+| **A2 capital is CALLED — a real payment the investor cannot refuse** | `src/engine/simulation/stages/pe-lifecycle.ts:callCapitalLocal` | ⚠️ |
 | **A2.a the investor must hold liquidity against calls it did not time** | — | ❌ |
 | **A3 a manager on a fee and a share of the gains** | — | ❌ |
 | A4 the fund has a life: invest, hold, exit, wind up | `src/engine/simulation/stages/pe-lifecycle.ts:PE_FUND_LIFE_WEEKS` | ⚠️ |
 | A5 the firms are held in named vehicles with their own sheets | `src/engine/simulation/stages/pe-lifecycle.ts:portfolioCompanyIds` | ✅ |
-| B1 it buys at a price agreed with the sellers | `src/engine/simulation/stages/pe-lifecycle.ts:equityValueUSD` | ⚠️ |
+| B1 it buys at a price agreed with the sellers | `src/engine/simulation/stages/pe-lifecycle.ts:equityValueLocal` | ⚠️ |
 | B2 most of the price is debt raised against the target | `src/engine/simulation/stages/pe-lifecycle.ts:debtLocal` | ✅ |
 | B2.a the debt is the TARGET's liability, not the fund's | `src/engine/ledger/tranche-ledger.ts:issueTranche` | ✅ |
 | B2.b the credit market decides which buyouts occur | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:runLeveragedLoanClearingStage` | ✅ |
@@ -95,8 +95,8 @@ checked by `scripts/check-atlas.sh`.
 | **C2 the owner influences the firm** | — | ❌ |
 | C3 it can recapitalise: debt raised to pay a dividend | `src/engine/simulation/stages/pe-lifecycle.ts:RECAP_DM_THRESHOLD_BPS` | ✅ |
 | C4 it can fail; the loss falls on lenders and wipes the equity | `src/engine/simulation/stages/pe-lifecycle.ts:defaultedIds` | ✅ |
-| C5 the holding has a value that is not a market price | `src/engine/simulation/stages/institutional-balance-sheet.ts:sponsorPortfolioUSD` | ✅ |
-| **C5.a FORBID an unlisted mark must not be treated as a cleared price** | `src/engine/simulation/stages/institutional-balance-sheet.ts:sponsorPortfolioUSD` | ❌ |
+| C5 the holding has a value that is not a market price | `src/engine/simulation/stages/institutional-balance-sheet.ts:sponsorPortfolioLocal` | ✅ |
+| **C5.a FORBID an unlisted mark must not be treated as a cleared price** | `src/engine/simulation/stages/institutional-balance-sheet.ts:sponsorPortfolioLocal` | ❌ |
 | D1 it sells: to a sponsor, a corporate, or the public market | `src/engine/simulation/stages/pe-lifecycle.ts:saleCandidate` | ⚠️ |
 | D2 the exit produces a cleared price — the first real one | `src/engine/simulation/stages/pe-lifecycle.ts:markEvMultiple` | ⚠️ |
 | D3 proceeds are distributed to the investors, in cash | `src/engine/simulation/stages/pe-lifecycle.ts:distributeToLps` | ✅ |

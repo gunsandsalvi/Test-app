@@ -29,7 +29,7 @@ import { trancheKindOf } from '../../domain/assets';
 import { PartyRef } from './party';
 import { wire, AssetKind } from './wire';
 import { internReason } from '../simulation/stages/settlement';
-import { LADDER_FACE_DUST_USD } from '../../domain/stated';
+import { LADDER_FACE_DUST_LOCAL } from '../../domain/stated';
 import { defect } from '../../domain/defect';
 
 /**
@@ -86,7 +86,7 @@ export function retireTranche(v2: V2World, issuer: TrancheIssuer, r: number, fac
   const S = mutableTranches(v2);
   if (!(faceLocal > 0)) return -1;
   const take = Math.min(faceLocal, S.principalLocal[r]);
-  if (faceLocal > S.principalLocal[r] + LADDER_FACE_DUST_USD) defect(`tranche ${v2.internedStrings[S.idRef[r]]} retired ${(faceLocal / 1e6).toFixed(3)}M against ${(S.principalLocal[r] / 1e6).toFixed(3)}M of principal`);
+  if (faceLocal > S.principalLocal[r] + LADDER_FACE_DUST_LOCAL) defect(`tranche ${v2.internedStrings[S.idRef[r]]} retired ${(faceLocal / 1e6).toFixed(3)}M against ${(S.principalLocal[r] / 1e6).toFixed(3)}M of principal`);
   const n = wire({ from: holderOfRow(v2, r, issuer.region), to: issuerParty(issuer), kind: kindOfRow(v2, r), asset: v2.internedStrings[S.idRef[r]], quantity: take, priceLocal: 1, reason }, internReason);
   S.principalLocal[r] -= take;
   return n;
@@ -167,5 +167,5 @@ export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromTicke
  */
 export function seedLadder(v2: V2World, issuer: TrancheIssuer, ladder: DebtTranche[] | undefined): void {
   syncLadderRows(v2, issuer.id, []);
-  for (const t of ladder ?? []) if (t.principalLocal > LADDER_FACE_DUST_USD) issueTranche(v2, issuer, t, 'seed: ladder opened');
+  for (const t of ladder ?? []) if (t.principalLocal > LADDER_FACE_DUST_LOCAL) issueTranche(v2, issuer, t, 'seed: ladder opened');
 }

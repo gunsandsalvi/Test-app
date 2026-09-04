@@ -22,7 +22,7 @@ export function defect(what: string): never {
  * switch over a union that gains a member fails to build at every `assertNever` default until the
  * new member is handled; at RUN time (a value smuggled past the types) it is a defect, not a
  * silent fall-through. The recorded costs of the silent form: an unhandled settlement party kind
- * deleted its money without touching `unresolvedUSD`; an unhandled asset type froze positions at
+ * deleted its money without touching `unresolvedLocal`; an unhandled asset type froze positions at
  * entry price forever.
  */
 export function assertNever(value: never, where: string): never {

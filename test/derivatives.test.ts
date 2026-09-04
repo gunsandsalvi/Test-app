@@ -7,10 +7,10 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DerivativeContract, standingCoverUSD, standingCoverUnits, derivativePartyKey }
+import { DerivativeContract, standingCoverLocal, standingCoverUnits, derivativePartyKey }
   from '../src/domain/derivatives/contract';
 import { DerivativeMarketView } from '../src/domain/derivatives/profile';
-import { DERIVATIVE_CLASSES, deskNotionalCapacityUSD, standingPfeChargeUSD, DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM }
+import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, standingPfeChargeLocal, DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM }
   from '../src/domain/derivatives/registry';
 import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivatives/hedging';
 import { StandingBook } from '../src/domain/derivatives/standing-book';
@@ -68,22 +68,22 @@ test('CDS: close-out is the spread move over the remaining life, owed to the buy
 
 test('futures: the mark telescopes — settling every weekly delta sums to (delivery spot − strike) × units', () => {
   const p = DERIVATIVE_CLASSES.COMMODITY_FUTURE;
-  const c = base({ classId: 'COMMODITY_FUTURE', strike: 100, units: 10, referenceId: 'OIL', termKey: '3M', maturityWeek: 13, settledMarkUSD: 0 });
+  const c = base({ classId: 'COMMODITY_FUTURE', strike: 100, units: 10, referenceId: 'OIL', termKey: '3M', maturityWeek: 13, settledMarkLocal: 0 });
   const prints = [104, 98, 120];
   let paidToA = 0;
   prints.forEach((px, i) => {
     const mark = p.markToMarketUSDToA(c, view({ week: 10 + i, commodityPrint: () => px }))!;
-    paidToA += mark - (c.settledMarkUSD ?? 0);
-    c.settledMarkUSD = mark;
+    paidToA += mark - (c.settledMarkLocal ?? 0);
+    c.settledMarkLocal = mark;
   });
   const final = p.markToMarketUSDToA(c, view({ week: 13, commoditySpot: () => 115 }))!;
-  paidToA += final - (c.settledMarkUSD ?? 0);
+  paidToA += final - (c.settledMarkLocal ?? 0);
   assert.ok(Math.abs(paidToA - (115 - 100) * 10) < 1e-9);
   assert.equal(p.markToMarketUSDToA(c, view({ week: 11, commodityPrint: () => Number.NaN })), null, 'no print, no mark');
 });
 
 test('FX forward: the holder short the foreign currency gains when it falls; the dealer mirrors it', () => {
-  const c = base({ classId: 'FX_FORWARD', strike: 1.0, referenceId: 'EUR', termKey: '', settledMarkUSD: 0 });
+  const c = base({ classId: 'FX_FORWARD', strike: 1.0, referenceId: 'EUR', termKey: '', settledMarkLocal: 0 });
   const mark = DERIVATIVE_CLASSES.FX_FORWARD.markToMarketUSDToA(c, view({ fxToUsd: () => 0.9 }))!;
   assert.ok(Math.abs(mark - 1_000_000 * 0.1) < 1e-6);
   assert.ok(DERIVATIVE_CLASSES.FX_FORWARD.markToMarketUSDToA(c, view({ fxToUsd: () => 1.1 }))! < 0);
@@ -95,12 +95,12 @@ test('one capacity budget across every class: what the CDS desk wrote consumes w
     base({ classId: 'FX_FORWARD', a: { kind: 'INSTITUTION', id: 'X' }, b: { kind: 'BANK', ticker: 'DESK' }, notional: 500 }),
     base({ classId: 'IRS', a: { kind: 'BANK', ticker: 'DESK' }, notional: 1000, maturityWeek: 5 }), // matured: no charge
   ];
-  const charged = standingPfeChargeUSD(book, 'BANK:DESK', 10);
+  const charged = standingPfeChargeLocal(book, 'BANK:DESK', 10);
   assert.ok(Math.abs(charged - (100 * 0.10 + 500 * 0.02)) < 1e-9);
   const headroom = 1000;
-  const fxCap = deskNotionalCapacityUSD(headroom, charged, 'FX_FORWARD');
+  const fxCap = deskNotionalCapacityLocal(headroom, charged, 'FX_FORWARD');
   assert.ok(Math.abs(fxCap - (headroom * DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM - charged) / 0.02) < 1e-9);
-  assert.equal(deskNotionalCapacityUSD(headroom, 10_000, 'CDS'), 0, 'a spent budget writes nothing');
+  assert.equal(deskNotionalCapacityLocal(headroom, 10_000, 'CDS'), 0, 'a spent budget writes nothing');
 });
 
 test('standing cover nets exactly one side of one party, live contracts only, by reference and tenor', () => {
@@ -112,9 +112,9 @@ test('standing cover nets exactly one side of one party, live contracts only, by
     base({ classId: 'IRS', a: me, termKey: 's5', notional: 80, maturityWeek: 10 }), // matures this week
     base({ classId: 'COMMODITY_FUTURE', b: me, referenceId: 'OIL', termKey: '3M', units: 7, notional: 700 }),
   ];
-  assert.equal(standingCoverUSD(book, 'IRS', 'a', derivativePartyKey(me), 10, undefined, 's5'), 10);
-  assert.equal(standingCoverUSD(book, 'IRS', 'a', derivativePartyKey(me), 10), 30);
-  assert.equal(standingCoverUSD(book, 'IRS', 'b', derivativePartyKey(me), 10), 40);
+  assert.equal(standingCoverLocal(book, 'IRS', 'a', derivativePartyKey(me), 10, undefined, 's5'), 10);
+  assert.equal(standingCoverLocal(book, 'IRS', 'a', derivativePartyKey(me), 10), 30);
+  assert.equal(standingCoverLocal(book, 'IRS', 'b', derivativePartyKey(me), 10), 40);
   assert.equal(standingCoverUnits(book, 'COMMODITY_FUTURE', 'b', derivativePartyKey(me), 10, 'OIL', '3M'), 7);
   assert.equal(standingCoverUnits(book, 'COMMODITY_FUTURE', 'b', derivativePartyKey(me), 10, 'OIL', '1M'), 0);
 });
@@ -131,7 +131,7 @@ test('every registered class states both roles and admissible facts — the comp
     assert.ok(p.roleA && p.roleB);
     assert.ok(p.pfeAddOnRate > 0 && p.pfeAddOnRate < 1);
     assert.ok(p.initialMarginRate >= 0 && p.initialMarginRate < 1);
-    const marks = p.markToMarketUSDToA(base({ classId: p.id, units: 1, referenceId: 'X', settledMarkUSD: 0 }), view()) !== null;
+    const marks = p.markToMarketUSDToA(base({ classId: p.id, units: 1, referenceId: 'X', settledMarkLocal: 0 }), view()) !== null;
     const periodic = p.periodicLegUSDToB(base({ classId: p.id }), view()) !== null;
     assert.ok(marks !== periodic, `${p.id}: exactly one leg family`);
     if (marks) assert.ok(p.markReasonLive && p.markReasonFinal, `${p.id}: a mark class labels its legs`);
@@ -160,23 +160,23 @@ test('the standing-book index answers exactly what the per-participant walks ans
   for (const [party, key] of [[me, meKey], [you, youKey]] as const) {
     for (const side of ['a', 'b'] as const) {
       for (const classId of ['IRS', 'CDS', 'COMMODITY_FUTURE', 'FX_FORWARD'] as const) {
-        assert.equal(index.coverUSD(classId, side, key), standingCoverUSD(book, classId, side, key, 10), `${classId} ${side} ${key}`);
+        assert.equal(index.coverLocal(classId, side, key), standingCoverLocal(book, classId, side, key, 10), `${classId} ${side} ${key}`);
         for (const term of ['s2', 's5', 's10', '3M', '']) {
-          assert.equal(index.coverUSD(classId, side, key, undefined, term), standingCoverUSD(book, classId, side, key, 10, undefined, term));
+          assert.equal(index.coverLocal(classId, side, key, undefined, term), standingCoverLocal(book, classId, side, key, 10, undefined, term));
         }
         for (const ref of ['IG-NAME', 'HY-NAME', 'OIL', 'EUR', '']) {
-          assert.equal(index.coverUSD(classId, side, key, ref), standingCoverUSD(book, classId, side, key, 10, ref));
+          assert.equal(index.coverLocal(classId, side, key, ref), standingCoverLocal(book, classId, side, key, 10, ref));
           assert.equal(index.coverUnits(classId, side, key, ref, '3M'), standingCoverUnits(book, classId, side, key, 10, ref, '3M'));
         }
       }
     }
-    assert.equal(index.pfeChargeUSD(key), standingPfeChargeUSD(book, key, 10, isIG), `graded charge ${key}`);
+    assert.equal(index.pfeChargeLocal(key), standingPfeChargeLocal(book, key, 10, isIG), `graded charge ${key}`);
     void party;
   }
   // A strike appends; the index folds the tail and stays the book's.
   book.push(base({ id: '8', a: me, b: you, notional: 5, termKey: 's5' }));
   index.extend(book);
-  assert.equal(index.coverUSD('IRS', 'a', meKey, undefined, 's5'), 15);
-  assert.equal(index.pfeChargeUSD(meKey), standingPfeChargeUSD(book, meKey, 10, isIG));
+  assert.equal(index.coverLocal('IRS', 'a', meKey, undefined, 's5'), 15);
+  assert.equal(index.pfeChargeLocal(meKey), standingPfeChargeLocal(book, meKey, 10, isIG));
   assert.equal(index.indexed, book.length);
 });

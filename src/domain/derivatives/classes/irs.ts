@@ -22,7 +22,7 @@ export const SWAP_TENOR_ZERO_FIELD: Record<SwapTenorKey, 'tenor2Y' | 'tenor5Y' |
  * The DV01-equivalent loss a fixed-rate book suffers on a two-sigma weekly repricing — what an
  * owner has to decide whether it can absorb. Duration times the move, on the notional.
  */
-export function repricingLossUSD(bookLocal: number, durationYears: number, moveBps: number): number {
+export function repricingLossLocal(bookLocal: number, durationYears: number, moveBps: number): number {
   return Math.max(0, bookLocal) * Math.max(0, durationYears) * (Math.max(0, moveBps) / 10000);
 }
 

@@ -47,14 +47,14 @@ export function pledgedFaceByBond(
  * reconcile used 1 and the harness used 1e6, so a bank could be a million dollars over-pledged,
  * pass the reconcile, and fail the check in the same week.
  */
-export const PLEDGE_ROUNDING_TOLERANCE_USD = 1;
+export const PLEDGE_ROUNDING_TOLERANCE_LOCAL = 1;
 
 export function overPledgedByBond(position: CollateralPosition): Map<string, number> {
   const out = new Map<string, number>();
   position.pledgedByBond.forEach((faceLocal, bondId) => {
     const heldLocal = position.heldByBond.get(bondId) ?? 0;
-    const excessUSD = faceLocal - heldLocal;
-    if (excessUSD > PLEDGE_ROUNDING_TOLERANCE_USD) out.set(bondId, excessUSD);
+    const excessLocal = faceLocal - heldLocal;
+    if (excessLocal > PLEDGE_ROUNDING_TOLERANCE_LOCAL) out.set(bondId, excessLocal);
   });
   return out;
 }

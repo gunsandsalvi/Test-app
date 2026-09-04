@@ -6,9 +6,9 @@ import { openingSovereignRating } from './evolution';
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, SmePool, Industry, GovDebtTranche } from '../../types';
 import { buildHouseholdCohorts } from './household-cohorts';
-import { weeklyInterestExpenseUSD, govTrancheView } from '../../domain/government';
+import { weeklyInterestExpenseLocal, govTrancheView } from '../../domain/government';
 import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
-import { governmentPayrollWeeklyUSD, governmentObligationsWeeklyUSD } from '../../domain/government';
+import { governmentPayrollWeeklyLocal, governmentObligationsWeeklyLocal } from '../../domain/government';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
 import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, totalOutputFromFinalDemand, smePoolEmployment } from '../../domain/industry-registry';
 import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT, seedPoolLeverageStrata, SME_POOL_STRATA_COUNT } from '../bootstrap/firms';
@@ -16,13 +16,13 @@ import { generate52WeekHistory } from './utils';
 import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS, CategoryDemandState } from '../../domain/market-microstructure';
 import { INITIAL_WEATHER } from './weather';
 import {
-  getRegionPopulation, getRegionProductivityPerCapitaUSD, getRegionBirthRateAnnual, getRegionDeathRateAnnual,
+  getRegionPopulation, getRegionProductivityPerCapitaLocal, getRegionBirthRateAnnual, getRegionDeathRateAnnual,
   stationaryAgeDistribution, RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS, MAX_AGE_YEARS,
 } from '../bootstrap/population';
-import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
+import { getBaseAnnualWageLocal, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
 import { CPI_BASE_LEVEL, openingCpiHistory } from '../simulation/stages/price-index';
 import {
-  computeHouseholdDisposableIncomeUSD,
+  computeHouseholdDisposableIncomeLocal,
   splitWageBill,
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
@@ -40,60 +40,60 @@ export function createWealthDistribution(estimatedHouseholdIncomeLocal: number):
   return {
     BOTTOM_50: {
       shareOfHouseholds: 0.50,
-      shareOfIncomeUSD: Math.round((inc * 0.15)),
+      shareOfIncomeLocal: Math.round((inc * 0.15)),
       // RULE 19 — THE OPENING ACCUMULATION REFLECTS THE INCOME THAT PRODUCED IT, and this one
       // line retires `TIER_BALANCE_SHEET_WEIGHTS` — 32 stated numbers that existed ONLY as the
       // opening condition for §7.145's derived splits. Every one of those splits keys off
       // accumulated savings or income; with a stock here from week 1 the fallbacks are never
       // reached, so the table has nothing left to do (§7.171).
-      accumulatedSavingsUSD: Math.round((inc * 0.15)),
+      accumulatedSavingsLocal: Math.round((inc * 0.15)),
       // COH1: the opening stock split by this tier's own exposure — spendable and invested
       // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
-      liquidSavingsUSD: Math.round((inc * 0.15 * 0.95)),
-      investedSavingsUSD: Math.round((inc * 0.15 * 0.05)),
-      shareOfNetWorthUSD: Math.round((nw * 0.02)),
+      liquidSavingsLocal: Math.round((inc * 0.15 * 0.95)),
+      investedSavingsLocal: Math.round((inc * 0.15 * 0.05)),
+      shareOfNetWorthLocal: Math.round((nw * 0.02)),
       savingsRate: 0.01,
       equityExposureShare: 0.05,
-      homeEquityUSD: Math.round((nw * 0.01)),
+      homeEquityLocal: Math.round((nw * 0.01)),
     },
     NEXT_40: {
       shareOfHouseholds: 0.40,
-      shareOfIncomeUSD: Math.round((inc * 0.45)),
-      accumulatedSavingsUSD: Math.round((inc * 0.45)),
+      shareOfIncomeLocal: Math.round((inc * 0.45)),
+      accumulatedSavingsLocal: Math.round((inc * 0.45)),
       // COH1: the opening stock split by this tier's own exposure — spendable and invested
       // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
-      liquidSavingsUSD: Math.round((inc * 0.45 * 0.75)),
-      investedSavingsUSD: Math.round((inc * 0.45 * 0.25)),
-      shareOfNetWorthUSD: Math.round((nw * 0.28)),
+      liquidSavingsLocal: Math.round((inc * 0.45 * 0.75)),
+      investedSavingsLocal: Math.round((inc * 0.45 * 0.25)),
+      shareOfNetWorthLocal: Math.round((nw * 0.28)),
       savingsRate: 0.06,
       equityExposureShare: 0.25,
-      homeEquityUSD: Math.round((nw * 0.18)),
+      homeEquityLocal: Math.round((nw * 0.18)),
     },
     TOP_9: {
       shareOfHouseholds: 0.09,
-      shareOfIncomeUSD: Math.round((inc * 0.25)),
-      accumulatedSavingsUSD: Math.round((inc * 0.25)),
+      shareOfIncomeLocal: Math.round((inc * 0.25)),
+      accumulatedSavingsLocal: Math.round((inc * 0.25)),
       // COH1: the opening stock split by this tier's own exposure — spendable and invested
       // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
-      liquidSavingsUSD: Math.round((inc * 0.25 * 0.5)),
-      investedSavingsUSD: Math.round((inc * 0.25 * 0.5)),
-      shareOfNetWorthUSD: Math.round((nw * 0.38)),
+      liquidSavingsLocal: Math.round((inc * 0.25 * 0.5)),
+      investedSavingsLocal: Math.round((inc * 0.25 * 0.5)),
+      shareOfNetWorthLocal: Math.round((nw * 0.38)),
       savingsRate: 0.18,
       equityExposureShare: 0.50,
-      homeEquityUSD: Math.round((nw * 0.12)),
+      homeEquityLocal: Math.round((nw * 0.12)),
     },
     TOP_1: {
       shareOfHouseholds: 0.01,
-      shareOfIncomeUSD: Math.round((inc * 0.15)),
-      accumulatedSavingsUSD: Math.round((inc * 0.15)),
+      shareOfIncomeLocal: Math.round((inc * 0.15)),
+      accumulatedSavingsLocal: Math.round((inc * 0.15)),
       // COH1: the opening stock split by this tier's own exposure — spendable and invested
       // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
-      liquidSavingsUSD: Math.round((inc * 0.15 * 0.3)),
-      investedSavingsUSD: Math.round((inc * 0.15 * 0.7)),
-      shareOfNetWorthUSD: Math.round((nw * 0.32)),
+      liquidSavingsLocal: Math.round((inc * 0.15 * 0.3)),
+      investedSavingsLocal: Math.round((inc * 0.15 * 0.7)),
+      shareOfNetWorthLocal: Math.round((nw * 0.32)),
       savingsRate: 0.35,
       equityExposureShare: 0.70,
-      homeEquityUSD: Math.round((nw * 0.04)),
+      homeEquityLocal: Math.round((nw * 0.04)),
     },
   };
 }
@@ -110,12 +110,12 @@ export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncome
   const basePrice = Math.round((perHouseholdIncome * HOME_PRICE_TO_HOUSEHOLD_INCOME_MULTIPLE));
   return {
     regionId,
-    medianHomePriceUSD: basePrice,
-    baselineHomePriceUSD: basePrice,
+    medianHomePriceLocal: basePrice,
+    baselineHomePriceLocal: basePrice,
     priceIndex: 1.0,
     historicalPrices: Array(52).fill(basePrice),
     ownershipRatePct: HOME_OWNERSHIP_RATE,
-    mortgageOriginationVolumeUSD: estimatedHouseholdIncomeLocal * 0.05,
+    mortgageOriginationVolumeLocal: estimatedHouseholdIncomeLocal * 0.05,
   };
 }
 
@@ -199,13 +199,13 @@ export function createInitialCategoryDemand(
   return cd;
 }
 
-function generateCreditTierBooks(creditCardDebtUSD: number, otherConsumerLoanDebtUSD: number): CreditTierBook[] {
-  const totalDebt = creditCardDebtUSD + otherConsumerLoanDebtUSD;
+function generateCreditTierBooks(creditCardDebtLocal: number, otherConsumerLoanDebtLocal: number): CreditTierBook[] {
+  const totalDebt = creditCardDebtLocal + otherConsumerLoanDebtLocal;
   return [
-    { tier: 'SUPER_PRIME', shareOfHouseholds: 0.25, debtBalanceUSD: totalDebt * 0.25, avgInterestRate: 0.08, delinquencyRatePct: 0.005 },
-    { tier: 'PRIME', shareOfHouseholds: 0.35, debtBalanceUSD: totalDebt * 0.35, avgInterestRate: 0.12, delinquencyRatePct: 0.02 },
-    { tier: 'NEAR_PRIME', shareOfHouseholds: 0.25, debtBalanceUSD: totalDebt * 0.25, avgInterestRate: 0.18, delinquencyRatePct: 0.06 },
-    { tier: 'SUBPRIME', shareOfHouseholds: 0.15, debtBalanceUSD: totalDebt * 0.15, avgInterestRate: 0.25, delinquencyRatePct: 0.15 },
+    { tier: 'SUPER_PRIME', shareOfHouseholds: 0.25, debtBalanceLocal: totalDebt * 0.25, avgInterestRate: 0.08, delinquencyRatePct: 0.005 },
+    { tier: 'PRIME', shareOfHouseholds: 0.35, debtBalanceLocal: totalDebt * 0.35, avgInterestRate: 0.12, delinquencyRatePct: 0.02 },
+    { tier: 'NEAR_PRIME', shareOfHouseholds: 0.25, debtBalanceLocal: totalDebt * 0.25, avgInterestRate: 0.18, delinquencyRatePct: 0.06 },
+    { tier: 'SUBPRIME', shareOfHouseholds: 0.15, debtBalanceLocal: totalDebt * 0.15, avgInterestRate: 0.25, delinquencyRatePct: 0.15 },
   ];
 }
 
@@ -313,7 +313,7 @@ const GOV_DEBT_TENOR_WEIGHTS: { tenorYears: number; tenorWeeks: number; weight: 
 ];
 
 // RULE 4: observed household balance-sheet ratios. `equityHoldingsToIncome` is the one the
-// household state's `unmodeledFinancialAssetsUSD` doc already names as the source of its own
+// household state's `unmodeledFinancialAssetsLocal` doc already names as the source of its own
 // named gap ("real households hold roughly 1.5x income in financial assets and the seed says
 // so"). Cohort balance sheets (§6.1 / MAC) replace the whole line with accumulation.
 const HOUSEHOLD_DEBT_RATIOS = { creditCardToIncome: 0.075, otherConsumerLoanToIncome: 0.133, mortgageToIncome: 0.90, depositsToIncome: 0.65, equityHoldingsToIncome: 1.8 };
@@ -335,17 +335,17 @@ const HOUSEHOLD_SAVINGS_RATE = 0.065;
  * region's real trend and nothing else, so week 1 reads growth equal to trend instead of reading
  * invented volatility.
  */
-function seedNominalGdpHistory(currentLevelUSD: number, nominalAnnualGrowth: number): number[] {
+function seedNominalGdpHistory(currentLevelLocal: number, nominalAnnualGrowth: number): number[] {
   const weeks = 52;
   return Array.from({ length: weeks }, (_, i) =>
-    Math.round((currentLevelUSD * Math.pow(1 + nominalAnnualGrowth, (i - (weeks - 1)) / 52)))
+    Math.round((currentLevelLocal * Math.pow(1 + nominalAnnualGrowth, (i - (weeks - 1)) / 52)))
   );
 }
 
 function buildRegion(regionId: RegionId): Region {
   const identity = REGION_IDENTITY[regionId];
   const totalPopulation = getRegionPopulation(regionId);
-  const productivityPerCapita = getRegionProductivityPerCapitaUSD(regionId);
+  const productivityPerCapita = getRegionProductivityPerCapitaLocal(regionId);
 
   const yieldCurveParams = getRegionYieldCurveParams(regionId);
   const zeroRates = calculateTenorZeroRates(yieldCurveParams);
@@ -360,7 +360,7 @@ function buildRegion(regionId: RegionId): Region {
   const estimatedNominalGdpLocal = Math.round((totalEmployed * productivityPerCapita));
   const governmentEmployment = Math.round(totalPopulation * GOV_EMPLOYMENT_SHARE_OF_POPULATION);
 
-  const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
+  const baseAnnualWageLocal = getBaseAnnualWageLocal(regionId);
   const occupationLaborForceShare: Record<OccupationType, number> = { ...BASELINE_OCCUPATION_LABOR_FORCE_SHARE };
   const occupationPools: Record<OccupationType, OccupationPool> = {} as Record<OccupationType, OccupationPool>;
   (Object.keys(occupationLaborForceShare) as OccupationType[]).forEach((occ) => {
@@ -371,24 +371,24 @@ function buildRegion(regionId: RegionId): Region {
     };
   });
 
-  const governmentRevenueUSD = Math.round(((estimatedNominalGdpLocal * EFFECTIVE_TAX_RATE) / 52));
+  const governmentRevenueLocal = Math.round(((estimatedNominalGdpLocal * EFFECTIVE_TAX_RATE) / 52));
 
   // Household income comes from the one shared national-accounts derivation (wages + capital
   // income + government transfers, net of household tax) that the weekly evolution also uses,
   // so the cold start and week 1 describe the same economy. At init the unemployment-benefit
   // component sits well inside the government's standing transfer budget, so it does not raise
   // the total — it becomes the variable part of it once unemployment moves.
-  const totalWageIncomeUSD = (Object.keys(occupationPools) as OccupationType[]).reduce(
-    (sum, occ) => sum + baseAnnualWageUSD[occ] * occupationPools[occ].employed, 0
+  const totalWageIncomeLocal = (Object.keys(occupationPools) as OccupationType[]).reduce(
+    (sum, occ) => sum + baseAnnualWageLocal[occ] * occupationPools[occ].employed, 0
   );
-  const initialUnemploymentBenefitsUSD = (Object.keys(occupationPools) as OccupationType[]).reduce((sum, occ) => {
+  const initialUnemploymentBenefitsLocal = (Object.keys(occupationPools) as OccupationType[]).reduce((sum, occ) => {
     const unemployedInPool = totalLaborForce * occupationLaborForceShare[occ] - occupationPools[occ].employed;
-    return sum + baseAnnualWageUSD[occ] * Math.max(0, unemployedInPool) * UNEMPLOYMENT_REPLACEMENT_RATE;
+    return sum + baseAnnualWageLocal[occ] * Math.max(0, unemployedInPool) * UNEMPLOYMENT_REPLACEMENT_RATE;
   }, 0);
-  const totalGovDebtUSD = estimatedNominalGdpLocal * DEBT_TO_GDP_PCT;
+  const totalGovDebtLocal = estimatedNominalGdpLocal * DEBT_TO_GDP_PCT;
   const govDebtTranches: GovDebtTranche[] = GOV_DEBT_TENOR_WEIGHTS.map(({ tenorYears, tenorWeeks, weight }) => ({
     id: govBondTrancheId(regionId, tenorYears, 'INIT'),
-    principalLocal: Math.round((totalGovDebtUSD * weight)),
+    principalLocal: Math.round((totalGovDebtLocal * weight)),
     couponRate: Number(calculateNelsonSiegelZeroRate(tenorYears, yieldCurveParams).toFixed(4)),
     // §3.13-SOV: the two dates are ONE span, so they are rounded ONCE. Rounding each end
     // separately made an odd tenor a week longer than it claimed — a 13-week bill seeded at
@@ -406,13 +406,13 @@ function buildRegion(regionId: RegionId): Region {
 
   // PUB1 (§7.4): the debt stack exists at week 0, so its interest is in the decomposition from
   // week 0 too — otherwise the seed opens on a transfer base the engine immediately shrinks.
-  const seedInterestWeeklyUSD = weeklyInterestExpenseUSD(govDebtTranches.map(govTrancheView));
-  const seedWageSplit = splitWageBill(totalWageIncomeUSD);
+  const seedInterestWeeklyLocal = weeklyInterestExpenseLocal(govDebtTranches.map(govTrancheView));
+  const seedWageSplit = splitWageBill(totalWageIncomeLocal);
   // PUB3 (§7.4): the government has its staff at week 0, so it owes them at week 0 — computed by
   // the same function the weekly step uses, off the same pools.
-  const seedPayrollWeeklyUSD = governmentPayrollWeeklyUSD({
+  const seedPayrollWeeklyLocal = governmentPayrollWeeklyLocal({
     governmentEmployment,
-    baseAnnualWageUSD,
+    baseAnnualWageLocal,
     wageIndexByOccupation: Object.fromEntries(
       (Object.keys(occupationPools) as OccupationType[]).map(o => [o, occupationPools[o].wageIndex])
     ),
@@ -421,19 +421,19 @@ function buildRegion(regionId: RegionId): Region {
   const seedLifeCycle = createLifeCycleDistribution(getRegionBirthRateAnnual(regionId));
   // PUB3b (§7.4): the seed budget is the same sum of real obligations the weekly step computes,
   // so week 0's fiscal state and week 1's are the same shape rather than two derivations.
-  const seedAvgAnnualWageUSD = totalEmployed > 0 ? totalWageIncomeUSD / totalEmployed : 0;
-  const seedObligations = governmentObligationsWeeklyUSD({
-    interestWeeklyUSD: seedInterestWeeklyUSD,
-    payrollWeeklyUSD: seedPayrollWeeklyUSD,
-    unemploymentBenefitsWeeklyUSD: initialUnemploymentBenefitsUSD / 52,
+  const seedAvgAnnualWageLocal = totalEmployed > 0 ? totalWageIncomeLocal / totalEmployed : 0;
+  const seedObligations = governmentObligationsWeeklyLocal({
+    interestWeeklyLocal: seedInterestWeeklyLocal,
+    payrollWeeklyLocal: seedPayrollWeeklyLocal,
+    unemploymentBenefitsWeeklyLocal: initialUnemploymentBenefitsLocal / 52,
     retiredPopulation: totalPopulation * (seedLifeCycle.RETIRED?.shareOfPopulation ?? 0),
-    averageAnnualWageUSD: seedAvgAnnualWageUSD,
+    averageAnnualWageLocal: seedAvgAnnualWageLocal,
     fiscalStanceScore: 0,
   });
-  const governmentSpendingWeeklyUSD = Math.round(seedObligations.totalLocal);
-  const estimatedHouseholdIncomeLocal = Math.round(computeHouseholdDisposableIncomeUSD({
-    wageIncomeUSD: totalWageIncomeUSD,
-    transfersWeeklyUSD: seedObligations.transfersUSD,
+  const governmentSpendingWeeklyLocal = Math.round(seedObligations.totalLocal);
+  const estimatedHouseholdIncomeLocal = Math.round(computeHouseholdDisposableIncomeLocal({
+    wageIncomeLocal: totalWageIncomeLocal,
+    transfersWeeklyLocal: seedObligations.transfersLocal,
   }));
   // COH3 — `assertHouseholdIncomeIdentity` is GONE, and the reason is that it could not fail.
   // Both sides of it came from the same four constants, so it was a tautology dressed as a check
@@ -441,7 +441,7 @@ function buildRegion(regionId: RegionId): Region {
   // when household income became the measured sum of what employers actually pay (§7.96). A check
   // that cannot fire is not a check; what would catch a real break is the cohort identity the
   // harness already asserts, which compares two things that are separately derived.
-  const lastWeekNominalGdpUSD = estimatedNominalGdpLocal;
+  const lastWeekNominalGdpLocal = estimatedNominalGdpLocal;
 
   // HH4 — §7.4: the cohorts are seeded by the same builder the weekly evolution runs, off the
   // same pools and wages, so week 0 decomposes into exactly the cells week 1 will. Debt service
@@ -455,32 +455,32 @@ function buildRegion(regionId: RegionId): Region {
   const seedCohorts = buildHouseholdCohorts({
     regionId,
     occupationPools,
-    baseAnnualWageUSD,
+    baseAnnualWageLocal,
     laborForceByOccupation,
-    governmentTransfersWeeklyUSD: seedObligations.transfersUSD,
+    governmentTransfersWeeklyLocal: seedObligations.transfersLocal,
     // The seed has no accumulated deposits yet, so every tier opens below its buffer and saves
     // toward it — which is the opening condition a cold start should have (§7.4).
-    liquidAssetsUSD: 0,
+    liquidAssetsLocal: 0,
     // DEM/DIST — the seed's own stationary age structure decides it, like every other week.
     retiredShareOfPopulation: seedLifeCycle.RETIRED.shareOfPopulation,
-    weeklyDebtServiceUSD: 0,
+    weeklyDebtServiceLocal: 0,
     // Zero here to match the zero debt service: both sides of the budget loop arrive together
     // at the HH3 seed migration, which re-derives the cohorts with the real books.
-    annualCapitalReceiptsUSD: { depositInterestUSD: 0, dividendsUSD: 0 },
+    annualCapitalReceiptsLocal: { depositInterestLocal: 0, dividendsLocal: 0 },
     wealthDistribution: seedWealthDistribution,
   });
   // The tier income lines open as the DERIVED sums they will be every week from here on —
   // the income-ranked 15/45/25/15 shape the raw seed carried was a different ranking (income
   // deciles) misapplied to wealth tiers, and week 1 would overwrite it anyway.
   (Object.keys(seedWealthDistribution) as WealthTier[]).forEach((t) => {
-    seedWealthDistribution[t].shareOfIncomeUSD = Math.round((seedCohorts.tierDisposableUSD[t] ?? 0));
+    seedWealthDistribution[t].shareOfIncomeLocal = Math.round((seedCohorts.tierDisposableLocal[t] ?? 0));
   });
 
   const netInterestMarginPct = Number(Math.max(NIM_FLOOR, policyRate * NIM_TO_POLICY_RATE_RATIO + 0.005).toFixed(4));
   // §5-WIRES D: the seed states no loan-book scalar — the books are the rows the seed migrations
   // build (SME pools from segment EBITDA, household pools from the households' own debt). The
   // stated loan-to-GDP ratios survive only where the seed SIZES something off them
-  // (`seedLoanBookUSD`: a bank's opening revenue, the consumer scalar the HH3 migration replaced).
+  // (`seedLoanBookLocal`: a bank's opening revenue, the consumer scalar the HH3 migration replaced).
   const bankingSector = {
     sovereignBondHoldingsLocal: Math.round((estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp)),
     bankEquityLocal: Math.round((estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.bankEquityToGdp)),
@@ -488,8 +488,8 @@ function buildRegion(regionId: RegionId): Region {
     netInterestMarginPct,
     loanLossProvisionRateAnnualPct: LOAN_LOSS_PROVISION_RATE,
     creditConditionsIndex: 0,
-    centralBankReservesUSD: Math.round((estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.centralBankReservesToGdp)),
-    moneySupplyM2USD: 0,
+    centralBankReservesLocal: Math.round((estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.centralBankReservesToGdp)),
+    moneySupplyM2Local: 0,
     itemizedHoldings: [],
     srfBorrowingLocal: 0,
     onRrpLendingLocal: 0,
@@ -501,10 +501,10 @@ function buildRegion(regionId: RegionId): Region {
     // start opens with an empty book — the same shape the weekly engine produces (§7.4).
     repoLentLocal: 0,
     repoBorrowedLocal: 0,
-    repoEncumberedCollateralUSD: 0,
+    repoEncumberedCollateralLocal: 0,
     businessLoans: [],
     householdLoans: [],
-    wholesaleFundingUSD: 0,
+    wholesaleFundingLocal: 0,
   };
   // §5-WIRES A3.6c: the seed's stated reserves ride the opening-cash stash (the same channel a
   // firm's opening cash rides) until close-seed opens each bank's account; no sheet carries them.
@@ -512,22 +512,22 @@ function buildRegion(regionId: RegionId): Region {
   stashSeedHouseholdLine(bankingSector, Math.round(estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.depositsToGdp));
 
   const institutionalSector = {
-    corpBondHoldingsUSD: 0,
-    sovBondHoldingsUSD: 0,
-    equityHoldingsUSD: 0,
+    corpBondHoldingsLocal: 0,
+    sovBondHoldingsLocal: 0,
+    equityHoldingsLocal: 0,
     cashLocal: Math.round((estimatedNominalGdpLocal * INSTITUTIONAL_SECTOR_RATIOS.cashToGdp)),
-    sectorEquityUSD: Math.round((estimatedNominalGdpLocal * INSTITUTIONAL_SECTOR_RATIOS.sectorEquityToGdp)),
+    sectorEquityLocal: Math.round((estimatedNominalGdpLocal * INSTITUTIONAL_SECTOR_RATIOS.sectorEquityToGdp)),
     investmentIncomeMarginPct: INSTITUTIONAL_SECTOR_RATIOS.investmentIncomeMargin,
     itemizedHoldings: [],
   };
 
 
-  const creditCardDebtUSD = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.creditCardToIncome));
-  const otherConsumerLoanDebtUSD = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.otherConsumerLoanToIncome));
-  const mortgageDebtUSD = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.mortgageToIncome));
+  const creditCardDebtLocal = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.creditCardToIncome));
+  const otherConsumerLoanDebtLocal = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.otherConsumerLoanToIncome));
+  const mortgageDebtLocal = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.mortgageToIncome));
   const depositsLocal = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.depositsToIncome));
-  const equityHoldingsUSD = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.equityHoldingsToIncome));
-  const householdDebtToIncomeRatio = Number(((mortgageDebtUSD + creditCardDebtUSD + otherConsumerLoanDebtUSD) / Math.max(1, estimatedHouseholdIncomeLocal)).toFixed(3));
+  const equityHoldingsLocal = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.equityHoldingsToIncome));
+  const householdDebtToIncomeRatio = Number(((mortgageDebtLocal + creditCardDebtLocal + otherConsumerLoanDebtLocal) / Math.max(1, estimatedHouseholdIncomeLocal)).toFixed(3));
 
   // SEG-A: the SME pools are seeded from the region's REAL demand, so they are built after
   // `categoryDemand` exists (below, once the region object is assembled).
@@ -581,10 +581,10 @@ function buildRegion(regionId: RegionId): Region {
     unemploymentRate: UNEMPLOYMENT_RATE,
     wageGrowth,
     tradeBalance: 0,
-    exportsUSD: 0,
-    importsUSD: 0,
+    exportsLocal: 0,
+    importsLocal: 0,
     currentAccountPctGdp: 0,
-    fxReservesUSD: Math.round((estimatedNominalGdpLocal * 0.002)),
+    fxReservesLocal: Math.round((estimatedNominalGdpLocal * 0.002)),
     fiscalStanceScore: 0,
     // FRM: an outcome of this region's own seeded position, through the weekly rater's own
     // thresholds — not a label.
@@ -602,19 +602,19 @@ function buildRegion(regionId: RegionId): Region {
     occupationPools,
     occupationLaborForceShare,
     estimatedNominalGdpLocal,
-    derivedNominalGdpUSD: estimatedNominalGdpLocal,
+    derivedNominalGdpLocal: estimatedNominalGdpLocal,
     gdpGrowthBottomUp: 0,
     smoothedWeeklyGrowthRate: 0,
-    lastWeekNominalGdpUSD,
+    lastWeekNominalGdpLocal,
     nominalGdpHistory: seedNominalGdpHistory(estimatedNominalGdpLocal, gdpGrowth + targetInflation),
-    consumptionComponentUSD: 0,
-    investmentComponentUSD: 0,
+    consumptionComponentLocal: 0,
+    investmentComponentLocal: 0,
     effectiveTaxRate: CORPORATE_TAX_RATE_BY_REGION[regionId],
-    governmentRevenueUSD,
-    governmentSpendingWeeklyUSD,
-    governmentPayrollWeeklyUSD: Math.round(seedPayrollWeeklyUSD),
-    governmentInterestWeeklyUSD: Math.round(seedInterestWeeklyUSD),
-    employerPayrollTaxWeeklyUSD: Math.round((seedWageSplit.employerPayrollTaxUSD / 52)),
+    governmentRevenueLocal,
+    governmentSpendingWeeklyLocal,
+    governmentPayrollWeeklyLocal: Math.round(seedPayrollWeeklyLocal),
+    governmentInterestWeeklyLocal: Math.round(seedInterestWeeklyLocal),
+    employerPayrollTaxWeeklyLocal: Math.round((seedWageSplit.employerPayrollTaxLocal / 52)),
     // PUB2 (§7.4): the CB opens holding its real share of the stock, with the TGA at its
     // operating balance and currency as the residual that closes the balance sheet. Bank
     // reserves are the banks' own cash and are not stored here — one representation.
@@ -629,28 +629,28 @@ function buildRegion(regionId: RegionId): Region {
       // §5-WIRES A3.5: the treasury's account opens at its operating balance — stashed here,
       // opened as the government's row before close-seed (initialization.ts). No field.
       // §5-CLOSE: a stored liability at zero — never a residual.
-      currencyInCirculationUSD: 0,
+      currencyInCirculationLocal: 0,
       // The window opens empty: nothing is parked until the first repo session runs.
-      reverseRepoBorrowedUSD: 0,
-      loansToBanksUSD: 0,
+      reverseRepoBorrowedLocal: 0,
+      loansToBanksLocal: 0,
       foreignOfficialClaimsUSD: 0,
-      standingFacilityLentUSD: 0,
-      lastRemittanceUSD: 0,
+      standingFacilityLentLocal: 0,
+      lastRemittanceLocal: 0,
       // PUB2b: no order outstanding at birth — the first week's redemptions set the first one.
       plannedPurchasesByBond: {},
       reinvestmentShare: 1,
-      lastOpenMarketPurchasesUSD: 0,
-      lastOrderPlacedUSD: 0,
-      lastReserveDrainUSD: 0,
+      lastOpenMarketPurchasesLocal: 0,
+      lastOrderPlacedLocal: 0,
+      lastReserveDrainLocal: 0,
     },
     // Seeded from the stack this function just built, so week 0 rates the sovereign off the same
     // ratio week 1 will (§7.4).
-    debtToGdpPctBottomUp: estimatedNominalGdpLocal > 0 ? totalGovDebtUSD / estimatedNominalGdpLocal : 0,
+    debtToGdpPctBottomUp: estimatedNominalGdpLocal > 0 ? totalGovDebtLocal / estimatedNominalGdpLocal : 0,
     // §5-WIRES A3.4: the sector's deposits are its rows at the banks; the seed's provisional
     // sizing rides a stash until close-seed strikes the lines and opens the rows.
     householdState: withOpeningCash({
       consumerConfidence: 100,
-      creditTierBooks: generateCreditTierBooks(creditCardDebtUSD, otherConsumerLoanDebtUSD),
+      creditTierBooks: generateCreditTierBooks(creditCardDebtLocal, otherConsumerLoanDebtLocal),
       wageGrowth,
       savingsRate: HOUSEHOLD_SAVINGS_RATE,
       realConsumptionGrowth: Number((gdpGrowth * 0.7).toFixed(4)),
@@ -664,20 +664,20 @@ function buildRegion(regionId: RegionId): Region {
       // only place that knows the cleared prices and the private tier. The seed therefore opens
       // with the whole stock UNMODELED and lets that line be paid down as real claims are found —
       // §7.4's seed-shape rule: seed the shape the engine produces, never a second version of it.
-      equityHoldingsUSD,
-      directEquityUSD: 0,
-      housingStockUSD: 0,
-      priorNetWorthUSD: 0,
-      homeEquityUSD: 0,
+      equityHoldingsLocal,
+      directEquityLocal: 0,
+      housingStockLocal: 0,
+      priorNetWorthLocal: 0,
+      homeEquityLocal: 0,
       institutionalClaims: [],
-      institutionalClaimsUSD: 0,
+      institutionalClaimsLocal: 0,
       etfShares: [],
-      etfHoldingsUSD: 0,
-      privateBusinessEquityUSD: 0,
-      mortgageDebtUSD,
-      creditCardDebtUSD,
-      otherConsumerLoanDebtUSD,
-      netWorthUSD: 0,
+      etfHoldingsLocal: 0,
+      privateBusinessEquityLocal: 0,
+      mortgageDebtLocal,
+      creditCardDebtLocal,
+      otherConsumerLoanDebtLocal,
+      netWorthLocal: 0,
     }, depositsLocal),
     dotPlot1Y: policyRate,
     dotPlot2Y: neutralRate,
@@ -697,9 +697,9 @@ function buildRegion(regionId: RegionId): Region {
     ageDistribution: stationaryAgeDistribution(getRegionBirthRateAnnual(regionId)),
     lifeCycleDistribution: seedLifeCycle,
   };
-  stashOpeningCash(region.centralBankSheet!, Math.round(governmentSpendingWeeklyUSD * TGA_TARGET_WEEKS_OF_SPENDING));
+  stashOpeningCash(region.centralBankSheet!, Math.round(governmentSpendingWeeklyLocal * TGA_TARGET_WEEKS_OF_SPENDING));
 
-  region.categoryDemand = createInitialCategoryDemand(gdpGrowth, estimatedHouseholdIncomeLocal, lastWeekNominalGdpUSD, totalPopulation, TARGET_FIRMS_PER_REGION);
+  region.categoryDemand = createInitialCategoryDemand(gdpGrowth, estimatedHouseholdIncomeLocal, lastWeekNominalGdpLocal, totalPopulation, TARGET_FIRMS_PER_REGION);
 
   // ---- SEG-A: the SME tier, one pool per registry industry, sized by REAL DEMAND ----
   //
@@ -723,8 +723,8 @@ function buildRegion(regionId: RegionId): Region {
     const demandOf = (unitId: string) => region.categoryDemand[unitId]?.demandLevelAnnualLocal ?? 0;
     const revenueByIndustry = new Map<Industry, number>();
     SME_POOL_INDUSTRIES.forEach((industry) => {
-      const industryDemandUSD = smePoolSubUnits(industry).reduce((a, su) => a + demandOf(su.unitId), 0);
-      revenueByIndustry.set(industry, industryDemandUSD * INDUSTRY_REGISTRY[industry].smeShareOfActivity);
+      const industryDemandLocal = smePoolSubUnits(industry).reduce((a, su) => a + demandOf(su.unitId), 0);
+      revenueByIndustry.set(industry, industryDemandLocal * INDUSTRY_REGISTRY[industry].smeShareOfActivity);
     });
     SME_POOL_INDUSTRIES.forEach((industry) => {
       const annualRevenueLocal = Math.round((revenueByIndustry.get(industry) ?? 0));
@@ -743,7 +743,7 @@ function buildRegion(regionId: RegionId): Region {
         // uses. Its debt is migrated later (bank-lending's seed), so the mean is re-centred on
         // the pool's real book every week; what is seeded here is the SHAPE.
         strata: seedPoolLeverageStrata(SME_SEED_LEVERAGE_MULTIPLE, SME_POOL_STRATA_COUNT),
-        capexUSD: Math.round((annualRevenueLocal * 0.05)),
+        capexLocal: Math.round((annualRevenueLocal * 0.05)),
       });
     });
   }
@@ -765,8 +765,8 @@ function buildRegion(regionId: RegionId): Region {
  */
 /** The seed's STATED loan book for one region and book, off its nominal GDP — a stated number
  *  (R's registry), read only by the seed's own sizing arithmetic, never stored on a sheet. */
-export function seedLoanBookUSD(nominalGdpUSD: number, book: 'business' | 'consumer'): number {
-  return Math.round(nominalGdpUSD * (book === 'business' ? BANK_BALANCE_SHEET_RATIOS.businessLoanBookToGdp : BANK_BALANCE_SHEET_RATIOS.consumerLoanBookToGdp));
+export function seedLoanBookLocal(nominalGdpLocal: number, book: 'business' | 'consumer'): number {
+  return Math.round(nominalGdpLocal * (book === 'business' ? BANK_BALANCE_SHEET_RATIOS.businessLoanBookToGdp : BANK_BALANCE_SHEET_RATIOS.consumerLoanBookToGdp));
 }
 
 export function getInitialRegions(): Record<RegionId, Region> {

@@ -42,7 +42,7 @@ export function sovereignCouponByBond(tranches: readonly GovDebtTrancheView[] | 
  * payment, and the whole return is the accretion to par paid at redemption. Its cost lands in the
  * redemption leg (face repaid against discounted proceeds received), not here.
  */
-export function weeklyInterestExpenseUSD(tranches: readonly GovDebtTrancheView[] | undefined): number {
+export function weeklyInterestExpenseLocal(tranches: readonly GovDebtTrancheView[] | undefined): number {
   return (tranches ?? [])
     .filter((t) => !isDiscountBill(t.tenorAtIssuanceYears))
     .reduce((a, t) => a + (t.principalLocal * (t.couponRate ?? 0)) / 52, 0);
@@ -70,7 +70,7 @@ export function isDiscountBill(tenorAtIssuanceYears: number): boolean {
  * were paid a coupon that does not exist. Discounting the proceeds while KEEPING the coupon would
  * have been worse than either — it doubles the cost.
  */
-export function discountBillProceedsUSD(faceLocal: number, annualYield: number, tenorYears: number): number {
+export function discountBillProceedsLocal(faceLocal: number, annualYield: number, tenorYears: number): number {
   return faceLocal / (1 + Math.max(-0.99, annualYield) * tenorYears);
 }
 
@@ -78,7 +78,7 @@ export function discountBillProceedsUSD(faceLocal: number, annualYield: number, 
  * §3.13-SOV row 4 — THE YIELD A BILL'S PRICE IMPLIES. The exact inverse of the line above.
  *
  * A bill is quoted on SIMPLE interest, not compounded: that is the money-market convention and it
- * is what `discountBillProceedsUSD` has always used. `pricing/yieldFromPrice` compounds, which is
+ * is what `discountBillProceedsLocal` has always used. `pricing/yieldFromPrice` compounds, which is
  * right for a coupon bond and wrong here — the two differ by about 2bp of price on a 13-week bill
  * at 5%, and swapping one for the other would silently re-price every bill by changing its
  * day-count. That is a different change from making the price the primitive, so the bill keeps
@@ -139,16 +139,16 @@ export function billYieldFromPrice(priceFraction: number, tenorYears: number): n
 /**
  * The discount accruing on the bill stack this week — a STATISTIC, never a debit.
  *
- * `weeklyInterestExpenseUSD` is now cash-basis: it is the coupon the government actually pays,
+ * `weeklyInterestExpenseLocal` is now cash-basis: it is the coupon the government actually pays,
  * and bills pay none. Their cost is real but lands at redemption, so the reported interest line
  * understates the economic burden by exactly this much (measured: bills are ~21% of the stack, and
  * excluding them roughly halved the reported line). Government accounts on an ACCRUAL basis would
  * add this back.
  *
  * It is deliberately not added to the expense: the cost is already in the redemption leg, and
- * charging it here as well is the double count `discountBillProceedsUSD` warns about.
+ * charging it here as well is the double count `discountBillProceedsLocal` warns about.
  */
-export function weeklyBillDiscountAccrualUSD(tranches: readonly GovDebtTrancheView[] | undefined): number {
+export function weeklyBillDiscountAccrualLocal(tranches: readonly GovDebtTrancheView[] | undefined): number {
   return (tranches ?? [])
     .filter((t) => isDiscountBill(t.tenorAtIssuanceYears))
     .reduce((a, t) => a + (t.principalLocal * (t.couponRate ?? 0)) / 52, 0);
@@ -171,23 +171,23 @@ export function weeklyBillDiscountAccrualUSD(tranches: readonly GovDebtTrancheVi
  * borrows the difference. That is a debt spiral, and it is allowed to happen.
  */
 export function decomposeGovernmentSpending(
-  spendingWeeklyUSD: number,
-  interestWeeklyUSD: number,
+  spendingWeeklyLocal: number,
+  interestWeeklyLocal: number,
   procurementShare: number,
   fiscalStanceScore: number = 0,
   /** PUB3: what the government owes its own staff this week — real headcount x real wages. */
-  payrollWeeklyUSD: number = 0
-): { interestLocal: number; payrollLocal: number; procurementBudgetUSD: number; transfersUSD: number } {
-  const interestLocal = Math.max(0, interestWeeklyUSD);
-  const payrollLocal = Math.max(0, payrollWeeklyUSD);
+  payrollWeeklyLocal: number = 0
+): { interestLocal: number; payrollLocal: number; procurementBudgetLocal: number; transfersLocal: number } {
+  const interestLocal = Math.max(0, interestWeeklyLocal);
+  const payrollLocal = Math.max(0, payrollWeeklyLocal);
   // Payroll is contractual like interest: it comes off the top, and what is left is the
   // discretionary budget. A government facing a rising wage bill cuts programs, not salaries.
-  const primaryUSD = Math.max(0, spendingWeeklyUSD - interestLocal - payrollLocal);
+  const primaryLocal = Math.max(0, spendingWeeklyLocal - interestLocal - payrollLocal);
   return {
     interestLocal,
     payrollLocal,
-    procurementBudgetUSD: primaryUSD * procurementShare * (1 + fiscalStanceScore * FISCAL_STANCE_PROCUREMENT_SENSITIVITY),
-    transfersUSD: primaryUSD * (1 - procurementShare),
+    procurementBudgetLocal: primaryLocal * procurementShare * (1 + fiscalStanceScore * FISCAL_STANCE_PROCUREMENT_SENSITIVITY),
+    transfersLocal: primaryLocal * (1 - procurementShare),
   };
 }
 
@@ -208,10 +208,10 @@ export function decomposeGovernmentSpending(
  * Real national accounts split a ~36%-of-GDP state as compensation ~8% + purchases ~11% +
  * transfers ~13% + interest ~4%. This is the compensation line.
  */
-export function governmentPayrollWeeklyUSD(args: {
+export function governmentPayrollWeeklyLocal(args: {
   governmentEmployment: number;
   /** Structural base wage per occupation (annual), before the market's own wage index. */
-  baseAnnualWageUSD: Record<string, number>;
+  baseAnnualWageLocal: Record<string, number>;
   /** The pools' live wage indexes — so a tight labor market raises the government's bill too. */
   wageIndexByOccupation: Record<string, number>;
   /** What the government employs, from GOVERNMENT_OCCUPATION_MIX. */
@@ -219,7 +219,7 @@ export function governmentPayrollWeeklyUSD(args: {
 }): number {
   const annualPerHead = Object.entries(args.occupationMix).reduce(
     (a, [occ, share]) =>
-      a + (args.baseAnnualWageUSD[occ] ?? 0) * (args.wageIndexByOccupation[occ] ?? 1) * (share ?? 0),
+      a + (args.baseAnnualWageLocal[occ] ?? 0) * (args.wageIndexByOccupation[occ] ?? 1) * (share ?? 0),
     0
   );
   return (Math.max(0, args.governmentEmployment) * annualPerHead) / 52;
@@ -234,21 +234,21 @@ export const FISCAL_STANCE_PROCUREMENT_SENSITIVITY = 0.25;
  * cannot buy what it planned to buy has not spent the money. The difference is unspent budget,
  * and it is named rather than assumed away.
  */
-export function governmentOutlaysUSD(parts: {
+export function governmentOutlaysLocal(parts: {
   interestLocal: number;
   /** PUB3: staff are paid in full — a government does not skip payroll. */
   payrollLocal: number;
-  transfersUSD: number;
-  procurementSpentUSD: number;
+  transfersLocal: number;
+  procurementSpentLocal: number;
 }): number {
-  return parts.interestLocal + parts.payrollLocal + parts.transfersUSD + parts.procurementSpentUSD;
+  return parts.interestLocal + parts.payrollLocal + parts.transfersLocal + parts.procurementSpentLocal;
 }
 
 
 /**
  * PUB3b — the budget as a sum of real obligations, so the deficit is an OUTCOME.
  *
- * What this replaces: `spending = lastWeekNominalGdpUSD x (taxRate + deficitPct) / 52`. The whole
+ * What this replaces: `spending = lastWeekNominalGdpLocal x (taxRate + deficitPct) / 52`. The whole
  * fiscal state was a share of a LAGGED nominal aggregate, which is why revenue (real bases at
  * real prices, since PUB1b/1c) and outlays drifted apart whenever the price level moved — the
  * measured 1.18x wedge that fills the treasury's account.
@@ -259,27 +259,27 @@ export function governmentOutlaysUSD(parts: {
  * recession puts more people on benefits and takes the tax base down, and the deficit widens
  * because both of those really happened.
  */
-export function governmentObligationsWeeklyUSD(args: {
-  interestWeeklyUSD: number;
-  payrollWeeklyUSD: number;
+export function governmentObligationsWeeklyLocal(args: {
+  interestWeeklyLocal: number;
+  payrollWeeklyLocal: number;
   /** Real unemployed x real wage x the replacement rate — the existing UI computation. */
-  unemploymentBenefitsWeeklyUSD: number;
+  unemploymentBenefitsWeeklyLocal: number;
   /** Real retired headcount. */
   retiredPopulation: number;
   /** The pools' real average annual wage — benefits are indexed to earnings, as they are. */
-  averageAnnualWageUSD: number;
+  averageAnnualWageLocal: number;
   fiscalStanceScore: number;
-}): { interestLocal: number; payrollLocal: number; transfersUSD: number; procurementBudgetUSD: number; totalLocal: number } {
-  const socialBenefitsUSD =
-    (Math.max(0, args.retiredPopulation) * Math.max(0, args.averageAnnualWageUSD) * SOCIAL_BENEFIT_REPLACEMENT_RATE) / 52;
-  const transfersUSD = Math.max(0, args.unemploymentBenefitsWeeklyUSD) + socialBenefitsUSD;
-  const payrollLocal = Math.max(0, args.payrollWeeklyUSD);
-  const procurementBudgetUSD =
+}): { interestLocal: number; payrollLocal: number; transfersLocal: number; procurementBudgetLocal: number; totalLocal: number } {
+  const socialBenefitsLocal =
+    (Math.max(0, args.retiredPopulation) * Math.max(0, args.averageAnnualWageLocal) * SOCIAL_BENEFIT_REPLACEMENT_RATE) / 52;
+  const transfersLocal = Math.max(0, args.unemploymentBenefitsWeeklyLocal) + socialBenefitsLocal;
+  const payrollLocal = Math.max(0, args.payrollWeeklyLocal);
+  const procurementBudgetLocal =
     payrollLocal * PROCUREMENT_PER_PAYROLL_DOLLAR * (1 + args.fiscalStanceScore * FISCAL_STANCE_PROCUREMENT_SENSITIVITY);
-  const interestLocal = Math.max(0, args.interestWeeklyUSD);
+  const interestLocal = Math.max(0, args.interestWeeklyLocal);
   return {
-    interestLocal, payrollLocal, transfersUSD, procurementBudgetUSD,
-    totalLocal: interestLocal + payrollLocal + transfersUSD + procurementBudgetUSD,
+    interestLocal, payrollLocal, transfersLocal, procurementBudgetLocal,
+    totalLocal: interestLocal + payrollLocal + transfersLocal + procurementBudgetLocal,
   };
 }
 
@@ -322,7 +322,7 @@ export const GOV_HIRING_RESPONSE_TO_STANCE = 0.0004;
  * treasury's is. Zero in most weeks, half a year's coupon in two of them.
  *
  * NOT WIRED YET, DELIBERATELY, AND THIS IS THE CONDITION. Both sides have to move together:
- * `weeklyInterestExpenseUSD` is the government's own smooth accrual, and putting the HOLDERS on
+ * `weeklyInterestExpenseLocal` is the government's own smooth accrual, and putting the HOLDERS on
  * coupon dates without putting the TREASURY on them leaves the two disagreeing by exactly the
  * lumpiness — measured the moment it was tried, as the `governmentInterestToUnmodeledHolders`
  * boundary line swinging on coupon weeks. One change to that function and both readers of it,

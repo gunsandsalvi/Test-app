@@ -31,7 +31,7 @@ export const contracts: FunctionModule = {
     const active = tabs.includes(args.tab ?? '') ? args.tab! : 'all';
     const shown = mine.filter((k) => active === 'all' || classWord(k.classId) === active).sort((a, b) => b.notional - a.notional);
     const notional = shown.reduce((a, k) => a + k.notional, 0);
-    const settled = shown.reduce((a, k) => a + (k.settledMarkUSD ?? 0), 0);
+    const settled = shown.reduce((a, k) => a + (k.settledMarkLocal ?? 0), 0);
     if (mine.length === 0) return <Card style={{ padding: 14, color: T.muted }}>no derivative contract names this {ref.type === 'fx' ? 'pair' : ref.type}.</Card>;
     return (<>
       {tabs.length > 2 ? <Tabs items={tabs} active={active} onPick={(t) => nav.go('contracts', { tab: t })} /> : null}

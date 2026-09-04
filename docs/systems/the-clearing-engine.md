@@ -102,7 +102,7 @@ checked by `scripts/check-atlas.sh`.
 | B1 the participants are named parties with balance sheets | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
 | B2 a party is present because it has a reason to be | `src/engine/simulation/stages/central-bank-demand.ts:centralBankParticipant` | ✅ |
 | B3 a dealer may be there; its reason is inventory and spread | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
-| B3.a a dealer has a limit: capital, risk, inventory | `src/domain/dealer-desk.ts:dealerDeskCapacityUSD` | ✅ |
+| B3.a a dealer has a limit: capital, risk, inventory | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
 | **B4 FORBID no buyer of last resort by construction** | `src/engine/simulation/stages/financial-clearing-engine.ts:unsoldStaysWithHolder` | ✅ |
 | **B5 FORBID the mechanism does not add demand to make itself clear** | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ⚠️ |
 | C1 the price where posted supply meets posted demand | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ✅ |
@@ -117,7 +117,7 @@ checked by `scripts/check-atlas.sh`.
 | D2 a set of trades with two named sides and a quantity | `src/engine/ledger/holdings-ledger.ts:clearedBookDelta` | ✅ |
 | D3 the trades hit the register and the accounts in the same pass | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ⚠️ |
 | D4 the price becomes the mark for every holder | `src/engine/ledger/holdings-ledger.ts:markCreditBook` | ✅ |
-| D5 VERIFY Σ bought = Σ sold, Σ cash paid = Σ cash received | `src/engine/simulation/stages/settlement.ts:clearingHouseResidualUSD` | ✅ |
+| D5 VERIFY Σ bought = Σ sold, Σ cash paid = Σ cash received | `src/engine/simulation/stages/settlement.ts:clearingHouseResidualLocal` | ✅ |
 | E1 the price is public | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:runCorporateBondClearingStage` | ✅ |
 | E2 one market's print is another's input | `src/engine/simulation/stages/index-calculation.ts:runIndexCalculationStage` | ✅ |
 | **E3 the bid–offer is a consequence, never a prior on a mid** | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |

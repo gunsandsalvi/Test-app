@@ -1,5 +1,5 @@
 import { householdDepositsOf, bankReservesOf, bankDepositLines } from '../../ledger/accounts';
-import { addDepositLines, ZERO_DEPOSIT_LINES, regionLoanBooksUSD } from '../../../domain/banking';
+import { addDepositLines, ZERO_DEPOSIT_LINES, regionLoanBooksLocal } from '../../../domain/banking';
 import { facilityBookOf, materializeGovLadder } from '../../../engine2/tranches';
 /**
  * Stage 2: Region Macro Evolution
@@ -29,22 +29,22 @@ import { marketCapOf } from '../../../domain/company';
  * the time this stage consumed it) and retires the three region fields that carried it.
  */
 function householdWeekOf(
-  ctx: WeeklyStepContext, regionId: RegionId, depositInterestUSD: number
-): { receiptsUSD: number; taxPaidUSD: number; dividendsUSD: number } | undefined {
+  ctx: WeeklyStepContext, regionId: RegionId, depositInterestLocal: number
+): { receiptsLocal: number; taxPaidLocal: number; dividendsLocal: number } | undefined {
   const flows = ctx.priorWeekFlows.householdFlowsByRegion.get(regionId);
   if (!flows) return undefined;
-  let receiptsUSD = depositInterestUSD;
-  let taxPaidUSD = 0;
-  let dividendsUSD = 0;
+  let receiptsLocal = depositInterestLocal;
+  let taxPaidLocal = 0;
+  let dividendsLocal = 0;
   flows.forEach((amountLocal, reason) => {
     if (amountLocal > 0) {
-      receiptsUSD += amountLocal;
-      if (reason === 'dividend to the public float') dividendsUSD += amountLocal;
+      receiptsLocal += amountLocal;
+      if (reason === 'dividend to the public float') dividendsLocal += amountLocal;
       return;
     }
-    if (reason.includes('tax')) taxPaidUSD += -amountLocal;
+    if (reason.includes('tax')) taxPaidLocal += -amountLocal;
   });
-  return { receiptsUSD, taxPaidUSD, dividendsUSD };
+  return { receiptsLocal, taxPaidLocal, dividendsLocal };
 }
 
 export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -112,11 +112,11 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         publicCompanyEmployment: ctx.regionPublicCompanyEmployment[regionId],
         occupationDemand: regionOccDemand,
         avgListedDividendYieldAnnual: regionAvgDividendYield,
-        householdDepositsUSD: householdDepositsOf(ctx.v2, regionId),
-        bankReservesUSD: ctx.updatedCompanies.reduce((a, c) => a + (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? bankReservesOf(ctx.v2, c.ticker) : 0), 0),
+        householdDepositsLocal: householdDepositsOf(ctx.v2, regionId),
+        bankReservesLocal: ctx.updatedCompanies.reduce((a, c) => a + (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? bankReservesOf(ctx.v2, c.ticker) : 0), 0),
         bankDepositLines: ctx.updatedCompanies.reduce((a, c) => (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? addDepositLines(a, bankDepositLines(ctx, c.ticker)) : a), ZERO_DEPOSIT_LINES),
-        bankLoanBooks: regionLoanBooksUSD(ctx.updatedCompanies.filter((c) => c.region === regionId && c.isBankEntity && !!c.bankBalanceSheet), (b) => facilityBookOf(ctx.v2, b.ticker)),
-        householdWeek: householdWeekOf(ctx, regionId, state.regions[regionId].householdDepositInterestWeeklyUSD ?? 0),
+        bankLoanBooks: regionLoanBooksLocal(ctx.updatedCompanies.filter((c) => c.region === regionId && c.isBankEntity && !!c.bankBalanceSheet), (b) => facilityBookOf(ctx.v2, b.ticker)),
+        householdWeek: householdWeekOf(ctx, regionId, state.regions[regionId].householdDepositInterestWeeklyLocal ?? 0),
         // §3.13-SOV row 2: the ladder is the store's, read here and passed in.
         govLadder: materializeGovLadder(ctx.v2, regionId),
       },

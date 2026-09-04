@@ -79,12 +79,12 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a stated rule over stated constituents at stated weights | `src/domain/indexes.ts:IndexDefinition` | ✅ |
 | A1.a all three public and reproducible | `src/ui/objects/index-object.tsx:indexesOf` | ⚠️ |
-| A2 reads cleared prices and nothing else | `src/engine/simulation/stages/index-calculation.ts:indexValueUSD` | ⚠️ |
+| A2 reads cleared prices and nothing else | `src/engine/simulation/stages/index-calculation.ts:indexValueLocal` | ⚠️ |
 | **A3 FORBID never an input to its own constituents** | `src/engine/macro/indices.ts:measureBeta` | ⚠️ |
 | A4 a unit and a base | `src/domain/indexes.ts:INDEX_BASE_LEVEL` | ✅ |
 | B1 weights come from something real | `src/engine/simulation/stages/index-calculation.ts:rebalance` | ✅ |
 | B2 the constituent set changes | `src/domain/indexes.ts:INDEX_REBALANCE_WEEKS` | ✅ |
-| B2.a chained across the rebalance | `src/engine/simulation/stages/index-calculation.ts:basketValueUSD` | ✅ |
+| B2.a chained across the rebalance | `src/engine/simulation/stages/index-calculation.ts:basketValueLocal` | ✅ |
 | B3 corporate actions handled explicitly | — | ❌ |
 | B4 VERIFY index return = weighted constituent return | — | ❌ |
 | C1 a benchmark, and the measurement drives flows | — | ❌ |
@@ -93,7 +93,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 an underlying futures/options/swaps settle against | `src/domain/derivatives/registry.ts:DERIVATIVE_CLASSES` | ❌ |
 | C4 a signal participants read | `src/engine/macro/indices.ts:regionIndexOf` | ✅ |
 | D1 an equity index per region | `src/domain/indexes.ts:INDEX_DEFINITIONS` | ⚠️ |
-| D2 a credit index over a defined bond set | `src/engine/simulation/stages/index-calculation.ts:fixedMarketValueUSD` | ⚠️ |
+| D2 a credit index over a defined bond set | `src/engine/simulation/stages/index-calculation.ts:fixedMarketValueLocal` | ⚠️ |
 | **D3 a rate benchmark floating instruments fix on** | `src/domain/company.ts:referenceBenchmark` | ❌ |
 | D3.a a read of actual transactions | `src/domain/pricing/tranche.ts:policyRate` | ❌ |
 | **D3.b FORBID no benchmark that is posted rather than transacted** | `src/engine/macro/evolution.ts:taylorTarget` | ❌ |

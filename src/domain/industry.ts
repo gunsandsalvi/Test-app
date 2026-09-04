@@ -104,22 +104,22 @@ export const DEMAND_LADDER_RUNGS = 3;
  * own value at `p`.
  */
 export function budgetDemandLadder(args: {
-  weeklyBudgetUSD: number;
+  weeklyBudgetLocal: number;
   budgetReachMultiple: number;
-  referencePriceUSD: number;
+  referencePriceLocal: number;
   satiationUnits: number;
   rungs?: number;
-}): { units: number; maxPriceUSD: number }[] {
-  const { weeklyBudgetUSD, referencePriceUSD, satiationUnits } = args;
+}): { units: number; maxPriceLocal: number }[] {
+  const { weeklyBudgetLocal, referencePriceLocal, satiationUnits } = args;
   const rungs = Math.max(1, args.rungs ?? HOUSEHOLD_DEMAND_LADDER_RUNGS);
-  if (!(weeklyBudgetUSD > 0)) return [];
+  if (!(weeklyBudgetLocal > 0)) return [];
   // The money this line can actually command: its own budget, plus the share of the wider budget
   // its tier can be defended with. This is the ONLY bound on what the household will pay.
-  const reachableUSD = weeklyBudgetUSD * Math.max(1, args.budgetReachMultiple);
+  const reachableLocal = weeklyBudgetLocal * Math.max(1, args.budgetReachMultiple);
   // The most it could ever want: what it physically consumes, or — with no registry intensity for
   // this good — what that money buys at the going price.
   const maxUnits = satiationUnits > 0 ? satiationUnits
-    : (referencePriceUSD > 0 ? reachableUSD / referencePriceUSD : 0);
+    : (referencePriceLocal > 0 ? reachableLocal / referencePriceLocal : 0);
   if (!(maxUnits > 0)) return [];
 
   // The rungs are equal QUANTITY steps, each priced at the level where that step is the marginal
@@ -154,9 +154,9 @@ export function budgetDemandLadder(args: {
   // count only samples the curve (a resolution choice); the clearing point it produces for a
   // given supply is the curve's own value there, finer as the count grows.
   const step = maxUnits / rungs;
-  const out: { units: number; maxPriceUSD: number }[] = [];
+  const out: { units: number; maxPriceLocal: number }[] = [];
   for (let i = 1; i <= rungs; i++) {
-    out.push({ units: step, maxPriceUSD: reachableUSD / (step * i) });
+    out.push({ units: step, maxPriceLocal: reachableLocal / (step * i) });
   }
   return out;
 }

@@ -29,7 +29,7 @@ import { institutionProfile } from './institution-profiles';
  *
  * RULE 5, OPEN: a real home-bias mandate is a LIMIT ("no more than X% foreign"), but
  * HF4 CHECKED THIS AND THE CLAIM DOES NOT HOLD. The review recorded it as "a mandate LIMIT
- * acting as a preference". It is not: `mandateWeightForIssuer` feeds `structuralSizeUSD`, which
+ * acting as a preference". It is not: `mandateWeightForIssuer` feeds `structuralSizeLocal`, which
  * becomes `maxHoldingLocal x overweightMultiple` — a CEILING — and the fill between zero and it is
  * decided tactically by the entity's own reservation against the cleared level. The bound is
  * already a bound. What IS still stated is the seven LEVELS below: they are mandate primitives
@@ -62,16 +62,16 @@ export function mandateWeightForIssuer(
   entityType: InstitutionalEntityType,
   holderRegion: RegionId,
   issuerRegion: RegionId,
-  marketSizeByRegionUSD: Record<string, number>
+  marketSizeByRegionLocal: Record<string, number>
 ): number {
   const homeBias = HOME_BIAS_BY_ENTITY_TYPE[entityType] ?? 1;
   if (issuerRegion === holderRegion) return homeBias;
   if (homeBias >= 1) return 0;
-  const foreignTotal = Object.entries(marketSizeByRegionUSD)
+  const foreignTotal = Object.entries(marketSizeByRegionLocal)
     .filter(([r]) => r !== holderRegion)
     .reduce((a, [, v]) => a + (Number(v) || 0), 0);
   if (foreignTotal <= 0) return 0;
-  return (1 - homeBias) * ((Number(marketSizeByRegionUSD[issuerRegion]) || 0) / foreignTotal);
+  return (1 - homeBias) * ((Number(marketSizeByRegionLocal[issuerRegion]) || 0) / foreignTotal);
 }
 
 /**

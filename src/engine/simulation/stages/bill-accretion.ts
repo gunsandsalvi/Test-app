@@ -63,24 +63,24 @@ export function runBillAccretionStage(state: GameState, ctx: WeeklyStepContext):
       if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return c;
       const existing = c.bankBalanceSheet;
       const byTenor = { ...(existing.sovereignBondHoldingsByBond || {}) };
-      let gainUSD = 0;
+      let gainLocal = 0;
       rateByBill.forEach((rate, key) => {
         const heldLocal = Number(byTenor[key]) || 0;
         if (heldLocal <= 0 || rate === 0) return;
-        const accretedUSD = heldLocal * rate;
-        byTenor[key] = heldLocal + accretedUSD;
-        gainUSD += accretedUSD;
+        const accretedLocal = heldLocal * rate;
+        byTenor[key] = heldLocal + accretedLocal;
+        gainLocal += accretedLocal;
       });
-      if (gainUSD === 0 && !(existing.lastBillAccretionWeeklyUSD ?? 0)) return c;
+      if (gainLocal === 0 && !(existing.lastBillAccretionWeeklyLocal ?? 0)) return c;
       return {
         ...c,
         bankBalanceSheet: {
-          ...bookPnL(existing, gainUSD, 'bill accretion', c.ticker),
+          ...bookPnL(existing, gainLocal, 'bill accretion', c.ticker),
           sovereignBondHoldingsByBond: byTenor,
           sovereignBondHoldingsLocal: Math.round(Object.values(byTenor).reduce((a: number, v) => a + (Number(v) || 0), 0)),
           // §7.254: recorded so next week's NIM income measure counts the return this book
           // actually earned; the equity leg above is the booking, this line is the reading.
-          lastBillAccretionWeeklyUSD: Math.round(gainUSD),
+          lastBillAccretionWeeklyLocal: Math.round(gainLocal),
         },
       };
     });
@@ -109,18 +109,18 @@ export function runBillAccretionStage(state: GameState, ctx: WeeklyStepContext):
     const cb = reg.centralBankSheet;
     if (cb) {
       const book = { ...cb.sovereignHoldingsByBond };
-      let gainUSD = 0;
+      let gainLocal = 0;
       rateByBill.forEach((rate, key) => {
         const heldLocal = Number(book[key]) || 0;
         if (heldLocal <= 0 || rate === 0) return;
         book[key] = heldLocal * (1 + rate);
-        gainUSD += heldLocal * rate;
+        gainLocal += heldLocal * rate;
       });
-      if (gainUSD > 0) {
+      if (gainLocal > 0) {
         cb.sovereignHoldingsByBond = book;
-        cb.lastBillAccretionUSD = Math.round(gainUSD);
+        cb.lastBillAccretionLocal = Math.round(gainLocal);
       } else {
-        cb.lastBillAccretionUSD = 0;
+        cb.lastBillAccretionLocal = 0;
       }
     }
   });

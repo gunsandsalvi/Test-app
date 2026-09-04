@@ -34,7 +34,7 @@ export function getRegionPopulation(regionId: RegionId): number {
   return Math.round(raw / 100_000) * 100_000;
 }
 
-export function getRegionProductivityPerCapitaUSD(regionId: RegionId): number {
+export function getRegionProductivityPerCapitaLocal(regionId: RegionId): number {
   return Math.round((PRODUCTIVITY_UNIT_USD * zipfMultiple(PRODUCTIVITY_RANK[regionId], PRODUCTIVITY_ZIPF_EXPONENT)));
 }
 
@@ -63,9 +63,9 @@ export const MORTALITY_PER_RETIRED_SHARE = 0.030;
 
 /** Region productivity relative to the set's mean — the income term the transition reads. */
 function relativeProductivity(regionId: RegionId): number {
-  const all = REGION_IDS.map(getRegionProductivityPerCapitaUSD);
+  const all = REGION_IDS.map(getRegionProductivityPerCapitaLocal);
   const mean = all.reduce((a, b) => a + b, 0) / all.length;
-  return mean > 0 ? getRegionProductivityPerCapitaUSD(regionId) / mean : 1;
+  return mean > 0 ? getRegionProductivityPerCapitaLocal(regionId) / mean : 1;
 }
 
 export function getRegionBirthRateAnnual(regionId: RegionId): number {

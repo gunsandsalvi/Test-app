@@ -2,7 +2,7 @@ import { isActiveCompany, CreditRating } from '../../domain/company';
 import { rowOf, ringLen, ringAt } from '../../engine2/world';
 import { Company, RegionId, Region, Commodity, CompositeBenchmarkIndices, IndexMetric } from '../../types';
 import { generate52WeekHistory } from './utils';
-import { getRegionPopulation, getRegionProductivityPerCapitaUSD, POPULATION_UNIT, PRODUCTIVITY_UNIT_USD } from '../bootstrap/population';
+import { getRegionPopulation, getRegionProductivityPerCapitaLocal, POPULATION_UNIT, PRODUCTIVITY_UNIT_USD } from '../bootstrap/population';
 import { RATING_OAS_SPREADS } from '../pricing';
 import { marketCapOf, totalDebtOf } from '../../domain/company';
 
@@ -12,7 +12,7 @@ import { marketCapOf, totalDebtOf } from '../../domain/company';
 const INDEX_BASE_UNIT = 1000;
 const REFERENCE_ECONOMIC_SIZE = POPULATION_UNIT * PRODUCTIVITY_UNIT_USD;
 function regionIndexBase(regionId: RegionId): number {
-  const economicSize = getRegionPopulation(regionId) * getRegionProductivityPerCapitaUSD(regionId);
+  const economicSize = getRegionPopulation(regionId) * getRegionProductivityPerCapitaLocal(regionId);
   return Number((INDEX_BASE_UNIT * (economicSize / REFERENCE_ECONOMIC_SIZE)).toFixed(1));
 }
 // Fallback OAS spreads (used only when a region/rating bucket has no companies yet) come

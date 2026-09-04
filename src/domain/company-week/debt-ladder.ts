@@ -63,15 +63,15 @@ export function callEconomics(i: {
  * callable size is smaller than the free version — the detail that separates a real call from an
  * accounting one.
  */
-export function callableAmountUSD(i: {
-  tranchePrincipalUSD: number;
+export function callableAmountLocal(i: {
+  tranchePrincipalLocal: number;
   cashLocal: number;
-  cashFloorUSD: number;
+  cashFloorLocal: number;
   premiumPerDollar: number;
 }): number {
-  const budgetUSD = i.cashLocal - i.cashFloorUSD;
-  if (!(budgetUSD > 0)) return 0;
-  return Math.max(0, Math.min(i.tranchePrincipalUSD, budgetUSD / (1 + i.premiumPerDollar)));
+  const budgetLocal = i.cashLocal - i.cashFloorLocal;
+  if (!(budgetLocal > 0)) return 0;
+  return Math.max(0, Math.min(i.tranchePrincipalLocal, budgetLocal / (1 + i.premiumPerDollar)));
 }
 
 /** The paper coming due inside a window — what has to be refinanced or repaid. */
@@ -84,6 +84,6 @@ export function tranchesDueWithin<T extends { maturityWeek?: number; principalLo
 }
 
 /** A ladder carries no zero rungs: a tranche repaid to nothing is gone, not a row of zeroes. */
-export function dropExhausted<T extends { principalLocal: number }>(tranches: T[], dustUSD = 1): T[] {
-  return tranches.filter((t) => t.principalLocal > dustUSD);
+export function dropExhausted<T extends { principalLocal: number }>(tranches: T[], dustLocal = 1): T[] {
+  return tranches.filter((t) => t.principalLocal > dustLocal);
 }

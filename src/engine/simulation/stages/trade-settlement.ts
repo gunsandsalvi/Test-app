@@ -23,8 +23,8 @@ import { getFxToUsd } from './06-fx-and-trade';
 import { pay } from './settlement';
 
 export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext): void {
-  ctx.tradeInvoiceFxGainUSD = 0;
-  ctx.tradeInvoiceWriteOffUSD = 0;
+  ctx.tradeInvoiceFxGainLocal = 0;
+  ctx.tradeInvoiceWriteOffLocal = 0;
   const outstanding = state.tradeInvoices ?? [];
   if (outstanding.length === 0) return;
 
@@ -41,7 +41,7 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
   outstanding.forEach((invoice) => {
     if (invoice.weekDue > state.currentWeek) { stillOutstanding.push(invoice); return; }
 
-    const bookedUSD = invoice.amountCurrency * invoice.bookedUsdPerCurrency;
+    const bookedLocal = invoice.amountCurrency * invoice.bookedUsdPerCurrency;
 
     // §7.286 — a dead BUYER kills the invoice (paying a seller out of a buyer that no longer
     // exists would mint the money; the unpaid receivable is the seller's real loss). A dead
@@ -51,17 +51,17 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
     // receivable the estate was simultaneously "collecting" from the UNMODELED boundary —
     // the same claim represented twice, one copy funded by nobody.
     if (!activeByTicker.get(invoice.buyerTicker)) {
-      ctx.tradeInvoiceWriteOffUSD += bookedUSD;
+      ctx.tradeInvoiceWriteOffLocal += bookedLocal;
       return;
     }
 
     const rateNow = usdPerCurrency[invoice.currency];
-    const settledUSD = rateNow > 0 && isFinite(rateNow) ? invoice.amountCurrency * rateNow : bookedUSD;
+    const settledLocal = rateNow > 0 && isFinite(rateNow) ? invoice.amountCurrency * rateNow : bookedLocal;
 
     const seller = companyUpdates[invoice.sellerTicker] ?? (companyUpdates[invoice.sellerTicker] = {});
-    seller.tradeReceivableCollectedUSD = (seller.tradeReceivableCollectedUSD ?? 0) + settledUSD;
+    seller.tradeReceivableCollectedLocal = (seller.tradeReceivableCollectedLocal ?? 0) + settledLocal;
     const buyer = companyUpdates[invoice.buyerTicker] ?? (companyUpdates[invoice.buyerTicker] = {});
-    buyer.tradePayableSettledUSD = (buyer.tradePayableSettledUSD ?? 0) + settledUSD;
+    buyer.tradePayableSettledLocal = (buyer.tradePayableSettledLocal ?? 0) + settledLocal;
     // CASH: the money goes from the buyer to the seller, because that is who owes whom. Stage
     // 08 used to post each side against the UNMODELED boundary and let the two halves find each
     // other in the aggregate — a payment whose counterparty is known has no business at a
@@ -69,7 +69,7 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
     pay(ctx, {
       payer: { kind: 'COMPANY', ticker: invoice.buyerTicker },
       payee: { kind: 'COMPANY', ticker: invoice.sellerTicker },
-      amount: settledUSD,
+      amount: settledLocal,
       currency: invoice.currency as CurrencyCode,
       reason: 'trade invoice settled',
     });
@@ -77,7 +77,7 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
     // Both legs move by the same amount, so the pair nets to zero and no money is created. What
     // each side FEELS is the gap against what it booked, and that gap is only ever zero for a
     // party invoicing in its own currency.
-    ctx.tradeInvoiceFxGainUSD += settledUSD - bookedUSD;
+    ctx.tradeInvoiceFxGainLocal += settledLocal - bookedLocal;
   });
 
   state.tradeInvoices = stillOutstanding;

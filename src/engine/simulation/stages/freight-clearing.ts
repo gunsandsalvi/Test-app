@@ -22,9 +22,9 @@ import { GameState, Region, RegionId, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { laneDistanceNm } from '../../../domain/geography';
 import {
-  FreightAsset, laneKey, marginalCostPerTonneNmUSD, weeklyCapacityTonnes,
+  FreightAsset, laneKey, marginalCostPerTonneNmLocal, weeklyCapacityTonnes,
 } from '../../../domain/carrier';
-import { getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
+import { getBaseAnnualWageLocal } from '../../bootstrap/labor-and-wages';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { convertLocal, FxToUsd } from '../../../domain/currency';
 import { LaneBooking, SOURCING_REGION_IDS } from './sourcing-intent';
@@ -43,7 +43,7 @@ export interface FreightClearing {
   marginalRatePerTonneLaneMoneyByLane: Record<string, number>;
   /** Tonnes each carrier actually carried, what it earned, and the fuel that took. */
   carrierTonnesCarried: Map<string, number>;
-  carrierRevenueUSD: Map<string, number>;
+  carrierRevenueLocal: Map<string, number>;
   carrierFuelBurnedTonnes: Map<string, number>;
   /** Of the tonnage booked on a lane, the share that found space. */
   laneFillRatio: Record<string, number>;
@@ -62,7 +62,7 @@ export function emptyFreightClearing(): FreightClearing {
     ratePerTonneLaneMoneyByLane: {},
     marginalRatePerTonneLaneMoneyByLane: {},
     carrierTonnesCarried: new Map(),
-    carrierRevenueUSD: new Map(),
+    carrierRevenueLocal: new Map(),
     carrierFuelBurnedTonnes: new Map(),
     laneFillRatio: {},
     shippedShareByLaneSubUnit: new Map(),
@@ -82,8 +82,8 @@ export function fuelPriceUsdPerTonne(region: Region, unitMassTonnes: Record<stri
 }
 
 /** A carrier's crew wage: the region's real going rate for the trades that operate equipment. */
-export function crewAnnualWageUSD(region: Region, regionId: RegionId): number {
-  const base = getBaseAnnualWageUSD(regionId).SKILLED_TRADES;
+export function crewAnnualWageLocal(region: Region, regionId: RegionId): number {
+  const base = getBaseAnnualWageLocal(regionId).SKILLED_TRADES;
   const index = region.occupationPools?.SKILLED_TRADES?.wageIndex;
   return base * (typeof index === 'number' && index > 0 ? index : 1);
 }
@@ -113,19 +113,19 @@ function buildCarrierOffers(
   carriers.forEach(carrier => {
     const home = carrier.region as RegionId;
     const fuelUsdPerTonne = fuelPriceUsdPerTonne(regions[home], unitMassTonnes);
-    const wage = crewAnnualWageUSD(regions[home], home);
+    const wage = crewAnnualWageLocal(regions[home], home);
 
     // CAP — the carrier's own weekly capital charge, spread across its fleet by capacity. The
     // return its hulls require is a real cost of offering the capacity, and a floor without it
     // prices freight where the fleet cannot be replaced.
-    const netPpeUSD = Math.max(0, (carrier.grossPPELocal ?? 0) - (carrier.accumulatedDepreciationLocal ?? 0));
+    const netPpeLocal = Math.max(0, (carrier.grossPPELocal ?? 0) - (carrier.accumulatedDepreciationLocal ?? 0));
     const costOfCapital = Math.max(0,
       (regions[home]?.zeroRates?.tenor10Y ?? regions[home]?.policyRate ?? 0) + (carrier.beta ?? 1) * EQUITY_RISK_PREMIUM);
     const fleetCapacityTonnes = (carrier.carrierFleet?.assets ?? []).reduce((a, x: FreightAsset) => {
       const d = laneDistanceNm(x.laneFrom, x.laneTo);
       return a + (d > 0 ? weeklyCapacityTonnes(x, d) : 0);
     }, 0);
-    const carrierWeeklyCapitalChargeUSD = (netPpeUSD * costOfCapital) / 52;
+    const carrierWeeklyCapitalChargeLocal = (netPpeLocal * costOfCapital) / 52;
 
     // One offer per lane, not per hull: several identical vessels on a route are one block of
     // capacity at one cost.
@@ -138,10 +138,10 @@ function buildCarrierOffers(
       // A carrier's fuel and crew are paid in its OWN money; a lane is quoted in its origin's.
       // A Japanese operator on a European route competes at the euro equivalent of its yen costs,
       // which is the channel by which a weak home currency makes an operator cheap abroad.
-      const costInCarrierMoney = marginalCostPerTonneNmUSD({
-        asset, fuelPriceUsdPerTonne: fuelUsdPerTonne, annualCrewWageUSD: wage, distanceNm,
-        weeklyCapitalChargeUSD: fleetCapacityTonnes > 0
-          ? carrierWeeklyCapitalChargeUSD * (capacity / fleetCapacityTonnes) : 0,
+      const costInCarrierMoney = marginalCostPerTonneNmLocal({
+        asset, fuelPriceUsdPerTonne: fuelUsdPerTonne, annualCrewWageLocal: wage, distanceNm,
+        weeklyCapitalChargeLocal: fleetCapacityTonnes > 0
+          ? carrierWeeklyCapitalChargeLocal * (capacity / fleetCapacityTonnes) : 0,
       }) * distanceNm;
       const minPrice = convertLocal(costInCarrierMoney, home, asset.laneFrom, fxToUsd);
       const existing = byLane.get(key);
@@ -247,15 +247,15 @@ export function runFreightClearing(args: {
       result.carrierShareByLane.set(key, shares);
     }
     if (FREIGHT_TRACE) {
-      let laneRevenueUSD = 0;
-      cleared.sales.forEach((fill) => { laneRevenueUSD += fill.amount; });
+      let laneRevenueLocal = 0;
+      cleared.sales.forEach((fill) => { laneRevenueLocal += fill.amount; });
       console.log(`  [frt] ${key} booked ${(booked / 1e3).toFixed(0)}kt cap ${((capacityByLane[key] ?? 0) / 1e3).toFixed(0)}kt`
         + ` rate ${cleared.clearedPrice.toFixed(2)} anchor ${anchor.toFixed(2)} fill ${(result.laneFillRatio[key] ?? 0).toFixed(2)}`
-        + ` rev ${(laneRevenueUSD / 1e6).toFixed(1)}M bids ${bids.length} maxBid ${Math.max(...bids.map((b) => b.maxPrice)).toFixed(2)}`);
+        + ` rev ${(laneRevenueLocal / 1e6).toFixed(1)}M bids ${bids.length} maxBid ${Math.max(...bids.map((b) => b.maxPrice)).toFixed(2)}`);
     }
     cleared.sales.forEach((fill, ticker) => {
       result.carrierTonnesCarried.set(ticker, (result.carrierTonnesCarried.get(ticker) ?? 0) + fill.quantity);
-      result.carrierRevenueUSD.set(ticker, (result.carrierRevenueUSD.get(ticker) ?? 0) + fill.amount);
+      result.carrierRevenueLocal.set(ticker, (result.carrierRevenueLocal.get(ticker) ?? 0) + fill.amount);
       const carrier = carriers.find(c => c.ticker === ticker);
       const asset = carrier?.carrierFleet?.assets.find((a: FreightAsset) => laneKey(a.laneFrom, a.laneTo) === key);
       if (asset && asset.capacityTonnes > 0) {

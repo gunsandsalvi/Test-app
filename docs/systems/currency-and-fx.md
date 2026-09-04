@@ -109,12 +109,12 @@ checked by `scripts/check-atlas.sh`.
 | D1 one rate in force for the period | `src/engine2/world.ts:openFxWeek` | ✅ |
 | D1.a a rate that changes mid-period is a residual | `src/engine/simulation/stages/context.ts:WeeklyStepContext` | ✅ |
 | D2 every foreign position revalues | `src/engine/simulation/stages/fx-revaluation.ts:runFxRevaluationStage` | ✅ |
-| D2.a it hits equity, and the issuer's own account | `src/domain/central-bank.ts:centralBankLiabilitiesUSD` | ✅ |
+| D2.a it hits equity, and the issuer's own account | `src/domain/central-bank.ts:centralBankLiabilitiesLocal` | ✅ |
 | D2.b FORBID an unrevalued position is silent money | `src/engine/audit/money.ts:auditMoney` | ✅ |
 | D3 revaluation happens before anything uses the new rate | `src/engine/simulation/core.ts:advanceWeeklyStep` | ✅ |
 | D4 Σ gains + Σ losses = the move on the net open position | — | ❌ |
 | E1 it moves because somebody trades at it | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
-| E2 the reasons are real | `src/domain/fx-market.ts:speculatorMaxPositionUSD` | ✅ |
+| E2 the reasons are real | `src/domain/fx-market.ts:speculatorMaxPositionLocal` | ✅ |
 | E2.a a rate differential is a reason, hedging is its cost | `src/domain/derivatives/classes/fx-forward.ts:FX_FORWARD_PROFILE` | ✅ |
 | **E3 FORBID no exogenous rate path** | `src/engine/macro/evolution.ts:evolveFxPair` | ⚠️ |
 | E4 one-way flow should move the rate | `src/engine/simulation/stages/fx-clearing.ts:recordForeignHoldingsSnapshot` | ✅ |

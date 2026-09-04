@@ -17,7 +17,7 @@ const playerPfeAddOnRate = (assetType: string): number =>
 export function executeTrade(
   state: GameState,
   posData: Omit<Position, 'id' | 'openedWeek' | 'unrealizedPnL' | 'realizedPnL' | 'maintenanceMargin' | 'weeklyFinancingCost'>,
-  executionDetails?: { fillPrice: number; counterpartyFeeUSD: number; sourcedFrom: string; spreadCostUSD: number }
+  executionDetails?: { fillPrice: number; counterpartyFeeLocal: number; sourcedFrom: string; spreadCostLocal: number }
 ): GameState {
   const newPos: Position = {
     ...posData,
@@ -29,14 +29,14 @@ export function executeTrade(
     weeklyFinancingCost: 0,
   };
 
-  const updatedCash = state.portfolio.cashLocal - (executionDetails?.spreadCostUSD ?? 0);
+  const updatedCash = state.portfolio.cashLocal - (executionDetails?.spreadCostLocal ?? 0);
 
   const updatedPositions = [newPos, ...state.portfolio.positions];
   const totalMarginReq = updatedPositions.reduce((s, p) => s + p.marginRequirement, 0);
   const totalMaintMargin = updatedPositions.reduce((s, p) => s + p.maintenanceMargin, 0);
 
-  const navUSD = updatedCash + updatedPositions.reduce((s, p) => s + p.unrealizedPnL, 0);
-  const marginUtilizationPct = navUSD > 0 ? Math.round((totalMarginReq / navUSD) * 100) : 100;
+  const navLocal = updatedCash + updatedPositions.reduce((s, p) => s + p.unrealizedPnL, 0);
+  const marginUtilizationPct = navLocal > 0 ? Math.round((totalMarginReq / navLocal) * 100) : 100;
 
   // G3b: a player order is an order to a NAMED bank's desk — the same desk that makes markets
   // in this book for every other participant. `dealerId` is that bank's ticker.
@@ -60,34 +60,34 @@ export function executeTrade(
       const sheet = bank.bankBalanceSheet!;
       const book = DESK_BOOK_BY_ASSET_TYPE[posData.assetType] ?? 'derivatives';
       const instrumentId = posData.trancheId || posData.symbol;
-      const balanceSheetUseUSD = book === 'derivatives'
+      const balanceSheetUseLocal = book === 'derivatives'
         ? posData.notional * playerPfeAddOnRate(posData.assetType)
         : posData.notional;
       // Buying takes paper OFF the desk; selling puts it on. A short sale is the desk taking the
       // other side, which leaves it long, exactly as a real client short does. A derivative
       // consumes the desk either way — the add-on is charged on gross notional, not net.
-      const inventoryDeltaUSD = book === 'derivatives'
-        ? balanceSheetUseUSD
-        : (posData.direction === 'LONG' ? -balanceSheetUseUSD : balanceSheetUseUSD);
-      const incomeUSD = executionDetails.counterpartyFeeUSD + executionDetails.spreadCostUSD;
+      const inventoryDeltaLocal = book === 'derivatives'
+        ? balanceSheetUseLocal
+        : (posData.direction === 'LONG' ? -balanceSheetUseLocal : balanceSheetUseLocal);
+      const incomeLocal = executionDetails.counterpartyFeeLocal + executionDetails.spreadCostLocal;
 
       const inventory = { ...(sheet.dealerDeskInventory ?? {}) };
       const rows = [...(inventory[book] ?? [])];
       const at = rows.findIndex((r) => r.instrumentId === instrumentId);
-      if (at >= 0) rows[at] = { instrumentId, inventoryLocal: rows[at].inventoryLocal + inventoryDeltaUSD };
-      else rows.push({ instrumentId, inventoryLocal: inventoryDeltaUSD });
+      if (at >= 0) rows[at] = { instrumentId, inventoryLocal: rows[at].inventoryLocal + inventoryDeltaLocal };
+      else rows.push({ instrumentId, inventoryLocal: inventoryDeltaLocal });
       inventory[book] = rows.filter((r) => Math.abs(r.inventoryLocal) > 1);
 
       updatedCompanies = [...state.companies];
       updatedCompanies[bankIndex] = {
         ...bank,
         bankBalanceSheet: {
-          ...bookPnL(sheet, incomeUSD, 'player trade fee/spread', bank.ticker),
+          ...bookPnL(sheet, incomeLocal, 'player trade fee/spread', bank.ticker),
           dealerDeskInventory: inventory,
         },
       };
       // A3.6: the desk pays for inventory from the bank's account and the fee lands on it.
-      adjustBankReserves(ensureV2(state), bank.ticker, -inventoryDeltaUSD + incomeUSD);
+      adjustBankReserves(ensureV2(state), bank.ticker, -inventoryDeltaLocal + incomeLocal);
 
       // The region's view of that book, kept in step for the readers that want one aggregate.
       const region = updatedRegions[posData.region];
@@ -119,12 +119,12 @@ export function executeTrade(
     portfolio: {
       ...state.portfolio,
       cashLocal: updatedCash,
-      navUSD,
+      navLocal,
       positions: updatedPositions,
-      totalRequiredMarginUSD: totalMarginReq,
-      maintenanceMarginUSD: totalMaintMargin,
+      totalRequiredMarginLocal: totalMarginReq,
+      maintenanceMarginLocal: totalMaintMargin,
       marginUtilizationPct,
-      isMarginCall: navUSD < totalMaintMargin,
+      isMarginCall: navLocal < totalMaintMargin,
     }
   };
 }

@@ -76,10 +76,10 @@ export function shelfLifeWeeksOf(subUnitId: string): number | undefined {
  * It is pinned at the BASELINE price and never moves afterwards, because mass is physical: when
  * steel doubles in price the same tonne is worth twice as much, it does not become half a tonne.
  */
-export function unitMassTonnes(subUnitId: string, baselineUnitPriceUSD: number): number {
+export function unitMassTonnes(subUnitId: string, baselineUnitPriceLocal: number): number {
   const physical = SUBUNIT_PHYSICAL[subUnitId];
   if (!physical || physical.deliveryMode !== 'PHYSICAL') return 0;
   const density = physical.baselineValueDensityUsdPerTonne;
-  if (!density || !(density > 0) || !(baselineUnitPriceUSD > 0)) return 0;
-  return baselineUnitPriceUSD / density;
+  if (!density || !(density > 0) || !(baselineUnitPriceLocal > 0)) return 0;
+  return baselineUnitPriceLocal / density;
 }

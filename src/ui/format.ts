@@ -12,7 +12,7 @@ export function money(usd: number | undefined | null, digits = 1): string {
 }
 
 /** Statement style: USD millions with thousands separators, negatives in parentheses. */
-export function statementUSD(usd: number | undefined | null): string {
+export function statementLocal(usd: number | undefined | null): string {
   if (usd === undefined || usd === null || !Number.isFinite(usd)) return '—';
   const m = Math.round(usd / 1e6);
   const s = Math.abs(m).toLocaleString('en-US');

@@ -92,8 +92,8 @@ port.on('message', (job: BackAJob) => {
   const fakeCtx = {
     paymentJournal: journal,
     deferPendingNet: true,
-    pendingHolderAccrualUSD: holderAcc,
-    pendingHolderCashUSD: holderCash,
+    pendingHolderAccrualLocal: holderAcc,
+    pendingHolderCashLocal: holderCash,
     pendingHolderAccrualPayout: holderPay,
     taxAccruedByRegion: {},
     channelShareByRegion: job.channelShareByRegion,
@@ -101,12 +101,12 @@ port.on('message', (job: BackAJob) => {
     channelMarginRevenue: {},
   } as unknown as WeeklyStepContext;
   const taxCapture = {
-    accrueUSD: new Float64Array(n).fill(NaN),
+    accrueLocal: new Float64Array(n).fill(NaN),
   };
   const F = {
     ...job.f,
     costDrivers: [], outputInv: [], updatedProductLines: [],
-    stillUnderConstruction: [], newRecurringBaseUSD: [],
+    stillUnderConstruction: [], newRecurringBaseLocal: [],
   } as FrontPass;
   const d = {
     ctx: fakeCtx,
@@ -119,7 +119,7 @@ port.on('message', (job: BackAJob) => {
     taxCapture,
     // Unreachable off the profile branch, which comp: null forbids:
     state: undefined, v2: undefined, entityById: undefined, companyUpdates: undefined,
-    regionMedianRevenueUSD: 0, systemicStressFactorGlobal: 0, mmfSweepBooks: undefined,
+    regionMedianRevenueLocal: 0, systemicStressFactorGlobal: 0, mmfSweepBooks: undefined,
     primarySettlementByIssuerId: undefined, pendingOfferingIssuerIds: undefined,
     leadBankFor: undefined, enqueueOffering: undefined, pushNews: undefined,
   } as unknown as BackKernelDeps;
@@ -135,13 +135,13 @@ port.on('message', (job: BackAJob) => {
   for (let i = job.lo; i < job.hi; i++) {
     if (isActive[i] === 1 && isProfile[i] !== 1) {
       const a = runBackCoreA(null, i, d);
-      const { post, cash, cashLedger, sec, costDriversUSD,
+      const { post, cash, cashLedger, sec, costDriversLocal,
         newOutputInventoryBySubUnit, updatedProductLines, stillUnderConstruction,
-        newRecurringBaseUSD, ...rest } = a;
-      void post; void cashLedger; void sec; void costDriversUSD;
+        newRecurringBaseLocal, ...rest } = a;
+      void post; void cashLedger; void sec; void costDriversLocal;
       void newOutputInventoryBySubUnit; void updatedProductLines; void stillUnderConstruction;
-      void newRecurringBaseUSD;
-      crossings[i] = { ...rest, cashAfterAUSD: cash.usd };
+      void newRecurringBaseLocal;
+      crossings[i] = { ...rest, cashAfterALocal: cash.usd };
     }
     journalMark[i] = journal.n;
     holderAccMark[i] = holderAcc.size;
@@ -169,7 +169,7 @@ port.on('message', (job: BackAJob) => {
     holderAcc: [...holderAcc], holderAccMark,
     holderCash: [...holderCash], holderCashMark,
     holderPay: [...holderPay], holderPayMark,
-    taxAccrue: taxCapture.accrueUSD,
+    taxAccrue: taxCapture.accrueLocal,
     crossings,
   };
   port.postMessage(out);

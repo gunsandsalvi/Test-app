@@ -9,7 +9,7 @@
  */
 
 import { CreditTierBook } from './region-macro';
-import { BankingSector, householdBookRwaUSD, businessLoanBookOf } from './banking';
+import { BankingSector, householdBookRwaLocal, businessLoanBookOf } from './banking';
 
 /** The workout prior: what a defaulted credit recovers before this region has measured its own
  *  experience (G5 displaces it with the realized rate, one resolution at a time — §7.192). */
@@ -28,10 +28,10 @@ export const BANK_MIN_CAPITAL_RATIO = 0.08;
 export const BANK_TARGET_ROE = 0.12;
 
 /** The bank's risk-weighted book — what the capital ratio and every capital charge divide by. */
-export function bankRwaUSD(sheet: BankingSector, facilityBookLocal: number): number {
+export function bankRwaLocal(sheet: BankingSector, facilityBookLocal: number): number {
   // HH3: the household book's weight is per-kind (a secured mortgage consumes less capital
   // than a card balance). §5-WIRES D: both books are read off the rows.
-  return businessLoanBookOf(sheet, facilityBookLocal) * 1.0 + householdBookRwaUSD(sheet.householdLoans);
+  return businessLoanBookOf(sheet, facilityBookLocal) * 1.0 + householdBookRwaLocal(sheet.householdLoans);
 }
 
 /** One margin quote for any borrower: expected loss + capital cost, in bps over policy. */

@@ -7,7 +7,7 @@
  * objects it names as `refs` (every one a link in the UI) and, where the ledger says why, the
  * WHY traced through the payment journal ("cash −4M after 12M of interest to VOUL and 30M of
  * inputs"). Rule 4 binds: no narrative templates from the real world, no colour — the interest
- * is that the causal chain is real. Stories carry a size (`materialityUSD`) so a reader's feed
+ * is that the causal chain is real. Stories carry a size (`materialityLocal`) so a reader's feed
  * ranks by what matters, and a region's story cites the firms that moved it.
  *
  * Runs after every mechanism stage and before the feed is assembled (13-news).
@@ -21,7 +21,7 @@ import { reasonText } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
-import { ladderTotalUSD } from '../../../engine2/tranches';
+import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 
 type Ref = NonNullable<NewsItem['refs']>[number];
@@ -112,10 +112,10 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: 'default',
       category: 'CREDIT',
       title: `${c.name} defaults`,
-      description: `${ticker} (${c.sector}, ${c.region}) ran out of cash: ${M(cashOf(ctx.v2, c))} on hand against coverage of ${c.interestCoverage.toFixed(2)}×, ${M(c.annualRevenue)} of revenue and ${M(ladderTotalUSD(ctx.v2, c.id))} of debt; ${N(c.employeeCount)} people worked there${c.homeBankTicker ? `, banked at ${c.homeBankTicker}` : ''}.`,
+      description: `${ticker} (${c.sector}, ${c.region}) ran out of cash: ${M(cashOf(ctx.v2, c))} on hand against coverage of ${c.interestCoverage.toFixed(2)}×, ${M(c.annualRevenue)} of revenue and ${M(ladderTotalLocal(ctx.v2, c.id))} of debt; ${N(c.employeeCount)} people worked there${c.homeBankTicker ? `, banked at ${c.homeBankTicker}` : ''}.`,
       cause: why.text ? `This week it paid ${why.text}.` : undefined,
       refs: [...refs, ...why.refs],
-      materialityUSD: Math.max(ladderTotalUSD(ctx.v2, c.id), c.annualRevenue),
+      materialityLocal: Math.max(ladderTotalLocal(ctx.v2, c.id), c.annualRevenue),
       impactRegion: c.region, impactSector: c.sector, affectedTicker: ticker,
       urgent: c.annualRevenue > 1e9,
     });
@@ -146,7 +146,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       title: `${c.name} ${up ? 'upgraded' : 'downgraded'} to ${rc.to}${crossesIg ? (up ? ', back to investment grade' : ', out of investment grade') : ''}`,
       description: `${rc.ticker} moves ${rc.from} → ${rc.to}; its bonds clear ${Math.round(c.oasSpreadBps)}bp over the curve and its protection ${Math.round(c.cdsSpreadBps)}bp. Leverage ${c.leverage.toFixed(1)}×, coverage ${c.interestCoverage.toFixed(1)}×, cash ${M(cashOf(ctx.v2, c))}, revenue ${M(c.annualRevenue)}.`,
       refs: [company(c), region(c.region)],
-      materialityUSD: ladderTotalUSD(ctx.v2, c.id),
+      materialityLocal: ladderTotalLocal(ctx.v2, c.id),
       impactRegion: c.region, impactSector: c.sector, affectedTicker: rc.ticker,
       urgent: crossesIg && !up,
     });
@@ -161,7 +161,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       description: (d.down.length ? `Down: ${d.down.slice(0, 12).join(', ')}${d.down.length > 12 ? ` and ${d.down.length - 12} more` : ''}. ` : '')
         + (d.up.length ? `Up: ${d.up.slice(0, 12).join(', ')}${d.up.length > 12 ? ` and ${d.up.length - 12} more` : ''}.` : ''),
       refs: [region(rid)],
-      materialityUSD: 0,
+      materialityLocal: 0,
       impactRegion: rid,
     });
   });
@@ -176,9 +176,9 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: 'merger',
       category: 'CREDIT',
       title: `${a.name} acquires ${t.name}`,
-      description: `${m.acquirerTicker} takes ${m.targetTicker} (${t.sector}, ${t.region}; ${M(t.annualRevenue)} of revenue, ${N(t.employeeCount)} people) into a group with ${M(a.annualRevenue)} of revenue and ${M(ladderTotalUSD(ctx.v2, a.id))} of debt.`,
+      description: `${m.acquirerTicker} takes ${m.targetTicker} (${t.sector}, ${t.region}; ${M(t.annualRevenue)} of revenue, ${N(t.employeeCount)} people) into a group with ${M(a.annualRevenue)} of revenue and ${M(ladderTotalLocal(ctx.v2, a.id))} of debt.`,
       refs: [company(a), company(t), region(a.region)],
-      materialityUSD: marketCapOf(t) > 0 ? marketCapOf(t) : t.annualRevenue,
+      materialityLocal: marketCapOf(t) > 0 ? marketCapOf(t) : t.annualRevenue,
       impactRegion: a.region, impactSector: a.sector, affectedTicker: m.acquirerTicker,
     });
   });
@@ -192,7 +192,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       title: `${c.name} enters ${c.region}`,
       description: `A new ${c.sector.toLowerCase()} firm, ${c.ticker}, is carved from the ${c.smePoolIndustry ?? c.sector} pool with ${M(c.annualRevenue)} of revenue and ${N(c.employeeCount)} people — entry goes where unserved demand times the pool's margin is highest.`,
       refs: [company(c), region(c.region)],
-      materialityUSD: c.annualRevenue,
+      materialityLocal: c.annualRevenue,
       impactRegion: c.region, impactSector: c.sector, affectedTicker: c.ticker,
     });
   });
@@ -205,7 +205,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       title: `${parent?.name ?? c.parentTicker} builds in ${c.region}`,
       description: `${c.parentTicker} opens ${c.ticker} in ${c.region}: ${M(c.annualRevenue)} of revenue, ${N(c.employeeCount)} people, funded from the parent's cash above its buffer.`,
       refs: [company(c), ...(parent ? [company(parent)] : []), region(c.region)],
-      materialityUSD: c.annualRevenue,
+      materialityLocal: c.annualRevenue,
       impactRegion: c.region, impactSector: c.sector, affectedTicker: c.parentTicker,
     });
   });
@@ -221,9 +221,9 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: 'plant offline',
       category: 'MACRO',
       title: `${c.name} starts mothballing its plant`,
-      description: `${c.ticker} has run part of its plant idle for its management's horizon — it makes what it expects to sell — and begins taking it offline (${P(share, 1)} this week, no upkeep, no staff). Revenue ${M(c.annualRevenue)}, expected earnings ${M(c.expectedEbitdaUSD ?? c.ebitda)}, ${N(c.employeeCount)} people.`,
+      description: `${c.ticker} has run part of its plant idle for its management's horizon — it makes what it expects to sell — and begins taking it offline (${P(share, 1)} this week, no upkeep, no staff). Revenue ${M(c.annualRevenue)}, expected earnings ${M(c.expectedEbitdaLocal ?? c.ebitda)}, ${N(c.employeeCount)} people.`,
       refs: [company(c), region(c.region)],
-      materialityUSD: (c.grossPPELocal ?? 0) * share,
+      materialityLocal: (c.grossPPELocal ?? 0) * share,
       impactRegion: c.region, impactSector: c.sector, affectedTicker: c.ticker,
     });
   });
@@ -242,7 +242,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         title: `${b.name} borrows at the central bank`,
         description: `${b.ticker} draws ${M(now)} at the standing facility: reserves ${M(bankReservesOf(ctx.v2, b.ticker))} against ${M(householdDepositsAt(ctx.v2, b.ticker, currencyOf(b.region)))} of household deposits, capital ratio ${P(sheet.bankCapitalRatio)}, central bank loan ${M(sheet.centralBankLoanLocal ?? 0)}.`,
         refs: [company(b), region(b.region)],
-        materialityUSD: now,
+        materialityLocal: now,
         impactRegion: b.region, impactSector: b.sector, affectedTicker: b.ticker,
         urgent: true,
       });
@@ -258,9 +258,9 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: 'estate closed',
       category: 'CREDIT',
       title: `${c?.name ?? e.ticker}'s estate closes`,
-      description: `The workout of ${e.ticker} (opened ${week - e.openedWeek} weeks ago) distributed ${M(e.distributedUSD)} against ${M(owed)} of claims — ${owed > 0 ? P(e.distributedUSD / owed, 0) : '—'} recovered by ${e.claims.length} claimants.`,
+      description: `The workout of ${e.ticker} (opened ${week - e.openedWeek} weeks ago) distributed ${M(e.distributedLocal)} against ${M(owed)} of claims — ${owed > 0 ? P(e.distributedLocal / owed, 0) : '—'} recovered by ${e.claims.length} claimants.`,
       refs: [...(c ? [company(c)] : []), region(e.regionId)],
-      materialityUSD: owed,
+      materialityLocal: owed,
       impactRegion: e.regionId, affectedTicker: e.ticker,
     });
   });
@@ -290,7 +290,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         + (dead.length ? `${dead.length} firm${dead.length > 1 ? 's' : ''} defaulted (${N(deadHeads)} people): ${dead.map((c) => c.ticker).join(', ')}. ` : '')
         + `Inflation ${P(after.inflation)}, policy rate ${P(after.policyRate, 2)}, tightness ${(after.laborMarketTightness ?? 0).toFixed(2)}.`,
       refs: [region(rid), ...movers.map((x) => company(x.c)), ...dead.map(company)],
-      materialityUSD: Math.abs(du) * (after.derivedNominalGdpUSD ?? after.estimatedNominalGdpLocal ?? 0),
+      materialityLocal: Math.abs(du) * (after.derivedNominalGdpLocal ?? after.estimatedNominalGdpLocal ?? 0),
       impactRegion: rid,
       urgent: Math.abs(du) >= 0.02,
     });
@@ -320,7 +320,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         : `index at ${after.consumerPriceIndex.toFixed(1)}; no year of history yet`}). `
         + (cats.length ? `Biggest moves: ${cats.map((x) => `${x.k.replace(/_/g, ' ')} ${x.move > 0 ? '+' : ''}${P(x.move, 0)} (${P(x.fill, 0)} of demand served)`).join('; ')}.` : ''),
       refs: [region(rid)],
-      materialityUSD: Math.abs(dp) * (after.derivedNominalGdpUSD ?? after.estimatedNominalGdpLocal ?? 0),
+      materialityLocal: Math.abs(dp) * (after.derivedNominalGdpLocal ?? after.estimatedNominalGdpLocal ?? 0),
       impactRegion: rid,
       urgent: Math.abs(dp) >= 0.05,
     });

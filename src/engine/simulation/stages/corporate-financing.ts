@@ -36,15 +36,15 @@ import { marketCapOf } from '../../../domain/company';
  * The undrawn headroom on a firm's committed line: the extra debt its own earnings can service at
  * the revolver's rate while staying inside the coverage covenant. Zero when it cannot.
  */
-export function committedLineHeadroomUSD(params: {
-  ebitAnnualUSD: number;
-  currentAnnualInterestUSD: number;
+export function committedLineHeadroomLocal(params: {
+  ebitAnnualLocal: number;
+  currentAnnualInterestLocal: number;
   revolverRateAnnual: number;
 }): number {
-  const affordableInterestUSD = Math.max(0, params.ebitAnnualUSD) / COVENANT_INTEREST_COVERAGE;
-  const spareInterestUSD = affordableInterestUSD - Math.max(0, params.currentAnnualInterestUSD);
-  if (!(spareInterestUSD > 0) || !(params.revolverRateAnnual > 0)) return 0;
-  return spareInterestUSD / params.revolverRateAnnual;
+  const affordableInterestLocal = Math.max(0, params.ebitAnnualLocal) / COVENANT_INTEREST_COVERAGE;
+  const spareInterestLocal = affordableInterestLocal - Math.max(0, params.currentAnnualInterestLocal);
+  if (!(spareInterestLocal > 0) || !(params.revolverRateAnnual > 0)) return 0;
+  return spareInterestLocal / params.revolverRateAnnual;
 }
 
 /**
@@ -97,7 +97,7 @@ const ACTION_THRESHOLD = 0.005;
 
 export interface FinancingDecision {
   /** Positive: raise this much new debt. Negative: pay down this much. Zero: do nothing. */
-  netDebtChangeUSD: number;
+  netDebtChangeLocal: number;
   reason: 'ISSUE_CHEAP_DEBT' | 'DELEVER_EXPENSIVE_DEBT' | 'NONE';
   /**
    * WS8 — the all-in annual cost at which this issuer is indifferent to raising: the best use
@@ -119,16 +119,16 @@ export function decideCorporateFinancing(params: {
   ebitdaAnnual: number;
   /** Annual EBIT — the operating profit invested capital actually produces after depreciation. */
   ebitAnnual?: number;
-  totalDebtUSD: number;
+  totalDebtLocal: number;
   cashLocal: number;
   rating: CreditRating;
 }): FinancingDecision {
-  const { comp, costOfDebtAnnual, effectiveTaxRate, ebitdaAnnual, totalDebtUSD, cashLocal, rating } = params;
+  const { comp, costOfDebtAnnual, effectiveTaxRate, ebitdaAnnual, totalDebtLocal, cashLocal, rating } = params;
   // §5-BRAINS — the CFO's own risk weight: a risk-averse one needs a wider spread to act,
   // levers up more slowly and pays down faster. The median is the stated rule.
   const ra = riskAversionOf(comp.management);
   if (MARKET_ACCESS_DENIED.includes(rating) || !(ebitdaAnnual > 0)) {
-    return { netDebtChangeUSD: 0, reason: 'NONE', walkAwayCostAnnual: 0 };
+    return { netDebtChangeLocal: 0, reason: 'NONE', walkAwayCostAnnual: 0 };
   }
 
   // Debt interest is deductible, so what the company actually pays is the after-tax cost. What
@@ -144,40 +144,40 @@ export function decideCorporateFinancing(params: {
   // and the issuer count decaying 324 → 252 — recorded in the plan's RVr close-out).
   const afterTaxCostOfDebt = costOfDebtAnnual * (1 - effectiveTaxRate);
   const nopatAnnual = Math.max(0, (params.ebitAnnual ?? ebitdaAnnual * 0.75)) * (1 - effectiveTaxRate);
-  const netPPEUSD = Math.max(1, (comp.grossPPELocal ?? 0) - (comp.accumulatedDepreciationLocal ?? 0));
-  const investedCapitalUSD = netPPEUSD + comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
-  const returnOnInvestedCapital = nopatAnnual / investedCapitalUSD;
+  const netPPELocal = Math.max(1, (comp.grossPPELocal ?? 0) - (comp.accumulatedDepreciationLocal ?? 0));
+  const investedCapitalLocal = netPPELocal + comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
+  const returnOnInvestedCapital = nopatAnnual / investedCapitalLocal;
   const earningsYield = comp.stockPrice > 0 ? comp.eps / comp.stockPrice : 0;
   const bestUseOfProceeds = Math.max(returnOnInvestedCapital, earningsYield);
   const spreadOverCost = bestUseOfProceeds - afterTaxCostOfDebt;
   const walkAwayCostAnnual = bestUseOfProceeds / Math.max(0.01, 1 - effectiveTaxRate);
 
-  const currentLeverage = totalDebtUSD / ebitdaAnnual;
+  const currentLeverage = totalDebtLocal / ebitdaAnnual;
   const covenantCeiling = COVENANT_LEVERAGE_CEILING[rating] ?? 4.0;
 
   if (spreadOverCost > ACTION_THRESHOLD * ra && currentLeverage < covenantCeiling) {
     // Cheap debt, room under the covenant — and a real limit on how fast the money can be put
     // to work: the covenant bounds the STOCK, the deployment pipeline bounds the FLOW.
-    const headroomUSD = (covenantCeiling - currentLeverage) * ebitdaAnnual;
-    const weeklyDeploymentCapUSD =
+    const headroomLocal = (covenantCeiling - currentLeverage) * ebitdaAnnual;
+    const weeklyDeploymentCapLocal =
       (Math.max(comp.growthCapex ?? 0, marketCapOf(comp) * 0.02) / 52) * DEPLOYMENT_MULTIPLE;
     return {
-      netDebtChangeUSD: Math.min(headroomUSD * WEEKLY_ISSUANCE_TAKEUP_RATE / ra, weeklyDeploymentCapUSD),
+      netDebtChangeLocal: Math.min(headroomLocal * WEEKLY_ISSUANCE_TAKEUP_RATE / ra, weeklyDeploymentCapLocal),
       reason: 'ISSUE_CHEAP_DEBT',
       walkAwayCostAnnual,
     };
   }
 
-  if (spreadOverCost < -ACTION_THRESHOLD * ra && cashLocal > 0 && totalDebtUSD > 0) {
+  if (spreadOverCost < -ACTION_THRESHOLD * ra && cashLocal > 0 && totalDebtLocal > 0) {
     // Debt costs more than the money can earn: pay it down out of surplus cash.
     return {
-      netDebtChangeUSD: -Math.min(cashLocal * WEEKLY_DELEVERAGING_RATE * ra, totalDebtUSD * WEEKLY_DELEVERAGING_RATE * ra),
+      netDebtChangeLocal: -Math.min(cashLocal * WEEKLY_DELEVERAGING_RATE * ra, totalDebtLocal * WEEKLY_DELEVERAGING_RATE * ra),
       reason: 'DELEVER_EXPENSIVE_DEBT',
       walkAwayCostAnnual,
     };
   }
 
-  return { netDebtChangeUSD: 0, reason: 'NONE', walkAwayCostAnnual };
+  return { netDebtChangeLocal: 0, reason: 'NONE', walkAwayCostAnnual };
 }
 
 /**
@@ -185,22 +185,22 @@ export function decideCorporateFinancing(params: {
  * through the coverage covenant. Everything inside that headroom it can wear; everything past it
  * is a covenant breach waiting on a price, and a breach is not a preference.
  *
- * It is the same test `committedLineHeadroomUSD` above applies to interest, read against a price
+ * It is the same test `committedLineHeadroomLocal` above applies to interest, read against a price
  * instead of a rate, and the same shape 07g uses to decide which corporates must pay fixed. One
  * owner for all of it, because it is one question: how much variance does this balance sheet have
  * room for?
  */
-export function exposureToHedgeUSD(params: {
-  exposureUSD: number;
-  ebitAnnualUSD: number;
-  interestAnnualUSD: number;
+export function exposureToHedgeLocal(params: {
+  exposureLocal: number;
+  ebitAnnualLocal: number;
+  interestAnnualLocal: number;
   /** The exposure's own standard deviation over the hedge horizon, as a fraction. */
   oneSigma: number;
   /** §5-BRAINS — how many sigmas THIS management insures against: its risk aversion. */
   riskAversion?: number;
 }): number {
-  if (!(params.exposureUSD > 0) || !(params.oneSigma > 0)) return 0;
-  const spareEbitUSD = Math.max(0,
-    params.ebitAnnualUSD - COVENANT_INTEREST_COVERAGE * Math.max(0, params.interestAnnualUSD));
-  return Math.max(0, params.exposureUSD - spareEbitUSD / (params.oneSigma * (params.riskAversion ?? 1)));
+  if (!(params.exposureLocal > 0) || !(params.oneSigma > 0)) return 0;
+  const spareEbitLocal = Math.max(0,
+    params.ebitAnnualLocal - COVENANT_INTEREST_COVERAGE * Math.max(0, params.interestAnnualLocal));
+  return Math.max(0, params.exposureLocal - spareEbitLocal / (params.oneSigma * (params.riskAversion ?? 1)));
 }

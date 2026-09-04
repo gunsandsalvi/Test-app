@@ -41,8 +41,8 @@ test('per-lot costs are returned in consumption order, and they sum to the total
   // They are returned because the caller folds them into a running total spanning several
   // sub-units, and float addition is not associative — §7.237 caught this twice.
   const r = consumeLotsFifo([lot(2, 3, 1), lot(2, 7, 2)], 4);
-  assert.deepEqual(r.costsUSD, [6, 14]);
-  assert.equal(r.costsUSD.reduce((a, c) => a + c, 0), r.costLocal);
+  assert.deepEqual(r.costsLocal, [6, 14]);
+  assert.equal(r.costsLocal.reduce((a, c) => a + c, 0), r.costLocal);
 });
 
 test('wanting nothing consumes nothing and leaves the stack alone', () => {
@@ -54,9 +54,9 @@ test('wanting nothing consumes nothing and leaves the stack alone', () => {
 });
 
 test('a warehouse is not free, and the charge is reported separately from the stock', () => {
-  const { stock, totalCostUSD } = chargeCarryingCost(
+  const { stock, totalCostLocal } = chargeCarryingCost(
     { grain: { unitsHeld: 100, valueLocal: 5200 } }, () => 0.52);
-  assert.equal(totalCostUSD, 52, '52% a year is 1% a week of 5200');
+  assert.equal(totalCostLocal, 52, '52% a year is 1% a week of 5200');
   assert.equal(stock.grain.valueLocal, 5148);
   assert.equal(stock.grain.unitsHeld, 100, 'the units do not evaporate — only the value does');
 });

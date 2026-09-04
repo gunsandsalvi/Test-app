@@ -46,14 +46,14 @@ test('§7.291 — a bank at its regulatory floor prices at coin-flip PD; a capit
   // The PD lives in the stages layer (it reads Company); assert through the domain pieces it
   // composes: buffer over RWA x loss rate is the distance. Reproduce the arithmetic here so a
   // change to either side breaks this pin.
-  const { bankRwaUSD } = await import('../src/domain/bank-pricing');
+  const { bankRwaLocal } = await import('../src/domain/bank-pricing');
   const sheet = (equityLocal: number) => ({
     businessLoans: [],
     householdLoans: [{ kind: 'CREDIT_CARD', principalLocal: 10e9, marginBps: 0 }],
     bankEquityLocal: equityLocal, loanLossProvisionRateAnnualPct: 0.02,
   }) as never;
   // Step 10: the facility book is the bank's rows on the borrowers' ladders, read by the caller.
-  const rwa = bankRwaUSD(sheet(0), 10e9);
+  const rwa = bankRwaLocal(sheet(0), 10e9);
   // RWA = 10B x 1.0 + 10B x 0.75 (a card book's weight) = 17.5B — §5-WIRES D: both books are rows.
   if (Math.abs(rwa - 17.5e9) > 1) throw new Error(`rwa ${rwa}`);
 });

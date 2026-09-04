@@ -31,22 +31,22 @@ const NO_RESERVATION_YIELD_BPS = 1e9;
 const NO_RESERVATION_PRICE = 1e9;
 
 /**
- * The fund's terms for one instrument. `statKind` orients the no-reservation level; `targetUSD`
- * is index weight x investable assets, and `availableCashUSD` is what it can actually add.
+ * The fund's terms for one instrument. `statKind` orients the no-reservation level; `targetLocal`
+ * is index weight x investable assets, and `availableCashLocal` is what it can actually add.
  */
 export function indexFundDemand(
-  targetUSD: number,
-  availableCashUSD: number,
+  targetLocal: number,
+  availableCashLocal: number,
   statKind: 'YIELD_LIKE' | 'PRICE_LIKE'
 ): ParticipantDemand {
   return {
     reservationStat: statKind === 'YIELD_LIKE' ? -NO_RESERVATION_YIELD_BPS : NO_RESERVATION_PRICE,
-    maxHoldingLocal: Math.max(0, targetUSD),
+    maxHoldingLocal: Math.max(0, targetLocal),
     // Full size immediately: there is no level at which the fund scales in, because it is not
     // pricing. Any positive range would make it price-sensitive, which is the opposite of what
     // it is.
     fullSizeStatRange: 1e-6,
-    maxNetPurchaseUSD: Math.max(0, availableCashUSD),
+    maxNetPurchaseLocal: Math.max(0, availableCashLocal),
   };
 }
 
@@ -64,10 +64,10 @@ export function indexFundsForBook(
    * (the entity's own array is a stale week-start snapshot between the store's build and its
    * write-back). Callers outside that span omit this and the entity's array is read directly. */
   holdingsUsdOf?: (e: InstitutionalEntity) => number
-): { fund: InstitutionalEntity; index: MarketIndex; investableUSD: number }[] {
+): { fund: InstitutionalEntity; index: MarketIndex; investableLocal: number }[] {
   const wanted = new Set(indexIds);
   const indexById = new Map(indexes.map((i) => [i.id, i]));
-  const out: { fund: InstitutionalEntity; index: MarketIndex; investableUSD: number }[] = [];
+  const out: { fund: InstitutionalEntity; index: MarketIndex; investableLocal: number }[] = [];
   entities.forEach((e) => {
     if (e.entityType !== 'ETF' || !e.etf || !wanted.has(e.etf.indexId)) return;
     const index = indexById.get(e.etf.indexId);
@@ -79,7 +79,7 @@ export function indexFundsForBook(
     // ever sold, nothing ever refilled, and one small dip printed as a violation every week
     // (the sticky overdraft singles of §7.262/§7.265). A fund short of money liquidates —
     // that is the refill path a real fund has, and the one this one was missing.
-    const holdingsUSD = holdingsUsdOf
+    const holdingsLocal = holdingsUsdOf
       ? holdingsUsdOf(e)
       : e.itemizedHoldings.reduce((s, h) => s + (h.quantityOrNotionalLocal ?? 0), 0);
     // §7.273 — THE FUND KEEPS ITS OWN FEE AS A CASH SLEEVE. Fully invested, a fund that pays
@@ -88,8 +88,8 @@ export function indexFundsForBook(
     // (measured: USAEQX overdrawn by <5M for 21 straight weeks at the §7.271 reference). The
     // sleeve is a year of its OWN expense ratio — the fund's own measured obligation, no new
     // constant — which is also what real index funds hold cash for.
-    const investableUSD = (holdingsUSD + entityCashOf(v2, e)) * (1 - (e.etf?.expenseRatioAnnual ?? 0));
-    if (investableUSD > 0) out.push({ fund: e, index, investableUSD });
+    const investableLocal = (holdingsLocal + entityCashOf(v2, e)) * (1 - (e.etf?.expenseRatioAnnual ?? 0));
+    if (investableLocal > 0) out.push({ fund: e, index, investableLocal });
   });
   return out;
 }

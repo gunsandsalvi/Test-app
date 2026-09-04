@@ -31,10 +31,10 @@ export interface ProfileInput {
   perShare: (amountLocal: number) => number;
   /** IND-R1: the firm's real weekly wage bill, computed once for every firm before the dispatch.
    *  Charged in full by the shared code — a profile never sees it as a choice. */
-  weeklyPayrollUSD: number;
+  weeklyPayrollLocal: number;
   /** §7.122 step 4: the real annual cost of what this firm consumed — its products' recipe lots
    *  if it makes anything, its profile's input basket if it does not. Charged in full, shared. */
-  inputCostAnnualUSD: number;
+  inputCostAnnualLocal: number;
 }
 
 /**
@@ -55,9 +55,9 @@ export interface ProfilePnl {
   newRevenue: number;
   /** Annualised costs only this kind of firm has: a bank's credit losses, an insurer's claims.
    *  NEVER payroll, inputs or general opex — those are common and the caller charges them. */
-  profileCostsAnnualUSD: number;
+  profileCostsAnnualLocal: number;
   /** Annualised income earned outside revenue — an insurer's investment return on its float. */
-  otherIncomeAnnualUSD?: number;
+  otherIncomeAnnualLocal?: number;
 }
 
 export type ProfileModule = (input: ProfileInput) => ProfilePnl;

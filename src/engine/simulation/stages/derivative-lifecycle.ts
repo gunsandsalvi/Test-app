@@ -15,7 +15,7 @@
  *     contracts settle at replacement value through its account (the estate's account IS the
  *     debtor's); a party that has simply ceased to exist ends the contract flat.
  *  4. LIVE legs — the periodic leg and/or the mark DELTA (the change since last settled,
- *     never the whole mark), `settledMarkUSD` advanced.
+ *     never the whole mark), `settledMarkLocal` advanced.
  */
 
 import { GameState, RegionId } from '../../../types';
@@ -30,7 +30,7 @@ import { pay } from './settlement';
 import { creditRecoveryRate } from './shared-helpers';
 
 /** Legs under a dollar are dust; every book skipped them and the ledger need not carry them. */
-const MIN_LEG_USD = 1;
+const MIN_LEG_LOCAL = 1;
 
 /** The live book: the week's working copy, initialised from state on first touch. */
 export function derivativesBookOf(ctx: WeeklyStepContext, state: GameState): DerivativeContract[] {
@@ -68,8 +68,8 @@ export function standingBookOf(ctx: WeeklyStepContext, state: GameState): Standi
 }
 
 /** A desk's standing PFE charge against the one budget, off the live book (registry.ts). */
-export function deskStandingPfeChargeUSD(ctx: WeeklyStepContext, state: GameState, ticker: string): number {
-  return standingBookOf(ctx, state).pfeChargeUSD(`BANK:${ticker}`);
+export function deskStandingPfeChargeLocal(ctx: WeeklyStepContext, state: GameState, ticker: string): number {
+  return standingBookOf(ctx, state).pfeChargeLocal(`BANK:${ticker}`);
 }
 
 type PartyState = 'ALIVE' | 'DEFAULTED' | 'GONE';
@@ -136,7 +136,7 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
 }
 
 function payToB(ctx: WeeklyStepContext, c: DerivativeContract, usdToB: number, reason: string, net: Map<string, number>): void {
-  if (!(Math.abs(usdToB) > MIN_LEG_USD)) return;
+  if (!(Math.abs(usdToB) > MIN_LEG_LOCAL)) return;
   const payer = usdToB > 0 ? c.a : c.b;
   const payee = usdToB > 0 ? c.b : c.a;
   // §3.13c: the contract says what it settles in; `currencyOf(c.regionId)` was a proxy.
@@ -168,8 +168,8 @@ export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameSt
     // A counterparty that has ceased to exist leaves nobody to pay or be paid: flat.
     if (view.partyState(onA ? c.b : c.a) === 'GONE') continue;
     const profile = derivativeProfile(c.classId);
-    const markUSD = profile.markToMarketUSDToA(c, view);
-    if (markUSD !== null) payToB(ctx, c, -(markUSD - (c.settledMarkUSD ?? 0)), 'derivative close-out', net);
+    const markLocal = profile.markToMarketUSDToA(c, view);
+    if (markLocal !== null) payToB(ctx, c, -(markLocal - (c.settledMarkLocal ?? 0)), 'derivative close-out', net);
     else payToB(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net);
   }
   if (closed > 0) ctx.derivativesBook = kept;
@@ -187,14 +187,14 @@ export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameSt
  * moved by the week's margin with no creator that could explain it.
  */
 function releaseInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract, view: DerivativeLifecycleView): void {
-  const marginUSD = initialMarginUSD(c);
+  const marginLocal = initialMarginLocal(c);
   // Held on the desk's own securities account, which is where the posting put it; a party that
   // has ceased to exist has nowhere to receive it, the same rule the close-out legs follow.
-  if (!(marginUSD > MIN_LEG_USD) || c.b.kind !== 'BANK' || view.partyState(c.a) === 'GONE') return;
+  if (!(marginLocal > MIN_LEG_LOCAL) || c.b.kind !== 'BANK' || view.partyState(c.a) === 'GONE') return;
   pay(ctx, {
     payer: { kind: 'BANK_SECURITIES', ticker: c.b.ticker },
     payee: c.a,
-    amount: marginUSD,
+    amount: marginLocal,
     currency: c.currency,
     reason: 'initial margin returned',
   });
@@ -217,11 +217,11 @@ export function settleDerivativeClass(
 
   /** The mark leg: value to A now, less what was already settled, signed to B. */
   const settleMark = (c: DerivativeContract, reason: string): void => {
-    const markUSD = profile.markToMarketUSDToA(c, view);
-    if (markUSD === null) return;
-    const deltaToA = markUSD - (c.settledMarkUSD ?? 0);
+    const markLocal = profile.markToMarketUSDToA(c, view);
+    if (markLocal === null) return;
+    const deltaToA = markLocal - (c.settledMarkLocal ?? 0);
     payToB(ctx, c, -deltaToA, reason, net);
-    c.settledMarkUSD = markUSD;
+    c.settledMarkLocal = markLocal;
   };
 
   for (const c of book) {
@@ -245,8 +245,8 @@ export function settleDerivativeClass(
       // flat. A DEFAULTED party still has an account (its estate's), and settles replacement
       // value through it like any other claim on the estate.
       if (aState !== 'GONE' && bState !== 'GONE') {
-        const markUSD = profile.markToMarketUSDToA(c, view);
-        if (markUSD !== null) payToB(ctx, c, -(markUSD - (c.settledMarkUSD ?? 0)), 'derivative close-out', net);
+        const markLocal = profile.markToMarketUSDToA(c, view);
+        if (markLocal !== null) payToB(ctx, c, -(markLocal - (c.settledMarkLocal ?? 0)), 'derivative close-out', net);
         else payToB(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net);
       }
       releaseInitialMargin(ctx, c, view);
@@ -264,6 +264,6 @@ export function settleDerivativeClass(
 }
 
 /** Initial margin on a contract about to be struck: the A side's cash, held by the B side. */
-export function initialMarginUSD(c: Pick<DerivativeContract, 'classId' | 'notional'>): number {
+export function initialMarginLocal(c: Pick<DerivativeContract, 'classId' | 'notional'>): number {
   return c.notional * derivativeProfile(c.classId).initialMarginRate;
 }

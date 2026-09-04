@@ -22,9 +22,9 @@ import { bankReservesOf } from '../../../ledger/accounts';
 import { RegionId, Company } from '../../../../types';
 import { ensureV2 } from '../../../../engine2/world';
 import { institutionProfile } from '../../../../domain/institution-profiles';
-import { CDS_TENOR_WEEKS, protectionNeedUSD } from '../../../../domain/derivatives/classes/cds';
+import { CDS_TENOR_WEEKS, protectionNeedLocal } from '../../../../domain/derivatives/classes/cds';
 import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
-import { deskNotionalCapacityUSD } from '../../../../domain/derivatives/registry';
+import { deskNotionalCapacityLocal } from '../../../../domain/derivatives/registry';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { isActiveCompany } from '../../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from '../shared-helpers';
@@ -65,17 +65,17 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
         exposureByIssuer.set(l.borrowerId, (exposureByIssuer.get(l.borrowerId) ?? 0) + Math.max(0, l.principalLocal));
       });
       const party: DerivativeParty = { kind: 'BANK', ticker: bank.ticker };
-      exposureByIssuer.forEach((exposureUSD, issuerId) => {
+      exposureByIssuer.forEach((exposureLocal, issuerId) => {
         const issuer = companyById.get(issuerId);
         if (!issuer || issuer.region !== regionId || !isActiveCompany(issuer)) return;
-        const needUSD = protectionNeedUSD({
-          exposureUSD,
+        const needLocal = protectionNeedLocal({
+          exposureLocal,
           bankEquityLocal: sheet.bankEquityLocal,
-          alreadyHedgedUSD: standing.coverUSD('CDS', 'a', `BANK:${bank.ticker}`, issuerId),
+          alreadyHedgedLocal: standing.coverLocal('CDS', 'a', `BANK:${bank.ticker}`, issuerId),
         });
-        if (needUSD <= 1) return;
+        if (needLocal <= 1) return;
         const list = hedgeDemandByIssuer.get(issuerId) ?? [];
-        list.push({ party, usd: needUSD });
+        list.push({ party, usd: needLocal });
         hedgeDemandByIssuer.set(issuerId, list);
       });
     });
@@ -88,11 +88,11 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
     const pdByIssuerId = new Map(referenceIssuers.map((c) => [c.id, computeAnnualDefaultProbability(v2cds, c)]));
     const instruments: ClearingInstrument[] = referenceIssuers.map((c) => {
       const demand = hedgeDemandByIssuer.get(c.id)!;
-      const floatUSD = demand.reduce((a, d) => a + d.usd, 0);
+      const floatLocal = demand.reduce((a, d) => a + d.usd, 0);
       return {
         id: cdsInstrumentId(regionId, c.id),
-        outstandingLocal: floatUSD,
-        tradableFloatLocal: floatUSD,
+        outstandingLocal: floatLocal,
+        tradableFloatLocal: floatLocal,
         // Opens at the issuer's own cleared cash spread — the alternative a seller is pricing
         // against — and moves from there on this book's own supply and demand. The BASIS between
         // the two is what the market then produces.
@@ -118,8 +118,8 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      const capacityLocal = deskNotionalCapacityUSD(
-        leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'CDS');
+      const capacityLocal = deskNotionalCapacityLocal(
+        leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeLocal(`BANK:${bank.ticker}`), 'CDS');
       if (!(capacityLocal > 0)) return;
       referenceIssuers.forEach((c) => {
         const annualPd = pdByIssuerId.get(c.id)!;
@@ -201,22 +201,22 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       issuer.cdsBasisBps = Number((clearedBps - issuer.oasSpreadBps).toFixed(1));
 
       const writtenBySeller = new Map<string, number>();
-      let totalWrittenUSD = 0;
+      let totalWrittenLocal = 0;
       result.newParticipantHoldings.forEach((byInstrument, participantId) => {
         const usd = byInstrument.get(instrumentId) ?? 0;
         if (usd <= 1) return;
         writtenBySeller.set(participantId, usd);
-        totalWrittenUSD += usd;
+        totalWrittenLocal += usd;
       });
-      if (totalWrittenUSD <= 0) return;
+      if (totalWrittenLocal <= 0) return;
       const demands = hedgeDemandByIssuer.get(issuer.id)!;
-      const totalNeedUSD = demands.reduce((a, d) => a + d.usd, 0);
-      const filledShare = Math.min(1, totalWrittenUSD / Math.max(1, totalNeedUSD));
+      const totalNeedLocal = demands.reduce((a, d) => a + d.usd, 0);
+      const filledShare = Math.min(1, totalWrittenLocal / Math.max(1, totalNeedLocal));
       demands.forEach((d) => {
-        const hedgedUSD = d.usd * filledShare;
-        if (hedgedUSD <= 1) return;
-        writtenBySeller.forEach((writtenUSD, participantId) => {
-          const notional = hedgedUSD * (writtenUSD / totalWrittenUSD);
+        const hedgedLocal = d.usd * filledShare;
+        if (hedgedLocal <= 1) return;
+        writtenBySeller.forEach((writtenLocal, participantId) => {
+          const notional = hedgedLocal * (writtenLocal / totalWrittenLocal);
           if (notional <= 1) return;
           const seller: DerivativeParty = participantId.startsWith('CDSDESK-')
             ? { kind: 'BANK', ticker: participantId.slice('CDSDESK-'.length) }

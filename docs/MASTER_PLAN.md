@@ -412,19 +412,18 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
     doing the work.
 
     **PARTS 1 AND 2 ARE DONE (§9.13c).** What is LEFT of 13c:
-    · **the rename** — 11,821 occurrences of 1,439 `…USD` identifiers, of which a handful are now
-      literally true (`foreignOfficialClaimsUSD` is a numéraire claim and says so). Mechanical, and
-      last. **Its prerequisite is done (§9.13c-RENAMEABLE): a field name in an unchecked string is
-      a rename this compiler cannot verify, and there were three such places.** The naming rule,
-      decided once so it is not re-litigated 1,439 times:
+    · ~~**the rename**~~ (DONE, §9.13c-RENAME). 11,821 → **5**, and each survivor is true:
+      `foreignOfficialClaimsUSD` (a numéraire claim between central banks), the three seed
+      primitives that ARE the USA's price level, and `PAR_USD`, which is a `countedIn` enum value
+      meaning "counted in par" and not a figure at all.
+
+      **THE STANDING NAMING RULE** it leaves behind, for every monetary identifier written from here:
       · a figure in its OWNER's own money → `…Local` (the word `convertLocal` already uses);
       · a figure whose currency is named beside it — a `currency` field or parameter in the same
         object or signature — → NO suffix, because the unit is already stated (rule 8);
       · a figure genuinely in the numéraire → `…USD` STAYS, and now means it;
       · a figure in a named OTHER party's money → `…BuyerMoney` / `…SellerMoney`, the shape
         `exWorksBuyerMoney` and `valueBuyerMoney` already use.
-      Stage it identifier-group by identifier-group, tree-wide, with `tsc` between: the axis is
-      the identifier, not the directory, because a field rename reaches every reader at once;
     · ~~**clearing**~~ (DONE, §9.13c-DENOM). The BOOK names its money once and its five cash legs
       read it. Putting it on the INSTRUMENT was considered and is not the shape: settlement is per
       book, every instrument in a book shares its currency, and a per-instrument field would be
@@ -1410,6 +1409,22 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13c-RENAME — 11,821 lying suffixes, and five true ones left.** Every `…USD` identifier whose
+figure is in its owner's own money is now `…Local`; a figure whose currency is named beside it lost
+its suffix entirely (`DerivativeContract.notional`, because the contract carries `currency`); and
+`…USD` survives on exactly five names that mean it — `foreignOfficialClaimsUSD`, the three seed
+primitives that are the USA's own price level, and `PAR_USD`, a `countedIn` enum value that is not
+a figure. Staged tree-wide by identifier group with `tsc` between, which the previous commit's work
+made safe.
+
+Two things it found, both of the same shape — a field name in a string nothing checks. `scaleFirmSize`
+had a fifth unchecked list, now `satisfies keyof Company`, and that constraint caught a dead entry:
+`annualInterest` is not a `Company` field, it is derived from the ladder, so the scale had been
+silently no-opping on `undefined`. And `check-hygiene.sh`'s guards are shell regexes over identifier
+names, which nothing can type-check: the rename killed three of them silently — they matched names
+that no longer existed and could never fire again. Repaired, verified by making each fire, and the
+file now says that a guard of that shape must be updated WITH any rename of the names it watches.
 
 **13c-RENAMEABLE — the `…USD` rename could not have been verified, and now it can.** The rename is
 11,821 occurrences of 1,439 identifiers, and it is type-safe only if every field name the code

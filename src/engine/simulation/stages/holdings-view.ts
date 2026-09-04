@@ -11,7 +11,7 @@
  * dollar figure across issuers with a size-sorted greedy fill — a second, parallel description of
  * who owns what, computed from a formula and overwriting nothing (the real per-entity books lived
  * beside it, untouched and disagreeing). Meanwhile the macro aggregates
- * (`institutionalSector.corpBondHoldingsUSD` and siblings) were written ONCE at initialization
+ * (`institutionalSector.corpBondHoldingsLocal` and siblings) were written ONCE at initialization
  * and never again: frozen week-0 snapshots that the UI, the sector-equity book value in stage 08,
  * and stage 02's investment income all read as if current. Rule 3's anti-pattern in both
  * directions at once — a formula-built ledger and a frozen aggregate, either of which could
@@ -36,17 +36,17 @@ export interface RegionalHoldingsView {
   institutionalHoldings: ItemizedHolding[];
   /** Every named bank's real holdings in this region, flattened. */
   bankHoldings: ItemizedHolding[];
-  institutionalCorpBondUSD: number;
-  institutionalSovBondUSD: number;
-  institutionalLoanUSD: number;
-  institutionalEquityUSD: number;
-  institutionalCashUSD: number;
+  institutionalCorpBondLocal: number;
+  institutionalSovBondLocal: number;
+  institutionalLoanLocal: number;
+  institutionalEquityLocal: number;
+  institutionalCashLocal: number;
   /** What the sector owes the people whose money it manages: beneficiary entitlements and money
    *  fund shares. Every dollar of it is a named holder's, not the sector's capital. */
-  institutionalLiabilitiesUSD: number;
+  institutionalLiabilitiesLocal: number;
   /** Cash + all securities, summed from the real entity books. */
-  institutionalTotalAssetsUSD: number;
-  bankSovBondUSD: number;
+  institutionalTotalAssetsLocal: number;
+  bankSovBondLocal: number;
 }
 
 /**
@@ -70,8 +70,8 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
     // well, the sector's aggregate holds the same dollars twice. It is a receivable, and it is
     // in the entity's total assets below, where a claim belongs.
     cash += entityCashOf(ensureV2(state), e);
-    lent += (e.repoLentLocal ?? 0) + (e.rrpLentUSD ?? 0);
-    liabilities += (e.beneficiaryLiabilityUSD ?? 0) + (e.mmfSharesOutstandingUSD ?? 0);
+    lent += (e.repoLentLocal ?? 0) + (e.rrpLentLocal ?? 0);
+    liabilities += (e.beneficiaryLiabilityLocal ?? 0) + (e.mmfSharesOutstandingLocal ?? 0);
     for (let r = bookHeadOf(v2a, e.id); r >= 0; r = Ha.next[r]) {
       const type = v2a.internedStrings[Ha.typeRef[r]] as ItemizedHolding['instrumentType'];
       const sh = Ha.shares[r];
@@ -123,14 +123,14 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
   return {
     institutionalHoldings,
     bankHoldings,
-    institutionalCorpBondUSD: corp,
-    institutionalSovBondUSD: sov,
-    institutionalLoanUSD: loan,
-    institutionalEquityUSD: equity,
-    institutionalCashUSD: cash,
-    institutionalTotalAssetsUSD: cash + lent + corp + sov + loan + equity,
-    institutionalLiabilitiesUSD: liabilities,
-    bankSovBondUSD: bankSov,
+    institutionalCorpBondLocal: corp,
+    institutionalSovBondLocal: sov,
+    institutionalLoanLocal: loan,
+    institutionalEquityLocal: equity,
+    institutionalCashLocal: cash,
+    institutionalTotalAssetsLocal: cash + lent + corp + sov + loan + equity,
+    institutionalLiabilitiesLocal: liabilities,
+    bankSovBondLocal: bankSov,
   };
 }
 
@@ -204,22 +204,22 @@ export function measuredForeignOwnershipAllRegions(state: GameState): Record<Reg
 
 export function refreshRegionalHoldingsView(state: GameState, regionId: RegionId, reg: {
   institutionalSector: {
-    itemizedHoldings: ItemizedHolding[]; corpBondHoldingsUSD: number; sovBondHoldingsUSD: number;
-    equityHoldingsUSD: number; cashLocal: number; sectorEquityUSD: number;
+    itemizedHoldings: ItemizedHolding[]; corpBondHoldingsLocal: number; sovBondHoldingsLocal: number;
+    equityHoldingsLocal: number; cashLocal: number; sectorEquityLocal: number;
   };
   bankingSector: import('../../../domain/banking').BankingSectorView;
 }): void {
   const view = aggregateRegionalHoldings(state, regionId);
   reg.institutionalSector.itemizedHoldings = view.institutionalHoldings;
-  reg.institutionalSector.corpBondHoldingsUSD = Math.round(view.institutionalCorpBondUSD + view.institutionalLoanUSD);
-  reg.institutionalSector.sovBondHoldingsUSD = Math.round(view.institutionalSovBondUSD);
-  reg.institutionalSector.equityHoldingsUSD = Math.round(view.institutionalEquityUSD);
-  reg.institutionalSector.cashLocal = Math.round(view.institutionalCashUSD);
+  reg.institutionalSector.corpBondHoldingsLocal = Math.round(view.institutionalCorpBondLocal + view.institutionalLoanLocal);
+  reg.institutionalSector.sovBondHoldingsLocal = Math.round(view.institutionalSovBondLocal);
+  reg.institutionalSector.equityHoldingsLocal = Math.round(view.institutionalEquityLocal);
+  reg.institutionalSector.cashLocal = Math.round(view.institutionalCashLocal);
   // EQUITY IS ASSETS LESS WHAT THEY ARE OWED TO. Set to total assets outright, the sector
   // counted other people's money as its own capital — every dollar of money-fund shares and
   // every beneficiary entitlement is a named holder's claim, and A = L + E cannot hold with the
   // liabilities left out.
-  reg.institutionalSector.sectorEquityUSD = Math.round(view.institutionalTotalAssetsUSD - view.institutionalLiabilitiesUSD);
+  reg.institutionalSector.sectorEquityLocal = Math.round(view.institutionalTotalAssetsLocal - view.institutionalLiabilitiesLocal);
   reg.bankingSector = { ...reg.bankingSector, itemizedHoldings: view.bankHoldings };
 }
 
@@ -236,9 +236,9 @@ export function refreshRegionalHoldingsView(state: GameState, regionId: RegionId
  * the market it clears, so the two halves partition the corporate stock exactly once).
  */
 export interface MeasuredOwnership {
-  bankUSD: number;
+  bankLocal: number;
   institutionalLocal: number;
-  centralBankUSD: number;
+  centralBankLocal: number;
   outstandingLocal: number;
 }
 export type MeasuredOwnershipByClass = {
@@ -246,7 +246,7 @@ export type MeasuredOwnershipByClass = {
 };
 
 const ZERO_OWNERSHIP = (): MeasuredOwnership =>
-  ({ bankUSD: 0, institutionalLocal: 0, centralBankUSD: 0, outstandingLocal: 0 });
+  ({ bankLocal: 0, institutionalLocal: 0, centralBankLocal: 0, outstandingLocal: 0 });
 
 /** One pass over every book; a holding contributes to its ISSUER's region, not its holder's. */
 export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, MeasuredOwnershipByClass> {
@@ -314,7 +314,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     if (!sheet || !isActiveCompany(c)) return;
     Object.values(sheet.sovereignBondHoldingsByBond || {}).forEach((usd) => {
       // A bank holds its OWN sovereign as its liquidity buffer (07c's domestic mandate).
-      a.sovBond.bankUSD += Math.max(0, Number(usd) || 0);
+      a.sovBond.bankLocal += Math.max(0, Number(usd) || 0);
     });
   });
   // Second pass: a facility's issuer region comes from the borrower, which may not be the
@@ -332,7 +332,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     facilityRowsOf(v2hv, c.ticker).forEach((l) => {
       const issuerRegion = companyRegionById.get(l.borrowerId);
       const a = issuerRegion ? acc(issuerRegion) : undefined;
-      if (a) a.corpBond.bankUSD += Math.max(0, l.principalLocal);
+      if (a) a.corpBond.bankLocal += Math.max(0, l.principalLocal);
     });
   });
 
@@ -343,7 +343,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     a.sovBond.outstandingLocal = materializeGovLadder(v2hv, r)
       .reduce((s, t) => s + Math.max(0, t.principalLocal), 0);
     Object.values(reg.centralBankSheet?.sovereignHoldingsByBond || {}).forEach((usd) => {
-      a.sovBond.centralBankUSD += Math.max(0, Number(usd) || 0);
+      a.sovBond.centralBankLocal += Math.max(0, Number(usd) || 0);
     });
   });
   return out;
@@ -354,8 +354,8 @@ export function ownershipSharesFromRegister(m: MeasuredOwnership): { bankShare: 
   const o = m.outstandingLocal;
   if (!(o > 0)) return { bankShare: 0, institutionalShare: 0, centralBankShare: 0 };
   return {
-    bankShare: m.bankUSD / o,
+    bankShare: m.bankLocal / o,
     institutionalShare: m.institutionalLocal / o,
-    centralBankShare: m.centralBankUSD / o,
+    centralBankShare: m.centralBankLocal / o,
   };
 }

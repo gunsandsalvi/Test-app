@@ -88,7 +88,7 @@ checked by `scripts/check-atlas.sh`.
 | B3 an investor changing its currency mix | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
 | B4 a hedger closing an exposure | `src/domain/derivatives/classes/fx-forward.ts:equityHedgeRatioFor` | ✅ |
 | B5 a dealer, whose reason is spread and inventory | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ✅ |
-| B5.a it is not obliged to take whatever arrives | `src/domain/derivatives/registry.ts:deskNotionalCapacityUSD` | ✅ |
+| B5.a it is not obliged to take whatever arrives | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ✅ |
 | B6 the central bank participates with a limit | `src/domain/fx-market.ts:CENTRAL_BANK_FX_INTERVENTION_SHARE` | ✅ |
 | C1 participants post schedules in rate space | `src/engine/simulation/stages/financial-clearing-engine.ts:ParticipantDemand` | ✅ |
 | C2 it clears per pair and consistently across pairs | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
@@ -100,7 +100,7 @@ checked by `scripts/check-atlas.sh`.
 | D1 a dealer is left with the other side | `src/domain/dealer-derivatives.ts:FxDealerBook` | ✅ |
 | D2 it can square, and squaring is a trade | `src/engine/simulation/stages/fx-squaring.ts:squareInterbankFxPositions` | ✅ |
 | D3 what it does not square, it carries and revalues | `src/engine/simulation/stages/fx-revaluation.ts:runFxRevaluationStage` | ✅ |
-| D4 it has a limit and stops quoting at it | `src/domain/derivatives/registry.ts:deskNotionalCapacityUSD` | ✅ |
+| D4 it has a limit and stops quoting at it | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ✅ |
 | D5 Σ dealer + Σ client positions = 0 per currency | `src/engine/simulation/stages/fx-clearing.ts:recordForeignHoldingsSnapshot` | ✅ |
 | E1 FORBID no conversion without a counterparty | `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ✅ |
 | E2 FORBID no rate from a formula | `src/engine/macro/evolution.ts:evolveFxPair` | ⚠️ |

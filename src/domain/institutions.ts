@@ -6,11 +6,11 @@ import { ItemizedHolding } from './banking';
 import { FinancialStatementProfile } from './company';
 
 export interface InstitutionalSector {
-  corpBondHoldingsUSD: number;
-  sovBondHoldingsUSD: number;
-  equityHoldingsUSD: number;
+  corpBondHoldingsLocal: number;
+  sovBondHoldingsLocal: number;
+  equityHoldingsLocal: number;
   cashLocal: number;
-  sectorEquityUSD: number;
+  sectorEquityLocal: number;
   investmentIncomeMarginPct: number;
   itemizedHoldings: ItemizedHolding[];
 }
@@ -97,13 +97,13 @@ export interface InstitutionalEntity {
   /** HF1 — what this fund's prime broker will still lend it beyond what it has already drawn.
    *  Its purchasing capacity above its own cash, and the replacement for a leverage ALLOWANCE
    *  that no one granted and no one could withdraw. Written by the prime-brokerage stage. */
-  primeBrokerageAvailableUSD?: number;
+  primeBrokerageAvailableLocal?: number;
   // D: total assets are a READ — `institutionTotalAssetsLocal` (domain) over the book's
   // rows, cash, receivables and the sponsor's portfolio mark; never a stored mark.
   equityCapitalLocal: number;
   /**
    * What this institution owes its ultimate BENEFICIARIES: policyholder reserves, pension
-   * entitlements, fund shares. A derived residual, `totalAssetsUSD - equityCapitalLocal`, carried
+   * entitlements, fund shares. A derived residual, `totalAssetsLocal - equityCapitalLocal`, carried
    * here so both sides of the claim are visible on the books that hold them.
    *
    * THE DIRECTION IS BACKWARDS, and it is load-bearing. In reality an institution's
@@ -121,21 +121,21 @@ export interface InstitutionalEntity {
    * Absent on the entity types whose liabilities already have named holders: money funds (WS7's
    * shareholders), ETFs (MS1's), and private equity (HC4's LP commitments).
    */
-  beneficiaryLiabilityUSD?: number;
+  beneficiaryLiabilityLocal?: number;
   /**
    * HH1b — what this entity's real book earned this week (`accrueInstitutionalIncome`). Recorded
    * so the listed shell's income statement can REPORT the income its own portfolio produced,
    * rather than computing a second, formula version of it from a different asset base.
    */
-  lastWeeklyInvestmentIncomeUSD?: number;
+  lastWeeklyInvestmentIncomeLocal?: number;
   /**
    * HH1c — INSURER: premiums less claims less expenses over the last year. The sign is the whole
    * point: positive means the float is free and this insurer can accept a lower return on its
    * assets than anyone else. Read by `entityRequiredReturn`.
    */
-  lastAnnualUnderwritingResultUSD?: number;
+  lastAnnualUnderwritingResultLocal?: number;
   /** HH1c — PENSION_FUND: benefits paid out over the last year, against the promises it holds. */
-  lastAnnualBenefitOutflowUSD?: number;
+  lastAnnualBenefitOutflowLocal?: number;
   sharesOutstanding: number;
   stockPrice: number;
   itemizedHoldings: ItemizedHolding[];
@@ -161,12 +161,12 @@ export interface InstitutionalEntity {
    * account: like `repoLentLocal` it is part of the entity's book and not part of its purchase
    * capacity, and it returns with interest at the start of the next money-market session.
    */
-  rrpLentUSD?: number;
+  rrpLentLocal?: number;
   rrpRateAnnual?: number;
   /** HF — this entity's stock-loan book, netted to one number the way `repoLentLocal` nets the repo
    * one. Positive for whichever side the mark has moved toward; a short's P&L lives here.
    * Derived every week from the region's loan book — never set by hand. */
-  stockLoanNetUSD?: number;
+  stockLoanNetLocal?: number;
   /** WS9/XB2d: last week's foreign holdings by issuer region, so this week's CHANGE is the real
    * cross-border settlement flow that has to buy or sell currency. */
   priorForeignHoldingsByRegion?: Record<string, number>;
@@ -177,7 +177,7 @@ export interface InstitutionalEntity {
    * fund's own retained fee income; the yield PAID to holders is the real asset yield minus
    * the fee.
    */
-  mmfSharesOutstandingUSD?: number;
+  mmfSharesOutstandingLocal?: number;
   /** MONEY_MARKET_FUND only: last week's realised annualised yield net of fee — the number
    * deposits compete against. Rule 9: annualised decimal. */
   mmfNetYieldAnnual?: number;
@@ -191,7 +191,7 @@ export interface InstitutionalEntity {
    */
   peFund?: {
     portfolioCompanyIds: string[];
-    lpCommitments: { lpEntityId: string; committedUSD: number; drawnLocal: number }[];
+    lpCommitments: { lpEntityId: string; committedLocal: number; drawnLocal: number }[];
   };
   /**
    * ETF only: the fund's index, its sponsor, its share count and the residual the authorised
@@ -209,18 +209,18 @@ export interface InstitutionalEntity {
  * AN INSTITUTION'S TOTAL ASSETS ARE A READ, never a stored mark: its cash, what it is owed this
  * week (the unsettled legs of its trades and receipts), its overnight cash lent to banks and to
  * the central bank's window, its stock-loan book, and its securities — the register's rows — or, for a sponsor, its portfolio
- * companies at the public comparable. The stored `totalAssetsUSD` this replaces was a week-end
+ * companies at the public comparable. The stored `totalAssetsLocal` this replaces was a week-end
  * mark of exactly this sum, read a week stale by every sizing pass.
  */
 export function institutionTotalAssetsLocal(
-  e: { repoLentLocal?: number; rrpLentUSD?: number; stockLoanNetUSD?: number; entityType: InstitutionalEntityType; peFund?: unknown },
-  cashLocal: number, bookLocal: number, pendingUSD: number, portfolioUSD: number
+  e: { repoLentLocal?: number; rrpLentLocal?: number; stockLoanNetLocal?: number; entityType: InstitutionalEntityType; peFund?: unknown },
+  cashLocal: number, bookLocal: number, pendingLocal: number, portfolioLocal: number
 ): number {
-  return cashLocal + pendingUSD + (e.repoLentLocal ?? 0) + (e.rrpLentUSD ?? 0) + (e.stockLoanNetUSD ?? 0)
-    + (e.entityType === 'PRIVATE_EQUITY' && e.peFund ? portfolioUSD : bookLocal);
+  return cashLocal + pendingLocal + (e.repoLentLocal ?? 0) + (e.rrpLentLocal ?? 0) + (e.stockLoanNetLocal ?? 0)
+    + (e.entityType === 'PRIVATE_EQUITY' && e.peFund ? portfolioLocal : bookLocal);
 }
 
 /** The seed's read, before the register exists: cash plus the entity's own itemized rows. */
-export function seedInstitutionTotalAssetsUSD(e: { itemizedHoldings: { quantityOrNotionalLocal?: number }[] }, openingCashUSD: number): number {
-  return openingCashUSD + e.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalLocal ?? 0), 0);
+export function seedInstitutionTotalAssetsLocal(e: { itemizedHoldings: { quantityOrNotionalLocal?: number }[] }, openingCashLocal: number): number {
+  return openingCashLocal + e.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalLocal ?? 0), 0);
 }

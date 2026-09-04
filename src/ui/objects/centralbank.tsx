@@ -47,7 +47,7 @@ export const centralbank = defineObject<Region>({
     const policy = tapeSeries(world, `region:${ref.id}:policy`).values;
     const banks = world.state.companies.filter((c) => c.region === ref.id && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet);
     const atWindow = banks.filter((b) => (b.bankBalanceSheet!.srfBorrowingLocal ?? 0) > 1e6);
-    const reserves = r.bankingSector?.centralBankReservesUSD ?? 0;
+    const reserves = r.bankingSector?.centralBankReservesLocal ?? 0;
     return (
       <>
         <ObjectHeader name={r.centralBank} sub={<>central bank of <RegionLink id={ref.id} nav={nav} /> · target inflation {pctLevel(r.targetInflation)} · {r.currency}</>} />
@@ -60,13 +60,13 @@ export const centralbank = defineObject<Region>({
           <KV k="sovereign book" hint="by tenor" v={money(book)} onTap={() => nav.go('all', { path: 'centralBankSheet.sovereignHoldingsByBond' })} />
           <KV k="bank reserves" hint="the banks' deposits here" v={money(reserves)} />
           <KV k="treasury account" v={money(treasuryAccountOf(ensureV2(world.state), r.id as RegionId))} />
-          <KV k="currency in circulation" v={money(cb?.currencyInCirculationUSD)} />
-          <KV k="fx reserves" v={money(r.fxReservesUSD)} />
+          <KV k="currency in circulation" v={money(cb?.currencyInCirculationLocal)} />
+          <KV k="fx reserves" v={money(r.fxReservesLocal)} />
           <KV k="claims on other central banks" hint="official settlement · negative = their deposits here" v={money(cb?.foreignOfficialClaimsUSD)} />
-          <KV k="standing facility lent" hint="the window's repo book" v={money(cb?.standingFacilityLentUSD)} />
+          <KV k="standing facility lent" hint="the window's repo book" v={money(cb?.standingFacilityLentLocal)} />
           <KV k="ways and means advance" hint="the treasury's overdraft here" v={money(waysAndMeansOf(ensureV2(world.state), r.id as RegionId))} />
-          <KV k="last open-market purchase" v={money(cb?.lastOpenMarketPurchasesUSD)} />
-          <KV k="last remittance to the treasury" v={money(cb?.lastRemittanceUSD)} />
+          <KV k="last open-market purchase" v={money(cb?.lastOpenMarketPurchasesLocal)} />
+          <KV k="last remittance to the treasury" v={money(cb?.lastRemittanceLocal)} />
           <KV k="banks at the window" v={atWindow.length ? atWindow.map((b) => <Link key={b.id} to={{ type: 'company', id: b.id }} nav={nav}>{b.ticker}</Link>).reduce<ReactNode[]>((acc, x, i) => (i ? [...acc, ' ', x] : [x]), []) : 'none'} />
         </Card>
         <FunctionTiles nav={nav} tiles={[

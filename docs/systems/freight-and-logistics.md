@@ -74,21 +74,21 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 a service: moving a quantity from A to B, over a time | `src/domain/carrier.ts:transitWeeks` | ✅ |
-| A2 bought by a named shipper from a named carrier, in a currency | `src/engine/simulation/stages/freight-clearing.ts:carrierRevenueUSD` | ⚠️ |
+| A2 bought by a named shipper from a named carrier, in a currency | `src/engine/simulation/stages/freight-clearing.ts:carrierRevenueLocal` | ⚠️ |
 | **A3 it has a duration, so goods are in transit, owned by somebody** | `src/engine/simulation/stages/goods-arrival.ts:InTransitShipment` | ✅ |
 | A3.a in-transit inventory is a real asset and a real use of working capital | `src/engine/simulation/stages/sourcing-intent.ts:pipelineCarryCostRatePerWeek` | ✅ |
 | A4 the price is per unit per route, and routes are distinct | `src/domain/carrier.ts:laneKey` | ✅ |
 | B1 a carrier owns capital: ships, trucks, warehouses | `src/domain/carrier.ts:FreightAsset` | ✅ |
 | B2 capacity is fixed in the short run, slow and dear to add | `src/domain/carrier.ts:weeklyCapacityTonnes` | ✅ |
 | B2.a so the freight price is extremely inelastic short-run | `src/engine/simulation/stages/freight-clearing.ts:laneCapacityTonnes` | ✅ |
-| B3 it has an operating cost: fuel, labour, the capital charge | `src/domain/carrier.ts:marginalCostPerTonneNmUSD` | ✅ |
+| B3 it has an operating cost: fuel, labour, the capital charge | `src/domain/carrier.ts:marginalCostPerTonneNmLocal` | ✅ |
 | B4 capacity can be lost or blocked | — | ❌ |
 | C1 demand is derived from somebody trading goods | `src/engine/simulation/stages/sourcing-intent.ts:computeSourcingIntent` | ✅ |
 | C1.a so it moves with trade volumes | `src/engine/simulation/stages/sourcing-intent.ts:LaneBooking` | ✅ |
 | C2 a shipper can not ship, and that caps the freight price | `src/engine/simulation/stages/sourcing-intent.ts:alternativeLanded` | ✅ |
 | C3 VERIFY freight demand equals the volume actually moving | `src/engine/simulation/stages/freight-clearing.ts:shippedShareByLaneSubUnit` | ⚠️ |
 | D1 it clears, per route | `src/engine/simulation/stages/freight-clearing.ts:runFreightClearing` | ✅ |
-| D2 the freight cost is part of the delivered price | `src/engine/simulation/stages/sourcing-intent.ts:freightPerUnitUSD` | ✅ |
+| D2 the freight cost is part of the delivered price | `src/engine/simulation/stages/sourcing-intent.ts:freightPerUnitLocal` | ✅ |
 | **D3 it is the mechanism behind the location basis** | `src/engine/simulation/stages/sourcing-intent.ts:exWorksInBuyerMoney` | ✅ |
 | D3.a the arbitrage is somebody actually shipping, with capacity and money | `src/engine/simulation/stages/freight-clearing.ts:laneFillRatio` | ⚠️ |
 | D4 the transit time is a real lag between purchase and delivery | `src/engine/simulation/stages/goods-arrival.ts:runGoodsArrivalStage` | ✅ |

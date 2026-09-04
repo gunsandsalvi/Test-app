@@ -21,11 +21,11 @@ import { V2World } from '../../engine2/world';
 
 import { Company, InstitutionalEntity, Region, RegionId } from '../../types';
 import { BankingSector } from '../../domain/banking';
-import { bankTotalAssetsUSD } from '../macro/banking';
-import { centralBankFxReservesUSD, centralBankAssetsUSD } from '../../domain/central-bank';
+import { bankTotalAssetsLocal } from '../macro/banking';
+import { centralBankFxReservesLocal, centralBankAssetsLocal } from '../../domain/central-bank';
 
 import { holdingClassOf } from '../../domain/assets';
-import { weeklyInterestExpenseUSD, govTrancheView } from '../../domain/government';
+import { weeklyInterestExpenseLocal, govTrancheView } from '../../domain/government';
 import { facilityBookOf, ladderRowsOf, trancheScheduleOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../../engine2/tranches';
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../../domain/stated';
 import { accrueHoldersInterest, applyHolderInterestAccruals } from '../simulation/stages/shared-helpers';
@@ -51,7 +51,7 @@ export function closeSeedMoney(
     if (!cb || banks.length === 0) return;
 
     // ---- 1. Household deposits are the funding residual; wholesale is nobody's and is zero. ----
-    let householdDepositsUSD = 0;
+    let householdDepositsLocal = 0;
     banks.forEach((b) => {
       const s: BankingSector = b.bankBalanceSheet!;
       // A3.6c-ii: the corporate and institutional lines are the depositors' accounts, open by now
@@ -59,44 +59,44 @@ export function closeSeedMoney(
       // rule the field carried; a sub-dollar change here moved the week-2 print — §7.392), so the
       // funding residual is struck on the rounded lines.
       const lines = depositLinesAt(v2, companies, institutionalEntities, b.ticker);
-      const otherDepositsUSD = Math.round(Math.max(0, lines.corporateLocal)) + Math.round(Math.max(0, lines.institutionalLocal))
+      const otherDepositsLocal = Math.round(Math.max(0, lines.corporateLocal)) + Math.round(Math.max(0, lines.institutionalLocal))
         + Math.max(0, lines.smeLocal) + Math.max(0, s.clientMarginLocal ?? 0) + Math.max(0, s.centralBankLoanLocal ?? 0);
-      const needUSD = bankTotalAssetsUSD(s, openingCashOf(s), facilityBookOf(v2, b.ticker)) - s.bankEquityLocal - (s.repoBorrowedLocal ?? 0) - (s.srfBorrowingLocal ?? 0) - otherDepositsUSD;
-      let lineUSD = 0;
-      if (needUSD >= 0) {
-        lineUSD = Math.round(needUSD);
+      const needLocal = bankTotalAssetsLocal(s, openingCashOf(s), facilityBookOf(v2, b.ticker)) - s.bankEquityLocal - (s.repoBorrowedLocal ?? 0) - (s.srfBorrowingLocal ?? 0) - otherDepositsLocal;
+      let lineLocal = 0;
+      if (needLocal >= 0) {
+        lineLocal = Math.round(needLocal);
       } else {
         // Over-funded: the depositors' money is real, so the bank holds it as reserves.
-        stashOpeningCash(s, Math.round(openingCashOf(s) - needUSD));
+        stashOpeningCash(s, Math.round(openingCashOf(s) - needLocal));
       }
-      householdDepositsUSD += lineUSD;
+      householdDepositsLocal += lineLocal;
       // A3.4/A3.6c-iii: the household sector's row at this bank opens at the line struck — the
       // only place the line exists (the seed's provisional sizing was a stash, retired here).
-      v2.accounts.balance[sectorRowAt(v2, { kind: 'HOUSEHOLD', region: regionId }, b.ticker, currencyOf(regionId))] = lineUSD;
+      v2.accounts.balance[sectorRowAt(v2, { kind: 'HOUSEHOLD', region: regionId }, b.ticker, currencyOf(regionId))] = lineLocal;
       // A3.6a: the bank's own account opens at the reserves the close strikes.
       openAccount(v2, { kind: 'BANK', ticker: b.ticker }, currencyOf(regionId), openingCashOf(s));
     });
     const hs = reg.householdState;
     // The seed's provisional sizing of the sector's deposits (macro/initialization.ts) is what
     // net worth was struck on; the residual replaces it and net worth moves by the difference.
-    const priorHouseholdDepositsUSD = openingCashOf(hs);
-    hs.netWorthUSD = Math.round((hs.netWorthUSD ?? 0) + (Math.round(householdDepositsUSD) - priorHouseholdDepositsUSD));
+    const priorHouseholdDepositsLocal = openingCashOf(hs);
+    hs.netWorthLocal = Math.round((hs.netWorthLocal ?? 0) + (Math.round(householdDepositsLocal) - priorHouseholdDepositsLocal));
 
     // ---- 2. The central bank's book backs reserves and the treasury's account exactly. ----
-    const reservesUSD = banks.reduce((a, b) => a + openingCashOf(b.bankBalanceSheet!), 0);
-    cb.currencyInCirculationUSD = 0;
-    const targetBookUSD = Math.max(0, reservesUSD + treasuryAccountOf(v2, regionId) - centralBankFxReservesUSD(cb));
-    const currentBookUSD = sumByTenor(cb.sovereignHoldingsByBond);
+    const reservesLocal = banks.reduce((a, b) => a + openingCashOf(b.bankBalanceSheet!), 0);
+    cb.currencyInCirculationLocal = 0;
+    const targetBookLocal = Math.max(0, reservesLocal + treasuryAccountOf(v2, regionId) - centralBankFxReservesLocal(cb));
+    const currentBookLocal = sumByTenor(cb.sovereignHoldingsByBond);
     const weights = new Map<string, number>();
     // §3.13-SOV row 3: weighted by BOND, so the fallback book below names bonds like every
     // other holder's does.
     materializeGovLadder(v2, regionId).forEach((t) => { weights.set(t.id, (weights.get(t.id) ?? 0) + t.principalLocal); });
     const weightTotal = [...weights.values()].reduce((a, v) => a + v, 0) || 1;
     const scaled: Record<string, number> = {};
-    if (currentBookUSD > 0) {
-      Object.entries(cb.sovereignHoldingsByBond ?? {}).forEach(([k, v]) => { scaled[k] = Math.round((Number(v) || 0) * (targetBookUSD / currentBookUSD)); });
+    if (currentBookLocal > 0) {
+      Object.entries(cb.sovereignHoldingsByBond ?? {}).forEach(([k, v]) => { scaled[k] = Math.round((Number(v) || 0) * (targetBookLocal / currentBookLocal)); });
     } else {
-      weights.forEach((w, k) => { scaled[k] = Math.round(targetBookUSD * (w / weightTotal)); });
+      weights.forEach((w, k) => { scaled[k] = Math.round(targetBookLocal * (w / weightTotal)); });
     }
     cb.sovereignHoldingsByBond = scaled;
 
@@ -125,8 +125,8 @@ export function closeSeedMoney(
       principalLocal: Math.round(heldByBond.get(t.id) ?? 0),
     })));
     // The stash carries what the seed STATED; the tenor is derived, as it is on every read.
-    reg.governmentInterestWeeklyUSD = Math.round(weeklyInterestExpenseUSD(seedGovLadderOf(reg).map(govTrancheView)));
-    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb, waysAndMeansOf(v2, regionId), currencyOf(regionId), v2.fx));
+    reg.governmentInterestWeeklyLocal = Math.round(weeklyInterestExpenseLocal(seedGovLadderOf(reg).map(govTrancheView)));
+    reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(cb, waysAndMeansOf(v2, regionId), currencyOf(regionId), v2.fx));
   });
 }
 
@@ -153,11 +153,11 @@ export function seedOpeningAccruals(
   institutionalEntities: InstitutionalEntity[],
   v2: V2World,
   currentWeek: number,
-  holderAccruedInterestUSD: Map<string, Map<string, number>>,
-  sovereignAccruedInterestUSD: Map<string, number>,
+  holderAccruedInterestLocal: Map<string, Map<string, number>>,
+  sovereignAccruedInterestLocal: Map<string, number>,
 ): void {
   const TS = v2.tranches;
-  const pendingHolderAccrualUSD = new Map<string, number>();
+  const pendingHolderAccrualLocal = new Map<string, number>();
   companies.forEach((c) => {
     for (const tr of ladderRowsOf(v2, c.id)) {
       const fl = TS.flags[tr];
@@ -174,11 +174,11 @@ export function seedOpeningAccruals(
       const since = currentWeek - anchorWeek;
       const elapsedWeeks = since <= 0 ? 0 : since % periodWeeks;
       if (elapsedWeeks === 0) continue;
-      const annualUSD = TS.principalLocal[tr] * (floating ? policyRate + annualRate : annualRate);
-      const accruedUSD = (annualUSD * elapsedWeeks) / 52;
-      if (!(accruedUSD > 0)) continue;
-      accrueHoldersInterest({ pendingHolderAccrualUSD },
-        v2.internedStrings[TS.idRef[tr]], floating ? 'LEVERAGED_LOAN' : 'CORP_BOND', accruedUSD);
+      const annualLocal = TS.principalLocal[tr] * (floating ? policyRate + annualRate : annualRate);
+      const accruedLocal = (annualLocal * elapsedWeeks) / 52;
+      if (!(accruedLocal > 0)) continue;
+      accrueHoldersInterest({ pendingHolderAccrualLocal },
+        v2.internedStrings[TS.idRef[tr]], floating ? 'LEVERAGED_LOAN' : 'CORP_BOND', accruedLocal);
     }
   });
   // The SOVEREIGN side, through the calendar's own holder walk: a seeded bond opens with the
@@ -193,19 +193,19 @@ export function seedOpeningAccruals(
     });
     accrueSovereignHolders(
       { v2, updatedInstitutionalEntities: institutionalEntities, updatedCompanies: companies,
-        sovereignAccruedInterestUSD },
+        sovereignAccruedInterestLocal },
       regionId, couponByBond, (bondId) => elapsedByBond.get(bondId) ?? 0,
     );
   });
 
-  if (pendingHolderAccrualUSD.size === 0) return;
+  if (pendingHolderAccrualLocal.size === 0) return;
   applyHolderInterestAccruals({
     v2,
     updatedInstitutionalEntities: institutionalEntities,
     updatedCompanies: companies,
-    pendingHolderAccrualUSD,
+    pendingHolderAccrualLocal,
     // Nothing is DUE at the seed: this opens the balance, it does not pay it.
     pendingHolderAccrualPayout: new Set<string>(),
-    holderAccruedInterestUSD,
+    holderAccruedInterestLocal,
   } as Parameters<typeof applyHolderInterestAccruals>[0]);
 }

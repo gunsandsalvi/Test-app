@@ -288,14 +288,14 @@ export function priceCrossCurrencyBasisSwap(
   currentBasisBps: number,
   tenorYears: number,
   direction: 'LONG' | 'SHORT' // Pay EUR / Receive USD or vice versa
-): { npvUSD: number; dv01USD: number } {
+): { npvLocal: number; dv01Local: number } {
   const basisDiffBps = currentBasisBps - contractedBasisBps;
   // Approximate duration = tenorYears * 0.9
   const duration = tenorYears * 0.9;
   const notional = notionalBase * fxSpot;
   const multiplier = direction === 'LONG' ? 1 : -1;
-  const npvUSD = notional * (basisDiffBps / 10000) * duration * multiplier;
-  const dv01USD = notional * duration * 0.0001 * multiplier;
+  const npvLocal = notional * (basisDiffBps / 10000) * duration * multiplier;
+  const dv01Local = notional * duration * 0.0001 * multiplier;
 
-  return { npvUSD, dv01USD };
+  return { npvLocal, dv01Local };
 }

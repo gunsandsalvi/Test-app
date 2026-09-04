@@ -95,7 +95,7 @@ checked by `scripts/check-atlas.sh`.
 | A2 its liability is its shares, held by named holders | `src/engine/ledger/holdings-ledger.ts:issueHolding` | ⚠️ |
 | **A3 its equity is zero by construction** | `src/engine/simulation/initialization.ts:equityCapitalLocal` | ⚠️ |
 | A4 a mandate that really constrains what it buys | `src/domain/institutions.ts:mandatePctOf` | ✅ |
-| **B1 NAV is a READ, never a stored series** | `src/engine/simulation/stages/etf-flows.ts:fundNavUSD` | ⚠️ |
+| **B1 NAV is a READ, never a stored series** | `src/engine/simulation/stages/etf-flows.ts:fundNavLocal` | ⚠️ |
 | B2 assets marked at cleared prices | `src/engine/ledger/holdings-ledger.ts:markHolding` | ✅ |
 | B2.a a stale price makes a stale NAV somebody transacts on | `src/engine/simulation/stages/etf-flows.ts:carryPricePerShare` | ✅ |
 | B3 fees accrue, are paid to the manager, and reduce NAV | `src/engine/simulation/stages/etf-flows.ts:runEtfFlowsStage` | ✅ |
@@ -103,8 +103,8 @@ checked by `scripts/check-atlas.sh`.
 | C1 a subscription: cash in, new shares at NAV | `src/engine/ledger/holdings-ledger.ts:issueHolding` | ✅ |
 | C1.a and the fund must then buy, per its mandate | `src/engine/simulation/stages/etf-demand.ts:indexFundsForBook` | ✅ |
 | C2 a redemption: shares back, cash at NAV | `src/engine/ledger/holdings-ledger.ts:retireHolding` | ⚠️ |
-| C2.a and the fund must find the cash: buffer, or sell | `src/engine/simulation/stages/etf-flows.ts:fundCashAvailableUSD` | ⚠️ |
-| **C2.b the forced-seller channel: it sells into a market that must clear** | `src/engine/simulation/stages/etf-demand.ts:investableUSD` | ⚠️ |
+| C2.a and the fund must find the cash: buffer, or sell | `src/engine/simulation/stages/etf-flows.ts:fundCashAvailableLocal` | ⚠️ |
+| **C2.b the forced-seller channel: it sells into a market that must clear** | `src/engine/simulation/stages/etf-demand.ts:investableLocal` | ⚠️ |
 | C3 shares outstanding change; a fund is not fixed-size | `src/domain/etf.ts:sharesOutstanding` | ✅ |
 | C4 a timing mismatch between the NAV paid and the sales | `src/engine/simulation/stages/etf-flows.ts:navPerShare` | ⚠️ |
 | C4.a a redemption is a real cost to those who stay | `src/engine/simulation/stages/etf-flows.ts:carryPricePerShare` | ⚠️ |
@@ -117,7 +117,7 @@ checked by `scripts/check-atlas.sh`.
 | D5 VERIFY flows follow the yield, never an imposed allocation | `src/engine/simulation/stages/money-market-fund.ts:divertHouseholdSavingsToMmf` | ⚠️ |
 | E1 ETF shares trade at a price that clears | `src/engine/simulation/stages/etf-flows.ts:marketPricePerShare` | ✅ |
 | E2 two values: the traded price and the NAV | `src/domain/etf.ts:premiumToNavBps` | ✅ |
-| E3 the gap is arbitrageable by create/redeem | `src/domain/etf.ts:apWeeklyCapacityUSD` | ✅ |
+| E3 the gap is arbitrageable by create/redeem | `src/domain/etf.ts:apWeeklyCapacityLocal` | ✅ |
 | E3.a a REASON for a participant, not a rule tying the two | `src/engine/simulation/stages/etf-flows.ts:primaryWithdrawStat` | ✅ |
 | E4 VERIFY the premium is a read, never a number to clamp | `src/domain/etf.ts:premiumToNavBps` | ✅ |
 | F1 FORBID a fund does not create its assets | `src/engine/simulation/stages/07e-equity-clearing.ts:runEquityClearingStage` | ✅ |

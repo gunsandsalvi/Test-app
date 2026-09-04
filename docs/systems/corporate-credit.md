@@ -152,7 +152,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | A2.b a target or constraint it manages towards | `src/engine/simulation/stages/corporate-financing.ts:decideCorporateFinancing` | ✅ |
 | A2.c VERIFY the structure is an outcome, never assigned | — | ❌ |
 | A3 capacity to service, and coverage of it | `src/domain/company-week/credit-standing.ts:creditMetrics` | ✅ |
-| A3.a service is interest **plus scheduled principal** | `src/domain/company-week/capital-programme.ts:weeklyInterestUSD` | ⚠️ |
+| A3.a service is interest **plus scheduled principal** | `src/domain/company-week/capital-programme.ts:weeklyInterestLocal` | ⚠️ |
 | A3.b coverage is a read and can fall below one | `src/domain/company-week/credit-standing.ts:creditMetrics` | ✅ |
 | **A4 creditworthiness is an OPINION HELD BY SOMEBODY** | `src/domain/company.ts:CreditRating` | ⚠️ |
 | A4.a the assessor is named and can be wrong | — | ❌ |
@@ -179,7 +179,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | **D2 a PRICE clears (bond N7)** | — | ❌ |
 | D3 a dealer intermediates, a real party | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
 | D3.a it quotes both sides out of its own inventory | `src/engine/simulation/stages/dealer-desks.ts:applyDealerDeskFills` | ✅ |
-| D3.b bounded by its balance sheet and capital | `src/domain/dealer-desk.ts:dealerDeskCapacityUSD` | ✅ |
+| D3.b bounded by its balance sheet and capital | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
 | D3.c its quote widens as its inventory fills | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ⚠️ |
 | D4 the dealer earns the bid-offer, and somebody pays it | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
 | D5 VERIFY an unsold seller keeps its paper | `src/engine/simulation/stages/financial-clearing-engine.ts:unsoldStaysWithHolder` | ✅ |

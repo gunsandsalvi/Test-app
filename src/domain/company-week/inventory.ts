@@ -27,15 +27,15 @@ export interface CostedLot { unitsHeld: number; unitPriceLocal: number; acquired
 export function chargeCarryingCost(
   stock: Record<string, OutputStock>,
   annualRateOf: (subUnitId: string) => number
-): { stock: Record<string, OutputStock>; totalCostUSD: number } {
-  let totalCostUSD = 0;
+): { stock: Record<string, OutputStock>; totalCostLocal: number } {
+  let totalCostLocal = 0;
   const out: Record<string, OutputStock> = {};
   for (const [subUnitId, inv] of Object.entries(stock)) {
     const costLocal = inv.valueLocal * (annualRateOf(subUnitId) / 52);
-    totalCostUSD += costLocal;
+    totalCostLocal += costLocal;
     out[subUnitId] = { unitsHeld: inv.unitsHeld, valueLocal: Math.max(0, inv.valueLocal - costLocal) };
   }
-  return { stock: out, totalCostUSD };
+  return { stock: out, totalCostLocal };
 }
 
 /**
@@ -53,7 +53,7 @@ export function chargeCarryingCost(
 export function consumeLotsFifo<T extends CostedLot>(
   lots: T[],
   unitsWanted: number
-): { remaining: T[]; unitsTaken: number; costLocal: number; costsUSD: number[]; availableUnits: number } {
+): { remaining: T[]; unitsTaken: number; costLocal: number; costsLocal: number[]; availableUnits: number } {
   // SCALE §7.303 — lots are appended in week order, so they arrive sorted almost always; the
   // unconditional slice().sort() paid an allocation and an O(n log n) pass per firm-sub-unit-
   // week for nothing. One linear check keeps the sorted guarantee and the same order exactly.
@@ -70,20 +70,20 @@ export function consumeLotsFifo<T extends CostedLot>(
   // spans several sub-units — and floating-point addition is not associative, so summing here and
   // adding once changes the world at the third decimal. The three-week fingerprint caught exactly
   // this, twice (§7.237). An extraction that reorders arithmetic is not a refactor.
-  const costsUSD: number[] = [];
+  const costsLocal: number[] = [];
   const remaining: T[] = [];
   for (const lot of sorted) {
     if (left <= 0.0001) { remaining.push(lot); continue; }
     const take = Math.min(lot.unitsHeld, left);
     left -= take;
     unitsTaken += take;
-    const lotCostUSD = take * lot.unitPriceLocal;
-    costsUSD.push(lotCostUSD);
-    costLocal += lotCostUSD;
+    const lotCostLocal = take * lot.unitPriceLocal;
+    costsLocal.push(lotCostLocal);
+    costLocal += lotCostLocal;
     const unitsLeftInLot = lot.unitsHeld - take;
     if (unitsLeftInLot > 0.0001) remaining.push({ ...lot, unitsHeld: unitsLeftInLot });
   }
-  return { remaining, unitsTaken, costLocal, costsUSD, availableUnits };
+  return { remaining, unitsTaken, costLocal, costsLocal, availableUnits };
 }
 
 /** How much of what a line needed its stock could actually cover. 1 = fully supplied. */

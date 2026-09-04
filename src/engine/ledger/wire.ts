@@ -149,7 +149,7 @@ export interface WireSummary {
   byKind: Record<string, number>;
   valueUSDByKind: Record<string, number>;
   /** Money wires recorded after the last pass — they settle next week (N: dated wires). */
-  moneyPendingUSD: number;
+  moneyPendingLocal: number;
   /** §3.13c — the same money wires PER CURRENCY, in that currency's own units. The identity
    *  against settlement's gross is exact here and only approximate in the numéraire, because a
    *  dated row is written in one week at one rate and settles in another at another; comparing
@@ -193,7 +193,7 @@ export interface WireSummary {
  * price is already in one money by construction (an instrument has one quote currency).
  */
 export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number; byCurrency: Record<string, number> } = { numeraire: 0, byCurrency: {} }, regionOfIssuer?: (ticker: string) => string | undefined, reasonTextOf?: (id: number) => string, fx: FxTable = PARITY_FX): WireSummary {
-  const moneyPendingUSD = moneyPending.numeraire;
+  const moneyPendingLocal = moneyPending.numeraire;
   const moneyPendingByCurrency = moneyPending.byCurrency;
   const byKind: Record<string, number> = {}; const valueUSDByKind: Record<string, number> = {};
   const moneyByCurrency: Record<string, number> = {};
@@ -267,5 +267,5 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
       if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueLocal; if (issuerNetUSDByTicker) { const tk = `${to.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueLocal; } } }
     }
   }
-  return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, moneyByCurrency, moneyPendingByCurrency, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
+  return { count: j.n, byKind, valueUSDByKind, moneyPendingLocal, moneyByCurrency, moneyPendingByCurrency, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
 }

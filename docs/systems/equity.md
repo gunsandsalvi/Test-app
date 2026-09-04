@@ -101,7 +101,7 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a residual claim | `src/engine/equity-valuation.ts:companyBookEquityUSD` | ✅ |
+| A1 a residual claim | `src/engine/equity-valuation.ts:companyBookEquityLocal` | ✅ |
 | A1.a ranks below all debt | `src/engine/simulation/stages/estate-resolution.ts:CLAIM_SENIORITY` | ✅ |
 | A1.b value can be zero, not negative | `src/engine2/stage08-back.ts:newStockPrice` | ✅ |
 | A2 counted in SHARES | `src/domain/banking.ts:quantityShares` | ✅ |
@@ -123,14 +123,14 @@ checked by `scripts/check-atlas.sh`.
 | C1.a VERIFY Σ held = shares outstanding | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | C1.b the free float is what is genuinely tradeable | `src/engine/simulation/stages/07e-equity-clearing.ts:heldByInstitutionsShares` | ✅ |
 | C2 holder classes hold for different reasons | `src/domain/institution-profiles.ts:INSTITUTION_PROFILES` | ✅ |
-| C2.a households, directly | `src/engine/macro/household-portfolio.ts:householdDirectEquityUSD` | ⚠️ |
+| C2.a households, directly | `src/engine/macro/household-portfolio.ts:householdDirectEquityLocal` | ⚠️ |
 | C2.b institutions with mandates | `src/domain/cross-border.ts:mandateWeightForIssuer` | ✅ |
 | C2.c index funds, which do not price | `src/engine/simulation/stages/etf-demand.ts:indexFundDemand` | ✅ |
 | **C2.d the issuer itself, via treasury shares** | — | ❌ |
 | C2.e insiders and founders, not for sale | `src/domain/company.ts:ownership` | ✅ |
 | C3 marked at the cleared price | `src/engine/ledger/holdings-ledger.ts:markHolding` | ✅ |
 | **C4 the change in the mark is P&L reaching the holder's income** | `src/engine/simulation/stages/institutional-balance-sheet.ts:accrueInstitutionalIncome` | ⚠️ |
-| C5 a leveraged holder funds and can be forced to sell | `src/domain/prime-brokerage.ts:maxDrawnUSD` | ⚠️ |
+| C5 a leveraged holder funds and can be forced to sell | `src/domain/prime-brokerage.ts:maxDrawnLocal` | ⚠️ |
 | C5.a margin, and a call on it | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageStage` | ⚠️ |
 | C6 it can be lent and pledged, at a haircut | `src/engine/simulation/stages/prime-brokerage.ts:measuredHaircutsFor` | ✅ |
 | C7 a short is a borrow with a cost and a squeeze risk | `src/domain/securities-lending.ts:shortSizeShares` | ✅ |
@@ -155,7 +155,7 @@ checked by `scripts/check-atlas.sh`.
 | **F3 a vote** | — | ❌ |
 | F4 FORBID no entitlement to undistributed earnings | `src/engine/simulation/stages/institutional-balance-sheet.ts:accrueInstitutionalIncome` | ✅ |
 | G1 an index on real prices and free-float weights | `src/engine/simulation/stages/index-calculation.ts:rebalance` | ⚠️ |
-| G2 VERIFY the index is a read of its constituents | `src/engine/simulation/stages/index-calculation.ts:basketValueUSD` | ✅ |
+| G2 VERIFY the index is a read of its constituents | `src/engine/simulation/stages/index-calculation.ts:basketValueLocal` | ✅ |
 | G3 VERIFY a derived statistic never sets the price | `src/engine/simulation/stages/pe-lifecycle.ts:publicComparableEvMultiple` | ⚠️ |
 
 Counts: 41 `✅` · 11 `⚠️` · 4 `❌`.

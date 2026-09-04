@@ -115,7 +115,7 @@ in `src`.
 | **D3 the senior tranche is used as collateral** | — | ❌ |
 | **D4 correlation worse than the tranching assumed** | — | ❌ |
 | **D4.a and that must be emergent, never scripted** | — | ❌ |
-| **E1 FORBID no pool whose losses come from a loss rate** | `src/engine/simulation/stages/bank-lending.ts:loanLossWeeklyUSD` | ❌ |
+| **E1 FORBID no pool whose losses come from a loss rate** | `src/engine/simulation/stages/bank-lending.ts:loanLossWeeklyLocal` | ❌ |
 | **E2 FORBID no tranche without a holder** | — | ❌ |
 | **E3 FORBID no risk transfer without a transferee** | — | ❌ |
 

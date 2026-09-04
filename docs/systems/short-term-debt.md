@@ -85,7 +85,7 @@ Two instruments answer this tree and they answer it differently, so a row that s
 | Node | Code | |
 |---|---|---|
 | A1 it satisfies the bond contract | `src/domain/company.ts:isCommercialPaper` | ⚠️ |
-| A1.a coupon: none — issued at a **discount**, redeems at par | `src/domain/government.ts:discountBillProceedsUSD` | ⚠️ |
+| A1.a coupon: none — issued at a **discount**, redeems at par | `src/domain/government.ts:discountBillProceedsLocal` | ⚠️ |
 | A1.b maturity under a year | `src/engine/simulation/stages/shared-helpers.ts:SOV_BILL_MAX_TENOR_YEARS` | ✅ |
 | A1.c senior unsecured, ranking with other senior debt | `src/domain/estate.ts:CLAIM_SENIORITY` | ✅ |
 | A1.d optionality: none — too short to be worth an option | `src/domain/call-protection.ts:callProtectionForIssue` | ✅ |
@@ -94,10 +94,10 @@ Two instruments answer this tree and they answer it differently, so a row that s
 | A3 types by issuer: state (bills), bank (CD), firm (CP) | `src/engine/simulation/stages/07f-short-debt-clearing.ts:CP_BOOK` | ⚠️ |
 | B1 to fund a short, known need | `src/engine/simulation/stages/07f-short-debt-clearing.ts:WORKING_CAPITAL_SHARE_OF_REVENUE` | ✅ |
 | B2 because it is cheap when the curve is upward-sloping | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:billShareTarget` | ⚠️ |
-| B3 **and it must be rolled** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:rollNeedUSD` | ✅ |
+| B3 **and it must be rolled** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:rollNeedLocal` | ✅ |
 | B3.a a rollover is a new issue into a market that must clear | `src/engine/simulation/stages/07f-short-debt-clearing.ts:cpParticipants` | ✅ |
-| B3.b so a run is possible | `src/engine/simulation/stages/07f-short-debt-clearing.ts:revolverUSD` | ✅ |
-| B4 the issuer keeps a **backstop**, and it costs money unused | `src/engine/simulation/stages/corporate-financing.ts:committedLineHeadroomUSD` | ⚠️ |
+| B3.b so a run is possible | `src/engine/simulation/stages/07f-short-debt-clearing.ts:revolverLocal` | ✅ |
+| B4 the issuer keeps a **backstop**, and it costs money unused | `src/engine/simulation/stages/corporate-financing.ts:committedLineHeadroomLocal` | ⚠️ |
 | B5 VERIFY the maturity profile is a read | `src/domain/company-week/credit-standing.ts:maturityWallShare` | ✅ |
 | C1 a cash investor with a horizon | `src/engine/simulation/stages/07f-short-debt-clearing.ts:CASH_SLEEVE_BILL_SHARE` | ⚠️ |
 | C2 yield against the alternatives, credit, and liquidity | `src/domain/commercial-paper.ts:cpReservationYieldBps` | ✅ |
@@ -110,7 +110,7 @@ Two instruments answer this tree and they answer it differently, so a row that s
 | D4 VERIFY a spread over the equivalent-tenor bill is a derived read | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
 | E1 FORBID **no automatic roll** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:cpIssuers` | ✅ |
 | **E2 FORBID no price without a market** | `src/engine/simulation/stages/bill-accretion.ts:weeklyAccretionRate` | ❌ |
-| E3 FORBID no negative outstanding, no maturity without cash | `src/engine/simulation/stages/07f-short-debt-clearing.ts:maturedUSD` | ✅ |
+| E3 FORBID no negative outstanding, no maturity without cash | `src/engine/simulation/stages/07f-short-debt-clearing.ts:maturedLocal` | ✅ |
 
 ---
 

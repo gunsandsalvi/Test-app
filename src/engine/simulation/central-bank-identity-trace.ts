@@ -9,9 +9,9 @@ import { bankReservesOf, treasuryAccountOf, waysAndMeansOf } from '../ledger/acc
 import { GameState, RegionId } from '../../types';
 import { WeeklyStepContext } from './stages/context';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
-import { centralBankAssetsUSD } from '../../domain/central-bank';
+import { centralBankAssetsLocal } from '../../domain/central-bank';
 
-const FLOOR_USD = 1e7;
+const FLOOR_LOCAL = 1e7;
 
 export function centralBankIdentityTraceEnabled(): boolean {
   return process.env.CB_IDENTITY_TRACE === '1';
@@ -36,8 +36,8 @@ export class CentralBankIdentityTrace {
         const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[c.ticker]?.bankBalanceSheet) || c.bankBalanceSheet;
         if (sheet) reserves += bankReservesOf(ctx.v2, c.ticker);
       });
-      const tga = treasuryAccountOf(ctx.v2, r), assets = centralBankAssetsUSD(cb, waysAndMeansOf(ctx.v2, r), currencyOf(r), ctx.fx);
-      out.set(r, reserves + tga + cb.currencyInCirculationUSD - assets);
+      const tga = treasuryAccountOf(ctx.v2, r), assets = centralBankAssetsLocal(cb, waysAndMeansOf(ctx.v2, r), currencyOf(r), ctx.fx);
+      out.set(r, reserves + tga + cb.currencyInCirculationLocal - assets);
       parts.set(r, { reserves, tga, assets });
     });
     this.parts = parts;
@@ -52,7 +52,7 @@ export class CentralBankIdentityTrace {
     const parts: string[] = [];
     now.forEach((v, r) => {
       const d = v - (this.last.get(r) ?? v);
-      if (Math.abs(d) >= FLOOR_USD) {
+      if (Math.abs(d) >= FLOOR_LOCAL) {
         const p = this.parts.get(r) ?? {}; const q = this.lastParts.get(r) ?? {};
         const detail = Object.keys(p).map((k) => `${k} ${((p[k] - (q[k] ?? p[k])) / 1e6).toFixed(0)}`).join(' ');
         parts.push(`${r} ${d >= 0 ? '+' : ''}${(d / 1e6).toFixed(1)}M [${detail}]`);

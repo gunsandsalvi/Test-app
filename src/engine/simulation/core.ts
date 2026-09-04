@@ -463,9 +463,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
     derivativesBook: ctx.derivativesBook ?? state.derivativesBook,
-    holderAccruedInterestUSD: ctx.holderAccruedInterestUSD,
-    sovereignAccruedInterestUSD: ctx.sovereignAccruedInterestUSD,
-    lastCashOverdraftUSD: ctx.cashOverdraftUSD,
+    holderAccruedInterestLocal: ctx.holderAccruedInterestLocal,
+    sovereignAccruedInterestLocal: ctx.sovereignAccruedInterestLocal,
+    lastCashOverdraftLocal: ctx.cashOverdraftLocal,
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.
     dealers: dealersFromBanks((b) => bankReservesOf(ctx.v2, b.ticker), (b) => facilityBookOf(ctx.v2, b.ticker), nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, damperBindStreakById: rollDamperStreaks(state.damperBindStreakById, ctx.damperBoundInstrumentIds), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
@@ -474,11 +474,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     lastSettlement: ctx.lastSettlementReport && {
       grossLocal: ctx.lastSettlementReport.grossLocal,
       grossByCurrency: { ...ctx.lastSettlementReport.grossByCurrency },
-      unresolvedUSD: ctx.lastSettlementReport.unresolvedUSD,
-      clearingHouseResidualUSD: ctx.lastSettlementReport.clearingHouseResidualUSD,
-      centralBankResidualUSD: ctx.lastSettlementReport.centralBankResidualUSD,
+      unresolvedLocal: ctx.lastSettlementReport.unresolvedLocal,
+      clearingHouseResidualLocal: ctx.lastSettlementReport.clearingHouseResidualLocal,
+      centralBankResidualLocal: ctx.lastSettlementReport.centralBankResidualLocal,
       accountRowsUnmapped: ctx.lastSettlementReport.accountRowsUnmapped,
-      accountUnmappedUSD: ctx.lastSettlementReport.accountUnmappedUSD,
+      accountUnmappedLocal: ctx.lastSettlementReport.accountUnmappedLocal,
       accountUnmappedByKind: Object.fromEntries(ctx.lastSettlementReport.accountUnmappedByKind.entries()),
       treasuryFlowsByRegion: Object.fromEntries(
         Array.from(ctx.lastSettlementReport.treasuryFlowsByRegion.entries())
@@ -505,19 +505,19 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         };
         // Whatever still finds no region is NAMED, never absorbed: a tally that cannot be placed
         // is money the identity below cannot see, which is the thing M6 exists to report.
-        let unmappedUSD = 0;
+        let unmappedLocal = 0;
         const byRegion = (m: Map<string, number>): Record<string, number> => {
           const out: Record<string, number> = {};
           m.forEach((v, ticker) => {
             const r = regionOfBank.get(ticker);
-            if (r) out[r] = (out[r] ?? 0) + v; else unmappedUSD += v;
+            if (r) out[r] = (out[r] ?? 0) + v; else unmappedLocal += v;
           });
           return out;
         };
         const creditCreatedByRegion = byRegion(ctx.lastSettlementReport.creditCreatedByBank);
         const bankOwnAccountByRegion = byRegion(mergeMapsForRegion(ctx.lastSettlementReport.bankEquityDeltaByBank, ctx.lastSettlementReport.bankSecuritiesDeltaByBank));
         return {
-          bankTallyUnmappedUSD: unmappedUSD,
+          bankTallyUnmappedLocal: unmappedLocal,
           creditCreatedByRegion,
           bankOwnAccountByRegion,
           centralBankIssuanceByRegion: Object.fromEntries(ctx.lastSettlementReport.centralBankIssuanceByRegion.entries()),

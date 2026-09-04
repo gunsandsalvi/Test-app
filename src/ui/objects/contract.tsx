@@ -49,7 +49,7 @@ export const contract = defineObject<DerivativeContract>({
           <KV k="party b" hint={k.classId === 'IRS' ? 'receives fixed' : k.classId === 'CDS' ? 'sells protection' : 'short'} v={b ? <Link to={b} nav={nav}>{partyName(world, k.b)}</Link> : partyName(world, k.b)} />
           {k.referenceId ? <KV k="reference" v={ref ? <Link to={ref} nav={nav}>{k.referenceId}</Link> : k.referenceId} /> : null}
           <KV k="struck" v={formatDate(displayWeek(world.state, k.struckWeek))} />
-          {k.settledMarkUSD !== undefined ? <KV k="settled mark" v={money(k.settledMarkUSD)} /> : null}
+          {k.settledMarkLocal !== undefined ? <KV k="settled mark" v={money(k.settledMarkLocal)} /> : null}
         </Card>
         <FunctionTiles nav={nav} tiles={[{ fn: 'all', sub: 'the stored record' }]} />
         <AllRow fields={Object.keys(k).length} nav={nav} />

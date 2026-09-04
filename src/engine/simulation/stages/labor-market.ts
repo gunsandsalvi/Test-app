@@ -52,7 +52,7 @@ import { isActiveCompany, fullStaffingCapHeads, RECEIPTS_MEASUREMENT_WEIGHT } fr
 import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
 import { INDUSTRY_REGISTRY, smePoolSubUnits } from '../../../domain/industry-registry';
-import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
+import { weeklyWageBillLocal, getBaseAnnualWageLocal } from '../../bootstrap/labor-and-wages';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { NEUTRAL_LABOR_TIGHTNESS } from '../../../domain/region-macro';
 import { patienceWeeksOf, riskAversionOf, adaptiveExpectation } from '../../../domain/preferences';
@@ -107,7 +107,7 @@ function occupationMixFor(sector: string): Partial<Record<OccupationType, number
  * direction was nominal and one was real, and only the shedding direction could happen.
  *
  * The deflator is a MEASUREMENT, not an index anyone chose: each good's own cleared price
- * against the price it was seeded at (`unitPriceLocal / baseUnitPriceUSD`), revenue-weighted
+ * against the price it was seeded at (`unitPriceLocal / baseUnitPriceLocal`), revenue-weighted
  * across the firm's lines. A firm whose own product has halved in price is not overstaffed.
  */
 function outputPriceVsBaselineOf(comp: Company, reg: Region): number {
@@ -116,7 +116,7 @@ function outputPriceVsBaselineOf(comp: Company, reg: Region): number {
     const cd = reg.categoryDemand[line.subUnitId];
     return {
       weight: Math.max(0, line.revenueShare ?? 0),
-      base: cd?.baseUnitPriceUSD ?? 0,
+      base: cd?.baseUnitPriceLocal ?? 0,
       now: cd?.unitPriceLocal ?? 0,
     };
   }));
@@ -133,7 +133,7 @@ function outputPriceVsBaselineOf(comp: Company, reg: Region): number {
  */
 function desiredGrowthAnnualOf(
   history: number[] | undefined,
-  currentRevenueUSD: number,
+  currentRevenueLocal: number,
   fallbackInflationAnnual: number,
   lines: { subUnitId: string; revenueShare?: number }[] | undefined,
   reg: Region,
@@ -143,7 +143,7 @@ function desiredGrowthAnnualOf(
 ): number {
   // Gatherer only — the window, the deflator and the growth rule live in
   // domain/company-week/labor-demand.ts (§5-STRUCT step 2), where their tests are.
-  const w = revenueGrowthWindow(history, currentRevenueUSD);
+  const w = revenueGrowthWindow(history, currentRevenueLocal);
   if (!w) return 0;
   const rows: PriceGrowthRow[] = [];
   (lines ?? []).forEach((l) => {
@@ -182,7 +182,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     // Real output growth is what hiring follows, so the revenue signal is deflated.
     const inflationAnnual = reg.inflation ?? 0.02;
     // LAB: the occupation wage table this region's employers pay against.
-    const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
+    const baseAnnualWageLocal = getBaseAnnualWageLocal(regionId);
 
     // Last week's tightness sets this week's quit rate: a worker with options uses them.
     const priorTightness = reg.laborMarketTightness ?? 1.0;
@@ -230,9 +230,9 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // shedding in the same week (§7.344). One owner for the expectation: this stage.
       const patienceWeeks = patienceWeeksOf(comp.management);
       const riskAversion = riskAversionOf(comp.management);
-      const expectedEbitdaUSD = adaptiveExpectation(comp.expectedEbitdaUSD, comp.ebitda, patienceWeeks);
+      const expectedEbitdaLocal = adaptiveExpectation(comp.expectedEbitdaLocal, comp.ebitda, patienceWeeks);
       if (!ctx.companyUpdates[comp.ticker]) ctx.companyUpdates[comp.ticker] = {};
-      ctx.companyUpdates[comp.ticker].expectedEbitdaUSD = expectedEbitdaUSD;
+      ctx.companyUpdates[comp.ticker].expectedEbitdaLocal = expectedEbitdaLocal;
 
       // HH6: a firm's OWN quit rate. Paying below the going rate loses people faster; paying
       // above keeps them, which is what makes a raise do something rather than just cost money.
@@ -252,18 +252,18 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // fund did not reduce hiring, it just accumulated as an unpayable payroll, and the entire
       // adjustment fell on cash-exhaustion layoffs that arrived too late and cascaded (measured:
       // 30-50% unemployment in all four regions, hidden by the 50% clamp on the print).
-      const netPpeUSD = Math.max(0, (comp.grossPPELocal ?? 0) - (comp.accumulatedDepreciationLocal ?? 0));
+      const netPpeLocal = Math.max(0, (comp.grossPPELocal ?? 0) - (comp.accumulatedDepreciationLocal ?? 0));
       // §5-BRAINS — the return THIS management requires of its plant: the premium weighted by its own
       // risk aversion. A risk-averse board wants more for the same beta and sheds sooner.
       const costOfCapital = Math.max(0, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (comp.beta ?? 1) * EQUITY_RISK_PREMIUM * riskAversion);
-      const capitalChargeUSD = netPpeUSD * costOfCapital;
-      const earningsShortfallUSD = capitalChargeUSD - expectedEbitdaUSD;
-      const annualWagePerWorkerUSD = current > 0
-        ? (weeklyWageBillUSD(current, occupationMixFor(comp.sector), baseAnnualWageUSD, reg.occupationPools,
+      const capitalChargeLocal = netPpeLocal * costOfCapital;
+      const earningsShortfallLocal = capitalChargeLocal - expectedEbitdaLocal;
+      const annualWagePerWorkerLocal = current > 0
+        ? (weeklyWageBillLocal(current, occupationMixFor(comp.sector), baseAnnualWageLocal, reg.occupationPools,
           comp.offeredWageIndex ?? 1.0) * 52) / current
         : 0;
-      const earningsShortfallHeads = (earningsShortfallUSD > 0 && annualWagePerWorkerUSD > 0)
-        ? earningsShortfallUSD / annualWagePerWorkerUSD
+      const earningsShortfallHeads = (earningsShortfallLocal > 0 && annualWagePerWorkerLocal > 0)
+        ? earningsShortfallLocal / annualWagePerWorkerLocal
         : 0;
 
       // EMP (§7.109/§7.110): THE OTHER SIDE OF THE SAME CONSTRAINT.
@@ -281,12 +281,12 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // output needs and what its earnings can carry. The need is the level target this stage's
       // header has always described — its own annualised output at its own baseline
       // productivity — which is a measurement off the firm's own books and not a new parameter.
-      const baselineRevPerHeadUSD = (comp.baselineEmployeeCount ?? 0) > 0
+      const baselineRevPerHeadLocal = (comp.baselineEmployeeCount ?? 0) > 0
         ? (comp.baselineAnnualRevenue || comp.annualRevenue) / comp.baselineEmployeeCount!
         : 0;
       // Both sides of this ratio in the SAME dollars: this week's revenue deflated back to the
       // price level the baseline was struck at (see `outputPriceVsBaseline`).
-      const realRevenueUSD = comp.annualRevenue / Math.max(0.05, outputPriceVsBaselineOf(comp, reg));
+      const realRevenueLocal = comp.annualRevenue / Math.max(0.05, outputPriceVsBaselineOf(comp, reg));
       // §7.247 — THE LEVEL TARGET SEES THE DEMAND THE FIRM'S MARKETS LEFT UNSERVED.
       //
       // Realized revenue is what the firm's CURRENT staff produced, so a target built on it
@@ -333,8 +333,8 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // instant multiplier) and a double-count: the firm's OWN learning already reaches its
       // labour demand through the netting (the flow) and the ceiling below (the cap). Both
       // sides of this ratio are struck at the BASELINE vintage, deliberately.
-      const outputNeedHeads = baselineRevPerHeadUSD > 0
-        ? Math.min((realRevenueUSD * demandPull) / baselineRevPerHeadUSD, productiveHeadsCap)
+      const outputNeedHeads = baselineRevPerHeadLocal > 0
+        ? Math.min((realRevenueLocal * demandPull) / baselineRevPerHeadLocal, productiveHeadsCap)
         : current;
       // §7.345 — A CUT THAT LOWERS EARNINGS CANNOT CLOSE AN EARNINGS SHORTFALL. The affordability
       // rule fired a head for every wage of shortfall, and outranked the level target — so a
@@ -355,10 +355,10 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // hires nobody. What it may hire toward is still the level target, and the matching
       // friction still paces it.
       const cashLocal = cashOf(ctx.v2, comp);
-      const valueAddedPerHeadUSD = current > 0
-        ? (comp.annualRevenue - Math.max(0, (comp.realInputConsumptionCostWeeklyUSD ?? 0) * 52)) / current
+      const valueAddedPerHeadLocal = current > 0
+        ? (comp.annualRevenue - Math.max(0, (comp.realInputConsumptionCostWeeklyLocal ?? 0) * 52)) / current
         : 0;
-      const affordableHireHeads = (cashLocal >= 0 && valueAddedPerHeadUSD > annualWagePerWorkerUSD)
+      const affordableHireHeads = (cashLocal >= 0 && valueAddedPerHeadLocal > annualWagePerWorkerLocal)
         ? Math.max(0, outputNeedHeads - current)
         : 0;
 
@@ -412,7 +412,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
           ?? reg.categoryDemand[su.unitId]?.demandLevelAnnualLocal ?? 0),
       }));
       const growthAnnual = desiredGrowthAnnualOf(
-        seg.revenueHistoryUSD, seg.annualRevenueLocal, inflationAnnual, segLines, reg,
+        seg.revenueHistoryLocal, seg.annualRevenueLocal, inflationAnnual, segLines, reg,
         LABOR_PRODUCTIVITY_GROWTH_ANNUAL
       );
       const desiredWeeklyChange = current * (growthAnnual / 52);
@@ -436,15 +436,15 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // the same integral: the share of the pool's firms in trouble sheds, and the rest does not.
       // A pool whose aggregate cash is comfortable while a third of its firms cannot cover their
       // interest now sheds that third — which the mean could not express.
-      const poolCashUSD = poolCashOf(ctx.v2, regionId, seg.industry);
-      const distressedShare = seg.distressedFirmShare ?? (poolCashUSD < 0 ? 1 : 0);
+      const poolCashLocal = poolCashOf(ctx.v2, regionId, seg.industry);
+      const distressedShare = seg.distressedFirmShare ?? (poolCashLocal < 0 ? 1 : 0);
       if (distressedShare > 0) {
         layoffs = Math.max(layoffs, current * distressedShare * DISTRESS_LAYOFF_SPEED);
       }
       // The whole pool running out of money is still the acute case, and it is not the same
       // statement: the strata above are about firms that cannot service DEBT, this is a pool
       // that cannot make PAYROLL.
-      if (poolCashUSD < 0) layoffs = Math.max(layoffs, current * DISTRESS_LAYOFF_SPEED);
+      if (poolCashLocal < 0) layoffs = Math.max(layoffs, current * DISTRESS_LAYOFF_SPEED);
       OCCUPATIONS.forEach((occ) => {
         const w = (mix as Partial<Record<OccupationType, number>>)[occ] ?? 0;
         if (w <= 0) return;
@@ -643,15 +643,15 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // can leave. The pull is toward the level that share implies, not a jump to it: a wage is
       // sticky, and the existing push/pull already carry the cyclical half.
       const headcount = Math.max(1, comp.employeeCount);
-      const nonWageCostUSD = Math.max(0, comp.annualRevenue - comp.ebitda) - weeklyWageBillUSD(
-        headcount, occupationMixFor(comp.sector), baseAnnualWageUSD, reg.occupationPools, prevIndex) * 52;
-      const surplusPerHeadUSD = (comp.annualRevenue - Math.max(0, nonWageCostUSD)) / headcount;
-      const goingWagePerHeadUSD = (weeklyWageBillUSD(
-        headcount, occupationMixFor(comp.sector), baseAnnualWageUSD, reg.occupationPools, 1.0) * 52) / headcount;
+      const nonWageCostLocal = Math.max(0, comp.annualRevenue - comp.ebitda) - weeklyWageBillLocal(
+        headcount, occupationMixFor(comp.sector), baseAnnualWageLocal, reg.occupationPools, prevIndex) * 52;
+      const surplusPerHeadLocal = (comp.annualRevenue - Math.max(0, nonWageCostLocal)) / headcount;
+      const goingWagePerHeadLocal = (weeklyWageBillLocal(
+        headcount, occupationMixFor(comp.sector), baseAnnualWageLocal, reg.occupationPools, 1.0) * 52) / headcount;
       // The target premium is the share of the surplus that exceeds the going wage. A firm with
       // no surplus above it offers no premium; one earning twice it offers a real one.
-      const rentTargetIndex = goingWagePerHeadUSD > 0
-        ? 1 + RENT_SHARE_TO_LABOUR * ((surplusPerHeadUSD - goingWagePerHeadUSD) / goingWagePerHeadUSD)
+      const rentTargetIndex = goingWagePerHeadLocal > 0
+        ? 1 + RENT_SHARE_TO_LABOUR * ((surplusPerHeadLocal - goingWagePerHeadLocal) / goingWagePerHeadLocal)
         : 1;
       // Closed over about a YEAR — the gap expressed directly as an annual rate, so no speed
       // constant is invented. A firm reprices to its own productivity roughly annually; borrowing

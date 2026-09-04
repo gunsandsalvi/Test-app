@@ -69,7 +69,7 @@ export interface SegmentFinancial {
   subUnitId: string;
   revenueLocal: number;
   ebitdaLocal: number;
-  capexUSD: number;
+  capexLocal: number;
 }
 
 export interface DebtTranche {
@@ -129,11 +129,11 @@ export interface DebtTranche {
 }
 
 export interface CogsBreakdown {
-  baseCostUSD: number;
-  wagePressureUSD: number;
-  inputPriceCostUSD: number;
-  capacityDecayCostUSD: number;
-  crowdingCostUSD: number;
+  baseCostLocal: number;
+  wagePressureLocal: number;
+  inputPriceCostLocal: number;
+  capacityDecayCostLocal: number;
+  crowdingCostLocal: number;
 }
 
 export interface QuarterlyIncomeStatement {
@@ -154,14 +154,14 @@ export interface QuarterlyIncomeStatement {
 
 export interface QuarterlyBalanceSheet {
   cash: number;
-  treasuryHoldingsUSD: number;
+  treasuryHoldingsLocal: number;
   accountsReceivable: number;
-  finishedGoodsInventoryUSD: number;
+  finishedGoodsInventoryLocal: number;
   // 1$ is 1$ Phase 6: real held raw-material/input inventory value (sum of InputLot.unitsHeld *
   // unitPriceLocal across every category, as of this filing date) — genuinely distinct from
   // finished goods, and previously missing from the balance sheet entirely (real input stock
   // existed on the company but nothing on the statements reflected its value as an asset).
-  rawMaterialsInventoryUSD: number;
+  rawMaterialsInventoryLocal: number;
   grossPPE: number;
   accumulatedDepreciation: number;
   netPPE: number;
@@ -252,11 +252,11 @@ export interface Company {
   carrierFleet?: import('./carrier').CarrierFleet;
   segmentFinancials?: SegmentFinancial[];
   revenueVolatility?: number;
-  technicalReservesUSD?: number;
-  aumUSD?: number;
+  technicalReservesLocal?: number;
+  aumLocal?: number;
   managementFeeRate?: number;
-  insurancePremiumsWrittenUSD?: number;
-  insuranceClaimsPaidUSD?: number;
+  insurancePremiumsWrittenLocal?: number;
+  insuranceClaimsPaidLocal?: number;
   id: string;
   ticker: string;
   name: string;
@@ -313,12 +313,12 @@ export interface Company {
    *  staffing ceiling is read (the `unitsPerNetPpeDollar` pattern). The full-staffing ceiling is
    *  `baselineEmployeeCount × netPPE/baselineNetPPE`: a firm that BUILDS plant can hire past its
    *  seed headcount, and one that lets it depreciate cannot staff a plant it no longer has. */
-  baselineNetPpeUSD?: number;
+  baselineNetPpeLocal?: number;
   /** §7.246 — the two measured cost lines of the most recent completed company week, persisted so
    *  stage 05's offer floor can decompose `(annualRevenue − ebitda)` into wages + real inputs +
    *  residual instead of dividing a TRAILING total by CURRENT staffed output. Both weekly (rule 8). */
-  payrollWeeklyUSD?: number;
-  realInputConsumptionCostWeeklyUSD?: number;
+  payrollWeeklyLocal?: number;
+  realInputConsumptionCostWeeklyLocal?: number;
   ebitda: number;
   baselineEbitdaMargin?: number;
   ebit: number;
@@ -326,7 +326,7 @@ export interface Company {
   eps: number;
   sharesOutstanding: number;
   // §5-WIRES A3.1: cash is a READ of the persistent account (`cashOf`, engine/ledger/accounts.ts).
-  // §5-WIRES D: total debt is a READ of the ladder (`totalDebtOf`, `ladderTotalUSD`), not a field.
+  // §5-WIRES D: total debt is a READ of the ladder (`totalDebtOf`, `ladderTotalLocal`), not a field.
   currentLiabilities: number;
   debtTranches: DebtTranche[];
   capex: number;
@@ -347,7 +347,7 @@ export interface Company {
    */
   assetsUnderConstruction?: { valueLocal: number; entersServiceWeek: number }[];
   /** IND13 — what actually entered service last week: what the plant really grew by. */
-  capexCommissionedLastWeekUSD?: number;
+  capexCommissionedLastWeekLocal?: number;
   rndExpense?: number;
   baselineGrowthCapexToRevenueRatio: number;
   maintenanceShortfallStreak: number;
@@ -357,7 +357,7 @@ export interface Company {
   management?: import('./preferences').Preferences;
   /** §5-BRAINS — the earnings this management EXPECTS: an adaptive expectation at its own
    *  horizon. One owner, the labour stage (the first decision that reads it). */
-  expectedEbitdaUSD?: number;
+  expectedEbitdaLocal?: number;
   /** §5-MGMT — consecutive quarterly reviews this management has failed. */
   managementFailedQuarters?: number;
   occupationMixDrift: Partial<Record<string, number>>;
@@ -402,7 +402,7 @@ export interface Company {
   // the WS8 queue this week; settlement (or withdrawal) clears it — a deal whose market says
   // no simply does not happen. ----
   pendingLboSponsorId?: string;
-  pendingLboEquityUSD?: number;
+  pendingLboEquityLocal?: number;
   pendingRecapSponsorId?: string;
   pendingIpoSponsorId?: string;
   pendingIpoShares?: number;
@@ -525,7 +525,7 @@ export interface Company {
   // Output (finished-goods) inventory, keyed by sub-unit — a company producing multiple
   // product lines (e.g. semiconductors + consumer_devices + enterprise_software at once) holds
   // a genuinely separate inventory for each; a single shared scalar here was silently
-  // overwritten by whichever line's weekly bidding pass ran last. See getOutputInventoryUSD /
+  // overwritten by whichever line's weekly bidding pass ran last. See getOutputInventoryLocal /
   // getOutputInventoryUnits below for the aggregate reads most call sites actually want.
   /** §7.345 — units sold last week by line (stage 08 carries it from the week's update) and the
    *  sales this management EXPECTS by line (owner: stage 05, where production is decided). */
@@ -574,14 +574,14 @@ export interface Company {
   /** IND2 — the annualised CONTRACTED revenue base a subscription seller carries. It survives a
    *  week with no sales and decays only by churn, which is what makes a software firm's revenue
    *  behave differently from a steel mill's. Absent on pure unit sellers. */
-  recurringRevenueBaseUSD?: number;
+  recurringRevenueBaseLocal?: number;
   _targetProductionUSD?: number;
   // 1$ is 1$ Phase 6: this week's real settled sales/purchases (from 05-unit-bidding.ts's
   // actual bid/offer clearing — open-market plus active-contract volume) — persisted onto the
   // company so the UI can show real weekly production/purchasing activity, not just the target.
   /** PUB1b — tax accrued but not yet remitted. Real firms accrue weekly and pay quarterly, and
    * that lumpiness is most of what makes a treasury account swing. */
-  // §5-WIRES N: the accrued, unpaid tax is the firm's undue dated rows to the treasury (`undueOwedByPayerUSD`), not a field.
+  // §5-WIRES N: the accrued, unpaid tax is the firm's undue dated rows to the treasury (`undueOwedByPayerLocal`), not a field.
   /** §7.302 — the week this bank was RESOLVED (equity ≤ 0 → purchase-and-assumption by the
    *  region's largest survivor; wholesale haircut by the hole; the shell defaults into the
    *  estate for its register claims). Set once; a resolved bank never trades again. */
@@ -589,13 +589,13 @@ export interface Company {
   /** §5-TAXR — accumulated losses not yet used against taxable profit. A recovering firm draws
    *  this down and pays nothing until it is gone; receipts fall faster than profits in a
    *  downturn. Seeded absent: a firm opens with no loss history (§7.4). */
-  taxLossCarryforwardUSD?: number;
+  taxLossCarryforwardLocal?: number;
   /** §5-TAXR — the plant's TAX basis, run down double-declining while the book runs straight-
    *  line. Seeded at book net PP&E on first touch — no opening deferral (§7.4). */
-  taxBasisPpeUSD?: number;
+  taxBasisPpeLocal?: number;
   /** §5-TAXR — (book net PP&E − tax basis) × rate: what acceleration has deferred. A VIEW. */
-  deferredTaxLiabilityUSD?: number;
-  lastWeekSalesUSD?: number;
+  deferredTaxLiabilityLocal?: number;
+  lastWeekSalesLocal?: number;
   /**
    * HH6 — the wage this firm OFFERS, as a multiple of the going rate for its own occupation
    * mix. 1.0 is the market rate. Set weekly from its real vacancy-fill experience (cannot fill
@@ -606,7 +606,7 @@ export interface Company {
   /** HH6 — the share of this firm's own postings that went unfilled last week: its measured
    * hiring difficulty, and the input to the wage push above. */
   unfilledVacancyShare?: number;
-  lastWeekPurchasesUSD?: number;
+  lastWeekPurchasesLocal?: number;
   treasuryHoldings: ItemizedHolding[];
   producedCommodityId?: string;
 }
@@ -643,7 +643,7 @@ export function isActiveCompany(c: Company): boolean { return !c.isDefaulted && 
 export function fullStaffingCapHeads(c: Company): number {
   const baselineHeads = c.baselineEmployeeCount ?? 0;
   if (!(baselineHeads > 0)) return Math.max(1, c.employeeCount ?? 1);
-  const netPpeUSD = (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0);
+  const netPpeLocal = (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0);
   // §5-PROD: a firm that has LEARNED runs the same plant with fewer people — the ceiling is
   // heads-per-plant at the firm's own current unit-labour productivity, not its baseline's.
   const learning = Math.max(1e-6, c.learningMultiplier ?? 1);
@@ -655,9 +655,9 @@ export function fullStaffingCapHeads(c: Company): number {
   // (§7.301). The labour demand this ceiling caps now falls with the plant that is actually
   // there to staff, which is what lets a mothballed firm shed cost and the test recover.
   const online = 1 - Math.max(0, Math.min(1, c.mothballedPpeShare ?? 0));
-  if (!(netPpeUSD > 0)) return Math.max(1, (baselineHeads * online) / learning);
-  if (!(c.baselineNetPpeUSD !== undefined && c.baselineNetPpeUSD > 0)) c.baselineNetPpeUSD = netPpeUSD;
-  return Math.max(1, (baselineHeads * (netPpeUSD / c.baselineNetPpeUSD) * online) / learning);
+  if (!(netPpeLocal > 0)) return Math.max(1, (baselineHeads * online) / learning);
+  if (!(c.baselineNetPpeLocal !== undefined && c.baselineNetPpeLocal > 0)) c.baselineNetPpeLocal = netPpeLocal;
+  return Math.max(1, (baselineHeads * (netPpeLocal / c.baselineNetPpeLocal) * online) / learning);
 }
 
 /**
@@ -685,12 +685,12 @@ export function operatingBufferShareOf(c: { management?: import('./preferences')
 }
 
 /** What this firm wants to be holding in short government paper, given the cash it has now. */
-export function corporateTreasuryTargetUSD(cashLocal: number, annualRevenueLocal: number, riskAversion = 1): number {
-  const investableUSD = Math.max(0, cashLocal - annualRevenueLocal * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversion);
-  return investableUSD * TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH;
+export function corporateTreasuryTargetLocal(cashLocal: number, annualRevenueLocal: number, riskAversion = 1): number {
+  const investableLocal = Math.max(0, cashLocal - annualRevenueLocal * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversion);
+  return investableLocal * TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH;
 }
 
-export function getOutputInventoryUSD(comp: Company, subUnitId?: string): number {
+export function getOutputInventoryLocal(comp: Company, subUnitId?: string): number {
   const inv = comp.outputInventoryBySubUnit;
   if (!inv) return 0;
   if (subUnitId) return inv[subUnitId]?.valueLocal ?? 0;
@@ -706,7 +706,7 @@ export function getOutputInventoryUnits(comp: Company, subUnitId?: string): numb
 
 /** IND10 — units of this company's output that are started but not yet finished. */
 /** IND13 — capital delivered and not yet in service: the construction-in-progress asset. */
-export function assetsUnderConstructionUSD(comp: Company): number {
+export function assetsUnderConstructionLocal(comp: Company): number {
   return (comp.assetsUnderConstruction ?? []).reduce((s, l) => s + l.valueLocal, 0);
 }
 
@@ -719,7 +719,7 @@ export function getWipUnits(comp: Company, subUnitId?: string): number {
 }
 
 /** IND10 — the cost sunk into that unfinished production: the WIP asset. */
-export function getWipUSD(comp: Company, subUnitId?: string): number {
+export function getWipLocal(comp: Company, subUnitId?: string): number {
   const wip = comp.wipBySubUnit;
   if (!wip) return 0;
   const q = (lots: { valueLocal: number }[]) => lots.reduce((s, l) => s + l.valueLocal, 0);
@@ -728,7 +728,7 @@ export function getWipUSD(comp: Company, subUnitId?: string): number {
 }
 
 // ENGINE V2 (§7.304) — input lots live on the persistent columnar table (engine2/lots.ts);
-// the balance-sheet reads are totalInputValueUSD / inputUnitsHeld / materializeInputInventory.
+// the balance-sheet reads are totalInputValueLocal / inputUnitsHeld / materializeInputInventory.
 
 
 /**
@@ -817,6 +817,6 @@ export const marketCapOf = (c: { stockPrice: number; sharesOutstanding: number }
   (c.stockPrice > 0 && c.sharesOutstanding > 0 ? c.stockPrice * c.sharesOutstanding : 0);
 
 /** Total debt is the ladder's face — the week-end VIEW (`debtTranches`); inside a week the engine
- *  reads the live rows (`ladderTotalUSD` in engine2/tranches.ts). */
+ *  reads the live rows (`ladderTotalLocal` in engine2/tranches.ts). */
 export const totalDebtOf = (c: { debtTranches?: DebtTranche[] }): number =>
   (c.debtTranches ?? []).reduce((s, t) => s + t.principalLocal, 0);

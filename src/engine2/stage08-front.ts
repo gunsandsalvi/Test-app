@@ -40,33 +40,33 @@ export interface FrontPass {
   isProfile: Uint8Array;
   /** The firm's entity-scoped stream position AFTER the front half's one draw. */
   rngAfter: Uint32Array;
-  weeklyPayrollUSD: Float64Array;
+  weeklyPayrollLocal: Float64Array;
   annualInterest: Float64Array;
-  facilityInterestWeeklyUSD: Float64Array;
-  marketBondAccrualUSD: Float64Array;
-  commercialPaperAccrualUSD: Float64Array;
-  marketLoanAccrualUSD: Float64Array;
+  facilityInterestWeeklyLocal: Float64Array;
+  marketBondAccrualLocal: Float64Array;
+  commercialPaperAccrualLocal: Float64Array;
+  marketLoanAccrualLocal: Float64Array;
   couponDue: Uint8Array;
   effectiveDebtRate: Float64Array;
-  capexCommissionedUSD: Float64Array;
+  capexCommissionedLocal: Float64Array;
   stillUnderConstruction: (ConstructionLot[])[];
   newExecutionQuality: Float64Array;
-  carryingCostUSD: Float64Array;
+  carryingCostLocal: Float64Array;
   outputInv: Record<string, { unitsHeld: number; valueLocal: number }>[];
   updatedProductLines: ProductLines[];
   newRevenue: Float64Array;
-  measuredInputConsumptionWeeklyUSD: Float64Array;
+  measuredInputConsumptionWeeklyLocal: Float64Array;
   /** §5-WIRES W4: units drawn from the input lots per (row × NSUB + sub) — the consumption record. */
   inputUnitsConsumed: Float64Array;
   newEbitda: Float64Array;
   newEbit: Float64Array;
   newNetIncome: Float64Array;
   newEps: Float64Array;
-  taxPaidAnnualRateUSD: Float64Array;
+  taxPaidAnnualRateLocal: Float64Array;
   newInputSupplyConstraintFactor: Float64Array;
   newRecentFulfillmentEMA: Float64Array;
-  newRecurringBaseUSD: (number | undefined)[];
-  targetProductionUSD: Float64Array;
+  newRecurringBaseLocal: (number | undefined)[];
+  targetProductionLocal: Float64Array;
   costDrivers: (CogsCostDrivers | undefined)[];
 }
 
@@ -81,7 +81,7 @@ function allocScratch(n: number): FrontPass {
     scratch.stillUnderConstruction.length = n;
     scratch.outputInv.length = n;
     scratch.updatedProductLines.length = n;
-    scratch.newRecurringBaseUSD.length = n;
+    scratch.newRecurringBaseLocal.length = n;
     scratch.costDrivers.length = n;
     return scratch;
   }
@@ -90,32 +90,32 @@ function allocScratch(n: number): FrontPass {
     isActive: lane8(n),
     isProfile: lane8(n),
     rngAfter: laneU32(n),
-    weeklyPayrollUSD: lane64(n),
+    weeklyPayrollLocal: lane64(n),
     annualInterest: lane64(n),
-    facilityInterestWeeklyUSD: lane64(n),
-    marketBondAccrualUSD: lane64(n),
-    commercialPaperAccrualUSD: lane64(n),
-    marketLoanAccrualUSD: lane64(n),
+    facilityInterestWeeklyLocal: lane64(n),
+    marketBondAccrualLocal: lane64(n),
+    commercialPaperAccrualLocal: lane64(n),
+    marketLoanAccrualLocal: lane64(n),
     couponDue: lane8(n),
     effectiveDebtRate: lane64(n),
-    capexCommissionedUSD: lane64(n),
+    capexCommissionedLocal: lane64(n),
     stillUnderConstruction: new Array(n),
     newExecutionQuality: lane64(n),
-    carryingCostUSD: lane64(n),
+    carryingCostLocal: lane64(n),
     outputInv: new Array(n),
     updatedProductLines: new Array(n),
     newRevenue: lane64(n),
-    measuredInputConsumptionWeeklyUSD: lane64(n),
+    measuredInputConsumptionWeeklyLocal: lane64(n),
     inputUnitsConsumed: lane64(n * NSUB),
     newEbitda: lane64(n),
     newEbit: lane64(n),
     newNetIncome: lane64(n),
     newEps: lane64(n),
-    taxPaidAnnualRateUSD: lane64(n),
+    taxPaidAnnualRateLocal: lane64(n),
     newInputSupplyConstraintFactor: lane64(n),
     newRecentFulfillmentEMA: lane64(n),
-    newRecurringBaseUSD: new Array(n),
-    targetProductionUSD: lane64(n),
+    newRecurringBaseLocal: new Array(n),
+    targetProductionLocal: lane64(n),
     costDrivers: new Array(n),
   };
   return scratch;
@@ -127,7 +127,7 @@ export interface FrontPassInputs {
   companyUpdates: Record<string, CompanyWeekUpdate>;
   updatedRegions: WeeklyStepContext['updatedRegions'];
   /** Frozen pre-loop snapshots, built by the stage exactly as before. */
-  supplyRelsByCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeUSD: number; relationshipStrength: number }[]>;
+  supplyRelsByCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeLocal: number; relationshipStrength: number }[]>;
   supplierShockStats: Map<string, { annualRevenue: number; invUSDByCategory: Map<string, number> }>;
   suppliedSubUnitsByRegion: Map<string, Set<string>>;
   companyStore: import('./company-store').CompanyStore;

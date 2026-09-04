@@ -37,7 +37,7 @@ export function Linked({ text, world, nav }: { text: string; world: World; nav: 
 export function storiesFor(world: World, ref?: ObjectRef, limit = 60): NewsItem[] {
   const feed = world.state.newsFeed ?? [];
   const mine = ref ? feed.filter((n) => storyMentions(world, ref, n)) : feed;
-  return [...mine].sort((a, b) => b.week - a.week || (b.materialityUSD ?? 0) - (a.materialityUSD ?? 0) || Number(b.urgent) - Number(a.urgent)).slice(0, limit);
+  return [...mine].sort((a, b) => b.week - a.week || (b.materialityLocal ?? 0) - (a.materialityLocal ?? 0) || Number(b.urgent) - Number(a.urgent)).slice(0, limit);
 }
 
 export function Story({ item, world, nav, compact }: { item: NewsItem; world: World; nav: Nav; compact?: boolean }) {

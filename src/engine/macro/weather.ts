@@ -65,22 +65,22 @@ const ENERGY_IDS = new Set(['CRUDE_OIL', 'HEAVY_CRUDE_OIL', 'NATURAL_GAS']);
 
 /** Read a region's exposure off the firms that are actually in it. */
 export function regionExposure(regionId: RegionId, companies: Company[]): RegionExposure {
-  let cropUSD = 0, energyUSD = 0, metalUSD = 0;
+  let cropLocal = 0, energyLocal = 0, metalLocal = 0;
   const commodityIds: string[] = [];
   companies.forEach((c) => {
     if (c.region !== regionId || !c.producedCommodityId) return;
     if (!commodityIds.includes(c.producedCommodityId)) commodityIds.push(c.producedCommodityId);
     const usd = Math.max(0, c.annualRevenue);
-    if (CROP_IDS.has(c.producedCommodityId)) cropUSD += usd;
-    else if (ENERGY_IDS.has(c.producedCommodityId)) energyUSD += usd;
-    else metalUSD += usd;
+    if (CROP_IDS.has(c.producedCommodityId)) cropLocal += usd;
+    else if (ENERGY_IDS.has(c.producedCommodityId)) energyLocal += usd;
+    else metalLocal += usd;
   });
-  const totalLocal = cropUSD + energyUSD + metalUSD;
+  const totalLocal = cropLocal + energyLocal + metalLocal;
   if (!(totalLocal > 0)) return { cropShare: 0, energyShare: 0, metalShare: 0, commodityIds };
   return {
-    cropShare: cropUSD / totalLocal,
-    energyShare: energyUSD / totalLocal,
-    metalShare: metalUSD / totalLocal,
+    cropShare: cropLocal / totalLocal,
+    energyShare: energyLocal / totalLocal,
+    metalShare: metalLocal / totalLocal,
     commodityIds,
   };
 }

@@ -122,11 +122,11 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     const tickers = new Set(ctx.updatedCompanies.map((c) => c.ticker));
     let ticker = `${parent.ticker}SP`;
     for (let n = 2; tickers.has(ticker); n++) ticker = `${parent.ticker}SP${n}`;
-    const spinMcapUSD = Math.max(1, marketCapOf(parent) * share);
+    const spinMcapLocal = Math.max(1, marketCapOf(parent) * share);
     // One spin-co share per parent share — the classic ratio, so a holder's fraction of the
     // parent IS its fraction of the spin-co and the mint below is one multiplication.
     const spinShares = parent.sharesOutstanding;
-    const spinPrice = spinMcapUSD / Math.max(1e-9, spinShares);
+    const spinPrice = spinMcapLocal / Math.max(1e-9, spinShares);
     const employees = Math.max(1, Math.round(parent.employeeCount * share));
 
     // structuredClone: a shallow spread would SHARE every nested array/object with the parent,
@@ -145,7 +145,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     spin.debtTranches = [];
     spin.grossPPELocal = (parent.grossPPELocal ?? 0) * share;
     spin.accumulatedDepreciationLocal = (parent.accumulatedDepreciationLocal ?? 0) * share;
-    if (spin.baselineNetPpeUSD !== undefined) spin.baselineNetPpeUSD = spin.baselineNetPpeUSD * share;
+    if (spin.baselineNetPpeLocal !== undefined) spin.baselineNetPpeLocal = spin.baselineNetPpeLocal * share;
     spin.antitrustWeeksAboveThreshold = 0;
     revHistSeed(ctx.v2!, rowOf(ctx.v2!, spin.id), spin.annualRevenue);
     // II.5 — structuredClone(parent) used to carry the histories; the rings copy rows.
@@ -174,7 +174,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
       if (!(heldShares > 0)) return;
       const fraction = Math.min(1, heldShares / parent.sharesOutstanding);
       issueHolding(ctx.v2, { kind: 'COMPANY', ticker: spin.ticker }, { kind: 'INSTITUTION', id: e.id },
-        { instrumentType: 'EQUITY', instrumentId: spin.id, issuerRegion: spin.region, valueLocal: fraction * spinMcapUSD, shares: fraction * spinShares }, 'spin-off: shares distributed');
+        { instrumentType: 'EQUITY', instrumentId: spin.id, issuerRegion: spin.region, valueLocal: fraction * spinMcapLocal, shares: fraction * spinShares }, 'spin-off: shares distributed');
     });
     bumpRegister(ctx);
 
@@ -189,18 +189,18 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     parent.employeeCount = Math.max(1, parent.employeeCount - employees);
     parent.grossPPELocal = (parent.grossPPELocal ?? 0) * (1 - share);
     parent.accumulatedDepreciationLocal = (parent.accumulatedDepreciationLocal ?? 0) * (1 - share);
-    if (parent.baselineNetPpeUSD !== undefined) parent.baselineNetPpeUSD = parent.baselineNetPpeUSD * (1 - share);
+    if (parent.baselineNetPpeLocal !== undefined) parent.baselineNetPpeLocal = parent.baselineNetPpeLocal * (1 - share);
     parent.stockPrice = Number((parent.stockPrice * (1 - share)).toFixed(4));
     parent.antitrustWeeksAboveThreshold = 0;
 
     // Opening cash is CARVED from the parent through settlement, like a firm birth's — the
     // economy's total cash never moves.
-    const openingCashUSD = Math.max(0, cashOf(ctx.v2, parent)) * share;
-    if (openingCashUSD > 0) {
+    const openingCashLocal = Math.max(0, cashOf(ctx.v2, parent)) * share;
+    if (openingCashLocal > 0) {
       pay(ctx, {
         payer: { kind: 'COMPANY', ticker: parent.ticker },
         payee: { kind: 'COMPANY', ticker: spin.ticker },
-        amount: openingCashUSD,
+        amount: openingCashLocal,
         currency: currencyOf(parent.region),
         reason: 'divestiture: opening balance carved from parent',
       });
@@ -235,7 +235,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   const purchasePrice = marketCapOf(target) * 1.15;
   const cashPaid = purchasePrice * 0.5;
   const stockPaid = purchasePrice * 0.5;
-  const targetMarketCapUSD = Math.max(1, marketCapOf(target));
+  const targetMarketCapLocal = Math.max(1, marketCapOf(target));
 
   // The consideration is PAYMENTS now. The old form debited the acquirer directly and
   // the money arrived on NO book — target shareholders' register rows were neither re-keyed nor
@@ -260,7 +260,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   });
   // The tender: the target pays its equity holders of record their cash half, pro rata to the
   // stake each holds; the residual float (the household sector's) receives the remainder.
-  let institutionalTenderUSD = 0;
+  let institutionalTenderLocal = 0;
   // holdings flip: row walk for the tender stake read.
   const Ht = ctx.v2.holdings;
   const targetRef = internString(ctx.v2, target.id);
@@ -272,12 +272,12 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       if (Ht.instrRef[r] === targetRef && Ht.typeRef[r] === equityRefT) heldLocal += Ht.qtyLocal[r];
     }
     if (!(heldLocal > 0)) return;
-    const tenderUSD = cashPaid * Math.min(1, heldLocal / targetMarketCapUSD);
-    institutionalTenderUSD += tenderUSD;
+    const tenderLocal = cashPaid * Math.min(1, heldLocal / targetMarketCapLocal);
+    institutionalTenderLocal += tenderLocal;
     pay(ctx, {
       payer: { kind: 'COMPANY', ticker: target.ticker },
       payee: { kind: 'INSTITUTION', id: e.id },
-      amount: tenderUSD,
+      amount: tenderLocal,
       currency: currencyOf(target.region),
       reason: 'merger tender: cash for target shares',
     });
@@ -285,7 +285,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   pay(ctx, {
     payer: { kind: 'COMPANY', ticker: target.ticker },
     payee: { kind: 'HOUSEHOLD', region: target.region },
-    amount: Math.max(0, cashPaid - institutionalTenderUSD),
+    amount: Math.max(0, cashPaid - institutionalTenderLocal),
     currency: currencyOf(target.region),
     reason: 'merger tender: cash for target shares',
   });
@@ -407,7 +407,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // acquirer stock it was exchanged for (its stake's share of the stock leg).
   // The re-key is column writes on the matching rows: interned refs swap to the
   // acquirer's, and the equity rows revalue in place.
-  const stockRatio = stockPaid / targetMarketCapUSD;
+  const stockRatio = stockPaid / targetMarketCapLocal;
   {
     // W2: the exchange is two wires per holder — the target's paper back to the target
     // (retired), the acquirer's paper out to the holder (issued) — never a re-key in place.
@@ -445,9 +445,9 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           // The equity issuers' sides — the target's shares are cancelled (house →
           // target), the acquirer's created (acquirer → house); the credit kinds' are the ladders'.
           if (isEquity) transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: target.region }, { kind: 'COMPANY', ticker: target.ticker }, oldSpec, 'merger: target shares cancelled');
-          const newValueUSD = isEquity ? sw.valueLocal * stockRatio : sw.valueLocal;
-          if (newValueUSD > 1) {
-            const newSpec = { instrumentType: sw.type, instrumentId: newInstrumentId, issuerRegion: acquirer.region, valueLocal: newValueUSD, shares: isEquity && acquirer.stockPrice > 0 ? newValueUSD / acquirer.stockPrice : sw.shares };
+          const newValueLocal = isEquity ? sw.valueLocal * stockRatio : sw.valueLocal;
+          if (newValueLocal > 1) {
+            const newSpec = { instrumentType: sw.type, instrumentId: newInstrumentId, issuerRegion: acquirer.region, valueLocal: newValueLocal, shares: isEquity && acquirer.stockPrice > 0 ? newValueLocal / acquirer.stockPrice : sw.shares };
             if (isEquity) transferHolding(ctx.v2, { kind: 'COMPANY', ticker: acquirer.ticker }, { kind: 'CLEARING_HOUSE', region: acquirer.region }, newSpec, 'merger: acquirer shares issued');
             transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: acquirer.region }, holder, newSpec, 'merger: acquirer paper delivered');
           }
@@ -513,7 +513,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     targetTicker: target.ticker,
     targetName: target.name,
     week: ctx.nextWeek,
-    dealValueUSD: purchasePrice
+    dealValueLocal: purchasePrice
   });
   if (ctx.recentMergers.length > 20) ctx.recentMergers.shift();
 

@@ -60,18 +60,18 @@ export function statedCounts(): Record<StatedKind, number> {
 // THE DECLARATIONS. One block per area; each reads as a sentence the plan can quote.
 // ---------------------------------------------------------------------------------------------
 
-// --- The seed's bank books (macro/initialization `seedLoanBookUSD`) ---
+// --- The seed's bank books (macro/initialization `seedLoanBookLocal`) ---
 /** The seed's opening business loan book as a share of GDP. */
 export const SEED_BUSINESS_LOAN_BOOK_TO_GDP = stated({
   id: 'seed.businessLoanBookToGdp', value: 0.040, kind: 'SHAPE',
-  owner: 'engine/macro/initialization.ts seedLoanBookUSD',
+  owner: 'engine/macro/initialization.ts seedLoanBookLocal',
   reason: 'the seed has no lending history to open a book from; the ratio sizes the SME pools\' migrated debt and a bank\'s opening revenue',
   replacedBy: 'a burn-in in which the banks lend under their own capital constraint and the book is what they wrote (§7.345 burn-in)',
 });
 /** The seed's opening consumer loan book as a share of GDP. */
 export const SEED_CONSUMER_LOAN_BOOK_TO_GDP = stated({
   id: 'seed.consumerLoanBookToGdp', value: 0.070, kind: 'SHAPE',
-  owner: 'engine/macro/initialization.ts seedLoanBookUSD',
+  owner: 'engine/macro/initialization.ts seedLoanBookLocal',
   reason: 'the household pools HH3 seeds replace this scalar; it still stands in the seed\'s capital arithmetic until the pools exist',
   replacedBy: 'the household books the banks originate week by week (bank-lending.ts runBankHouseholdLending)',
 });
@@ -114,8 +114,8 @@ export const TRANCHE_DEFAULT_MARGIN_BPS = stated({
  *  whether a retirement over-runs the principal, and whether a reconciliation's delta is a move
  *  or a rounding. It is an ABSOLUTE dust bound and never a fraction of the face (rule 7) —
  *  a cent is a cent whether the rung is a million or a billion. */
-export const LADDER_FACE_DUST_USD = stated({
-  id: 'ladder.faceDustUSD', value: 0.01, kind: 'RESOLUTION',
+export const LADDER_FACE_DUST_LOCAL = stated({
+  id: 'ladder.faceDustLocal', value: 0.01, kind: 'RESOLUTION',
   owner: 'engine/ledger/tranche-ledger.ts',
   reason: 'face is money and money has a smallest unit; below it there is no rung to wire',
   replacedBy: 'none (a resolution choice, and the one rule 7 asks for: absolute, not a percentage)',

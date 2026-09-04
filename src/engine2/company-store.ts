@@ -18,7 +18,7 @@ import { GameState, Company } from '../types';
 import { V2World, ensureV2 } from './world';
 import { marketCapOf } from '../domain/company';
 import { cashOf } from '../engine/ledger/accounts';
-import { ladderTotalUSD } from './tranches';
+import { ladderTotalLocal } from './tranches';
 
 /**
  * §5-WIRES D — the lanes that are READS of other state rather than fields on the object: market
@@ -40,27 +40,27 @@ export type DerivedF64Field = typeof DERIVED_F64_FIELDS[number];
  */
 const F64_FIELDS = [
   // capital / production
-  'customerConcentration', 'supplierConcentration', 'revenueVolatility', 'technicalReservesUSD',
-  'aumUSD', 'managementFeeRate', 'insurancePremiumsWrittenUSD', 'insuranceClaimsPaidUSD',
+  'customerConcentration', 'supplierConcentration', 'revenueVolatility', 'technicalReservesLocal',
+  'aumLocal', 'managementFeeRate', 'insurancePremiumsWrittenLocal', 'insuranceClaimsPaidLocal',
   'cumulativeOutputUnits', 'learningMultiplier', 'lastLearningGrowthAnnual', 'mothballedPpeShare',
   'idleStreakWeeks', 'mothballedStreakWeeks', 'baselineAnnualRevenue', 'annualRevenue',
   'antitrustWeeksAboveThreshold', 'employeeCount', 'previousEmployeeCount', 'baselineEmployeeCount',
-  'baselineNetPpeUSD', 'payrollWeeklyUSD', 'realInputConsumptionCostWeeklyUSD', 'ebitda',
+  'baselineNetPpeLocal', 'payrollWeeklyLocal', 'realInputConsumptionCostWeeklyLocal', 'ebitda',
   'baselineEbitdaMargin', 'ebit', 'netIncome', 'eps', 'sharesOutstanding', 'cash', 'totalDebt',
   'currentLiabilities', 'capex', 'previousCapex', 'maintenanceCapex', 'growthCapex', 'grossPPELocal',
-  'accumulatedDepreciationLocal', 'capexCommissionedLastWeekUSD', 'rndExpense',
+  'accumulatedDepreciationLocal', 'capexCommissionedLastWeekLocal', 'rndExpense',
   'baselineGrowthCapexToRevenueRatio', 'maintenanceShortfallStreak', 'executionQuality',
   // clocks / market
   'earningsWeekModulo', 'lastEarningsReportWeek', 'lastEarningsSurprisePct', 'mmfSharesLocal',
-  'lastOpportunisticOfferingWeek', 'pendingLboEquityUSD', 'pendingIpoShares', 'lastRecapWeek',
+  'lastOpportunisticOfferingWeek', 'pendingLboEquityLocal', 'pendingIpoShares', 'lastRecapWeek',
   'bornWeek', 'leverage', 'interestCoverage', 'recoveryRate', 'baselineRecoveryRate', 'stockPrice',
   'forwardPE', 'marketCap', 'dividendYield', 'baselineDividendYield', 'bankMarketShare',
   'bankRiskFactor', 'defaultedWeek', 'institutionalMarketShare', 'beta', 'seniorBondYield',
   'oasSpreadBps', 'cdsSpreadBps', 'cdsBasisBps', 'shortInterestShares',
   'inputSupplyConstraintFactor', 'recentFulfillmentEMA', 'deliveryReliability',
-  'recurringRevenueBaseUSD', '_targetProductionUSD', 'bankResolvedWeek',
-  'taxLossCarryforwardUSD', 'taxBasisPpeUSD', 'deferredTaxLiabilityUSD', 'lastWeekSalesUSD',
-  'offeredWageIndex', 'unfilledVacancyShare', 'lastWeekPurchasesUSD', 'expectedEbitdaUSD',
+  'recurringRevenueBaseLocal', '_targetProductionUSD', 'bankResolvedWeek',
+  'taxLossCarryforwardLocal', 'taxBasisPpeLocal', 'deferredTaxLiabilityLocal', 'lastWeekSalesLocal',
+  'offeredWageIndex', 'unfilledVacancyShare', 'lastWeekPurchasesLocal', 'expectedEbitdaLocal',
 ] as const satisfies readonly (keyof Company | DerivedF64Field)[];
 
 const BOOL_FIELDS = [
@@ -101,7 +101,7 @@ export interface CompanyStore {
 function derivedColumn(S: CompanyStore, f: DerivedF64Field, c: Company): number {
   if (f === 'marketCap') return marketCapOf(c);
   if (f === 'cash') return S.v2 ? cashOf(S.v2, c) : NaN;
-  return S.v2 ? ladderTotalUSD(S.v2, c.id) : NaN;
+  return S.v2 ? ladderTotalLocal(S.v2, c.id) : NaN;
 }
 
 // Browsers hide the SharedArrayBuffer global without cross-origin isolation (e.g. plain static

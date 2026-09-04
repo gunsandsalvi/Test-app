@@ -68,7 +68,7 @@ export interface DerivativeContract {
    * Mark-to-market already SETTLED as variation margin, cumulative USD to A (§7.241: each week
    * pays the CHANGE in the mark, never the whole mark). Only mark-leg classes carry it.
    */
-  settledMarkUSD?: number;
+  settledMarkLocal?: number;
   struckWeek: number;
   maturityWeek: number;
 }
@@ -78,7 +78,7 @@ export interface DerivativeContract {
  * an exposure its live contracts already carry. Keys: the party's side, and optionally what the
  * cover is on and at which tenor.
  */
-export function standingCoverUSD(
+export function standingCoverLocal(
   book: DerivativeContract[],
   classId: DerivativeClassId,
   side: 'a' | 'b',
@@ -97,7 +97,7 @@ export function standingCoverUSD(
   return usd;
 }
 
-/** As standingCoverUSD, in physical units — the unit-quoted classes net in their own quantity. */
+/** As standingCoverLocal, in physical units — the unit-quoted classes net in their own quantity. */
 export function standingCoverUnits(
   book: DerivativeContract[],
   classId: DerivativeClassId,

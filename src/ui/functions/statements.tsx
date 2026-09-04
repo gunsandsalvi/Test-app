@@ -10,13 +10,13 @@ import { Company, InstitutionalEntity, Region } from '../../types';
 import { currencyOf } from '../../domain/geography';
 
 import { undueOwedByPayer, partyId, internReason, CORPORATE_TAX_REASON } from '../../engine/simulation/stages/settlement';
-import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksUSD, addDepositLines, ZERO_DEPOSIT_LINES } from '../../domain/banking';
+import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksLocal, addDepositLines, ZERO_DEPOSIT_LINES } from '../../domain/banking';
 import { FunctionModule } from '../fn';
 import { Card, Hint, KV, Tabs, T, mono } from '../ui';
-import { statementUSD, pct, pctLevel, ratio, changePct, money } from '../format';
+import { statementLocal, pct, pctLevel, ratio, changePct, money } from '../format';
 import { formatDate, quarterLabel } from '../calendar';
 import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
-import { bankRwaUSD } from '../../domain/bank-pricing';
+import { bankRwaLocal } from '../../domain/bank-pricing';
 import { totalDebtOf } from '../../domain/company';
 import { cashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
@@ -38,7 +38,7 @@ function Statement({ units, asOf, lines }: { units: string; asOf: string; lines:
           return (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr) minmax(0, 0.8fr)', gap: 6, minHeight: 38, alignItems: 'center', padding: '0 12px', borderTop: l.total ? `1px solid ${T.border}` : undefined, borderBottom: `1px solid ${T.rule}` }}>
               <span style={{ color: l.total ? T.text : T.muted, paddingLeft: l.total ? 0 : 10, fontWeight: l.total ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.label}</span>
-              <span style={{ ...mono, textAlign: 'right' }}>{l.text ?? statementUSD(l.usd)}</span>
+              <span style={{ ...mono, textAlign: 'right' }}>{l.text ?? statementLocal(l.usd)}</span>
               <span style={{ ...mono, textAlign: 'right', fontSize: 12, color: ch === undefined ? T.hint : ch < 0 ? T.neg : T.hint }}>{ch !== undefined ? pct(ch) : ''}</span>
             </div>
           );
@@ -62,16 +62,16 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     const lines = stateDepositLines(world.state, c.ticker);
     const deposits = lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.smeLocal;
     const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0);
-    const reservesUSD = bankReservesOf(ensureV2(world.state), c.ticker);
+    const reservesLocal = bankReservesOf(ensureV2(world.state), c.ticker);
     const facilityBookLocal = facilityBookOf(ensureV2(world.state), c.ticker);
-    const assets = loanBooksOf(bank, facilityBookLocal) + sov + reservesUSD + (bank.repoLentLocal ?? 0) + (bank.sovereignAccruedCouponLocal ?? 0) + desks + (bank.primeBrokerageLoansLocal ?? 0);
+    const assets = loanBooksOf(bank, facilityBookLocal) + sov + reservesLocal + (bank.repoLentLocal ?? 0) + (bank.sovereignAccruedCouponLocal ?? 0) + desks + (bank.primeBrokerageLoansLocal ?? 0);
     const liabilities = deposits + (bank.clientMarginLocal ?? 0) + (bank.centralBankLoanLocal ?? 0) + (bank.repoBorrowedLocal ?? 0) + (bank.srfBorrowingLocal ?? 0);
     body = (<>
       <Statement units="USD millions · the live sheet" asOf={formatDate(world.state.currentWeek)} lines={[
         { label: 'Business loans', usd: businessLoanBookOf(bank, facilityBookLocal) },
         { label: 'Household loans', usd: consumerLoanBookOf(bank) },
         { label: 'Sovereign bonds', usd: sov },
-        { label: 'Reserves at the central bank', usd: reservesUSD },
+        { label: 'Reserves at the central bank', usd: reservesLocal },
         { label: 'Repo lent', usd: bank.repoLentLocal ?? 0 },
         { label: 'Desk inventory, gross', usd: desks },
         { label: 'Prime brokerage loans', usd: bank.primeBrokerageLoansLocal ?? 0 },
@@ -89,7 +89,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
         { label: 'Identity residual', usd: liabilities + bank.bankEquityLocal - assets },
       ]} />
       <Card style={{ padding: '2px 0' }}>
-        <KV k="capital ratio" hint={`rwa ${money(bankRwaUSD(bank, facilityBookLocal))} · floor 8% · closed at 2%`} v={pctLevel(bank.bankCapitalRatio, 2)} />
+        <KV k="capital ratio" hint={`rwa ${money(bankRwaLocal(bank, facilityBookLocal))} · floor 8% · closed at 2%`} v={pctLevel(bank.bankCapitalRatio, 2)} />
         <KV k="net interest margin" v={pctLevel(bank.netInterestMarginPct, 2)} />
         <KV k="loan loss rate" hint="annual, own book" v={pctLevel(bank.loanLossProvisionRateAnnualPct, 2)} />
         <KV k="deposit rate paid" v={pctLevel(bank.depositRateAnnual, 2)} />
@@ -132,9 +132,9 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     body = bs ? (
       <Statement units="USD millions · quarter end" asOf={asOf} lines={[
         { label: 'Cash', usd: bs.cash, prior: pb?.cash },
-        { label: 'Treasury holdings', usd: bs.treasuryHoldingsUSD, prior: pb?.treasuryHoldingsUSD },
+        { label: 'Treasury holdings', usd: bs.treasuryHoldingsLocal, prior: pb?.treasuryHoldingsLocal },
         { label: 'Receivables', usd: bs.accountsReceivable, prior: pb?.accountsReceivable },
-        { label: 'Inventory, finished · raw', usd: bs.finishedGoodsInventoryUSD + bs.rawMaterialsInventoryUSD, prior: pb ? pb.finishedGoodsInventoryUSD + pb.rawMaterialsInventoryUSD : undefined },
+        { label: 'Inventory, finished · raw', usd: bs.finishedGoodsInventoryLocal + bs.rawMaterialsInventoryLocal, prior: pb ? pb.finishedGoodsInventoryLocal + pb.rawMaterialsInventoryLocal : undefined },
         { label: 'Net plant', usd: bs.netPPE, prior: pb?.netPPE },
         { label: 'Total assets', usd: bs.totalAssets, prior: pb?.totalAssets, total: true },
         { label: 'Payables', usd: bs.accountsPayable, prior: pb?.accountsPayable },
@@ -174,9 +174,9 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     body = (
       <Card style={{ padding: '2px 0' }}>
         <KV k="tax accrued, unpaid" hint="the dated wires to the treasury" v={money(world.state.pendingPaymentJournal ? undueOwedByPayer(world.state.pendingPaymentJournal, partyId({ kind: 'COMPANY', ticker: c.ticker }), internReason(CORPORATE_TAX_REASON), world.state.currentWeek, currencyOf(c.region), ensureV2(world.state).fx) : 0)} />
-        <KV k="loss carryforward" v={money(c.taxLossCarryforwardUSD)} />
-        <KV k="tax basis of plant" hint="double-declining" v={money(c.taxBasisPpeUSD)} />
-        <KV k="deferred tax liability" v={money(c.deferredTaxLiabilityUSD)} />
+        <KV k="loss carryforward" v={money(c.taxLossCarryforwardLocal)} />
+        <KV k="tax basis of plant" hint="double-declining" v={money(c.taxBasisPpeLocal)} />
+        <KV k="deferred tax liability" v={money(c.deferredTaxLiabilityLocal)} />
         <KV k="statutory rate" hint={c.region} v={pctLevel(regionOf(world, c.region)?.effectiveTaxRate)} />
       </Card>
     );
@@ -192,15 +192,15 @@ function InstitutionStatements({ world, e }: { world: World; e: InstitutionalEnt
   const byType = new Map<string, number>();
   book.forEach((r) => byType.set(r.instrumentType, (byType.get(r.instrumentType) ?? 0) + r.usd));
   const holdings = book.reduce((a, r) => a + r.usd, 0);
-  const eCashUSD = entityCashOf(ensureV2(world.state), e);
-  const assets = holdings + eCashUSD;
+  const eCashLocal = entityCashOf(ensureV2(world.state), e);
+  const assets = holdings + eCashLocal;
   const lines: Line[] = [...byType.entries()].sort((a, b) => b[1] - a[1]).map(([t, usd]) => ({ label: t.toLowerCase().replace(/_/g, ' '), usd }));
   return (
     <Statement units="USD millions · the live book" asOf={formatDate(world.state.currentWeek)} lines={[
       ...lines,
-      { label: 'Cash at the house bank', usd: eCashUSD },
+      { label: 'Cash at the house bank', usd: eCashLocal },
       { label: 'Total assets', usd: assets, total: true },
-      { label: 'Owed to beneficiaries', usd: e.beneficiaryLiabilityUSD ?? 0 },
+      { label: 'Owed to beneficiaries', usd: e.beneficiaryLiabilityLocal ?? 0 },
       { label: 'Equity capital', usd: e.equityCapitalLocal, total: true },
     ]} />
   );
@@ -213,13 +213,13 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
   const bs = r.bankingSector; const hs = r.householdState;
   let body: React.ReactNode;
   if (active === 'national accounts') {
-    const gdp = r.derivedNominalGdpUSD ?? r.estimatedNominalGdpLocal;
+    const gdp = r.derivedNominalGdpLocal ?? r.estimatedNominalGdpLocal;
     body = <Statement units="USD millions · annualised from the week" asOf={asOf} lines={[
-      { label: 'Consumption', usd: r.consumptionComponentUSD },
-      { label: 'Investment', usd: r.investmentComponentUSD },
-      { label: 'Government', usd: (r.governmentOutlaysUSD ?? r.governmentSpendingWeeklyUSD) * 52 },
-      { label: 'Exports', usd: r.exportsUSD },
-      { label: 'Imports', usd: -r.importsUSD },
+      { label: 'Consumption', usd: r.consumptionComponentLocal },
+      { label: 'Investment', usd: r.investmentComponentLocal },
+      { label: 'Government', usd: (r.governmentOutlaysLocal ?? r.governmentSpendingWeeklyLocal) * 52 },
+      { label: 'Exports', usd: r.exportsLocal },
+      { label: 'Imports', usd: -r.importsLocal },
       { label: 'GDP', usd: gdp, total: true },
       { label: 'Unemployment', text: pctLevel(r.unemploymentRate) },
       { label: 'Inflation · core', text: `${pctLevel(r.inflation)} · ${pctLevel(r.coreInflation)}` },
@@ -227,26 +227,26 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
     ]} />;
   } else if (active === 'treasury') {
     body = <Statement units="USD millions · weekly flows" asOf={asOf} lines={[
-      { label: 'Revenue', usd: r.governmentRevenueUSD, total: true },
-      { label: 'Corporate tax', usd: r.taxCollectedCorporateUSD },
-      { label: 'Payroll tax', usd: r.taxCollectedPayrollUSD },
-      { label: 'Consumption tax', usd: r.taxCollectedConsumptionUSD },
-      { label: 'Household tax', usd: r.taxCollectedHouseholdUSD },
-      { label: 'Outlays', usd: r.governmentOutlaysUSD ?? r.governmentSpendingWeeklyUSD, total: true },
-      { label: 'Payroll', usd: r.governmentPayrollWeeklyUSD },
-      { label: 'Transfers', usd: r.governmentTransfersWeeklyUSD },
-      { label: 'Interest', usd: r.governmentInterestWeeklyUSD },
+      { label: 'Revenue', usd: r.governmentRevenueLocal, total: true },
+      { label: 'Corporate tax', usd: r.taxCollectedCorporateLocal },
+      { label: 'Payroll tax', usd: r.taxCollectedPayrollLocal },
+      { label: 'Consumption tax', usd: r.taxCollectedConsumptionLocal },
+      { label: 'Household tax', usd: r.taxCollectedHouseholdLocal },
+      { label: 'Outlays', usd: r.governmentOutlaysLocal ?? r.governmentSpendingWeeklyLocal, total: true },
+      { label: 'Payroll', usd: r.governmentPayrollWeeklyLocal },
+      { label: 'Transfers', usd: r.governmentTransfersWeeklyLocal },
+      { label: 'Interest', usd: r.governmentInterestWeeklyLocal },
       { label: 'Treasury account', usd: treasuryAccountOf(ensureV2(world.state), r.id as RegionId), total: true },
       { label: 'Sovereign rating', text: r.sovereignRating },
       { label: 'Fiscal stance', text: r.fiscalStanceScore.toFixed(2) },
     ]} />;
   } else if (active === 'banks') {
     const sov = bs?.sovereignBondHoldingsLocal ?? 0;
-    const books = regionLoanBooksUSD(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.ticker));
+    const books = regionLoanBooksLocal(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.ticker));
     const regionLines = world.state.companies.reduce((a, c) => (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? addDepositLines(a, stateDepositLines(world.state, c.ticker)) : a), ZERO_DEPOSIT_LINES);
     body = <Statement units="USD millions · the region's banks, summed" asOf={asOf} lines={[
-      { label: 'Business loans', usd: books.businessLoanUSD },
-      { label: 'Household loans', usd: books.consumerLoanUSD },
+      { label: 'Business loans', usd: books.businessLoanLocal },
+      { label: 'Household loans', usd: books.consumerLoanLocal },
       { label: 'Sovereign bonds', usd: sov },
       { label: 'Reserves', usd: world.state.companies.reduce((a, c) => a + (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? bankReservesOf(ensureV2(world.state), c.ticker) : 0), 0) },
       { label: 'Household deposits', usd: regionLines.householdLocal, total: true },
@@ -262,12 +262,12 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
     body = <Statement units="USD millions · the household sector" asOf={asOf} lines={[
       { label: 'Deposits', usd: householdDepositsOf(ensureV2(world.state), r.id as RegionId) },
       { label: 'Money fund shares', usd: hs?.mmfSharesLocal },
-      { label: 'Direct equity', usd: hs?.directEquityUSD },
-      { label: 'ETF holdings', usd: hs?.etfHoldingsUSD },
-      { label: 'Housing', usd: hs?.housingStockUSD },
-      { label: 'Net worth', usd: hs?.netWorthUSD, total: true },
-      { label: 'Mortgages', usd: hs?.mortgageDebtUSD },
-      { label: 'Cards · consumer loans', usd: (hs?.creditCardDebtUSD ?? 0) + (hs?.otherConsumerLoanDebtUSD ?? 0) },
+      { label: 'Direct equity', usd: hs?.directEquityLocal },
+      { label: 'ETF holdings', usd: hs?.etfHoldingsLocal },
+      { label: 'Housing', usd: hs?.housingStockLocal },
+      { label: 'Net worth', usd: hs?.netWorthLocal, total: true },
+      { label: 'Mortgages', usd: hs?.mortgageDebtLocal },
+      { label: 'Cards · consumer loans', usd: (hs?.creditCardDebtLocal ?? 0) + (hs?.otherConsumerLoanDebtLocal ?? 0) },
       { label: 'Debt to income', text: ratio(hs?.householdDebtToIncomeRatio, 2) },
       { label: 'Savings rate', text: pctLevel(hs?.savingsRate) },
       { label: 'Consumer confidence', text: (hs?.consumerConfidence ?? 0).toFixed(0) },

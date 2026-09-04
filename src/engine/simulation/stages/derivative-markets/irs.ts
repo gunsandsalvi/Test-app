@@ -26,7 +26,7 @@ import { sovereignTenorResolver } from '../../../../domain/government';
 import { institutionProfile } from '../../../../domain/institution-profiles';
 import { carriesRateDuration } from '../../../../domain/assets';
 import {
-  SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, repricingLossUSD,
+  SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, repricingLossLocal,
 } from '../../../../domain/derivatives/classes/irs';
 import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from '../financial-clearing-engine';
@@ -93,8 +93,8 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
     );
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-      const rwaUSD = loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.ticker));
-      const absorbableUSD = Math.max(0, sheet.bankEquityLocal - rwaUSD * BANK_WORKING_CAPITAL_RATIO);
+      const rwaLocal = loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.ticker));
+      const absorbableLocal = Math.max(0, sheet.bankEquityLocal - rwaLocal * BANK_WORKING_CAPITAL_RATIO);
       const bookByTenor = new Map<SwapTenorKey, number>();
       Object.entries(sheet.sovereignBondHoldingsByBond ?? {}).forEach(([bondId, usd]) => {
         const years = tenorYearsOf(bondId);
@@ -105,14 +105,14 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       SWAP_TENORS.forEach((k) => {
         const bookLocal = bookByTenor.get(k) ?? 0;
         if (!(bookLocal > 0)) return;
-        const lossUSD = repricingLossUSD(bookLocal, SWAP_TENOR_YEARS[k], moveBps);
-        if (lossUSD <= absorbableUSD) return;
+        const lossLocal = repricingLossLocal(bookLocal, SWAP_TENOR_YEARS[k], moveBps);
+        if (lossLocal <= absorbableLocal) return;
         // Hedge the notional whose repricing loss is the excess — the rest it can carry.
-        const wantedUSD = ((lossUSD - absorbableUSD) / Math.max(1e-9, lossUSD)) * bookLocal;
-        const alreadyPayingUSD = standing.coverUSD('IRS', 'a', `BANK:${bank.ticker}`, undefined, k);
-        const hedgeUSD = Math.max(0, wantedUSD - alreadyPayingUSD);
-        if (!(hedgeUSD > 0)) return;
-        payDemandByTenor.get(k)!.push({ party: { kind: 'BANK', ticker: bank.ticker }, usd: hedgeUSD });
+        const wantedLocal = ((lossLocal - absorbableLocal) / Math.max(1e-9, lossLocal)) * bookLocal;
+        const alreadyPayingLocal = standing.coverLocal('IRS', 'a', `BANK:${bank.ticker}`, undefined, k);
+        const hedgeLocal = Math.max(0, wantedLocal - alreadyPayingLocal);
+        if (!(hedgeLocal > 0)) return;
+        payDemandByTenor.get(k)!.push({ party: { kind: 'BANK', ticker: bank.ticker }, usd: hedgeLocal });
       });
     });
 
@@ -121,28 +121,28 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
     regionCompanies.forEach((comp) => {
       // §7.311 — ladder reads on rows, fold order = chain order = array order.
       const TS = v2g.tranches;
-      let floatingUSD = 0;
+      let floatingLocal = 0;
       let interestLocal = 0;
       for (const r of ladderRowsOf(v2g, comp.id)) {
         const isFloating = (TS.flags[r] & TR_FLOATING) !== 0;
-        if (isFloating) floatingUSD += TS.principalLocal[r];
+        if (isFloating) floatingLocal += TS.principalLocal[r];
         interestLocal += TS.principalLocal[r]
           * (!isFloating
             ? (Number.isNaN(TS.couponRate[r]) ? 0.05 : TS.couponRate[r])
             : reg.policyRate + ((Number.isNaN(TS.floatingMarginBps[r]) ? 200 : TS.floatingMarginBps[r])) / 10000);
       }
-      if (!(floatingUSD > 0)) return;
-      const affordableInterestUSD = Math.max(0, comp.ebitda) / COVENANT_INTEREST_COVERAGE;
-      const headroomUSD = affordableInterestUSD - interestLocal;
+      if (!(floatingLocal > 0)) return;
+      const affordableInterestLocal = Math.max(0, comp.ebitda) / COVENANT_INTEREST_COVERAGE;
+      const headroomLocal = affordableInterestLocal - interestLocal;
       // What a two-sigma rise would add to the bill, against the headroom it has.
-      const shockCostUSD = floatingUSD * (moveBps / 10000);
-      if (shockCostUSD <= headroomUSD) return;
-      const wantedUSD = Math.min(floatingUSD, ((shockCostUSD - headroomUSD) / Math.max(1e-9, shockCostUSD)) * floatingUSD);
+      const shockCostLocal = floatingLocal * (moveBps / 10000);
+      if (shockCostLocal <= headroomLocal) return;
+      const wantedLocal = Math.min(floatingLocal, ((shockCostLocal - headroomLocal) / Math.max(1e-9, shockCostLocal)) * floatingLocal);
       // Floating corporate debt is short-dated relative to the curve; it hedges at the 5-year.
-      const alreadyPayingUSD = standing.coverUSD('IRS', 'a', `COMPANY:${comp.ticker}`, undefined, 's5');
-      const hedgeUSD = Math.max(0, wantedUSD - alreadyPayingUSD);
-      if (!(hedgeUSD > 0)) return;
-      payDemandByTenor.get('s5')!.push({ party: { kind: 'COMPANY', ticker: comp.ticker }, usd: hedgeUSD });
+      const alreadyPayingLocal = standing.coverLocal('IRS', 'a', `COMPANY:${comp.ticker}`, undefined, 's5');
+      const hedgeLocal = Math.max(0, wantedLocal - alreadyPayingLocal);
+      if (!(hedgeLocal > 0)) return;
+      payDemandByTenor.get('s5')!.push({ party: { kind: 'COMPANY', ticker: comp.ticker }, usd: hedgeLocal });
     });
 
     // ---- The RECEIVE-FIXED side: liability-matched books, whose reservation is the government
@@ -170,19 +170,19 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       // How much duration it is short: a liability-matched book's assets are shorter than its
       // claims, and the gap is what it will take synthetically when the cash market cannot
       // supply it. Sized by the book itself, never by a share anyone chose.
-      const bondBookUSD = (entity.itemizedHoldings || [])
+      const bondBookLocal = (entity.itemizedHoldings || [])
         .filter((h) => carriesRateDuration(h.instrumentType))
         .reduce((a, h) => a + (h.quantityOrNotionalLocal ?? 0), 0);
-      const alreadyReceivingUSD = standing.coverUSD('IRS', 'b', `INSTITUTION:${entity.id}`);
-      const durationGapUSD = Math.max(0, institutionTotalAssetsLocal(ctx, entity) - bondBookUSD - alreadyReceivingUSD);
-      if (durationGapUSD <= 0) return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
+      const alreadyReceivingLocal = standing.coverLocal('IRS', 'b', `INSTITUTION:${entity.id}`);
+      const durationGapLocal = Math.max(0, institutionTotalAssetsLocal(ctx, entity) - bondBookLocal - alreadyReceivingLocal);
+      if (durationGapLocal <= 0) return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
       SWAP_TENORS.forEach((k) => {
         if (!(floatByTenor.get(k)! > 0)) return;
         const zeroBps = (reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]] ?? reg.policyRate) * 10000;
         demandByInstrumentId.set(swapInstrumentId(regionId, k), {
           // It will not receive less fixed than the bond of the same tenor already pays it.
           reservationStat: zeroBps,
-          maxHoldingLocal: durationGapUSD,
+          maxHoldingLocal: durationGapLocal,
           // And scales in over the move the market itself can make in a week: past that, the
           // swap is plainly better than the bond and it takes all it is allowed.
           fullSizeStatRange: moveBps,
@@ -209,22 +209,22 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       if (clearedBps === undefined) return;
       parByTenor[k] = Number((clearedBps / 10000).toFixed(6));
       const takenByEntity = new Map<string, number>();
-      let totalTakenUSD = 0;
+      let totalTakenLocal = 0;
       result.newParticipantHoldings.forEach((byInstrument, entityId) => {
         const usd = byInstrument.get(instrumentId) ?? 0;
         if (usd <= 1) return;
         takenByEntity.set(entityId, usd);
-        totalTakenUSD += usd;
+        totalTakenLocal += usd;
       });
-      if (totalTakenUSD <= 0) return;
+      if (totalTakenLocal <= 0) return;
       const demands = payDemandByTenor.get(k)!;
-      const totalDemandUSD = demands.reduce((a, d) => a + d.usd, 0);
-      const fundedShare = Math.min(1, totalTakenUSD / Math.max(1, totalDemandUSD));
+      const totalDemandLocal = demands.reduce((a, d) => a + d.usd, 0);
+      const fundedShare = Math.min(1, totalTakenLocal / Math.max(1, totalDemandLocal));
       demands.forEach((d) => {
-        const hedgedUSD = d.usd * fundedShare;
-        if (hedgedUSD <= 1) return;
-        takenByEntity.forEach((takenUSD, entityId) => {
-          const notional = hedgedUSD * (takenUSD / totalTakenUSD);
+        const hedgedLocal = d.usd * fundedShare;
+        if (hedgedLocal <= 1) return;
+        takenByEntity.forEach((takenLocal, entityId) => {
+          const notional = hedgedLocal * (takenLocal / totalTakenLocal);
           if (notional <= 1) return;
           struck.push({
             id: `${regionId}-IRS-${k}-${week}-${seq++}`,

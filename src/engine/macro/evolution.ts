@@ -3,9 +3,9 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams } from '../nelsonSiegel';
 import { RegionId, Region, FxPair, Commodity, HouseholdState, OccupationType, OccupationPool, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
-import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
+import { getBaseAnnualWageLocal, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
 import {
-  computeHouseholdDisposableIncomeUSD,
+  computeHouseholdDisposableIncomeLocal,
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
 import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking';
@@ -33,7 +33,7 @@ import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
 import {
-  weeklyInterestExpenseUSD, governmentPayrollWeeklyUSD, governmentObligationsWeeklyUSD,
+  weeklyInterestExpenseLocal, governmentPayrollWeeklyLocal, governmentObligationsWeeklyLocal,
   GOV_HIRING_RESPONSE_TO_STANCE,
 } from '../../domain/government';
 import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
@@ -79,11 +79,11 @@ export function sovereignDebtToGdpRatio(region: Region): number {
 }
 
 export function sovereignDeficitPctGdp(region: Region): number {
-  const gdpUSD = region.derivedNominalGdpUSD || region.estimatedNominalGdpLocal || 0;
-  if (!(gdpUSD > 0)) return 0;
+  const gdpLocal = region.derivedNominalGdpLocal || region.estimatedNominalGdpLocal || 0;
+  if (!(gdpLocal > 0)) return 0;
   // A region whose fiscal stage has not run this week has no outlay figure yet; its deficit is
   // its revenue shortfall against nothing, not NaN.
-  return (((region.governmentOutlaysUSD ?? 0) - region.governmentRevenueUSD) * 52) / gdpUSD;
+  return (((region.governmentOutlaysLocal ?? 0) - region.governmentRevenueLocal) * 52) / gdpLocal;
 }
 
 export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
@@ -112,18 +112,18 @@ export function evolveRegionMacro(
     avgListedDividendYieldAnnual?: number;
     /** §5-WIRES A3.4: the household sector's deposits — its rows at the region's banks, read off
      *  the ledger by the caller (this module never sees the world). */
-    householdDepositsUSD: number;
+    householdDepositsLocal: number;
     /** §5-WIRES A3.6c: the region's bank reserves — its named banks' accounts, summed by the caller. */
-    bankReservesUSD: number;
+    bankReservesLocal: number;
     /** §5-WIRES A3.6c-ii: the region's deposit lines — its named banks' lines, summed by the caller. */
     bankDepositLines: DepositLines;
     /** §5-FINALIZATION step 10: the region's loan books — its named banks' SME rows plus their
-     *  facility rows on the borrowers' ladders, summed by the caller (`regionLoanBooksUSD`). */
-    bankLoanBooks: { businessLoanUSD: number; consumerLoanUSD: number };
+     *  facility rows on the borrowers' ladders, summed by the caller (`regionLoanBooksLocal`). */
+    bankLoanBooks: { businessLoanLocal: number; consumerLoanLocal: number };
     /** What households measurably received and paid over the whole of LAST week, read off the
      *  completed settlement report by the caller. Undefined in week 1, when there is no prior
      *  week to read. */
-    householdWeek?: { receiptsUSD: number; taxPaidUSD: number; dividendsUSD: number };
+    householdWeek?: { receiptsLocal: number; taxPaidLocal: number; dividendsLocal: number };
     /** §3.13-SOV row 2: the region's sovereign ladder, read off the ONE store by the caller. */
     govLadder: GovDebtTrancheView[];
   },
@@ -165,25 +165,25 @@ export function evolveRegionMacro(
     stapleSpendShare: 0.35,
     standardSpendShare: 0.50,
     luxurySpendShare: 0.15,
-    equityHoldingsUSD: region.estimatedHouseholdIncomeLocal * 1.5,
-    directEquityUSD: 0,
-    housingStockUSD: 0,
-    priorNetWorthUSD: 0,
-    homeEquityUSD: 0,
+    equityHoldingsLocal: region.estimatedHouseholdIncomeLocal * 1.5,
+    directEquityLocal: 0,
+    housingStockLocal: 0,
+    priorNetWorthLocal: 0,
+    homeEquityLocal: 0,
     institutionalClaims: [],
-    institutionalClaimsUSD: 0,
+    institutionalClaimsLocal: 0,
     etfShares: [],
-    etfHoldingsUSD: 0,
-    privateBusinessEquityUSD: 0,
-    mortgageDebtUSD: region.estimatedHouseholdIncomeLocal * 0.8,
-    creditCardDebtUSD: region.estimatedHouseholdIncomeLocal * 0.05,
-    otherConsumerLoanDebtUSD: region.estimatedHouseholdIncomeLocal * 0.1,
-    netWorthUSD: region.estimatedHouseholdIncomeLocal * 1.0,
+    etfHoldingsLocal: 0,
+    privateBusinessEquityLocal: 0,
+    mortgageDebtLocal: region.estimatedHouseholdIncomeLocal * 0.8,
+    creditCardDebtLocal: region.estimatedHouseholdIncomeLocal * 0.05,
+    otherConsumerLoanDebtLocal: region.estimatedHouseholdIncomeLocal * 0.1,
+    netWorthLocal: region.estimatedHouseholdIncomeLocal * 1.0,
     creditTierBooks: [
-      { tier: 'SUPER_PRIME', shareOfHouseholds: 0.25, debtBalanceUSD: 0, avgInterestRate: 0.06, delinquencyRatePct: 0.002 },
-      { tier: 'PRIME', shareOfHouseholds: 0.35, debtBalanceUSD: 0, avgInterestRate: 0.12, delinquencyRatePct: 0.015 },
-      { tier: 'NEAR_PRIME', shareOfHouseholds: 0.25, debtBalanceUSD: 0, avgInterestRate: 0.19, delinquencyRatePct: 0.045 },
-      { tier: 'SUBPRIME', shareOfHouseholds: 0.15, debtBalanceUSD: 0, avgInterestRate: 0.28, delinquencyRatePct: 0.11 },
+      { tier: 'SUPER_PRIME', shareOfHouseholds: 0.25, debtBalanceLocal: 0, avgInterestRate: 0.06, delinquencyRatePct: 0.002 },
+      { tier: 'PRIME', shareOfHouseholds: 0.35, debtBalanceLocal: 0, avgInterestRate: 0.12, delinquencyRatePct: 0.015 },
+      { tier: 'NEAR_PRIME', shareOfHouseholds: 0.25, debtBalanceLocal: 0, avgInterestRate: 0.19, delinquencyRatePct: 0.045 },
+      { tier: 'SUBPRIME', shareOfHouseholds: 0.15, debtBalanceLocal: 0, avgInterestRate: 0.28, delinquencyRatePct: 0.11 },
     ],
   };
 
@@ -203,8 +203,8 @@ export function evolveRegionMacro(
   // Evaluate once per quarter, same cadence as monetary policy meetings
   if (week % 13 === 0) {
     const gov = governmentOf(region.id, region, microFeedback.govLadder);
-    const revenueLocal = Math.max(1, region.governmentRevenueUSD);
-    const interestShare = gov.interestWeeklyUSD() / revenueLocal;
+    const revenueLocal = Math.max(1, region.governmentRevenueLocal);
+    const interestShare = gov.interestWeeklyLocal() / revenueLocal;
     // 0 at the red line, 1 with a clean sheet: how much package this treasury can actually fund.
     const fiscalSpace = Math.max(0, Math.min(1, 1 - interestShare / INTEREST_SHARE_OF_REVENUE_RED_LINE));
     if (interestShare >= INTEREST_SHARE_OF_REVENUE_RED_LINE) {
@@ -231,7 +231,7 @@ export function evolveRegionMacro(
   // react to the most recently published statistic, exactly as a real central bank does.
   const newInflation = region.inflation;
 
-  const newEstimatedNominalGdpUSD = region.lastWeekNominalGdpUSD > 0 ? region.lastWeekNominalGdpUSD : region.estimatedNominalGdpLocal;
+  const newEstimatedNominalGdpLocal = region.lastWeekNominalGdpLocal > 0 ? region.lastWeekNominalGdpLocal : region.estimatedNominalGdpLocal;
 
   // Tax rate is a slow second fiscal lever — austerity nudges it up, stimulus nudges it down, same cadence as fiscalStanceScore
   const taxRateDrift = week % 13 === 0 ? -newFiscalStanceScore * 0.001 : 0;
@@ -242,9 +242,9 @@ export function evolveRegionMacro(
   // exists, exactly as inflation does above. The `GDP x tax rate` formula that used to sit here
   // was a second representation of the same quantity, and it was the one every stage between 02
   // and 11 saw.
-  const newGovernmentRevenueUSD = region.governmentRevenueUSD;
+  const newGovernmentRevenueLocal = region.governmentRevenueLocal;
   // PUB1: what the debt stack actually costs. Not added to spending — carved out of it.
-  const govInterestWeeklyUSD = weeklyInterestExpenseUSD(microFeedback.govLadder);
+  const govInterestWeeklyLocal = weeklyInterestExpenseLocal(microFeedback.govLadder);
 
   let newCycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery' = 'Slowdown';
   if (newGdpGrowth < 0) newCycleRegime = 'Recession';
@@ -391,7 +391,7 @@ export function evolveRegionMacro(
   // from cleared prices in `stages/etf-flows.ts`, which runs after the clearing books. This stage
   // runs before them, so it carries the line forward and lets the marking stage own its value.
   // The one-week lag is the same one stage 08 has against the prices it reads.
-  const newEquityHoldingsUSD = Math.max(0, prevHS.equityHoldingsUSD || 0);
+  const newEquityHoldingsLocal = Math.max(0, prevHS.equityHoldingsLocal || 0);
 
   // 2. Liability side — HH3: household debt is no longer evolved here by paydown constants
   // and a borrowing multiplier. The three lines are DERIVED SUMS of the itemized pools on the
@@ -399,9 +399,9 @@ export function evolveRegionMacro(
   // demand off the same confidence-and-rate appetite that used to live here), amortizes by
   // annuity arithmetic on each pool's own terms, and writes the sums back. This stage carries
   // last week's lines forward and reads last week's real flows.
-  const newMortgageDebtUSD = prevHS.mortgageDebtUSD || 0;
-  const newCreditCardDebtUSD = prevHS.creditCardDebtUSD || 0;
-  const newOtherLoanDebtUSD = prevHS.otherConsumerLoanDebtUSD || 0;
+  const newMortgageDebtLocal = prevHS.mortgageDebtLocal || 0;
+  const newCreditCardDebtLocal = prevHS.creditCardDebtLocal || 0;
+  const newOtherLoanDebtLocal = prevHS.otherConsumerLoanDebtLocal || 0;
 
   // HH5/HH6: this stage no longer sets employment OR wages. Employment is matched in the
   // labor market stage; the going wage per occupation is the employment-weighted average of
@@ -444,13 +444,13 @@ export function evolveRegionMacro(
 
 
 
-  const totalHouseholdDebtUSD = newMortgageDebtUSD + newCreditCardDebtUSD + newOtherLoanDebtUSD;
+  const totalHouseholdDebtLocal = newMortgageDebtLocal + newCreditCardDebtLocal + newOtherLoanDebtLocal;
   const newHouseholdDebtToIncomeRatio = region.estimatedHouseholdIncomeLocal > 0
-    ? totalHouseholdDebtUSD / region.estimatedHouseholdIncomeLocal
+    ? totalHouseholdDebtLocal / region.estimatedHouseholdIncomeLocal
     : prevHS.householdDebtToIncomeRatio;
 
   // 3. Net worth
-  const newNetWorthUSD = microFeedback.householdDepositsUSD + newEquityHoldingsUSD - totalHouseholdDebtUSD;
+  const newNetWorthLocal = microFeedback.householdDepositsLocal + newEquityHoldingsLocal - totalHouseholdDebtLocal;
 
   // 4. Wealth-effect correction in CCI & consumption.
   //
@@ -468,24 +468,24 @@ export function evolveRegionMacro(
   // consumption roughly twice as hard per dollar as an equity rally (top-held, low MPC), which
   // is what the literature finds and the single constant could not express. Falls back to the
   // aggregate constant only while the tier marks have not run yet.
-  const tierWealthEffectUSD = WEALTH_TIERS.reduce((a, t) => {
+  const tierWealthEffectLocal = WEALTH_TIERS.reduce((a, t) => {
     const tier = region.wealthDistribution?.[t];
-    if (!tier || tier.priorNetWorthUSD === undefined) return a;
+    if (!tier || tier.priorNetWorthLocal === undefined) return a;
     // DIST/COH: the propensity is DERIVED from this tier's own savings rate and how much of its
     // wealth is actually liquid — not a stated per-tier constant (§7.142).
-    return a + tierWealthMpc(tier) * (tier.shareOfNetWorthUSD - tier.priorNetWorthUSD);
+    return a + tierWealthMpc(tier) * (tier.shareOfNetWorthLocal - tier.priorNetWorthLocal);
   }, 0);
   const anyTierMarked = WEALTH_TIERS
-    .some((t) => region.wealthDistribution?.[t]?.priorNetWorthUSD !== undefined);
-  const wealthChangeUSD = (prevHS.netWorthUSD ?? 0) - (prevHS.priorNetWorthUSD ?? prevHS.netWorthUSD ?? 0);
+    .some((t) => region.wealthDistribution?.[t]?.priorNetWorthLocal !== undefined);
+  const wealthChangeLocal = (prevHS.netWorthLocal ?? 0) - (prevHS.priorNetWorthLocal ?? prevHS.netWorthLocal ?? 0);
   const balanceSheetWealthEffect = (anyTierMarked
-    ? tierWealthEffectUSD
-    : WEALTH_MARGINAL_PROPENSITY_TO_CONSUME * wealthChangeUSD) / Math.max(1, region.estimatedHouseholdIncomeLocal);
+    ? tierWealthEffectLocal
+    : WEALTH_MARGINAL_PROPENSITY_TO_CONSUME * wealthChangeLocal) / Math.max(1, region.estimatedHouseholdIncomeLocal);
   // HH3: the real card/term origination the banks actually granted last week — the same flow
   // that left their sheets as cash to the merchants.
-  const creditFundedSpendingUSD = (prevHS.weeklyNewConsumerCreditUSD ?? 0) * 0.8; // credit directly buying goods
-  const weeklyIncomeUSD = region.estimatedHouseholdIncomeLocal / 52;
-  const creditSpendingBoostPct = weeklyIncomeUSD > 0 ? (creditFundedSpendingUSD / weeklyIncomeUSD) * 0.05 : 0;
+  const creditFundedSpendingLocal = (prevHS.weeklyNewConsumerCreditLocal ?? 0) * 0.8; // credit directly buying goods
+  const weeklyIncomeLocal = region.estimatedHouseholdIncomeLocal / 52;
+  const creditSpendingBoostPct = weeklyIncomeLocal > 0 ? (creditFundedSpendingLocal / weeklyIncomeLocal) * 0.05 : 0;
 
   // HH3: the debt service burden is MEASURED — the interest and scheduled principal the
   // itemized books actually accrued last week, over weekly income — not a liability-weighted
@@ -493,8 +493,8 @@ export function evolveRegionMacro(
   // cohort budgets AND a real dividend channel back to household income: debiting one side of
   // that loop alone is the HH1c leak in a new costume.)
   const baselineDebtServiceBurden = 0.055; // Baseline ~5.5% debt service burden of household income
-  const newDebtServiceBurden = prevHS.weeklyDebtServiceUSD !== undefined
-    ? prevHS.weeklyDebtServiceUSD / Math.max(1, weeklyIncomeUSD)
+  const newDebtServiceBurden = prevHS.weeklyDebtServiceLocal !== undefined
+    ? prevHS.weeklyDebtServiceLocal / Math.max(1, weeklyIncomeLocal)
     : baselineDebtServiceBurden;
   const debtServiceDrag = (newDebtServiceBurden - baselineDebtServiceBurden) * 0.4;
 
@@ -513,46 +513,46 @@ export function evolveRegionMacro(
     - debtServiceDrag;
 
 
-  const baseAnnualWageUSD = getBaseAnnualWageUSD(region.id);
-  const totalWageIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
+  const baseAnnualWageLocal = getBaseAnnualWageLocal(region.id);
+  const totalWageIncomeLocal = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
-    return sum + baseAnnualWageUSD[occ] * pool.wageIndex * pool.employed;
+    return sum + baseAnnualWageLocal[occ] * pool.wageIndex * pool.employed;
   }, 0);
   const totalEmployedForWages = (Object.keys(newOccupationPools) as OccupationType[])
     .reduce((sum, occ) => sum + newOccupationPools[occ].employed, 0);
   // PUB1c: the wage bill is total compensation; the employer's payroll tax leaves it first.
-  const { employerPayrollTaxUSD } = splitWageBill(totalWageIncomeUSD);
+  const { employerPayrollTaxLocal } = splitWageBill(totalWageIncomeLocal);
   // PUB3: the government's own share of that bill — the employees it really has, at the wages
   // the pools really cleared. Computed once here and read by the budget, the outlays and the
   // household transfer line, so the jobs and the payroll that pays for them cannot disagree.
-  const newGovernmentPayrollWeeklyUSD = governmentPayrollWeeklyUSD({
+  const newGovernmentPayrollWeeklyLocal = governmentPayrollWeeklyLocal({
     governmentEmployment: newGovernmentEmployment,
-    baseAnnualWageUSD,
+    baseAnnualWageLocal,
     wageIndexByOccupation: Object.fromEntries(
       (Object.keys(newOccupationPools) as OccupationType[]).map(o => [o, newOccupationPools[o].wageIndex])
     ),
     occupationMix: GOVERNMENT_OCCUPATION_MIX,
   });
-  const unemploymentBenefitsUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
+  const unemploymentBenefitsLocal = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
     const availableSupplyForOcc = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
     const unemployedInPool = Math.max(0, availableSupplyForOcc - pool.employed);
-    return sum + baseAnnualWageUSD[occ] * pool.wageIndex * unemployedInPool * UNEMPLOYMENT_REPLACEMENT_RATE;
+    return sum + baseAnnualWageLocal[occ] * pool.wageIndex * unemployedInPool * UNEMPLOYMENT_REPLACEMENT_RATE;
   }, 0);
   // ---- PUB3b: the budget IS the sum of what the government really owes this week. The old
   // `revenue + deficit x GDP` made the whole fiscal state a share of a LAGGED nominal aggregate,
   // which is why revenue (real bases at real prices since PUB1b/1c) drifted away from outlays
   // whenever the price level moved. The deficit is now an OUTCOME, and the automatic stabilizer
   // is real: a recession puts people on benefits and takes the tax base down at the same time.
-  const govObligations = governmentObligationsWeeklyUSD({
-    interestWeeklyUSD: govInterestWeeklyUSD,
-    payrollWeeklyUSD: newGovernmentPayrollWeeklyUSD,
-    unemploymentBenefitsWeeklyUSD: unemploymentBenefitsUSD / 52,
+  const govObligations = governmentObligationsWeeklyLocal({
+    interestWeeklyLocal: govInterestWeeklyLocal,
+    payrollWeeklyLocal: newGovernmentPayrollWeeklyLocal,
+    unemploymentBenefitsWeeklyLocal: unemploymentBenefitsLocal / 52,
     retiredPopulation: newTotalPopulation * (region.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0),
-    averageAnnualWageUSD: totalEmployedForWages > 0 ? totalWageIncomeUSD / totalEmployedForWages : 0,
+    averageAnnualWageLocal: totalEmployedForWages > 0 ? totalWageIncomeLocal / totalEmployedForWages : 0,
     fiscalStanceScore: newFiscalStanceScore,
   });
-  const newGovernmentSpendingUSD = Math.max(1e8, govObligations.totalLocal);
+  const newGovernmentSpendingLocal = Math.max(1e8, govObligations.totalLocal);
 
   // The same national-accounts derivation the cold-start bootstrap uses. It used to be written
   // out separately here (wages + unemployment transfers + a flat 15% capital income, no tax and
@@ -563,20 +563,20 @@ export function evolveRegionMacro(
   // residual. At seed the sum equals debt service by the
   // residual's construction; from week 1 the two move apart with rates and payouts, and that
   // differential is the household rate channel.
-  const annualCapitalReceiptsUSD = {
+  const annualCapitalReceiptsLocal = {
     // What the banks MEASURABLY paid their household depositors last week, at their own
     // competitive deposit rates (stage 02b sums it). The `deposits x policyRate x 0.6` this replaces
     // was a second derivation of a flow the banks already compute and post — rule 4, and it
     // disagreed with them by whatever the deposit competition was doing.
-    depositInterestUSD: (region.householdDepositInterestWeeklyUSD ?? 0) * 52,
+    depositInterestLocal: (region.householdDepositInterestWeeklyLocal ?? 0) * 52,
     // The dividends the public float was PAID last week (the register's paying agent pays the
     // float's share to the household sector of the issuer's region), read off the household flow
     // ledger — not a yield times a mark. The residual "return path" of debt service (a share of
     // income from nobody, 14.7% of it) is deleted: income is what arrived.
-    dividendsUSD: (microFeedback.householdWeek?.dividendsUSD ?? 0) * 52,
+    dividendsLocal: (microFeedback.householdWeek?.dividendsLocal ?? 0) * 52,
   };
   // INCOME IS THE SUM OF PAYMENTS. It used to be
-  // `computeHouseholdDisposableIncomeUSD(totalWageIncomeUSD, transfers)`: wages as
+  // `computeHouseholdDisposableIncomeLocal(totalWageIncomeLocal, transfers)`: wages as
   // productivity x LABOR_SHARE_OF_OUTPUT across the occupation pools, capital income as a fixed
   // ratio to wages, tax as a flat effective rate. Three imposed constants deciding what half the
   // economy earns, while the employers who actually pay it were paying a different number
@@ -585,7 +585,7 @@ export function evolveRegionMacro(
   // What replaces it: what households MEASURABLY received last week — every employer's wage
   // payment, the government's transfers, and the interest the banks really paid on their
   // deposits — less the tax they really remitted, annualised. The dividend leg on their direct
-  // equity is a real holding at a real cleared yield and stays; `capitalReceiptsAnnualUSD`
+  // equity is a real holding at a real cleared yield and stays; `capitalReceiptsAnnualLocal`
   // carries the ONE named residual left (the unbuilt receipt channels), as a level that
   // shrinks when a channel becomes real rather than as a share of the income it feeds.
   //
@@ -593,15 +593,15 @@ export function evolveRegionMacro(
   // from this number. The seed still opens on the identity, and week 1 is the first week with a
   // prior week to measure.
   const measuredWeek = microFeedback.householdWeek;
-  const newEstimatedHouseholdIncomeUSD = measuredWeek !== undefined
+  const newEstimatedHouseholdIncomeLocal = measuredWeek !== undefined
     ? Math.round(Math.max(0,
       // The dividends are inside the measured receipts already (a payment to the household
       // sector like any other); they are split out above only for the cohorts' allocation.
-      (measuredWeek.receiptsUSD - measuredWeek.taxPaidUSD) * 52
+      (measuredWeek.receiptsLocal - measuredWeek.taxPaidLocal) * 52
     ))
-    : Math.round(computeHouseholdDisposableIncomeUSD({
-      wageIncomeUSD: totalWageIncomeUSD,
-      transfersWeeklyUSD: govObligations.transfersUSD,
+    : Math.round(computeHouseholdDisposableIncomeLocal({
+      wageIncomeLocal: totalWageIncomeLocal,
+      transfersWeeklyLocal: govObligations.transfersLocal,
     }));
 
   // HH4: the same income, decomposed — ~20 occupation x wealth-tier cohorts built from the
@@ -615,19 +615,19 @@ export function evolveRegionMacro(
   const cohortResult = buildHouseholdCohorts({
     regionId: region.id,
     occupationPools: newOccupationPools,
-    baseAnnualWageUSD,
+    baseAnnualWageLocal,
     laborForceByOccupation,
-    governmentTransfersWeeklyUSD: govObligations.transfersUSD,
+    governmentTransfersWeeklyLocal: govObligations.transfersLocal,
     // DIST/MAC — the sector's real liquid assets, which each tier's buffer is measured against.
     // The savings RATE is no longer passed in: it is what comes out.
-    liquidAssetsUSD: Math.max(0, microFeedback.householdDepositsUSD) + Math.max(0, prevHS.mmfSharesLocal ?? 0),
+    liquidAssetsLocal: Math.max(0, microFeedback.householdDepositsLocal) + Math.max(0, prevHS.mmfSharesLocal ?? 0),
     // DEM/DIST — the life-cycle saving rate, read off the real age structure (§7.181). Last
     // week's, because the cohorts are built before this week's ages are advanced; a week's lag on
     // a demographic share is not a lag anyone can measure.
     retiredShareOfPopulation: region.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0.20,
-    weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
-    measuredDisposableIncomeUSD: newEstimatedHouseholdIncomeUSD,
-    annualCapitalReceiptsUSD,
+    weeklyDebtServiceLocal: prevHS.weeklyDebtServiceLocal ?? 0,
+    measuredDisposableIncomeLocal: newEstimatedHouseholdIncomeLocal,
+    annualCapitalReceiptsLocal,
     wealthDistribution: region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeLocal),
     // DIST — the employers' own wage premia, weighted by whom they employ. With the tenure
     // strata this is what derives the tier wage multiplier instead of stating it (§7.173-174).
@@ -639,9 +639,9 @@ export function evolveRegionMacro(
   // DIST/MAC — THE SAVINGS RATE, MEASURED. Every tier decided its own saving against its own
   // buffer; this is what those decisions add up to, over the income they were taken out of. It
   // is an outcome now (rule 2), and nothing normalises the parts to it.
-  const measuredSavingsUSD = WEALTH_TIERS.reduce((a, t) => a + (cohortResult.tierSavingsUSD[t] ?? 0), 0);
-  const newSavingsRate = cohortResult.totalDisposableIncomeUSD > 0
-    ? measuredSavingsUSD / cohortResult.totalDisposableIncomeUSD
+  const measuredSavingsLocal = WEALTH_TIERS.reduce((a, t) => a + (cohortResult.tierSavingsLocal[t] ?? 0), 0);
+  const newSavingsRate = cohortResult.totalDisposableIncomeLocal > 0
+    ? measuredSavingsLocal / cohortResult.totalDisposableIncomeLocal
     : (prevHS.savingsRate ?? 0.06);
 
   // HH4: the spend shares are DERIVED — each tier's consumption budget times its real spend
@@ -785,7 +785,7 @@ export function evolveRegionMacro(
     return {
       ...t,
       shareOfHouseholds: headShare,
-      debtBalanceUSD: (newCreditCardDebtUSD + newOtherLoanDebtUSD) * debtShare,
+      debtBalanceLocal: (newCreditCardDebtLocal + newOtherLoanDebtLocal) * debtShare,
     };
   });
 
@@ -799,9 +799,9 @@ export function evolveRegionMacro(
     region.bankingSector,
     // §5-WIRES D / step 10: the region's loan books are its named banks' rows, summed by the caller.
     microFeedback.bankLoanBooks,
-    microFeedback.bankReservesUSD,
+    microFeedback.bankReservesLocal,
     microFeedback.bankDepositLines,
-    newEstimatedHouseholdIncomeUSD,
+    newEstimatedHouseholdIncomeLocal,
     newSavingsRate,
     region.policyRate,
     newUnemployment,
@@ -947,7 +947,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // Housing market evolution as a real asset class
   const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeLocal, region.totalPopulation);
   // S8: housing supply is the real cleared OUTPUT of the residential_construction auction, not
-  // its `inventoryLevelUSD` — that field is frozen at initialization for output-only categories,
+  // its `inventoryLevelLocal` — that field is frozen at initialization for output-only categories,
   // so the ratio below was a constant pretending to be a market signal and house prices drifted
   // on a number that never changed. Units cleared this week x the cleared price is the real
   // weekly supply, against the same week's real demand.
@@ -979,9 +979,9 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const affordabilityByTier = WEALTH_TIERS.map((t) => {
     const tier = region.wealthDistribution?.[t];
     const tierHouseholds = Math.max(1, householdsCount * Math.max(0, tier?.shareOfHouseholds ?? 0.25));
-    const weeklyIncomePerHouseholdUSD = Math.max(0, tier?.shareOfIncomeUSD ?? 0) / 52 / tierHouseholds;
-    const affordableLoanUSD = (weeklyIncomePerHouseholdUSD * MORTGAGE_DSTI_LIMIT) / annuityFactorForPricing;
-    return { households: tierHouseholds, priceLocal: affordableLoanUSD / MORTGAGE_LTV_AT_ORIGINATION };
+    const weeklyIncomePerHouseholdLocal = Math.max(0, tier?.shareOfIncomeLocal ?? 0) / 52 / tierHouseholds;
+    const affordableLoanLocal = (weeklyIncomePerHouseholdLocal * MORTGAGE_DSTI_LIMIT) / annuityFactorForPricing;
+    return { households: tierHouseholds, priceLocal: affordableLoanLocal / MORTGAGE_LTV_AT_ORIGINATION };
   }).sort((a, b) => b.priceLocal - a.priceLocal);
   // The week's supply: existing owners selling, plus what construction actually completed.
   const owningHouseholdsCount = householdsCount * Math.max(0, prevHousing.ownershipRatePct ?? 0.6);
@@ -991,30 +991,30 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const turnoverRateAnnual = prevHousing.turnoverRateAnnual ?? HOUSING_TURNOVER_SEED_RATE_ANNUAL;
   const supplyUnitsThisWeek = owningHouseholdsCount * (turnoverRateAnnual / 52) + resSupplyUnits;
   let absorbed = 0;
-  let marginalPriceUSD = affordabilityByTier[affordabilityByTier.length - 1]?.priceLocal ?? 0;
+  let marginalPriceLocal = affordabilityByTier[affordabilityByTier.length - 1]?.priceLocal ?? 0;
   for (const tier of affordabilityByTier) {
-    marginalPriceUSD = tier.priceLocal;
+    marginalPriceLocal = tier.priceLocal;
     absorbed += tier.households * (turnoverRateAnnual / 52);
     if (absorbed >= supplyUnitsThisWeek) break;
   }
   // A house cannot clear below what it costs to build: the construction sector's own cleared
   // price is the seller's floor, exactly as it is for every other produced good (§7.130).
-  const buildCostUSD = Math.max(0, (resCat?.unitPriceLocal ?? 0));
-  const newMedianHomePriceUSD = Math.round(Math.max(marginalPriceUSD, buildCostUSD));
-  const newPriceIndex = (prevHousing.baselineHomePriceUSD || 400000) > 0
-    ? newMedianHomePriceUSD / (prevHousing.baselineHomePriceUSD || 400000)
+  const buildCostLocal = Math.max(0, (resCat?.unitPriceLocal ?? 0));
+  const newMedianHomePriceLocal = Math.round(Math.max(marginalPriceLocal, buildCostLocal));
+  const newPriceIndex = (prevHousing.baselineHomePriceLocal || 400000) > 0
+    ? newMedianHomePriceLocal / (prevHousing.baselineHomePriceLocal || 400000)
     : 1;
-  const histPrices = [...(prevHousing.historicalPrices || []).slice(-51), newMedianHomePriceUSD];
+  const histPrices = [...(prevHousing.historicalPrices || []).slice(-51), newMedianHomePriceLocal];
 
   const updatedHousingMarket: HousingMarket = {
     ...prevHousing,
-    medianHomePriceUSD: newMedianHomePriceUSD,
-    baselineHomePriceUSD: prevHousing.baselineHomePriceUSD || 400000,
+    medianHomePriceLocal: newMedianHomePriceLocal,
+    baselineHomePriceLocal: prevHousing.baselineHomePriceLocal || 400000,
     priceIndex: Number(newPriceIndex.toFixed(4)),
     historicalPrices: histPrices,
     // HSG — what the banks actually originated, summed by the bank pass. The 5%-of-income x a
     // credit nudge this replaces was a statistic beside the real lending, not a measure of it.
-    mortgageOriginationVolumeUSD: Math.round((region.housingMarket?.mortgageOriginationVolumeUSD ?? 0)),
+    mortgageOriginationVolumeLocal: Math.round((region.housingMarket?.mortgageOriginationVolumeLocal ?? 0)),
   };
 
   // ---- DEM: PEOPLE AGE. The age structure is a real stock now, not four drifting shares. ----
@@ -1074,14 +1074,14 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // drawdown drift is gone — the household-balance-sheet stage derives each tier's net worth
   // as a split of the same marked components the aggregate is built from, every week, after
   // the clearing books. Only the income line (the cohorts' summed disposable) is written here.
-  let savedGrossThisWeekUSD = 0;
-  let savedToDepositsThisWeekUSD = 0;
+  let savedGrossThisWeekLocal = 0;
+  let savedToDepositsThisWeekLocal = 0;
   (Object.keys(updatedWealthDist) as WealthTier[]).forEach(t => {
     // DIST/COH: the tier's cumulative saving, which its deposit share is derived from. The
     // cohorts already measure what each tier saved this week; this is the stock that flow builds.
     // A tier that saves more now gets richer, which is the mechanism the stated split replaced.
-    const priorAccumulated = updatedWealthDist[t].accumulatedSavingsUSD;
-    const savedThisWeekUSD = (cohortResult.tierSavingsUSD[t] ?? 0) / 52;
+    const priorAccumulated = updatedWealthDist[t].accumulatedSavingsLocal;
+    const savedThisWeekLocal = (cohortResult.tierSavingsLocal[t] ?? 0) / 52;
 
     // COH1 — THE SAVING IS ALLOCATED AS IT ARRIVES, and dissaving draws the buffer first.
     //
@@ -1102,44 +1102,44 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     // flow by `equityExposureShare` instead was a portfolio weight standing in for a decision the
     // model already makes.
     const exposure = Math.max(0, Math.min(1, updatedWealthDist[t].equityExposureShare ?? 0.25));
-    let liquidUSD = Math.max(0, updatedWealthDist[t].liquidSavingsUSD
+    let liquidLocal = Math.max(0, updatedWealthDist[t].liquidSavingsLocal
       ?? Math.max(0, priorAccumulated ?? 0) * (1 - exposure));
-    let investedUSD = Math.max(0, updatedWealthDist[t].investedSavingsUSD
+    let investedLocal = Math.max(0, updatedWealthDist[t].investedSavingsLocal
       ?? Math.max(0, priorAccumulated ?? 0) * exposure);
-    const lifeCycleThisWeekUSD = Math.max(0,
-      Math.min(savedThisWeekUSD, (cohortResult.tierLifeCycleSavingUSD[t] ?? 0) / 52));
+    const lifeCycleThisWeekLocal = Math.max(0,
+      Math.min(savedThisWeekLocal, (cohortResult.tierLifeCycleSavingLocal[t] ?? 0) / 52));
     // COH4 — WHERE THE WEEK'S SAVING ACTUALLY GOES, measured. `HOUSEHOLD_SAVINGS_TO_DEPOSITS_
     // SHARE = 0.3` stated it, and its own comment convicted it: where a household's saving goes
     // is a portfolio choice it makes, and COH2 already makes it — by MOTIVE, which is exactly the
     // split that decides it. The buffer half stays where it can be spent, which is a deposit; the
     // life-cycle half leaves as a pension contribution. This is that same split, summed, so the
     // banks' funding competition reads the households' own decision instead of a constant.
-    if (savedThisWeekUSD > 0) {
-      savedGrossThisWeekUSD += savedThisWeekUSD;
-      savedToDepositsThisWeekUSD += savedThisWeekUSD - lifeCycleThisWeekUSD;
+    if (savedThisWeekLocal > 0) {
+      savedGrossThisWeekLocal += savedThisWeekLocal;
+      savedToDepositsThisWeekLocal += savedThisWeekLocal - lifeCycleThisWeekLocal;
     }
-    if (savedThisWeekUSD >= 0) {
-      liquidUSD += savedThisWeekUSD - lifeCycleThisWeekUSD;
-      investedUSD += lifeCycleThisWeekUSD;
+    if (savedThisWeekLocal >= 0) {
+      liquidLocal += savedThisWeekLocal - lifeCycleThisWeekLocal;
+      investedLocal += lifeCycleThisWeekLocal;
     } else {
-      const drawUSD = -savedThisWeekUSD;
-      const fromLiquidUSD = Math.min(liquidUSD, drawUSD);
-      liquidUSD -= fromLiquidUSD;
-      investedUSD = Math.max(0, investedUSD - (drawUSD - fromLiquidUSD));
+      const drawLocal = -savedThisWeekLocal;
+      const fromLiquidLocal = Math.min(liquidLocal, drawLocal);
+      liquidLocal -= fromLiquidLocal;
+      investedLocal = Math.max(0, investedLocal - (drawLocal - fromLiquidLocal));
     }
     updatedWealthDist[t] = {
       ...updatedWealthDist[t],
-      shareOfIncomeUSD: Math.round(Math.max(1000, cohortResult.tierDisposableUSD[t] ?? updatedWealthDist[t].shareOfIncomeUSD)),
-      liquidSavingsUSD: Math.round(liquidUSD),
-      investedSavingsUSD: Math.round(investedUSD),
+      shareOfIncomeLocal: Math.round(Math.max(1000, cohortResult.tierDisposableLocal[t] ?? updatedWealthDist[t].shareOfIncomeLocal)),
+      liquidSavingsLocal: Math.round(liquidLocal),
+      investedSavingsLocal: Math.round(investedLocal),
       // Their SUM, kept as the one number readers that want the whole stock should use (rule 4:
       // it is derived here, never accumulated separately).
-      accumulatedSavingsUSD: Math.round((liquidUSD + investedUSD)),
+      accumulatedSavingsLocal: Math.round((liquidLocal + investedLocal)),
     };
   });
 
-  const liquidSavingShare = savedGrossThisWeekUSD > 0
-    ? Number((savedToDepositsThisWeekUSD / savedGrossThisWeekUSD).toFixed(4))
+  const liquidSavingShare = savedGrossThisWeekLocal > 0
+    ? Number((savedToDepositsThisWeekLocal / savedGrossThisWeekLocal).toFixed(4))
     : undefined;
 
   const updatedRegion: Region = {
@@ -1183,20 +1183,20 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     smePools: newSmePools,
     occupationPools: newOccupationPools,
     occupationLaborForceShare: newLaborForceShares,
-    estimatedNominalGdpLocal: newEstimatedNominalGdpUSD,
-    derivedNominalGdpUSD: region.derivedNominalGdpUSD ?? newEstimatedNominalGdpUSD,
+    estimatedNominalGdpLocal: newEstimatedNominalGdpLocal,
+    derivedNominalGdpLocal: region.derivedNominalGdpLocal ?? newEstimatedNominalGdpLocal,
     gdpGrowthBottomUp: region.gdpGrowthBottomUp ?? 0,
     nominalGdpHistory: region.nominalGdpHistory ?? [],
-    lastWeekNominalGdpUSD: region.lastWeekNominalGdpUSD ?? (region.derivedNominalGdpUSD || newEstimatedNominalGdpUSD),
-    consumptionComponentUSD: region.consumptionComponentUSD ?? 0,
-    investmentComponentUSD: region.investmentComponentUSD ?? 0,
+    lastWeekNominalGdpLocal: region.lastWeekNominalGdpLocal ?? (region.derivedNominalGdpLocal || newEstimatedNominalGdpLocal),
+    consumptionComponentLocal: region.consumptionComponentLocal ?? 0,
+    investmentComponentLocal: region.investmentComponentLocal ?? 0,
     effectiveTaxRate: newEffectiveTaxRate,
-    governmentRevenueUSD: newGovernmentRevenueUSD,
-    governmentSpendingWeeklyUSD: newGovernmentSpendingUSD,
-    governmentPayrollWeeklyUSD: newGovernmentPayrollWeeklyUSD,
-    governmentTransfersWeeklyUSD: govObligations.transfersUSD,
-    governmentInterestWeeklyUSD: Math.round(govInterestWeeklyUSD),
-    employerPayrollTaxWeeklyUSD: Math.round((employerPayrollTaxUSD / 52)),
+    governmentRevenueLocal: newGovernmentRevenueLocal,
+    governmentSpendingWeeklyLocal: newGovernmentSpendingLocal,
+    governmentPayrollWeeklyLocal: newGovernmentPayrollWeeklyLocal,
+    governmentTransfersWeeklyLocal: govObligations.transfersLocal,
+    governmentInterestWeeklyLocal: Math.round(govInterestWeeklyLocal),
+    employerPayrollTaxWeeklyLocal: Math.round((employerPayrollTaxLocal / 52)),
     householdState: {
       consumerConfidence: newCCI,
       creditTierBooks: normalizedTiers,
@@ -1211,18 +1211,18 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       stapleSpendShare: newStapleShare,
       standardSpendShare: newStandardShare,
       luxurySpendShare: newLuxuryShare,
-      netWorthUSD: newNetWorthUSD,
-      equityHoldingsUSD: newEquityHoldingsUSD,
+      netWorthLocal: newNetWorthLocal,
+      equityHoldingsLocal: newEquityHoldingsLocal,
       // Carried forward untouched; `stages/etf-flows.ts` marks them against this week's clears.
-      directEquityUSD: prevHS.directEquityUSD ?? 0,
+      directEquityLocal: prevHS.directEquityLocal ?? 0,
       // Marked in `stages/household-balance-sheet.ts` against this week's home price.
-      housingStockUSD: prevHS.housingStockUSD ?? 0,
-      priorNetWorthUSD: prevHS.priorNetWorthUSD ?? 0,
-      homeEquityUSD: prevHS.homeEquityUSD ?? 0,
+      housingStockLocal: prevHS.housingStockLocal ?? 0,
+      priorNetWorthLocal: prevHS.priorNetWorthLocal ?? 0,
+      homeEquityLocal: prevHS.homeEquityLocal ?? 0,
       institutionalClaims: prevHS.institutionalClaims ?? [],
-      institutionalClaimsUSD: prevHS.institutionalClaimsUSD ?? 0,
+      institutionalClaimsLocal: prevHS.institutionalClaimsLocal ?? 0,
       etfShares: prevHS.etfShares ?? [],
-      etfHoldingsUSD: prevHS.etfHoldingsUSD ?? 0,
+      etfHoldingsLocal: prevHS.etfHoldingsLocal ?? 0,
       // §7.41's trap, third time: this rebuild takes a FIXED FIELD LIST, so anything not named
       // here is dropped weekly. `mmfSharesLocal` was not named, so the household's money-fund claim
       // was destroyed every week and recreated from that week's diversion alone — while the fund
@@ -1234,29 +1234,29 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       // reserves had left and no bank ever received them — money destroyed when households were
       // net receivers after the bank pass, created when they were net payers (±5–8B a week,
       // the whole of M1's periodic residual after C5).
-      privateBusinessEquityUSD: prevHS.privateBusinessEquityUSD ?? 0,
+      privateBusinessEquityLocal: prevHS.privateBusinessEquityLocal ?? 0,
       // HH4: this week's cohort decomposition — the cross-section the aggregates above sum from.
       cohorts: cohortResult.cohorts,
       // COH2: the life-cycle half of the saving flow, which the pension stage collects as the
       // contribution. Measured here so the flat `PENSION_CONTRIBUTION_RATE` has nothing to do.
-      lifeCycleSavingAnnualUSD: Math.round(cohortResult.lifeCycleSavingAnnualUSD),
-      capitalReceiptsAnnualUSD: Math.round((annualCapitalReceiptsUSD.depositInterestUSD + annualCapitalReceiptsUSD.dividendsUSD)),
+      lifeCycleSavingAnnualLocal: Math.round(cohortResult.lifeCycleSavingAnnualLocal),
+      capitalReceiptsAnnualLocal: Math.round((annualCapitalReceiptsLocal.depositInterestLocal + annualCapitalReceiptsLocal.dividendsLocal)),
       // HH3: derived sums of the banks' itemized pools, carried through and overwritten by the
       // bank-diversification stage after its lending passes run.
-      mortgageDebtUSD: newMortgageDebtUSD,
-      creditCardDebtUSD: newCreditCardDebtUSD,
-      otherConsumerLoanDebtUSD: newOtherLoanDebtUSD,
-      priorMortgageDebtUSD: prevHS.priorMortgageDebtUSD ?? newMortgageDebtUSD,
-      weeklyMortgageOriginationUSD: prevHS.weeklyMortgageOriginationUSD ?? 0,
-      weeklyNewConsumerCreditUSD: prevHS.weeklyNewConsumerCreditUSD ?? 0,
-      weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
+      mortgageDebtLocal: newMortgageDebtLocal,
+      creditCardDebtLocal: newCreditCardDebtLocal,
+      otherConsumerLoanDebtLocal: newOtherLoanDebtLocal,
+      priorMortgageDebtLocal: prevHS.priorMortgageDebtLocal ?? newMortgageDebtLocal,
+      weeklyMortgageOriginationLocal: prevHS.weeklyMortgageOriginationLocal ?? 0,
+      weeklyNewConsumerCreditLocal: prevHS.weeklyNewConsumerCreditLocal ?? 0,
+      weeklyDebtServiceLocal: prevHS.weeklyDebtServiceLocal ?? 0,
     },
     bankingSector: newBankingSector,
-    estimatedHouseholdIncomeLocal: newEstimatedHouseholdIncomeUSD,
+    estimatedHouseholdIncomeLocal: newEstimatedHouseholdIncomeLocal,
     dotPlot1Y,
     dotPlot2Y,
-    exportsUSD: region.exportsUSD ?? 0,
-    importsUSD: region.importsUSD ?? 0,
+    exportsLocal: region.exportsLocal ?? 0,
+    importsLocal: region.importsLocal ?? 0,
     tradeBalance: region.tradeBalance ?? 0,
     yieldCurveParams: newCurveParams,
     zeroRates: newZeroRates,
@@ -1300,7 +1300,7 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
  * Evolve Commodities with Weather & Supply/Demand shocks
  */
 
-export function computePrivateSegmentCommoditySupplyUSD(commodityId: string, regions: Record<RegionId, Region>, fxToUsd: FxToUsd): number {
+export function computePrivateSegmentCommoditySupplyLocal(commodityId: string, regions: Record<RegionId, Region>, fxToUsd: FxToUsd): number {
   // SEG-A: which pools supply a commodity comes from the REGISTRY's own sub-unit linkages —
   // the industries whose output is actually linked to it — rather than from a hardcoded list
   // bolted onto one bucket (MANUFACTURING_LINKED_COMMODITIES, deleted). A pool's contribution
@@ -1325,15 +1325,15 @@ export function calibrateIntensityShare(commodityId: string, allCompanies: Compa
   const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && isActiveCompany(c));
   // §6.1 money-locality: a producer's revenue is its region's local money and each region's
   // demand level is its own; both sides of the world ratio convert to USD before summing.
-  const publicWeeklySupplyUSD = producers.reduce((s, c) =>
+  const publicWeeklySupplyLocal = producers.reduce((s, c) =>
     s + localToUsd((c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, c.region, fxToUsd), 0);
-  const privateWeeklySupplyUSD = computePrivateSegmentCommoditySupplyUSD(commodityId, regions, fxToUsd);
-  const weeklySupplyUSD = publicWeeklySupplyUSD + privateWeeklySupplyUSD;
-  const totalCategoryDemandUSD = REGION_IDS.reduce((s, r) => s + localToUsd(regions[r].categoryDemand[subUnitId]?.demandLevelAnnualLocal ?? 0, r, fxToUsd), 0);
-  return totalCategoryDemandUSD > 0 ? (weeklySupplyUSD * 52) / totalCategoryDemandUSD : 0.01;
+  const privateWeeklySupplyLocal = computePrivateSegmentCommoditySupplyLocal(commodityId, regions, fxToUsd);
+  const weeklySupplyLocal = publicWeeklySupplyLocal + privateWeeklySupplyLocal;
+  const totalCategoryDemandLocal = REGION_IDS.reduce((s, r) => s + localToUsd(regions[r].categoryDemand[subUnitId]?.demandLevelAnnualLocal ?? 0, r, fxToUsd), 0);
+  return totalCategoryDemandLocal > 0 ? (weeklySupplyLocal * 52) / totalCategoryDemandLocal : 0.01;
 }
 
-function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity, regions: Record<RegionId, Region>, privateSegmentSupplyUSD: number, fxToUsd: FxToUsd): { ratio: number; supplyUnits: number; demandUnits: number } {
+function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity, regions: Record<RegionId, Region>, privateSegmentSupplyLocal: number, fxToUsd: FxToUsd): { ratio: number; supplyUnits: number; demandUnits: number } {
   const linkage = COMMODITY_CATEGORY_LINKAGE[commodityId] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
   const intensityShare = linkage?.intensityShare ?? 0;
 
@@ -1357,21 +1357,21 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
   const perRegion = REGION_IDS.reduce((acc, r) => {
     const catDemand = linkage ? regions[r].categoryDemand[linkage.subUnitId] : undefined;
     if (!catDemand) return acc;
-    acc.demandAnnualUSD += localToUsd(catDemand.demandLevelAnnualLocal ?? 0, r, fxToUsd);
+    acc.demandAnnualLocal += localToUsd(catDemand.demandLevelAnnualLocal ?? 0, r, fxToUsd);
     // Rule 9: `totalUnitsSuppliedThisWeek` is WEEKLY and `demandLevelAnnualLocal` is ANNUAL.
-    acc.supplyWeeklyUSD += localToUsd((catDemand.totalUnitsSuppliedThisWeek ?? 0) * (catDemand.unitPriceLocal ?? 0), r, fxToUsd);
+    acc.supplyWeeklyLocal += localToUsd((catDemand.totalUnitsSuppliedThisWeek ?? 0) * (catDemand.unitPriceLocal ?? 0), r, fxToUsd);
     return acc;
-  }, { demandAnnualUSD: 0, supplyWeeklyUSD: 0 });
+  }, { demandAnnualLocal: 0, supplyWeeklyLocal: 0 });
 
   // Before this market has ever cleared (week 1) there is no supplied figure yet, so fall back to
   // the tagged producers' own output, which is what the seed had.
   const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && isActiveCompany(c));
-  const taggedWeeklySupplyUSD = producers.reduce((s, c) => s + localToUsd((c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, c.region, fxToUsd), 0);
-  const weeklySupplyUSD = perRegion.supplyWeeklyUSD > 0
-    ? perRegion.supplyWeeklyUSD * intensityShare
-    : taggedWeeklySupplyUSD + privateSegmentSupplyUSD;
+  const taggedWeeklySupplyLocal = producers.reduce((s, c) => s + localToUsd((c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, c.region, fxToUsd), 0);
+  const weeklySupplyLocal = perRegion.supplyWeeklyLocal > 0
+    ? perRegion.supplyWeeklyLocal * intensityShare
+    : taggedWeeklySupplyLocal + privateSegmentSupplyLocal;
 
-  const baselineWeeklyDemandUSD = (perRegion.demandAnnualUSD * intensityShare) / 52;
+  const baselineWeeklyDemandLocal = (perRegion.demandAnnualLocal * intensityShare) / 52;
 
   const baselineHistoricalPrice = comm.historicalPrices.length > 0 ? comm.historicalPrices[0] : comm.spotPrice;
   const referencePrice = baselineHistoricalPrice > 0 ? baselineHistoricalPrice : comm.spotPrice;
@@ -1379,8 +1379,8 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
   const demandElasticity = -0.7; // low spot prices stimulate real industrial & consumer demand
   const supplyElasticity = 0.5; // low spot prices cause real production curtailment
 
-  const demandUnits = comm.spotPrice > 0 ? (baselineWeeklyDemandUSD / referencePrice) * Math.pow(priceRatio, demandElasticity) : 0;
-  const supplyUnits = comm.spotPrice > 0 ? (weeklySupplyUSD / referencePrice) * Math.pow(priceRatio, supplyElasticity) : 0;
+  const demandUnits = comm.spotPrice > 0 ? (baselineWeeklyDemandLocal / referencePrice) * Math.pow(priceRatio, demandElasticity) : 0;
+  const supplyUnits = comm.spotPrice > 0 ? (weeklySupplyLocal / referencePrice) * Math.pow(priceRatio, supplyElasticity) : 0;
 
   const ratio = supplyUnits > 0.001 ? demandUnits / supplyUnits : 1.0;
   return { ratio, supplyUnits, demandUnits };
@@ -1389,7 +1389,7 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
 export function evolveCommodity(
   comm: Commodity,
   globalGrowth: number,
-  rfUSD: number,
+  rfLocal: number,
   regions: Record<RegionId, Region>,
   allCompanies: Company[],
   fxToUsd: FxToUsd
@@ -1413,8 +1413,8 @@ export function evolveCommodity(
 
   const drift = demandShock * dt + randomEps;
   
-  const privateSegmentSupplyUSD = computePrivateSegmentCommoditySupplyUSD(comm.id, regions, fxToUsd);
-  const { ratio: rawClearingRatio, supplyUnits: rawSupplyUnits, demandUnits } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions, privateSegmentSupplyUSD, fxToUsd);
+  const privateSegmentSupplyLocal = computePrivateSegmentCommoditySupplyLocal(comm.id, regions, fxToUsd);
+  const { ratio: rawClearingRatio, supplyUnits: rawSupplyUnits, demandUnits } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions, privateSegmentSupplyLocal, fxToUsd);
   const supplyUnits = rawSupplyUnits * (1 - yieldLossShare);
   const clearingRatio = rawClearingRatio * (1 - yieldLossShare);
   const supplyDemandDrift = Math.max(-0.04, Math.min(0.04, (clearingRatio - 1.0) * 0.12));

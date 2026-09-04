@@ -115,8 +115,8 @@ checked by `scripts/check-atlas.sh`.
 | E2 the register holds foreign issuers' instruments | `src/engine/simulation/stages/holdings-store.ts:buildHoldingsStore` | ✅ |
 | E3 a default reaches foreign holders in proportion | `src/engine/simulation/stages/estate-resolution.ts:distribute` | ✅ |
 | E4 a central bank's actions reach other regions | `src/engine/macro/evolution.ts:evolveFxPair` | ⚠️ |
-| **F1 FORBID no region that is a closed box** | `src/engine/simulation/stages/05-unit-bidding.ts:bilateralTradeWeeklyUSD` | ✅ |
-| **F2 FORBID no netting of cross-border flows into a regional aggregate** | `src/engine/simulation/stages/06-fx-and-trade.ts:exportsWeeklyUSD` | ⚠️ |
+| **F1 FORBID no region that is a closed box** | `src/engine/simulation/stages/05-unit-bidding.ts:bilateralTradeWeeklyLocal` | ✅ |
+| **F2 FORBID no netting of cross-border flows into a regional aggregate** | `src/engine/simulation/stages/06-fx-and-trade.ts:exportsWeeklyLocal` | ⚠️ |
 | **F3 FORBID no exogenous trade or capital-flow series** | `src/engine/simulation/stages/06-fx-and-trade.ts:runFxAndTradeStage` | ✅ |
 
 ---

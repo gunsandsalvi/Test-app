@@ -279,7 +279,7 @@ function buildTemplate(
 
 // Deliberately flat across all 4 regions rather than scaled to relative region size: firm
 // COUNT models market structure (how many distinct competitors exist in a sector), while each
-// firm's actual scale (revBase, further downstream reshaped by deriveInitialRevenueUSD against
+// firm's actual scale (revBase, further downstream reshaped by deriveInitialRevenueLocal against
 // the region's own generated demand) is what carries the region's real economic size — so a
 // smaller region gets the same number of firms, just each proportionally smaller, matching how
 // e.g. the UK and USA both have several major banks despite very different GDP.

@@ -95,7 +95,7 @@ checked by `scripts/check-atlas.sh`.
 | B1 subject to `firm-fundamentals.md` from week one | `src/engine2/stage08-back.ts:runBackCoreA` | ✅ |
 | **B2 a young firm is more fragile** | `src/domain/company.ts:bornWeek` | ❌ |
 | B3 distress is observable before default | `src/domain/company-week/credit-standing.ts:creditMetrics` | ✅ |
-| B4 a distressed firm acts | `src/domain/company-week/credit-standing.ts:revolverDrawUSD` | ⚠️ |
+| B4 a distressed firm acts | `src/domain/company-week/credit-standing.ts:revolverDrawLocal` | ⚠️ |
 | C1 a stated, observable definition | `src/domain/company-week/credit-standing.ts:isInDefault` | ⚠️ |
 | C2 a consequence of the firm's state | `src/domain/company-week/credit-standing.ts:isInDefault` | ✅ |
 | **C2.a FORBID no exogenous default event** | `src/engine/simulation/stages/bank-lending.ts:smePoolAnnualPd` | ⚠️ |
@@ -105,10 +105,10 @@ checked by `scripts/check-atlas.sh`.
 | D2 proceeds distributed by seniority | `src/engine/simulation/stages/estate-resolution.ts:distribute` | ✅ |
 | D2.a recovery is what the assets fetched | `src/domain/estate.ts:realisedDebtRecoveryRate` | ✅ |
 | D3 losses land on named holders, in proportion | `src/engine/simulation/stages/estate-resolution.ts:reduceHolding` | ✅ |
-| D4 employees, suppliers and capital | `src/engine/simulation/stages/trade-settlement.ts:tradeInvoiceWriteOffUSD` | ⚠️ |
+| D4 employees, suppliers and capital | `src/engine/simulation/stages/trade-settlement.ts:tradeInvoiceWriteOffLocal` | ⚠️ |
 | D4.a the real-economy consequences | `src/engine/simulation/stages/labor-market.ts:runLaborReconciliationStage` | ⚠️ |
 | D5 the party ceases to exist; references resolve | `src/engine/simulation/stages/estate-resolution.ts:writeOffResidual` | ✅ |
-| D6 Σ(recoveries) + Σ(losses) = assets at realisation | `src/domain/estate.ts:estateAssetsUSD` | ⚠️ |
+| D6 Σ(recoveries) + Σ(losses) = assets at realisation | `src/domain/estate.ts:estateAssetsLocal` | ⚠️ |
 | **D6.a no residual left on a dead party** | `src/engine/simulation/stages/estate-resolution.ts:openEstate` | ⚠️ |
 | E1 FORBID no firm that cannot die | `src/domain/company.ts:isActiveCompany` | ✅ |
 | E2 FORBID no death without a destination | `src/engine/simulation/stages/estate-resolution.ts:scrapConsignmentsOf` | ⚠️ |

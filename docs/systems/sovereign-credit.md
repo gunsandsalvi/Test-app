@@ -148,12 +148,12 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 
 | Node | Code | |
 |---|---|---|
-| A1 a fiscal authority with revenue and outlays | `src/domain/government.ts:governmentOutlaysUSD` | ✅ |
+| A1 a fiscal authority with revenue and outlays | `src/domain/government.ts:governmentOutlaysLocal` | ✅ |
 | A1.a revenue by base, each with a payer who remits it | `src/domain/company-week/income-statement.ts:corporateTax` | ✅ |
 | A1.b outlays by kind, each with a payee | `src/domain/government.ts:decomposeGovernmentSpending` | ✅ |
-| A1.c VERIFY the deficit is the residual, never a target | `src/domain/government.ts:governmentObligationsWeeklyUSD` | ✅ |
-| **A2 ISSUANCE IS MANAGED TO COVER OUTLAYS** | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:quarterlyFundingNeedUSD` | ⚠️ |
-| A2.a the need is the deficit **plus redemptions** | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:quarterlyFundingNeedUSD` | ⚠️ |
+| A1.c VERIFY the deficit is the residual, never a target | `src/domain/government.ts:governmentObligationsWeeklyLocal` | ✅ |
+| **A2 ISSUANCE IS MANAGED TO COVER OUTLAYS** | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:quarterlyFundingNeedLocal` | ⚠️ |
+| A2.a the need is the deficit **plus redemptions** | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:quarterlyFundingNeedLocal` | ⚠️ |
 | **A2.b the plan is made BEFORE the outlay** | — | ❌ |
 | A2.c the tenor mix is a real choice with a real cost | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:steepnessAdjustment` | ✅ |
 | A3 one account, and every payment leaves it | `src/engine/ledger/accounts.ts:treasuryAccountOf` | ✅ |
@@ -172,7 +172,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | **B7 N13 the claim is on nothing seizable** | — | ❌ |
 | C1 issuance is announced before it happens, in a size | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
 | C1.a the calendar is public ahead of the auction | — | ❌ |
-| C1.b the size is the issuer's choice out of A2 | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:quarterlyFundingNeedUSD` | ✅ |
+| C1.b the size is the issuer's choice out of A2 | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:quarterlyFundingNeedLocal` | ✅ |
 | C2 a uniform-price single-round sealed-bid auction | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ✅ |
 | C3 primary dealers with an obligation to bid | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ⚠️ |
 | C3.a the obligation, not a backstop, is why it cannot fail | — | ❌ |
@@ -191,7 +191,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | D6 VERIFY the bid-offer is a consequence, not a prior | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
 | **E1 a register: who holds how much of WHICH LINE** | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ❌ |
 | E2 holder classes hold for different reasons | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
-| E2.a banks — the regulatory liquidity buffer | `src/engine/macro/banking.ts:liquidityDrivenSovereignFloorUSD` | ✅ |
+| E2.a banks — the regulatory liquidity buffer | `src/engine/macro/banking.ts:liquidityDrivenSovereignFloorLocal` | ✅ |
 | E2.b insurers and pensions — duration against liabilities | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:durationPremiumBps` | ⚠️ |
 | E2.c the central bank — monetary policy | `src/engine/simulation/stages/central-bank-demand.ts:plannedPurchasesByBond` | ✅ |
 | E2.d foreign official — reserves | — | ❌ |
@@ -199,7 +199,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | E2.f households and corporates, holding it DIRECTLY | `src/engine/simulation/stages/07f-short-debt-clearing.ts:treasuryParticipantId` | ⚠️ |
 | **E3 marked at the cleared price** | — | ❌ |
 | E4 pledgeable, at a haircut | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
-| E5 a zero risk weight, which is *why* E2.a holds it | `src/engine/macro/banking.ts:riskWeightedAssetsUSD` | ✅ |
+| E5 a zero risk weight, which is *why* E2.a holds it | `src/engine/macro/banking.ts:riskWeightedAssetsLocal` | ✅ |
 | F1 the coupon accrues and is paid to the holder on the date | `src/engine/simulation/stages/sovereign-calendar.ts:runSovereignCalendarStage` | ✅ |
 | **F2 a bill ACCRETES; its return is the discount** | `src/engine/simulation/stages/bill-accretion.ts:weeklyAccretionRate` | ⚠️ |
 | F3 principal repaid at maturity out of A3 | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |

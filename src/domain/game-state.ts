@@ -76,13 +76,13 @@ export interface GameState {
    * program, 5.25% of all CPU, converting a container to another container and back. Nothing
    * serialises or hashes GameState, so the object form was buying nothing at all.
    */
-  holderAccruedInterestUSD: Map<string, Map<string, number>>;
+  holderAccruedInterestLocal: Map<string, Map<string, number>>;
   /** CAL — accrued-but-unpaid SOVEREIGN interest by (region, tenor bucket, party); see
    *  stages/sovereign-calendar.ts. Party-keyed rather than holder-keyed because a bank holds
    *  government paper on its own balance sheet and is not on the institutional register. */
-  sovereignAccruedInterestUSD: Map<string, number>;
+  sovereignAccruedInterestLocal: Map<string, number>;
   /** CASH — clamped negative balances, summed over the week's reconciliations. */
-  lastCashOverdraftUSD?: number;
+  lastCashOverdraftLocal?: number;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   /** Signed consecutive-week bind streak per `book:id` (+ up, − down) — the adaptive damper's
@@ -98,11 +98,11 @@ export interface GameState {
     grossLocal: number;
     /** §3.13c: the same gross per currency, in that currency's own units — W1's exact form. */
     grossByCurrency?: Record<string, number>;
-    unresolvedUSD: number;
+    unresolvedLocal: number;
     /** SETL6 — what the cleared books' central counterparty was left holding. Must be zero. */
-    clearingHouseResidualUSD: number;
+    clearingHouseResidualLocal: number;
     /** SETL6 — reserves + treasury account, net of what the central bank issued. Must be zero. */
-    centralBankResidualUSD: number;
+    centralBankResidualLocal: number;
     /** §5-CLOSE C5 — the treasury's week by reason, per region: what the account moved by. */
     treasuryFlowsByRegion: Record<string, Record<string, number>>;
     /** The pools' and the households' weeks by reason, complete — all three settlement cycles.
@@ -119,11 +119,11 @@ export interface GameState {
     crossBorderByRegion: Record<string, number>;
     /** Bank tallies whose ticker matched no company at all, so they reached no region's identity.
      *  Named rather than absorbed — see M6. */
-    bankTallyUnmappedUSD?: number;
+    bankTallyUnmappedLocal?: number;
     /** §5-WIRES A — settled rows the store could not map to a party's row (must be zero). */
     accountRowsUnmapped: number;
     /** What those rows were worth: a count is not a size. */
-    accountUnmappedUSD?: number;
+    accountUnmappedLocal?: number;
     /** …and which kinds of party had no row, against the dollars each accounts for. */
     accountUnmappedByKind?: Record<string, number>;
   };
@@ -145,8 +145,8 @@ export interface GameState {
   lotReceiptsTrace?: Record<string, number>;
   /** §3.37-ZEROSUM: what `fx-revaluation` booked this week, and the rates it moved between, so
    *  the audit can recompute the move against every account row that exists and compare. */
-  lastFxRevaluation?: { bookedUSD: number; fxBefore: Record<string, number>; fxAfter: Record<string, number> };
-  lastWires?: { count: number; byKind: Record<string, number>; valueUSDByKind: Record<string, number>; /** money wires recorded after the last pass — they settle next week (N: dated wires) */ moneyPendingUSD: number; /** §3.13c: the week's money wires per currency, in that currency's units */ moneyByCurrency?: Record<string, number>; /** §3.13c: the dated tail per currency */ moneyPendingByCurrency?: Record<string, number>; /** §5-WIRES W2: the clearing house's net per `region|kind` after the week's wires */ houseNetUSDByKey?: Record<string, number>; houseNetUSDByAsset?: Record<string, number>; /** §5-WIRES W3: the issuers' net per `region|kind` */ issuerNetUSDByKey?: Record<string, number>; issuerNetUSDByTicker?: Record<string, number>; /** W5: the register's net per asset kind, in shares */ registerNetQtyByKind?: Record<string, number>; registerNetQtyByHolder?: Record<string, number>; /** §5-WIRES W4 */ goodsNetUnitsByKey?: Record<string, number>; goodsFlowByKey?: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>; goodsOutUnitsByKey?: Record<string, number>; goodsInUnitsByKey?: Record<string, number>; goodsDeliveredByKey?: Record<string, number>; goodsInByTicker?: Record<string, number> };
+  lastFxRevaluation?: { bookedLocal: number; fxBefore: Record<string, number>; fxAfter: Record<string, number> };
+  lastWires?: { count: number; byKind: Record<string, number>; valueUSDByKind: Record<string, number>; /** money wires recorded after the last pass — they settle next week (N: dated wires) */ moneyPendingLocal: number; /** §3.13c: the week's money wires per currency, in that currency's units */ moneyByCurrency?: Record<string, number>; /** §3.13c: the dated tail per currency */ moneyPendingByCurrency?: Record<string, number>; /** §5-WIRES W2: the clearing house's net per `region|kind` after the week's wires */ houseNetUSDByKey?: Record<string, number>; houseNetUSDByAsset?: Record<string, number>; /** §5-WIRES W3: the issuers' net per `region|kind` */ issuerNetUSDByKey?: Record<string, number>; issuerNetUSDByTicker?: Record<string, number>; /** W5: the register's net per asset kind, in shares */ registerNetQtyByKind?: Record<string, number>; registerNetQtyByHolder?: Record<string, number>; /** §5-WIRES W4 */ goodsNetUnitsByKey?: Record<string, number>; goodsFlowByKey?: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>; goodsOutUnitsByKey?: Record<string, number>; goodsInUnitsByKey?: Record<string, number>; goodsDeliveredByKey?: Record<string, number>; goodsInByTicker?: Record<string, number> };
   regions: Record<RegionId, Region>;
   fxPairs: FxPair[];
   companies: Company[];
@@ -157,16 +157,16 @@ export interface GameState {
   derivativesBook?: import('./derivatives/contract').DerivativeContract[];
   compositeIndices: CompositeBenchmarkIndices;
   recentIPOs: { ticker: string; name: string; category: string; week: number }[];
-  recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[];
+  recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueLocal: number }[];
   marketVolPremium?: number;
   dealers: Dealer[];
   portfolio: Portfolio;
   newsFeed: NewsItem[];
   turnSummary: {
     week: number;
-    pnlDeltaUSD: number;
+    pnlDeltaLocal: number;
     pnlDeltaPct: number;
-    interestIncomeUSD: number;
+    interestIncomeLocal: number;
     financingCostLocal: number;
     defaultedCompanies: string[];
     ratingsChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[];

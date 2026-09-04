@@ -77,16 +77,16 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a stock of productive assets held by a named firm | `src/engine2/stage08-back.ts:newGrossPPEUSD` | ✅ |
+| A1 a stock of productive assets held by a named firm | `src/engine2/stage08-back.ts:newGrossPPELocal` | ✅ |
 | A2 capacity is a function of the stock | `src/engine/simulation/stages/05-unit-bidding.ts:unitsPerNetPpeDollar` | ✅ |
-| **A3 it depreciates — a cost and a reduction** | `src/domain/company-week/capital-programme.ts:weeklyDepreciationUSD` | ⚠️ |
+| **A3 it depreciates — a cost and a reduction** | `src/domain/company-week/capital-programme.ts:weeklyDepreciationLocal` | ⚠️ |
 | A4 capital is specific | `src/engine/simulation/stages/estate-resolution.ts:sellAssetsToPeers` | ⚠️ |
 | A5 its value is what it can produce; it can be written down | `src/domain/company-week/capital-programme.ts:capacityRetirement` | ⚠️ |
 | **B1 invests when the return beats the cost of capital** | `src/domain/company-week/capital-programme.ts:desiredGrowthCapex` | ❌ |
 | B1.a the return comes from expected demand and price | `src/engine2/stage08-lanes.ts:categoryShortfall` | ⚠️ |
 | **B1.b the cost of capital comes from the markets** | `src/engine2/front-core.ts:effectiveDebtRate` | ⚠️ |
 | **B1.c a market price change moves real investment** | `src/domain/company-week/capital-programme.ts:rateDrag` | ⚠️ |
-| B2 it must be able to fund it | `src/domain/company-week/capital-programme.ts:growthFundingCapUSD` | ✅ |
+| B2 it must be able to fund it | `src/domain/company-week/capital-programme.ts:growthFundingCapLocal` | ✅ |
 | B2.a a good project with no funding is not built | `src/domain/company-week/capital-programme.ts:cashHealthFactor` | ✅ |
 | B3 capacity utilisation is a reason | `src/domain/company-week/capital-programme.ts:shortageCapexMultiple` | ⚠️ |
 | **B4 uncertainty delays it — the option to wait** | — | ❌ |
@@ -96,13 +96,13 @@ checked by `scripts/check-atlas.sh`.
 | C2 paid in cash, out of an account, in a currency | `src/engine2/stage08-back.ts:makeCashPoster` | ✅ |
 | C3 a lag between spend and capacity | `src/domain/industry-registry.ts:commissioningLeadWeeksOf` | ✅ |
 | C4 it is irreversible | `src/domain/company-week/capital-programme.ts:capacityRetirement` | ✅ |
-| D1 K′ = K + I − D, per firm | `src/engine2/stage08-back.ts:newAccumulatedDepreciationUSD` | ✅ |
+| D1 K′ = K + I − D, per firm | `src/engine2/stage08-back.ts:newAccumulatedDepreciationLocal` | ✅ |
 | D2 the aggregate stock is Σ(firms) | `src/engine/simulation/stages/estate-resolution.ts:regionalPpeAbsorptionWeeks` | ✅ |
 | D3 a failed firm's capital goes to somebody named | `src/engine/simulation/stages/estate-resolution.ts:sellAssetsToPeers` | ✅ |
 | **D4 capacity, output and utilisation reconcile** | — | ❌ |
-| E1 investment is a large, volatile component of demand | `src/engine/simulation/stages/05-unit-bidding.ts:capexPurchasesUSD` | ✅ |
+| E1 investment is a large, volatile component of demand | `src/engine/simulation/stages/05-unit-bidding.ts:capexPurchasesLocal` | ✅ |
 | E2 it employs people to build the capital | `src/domain/company-week/labor-demand.ts:employerWeekPosting` | ✅ |
-| E3 debt-funded at the margin | `src/domain/company-week/capital-programme.ts:debtFundedMaintenanceUSD` | ⚠️ |
+| E3 debt-funded at the margin | `src/domain/company-week/capital-programme.ts:debtFundedMaintenanceLocal` | ⚠️ |
 | **E4 tighter credit → less investment → less output** | — | ❌ |
 
 ---

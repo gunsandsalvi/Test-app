@@ -80,7 +80,7 @@ export function generatePrivateFirmSeeds(
   _region: RegionId,
   segments: { industry: Industry; annualRevenueLocal: number; debtLocal: number; employment: number }[]
 ): PrivateFirmSeed[] {
-  const totalRevenueUSD = segments.reduce((a, s) => a + s.annualRevenueLocal, 0) || 1;
+  const totalRevenueLocal = segments.reduce((a, s) => a + s.annualRevenueLocal, 0) || 1;
   const seeds: PrivateFirmSeed[] = [];
 
   segments.forEach((seg) => {
@@ -88,7 +88,7 @@ export function generatePrivateFirmSeeds(
     // roster (16 industries x 20 = 320 a region however small the knob was set), which is exactly
     // why the first cycle-time curve flattened at ~830 ms and looked like an engine floor.
     const segFloor = Math.max(2, Math.round(20 * UNIVERSE_SCALE));
-    const n = Math.max(segFloor, Math.round(PRIVATE_FIRMS_PER_REGION * (seg.annualRevenueLocal / totalRevenueUSD)));
+    const n = Math.max(segFloor, Math.round(PRIVATE_FIRMS_PER_REGION * (seg.annualRevenueLocal / totalRevenueLocal)));
 
     // Draw the tail: evenly spaced quantiles of a Pareto (deterministic — bootstrap generation
     // is reproducible-by-shape, and quantiles avoid a lucky/unlucky draw deciding the carve).
@@ -102,11 +102,11 @@ export function generatePrivateFirmSeeds(
     // Revenue attribute per firm: the named tier's revenue share mirrors its debt share of the
     // segment — the tier that carries the syndicated debt is the tier with the revenue behind
     // it. (Attribute only until HC3 — see module comment.)
-    const tierRevenueUSD = seg.annualRevenueLocal * NAMED_TIER_REVENUE_SHARE;
-    const productivityUSD = seg.annualRevenueLocal / Math.max(1, seg.employment);
+    const tierRevenueLocal = seg.annualRevenueLocal * NAMED_TIER_REVENUE_SHARE;
+    const productivityLocal = seg.annualRevenueLocal / Math.max(1, seg.employment);
 
     rawSizes.forEach((raw, i) => {
-      const revenueLocal = tierRevenueUSD * (raw / rawSum);
+      const revenueLocal = tierRevenueLocal * (raw / rawSum);
       // A named firm earns its sector's own margin — the SME discount applies to the POOL it
       // is carved out of, not to the named tier being carved.
       const margin = sectorBaselineMarginPct(INDUSTRY_REGISTRY[seg.industry].sector);
@@ -135,7 +135,7 @@ export function generatePrivateFirmSeeds(
         // 1,712 firms below their cost of capital (§7.115's reverted attempt). That was never a
         // double-count; the two tiers simply derived headcount by different routes.
         employeeCount: Math.max(25, Math.round(
-          revenueLocal * (1 - industryRecipeIntensity(seg.industry)) / Math.max(50_000, productivityUSD)
+          revenueLocal * (1 - industryRecipeIntensity(seg.industry)) / Math.max(50_000, productivityLocal)
         )),
       });
     });

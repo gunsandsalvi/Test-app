@@ -23,7 +23,7 @@ function walk(root: unknown, path: string[]): unknown {
   return cur;
 }
 
-/** A stored key, read aloud: `annualRevenue` → "annual revenue", `cashReservesUSD` → "cash reserves". */
+/** A stored key, read aloud: `annualRevenue` → "annual revenue", `cashReservesLocal` → "cash reserves". */
 export function humanKey(k: string): string {
   if (/^\d+$/.test(k)) return `#${k}`;
   return k

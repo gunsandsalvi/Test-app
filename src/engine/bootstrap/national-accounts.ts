@@ -44,14 +44,14 @@ const REFERENCE_COST_OF_CAPITAL_ANNUAL = 0.065;
  * stood here said the constants are "replaced by the flows themselves" once households are real
  * agents with real payroll, taxes and transfer receipts. They are: HH closed (§7.60), and §7.96
  * made household income the measured sum of what employers actually pay. Yet
- * `computeHouseholdDisposableIncomeUSD` survives as the fallback, `assertHouseholdIncomeIdentity`
+ * `computeHouseholdDisposableIncomeLocal` survives as the fallback, `assertHouseholdIncomeIdentity`
  * still ENFORCES these shares at startup, and `LABOR_SHARE_OF_OUTPUT` still sets the wage LEVEL
- * through `getBaseAnnualWageUSD`. So the measured sum and the identity coexist and disagree —
+ * through `getBaseAnnualWageLocal`. So the measured sum and the identity coexist and disagree —
  * §6.1's household-income row. Retiring this module is that row's real content.
  */
 
 /**
- * COH3 — THE LABOUR SHARE NO LONGER SETS THE WAGE LEVEL. `getBaseAnnualWageUSD` derives it from
+ * COH3 — THE LABOUR SHARE NO LONGER SETS THE WAGE LEVEL. `getBaseAnnualWageLocal` derives it from
  * the technology (`derivedLabourShareOfValueAdded`): what value added leaves after the capital
  * that produced it is depreciated and its owners paid. What survives here is the identity's own
  * REFERENCE share — the one the capital-income ratio below is defined against — and it is now
@@ -136,35 +136,35 @@ export const UNEMPLOYMENT_REPLACEMENT_RATE = 0.35;
  * PUB1c — the labor share is TOTAL COMPENSATION, so the employer's payroll tax comes out of it
  * before households see a wage. Splits a wage bill into what the treasury gets and what is paid.
  */
-export function splitWageBill(totalCompensationUSD: number): { grossWagesUSD: number; employerPayrollTaxUSD: number } {
-  const grossWagesUSD = totalCompensationUSD / (1 + EMPLOYER_PAYROLL_TAX_RATE);
-  return { grossWagesUSD, employerPayrollTaxUSD: totalCompensationUSD - grossWagesUSD };
+export function splitWageBill(totalCompensationLocal: number): { grossWagesLocal: number; employerPayrollTaxLocal: number } {
+  const grossWagesLocal = totalCompensationLocal / (1 + EMPLOYER_PAYROLL_TAX_RATE);
+  return { grossWagesLocal, employerPayrollTaxLocal: totalCompensationLocal - grossWagesLocal };
 }
 
-export function computeHouseholdDisposableIncomeUSD(parts: {
+export function computeHouseholdDisposableIncomeLocal(parts: {
   /** TOTAL COMPENSATION (the labor share). The employer payroll tax is split out inside, so
    * callers pass one number and cannot disagree about where the split happens. */
-  wageIncomeUSD: number;
+  wageIncomeLocal: number;
   /**
    * PUB3b: the government's REAL transfer obligation this week (unemployment benefits plus the
-   * social/retirement program), from `governmentObligationsWeeklyUSD`. It used to be derived here
+   * social/retirement program), from `governmentObligationsWeeklyLocal`. It used to be derived here
    * as a share of the spending budget — a second representation of a number the budget already
    * owned, and the reason the transfer line and the budget line could disagree.
    */
-  transfersWeeklyUSD: number;
+  transfersWeeklyLocal: number;
 }): number {
   // Capital income is a share of OUTPUT, keyed off total compensation — it has nothing to do
   // with the payroll tax, and deriving it from post-tax wages shrank it by the payroll rate
   // (measured: the identity assert fired at 78.66% against a required 79.46%).
-  const capitalIncomeUSD = parts.wageIncomeUSD * HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR;
-  const { grossWagesUSD } = splitWageBill(parts.wageIncomeUSD);
+  const capitalIncomeLocal = parts.wageIncomeLocal * HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR;
+  const { grossWagesLocal } = splitWageBill(parts.wageIncomeLocal);
   // PUB3b: the transfers households receive ARE the ones the government budgeted, annualised.
   // The `max(computedTransfers, unemploymentBenefits)` this replaces existed because neither
   // number was real; now unemployment benefits are one term INSIDE the obligation, so the
   // stabilizer is a sum rather than a comparison.
-  const transfersUSD = Math.max(0, parts.transfersWeeklyUSD) * 52;
-  const grossIncomeUSD = grossWagesUSD + capitalIncomeUSD + transfersUSD;
-  return grossIncomeUSD * (1 - HOUSEHOLD_EFFECTIVE_TAX_RATE);
+  const transfersLocal = Math.max(0, parts.transfersWeeklyLocal) * 52;
+  const grossIncomeLocal = grossWagesLocal + capitalIncomeLocal + transfersLocal;
+  return grossIncomeLocal * (1 - HOUSEHOLD_EFFECTIVE_TAX_RATE);
 }
 
 /**
@@ -196,19 +196,19 @@ export function computeHouseholdDisposableIncomeUSD(parts: {
  * reach GDP through C, see GOV_PROCUREMENT_SHARE_OF_SPENDING); I and NX are passed in as the
  * real figures their own subsystems produce.
  */
-export function computeExpenditureGdpUSD(parts: {
-  householdIncomeUSD: number;
+export function computeExpenditureGdpLocal(parts: {
+  householdIncomeLocal: number;
   savingsRate: number;
-  investmentUSD: number;
+  investmentLocal: number;
   /** PUB1e/PUB3b: G is the procurement the government REALLY bought, annualised. */
-  governmentPurchasesUSD: number;
-  netExportsUSD: number;
-}): { consumptionUSD: number; governmentPurchasesUSD: number; gdpUSD: number } {
-  const consumptionUSD = parts.householdIncomeUSD * (1 - parts.savingsRate);
-  const governmentPurchasesUSD = parts.governmentPurchasesUSD;
+  governmentPurchasesLocal: number;
+  netExportsLocal: number;
+}): { consumptionLocal: number; governmentPurchasesLocal: number; gdpLocal: number } {
+  const consumptionLocal = parts.householdIncomeLocal * (1 - parts.savingsRate);
+  const governmentPurchasesLocal = parts.governmentPurchasesLocal;
   return {
-    consumptionUSD,
-    governmentPurchasesUSD,
-    gdpUSD: consumptionUSD + parts.investmentUSD + governmentPurchasesUSD + parts.netExportsUSD,
+    consumptionLocal,
+    governmentPurchasesLocal,
+    gdpLocal: consumptionLocal + parts.investmentLocal + governmentPurchasesLocal + parts.netExportsLocal,
   };
 }

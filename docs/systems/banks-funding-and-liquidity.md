@@ -87,7 +87,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.a retail/household, sticky and insured to a limit | `src/engine/ledger/accounts.ts:householdDepositsAt` | ⚠️ |
 | A1.b corporate, operational | `src/engine/ledger/accounts.ts:corporateDepositsAt` | ✅ |
 | A1.c institutional/wholesale, rate-sensitive | `src/engine/ledger/accounts.ts:institutionalDepositsAt` | ⚠️ |
-| A1.d VERIFY stickiness differs by class | `src/engine/macro/banking.ts:stressedOutflowUSD` | ⚠️ |
+| A1.d VERIFY stickiness differs by class | `src/engine/macro/banking.ts:stressedOutflowLocal` | ⚠️ |
 | A2 wholesale borrowing — interbank, repo, CP | `src/domain/repo.ts:repoBorrowedLocal` | ⚠️ |
 | A2.a short, and it rolls | `src/domain/repo.ts:maturingAt` | ✅ |
 | A3 capital: equity and subordinated debt | `src/domain/banking.ts:bankEquityLocal` | ⚠️ |
@@ -100,9 +100,9 @@ checked by `scripts/check-atlas.sh`.
 | **B2 a blended cost of funds, read across the mix** | — | ❌ |
 | **B2.a which feeds the loan price** | `src/domain/bank-pricing.ts:quoteLoanMarginBps` | ❌ |
 | B3 net interest margin, and it can be negative | `src/engine/macro/banking.ts:netInterestMarginPct` | ✅ |
-| C1 liquid assets: reserves and pledgeable securities | `src/engine/macro/banking.ts:liquidityDrivenSovereignFloorUSD` | ✅ |
+| C1 liquid assets: reserves and pledgeable securities | `src/engine/macro/banking.ts:liquidityDrivenSovereignFloorLocal` | ✅ |
 | C1.a they differ by haircut and depth | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
-| C2 held against what could leave | `src/engine/macro/banking.ts:stressedOutflowUSD` | ✅ |
+| C2 held against what could leave | `src/engine/macro/banking.ts:stressedOutflowLocal` | ✅ |
 | **C2.a a buffer PREFERENCE derived from its own liabilities** | `src/engine/macro/banking.ts:bankCashBufferRatioOf` | ⚠️ |
 | C3 maturity transformation is the business | `src/domain/banking.ts:MORTGAGE_TERM_WEEKS` | ✅ |
 | C3.a VERIFY the gap is measurable | — | ❌ |
@@ -114,13 +114,13 @@ checked by `scripts/check-atlas.sh`.
 | D4.a which transmits into the credit book | — | ❌ |
 | D5 draws the facility, collateralised, at a penalty | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ⚠️ |
 | **D6 it can FAIL TO FUND ITSELF** | `src/domain/bank-resolution.ts:isBankUnderPca` | ❌ |
-| **D6.a FORBID no unbounded, uncollateralised, unpriced line** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanUSD` | ❌ |
+| **D6.a FORBID no unbounded, uncollateralised, unpriced line** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ❌ |
 | **E1 depositors can leave; A1.c leaves fastest** | — | ❌ |
 | **E2 they leave because they observe something** | — | ❌ |
 | E2.a and what they observe is observable | `src/ui/objects/company.tsx:bankCapitalRatio` | ✅ |
 | E3 leaving forces D2 and D4 | — | ❌ |
 | E3.a VERIFY the loop is self-reinforcing | — | ❌ |
-| E4 deposit insurance breaks it for retail, not wholesale | `src/domain/bank-resolution.ts:bankAssumedLiabilitiesUSD` | ⚠️ |
+| E4 deposit insurance breaks it for retail, not wholesale | `src/domain/bank-resolution.ts:bankAssumedLiabilitiesLocal` | ⚠️ |
 | E4.a which is why a run is wholesale first | — | ❌ |
 | E5 a run at one bank is information about others | — | ❌ |
 | F1 deposit lines by class, as reads of who banks there | `src/engine/ledger/accounts.ts:bankDepositLines` | ✅ |

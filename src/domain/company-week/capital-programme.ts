@@ -25,15 +25,15 @@ export interface CapitalProgrammeInputs {
   accumulatedDepreciationLocal: number;
   usefulLifeYears: number;
   /** What the firm earns and holds this week. */
-  weeklyEbitdaUSD: number;
-  weeklyInterestUSD: number;
+  weeklyEbitdaLocal: number;
+  weeklyInterestLocal: number;
   cashLocal: number;
-  currentLiabilitiesUSD: number;
+  currentLiabilitiesLocal: number;
   annualRevenueLocal: number;
-  newRevenueUSD: number;
+  newRevenueLocal: number;
   /** Last week's programme, which this one moves smoothly away from. */
-  priorMaintenanceCapexUSD: number;
-  priorGrowthCapexUSD: number;
+  priorMaintenanceCapexLocal: number;
+  priorGrowthCapexLocal: number;
   priorMaintenanceShortfallStreak: number;
   baselineGrowthCapexToRevenueRatio: number;
   /** Whether it can borrow to cover upkeep at all. */
@@ -49,8 +49,8 @@ export interface CapitalProgrammeInputs {
   mothballedPpeShare?: number;
   /** Financial conditions and the firm's standing. */
   effectiveDebtRate: number;
-  marketCapUSD: number;
-  totalDebtUSD: number;
+  marketCapLocal: number;
+  totalDebtLocal: number;
   avgCompetitiveness: number;
   /** §5-BRAINS — the management's horizon (weeks) and risk weight; median = the stated rule. */
   patienceWeeks?: number;
@@ -59,19 +59,19 @@ export interface CapitalProgrammeInputs {
 
 export interface CapitalProgramme {
   /** What upkeep costs if the plant is to stay whole: gross plant over its useful life. */
-  targetMaintenanceCapexUSD: number;
+  targetMaintenanceCapexLocal: number;
   /** What was actually funded, and what was therefore deferred. */
-  maintenanceCapexUSD: number;
-  maintenanceShortfallThisWeekUSD: number;
+  maintenanceCapexLocal: number;
+  maintenanceShortfallThisWeekLocal: number;
   maintenanceShortfallStreak: number;
   /** What the caller must issue as a bridge, if anything. Reported, never issued here. */
-  debtFundedMaintenanceUSD: number;
+  debtFundedMaintenanceLocal: number;
   /** Discretionary investment, after payout pressure, rate drag and the shortage signal. */
-  growthCapexUSD: number;
-  rndExpenseUSD: number;
-  capexUSD: number;
+  growthCapexLocal: number;
+  rndExpenseLocal: number;
+  capexLocal: number;
   /** The plant, rolled forward on what was COMMISSIONED — not what was ordered or delivered. */
-  weeklyDepreciationUSD: number;
+  weeklyDepreciationLocal: number;
   /** How much of this firm's free cash flow has nowhere productive to go. The dividend rule reads
    *  it, which is why it is reported rather than kept private: a firm out of reinvestment
    *  opportunity pays out, and that is one decision expressed in two places. */
@@ -84,25 +84,25 @@ export interface CapitalProgramme {
  * it was seeded at is what it stayed, and capital ARRIVED at ~0.5% of the stock a year against ~8%
  * straight-line depreciation. The anchor is the firm's own gross plant over its own useful life.
  */
-export function maintenanceTargetUSD(grossPPELocal: number, usefulLifeYears: number): number {
+export function maintenanceTargetLocal(grossPPELocal: number, usefulLifeYears: number): number {
   return grossPPELocal / Math.max(1, usefulLifeYears);
 }
 
 /** What a firm can put behind upkeep this week: operating cash, a small draw, and — only if it is
  *  investment grade — a bridge. A distressed company cannot borrow its way out of deferred upkeep. */
-export function maintenanceFundingCapacityUSD(i: CapitalProgrammeInputs): number {
-  const weeklyOperatingCashFlow = i.weeklyEbitdaUSD - i.weeklyInterestUSD;
-  const activePpeUSD = i.grossPPELocal * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
-  const weeklyDesired = maintenanceTargetUSD(activePpeUSD, i.usefulLifeYears) / 52;
-  const borrowing = bridgeCapacityUSD(i, weeklyDesired);
+export function maintenanceFundingCapacityLocal(i: CapitalProgrammeInputs): number {
+  const weeklyOperatingCashFlow = i.weeklyEbitdaLocal - i.weeklyInterestLocal;
+  const activePpeLocal = i.grossPPELocal * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
+  const weeklyDesired = maintenanceTargetLocal(activePpeLocal, i.usefulLifeYears) / 52;
+  const borrowing = bridgeCapacityLocal(i, weeklyDesired);
   return Math.max(0, weeklyOperatingCashFlow) + Math.max(0, i.cashLocal) * 0.05 + borrowing;
 }
 
 /** The weekly bridge a firm can draw against its upkeep: half the desired spend, investment grade
  *  only, and only from a house bank it actually has (measured §7.372: a BANK, banking nowhere,
  *  drew a maintenance facility from nobody — paper with no holder, interest paid to no one). */
-export function bridgeCapacityUSD(i: CapitalProgrammeInputs, weeklyDesiredMaintenanceUSD: number): number {
-  return i.isInvestmentGrade && i.hasHouseBank !== false ? weeklyDesiredMaintenanceUSD * 0.5 : 0;
+export function bridgeCapacityLocal(i: CapitalProgrammeInputs, weeklyDesiredMaintenanceLocal: number): number {
+  return i.isInvestmentGrade && i.hasHouseBank !== false ? weeklyDesiredMaintenanceLocal * 0.5 : 0;
 }
 
 export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramme {
@@ -113,36 +113,36 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   const patience = i.patienceWeeks ?? PATIENCE_MEDIAN_WEEKS;
   const ra = i.riskAversion ?? 1;
   // §5-DYN: mothballed plant draws no upkeep — that saving is most of why a firm mothballs.
-  const activePpeUSD = i.grossPPELocal * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
-  const targetMaintenanceCapexUSD = maintenanceTargetUSD(activePpeUSD, i.usefulLifeYears);
-  const weeklyDesiredMaintenance = targetMaintenanceCapexUSD / 52;
-  const weeklyOperatingCashFlow = i.weeklyEbitdaUSD - i.weeklyInterestUSD;
-  const borrowingCapacity = bridgeCapacityUSD(i, weeklyDesiredMaintenance);
-  const availableFunding = maintenanceFundingCapacityUSD(i);
+  const activePpeLocal = i.grossPPELocal * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
+  const targetMaintenanceCapexLocal = maintenanceTargetLocal(activePpeLocal, i.usefulLifeYears);
+  const weeklyDesiredMaintenance = targetMaintenanceCapexLocal / 52;
+  const weeklyOperatingCashFlow = i.weeklyEbitdaLocal - i.weeklyInterestLocal;
+  const borrowingCapacity = bridgeCapacityLocal(i, weeklyDesiredMaintenance);
+  const availableFunding = maintenanceFundingCapacityLocal(i);
 
   const weeklyFunded = Math.min(weeklyDesiredMaintenance, availableFunding);
   const fundedMaintenanceCapex = weeklyFunded * 52;
-  const maintenanceShortfallThisWeekUSD = Math.max(0, targetMaintenanceCapexUSD - fundedMaintenanceCapex);
-  const debtFundedMaintenanceUSD = Math.max(0,
+  const maintenanceShortfallThisWeekLocal = Math.max(0, targetMaintenanceCapexLocal - fundedMaintenanceCapex);
+  const debtFundedMaintenanceLocal = Math.max(0,
     Math.min(weeklyFunded, borrowingCapacity) - Math.max(0, weeklyOperatingCashFlow));
-  const maintenanceCapexUSD = Math.max(0, i.priorMaintenanceCapexUSD * 0.95 + fundedMaintenanceCapex * 0.05);
+  const maintenanceCapexLocal = Math.max(0, i.priorMaintenanceCapexLocal * 0.95 + fundedMaintenanceCapex * 0.05);
 
   // Deferred maintenance compounds; recovery is twice as fast as accumulation.
-  const maintenanceShortfallStreak = maintenanceShortfallThisWeekUSD > 0
+  const maintenanceShortfallStreak = maintenanceShortfallThisWeekLocal > 0
     ? i.priorMaintenanceShortfallStreak + 1
     : Math.max(0, i.priorMaintenanceShortfallStreak - 2);
 
   // GROWTH — discretionary, and disciplined by addressable opportunity rather than ambition.
-  const productiveReinvestmentEnvelope = i.newRevenueUSD * Math.max(0.01, i.addressableGrowthAnnual) * 1.5
+  const productiveReinvestmentEnvelope = i.newRevenueLocal * Math.max(0.01, i.addressableGrowthAnnual) * 1.5
     * (patience / PATIENCE_MEDIAN_WEEKS);
-  const fcfBeforeGrowthCapex = Math.max(0, weeklyOperatingCashFlow * 52 - maintenanceCapexUSD);
+  const fcfBeforeGrowthCapex = Math.max(0, weeklyOperatingCashFlow * 52 - maintenanceCapexLocal);
   const excessCashGeneration = Math.max(0, fcfBeforeGrowthCapex - productiveReinvestmentEnvelope);
   const payoutPressure = fcfBeforeGrowthCapex > 0 ? Math.min(1, excessCashGeneration / fcfBeforeGrowthCapex) : 0;
 
   const rateDrag = Math.max(0, i.effectiveDebtRate - 0.04) * 2.0 * ra;
-  const cashHealthFactor = i.cashLocal < 0 ? 0.05 : (i.cashLocal < i.currentLiabilitiesUSD * 0.25 * ra ? 0.4 : 1.0);
-  const safeMarketCap = Math.max(0, isFinite(i.marketCapUSD) ? i.marketCapUSD : 0);
-  const safeTotalDebt = Math.max(0, isFinite(i.totalDebtUSD) ? i.totalDebtUSD : 0);
+  const cashHealthFactor = i.cashLocal < 0 ? 0.05 : (i.cashLocal < i.currentLiabilitiesLocal * 0.25 * ra ? 0.4 : 1.0);
+  const safeMarketCap = Math.max(0, isFinite(i.marketCapLocal) ? i.marketCapLocal : 0);
+  const safeTotalDebt = Math.max(0, isFinite(i.totalDebtLocal) ? i.totalDebtLocal : 0);
   const safeRev = Math.max(1, isFinite(i.annualRevenueLocal) ? i.annualRevenueLocal : 1);
   const tobinsQ = Math.max(0.1, Math.min(10.0, safeMarketCap / Math.max(1, safeTotalDebt + safeRev * 1.5)));
   const qCapexEffect = (tobinsQ - 1) * 0.2;
@@ -154,7 +154,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   // the firm's finances and none about whether it can fill the orders in front of it.
   const shortageCapexMultiple = 1 + i.categoryShortfall * i.capacityCatchupShareAnnual;
 
-  const desiredGrowthCapex = i.newRevenueUSD * i.baselineGrowthCapexToRevenueRatio * (1 - rateDrag)
+  const desiredGrowthCapex = i.newRevenueLocal * i.baselineGrowthCapexToRevenueRatio * (1 - rateDrag)
     * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect)
     * growthCapexAllocationShare * shortageCapexMultiple;
   // §7.288 — A FIRM CANNOT BID CAPEX IT CANNOT FUND. Every term above is a reason to WANT
@@ -168,26 +168,26 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   // is sized against, one owner. Debt- or equity-funded expansion arrives the way it really
   // does: the firm RAISES the money first (the financing decision and the primary market),
   // the proceeds land as cash, and the next week's cap has grown by exactly what was raised.
-  const deployableCashUSD = Math.max(0,
+  const deployableCashLocal = Math.max(0,
     i.cashLocal - i.annualRevenueLocal * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * ra);
-  const growthFundingCapUSD = Math.max(0, fcfBeforeGrowthCapex) + deployableCashUSD;
-  const targetGrowthCapex = Math.min(desiredGrowthCapex, growthFundingCapUSD);
+  const growthFundingCapLocal = Math.max(0, fcfBeforeGrowthCapex) + deployableCashLocal;
+  const targetGrowthCapex = Math.min(desiredGrowthCapex, growthFundingCapLocal);
   // The stock-adjustment weight is the median's 0.10 at the median horizon (§7.288's convention),
   // and this board's own 1/horizon relative to it.
   const w = Math.min(1, 0.10 * (PATIENCE_MEDIAN_WEEKS / patience));
-  const growthCapexUSD = Math.max(0, i.priorGrowthCapexUSD * (1 - w) + targetGrowthCapex * w);
+  const growthCapexLocal = Math.max(0, i.priorGrowthCapexLocal * (1 - w) + targetGrowthCapex * w);
 
   return {
-    targetMaintenanceCapexUSD,
-    maintenanceCapexUSD,
-    maintenanceShortfallThisWeekUSD,
+    targetMaintenanceCapexLocal,
+    maintenanceCapexLocal,
+    maintenanceShortfallThisWeekLocal,
     maintenanceShortfallStreak,
-    debtFundedMaintenanceUSD,
-    growthCapexUSD,
-    rndExpenseUSD: 0,
-    capexUSD: maintenanceCapexUSD + growthCapexUSD,
+    debtFundedMaintenanceLocal,
+    growthCapexLocal,
+    rndExpenseLocal: 0,
+    capexLocal: maintenanceCapexLocal + growthCapexLocal,
     payoutPressure,
-    weeklyDepreciationUSD: i.grossPPELocal / (Math.max(1, i.usefulLifeYears) * 52),
+    weeklyDepreciationLocal: i.grossPPELocal / (Math.max(1, i.usefulLifeYears) * 52),
   };
 }
 
@@ -259,12 +259,12 @@ export function capacityRetirement(i: CapacityRetirementInputs): CapacityRetirem
 export function commissionCapital(
   underConstruction: { valueLocal: number; entersServiceWeek: number }[],
   week: number
-): { commissionedUSD: number; stillUnderConstruction: { valueLocal: number; entersServiceWeek: number }[] } {
-  let commissionedUSD = 0;
+): { commissionedLocal: number; stillUnderConstruction: { valueLocal: number; entersServiceWeek: number }[] } {
+  let commissionedLocal = 0;
   const stillUnderConstruction: { valueLocal: number; entersServiceWeek: number }[] = [];
   for (const lot of underConstruction) {
-    if (lot.entersServiceWeek <= week) commissionedUSD += lot.valueLocal;
+    if (lot.entersServiceWeek <= week) commissionedLocal += lot.valueLocal;
     else stillUnderConstruction.push(lot);
   }
-  return { commissionedUSD, stillUnderConstruction };
+  return { commissionedLocal, stillUnderConstruction };
 }

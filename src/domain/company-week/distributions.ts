@@ -18,9 +18,9 @@
 
 export interface DividendDecision {
   /** What the board declares each week, as an accrual. */
-  accrualWeeklyUSD: number;
+  accrualWeeklyLocal: number;
   /** What actually leaves this week — everything, or nothing. */
-  cashThisWeekUSD: number;
+  cashThisWeekLocal: number;
   /** Which constraint bound: the declared yield, or the earnings that have to cover it. */
   boundBy: 'declared-yield' | 'earnings';
 }
@@ -31,19 +31,19 @@ export interface DividendDecision {
  */
 export function dividendDecision(i: {
   declaredYield: number;
-  marketCapUSD: number;
-  netIncomeUSD: number;
+  marketCapLocal: number;
+  netIncomeLocal: number;
   maxPayoutRatio: number;
   weekOfQuarter: number;
   weeksInQuarter: number;
 }): DividendDecision {
-  const declaredWeekly = Math.max(0, i.declaredYield * i.marketCapUSD) / 52;
-  const sustainableWeekly = Math.max(0, i.netIncomeUSD) * i.maxPayoutRatio / 52;
-  const accrualWeeklyUSD = Math.min(declaredWeekly, sustainableWeekly);
+  const declaredWeekly = Math.max(0, i.declaredYield * i.marketCapLocal) / 52;
+  const sustainableWeekly = Math.max(0, i.netIncomeLocal) * i.maxPayoutRatio / 52;
+  const accrualWeeklyLocal = Math.min(declaredWeekly, sustainableWeekly);
   return {
-    accrualWeeklyUSD,
-    cashThisWeekUSD: i.weekOfQuarter === i.weeksInQuarter
-      ? accrualWeeklyUSD * i.weeksInQuarter
+    accrualWeeklyLocal,
+    cashThisWeekLocal: i.weekOfQuarter === i.weeksInQuarter
+      ? accrualWeeklyLocal * i.weeksInQuarter
       : 0,
     boundBy: sustainableWeekly < declaredWeekly ? 'earnings' : 'declared-yield',
   };
@@ -55,6 +55,6 @@ export function dividendDecision(i: {
  * the declared yield. No clamp is needed and none is used (§1.6) — it falls out of sizing the
  * payout on earnings rather than on capitalisation.
  */
-export function sustainableDividendWeeklyUSD(netIncomeUSD: number, maxPayoutRatio: number): number {
-  return Math.max(0, netIncomeUSD) * maxPayoutRatio / 52;
+export function sustainableDividendWeeklyLocal(netIncomeLocal: number, maxPayoutRatio: number): number {
+  return Math.max(0, netIncomeLocal) * maxPayoutRatio / 52;
 }

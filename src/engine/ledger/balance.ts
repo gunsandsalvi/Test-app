@@ -5,7 +5,7 @@
  * files**, and two mechanisms whose entire job is to absorb the damage: 02b's reconcile, which
  * INVENTS reserves for any balance a stage moved without a payment instruction (14.3B a week), and
  * the `Math.max(0, cashLocal)` overdraft clamp, which destroys negative balances and so creates the
- * money that was overspent (6.0B a week). `unbackedBankCashUSD` ran 213B to 585B in seventeen weeks.
+ * money that was overspent (6.0B a week). `unbackedBankCashLocal` ran 213B to 585B in seventeen weeks.
  *
  * None of that is a bug anyone introduced. It is what happens when conservation is a habit that
  * forty-three authors happen to share rather than a property of the code. The fix is not to find the
@@ -27,7 +27,7 @@ import { PartyRef } from './party';
 /**
  * THE END-STATE NOUN, STATED AS A TYPE (§5-STRUCT Tier 2's target). Today a balance is a
  * differently-named field on five types resolved by a kind-switch — `cash` on a Company,
- * `cashLocal` on an entity, `cashReservesUSD` / four deposit lines on a bank sheet, `cashLocal` on a
+ * `cashLocal` on an entity, `cashReservesLocal` / four deposit lines on a bank sheet, `cashLocal` on a
  * pool — which is the structural root under every money row §7.241 audited: the grep that cannot
  * see `cash` by name, the spread rebuild, the payer an instruction cannot express. The migration's
  * target is that those fields become VIEWS of rows shaped like this, owned by the ledger, keyed by
@@ -39,5 +39,5 @@ export interface Account {
   readonly holder: PartyRef;
   /** The named bank whose liability this balance is (null only for the central bank's own). */
   readonly bankTicker: string | null;
-  balanceUSD: number;
+  balanceLocal: number;
 }

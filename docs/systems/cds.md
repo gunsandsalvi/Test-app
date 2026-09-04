@@ -100,7 +100,7 @@ checked by `scripts/check-atlas.sh`.
 | A3 the protection leg is contingent; its value a read from the cleared spread | `src/domain/derivatives/classes/cds.ts:closeOutUSDToB` | ⚠️ |
 | A4 the reference entity exists here and can default | `src/engine/audit/ownership.ts:o8` | ✅ |
 | A4.a FORBID no protection on an entity nobody can observe failing | `src/engine/audit/ownership.ts:o5` | ✅ |
-| B1 the buyer of protection has a reason | `src/domain/derivatives/classes/cds.ts:protectionNeedUSD` | ⚠️ |
+| B1 the buyer of protection has a reason | `src/domain/derivatives/classes/cds.ts:protectionNeedLocal` | ⚠️ |
 | B1.a a bank hedges a loan it cannot sell | `src/domain/derivatives/classes/cds.ts:LARGE_EXPOSURE_LIMIT_OF_CAPITAL` | ✅ |
 | B2 the seller of protection has a reason | `src/engine/simulation/stages/asset-allocation.ts:computeReservationSpreadBps` | ✅ |
 | B2.a short a jump — capital and margin matter more than the mark | `src/domain/derivatives/classes/cds.ts:pfeAddOnRateFor` | ⚠️ |
@@ -120,7 +120,7 @@ checked by `scripts/check-atlas.sh`.
 | D5 VERIFY Σ protection paid = Σ received; a default is a transfer | — | ❌ |
 | E1 CDS moves credit risk to where it is not observed | `src/engine/simulation/stages/09-concentration-risk.ts:runConcentrationRiskStage` | ⚠️ |
 | E2 wrong-way risk: the seller correlated with the reference | — | ❌ |
-| E3 net notional per reference entity is a real concentration | `src/domain/derivatives/standing-book.ts:coverUSD` | ⚠️ |
+| E3 net notional per reference entity is a real concentration | `src/domain/derivatives/standing-book.ts:coverLocal` | ⚠️ |
 | E4 FORBID no protection that pays without a payer | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` | ✅ |
 
 ---

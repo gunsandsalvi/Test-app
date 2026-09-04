@@ -86,7 +86,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | B1 what it measures: the probability of failing to perform | `src/engine/simulation/stages/shared-helpers.ts:computeAnnualDefaultProbability` | ⚠️ |
 | B2 and, separately, the loss given that failure | `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ⚠️ |
 | **B2.a an instrument's rating differs from its issuer's** | — | ❌ |
-| B3 it is relative: an ordering across issuers | `src/engine/simulation/credit.ts:peerMedianRevenueUSD` | ✅ |
+| B3 it is relative: an ordering across issuers | `src/engine/simulation/credit.ts:peerMedianRevenueLocal` | ✅ |
 | C1 **mandates** restrict what a fund, insurer or pension may hold | `src/engine/simulation/stages/asset-allocation.ts:subInvestmentGradeSizeFactor` | ⚠️ |
 | C1.a a downgrade past a boundary is a synchronised forced sale | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:subIG` | ⚠️ |
 | C2 **capital charges** depend on it | `src/engine/simulation/stages/asset-allocation.ts:spreadRiskCapitalChargeRate` | ✅ |

@@ -8,7 +8,7 @@
  */
 
 import { RegionId, OccupationType } from '../../types';
-import { getRegionProductivityPerCapitaUSD } from './population';
+import { getRegionProductivityPerCapitaLocal } from './population';
 import { derivedLabourShareOfValueAdded } from '../../domain/industry-registry';
 import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from '../simulation/constants';
 import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
@@ -72,7 +72,7 @@ const BASELINE_WEIGHTED_TIER_PREMIUM = (Object.keys(OCCUPATION_SKILL_TIER) as Oc
  */
 const baseWageTableByRegion = new Map<RegionId, Record<OccupationType, number>>();
 
-export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType, number> {
+export function getBaseAnnualWageLocal(regionId: RegionId): Record<OccupationType, number> {
   // SCALE: every input below is fixed for the whole run — the region's productivity, its neutral
   // rate, the equity risk premium and the registry the labour share is derived from. Stage 08
   // calls this TWICE PER COMPANY, so ~5,000 times a week, and COH3 turned the body from a constant
@@ -80,7 +80,7 @@ export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType,
   // table per region is shared rather than rebuilt.
   const memo = baseWageTableByRegion.get(regionId);
   if (memo !== undefined) return memo;
-  const productivity = getRegionProductivityPerCapitaUSD(regionId);
+  const productivity = getRegionProductivityPerCapitaLocal(regionId);
   // COH3 — THE WAGE LEVEL IS NO LONGER A STATED LABOUR SHARE. `LABOR_SHARE_OF_OUTPUT = 0.62` set
   // every occupation's base wage, and through it household income, the labour market, every
   // employer's payroll and the freight market's crew cost. It is derived now from what the
@@ -120,18 +120,18 @@ export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType,
  * `offeredWageIndex`, which moves with its own hiring success, or the SME tier's discount. The
  * per-occupation `wageIndex` is the market's, set in the labor market by what employers offer.
  */
-export function weeklyWageBillUSD(
+export function weeklyWageBillLocal(
   headcount: number,
   occupationMix: Partial<Record<OccupationType, number>>,
-  baseAnnualWageUSD: Record<OccupationType, number>,
+  baseAnnualWageLocal: Record<OccupationType, number>,
   occupationPools: Record<OccupationType, { wageIndex: number }>,
   wageMultiplier = 1
 ): number {
   if (!(headcount > 0)) return 0;
-  const annualPerWorkerUSD = (Object.keys(occupationMix) as OccupationType[]).reduce((sum, occ) => {
+  const annualPerWorkerLocal = (Object.keys(occupationMix) as OccupationType[]).reduce((sum, occ) => {
     const share = occupationMix[occ] ?? 0;
     if (share <= 0) return sum;
-    return sum + share * (baseAnnualWageUSD[occ] ?? 0) * (occupationPools[occ]?.wageIndex ?? 1);
+    return sum + share * (baseAnnualWageLocal[occ] ?? 0) * (occupationPools[occ]?.wageIndex ?? 1);
   }, 0);
-  return (headcount * annualPerWorkerUSD * wageMultiplier) / 52;
+  return (headcount * annualPerWorkerLocal * wageMultiplier) / 52;
 }

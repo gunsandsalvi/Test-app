@@ -160,7 +160,7 @@ export const company = defineObject<Company>({
         ) : (
           <Card style={{ padding: '2px 0' }}>
             <KV k="revenue" hint="trailing year" v={money(c.annualRevenue)} />
-            <KV k="ebitda margin" hint={c.expectedEbitdaUSD !== undefined && c.annualRevenue > 0 ? `management expects ${pctLevel(c.expectedEbitdaUSD / c.annualRevenue)}` : undefined} v={c.annualRevenue > 0 ? pctLevel(c.ebitda / c.annualRevenue) : '—'} />
+            <KV k="ebitda margin" hint={c.expectedEbitdaLocal !== undefined && c.annualRevenue > 0 ? `management expects ${pctLevel(c.expectedEbitdaLocal / c.annualRevenue)}` : undefined} v={c.annualRevenue > 0 ? pctLevel(c.ebitda / c.annualRevenue) : '—'} />
             <KV k="net debt / ebitda" hint={`leverage ${ratio(c.leverage)}`} v={c.ebitda > 0 ? ratio(netDebt / c.ebitda) : '—'} />
             <KV k="interest coverage" v={ratio(c.interestCoverage)} />
             <KV k="cash" v={money(cashLocal)} />

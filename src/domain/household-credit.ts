@@ -104,11 +104,11 @@ export interface BufferBand {
  * the same cross-section (rule 8).
  */
 export function bufferMonthsOf(tier: {
-  liquidSavingsUSD?: number; shareOfIncomeUSD?: number;
+  liquidSavingsLocal?: number; shareOfIncomeLocal?: number;
 }): number {
-  const monthlyUSD = Math.max(0, tier.shareOfIncomeUSD ?? 0) / 12;
-  if (!(monthlyUSD > 0)) return 0;
-  return Math.max(0, tier.liquidSavingsUSD ?? 0) / monthlyUSD;
+  const monthlyLocal = Math.max(0, tier.shareOfIncomeLocal ?? 0) / 12;
+  if (!(monthlyLocal > 0)) return 0;
+  return Math.max(0, tier.liquidSavingsLocal ?? 0) / monthlyLocal;
 }
 
 /**

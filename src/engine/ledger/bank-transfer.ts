@@ -14,18 +14,18 @@ import { BankResolutionPlan, mergeDesks, mergeHouseholdPool } from '../../domain
  * the amount the caller says is assumed; equity is the caller's arithmetic (it depends on both
  * sides).
  */
-export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, centralBankLoanAssumedUSD: number): void {
+export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, centralBankLoanAssumedLocal: number): void {
   // A3.6c: the deposit lines are the depositors' accounts — the household sector's and the
   // pools' rows move with `moveSectorRowsToBank` at the caller, the firms' and institutions'
   // accounts follow their house bank (`rekeyBankLinks`); nothing to move here.
-  acquirer.centralBankLoanLocal = (acquirer.centralBankLoanLocal ?? 0) + centralBankLoanAssumedUSD; target.centralBankLoanLocal = 0;
+  acquirer.centralBankLoanLocal = (acquirer.centralBankLoanLocal ?? 0) + centralBankLoanAssumedLocal; target.centralBankLoanLocal = 0;
   acquirer.clientMarginLocal = (acquirer.clientMarginLocal ?? 0) + (target.clientMarginLocal ?? 0); target.clientMarginLocal = 0;
   // Secured lines and the paper behind them.
   acquirer.srfBorrowingLocal = (acquirer.srfBorrowingLocal ?? 0) + (target.srfBorrowingLocal ?? 0); target.srfBorrowingLocal = 0;
   acquirer.repoBorrowedLocal = (acquirer.repoBorrowedLocal ?? 0) + (target.repoBorrowedLocal ?? 0); target.repoBorrowedLocal = 0;
   acquirer.repoLentLocal = (acquirer.repoLentLocal ?? 0) + (target.repoLentLocal ?? 0); target.repoLentLocal = 0;
   acquirer.onRrpLendingLocal = (acquirer.onRrpLendingLocal ?? 0) + (target.onRrpLendingLocal ?? 0); target.onRrpLendingLocal = 0;
-  acquirer.repoEncumberedCollateralUSD = (acquirer.repoEncumberedCollateralUSD ?? 0) + (target.repoEncumberedCollateralUSD ?? 0); target.repoEncumberedCollateralUSD = 0;
+  acquirer.repoEncumberedCollateralLocal = (acquirer.repoEncumberedCollateralLocal ?? 0) + (target.repoEncumberedCollateralLocal ?? 0); target.repoEncumberedCollateralLocal = 0;
   // The credit books.
   acquirer.businessLoans = [...(acquirer.businessLoans || []), ...(target.businessLoans || [])];
   target.businessLoans = [];
@@ -48,13 +48,13 @@ export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, 
   acquirer.dealerDeskInventory = mergeDesks(acquirer.dealerDeskInventory, target.dealerDeskInventory);
   target.dealerDeskInventory = undefined;
   if (target.fxDealerBook) {
-    const mine = acquirer.fxDealerBook ?? { netNotionalByRegion: {}, initialMarginHeldUSD: 0, grossNotionalUSD: 0 };
+    const mine = acquirer.fxDealerBook ?? { netNotionalByRegion: {}, initialMarginHeldLocal: 0, grossNotionalLocal: 0 };
     const net = { ...mine.netNotionalByRegion };
     Object.entries(target.fxDealerBook.netNotionalByRegion || {}).forEach(([k, v]) => { net[k] = (net[k] ?? 0) + v; });
     acquirer.fxDealerBook = {
       ...mine, netNotionalByRegion: net,
-      initialMarginHeldUSD: mine.initialMarginHeldUSD + target.fxDealerBook.initialMarginHeldUSD,
-      grossNotionalUSD: mine.grossNotionalUSD + target.fxDealerBook.grossNotionalUSD,
+      initialMarginHeldLocal: mine.initialMarginHeldLocal + target.fxDealerBook.initialMarginHeldLocal,
+      grossNotionalLocal: mine.grossNotionalLocal + target.fxDealerBook.grossNotionalLocal,
     };
     target.fxDealerBook = undefined;
   }
@@ -78,7 +78,7 @@ export function mergeBankSheets(acquirer: BankingSector, target: BankingSector):
  * zeroing below to erase while the central bank still carries the asset.
  */
 export function assumeBankBooks(acquirer: BankingSector, target: BankingSector, plan: BankResolutionPlan, cashLocal: number): void {
-  absorbBankSheet(acquirer, target, plan.centralBankLoanAssumedUSD);
-  acquirer.bankEquityLocal += plan.netBookUSD - cashLocal;
+  absorbBankSheet(acquirer, target, plan.centralBankLoanAssumedLocal);
+  acquirer.bankEquityLocal += plan.netBookLocal - cashLocal;
   target.bankEquityLocal = cashLocal;
 }

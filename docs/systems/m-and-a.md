@@ -82,7 +82,7 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | **A1 an acquirer, a target, and a price the owners accept** | `src/engine/simulation/stages/10-mergers.ts:purchasePrice` | ⚠️ |
-| A2 ownership transfers in the register; holders are paid | `src/engine/simulation/stages/10-mergers.ts:institutionalTenderUSD` | ✅ |
+| A2 ownership transfers in the register; holders are paid | `src/engine/simulation/stages/10-mergers.ts:institutionalTenderLocal` | ✅ |
 | A3 the consideration is cash, shares, or both | `src/engine/simulation/stages/10-mergers.ts:cashPaid` | ⚠️ |
 | **A3.a cash needs funding and raises leverage** | — | ❌ |
 | A3.b shares dilute the acquirer's existing owners | `src/engine/simulation/stages/10-mergers.ts:newShares` | ✅ |
@@ -103,7 +103,7 @@ checked by `scripts/check-atlas.sh`.
 | **D2.a bonds can fall on the day shares rise** | — | ❌ |
 | D3 the target's shares cease to exist | `src/engine/simulation/stages/10-mergers.ts:stockRatio` | ✅ |
 | D4 employees, suppliers and customers carry over | `src/engine/simulation/stages/10-mergers.ts:novateContracts` | ⚠️ |
-| D5 the money paid equals what was put up | `src/engine/simulation/stages/10-mergers.ts:institutionalTenderUSD` | ✅ |
+| D5 the money paid equals what was put up | `src/engine/simulation/stages/10-mergers.ts:institutionalTenderLocal` | ✅ |
 | E1 FORBID no acquisition without payment | `src/engine/simulation/stages/10-mergers.ts:pay` | ✅ |
 | E2 FORBID no target that disappears with liabilities open | `src/engine/simulation/stages/10-mergers.ts:consolidateTranches` | ✅ |
 | **E3 FORBID no synergy assumed into the cash flows** | `src/engine/simulation/stages/10-mergers.ts:runMergersStage` | ❌ |

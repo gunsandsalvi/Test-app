@@ -67,7 +67,7 @@ export interface DerivativeClassProfile {
   periodicLegUSDToB(c: DerivativeContract, m: DerivativeMarketView): DerivativeLeg | null;
   /**
    * The contract's cumulative value to A at current prints (mark-leg classes). The lifecycle
-   * settles the delta against `settledMarkUSD` and owns the delta rule. Null: no marking this
+   * settles the delta against `settledMarkLocal` and owns the delta rule. Null: no marking this
    * week (no fresh print) — for rate-leg classes, always null.
    */
   markToMarketUSDToA(c: DerivativeContract, m: DerivativeMarketView): number | null;

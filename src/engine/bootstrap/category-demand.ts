@@ -41,14 +41,14 @@ export const TARGET_FIRMS_PER_REGION = 200;
  * is its dollars at that price.
  */
 export function deriveSubUnitUnitPrice(
-  finalDemandUSD: number,
+  finalDemandLocal: number,
   buyerMix: Record<BuyerType, number>,
   population: number,
   firmCount: number,
   unitId?: string,
-  intermediateDemandUSD?: number,
+  intermediateDemandLocal?: number,
   /** The household's OWN final dollars for this good (the C term of final demand). */
-  householdFinalDemandUSD?: number
+  householdFinalDemandLocal?: number
 ): number {
   const householdWeight = buyerMix.HOUSEHOLD + buyerMix.GOVERNMENT; // government spending also serves the population
   const corporateWeight = buyerMix.CORPORATE;
@@ -67,8 +67,8 @@ export function deriveSubUnitUnitPrice(
   // (the CPI ×2 the model carried its whole life). With this rule the seed's want, budget and
   // supply agree by construction; a shortage is then something the world DOES, not something
   // it opens with.
-  if ((householdFinalDemandUSD ?? 0) > 0 && population > 0 && (spec?.householdUnitsPerCapitaAnnual ?? 0) > 0) {
-    return Number(((householdFinalDemandUSD as number) / (population * hhIntensity)).toFixed(2));
+  if ((householdFinalDemandLocal ?? 0) > 0 && population > 0 && (spec?.householdUnitsPerCapitaAnnual ?? 0) > 0) {
+    return Number(((householdFinalDemandLocal as number) / (population * hhIntensity)).toFixed(2));
   }
   // A PURE INTERMEDIATE has no final buyer to price it: final demand is $0 by construction, so
   // this rule seeded its price at 0 and every reader shipped it weightless (§7.241's guard is
@@ -76,13 +76,13 @@ export function deriveSubUnitUnitPrice(
   // THEM: the dollars its actual buyers pay over the physical volume those buyers take. This is
   // not the intermediate-demand-as-price trap — the trap was a FINAL-buyer volume under a
   // total-output numerator; here numerator and volume count the same (producer) buyers.
-  if (!(finalDemandUSD > 0) && (intermediateDemandUSD ?? 0) > 0) {
+  if (!(finalDemandLocal > 0) && (intermediateDemandLocal ?? 0) > 0) {
     const producerVolumeUnits = Math.max(1, firmCount * corpIntensity * corporateWeight);
-    return Number(((intermediateDemandUSD as number) / producerVolumeUnits).toFixed(2));
+    return Number(((intermediateDemandLocal as number) / producerVolumeUnits).toFixed(2));
   }
   const physicalVolumeUnits = Math.max(
     1,
     population * hhIntensity * householdWeight + firmCount * corpIntensity * corporateWeight
   );
-  return Number((finalDemandUSD / physicalVolumeUnits).toFixed(2));
+  return Number((finalDemandLocal / physicalVolumeUnits).toFixed(2));
 }

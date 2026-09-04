@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { overPledgedByBond, isFullyBacked, pledgedFaceByBond, PLEDGE_ROUNDING_TOLERANCE_USD }
+import { overPledgedByBond, isFullyBacked, pledgedFaceByBond, PLEDGE_ROUNDING_TOLERANCE_LOCAL }
   from '../src/domain/collateral';
 
 const position = (pledged: [string, number][], held: [string, number][]) =>
@@ -24,7 +24,7 @@ test('a bond pledged against nothing held is over-pledged by the whole face', ()
 });
 
 test('the tolerance is a rounding allowance and nothing more', () => {
-  assert.ok(PLEDGE_ROUNDING_TOLERANCE_USD <= 1);
+  assert.ok(PLEDGE_ROUNDING_TOLERANCE_LOCAL <= 1);
   assert.equal(isFullyBacked(position([['USA-GOV-5Y-INIT', 1_000_000.5]], [['USA-GOV-5Y-INIT', 1_000_000]])), true);
   assert.equal(isFullyBacked(position([['USA-GOV-5Y-INIT', 1_000_002]], [['USA-GOV-5Y-INIT', 1_000_000]])), false);
 });

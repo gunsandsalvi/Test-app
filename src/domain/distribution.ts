@@ -69,8 +69,8 @@ export function channelMarginRate(subUnitId: string, shortRateAnnual: number): n
  * whole channel margin on week one and printed 30% inflation on a world where no price had moved.
  * Two price concepts in one ratio. One function now, called from both sides.
  */
-export function shelfPriceUSD(landedUnitPriceUSD: number, subUnitId: string, shortRateAnnual: number): number {
-  return landedUnitPriceUSD * (1 + channelMarginRate(subUnitId, shortRateAnnual));
+export function shelfPriceLocal(landedUnitPriceLocal: number, subUnitId: string, shortRateAnnual: number): number {
+  return landedUnitPriceLocal * (1 + channelMarginRate(subUnitId, shortRateAnnual));
 }
 
 /** The sub-unit whose firms run the channel — the same sector that sells the service. */

@@ -16,10 +16,10 @@ export type WealthTier = 'BOTTOM_50' | 'NEXT_40' | 'TOP_9' | 'TOP_1';
 
 export interface WealthTierData {
   shareOfHouseholds: number;
-  shareOfIncomeUSD: number;
-  shareOfNetWorthUSD: number;
+  shareOfIncomeLocal: number;
+  shareOfNetWorthLocal: number;
   /** HH4c — last week's marked net worth, so the tier wealth effect reads a real CHANGE. */
-  priorNetWorthUSD?: number;
+  priorNetWorthLocal?: number;
   savingsRate: number;
   /**
    * DIST/COH — this tier's CUMULATIVE saving, the stock its deposit share is derived from.
@@ -30,12 +30,12 @@ export interface WealthTierData {
    * thing that produces it (rule 2). This accumulates the per-tier saving the cohorts already
    * measure, and the share is its outcome.
    */
-  accumulatedSavingsUSD?: number;
+  accumulatedSavingsLocal?: number;
   /**
    * COH1 — WHAT IS SPENDABLE NOW, AND WHAT IS ACCUMULATED. Two stocks, because they are two
    * things, and one number was doing both jobs.
    *
-   * `accumulatedSavingsUSD` above drove the DEPOSIT split, the equity-like split, the private-
+   * `accumulatedSavingsLocal` above drove the DEPOSIT split, the equity-like split, the private-
    * business split and the institutional-claims split — every asset class at once, off one stock
    * that only ever tracked the saving FLOW and never where the saving went. A tier that put
    * everything into a house and a pension therefore looked as liquid as one that held cash.
@@ -49,10 +49,10 @@ export interface WealthTierData {
    * This is what the buffer rule needs to have something to be a buffer OF, and it makes the
    * wealthy-hand-to-mouth middle causal: house-rich and pension-rich is a large INVESTED stock
    * and a small LIQUID one, so the tier sits below its buffer and saves out of income like a poor
-   * household. `accumulatedSavingsUSD` remains their sum.
+   * household. `accumulatedSavingsLocal` remains their sum.
    */
-  liquidSavingsUSD?: number;
-  investedSavingsUSD?: number;
+  liquidSavingsLocal?: number;
+  investedSavingsLocal?: number;
   /**
    * RULE 19 — this tier's MEASURED debt and institutional claims, so the cohort build can weight
    * by them instead of by a stated table.
@@ -63,9 +63,9 @@ export interface WealthTierData {
    * split, measured where the balance sheets are built.
    */
   debtLocal?: number;
-  institutionalClaimsUSD?: number;
+  institutionalClaimsLocal?: number;
   equityExposureShare: number;
-  homeEquityUSD?: number;
+  homeEquityLocal?: number;
 }
 
 /**
@@ -85,23 +85,23 @@ export interface HouseholdCohort {
   /** Earners (employed + unemployed), not persons — one earner per labor-force member. */
   earnerCount: number;
   employedCount: number;
-  wageIncomeUSD: number;
-  unemploymentBenefitsUSD: number;
+  wageIncomeLocal: number;
+  unemploymentBenefitsLocal: number;
   /** Means-tested government transfers beyond unemployment benefits. */
-  transferIncomeUSD: number;
+  transferIncomeLocal: number;
   /** Still the aggregate constant share allocated by tier equity exposure — real dividend and
    * interest receipts are HH4b's, with the S1 seed identity re-derived when they land. */
-  capitalIncomeUSD: number;
-  grossIncomeUSD: number;
-  taxUSD: number;
-  disposableIncomeUSD: number;
+  capitalIncomeLocal: number;
+  grossIncomeLocal: number;
+  taxLocal: number;
+  disposableIncomeLocal: number;
   /** This cohort's share of the real HH3 debt service — recorded burden, not yet a budget
    * debit (see the interface comment). */
-  debtServiceUSD: number;
-  savingsUSD: number;
+  debtServiceLocal: number;
+  savingsLocal: number;
   /** PUB1c — the consumption tax inside this cohort's budget, remitted by merchants. */
-  consumptionTaxUSD: number;
-  consumptionBudgetUSD: number;
+  consumptionTaxLocal: number;
+  consumptionBudgetLocal: number;
 }
 
 export type LifeCycleStage = 'EARLY_CAREER' | 'PEAK_EARNING' | 'PRE_RETIREMENT' | 'RETIRED';
@@ -133,12 +133,12 @@ export const AVERAGE_HOUSEHOLD_SIZE = 2.5;
 
 export interface HousingMarket {
   regionId: RegionId;
-  medianHomePriceUSD: number;
-  baselineHomePriceUSD: number;
+  medianHomePriceLocal: number;
+  baselineHomePriceLocal: number;
   priceIndex: number;
   historicalPrices: number[];
   ownershipRatePct: number;
-  mortgageOriginationVolumeUSD: number;
+  mortgageOriginationVolumeLocal: number;
   /**
    * HSG — the BEST mortgage quote in this region last week, annual.
    *
@@ -189,7 +189,7 @@ export type CreditTier = 'SUPER_PRIME' | 'PRIME' | 'NEAR_PRIME' | 'SUBPRIME';
 export interface CreditTierBook {
   tier: CreditTier;
   shareOfHouseholds: number;
-  debtBalanceUSD: number;
+  debtBalanceLocal: number;
   avgInterestRate: number;
   delinquencyRatePct: number;
 }
@@ -208,7 +208,7 @@ export interface HouseholdState {
   stapleSpendShare: number;
   standardSpendShare: number;
   luxurySpendShare: number;
-  netWorthUSD: number;
+  netWorthLocal: number;
   durableGoodsStockUnits?: number;
   // §5-WIRES A3.4: the sector's deposits are its rows at the region's banks (`householdDepositsOf`).
   /**
@@ -218,9 +218,9 @@ export interface HouseholdState {
    * for it, while feeding net worth, the wealth effect and consumption. Measured at 2,224B against
    * a total real market capitalisation of 1,052B (§7.45).
    */
-  equityHoldingsUSD: number;
+  equityHoldingsLocal: number;
   /** Listed shares households really hold — the float institutions do not, marked at 07e's prices. */
-  directEquityUSD: number;
+  directEquityLocal: number;
   /** Index-fund shares, created through the real AP mechanism and marked at the fund's NAV. */
   etfShares: { fundId: string; shares: number }[];
   /**
@@ -231,15 +231,15 @@ export interface HouseholdState {
    * pays the HOUSEHOLD party the cleared proceeds. The announce-then-price week is the same
    * rhythm every ETF flow already follows. Zero (or absent) = nothing to sell.
    */
-  pendingDirectEquitySaleUSD?: number;
+  pendingDirectEquitySaleLocal?: number;
   /** Marked value of the above, carried so net worth does not have to reach into the fund list. */
-  etfHoldingsUSD: number;
+  etfHoldingsLocal: number;
   /**
    * Founder stakes in the private tier. Households own the unlisted economy — HC gave every
    * private firm an `ownership.founderPct`, and this is what that block is worth at the same
    * cleared multiple the sponsors mark at. The single largest real component, and it was invisible.
    */
-  privateBusinessEquityUSD: number;
+  privateBusinessEquityLocal: number;
   /**
    * HH2 — the housing stock households own, at this week's median price. Households carried
    * 1,061B of mortgage debt and owned no house: a balance sheet with the liability and not the
@@ -249,16 +249,16 @@ export interface HouseholdState {
    * of the debt, so a move in home prices moves household wealth, which is the transmission the
    * omission was suppressing.
    */
-  housingStockUSD: number;
+  housingStockLocal: number;
   /** The owners' share of it, after the mortgages secured on it. A derived view, carried for the UI. */
-  homeEquityUSD: number;
+  homeEquityLocal: number;
   /**
    * Last week's fully-marked net worth, carried so the wealth effect can be driven by the CHANGE
    * in wealth rather than by its level. See the note in `evolution.ts`: a level in a growth rate
    * is a units error, and it was invisible until HH2 put the house on the balance sheet and moved
    * the ratio from 1.5x to 4.6x.
    */
-  priorNetWorthUSD: number;
+  priorNetWorthLocal: number;
   /**
    * HH1 — claims on institutions: insurance reserves, pension entitlements and fund shares, held
    * per institution so a claim can be marked against the balance sheet that owes it. When an
@@ -267,16 +267,16 @@ export interface HouseholdState {
    */
   institutionalClaims: { entityId: string; valueLocal: number }[];
   /** Marked total of the above. */
-  institutionalClaimsUSD: number;
+  institutionalClaimsLocal: number;
   /**
    * HH3 — DERIVED SUMS of the itemized household loan pools on the region's named banks
    * (BankingSector.householdLoans), written by the bank-diversification stage each week. The
    * banks own the books; these lines are the household sector's view of the same loans, never
    * a second stock evolved by its own formula.
    */
-  mortgageDebtUSD: number;
-  creditCardDebtUSD: number;
-  otherConsumerLoanDebtUSD: number;
+  mortgageDebtLocal: number;
+  creditCardDebtLocal: number;
+  otherConsumerLoanDebtLocal: number;
   /** HH4 — the ~20 occupation x wealth-tier cohorts this aggregate decomposes into. Built by
    * `macro/household-cohorts.ts` each week; their sums ARE the aggregates (asserted). */
   cohorts?: HouseholdCohort[];
@@ -289,7 +289,7 @@ export interface HouseholdState {
    * motive lives, so that `insurance-and-pensions.ts` collects a real flow instead of applying a
    * flat rate to the whole sector's income.
    */
-  lifeCycleSavingAnnualUSD?: number;
+  lifeCycleSavingAnnualLocal?: number;
   /** HH4d — the households' money-fund share stock: the savings the WS7 gate diverted from
    * deposits, now a real asset line instead of money that vanished from the household view. */
   mmfSharesLocal?: number;
@@ -297,17 +297,17 @@ export interface HouseholdState {
   /** HH4b/§5-CLOSE C5 — this week's annual capital receipts recycling into the consumption
    * budget: deposit interest the banks paid plus the dividends the public float was paid. Both
    * are payments; there is no residual. */
-  capitalReceiptsAnnualUSD?: number;
+  capitalReceiptsAnnualLocal?: number;
   /** Last week's mortgage book, so demand signals can read a real change (set with the sums). */
-  priorMortgageDebtUSD?: number;
+  priorMortgageDebtLocal?: number;
   /** HH3 — last week's real flows off the itemized books, written by the lending pass:
    * NET mortgage credit (origination minus the sellers' loans the sale proceeds retired —
    * the household sector's deposit gain), gross card/term origination (spent into
    * consumption), and the debt service the books require: interest plus annuity-scheduled
    * principal plus card minimums. */
-  weeklyMortgageOriginationUSD?: number;
-  weeklyNewConsumerCreditUSD?: number;
-  weeklyDebtServiceUSD?: number;
+  weeklyMortgageOriginationLocal?: number;
+  weeklyNewConsumerCreditLocal?: number;
+  weeklyDebtServiceLocal?: number;
 }
 
 /**
@@ -387,7 +387,7 @@ export interface SmePool {
   // §5-WIRES A3.3: the pool's cash is its rows at the region's banks (`poolCashOf`, engine/ledger/accounts.ts).
   /** SEG-C — tax accrued weekly on the pool's earnings and REMITTED quarterly as a real
    * SEGMENT to GOVERNMENT payment (stage 11), replacing the payer-less revenue statistic. */
-  accruedTaxUSD?: number;
+  accruedTaxLocal?: number;
   /** The DERIVED SUM of the SME_POOL loans the region's banks hold against this pool — one
    * representation (rule 4); bank-lending.ts and 02b own it. */
   debtLocal: number;
@@ -398,11 +398,11 @@ export interface SmePool {
    * exactly where its comment claimed it closed. One writer (02b), read by sme-pools. */
   blendedMarginBps?: number;
   defaultRateAnnualPct: number;
-  capexUSD: number;
+  capexLocal: number;
   employment: number;
   /** The pool's recent annual-revenue prints, so its hiring reads its own real output growth
    * the way a named firm reads its revenue history. */
-  revenueHistoryUSD?: number[];
+  revenueHistoryLocal?: number[];
   annualRevenueLocal: number;
   marginPct: number;
   /** SEG-B — this week's real annualized receipts per sub-unit sold, from the pool's own
@@ -442,7 +442,7 @@ const _occupationsComplete: MissingOccupation extends never ? true : never = tru
 void _occupationsComplete;
 
 // Base annual wage by occupation is generated per-region from productivity — see
-// engine/bootstrap/labor-and-wages.ts's getBaseAnnualWageUSD(regionId).
+// engine/bootstrap/labor-and-wages.ts's getBaseAnnualWageLocal(regionId).
 
 /**
  * DIST 1(b) — ONE TENURE COHORT INSIDE AN OCCUPATION.
@@ -683,8 +683,8 @@ export interface Region {
   /** WS9/XB2d: what the FX market cleared this week, and what it could not clear. A large
    * persistent residual means the elastic side is too thin — a real signal, not noise. */
   fxClearedMovePct?: number;
-  fxUnclearedResidualUSD?: number;
-  fxGrossDemandUSD?: number;
+  fxUnclearedResidualLocal?: number;
+  fxGrossDemandLocal?: number;
   /** XB1: foreign ownership MEASURED from real holdings each week — an outcome, not an input. */
   measuredForeignOwnership?: { equity: number; corpBond: number; sovBond: number };
   institutionalSector: InstitutionalSector;
@@ -755,8 +755,8 @@ export interface Region {
    *  squeeze actually is, and it needs two prices to exist. */
   repoTermRateAnnual?: number;
   /** GUARD — the repo session's own volume diagnostic (see RepoSessionResult). */
-  repoFundableNeedUSD?: number;
-  repoClearedVolumeUSD?: number;
+  repoFundableNeedLocal?: number;
+  repoClearedVolumeLocal?: number;
   neutralRate: number;
   /**
    * PUB2b: what the Taylor rule wanted BEFORE the floor clamped it. The gap between this and the
@@ -791,10 +791,10 @@ export interface Region {
   unemploymentRate: number;
   wageGrowth: number;
   tradeBalance: number;
-  exportsUSD: number;
-  importsUSD: number;
+  exportsLocal: number;
+  importsLocal: number;
   currentAccountPctGdp: number;
-  fxReservesUSD: number;
+  fxReservesLocal: number;
   govEmploymentGrowthRate?: number;
   fiscalStanceScore: number;
   sovereignRating: 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
@@ -826,35 +826,35 @@ export interface Region {
 
   // Government & Nominal GDP
   estimatedNominalGdpLocal: number;
-  derivedNominalGdpUSD: number;
+  derivedNominalGdpLocal: number;
   gdpGrowthBottomUp: number;
   smoothedWeeklyGrowthRate: number;
-  lastWeekNominalGdpUSD: number;
+  lastWeekNominalGdpLocal: number;
   nominalGdpHistory: number[];
-  consumptionComponentUSD: number;
-  investmentComponentUSD: number;
+  consumptionComponentLocal: number;
+  investmentComponentLocal: number;
   effectiveTaxRate: number;
-  governmentRevenueUSD: number;
-  governmentSpendingWeeklyUSD: number;
+  governmentRevenueLocal: number;
+  governmentSpendingWeeklyLocal: number;
   /** PUB1 — real weekly interest on the debt stack, paid to holders. Comes off the top of
    * spending, so procurement and transfers get the primary budget only. */
   /** Cash-basis coupon expense: BONDS only, since bills pay no coupon (PUB3d). */
-  governmentInterestWeeklyUSD?: number;
+  governmentInterestWeeklyLocal?: number;
   /** PUB3d: the discount accruing on the bill stack — the accrual-basis half of the interest
    * burden, reported so the cash-basis line above cannot silently understate it. */
-  governmentBillDiscountAccrualUSD?: number;
+  governmentBillDiscountAccrualLocal?: number;
   /**
    * PUB3: what the government owes its own staff this week — real headcount at the pools' real
    * wages. Computed once and read by everything, so the budget line and the jobs that produce it
    * cannot disagree.
    */
-  governmentPayrollWeeklyUSD?: number;
+  governmentPayrollWeeklyLocal?: number;
   /** PUB3b — the government's real transfer obligation this week, paid to households as a real
    *  payment in stage 03 (it used to reach household INCOME without ever reaching their cash). */
-  governmentTransfersWeeklyUSD?: number;
+  governmentTransfersWeeklyLocal?: number;
   /** HH — interest the region's banks actually paid on household deposits this week, summed from
    *  their own deposit rates. Part of measured household income; not re-derived anywhere. */
-  householdDepositInterestWeeklyUSD?: number;
+  householdDepositInterestWeeklyLocal?: number;
   /**
    * PUB1e: the ONE per-category procurement budget. Stage 03 derives it from the treasury's real
    * primary budget; stage 05 bids exactly it. Before this the two disagreed — the demand stage
@@ -863,48 +863,48 @@ export interface Region {
    */
   governmentProcurementBudgetByCategory?: Record<string, number>;
   /** What those bids actually filled last week, at cleared prices. The real G. */
-  governmentProcurementSpentUSD?: number;
+  governmentProcurementSpentLocal?: number;
   /** Budget the goods market could not supply. Named, not assumed spent. */
-  unspentProcurementBudgetUSD?: number;
+  unspentProcurementBudgetLocal?: number;
   /** What actually left the account: interest + payroll + transfers + realized procurement. */
-  governmentOutlaysUSD?: number;
+  governmentOutlaysLocal?: number;
   /** PUB3c: extra bill issuance this week purely to bridge the treasury's cash position. */
-  cashBridgeBillIssuanceUSD?: number;
+  cashBridgeBillIssuanceLocal?: number;
   /** PUB2 — the central bank's real balance sheet (`centralBank` above is just its name). The
    * treasury's account lives on it as a liability, which is what makes TGA flows move reserves. */
   /** §5-CLOSE M6 — the deposits the household loan books wrote this week (origination less
    *  discharge, amortization and interest), the banks' second money creator. Written by 02b. */
-  householdBookDepositFlowWeeklyUSD?: number;
+  householdBookDepositFlowWeeklyLocal?: number;
   centralBankSheet?: CentralBank;
   /**
    * PUB1b/§5-CLOSE C5 — tax actually collected this week from real payers: corporate (quarterly,
-   * off accrued liability), SME pools, households, payroll and consumption. `governmentRevenueUSD`
+   * off accrued liability), SME pools, households, payroll and consumption. `governmentRevenueLocal`
    * is exactly their sum — the treasury's revenue is what its payers remitted.
    */
-  taxCollectedCorporateUSD?: number;
-  taxCollectedPayrollUSD?: number;
-  taxCollectedConsumptionUSD?: number;
+  taxCollectedCorporateLocal?: number;
+  taxCollectedPayrollLocal?: number;
+  taxCollectedConsumptionLocal?: number;
   /** PUB1c — the employer payroll tax accruing weekly out of the wage bill. */
-  employerPayrollTaxWeeklyUSD?: number;
-  taxCollectedSmeUSD?: number;
-  taxCollectedHouseholdUSD?: number;
+  employerPayrollTaxWeeklyLocal?: number;
+  taxCollectedSmeLocal?: number;
+  taxCollectedHouseholdLocal?: number;
   /** PUB1c — tax accrued but not yet remitted, per stream and per calendar. */
-  accruedSmeTaxUSD?: number;
-  accruedHouseholdTaxUSD?: number;
-  accruedConsumptionTaxUSD?: number;
+  accruedSmeTaxLocal?: number;
+  accruedHouseholdTaxLocal?: number;
+  accruedConsumptionTaxLocal?: number;
   /** PUB2 — this week's gross issuance proceeds and principal redeemed, so the TGA has the
    * financing leg that funds the deficit it is debited by. Written by stage 11. */
-  lastIssuanceProceedsUSD?: number;
+  lastIssuanceProceedsLocal?: number;
   /** PUB: matured paper that no named book ever bought — the front-of-ladder undersubscription
    *  the treasury auction leaves behind. It is not a payment; nobody was owed it. */
-  lastUnsoldMaturedUSD?: number;
-  lastRedemptionPaidUSD?: number;
+  lastUnsoldMaturedLocal?: number;
+  lastRedemptionPaidLocal?: number;
   /** CAL — sovereign interest ACCRUED to named holders and not yet paid: the treasury's payable,
    *  the same balance its holders carry as a receivable. Written only by sovereign-calendar.ts. */
-  sovereignCouponPayableUSD?: number;
+  sovereignCouponPayableLocal?: number;
   /** CAL — what this week's coupon dates actually turned into cash. The treasury's expense stays
-   *  smooth (`governmentInterestWeeklyUSD`); its ACCOUNT moves by this (stages/central-bank.ts). */
-  sovereignCouponPaidUSD?: number;
+   *  smooth (`governmentInterestWeeklyLocal`); its ACCOUNT moves by this (stages/central-bank.ts). */
+  sovereignCouponPaidLocal?: number;
   debtToGdpPctBottomUp: number;
 
   householdState: HouseholdState;

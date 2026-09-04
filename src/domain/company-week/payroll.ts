@@ -17,11 +17,11 @@
 
 export interface PayrollWeek {
   /** What the firm actually owes its staff this week, at its own offered wage. */
-  weeklyUSD: number;
+  weeklyLocal: number;
   /** What a firm of this shape owed at the baseline wage — the figure a stated margin contains. */
-  baselineWeeklyUSD: number;
+  baselineWeeklyLocal: number;
   /** The part a stated margin has NOT already accounted for, annualised. */
-  aboveBaselineAnnualUSD: number;
+  aboveBaselineAnnualLocal: number;
 }
 
 /**
@@ -30,13 +30,13 @@ export interface PayrollWeek {
  * occupation pools that only the engine has, and the RULE here is the deviation, not the bill.
  */
 export function payrollWeek(i: {
-  weeklyUSD: number;
-  baselineWeeklyUSD: number;
+  weeklyLocal: number;
+  baselineWeeklyLocal: number;
 }): PayrollWeek {
   return {
-    weeklyUSD: i.weeklyUSD,
-    baselineWeeklyUSD: i.baselineWeeklyUSD,
-    aboveBaselineAnnualUSD: (i.weeklyUSD - i.baselineWeeklyUSD) * 52,
+    weeklyLocal: i.weeklyLocal,
+    baselineWeeklyLocal: i.baselineWeeklyLocal,
+    aboveBaselineAnnualLocal: (i.weeklyLocal - i.baselineWeeklyLocal) * 52,
   };
 }
 
@@ -45,11 +45,11 @@ export function payrollWeek(i: {
  * rule to price a hiring or shedding decision against earnings rather than against a stated
  * multiple — the link that makes a wage a PRICE rather than a charge.
  */
-export function headcountCostDeltaAnnualUSD(
-  weeklyPayrollUSD: number,
+export function headcountCostDeltaAnnualLocal(
+  weeklyPayrollLocal: number,
   currentHeadcount: number,
   headcountDelta: number
 ): number {
   if (!(currentHeadcount > 0)) return 0;
-  return (weeklyPayrollUSD / currentHeadcount) * headcountDelta * 52;
+  return (weeklyPayrollLocal / currentHeadcount) * headcountDelta * 52;
 }

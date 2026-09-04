@@ -3,7 +3,7 @@
  *
  * §6.1's overdraft row and §7.226: `distributeToLps` paid recap and exit proceeds against drawn
  * capital alone, never against the sponsor's balance, so PEF1 wired 0.495B out of a 0.000B account
- * at week 12 and carried the same -0.50B for forty weeks. Ten lines above it, `callCapitalUSD`
+ * at week 12 and carried the same -0.50B for forty weeks. Ten lines above it, `callCapitalLocal`
  * already bounded a CALL by the LPs' real cash — "a call that comes up short is a deal that does
  * not close". One side of one rule, written twice, in one file, and only one of them was right.
  *
@@ -13,9 +13,9 @@
 /** What a fund can pay out right now, and why it is not more. */
 export interface Distributable {
   /** What it may actually wire. */
-  payableUSD: number;
+  payableLocal: number;
   /** What was asked for. */
-  requestedUSD: number;
+  requestedLocal: number;
   /** Which constraint bound: the commitment, or the balance. */
   boundBy: 'nothing' | 'drawn-capital' | 'cash';
 }
@@ -26,17 +26,17 @@ export interface Distributable {
  * drawn capital is simply finished returning it, and those are different facts about the world.
  */
 export function distributable(
-  requestedUSD: number,
-  totalDrawnUSD: number,
+  requestedLocal: number,
+  totalDrawnLocal: number,
   cashLocal: number
 ): Distributable {
-  const byDrawn = Math.min(requestedUSD, Math.max(0, totalDrawnUSD));
-  const payableUSD = Math.max(0, Math.min(byDrawn, Math.max(0, cashLocal)));
+  const byDrawn = Math.min(requestedLocal, Math.max(0, totalDrawnLocal));
+  const payableLocal = Math.max(0, Math.min(byDrawn, Math.max(0, cashLocal)));
   const boundBy: Distributable['boundBy'] =
-    payableUSD >= requestedUSD ? 'nothing'
-      : payableUSD < byDrawn ? 'cash'
+    payableLocal >= requestedLocal ? 'nothing'
+      : payableLocal < byDrawn ? 'cash'
         : 'drawn-capital';
-  return { payableUSD, requestedUSD, boundBy };
+  return { payableLocal, requestedLocal, boundBy };
 }
 
 /**
@@ -44,6 +44,6 @@ export function distributable(
  * it is here: the corporate sweep book bounded redemptions by the fund's cash while the PE book did
  * not, and nothing made that inconsistency visible.
  */
-export function redeemable(requestedUSD: number, cashLocal: number): number {
-  return Math.max(0, Math.min(Math.max(0, requestedUSD), Math.max(0, cashLocal)));
+export function redeemable(requestedLocal: number, cashLocal: number): number {
+  return Math.max(0, Math.min(Math.max(0, requestedLocal), Math.max(0, cashLocal)));
 }

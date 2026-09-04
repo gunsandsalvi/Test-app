@@ -17,7 +17,7 @@
  *
  * One ledger, keyed `<region>|<bondId>|<partyKey>`, and it is the ONLY writer of the receivable
  * on either book — the bank's `sovereignAccruedCouponLocal` and the treasury's
- * `sovereignCouponPayableUSD` are the same balance seen from two sides. That is what makes them
+ * `sovereignCouponPayableLocal` are the same balance seen from two sides. That is what makes them
  * incapable of drifting: the treasury pays exactly the sum of what its holders accrued.
  *
  * **The P&L stays smooth on both sides and only CASH is lumpy** — the same result the corporate
@@ -69,14 +69,14 @@ export function accrueSovereignHolders(
     v2: WeeklyStepContext['v2'];
     updatedInstitutionalEntities: WeeklyStepContext['updatedInstitutionalEntities'];
     updatedCompanies: WeeklyStepContext['updatedCompanies'];
-    sovereignAccruedInterestUSD: Map<string, number>;
+    sovereignAccruedInterestLocal: Map<string, number>;
   },
   regionId: RegionId,
   couponByBond: Record<string, number>,
   weeksOf: (bondId: string) => number,
 ): Map<string, number> {
-  const accrued = ctx.sovereignAccruedInterestUSD;
-  const bankEarnedUSD = new Map<string, number>();
+  const accrued = ctx.sovereignAccruedInterestLocal;
+  const bankEarnedLocal = new Map<string, number>();
   const accrue = (bondId: string, party: PartyRef, notional: number): number => {
     const coupon = couponByBond[bondId] ?? 0;
     const weeks = weeksOf(bondId);
@@ -101,13 +101,13 @@ export function accrueSovereignHolders(
   });
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || c.region !== regionId || !isActiveCompany(c)) return;
-    let earnedUSD = 0;
+    let earnedLocal = 0;
     Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, usd]) => {
-      earnedUSD += accrue(bondId, { kind: 'BANK_SECURITIES', ticker: c.ticker }, Number(usd) || 0);
+      earnedLocal += accrue(bondId, { kind: 'BANK_SECURITIES', ticker: c.ticker }, Number(usd) || 0);
     });
-    if (earnedUSD > 0) bankEarnedUSD.set(c.ticker, earnedUSD);
+    if (earnedLocal > 0) bankEarnedLocal.set(c.ticker, earnedLocal);
   });
-  return bankEarnedUSD;
+  return bankEarnedLocal;
 }
 
 const accrualKey = (regionId: RegionId, bondId: string, party: PartyRef) =>
@@ -121,9 +121,9 @@ const accrualKey = (regionId: RegionId, bondId: string, party: PartyRef) =>
  * interest line is struck against the same holdings.
  */
 export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
-  const accrued = ctx.sovereignAccruedInterestUSD;
+  const accrued = ctx.sovereignAccruedInterestLocal;
   /** What each BANK earned this week — its equity leg, posted once at the end. */
-  const bankEarnedUSD = new Map<string, number>();
+  const bankEarnedLocal = new Map<string, number>();
 
   REGION_IDS.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
@@ -135,7 +135,7 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
     // books — accrue this week. One week each; the seed calls the same walk with the weeks each
     // bond has actually run since its last coupon date. ----
     accrueSovereignHolders(ctx, regionId, couponByBond, () => 1)
-      .forEach((usd, ticker) => bankEarnedUSD.set(ticker, (bankEarnedUSD.get(ticker) ?? 0) + usd));
+      .forEach((usd, ticker) => bankEarnedLocal.set(ticker, (bankEarnedLocal.get(ticker) ?? 0) + usd));
 
     // ---- 3. THE COUPON DATES. A bond whose date falls this week turns every holder's accrued
     // balance into cash — including a holder that has since sold out, because it earned it while
@@ -173,8 +173,8 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
 
     // ---- 4. The treasury's own side of the same balance, so its expense can stay smooth while
     // its account moves on the dates (stages/central-bank.ts reads the change in this level). ----
-    reg.sovereignCouponPayableUSD = Math.round(sovereignAccruedPayableUSD(accrued, regionId));
-    reg.sovereignCouponPaidUSD = Math.round(paidLocal);
+    reg.sovereignCouponPayableLocal = Math.round(sovereignAccruedPayableLocal(accrued, regionId));
+    reg.sovereignCouponPaidLocal = Math.round(paidLocal);
   });
 
   // ---- 5. The banks' books. The receivable is SET to the ledger — one writer, so the holder's
@@ -182,13 +182,13 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
   // by (accrued - paid) + paid = accrued, equity by accrued: the identity holds either week. ----
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
-    const earnedUSD = bankEarnedUSD.get(c.ticker) ?? 0;
+    const earnedLocal = bankEarnedLocal.get(c.ticker) ?? 0;
     const key = `|${partyKey({ kind: 'BANK_SECURITIES', ticker: c.ticker })}`;
     let heldLocal = 0;
     accrued.forEach((usd, k) => { if (k.endsWith(key)) heldLocal += usd; });
-    if (earnedUSD === 0 && heldLocal === (c.bankBalanceSheet.sovereignAccruedCouponLocal ?? 0)) return;
+    if (earnedLocal === 0 && heldLocal === (c.bankBalanceSheet.sovereignAccruedCouponLocal ?? 0)) return;
     c.bankBalanceSheet = {
-      ...bookPnL(c.bankBalanceSheet, earnedUSD, 'sovereign coupon accrual', c.ticker),
+      ...bookPnL(c.bankBalanceSheet, earnedLocal, 'sovereign coupon accrual', c.ticker),
       sovereignAccruedCouponLocal: heldLocal,
     };
   });
@@ -198,7 +198,7 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
  * What the treasury has ACCRUED but not yet paid on its bond stack — its own side of the same
  * receivable, so the reported interest line stays smooth while the cash is lumpy.
  */
-export function sovereignAccruedPayableUSD(
+export function sovereignAccruedPayableLocal(
   accrued: Map<string, number>, regionId: RegionId
 ): number {
   let total = 0;

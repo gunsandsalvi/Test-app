@@ -26,7 +26,7 @@ if [ -n "$EXTRA" ]; then
 fi
 
 # 3. §5-STRUCT step 1 — THE LEDGER OWNS MONEY. The money-field write budget that lived here
-#    (`cashUSD`, `cashReservesUSD`, the four deposit lines, ratcheted 23 → 16 → 2) is RETIRED
+#    (`cashLocal`, `cashReservesLocal`, the four deposit lines, ratcheted 23 → 16 → 2) is RETIRED
 #    (§5-WIRES A4): none of those fields exists any more — a balance is an account
 #    (engine/ledger/accounts.ts) and the type system refuses the field. What remains below is the
 #    cast-hidden READ, which a type cannot see.
@@ -97,14 +97,19 @@ if [ -n "$LOT_STRAY$OUT_STRAY" ]; then
   echo "$LOT_STRAY$OUT_STRAY"
   exit 1
 fi
+# §3.13c — THESE GUARDS NAME FIELDS IN SHELL REGEXES, which nothing type-checks. The `…USD`
+# rename broke three of them silently (they matched names that no longer existed, so they could
+# never fire again) and they were repaired by hand. A guard here has to be updated WITH any
+# rename of the names it watches; that is the cost of guarding a shape the compiler cannot.
+#
 # §5-WIRES D — DERIVED QUANTITIES ARE READS. Market cap is price × shares (`marketCapOf`), total
-# debt is the ladder (`totalDebtOf` / `ladderTotalUSD`); a field by either name on a company is a
+# debt is the ladder (`totalDebtOf` / `ladderTotalLocal`); a field by either name on a company is a
 # stored sum of stored fields — the row store's derived columns and the kernel lanes are the only
 # places the names remain.
-DERIVED_STRAY=$(grep -rnE "\.(marketCap|totalDebt|totalAssetsUSD)\b" src --include=*.ts --include=*.tsx 2>/dev/null \
+DERIVED_STRAY=$(grep -rnE "\.(marketCap|totalDebt|totalAssetsLocal)\b" src --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE '^src/engine2/(company-store|stage08-lanes|front-core|state)\.ts:|^src/engine/simulation/stages/native-kernels\.ts:|^src/domain/company\.ts:|^src/domain/institutions\.ts:|^src/engine/simulation/stages/institutional-balance-sheet\.ts:' || true)
 if [ -n "$DERIVED_STRAY" ]; then
-  echo "ERROR: a stored derived quantity — read it (marketCapOf / totalDebtOf / ladderTotalUSD / institutionTotalAssetsUSD):"
+  echo "ERROR: a stored derived quantity — read it (marketCapOf / totalDebtOf / ladderTotalLocal / institutionTotalAssetsLocal):"
   echo "$DERIVED_STRAY"
   exit 1
 fi
@@ -113,9 +118,9 @@ fi
 # catches the cast-hidden read (`as any`, `as unknown as Company`) by the names a company is
 # usually held under. A statement's own cash line (`bs.cash`), the kernel's cash box and the
 # front lanes carry the word legitimately and are not company objects.
-# A3.2: an institutional entity's `cashUSD` the same way (`entityCashOf`); a pool's `cashUSD`
+# A3.2: an institutional entity's `cashLocal` the same way (`entityCashOf`); a pool's `cashLocal`
 # (`seg`/`pool`, A3.3, `poolCashOf`) too; the sector aggregate's is the only one left.
-CASH_STRAY=$(grep -rnE "\b(c|comp|company|firm|acquirer|target|issuer|seller|buyer|parent|sub|spin|bank|peer|estateComp|listedTarget|newborn|holder)\.cash\b|\b(e|f|entity|fund|mmf|lp|sponsor|investor|inv|manager|vehicle|etf|redeemer|lender|borrower|s2|seg|pool|segment)\.cashUSD\b|\b(hs|householdState)\.depositsUSD\b" src scripts --include=*.ts --include=*.tsx 2>/dev/null \
+CASH_STRAY=$(grep -rnE "\b(c|comp|company|firm|acquirer|target|issuer|seller|buyer|parent|sub|spin|bank|peer|estateComp|listedTarget|newborn|holder)\.cash\b|\b(e|f|entity|fund|mmf|lp|sponsor|investor|inv|manager|vehicle|etf|redeemer|lender|borrower|s2|seg|pool|segment)\.cashLocal\b|\b(hs|householdState)\.depositsLocal\b" src scripts --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE '^src/engine/ledger/accounts\.ts:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
 if [ -n "$CASH_STRAY" ]; then
   echo "ERROR: a company's cash read as a field — it is its account: cashOf(v2, company) (engine/ledger/accounts.ts):"

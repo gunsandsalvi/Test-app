@@ -87,7 +87,7 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 hours of a named person's time to a named firm | `src/engine/simulation/stages/labor-market.ts:employedByOccBefore` | ⚠️ |
-| A2 the price is the wage, per unit of time, in a currency | `src/engine/bootstrap/labor-and-wages.ts:getBaseAnnualWageUSD` | ✅ |
+| A2 the price is the wage, per unit of time, in a currency | `src/engine/bootstrap/labor-and-wages.ts:getBaseAnnualWageLocal` | ✅ |
 | A3 labour is heterogeneous: skill, sector, region | `src/domain/region-macro.ts:OCCUPATION_TYPES` | ⚠️ |
 | A3.a so unemployment and vacancies can be high at once | `src/engine/simulation/stages/labor-market.ts:fillRatioByOcc` | ✅ |
 | A4 the relationship persists — employment is a state | `src/domain/company.ts:employeeCount` | ⚠️ |
@@ -108,13 +108,13 @@ checked by `scripts/check-atlas.sh`.
 | **D2.b VERIFY stickiness is the contract's, not a coefficient** | `src/domain/region-macro.ts:MARKET_WAGE_CATCHUP_SPEED_WEEKLY` | ❌ |
 | D3 the matching is imperfect | `src/domain/region-macro.ts:MATCHING_ELASTICITY` | ✅ |
 | D4 VERIFY unemployment and vacancies move against each other | `src/engine/simulation/stages/labor-market.ts:vacancyRate` | ⚠️ |
-| E1 wages are household income | `src/engine/macro/household-cohorts.ts:wageIncomeUSD` | ✅ |
-| E2 wages are firm cost | `src/engine2/front-core.ts:weeklyPayrollUSD` | ✅ |
-| E2.a a wage rise is both demand and cost | `src/engine/simulation/stages/05-unit-bidding.ts:currentPayrollWeeklyUSD` | ✅ |
+| E1 wages are household income | `src/engine/macro/household-cohorts.ts:wageIncomeLocal` | ✅ |
+| E2 wages are firm cost | `src/engine2/front-core.ts:weeklyPayrollLocal` | ✅ |
+| E2.a a wage rise is both demand and cost | `src/engine/simulation/stages/05-unit-bidding.ts:currentPayrollWeeklyLocal` | ✅ |
 | E3 wage income is taxed | `src/engine/bootstrap/national-accounts.ts:splitWageBill` | ✅ |
 | E4 job loss changes the ability to service debt | `src/engine/macro/evolution.ts:householdStressSignal` | ⚠️ |
 | F1 FORBID no employment without an employer | `src/engine/simulation/stages/labor-market.ts:employers` | ✅ |
-| F2 FORBID no wage bill without headcount | `src/engine/bootstrap/labor-and-wages.ts:weeklyWageBillUSD` | ✅ |
+| F2 FORBID no wage bill without headcount | `src/engine/bootstrap/labor-and-wages.ts:weeklyWageBillLocal` | ✅ |
 | **F3 FORBID no exogenous unemployment rate** | `src/engine/simulation/stages/labor-market.ts:unemploymentRate` | ✅ |
 
 ---

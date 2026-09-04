@@ -11,7 +11,7 @@
 import { WeeklyStepContext } from './context';
 import { currencyOf } from '../../../domain/geography';
 import { RegionId } from '../../../types';
-import { pay, PartyRef, pendingSettlementUSD } from './settlement';
+import { pay, PartyRef, pendingSettlementLocal } from './settlement';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { smePoolId, facilityMarginBpsFor } from './bank-lending';
 import { PrimeBrokerageLine } from '../../../domain/prime-brokerage';
@@ -29,19 +29,19 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
   // of it — this used to re-derive the whole thing by walking the journal, because the paying
   // agent journalled its payments without touching the net and a quarterly dividend or coupon
   // paid that way left the biggest names negative after the first sweep.
-  const pendingUSD = (ref: PartyRef): number => pendingSettlementUSD(ctx, ref);
+  const pendingLocal = (ref: PartyRef): number => pendingSettlementLocal(ctx, ref);
 
   // ---- 1. Firms: a revolver draw at the house bank (the 02b conversion, at the close). ----
   ctx.updatedCompanies.forEach((c) => {
     if (c.isDefaulted || c.isBankEntity || c.mergerAcquired || !c.homeBankTicker) return;
-    const balanceUSD = cashOf(ctx.v2, c) + pendingUSD({ kind: 'COMPANY', ticker: c.ticker });
-    if (!(balanceUSD < -1)) return;
-    const drawUSD = -balanceUSD;
+    const balanceLocal = cashOf(ctx.v2, c) + pendingLocal({ kind: 'COMPANY', ticker: c.ticker });
+    if (!(balanceLocal < -1)) return;
+    const drawLocal = -balanceLocal;
     const reg = ctx.updatedRegions[c.region];
     const marginBps = reg ? facilityMarginBpsFor(v2, c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker)) : 350;
     const tranche = {
       id: `${c.id}-REVOLVER-OD-${ctx.nextWeek}-C`,
-      principalLocal: drawUSD,
+      principalLocal: drawLocal,
       rateType: 'FLOATING' as const,
       floatingMarginBps: marginBps,
       originationWeek: ctx.nextWeek,
@@ -54,7 +54,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     pay(ctx, {
       payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
       payee: { kind: 'COMPANY', ticker: c.ticker },
-      amount: drawUSD,
+      amount: drawLocal,
       currency: currencyOf(c.region),
       reason: 'overdraft converted to facility draw at the close',
     });
@@ -72,21 +72,21 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
       if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankTicker) return fund;
       const brokerTicker = fund.homeBankTicker;
-      const balanceUSD = entityCashOf(ctx.v2, fund) + pendingUSD({ kind: 'INSTITUTION', id: fund.id });
-      if (balanceUSD >= -1) return fund;
-      const drawUSD = -balanceUSD;
-      const withinLineUSD = Math.min(fund.primeBrokerageAvailableUSD ?? 0, drawUSD);
+      const balanceLocal = entityCashOf(ctx.v2, fund) + pendingLocal({ kind: 'INSTITUTION', id: fund.id });
+      if (balanceLocal >= -1) return fund;
+      const drawLocal = -balanceLocal;
+      const withinLineLocal = Math.min(fund.primeBrokerageAvailableLocal ?? 0, drawLocal);
       pay(ctx, {
         payer: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
         payee: { kind: 'INSTITUTION', id: fund.id },
-        amount: drawUSD,
+        amount: drawLocal,
         currency: currencyOf(fund.region),
-        reason: withinLineUSD >= drawUSD ? 'prime brokerage drawdown' : 'prime brokerage drawdown past the line',
+        reason: withinLineLocal >= drawLocal ? 'prime brokerage drawdown' : 'prime brokerage drawdown past the line',
       });
-      const penalty = withinLineUSD >= drawUSD ? 0 : OVERDRAFT_PENALTY_BPS;
+      const penalty = withinLineLocal >= drawLocal ? 0 : OVERDRAFT_PENALTY_BPS;
       const line = book.find((l) => l.fundId === fund.id);
       if (line) {
-        line.drawnLocal = Math.round(line.drawnLocal + drawUSD);
+        line.drawnLocal = Math.round(line.drawnLocal + drawLocal);
         if (penalty) line.rateAnnual = Number(Math.max(line.rateAnnual, reg.policyRate + (WHOLESALE_FUNDING_SPREAD_BPS + penalty) / 10000).toFixed(6));
       } else {
         book.push({
@@ -94,14 +94,14 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
           regionId,
           brokerTicker,
           fundId: fund.id,
-          drawnLocal: Math.round(drawUSD),
+          drawnLocal: Math.round(drawLocal),
           haircutRate: 0.5,
           rateAnnual: Number((reg.policyRate + (WHOLESALE_FUNDING_SPREAD_BPS + penalty) / 10000).toFixed(6)),
           struckWeek: ctx.nextWeek,
         });
       }
-      drawnByBroker.set(brokerTicker, (drawnByBroker.get(brokerTicker) ?? 0) + drawUSD);
-      return { ...fund, primeBrokerageAvailableUSD: Math.max(0, (fund.primeBrokerageAvailableUSD ?? 0) - withinLineUSD) };
+      drawnByBroker.set(brokerTicker, (drawnByBroker.get(brokerTicker) ?? 0) + drawLocal);
+      return { ...fund, primeBrokerageAvailableLocal: Math.max(0, (fund.primeBrokerageAvailableLocal ?? 0) - withinLineLocal) };
     });
     reg.primeBrokerageBook = book;
 
@@ -111,11 +111,11 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
     const smeDrawByBank = new Map<string, { industry: string; poolId: string; usd: number }[]>();
     (reg.smePools ?? []).forEach((seg) => {
-      const balanceUSD = poolCashOf(ctx.v2, regionId, seg.industry) + pendingUSD({ kind: 'SEGMENT', region: regionId, industry: seg.industry });
-      if (balanceUSD >= -1 || !(totalShare > 0)) return;
-      const drawUSD = -balanceUSD;
+      const balanceLocal = poolCashOf(ctx.v2, regionId, seg.industry) + pendingLocal({ kind: 'SEGMENT', region: regionId, industry: seg.industry });
+      if (balanceLocal >= -1 || !(totalShare > 0)) return;
+      const drawLocal = -balanceLocal;
       banks.forEach((b) => {
-        const shareLocal = drawUSD * ((b.bankMarketShare ?? 0) / totalShare);
+        const shareLocal = drawLocal * ((b.bankMarketShare ?? 0) / totalShare);
         if (shareLocal <= 1) return;
         const rows = smeDrawByBank.get(b.ticker) ?? [];
         rows.push({ industry: seg.industry, poolId: smePoolId(regionId, seg.industry), usd: shareLocal });

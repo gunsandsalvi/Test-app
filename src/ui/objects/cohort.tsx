@@ -43,8 +43,8 @@ export const cohort = defineObject<Cohort>({
       { key: 'name', label: 'cohort', width: 2, render: (r, _w, nav) => <Link to={{ type: 'cohort', id: r.id }} nav={nav}>{words(r.obj.c.occupation)} · {TIER_WORDS[r.obj.c.tier] ?? r.obj.c.tier}</Link>, value: (r) => r.obj.c.occupation },
       { key: 'earners', label: 'earners', render: (r) => count(Math.round(r.obj.c.earnerCount)), value: (r) => r.obj.c.earnerCount },
       { key: 'u', label: 'idle', render: (r) => pctLevel(r.obj.c.earnerCount > 0 ? 1 - r.obj.c.employedCount / r.obj.c.earnerCount : 0), value: (r) => (r.obj.c.earnerCount > 0 ? 1 - r.obj.c.employedCount / r.obj.c.earnerCount : 0) },
-      { key: 'income', label: 'income', render: (r) => money(r.obj.c.disposableIncomeUSD), value: (r) => r.obj.c.disposableIncomeUSD },
-      { key: 'budget', label: 'spend', render: (r) => money(r.obj.c.consumptionBudgetUSD), value: (r) => r.obj.c.consumptionBudgetUSD },
+      { key: 'income', label: 'income', render: (r) => money(r.obj.c.disposableIncomeLocal), value: (r) => r.obj.c.disposableIncomeLocal },
+      { key: 'budget', label: 'spend', render: (r) => money(r.obj.c.consumptionBudgetLocal), value: (r) => r.obj.c.consumptionBudgetLocal },
     ],
   },
   overview({ world, ref, obj: x, nav }) {
@@ -56,18 +56,18 @@ export const cohort = defineObject<Cohort>({
         <ObjectHeader name={`${words(c.occupation)} households, ${TIER_WORDS[c.tier] ?? words(c.tier)}`} sub={<><RegionLink id={x.region} nav={nav} /> · {count(Math.round(c.earnerCount))} earners · occupation <Link to={{ type: 'occupation', id: `${x.region}:${c.occupation}` }} nav={nav}>{words(c.occupation)}</Link></>} />
         <StatGrid>
           <Stat label="out of work" value={pctLevel(c.earnerCount > 0 ? 1 - c.employedCount / c.earnerCount : 0)} sub={`${count(Math.round(c.employedCount))} employed`} neg={c.earnerCount > 0 && 1 - c.employedCount / c.earnerCount > 0.1} />
-          <Stat label="spend" value={money(c.consumptionBudgetUSD)} sub={<ChangeSub series={budget} />} />
-          <Stat label="saving" value={c.disposableIncomeUSD > 0 ? pctLevel(c.savingsUSD / c.disposableIncomeUSD, 0) : '—'} sub="of disposable income" neg={c.savingsUSD < 0} />
+          <Stat label="spend" value={money(c.consumptionBudgetLocal)} sub={<ChangeSub series={budget} />} />
+          <Stat label="saving" value={c.disposableIncomeLocal > 0 ? pctLevel(c.savingsLocal / c.disposableIncomeLocal, 0) : '—'} sub="of disposable income" neg={c.savingsLocal < 0} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
-          <KV k="wages" hint={`${perHead(c.wageIncomeUSD)} a year per earner`} v={money(c.wageIncomeUSD)} />
-          <KV k="benefits" v={money(c.unemploymentBenefitsUSD)} />
-          <KV k="transfers" v={money(c.transferIncomeUSD)} />
-          <KV k="capital income" v={money(c.capitalIncomeUSD)} />
-          <KV k="tax" v={money(c.taxUSD)} />
-          <KV k="disposable income" hint="weekly" v={money(c.disposableIncomeUSD)} />
-          <KV k="debt service" v={money(c.debtServiceUSD)} />
-          <KV k="consumption tax paid" v={money(c.consumptionTaxUSD)} />
+          <KV k="wages" hint={`${perHead(c.wageIncomeLocal)} a year per earner`} v={money(c.wageIncomeLocal)} />
+          <KV k="benefits" v={money(c.unemploymentBenefitsLocal)} />
+          <KV k="transfers" v={money(c.transferIncomeLocal)} />
+          <KV k="capital income" v={money(c.capitalIncomeLocal)} />
+          <KV k="tax" v={money(c.taxLocal)} />
+          <KV k="disposable income" hint="weekly" v={money(c.disposableIncomeLocal)} />
+          <KV k="debt service" v={money(c.debtServiceLocal)} />
+          <KV k="consumption tax paid" v={money(c.consumptionTaxLocal)} />
         </Card>
         <FunctionTiles nav={nav} tiles={[
           { fn: 'chart', sub: 'budget · income · employment · saving' },

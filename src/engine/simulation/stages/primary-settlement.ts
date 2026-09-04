@@ -39,7 +39,7 @@ export function settlePricedOfferings(
   offeringsByIssuerId: Map<string, PrimaryOffering>,
   result: ClearingResult,
   ctx: WeeklyStepContext,
-  statToGrossProceedsUSD: (offering: PrimaryOffering, clearedStat: number) => number,
+  statToGrossProceedsLocal: (offering: PrimaryOffering, clearedStat: number) => number,
   /** What the lead quoted for THIS deal — the book's own spread plus what it can lose on the
    *  residual. Omitted only where a book has not been given its own quote yet. */
   feeBpsOf?: (offering: PrimaryOffering, clearedStat: number) => number,
@@ -57,7 +57,7 @@ export function settlePricedOfferings(
 
     if (outcome.withdrawn) {
       ctx.primarySettlements.set(offering.id, {
-        offering, clearedStat: outcome.clearedStat, withdrawn: true, marketTakeUSD: 0, issuedUSD: 0, proceedsUSD: 0,
+        offering, clearedStat: outcome.clearedStat, withdrawn: true, marketTakeLocal: 0, issuedLocal: 0, proceedsLocal: 0,
       });
       return;
     }
@@ -66,20 +66,20 @@ export function settlePricedOfferings(
     // and the lead owns whatever the book did not take, at the cleared level, in its own desk
     // inventory — which is the business the fee below is the price of. Paying the issuer on the
     // market take alone would be best-efforts placement wearing a firm commitment's name.
-    const takeShare = Math.min(1, outcome.marketTakeUSD / Math.max(1, offering.sizeLocal));
-    const fullGrossUSD = statToGrossProceedsUSD(offering, outcome.clearedStat);
+    const takeShare = Math.min(1, outcome.marketTakeLocal / Math.max(1, offering.sizeLocal));
+    const fullGrossLocal = statToGrossProceedsLocal(offering, outcome.clearedStat);
     const lead = ctx.updatedCompanies.find((c: Company) => c.ticker === offering.leadBankTicker && c.bankBalanceSheet)
       ?? ctx.prevActiveFirms.find((c: Company) => c.ticker === offering.leadBankTicker && c.bankBalanceSheet);
     const firmCommitment = !!(lead && deskBook);
-    const grossLocal = firmCommitment ? fullGrossUSD : fullGrossUSD * takeShare;
-    const residualUSD = firmCommitment ? Math.max(0, fullGrossUSD - fullGrossUSD * takeShare) : 0;
+    const grossLocal = firmCommitment ? fullGrossLocal : fullGrossLocal * takeShare;
+    const residualLocal = firmCommitment ? Math.max(0, fullGrossLocal - fullGrossLocal * takeShare) : 0;
     const feeBps = feeBpsOf ? feeBpsOf(offering, outcome.clearedStat) : UNDERWRITING_FEE_BPS[instrumentType];
     const feeLocal = grossLocal * (feeBps / 10000);
 
     // Lead bank: the fee and the residual, both as REAL PAYMENTS between it and the issuer.
     //
-    // They used to be a direct write on the lead's reserves (`cashReservesUSD + feeLocal -
-    // residualUSD`) while the issuer's proceeds were posted against the UNMODELED boundary on
+    // They used to be a direct write on the lead's reserves (`cashReservesLocal + feeLocal -
+    // residualLocal`) while the issuer's proceeds were posted against the UNMODELED boundary on
     // stage 08's cash walk — one transaction, two books, and neither leg pointed at the other.
     // The issuer is paid on the whole deal (firm commitment): the CCP pays it for what the book
     // took (book-settlement.ts), the lead pays it for the residual it is left holding, and it
@@ -92,11 +92,11 @@ export function settlePricedOfferings(
       ?? ctx.prevActiveFirms.find((c: Company) => c.id === issuerId)
       ?? ctx.prevActivePrivateFirms.find((c: Company) => c.id === issuerId);
     if (lead && issuerCompany) {
-      if (residualUSD > 0) {
+      if (residualLocal > 0) {
         pay(ctx, {
           payer: { kind: 'BANK_SECURITIES', ticker: lead.ticker },
           payee: { kind: 'COMPANY', ticker: issuerCompany.ticker },
-          amount: residualUSD,
+          amount: residualLocal,
           currency: currencyOf(issuerCompany.region),
           reason: 'underwriting residual taken by the lead',
         });
@@ -111,7 +111,7 @@ export function settlePricedOfferings(
         });
       }
     }
-    if (lead && deskBook && residualUSD > 0) {
+    if (lead && deskBook && residualLocal > 0) {
       const existingSheet = ctx.companyUpdates[lead.ticker]?.bankBalanceSheet ?? lead.bankBalanceSheet!;
       const inventory: DealerDeskInventory = { ...(existingSheet.dealerDeskInventory ?? {}) };
       const rows = [...(inventory[deskBook] ?? [])];
@@ -121,8 +121,8 @@ export function settlePricedOfferings(
       // build, fee mark) — inventoryLocal-as-units at a $40 price is a 40x phantom position.
       // Credit clears in dollars, where units and money are the same number.
       const residualUnits = instrumentType === 'EQUITY'
-        ? residualUSD / Math.max(1e-9, outcome.clearedStat)
-        : residualUSD;
+        ? residualLocal / Math.max(1e-9, outcome.clearedStat)
+        : residualLocal;
       if (at >= 0) {
         const prevUnits = rows[at].units
           ?? (instrumentType === 'EQUITY'
@@ -130,11 +130,11 @@ export function settlePricedOfferings(
             : rows[at].inventoryLocal);
         rows[at] = {
           instrumentId: issuerId,
-          inventoryLocal: rows[at].inventoryLocal + residualUSD,
+          inventoryLocal: rows[at].inventoryLocal + residualLocal,
           units: prevUnits + residualUnits,
         };
       } else {
-        rows.push({ instrumentId: issuerId, inventoryLocal: residualUSD, units: residualUnits });
+        rows.push({ instrumentId: issuerId, inventoryLocal: residualLocal, units: residualUnits });
       }
       inventory[deskBook] = rows;
       updateBankSheet(ctx, lead.ticker, { ...existingSheet, dealerDeskInventory: inventory });
@@ -147,8 +147,8 @@ export function settlePricedOfferings(
       // side attributed one movement to two different senders.
       const leadDesk: PartyRef = { kind: 'BANK_SECURITIES', ticker: lead.ticker };
       const spec: HoldingSpec = heldInShares(instrumentType)
-        ? { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueLocal: residualUSD, shares: residualUnits }
-        : { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueLocal: residualUSD };
+        ? { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueLocal: residualLocal, shares: residualUnits }
+        : { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueLocal: residualLocal };
       if (heldInShares(instrumentType)) issueHolding(ctx.v2, { kind: 'COMPANY', ticker: issuerCompany!.ticker }, leadDesk, spec, 'underwriting residual taken by the lead');
       else transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: regionId }, leadDesk, spec, 'underwriting residual taken by the lead');
     }
@@ -157,12 +157,12 @@ export function settlePricedOfferings(
       offering,
       clearedStat: outcome.clearedStat,
       withdrawn: false,
-      marketTakeUSD: outcome.marketTakeUSD,
+      marketTakeLocal: outcome.marketTakeLocal,
       // Firm commitment issues the WHOLE deal — the lead owns what the book did not take, and
       // that paper has to exist for the lead to own it. Creating the tranche at the market take
       // instead had the lead's desk holding a claim on nothing.
-      issuedUSD: firmCommitment ? offering.sizeLocal : outcome.marketTakeUSD,
-      proceedsUSD: Math.round((grossLocal - feeLocal)),
+      issuedLocal: firmCommitment ? offering.sizeLocal : outcome.marketTakeLocal,
+      proceedsLocal: Math.round((grossLocal - feeLocal)),
     });
   });
 

@@ -18,7 +18,7 @@ import { profileKeyOf } from './profiles';
 import { decomposeGovernmentSpending } from '../../../domain/government';
 import { pay } from './settlement';
 import { SME_WAGE_GAP } from '../../bootstrap/firms';
-import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
+import { weeklyWageBillLocal, getBaseAnnualWageLocal } from '../../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { INDUSTRY_REGISTRY, totalOutputFromFinalDemand } from '../../../domain/industry-registry';
 import { WeeklyStepContext } from './context';
@@ -65,7 +65,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     // service ahead of the top's receipts, and household demand genuinely tightens.
     const cohorts = hs.cohorts ?? [];
     const C = cohorts.length > 0
-      ? cohorts.reduce((a, c) => a + c.consumptionBudgetUSD, 0)
+      ? cohorts.reduce((a, c) => a + c.consumptionBudgetLocal, 0)
       : reg.estimatedHouseholdIncomeLocal * (1 - hs.savingsRate);
     // Government purchases only — the transfer share of outlays reaches demand through C, not
     // here. PUB1e: ONE owner of the procurement budget, including the fiscal stance, so the
@@ -77,7 +77,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     // until HC gives those segments a ledger of their own. Together these are the economy's wage
     // bill, and household deposits move by them instead of by a rate applied to an estimate.
     {
-      const payrollLocal = reg.governmentPayrollWeeklyUSD ?? 0;
+      const payrollLocal = reg.governmentPayrollWeeklyLocal ?? 0;
       if (payrollLocal > 0) {
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
@@ -91,12 +91,12 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       // reach household INCOME through the accounting identity while never reaching household
       // CASH — a one-sided flow (rule 5) that only became visible when income became the sum of
       // what households actually receive.
-      const transfersUSD = reg.governmentTransfersWeeklyUSD ?? 0;
-      if (transfersUSD > 0) {
+      const transfersLocal = reg.governmentTransfersWeeklyLocal ?? 0;
+      if (transfersLocal > 0) {
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
           payee: { kind: 'HOUSEHOLD', region: regionId },
-          amount: transfersUSD,
+          amount: transfersLocal,
           currency: currencyOf(regionId),
           reason: 'government transfers',
         });
@@ -109,46 +109,46 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       // had no ledger. It is the wrong one now: with books, an over-derived wage bill drains a
       // pool's cash and shows up as measurable distress instead of disappearing into a statistic.
       {
-        const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
+        const baseAnnualWageLocal = getBaseAnnualWageLocal(regionId);
         (reg.smePools || []).forEach((pool) => {
-          const wagesUSD = weeklyWageBillUSD(
+          const wagesLocal = weeklyWageBillLocal(
             pool.employment,
             SECTOR_OCCUPATION_MIX[INDUSTRY_REGISTRY[pool.industry].sector as keyof typeof SECTOR_OCCUPATION_MIX] ?? { GENERAL: 1.0 },
-            baseAnnualWageUSD,
+            baseAnnualWageLocal,
             reg.occupationPools,
             1 - SME_WAGE_GAP
           );
-          if (wagesUSD > 0) {
+          if (wagesLocal > 0) {
             pay(ctx, {
               payer: { kind: 'SEGMENT', region: regionId, industry: pool.industry },
               payee: { kind: 'HOUSEHOLD', region: regionId },
-              amount: wagesUSD,
+              amount: wagesLocal,
               currency: currencyOf(regionId),
               reason: 'private-sector tier wages',
             });
             // §5-CLOSE F2: the pool remits the employer payroll tax on its own wage bill.
-            const payrollTaxUSD = wagesUSD * EMPLOYER_PAYROLL_TAX_RATE;
+            const payrollTaxLocal = wagesLocal * EMPLOYER_PAYROLL_TAX_RATE;
             pay(ctx, {
               payer: { kind: 'SEGMENT', region: regionId, industry: pool.industry },
               payee: { kind: 'GOVERNMENT', region: regionId },
-              amount: payrollTaxUSD,
+              amount: payrollTaxLocal,
               currency: currencyOf(regionId),
               reason: 'employer payroll tax',
             });
-            ctx.payrollTaxByRegion[regionId] = (ctx.payrollTaxByRegion[regionId] ?? 0) + payrollTaxUSD;
+            ctx.payrollTaxByRegion[regionId] = (ctx.payrollTaxByRegion[regionId] ?? 0) + payrollTaxLocal;
           }
         });
       }
     }
 
     const govBudget = decomposeGovernmentSpending(
-      reg.governmentSpendingWeeklyUSD, reg.governmentInterestWeeklyUSD ?? 0,
+      reg.governmentSpendingWeeklyLocal, reg.governmentInterestWeeklyLocal ?? 0,
       GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,
-      reg.governmentPayrollWeeklyUSD ?? 0
+      reg.governmentPayrollWeeklyLocal ?? 0
     );
-    const G = govBudget.procurementBudgetUSD * 52;
+    const G = govBudget.procurementBudgetLocal * 52;
     // HC3: private firms' capex is real corporate demand like anyone else's (their segments'
-    // capexUSD was reduced by exactly this at the carve).
+    // capexLocal was reduced by exactly this at the carve).
     const rawCorporateDemandBase = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(f => f.region === regionId).reduce((s, f) => s + f.capex, 0);
     const newLaggedCorporateDemandBase = reg.laggedCorporateDemandBase * 0.95 + rawCorporateDemandBase * 0.05;
     reg.laggedCorporateDemandBase = newLaggedCorporateDemandBase;
@@ -217,10 +217,10 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           // categories in permanent shortage as a result.
           //
           // The level IS the firms' own capex now — a measurement of what they will actually bid,
-          // not a statistic beside it. `corporateDemandUSD` still stays absent: stage 05 sizes
+          // not a statistic beside it. `corporateDemandLocal` still stays absent: stage 05 sizes
           // those bids from each buyer's capex directly, and adding a generic corporate share on
           // top would be the double count this comment originally warned about.
-          const capexDemandUSD = ctx.updatedCompanies.reduce((a, c) => (
+          const capexDemandLocal = ctx.updatedCompanies.reduce((a, c) => (
             c.region === regionId && isActiveCompany(c)
               ? a + ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)) * CAPEX_SUPPLIER_WEIGHTS[su.unitId]
               : a), 0);
@@ -233,8 +233,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           // supplying industries are sized for a buyer that really bids.
           const suCapexGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
           govBudgetByCategory[su.unitId] = suCapexGovDemand / 52;
-          allTargets[su.unitId] = (capexDemandUSD > 0
-            ? capexDemandUSD
+          allTargets[su.unitId] = (capexDemandLocal > 0
+            ? capexDemandLocal
             : (reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelAnnualLocal ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId])))
             + suCapexGovDemand;
           smoothingByCategory[su.unitId] = 0.08;
@@ -267,7 +267,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         // 18.6M against 12.8M of capacity sized off supplier revenue; with the double count
         // out, level ≈ what the bids and the suppliers were both built from. The level is
         // FINAL demand here (C+G; capex investment keeps its own branch above); the solve
-        // adds the intermediate once. `corporateDemandUSD` still carries the operating leg —
+        // adds the intermediate once. `corporateDemandLocal` still carries the operating leg —
         // stage 05's corporate bids are sized from it and from the firms' own intensities,
         // never from the level.
         allTargets[su.unitId] = suHhDemand + suGovDemand;
@@ -333,21 +333,21 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         demandGrowthAnnual: growthAnnual,
         demandHistory: [...prevHistory.slice(-25), newLevel],
         crowdingIntensity,
-        inventoryLevelUSD: existingEntry?.inventoryLevelUSD ?? (newLevel * 0.10),
+        inventoryLevelLocal: existingEntry?.inventoryLevelLocal ?? (newLevel * 0.10),
         inputCostPressure: existingEntry?.inputCostPressure ?? 0,
         clearedInputPriceIndex: existingEntry?.clearedInputPriceIndex ?? 1.0,
         upstreamScarcityIndex: existingEntry?.upstreamScarcityIndex ?? 1.0,
-        lastWeekInventoryLevelUSD: existingEntry?.lastWeekInventoryLevelUSD ?? existingEntry?.inventoryLevelUSD ?? (newLevel * 0.10),
-        corporateDemandUSD: corporateDemandByCategory[cat] ?? 0,
+        lastWeekInventoryLevelLocal: existingEntry?.lastWeekInventoryLevelLocal ?? existingEntry?.inventoryLevelLocal ?? (newLevel * 0.10),
+        corporateDemandLocal: corporateDemandByCategory[cat] ?? 0,
         // The household leg, measured at its owner (the cohort budgets) — stage 05's bid ladder
         // reads THIS. Capex categories have no household buyer, so absent means zero.
-        householdDemandUSD: householdDemandByCategory[cat] ?? 0,
+        householdDemandLocal: householdDemandByCategory[cat] ?? 0,
       };
     });
 
     // PUB1e: publish the budget stage 05 will bid, and reset last week's realized spend.
     reg.governmentProcurementBudgetByCategory = govBudgetByCategory;
-    reg.governmentProcurementSpentUSD = 0;
+    reg.governmentProcurementSpentLocal = 0;
 
     // Supply Relationships
     if (state.currentWeek % 13 === 0 || !reg.supplyRelationships || reg.supplyRelationships.length === 0) {

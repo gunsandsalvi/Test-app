@@ -4,11 +4,11 @@
 import { Position } from './instruments';
 
 export interface ReturnAttribution {
-  carryUSD: number;
-  macroRatesUSD: number;
-  creditSpreadUSD: number;
-  equityDeltaUSD: number;
-  volThetaUSD: number;
+  carryLocal: number;
+  macroRatesLocal: number;
+  creditSpreadLocal: number;
+  equityDeltaLocal: number;
+  volThetaLocal: number;
 }
 
 export interface HistoricalBenchmarkRecord {
@@ -20,9 +20,9 @@ export interface HistoricalBenchmarkRecord {
 
 export interface Portfolio {
   cashLocal: number;
-  startingCapitalUSD: number;
-  navUSD: number;
-  previousNavUSD: number;
+  startingCapitalLocal: number;
+  navLocal: number;
+  previousNavLocal: number;
   historicalNav: number[];
   historicalBenchmarks: HistoricalBenchmarkRecord[];
   positions: Position[];
@@ -34,16 +34,16 @@ export interface Portfolio {
   lastWeekAttribution: ReturnAttribution;
   
   // Margining & Risk
-  totalRequiredMarginUSD: number;
-  maintenanceMarginUSD: number;
+  totalRequiredMarginLocal: number;
+  maintenanceMarginLocal: number;
   marginUtilizationPct: number;
   isMarginCall: boolean;
   marginCallWarning: string | null;
   totalLeverage: number;
   
   // Aggregate Portfolio Greeks
-  netDeltaUSD: number;
-  netGammaUSD: number;
-  netVegaUSD: number;
-  netDV01USD: number;
+  netDeltaLocal: number;
+  netGammaLocal: number;
+  netVegaLocal: number;
+  netDV01Local: number;
 }

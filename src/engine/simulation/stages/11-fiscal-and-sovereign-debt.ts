@@ -18,9 +18,9 @@ import { generateWeeklyNews } from '../../newsGenerator';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import {
-  weeklyInterestExpenseUSD, decomposeGovernmentSpending, governmentOutlaysUSD,
-  weeklyBillDiscountAccrualUSD, isDiscountBill } from '../../../domain/government';
-import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
+  weeklyInterestExpenseLocal, decomposeGovernmentSpending, governmentOutlaysLocal,
+  weeklyBillDiscountAccrualLocal, isDiscountBill } from '../../../domain/government';
+import { centralBankSovereignBookLocal, openMarketPolicy, cashPositionBillIssuanceLocal } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay, dueToPayee, partyId, internReason, CORPORATE_TAX_REASON, settlementWeek } from './settlement';
@@ -28,7 +28,7 @@ import { retireHolding } from '../../ledger/holdings-ledger';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { encumberedFaceByBond, repoBorrowedLocal, srfBorrowedUSD } from '../../../domain/repo';
+import { encumberedFaceByBond, repoBorrowedLocal, srfBorrowedLocal } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -103,15 +103,15 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const hs = reg.householdState;
 
     // C — household consumption, already-established convention
-    const consumptionComponentUSD = reg.estimatedHouseholdIncomeLocal * (1 - hs.savingsRate);
+    const consumptionComponentLocal = reg.estimatedHouseholdIncomeLocal * (1 - hs.savingsRate);
 
     // I — tracked company investment, scaled up to represent the whole private sector via Phase 1's employment split
     const trackedFirms = updatedCompanies.filter(f => f.region === regionId && isActiveCompany(f));
-    const trackedInvestmentUSD = trackedFirms.reduce((s, f) => s + f.maintenanceCapex + f.growthCapex, 0);
+    const trackedInvestmentLocal = trackedFirms.reduce((s, f) => s + f.maintenanceCapex + f.growthCapex, 0);
     const trackedEmployment = trackedFirms.reduce((s, f) => s + f.employeeCount, 0);
     const totalPrivateEmployment = (reg.smePools || []).reduce((s, seg) => s + seg.employment, 0);
     const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + totalPrivateEmployment) / trackedEmployment : 1;
-    const investmentComponentUSD = trackedInvestmentUSD * investmentScaleFactor;
+    const investmentComponentLocal = trackedInvestmentLocal * investmentScaleFactor;
 
     // G — government PURCHASES of goods and services. Transfer payments are the rest of the
     // government's outlays and are deliberately not counted here: a transfer is not a purchase,
@@ -121,32 +121,32 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // PUB1e: G is what the government's bids actually FILLED in stage 05, annualized — the same
     // number the treasury is debited by below. It used to be a formula here and a differently
     // allocated formula in the demand stage.
-    const governmentComponentUSD = (reg.governmentProcurementSpentUSD ?? 0) * 52;
+    const governmentComponentLocal = (reg.governmentProcurementSpentLocal ?? 0) * 52;
 
     // NX — net exports, annualized. §6.1's money-locality row, first verified casualty fixed:
-    // `exportsUSD`/`importsUSD` are GENUINE USD (05 converts every cross-border lot at the
+    // `exportsLocal`/`importsLocal` are GENUINE USD (05 converts every cross-border lot at the
     // cleared rate before the bilateral table sums a world total), while C, I and G above are
     // REGION-LOCAL money. Adding them raw put a dollar figure inside a yen identity; the NX
     // component converts back to this region's own money before it joins.
-    const netExportsComponentUSD = usdToLocal(reg.exportsUSD - reg.importsUSD, regionId, ctx.getFxToUsd);
+    const netExportsComponentLocal = usdToLocal(reg.exportsLocal - reg.importsLocal, regionId, ctx.getFxToUsd);
 
-    const rawGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
-    const instantaneousNominalGdpUSD = Math.max(1e11, isFinite(rawGdpUSD) ? rawGdpUSD : 1e12);
-    const gdpLevelLastWeek = reg.lastWeekNominalGdpUSD > 0 ? reg.lastWeekNominalGdpUSD : instantaneousNominalGdpUSD;
+    const rawGdpLocal = consumptionComponentLocal + investmentComponentLocal + governmentComponentLocal + netExportsComponentLocal;
+    const instantaneousNominalGdpLocal = Math.max(1e11, isFinite(rawGdpLocal) ? rawGdpLocal : 1e12);
+    const gdpLevelLastWeek = reg.lastWeekNominalGdpLocal > 0 ? reg.lastWeekNominalGdpLocal : instantaneousNominalGdpLocal;
     // Real GDP is inherently a flow measured over a full quarter, not an instantaneous
     // snapshot — smoothing the level itself (not just the growth-rate metrics derived from it)
     // is what makes it behave that way. Without this, a single week's noise in any bottom-up
-    // component (e.g. investmentComponentUSD, which scales tracked-firm capex up by a
+    // component (e.g. investmentComponentLocal, which scales tracked-firm capex up by a
     // total-private/tracked employment ratio that itself jumps whenever a company defaults or
     // merges) showed up directly as a 30-50% swing in the displayed absolute GDP number.
-    const newDerivedNominalGdpUSD = gdpLevelLastWeek > 0 ? gdpLevelLastWeek * 0.9 + instantaneousNominalGdpUSD * 0.1 : instantaneousNominalGdpUSD;
-    const isStartupTransition = gdpLevelLastWeek < newDerivedNominalGdpUSD * 0.2;
-    const rawWeeklyRealGrowthRate = (!isStartupTransition && gdpLevelLastWeek > 0 && isFinite(newDerivedNominalGdpUSD) && isFinite(gdpLevelLastWeek))
+    const newDerivedNominalGdpLocal = gdpLevelLastWeek > 0 ? gdpLevelLastWeek * 0.9 + instantaneousNominalGdpLocal * 0.1 : instantaneousNominalGdpLocal;
+    const isStartupTransition = gdpLevelLastWeek < newDerivedNominalGdpLocal * 0.2;
+    const rawWeeklyRealGrowthRate = (!isStartupTransition && gdpLevelLastWeek > 0 && isFinite(newDerivedNominalGdpLocal) && isFinite(gdpLevelLastWeek))
       // RULE 2, OPEN, and worse than an ordinary clamp: this bounds a MEASUREMENT. GDP here is
       // summed bottom-up from real settled activity, and the growth rate that sum implies is then
       // held inside +/-4%/wk before anyone reads it. A clamped statistic is not a statistic. If
       // the raw number is too noisy to publish, the smoothing two lines below is the honest tool.
-      ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpUSD / gdpLevelLastWeek - 1) - (reg.inflation / 52)))
+      ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpLocal / gdpLevelLastWeek - 1) - (reg.inflation / 52)))
       : 0;
     const prevSmoothedWeeklyRate = reg.smoothedWeeklyGrowthRate ?? rawWeeklyRealGrowthRate;
     // Kept for the fiscal output-gap signal in macro/evolution.ts, which wants a rough weekly
@@ -163,15 +163,15 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // exactly 52 weeks before the newest one. It used to keep 52 and compare against index 0,
     // which is 51 weeks back — a year-over-year reading taken a week short of a year.
     const gdpHistory = reg.nominalGdpHistory ?? [];
-    const updatedGdpHistory = [...gdpHistory.slice(-52), newDerivedNominalGdpUSD];
+    const updatedGdpHistory = [...gdpHistory.slice(-52), newDerivedNominalGdpLocal];
     const yearAgoGdpLevel = updatedGdpHistory.length >= 53 ? updatedGdpHistory[0] : null;
     // The bootstrap seeds a full trailing year (macro/initialization.ts), so the fallback below
     // is unreachable in a normal run and exists only for a state restored without history. It
     // reports the region's trend rate rather than annualizing one week via (1+x)^52: that
     // extrapolation is what converted the cold-start level transient into ~110% headline growth,
     // and it amplifies any weekly noise by construction whether or not a transient exists.
-    const gdpGrowthBottomUp = (!isStartupTransition && yearAgoGdpLevel && yearAgoGdpLevel > 0 && isFinite(newDerivedNominalGdpUSD))
-      ? (newDerivedNominalGdpUSD / yearAgoGdpLevel - 1) - reg.inflation
+    const gdpGrowthBottomUp = (!isStartupTransition && yearAgoGdpLevel && yearAgoGdpLevel > 0 && isFinite(newDerivedNominalGdpLocal))
+      ? (newDerivedNominalGdpLocal / yearAgoGdpLevel - 1) - reg.inflation
       : reg.potentialGdpGrowth;
 
     if (!isFinite(gdpGrowthBottomUp)) {
@@ -185,7 +185,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const ladderNow = materializeGovLadder(ctx.v2, regionId);
     const maturedTranches = ladderNow.filter(t => t.maturityWeek <= nextWeek);
     const liveTranches = ladderNow.filter(t => t.maturityWeek > nextWeek);
-    const maturedPrincipalUSD = maturedTranches.reduce((s, t) => s + t.principalLocal, 0);
+    const maturedPrincipalLocal = maturedTranches.reduce((s, t) => s + t.principalLocal, 0);
 
     // Redeem the maturing principal out of whoever actually holds it. Without this, a maturing
     // tranche vanished from the government's books while the banks and institutions that owned
@@ -206,8 +206,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // CASH: what the treasury actually paid out to NAMED holders this week. The rest of the
     // maturity is owed to holders this model does not name, and is posted to the boundary below
     // rather than leaving the account with nothing recording where it went.
-    let redemptionPaidUSD = 0;
-    if (maturedPrincipalUSD > 0) {
+    let redemptionPaidLocal = 0;
+    if (maturedPrincipalLocal > 0) {
       // §3.13-SOV row 3: A BOND EITHER MATURED OR IT DID NOT. The redemption used to be a
       // FRACTION per tenor bucket — matured face over the bucket's face — applied to every
       // holder's position in that bucket, so a holder of a bond that had NOT matured had part of
@@ -220,7 +220,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // §7.247 — THE PLEDGE FOLLOWS THE PAPER ON THE BOOK ITSELF, AT THE MATURITY SITE.
       //
       // The comment below has stated the right rule since PUB2b, and what it updated was the
-      // SCALAR (`repoEncumberedCollateralUSD × survivingShare`) while the repoBook's per-bucket
+      // SCALAR (`repoEncumberedCollateralLocal × survivingShare`) while the repoBook's per-bucket
       // pledges survived — §1.4's two representations, with the reconcile and the check both
       // reading the BOOK. The stage-order reconcile then trimmed each week's pledge to LAST
       // week's holding, so a bill-pledging bank printed over-pledged by exactly one week's
@@ -233,27 +233,27 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       if (redeemedFractionByBond.size > 0) {
         (reg.repoBook ?? []).forEach((ct) => {
           if (ct.principalLocal <= 0 || ct.collateral.length === 0) return;
-          let releasedFaceUSD = 0;
-          let pledgedFaceUSD = 0;
+          let releasedFaceLocal = 0;
+          let pledgedFaceLocal = 0;
           ct.collateral = ct.collateral.map((p) => {
-            pledgedFaceUSD += p.faceLocal;
+            pledgedFaceLocal += p.faceLocal;
             const fraction = redeemedFractionByBond.get(p.bondId) ?? 0;
             if (fraction <= 0) return p;
-            const takeUSD = p.faceLocal * fraction;
-            releasedFaceUSD += takeUSD;
-            return { ...p, faceLocal: p.faceLocal - takeUSD };
+            const takeLocal = p.faceLocal * fraction;
+            releasedFaceLocal += takeLocal;
+            return { ...p, faceLocal: p.faceLocal - takeLocal };
           }).filter((p) => p.faceLocal > 1);
-          if (releasedFaceUSD <= 0 || pledgedFaceUSD <= 0) return;
-          const callUSD = Math.min(ct.principalLocal, ct.principalLocal * (releasedFaceUSD / pledgedFaceUSD));
-          ct.principalLocal -= callUSD;
+          if (releasedFaceLocal <= 0 || pledgedFaceLocal <= 0) return;
+          const callLocal = Math.min(ct.principalLocal, ct.principalLocal * (releasedFaceLocal / pledgedFaceLocal));
+          ct.principalLocal -= callLocal;
           collateralCalledByBorrower.set(ct.borrowerTicker,
-            (collateralCalledByBorrower.get(ct.borrowerTicker) ?? 0) + callUSD);
+            (collateralCalledByBorrower.get(ct.borrowerTicker) ?? 0) + callLocal);
           pay(ctx, {
             payer: { kind: 'BANK_SECURITIES', ticker: ct.borrowerTicker },
             payee: ct.lender.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: ct.lender.ticker }
               : ct.lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: ct.lender.id }
                 : { kind: 'CENTRAL_BANK', region: regionId },
-            amount: callUSD,
+            amount: callLocal,
             currency: currencyOf(regionId),
             reason: 'repo collateral call',
           });
@@ -263,24 +263,24 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
         if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
         const byTenor = c.bankBalanceSheet.sovereignBondHoldingsByBond || {};
-        let redeemedUSD = 0;
+        let redeemedLocal = 0;
         const newByTenor: Record<string, number> = {};
         Object.entries(byTenor).forEach(([key, heldLocal]) => {
           const fraction = redeemedFractionByBond.get(key) ?? 0;
-          redeemedUSD += heldLocal * fraction;
+          redeemedLocal += heldLocal * fraction;
           newByTenor[key] = heldLocal * (1 - fraction);
         });
-        const calledUSD = collateralCalledByBorrower.get(c.ticker) ?? 0;
-        if (redeemedUSD <= 0 && calledUSD <= 0) return c;
+        const calledLocal = collateralCalledByBorrower.get(c.ticker) ?? 0;
+        if (redeemedLocal <= 0 && calledLocal <= 0) return c;
         // CASH: the treasury REPAYS this holder. It used to be reserves appearing on the bank's
         // book while the TGA was debited in another stage — two direct mutations that paired,
         // which is not the same as being recorded.
-        if (redeemedUSD > 0) {
-          redemptionPaidUSD += redeemedUSD;
+        if (redeemedLocal > 0) {
+          redemptionPaidLocal += redeemedLocal;
           pay(ctx, {
             payer: { kind: 'GOVERNMENT', region: regionId },
             payee: { kind: 'BANK_SECURITIES', ticker: c.ticker },
-            amount: redeemedUSD,
+            amount: redeemedLocal,
             currency: currencyOf(regionId),
             reason: 'sovereign redemption',
           });
@@ -295,9 +295,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             ...c.bankBalanceSheet,
             sovereignBondHoldingsByBond: newByTenor,
             sovereignBondHoldingsLocal: Math.round(Object.values(newByTenor).reduce((sum, v) => sum + v, 0)),
-            repoBorrowedLocal: Math.round(repoBorrowedLocal(book, c.ticker) - srfBorrowedUSD(book, c.ticker)),
-            srfBorrowingLocal: Math.round(srfBorrowedUSD(book, c.ticker)),
-            repoEncumberedCollateralUSD: Number(
+            repoBorrowedLocal: Math.round(repoBorrowedLocal(book, c.ticker) - srfBorrowedLocal(book, c.ticker)),
+            srfBorrowingLocal: Math.round(srfBorrowedLocal(book, c.ticker)),
+            repoEncumberedCollateralLocal: Number(
               Array.from(encumberedFaceByBond(book, c.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
             ),
           },
@@ -313,7 +313,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         const sheet = c.bankBalanceSheet;
         const inv = sheet.dealerDeskInventory;
         if (!inv) return c;
-        let redeemedUSD = 0;
+        let redeemedLocal = 0;
         const newInv: typeof inv = { ...inv };
         (['sovereign bond', 'bill'] as const).forEach(book => {
           const rows = inv[book];
@@ -321,16 +321,16 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           newInv[book] = rows.map(r => {
             const fraction = redeemedFractionByBond.get(r.instrumentId) ?? 0;
             if (fraction <= 0) return r;
-            redeemedUSD += r.inventoryLocal * fraction;
+            redeemedLocal += r.inventoryLocal * fraction;
             return { ...r, inventoryLocal: r.inventoryLocal * (1 - fraction) };
           }).filter(r => Math.abs(r.inventoryLocal) > 1);
         });
-        if (!(Math.abs(redeemedUSD) > 0)) return c;
-        redemptionPaidUSD += redeemedUSD;
+        if (!(Math.abs(redeemedLocal) > 0)) return c;
+        redemptionPaidLocal += redeemedLocal;
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
           payee: { kind: 'BANK_SECURITIES', ticker: c.ticker },
-          amount: redeemedUSD,
+          amount: redeemedLocal,
           currency: currencyOf(regionId),
           reason: 'sovereign redemption',
         });
@@ -345,19 +345,19 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         if (c.region !== regionId || c.isBankEntity) return c;
         const held = c.treasuryHoldings;
         if (!held || held.length === 0) return c;
-        let redeemedUSD = 0;
+        let redeemedLocal = 0;
         const newHeld = held.map(h => {
           const fraction = redeemedFractionByBond.get(h.instrumentId) ?? 0;
           if (fraction <= 0) return h;
-          redeemedUSD += h.quantityOrNotionalLocal * fraction;
+          redeemedLocal += h.quantityOrNotionalLocal * fraction;
           return { ...h, quantityOrNotionalLocal: h.quantityOrNotionalLocal * (1 - fraction) };
         }).filter(h => h.quantityOrNotionalLocal > 1);
-        if (!(redeemedUSD > 0)) return c;
-        redemptionPaidUSD += redeemedUSD;
+        if (!(redeemedLocal > 0)) return c;
+        redemptionPaidLocal += redeemedLocal;
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
           payee: { kind: 'COMPANY', ticker: c.ticker },
-          amount: redeemedUSD,
+          amount: redeemedLocal,
           currency: currencyOf(regionId),
           reason: 'sovereign redemption',
         });
@@ -377,19 +377,19 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       const cbSheet = reg.centralBankSheet;
       if (cbSheet) {
         const remaining: Record<string, number> = {};
-        let cbRedeemedUSD = 0;
+        let cbRedeemedLocal = 0;
         Object.entries(cbSheet.sovereignHoldingsByBond || {}).forEach(([key, held]) => {
           const heldLocal = Number(held) || 0;
-          const redeemedUSD = heldLocal * (redeemedFractionByBond.get(key) ?? 0);
-          if (redeemedUSD > 0) { cbRedeemedByBond.set(key, redeemedUSD); cbRedeemedUSD += redeemedUSD; }
-          remaining[key] = heldLocal - redeemedUSD;
+          const redeemedLocal = heldLocal * (redeemedFractionByBond.get(key) ?? 0);
+          if (redeemedLocal > 0) { cbRedeemedByBond.set(key, redeemedLocal); cbRedeemedLocal += redeemedLocal; }
+          remaining[key] = heldLocal - redeemedLocal;
         });
         cbSheet.sovereignHoldingsByBond = remaining;
-        if (cbRedeemedUSD > 0) {
+        if (cbRedeemedLocal > 0) {
           pay(ctx, {
             payer: { kind: 'GOVERNMENT', region: regionId },
             payee: { kind: 'CENTRAL_BANK', region: regionId },
-            amount: cbRedeemedUSD,
+            amount: cbRedeemedLocal,
             currency: currencyOf(regionId),
             reason: 'sovereign redemption to the central bank',
           });
@@ -417,18 +417,18 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           redeem.push({ id, usd: Hsov.qtyLocal[r] * fraction });
         }
         if (redeem.length === 0) return;
-        let redeemedCashUSD = 0;
+        let redeemedCashLocal = 0;
         redeem.forEach((x) => {
           retireHolding(ctx.v2, { kind: 'INSTITUTION', id: entity.id }, { kind: 'GOVERNMENT', region: regionId },
             { instrumentType: 'GOV_BOND', instrumentId: x.id, issuerRegion: regionId, valueLocal: x.usd }, 'sovereign redemption');
-          redeemedCashUSD += x.usd;
+          redeemedCashLocal += x.usd;
         });
-        if (redeemedCashUSD > 0) {
-          redemptionPaidUSD += redeemedCashUSD;
+        if (redeemedCashLocal > 0) {
+          redemptionPaidLocal += redeemedCashLocal;
           pay(ctx, {
             payer: { kind: 'GOVERNMENT', region: regionId },
             payee: { kind: 'INSTITUTION', id: entity.id },
-            amount: redeemedCashUSD,
+            amount: redeemedCashLocal,
             currency: currencyOf(regionId),
             reason: 'sovereign redemption',
           });
@@ -439,14 +439,14 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // WS5: bills and bonds are two funding programs. Maturing BILLS refinance as bills the same
     // week (a bill program is a perpetual roll); maturing BONDS join the quarterly bond calendar
     // as before. New deficit splits by a real treasury rule below.
-    const maturedBillPrincipalUSD = maturedTranches
+    const maturedBillPrincipalLocal = maturedTranches
       .filter(t => isDiscountBill(t.tenorAtIssuanceYears))
       .reduce((s2, t) => s2 + t.principalLocal, 0);
-    const maturedBondPrincipalUSD = maturedPrincipalUSD - maturedBillPrincipalUSD;
+    const maturedBondPrincipalLocal = maturedPrincipalLocal - maturedBillPrincipalLocal;
 
     // ---- PUB1b: what the government actually collected this week, from real payers. ----
     // Corporate tax arrives quarterly off the accrued liability (stage 08 remits it); the SME
-    // pools and households pay weekly. `governmentRevenueUSD` is the sum of these plus the
+    // pools and households pay weekly. `governmentRevenueLocal` is the sum of these plus the
     // named gap below — the model has no consumption or payroll tax, which is roughly half of a
     // real take, and shrinking the state to fit the bases that do exist would model a different
     // economy rather than a more honest one.
@@ -462,47 +462,47 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // after the week's settlement cutoff, so the money lands next cycle — a remittance date's
     // cash arriving a settlement day later). The regional accrual below stays as the statement's
     // smooth expectation; the PAYMENT is per segment.
-    let smeAccrualWeeklyUSD = 0;
+    let smeAccrualWeeklyLocal = 0;
     (reg.smePools || []).forEach((sg) => {
-      const accrualUSD = Math.max(0, sg.annualRevenueLocal * sg.marginPct) * reg.effectiveTaxRate / 52;
-      smeAccrualWeeklyUSD += accrualUSD;
-      sg.accruedTaxUSD = (sg.accruedTaxUSD ?? 0) + accrualUSD;
-      if (isQuarterEnd && (sg.accruedTaxUSD ?? 0) > 0) {
+      const accrualLocal = Math.max(0, sg.annualRevenueLocal * sg.marginPct) * reg.effectiveTaxRate / 52;
+      smeAccrualWeeklyLocal += accrualLocal;
+      sg.accruedTaxLocal = (sg.accruedTaxLocal ?? 0) + accrualLocal;
+      if (isQuarterEnd && (sg.accruedTaxLocal ?? 0) > 0) {
         pay(ctx, {
           payer: { kind: 'SEGMENT', region: regionId, industry: sg.industry },
           payee: { kind: 'GOVERNMENT', region: regionId },
-          amount: sg.accruedTaxUSD!,
+          amount: sg.accruedTaxLocal!,
           currency: currencyOf(regionId),
           reason: 'SME tax (quarterly remittance)',
         });
-        sg.accruedTaxUSD = 0;
+        sg.accruedTaxLocal = 0;
       }
     });
-    const householdAccrualWeeklyUSD = (reg.householdState.cohorts ?? []).reduce((a, c) => a + c.taxUSD, 0) / 52;
-    const consumptionAccrualWeeklyUSD = (reg.householdState.cohorts ?? []).reduce((a, c) => a + (c.consumptionTaxUSD ?? 0), 0) / 52;
+    const householdAccrualWeeklyLocal = (reg.householdState.cohorts ?? []).reduce((a, c) => a + c.taxLocal, 0) / 52;
+    const consumptionAccrualWeeklyLocal = (reg.householdState.cohorts ?? []).reduce((a, c) => a + (c.consumptionTaxLocal ?? 0), 0) / 52;
 
-    reg.accruedSmeTaxUSD = (reg.accruedSmeTaxUSD ?? 0) + smeAccrualWeeklyUSD;
-    reg.accruedHouseholdTaxUSD = (reg.accruedHouseholdTaxUSD ?? 0) + householdAccrualWeeklyUSD;
-    reg.accruedConsumptionTaxUSD = (reg.accruedConsumptionTaxUSD ?? 0) + consumptionAccrualWeeklyUSD;
+    reg.accruedSmeTaxLocal = (reg.accruedSmeTaxLocal ?? 0) + smeAccrualWeeklyLocal;
+    reg.accruedHouseholdTaxLocal = (reg.accruedHouseholdTaxLocal ?? 0) + householdAccrualWeeklyLocal;
+    reg.accruedConsumptionTaxLocal = (reg.accruedConsumptionTaxLocal ?? 0) + consumptionAccrualWeeklyLocal;
 
-    const smeTaxWeeklyUSD = isQuarterEnd ? reg.accruedSmeTaxUSD : 0;
-    const consumptionTaxWeeklyUSD = isQuarterEnd ? reg.accruedConsumptionTaxUSD : 0;
-    const householdTaxWeeklyUSD = isMonthEnd ? reg.accruedHouseholdTaxUSD : 0;
+    const smeTaxWeeklyLocal = isQuarterEnd ? reg.accruedSmeTaxLocal : 0;
+    const consumptionTaxWeeklyLocal = isQuarterEnd ? reg.accruedConsumptionTaxLocal : 0;
+    const householdTaxWeeklyLocal = isMonthEnd ? reg.accruedHouseholdTaxLocal : 0;
     // §5-CLOSE F2: payroll tax is what the employers REMITTED this week (firms in 08, pools in
     // 03, each on its own wage bill) — no accrual from the macro wage bill, no month-end credit
     // from nobody.
-    const payrollTaxWeeklyUSD = ctx.payrollTaxByRegion[regionId] ?? 0;
-    if (isQuarterEnd) { reg.accruedSmeTaxUSD = 0; reg.accruedConsumptionTaxUSD = 0; }
-    if (isMonthEnd) { reg.accruedHouseholdTaxUSD = 0; }
+    const payrollTaxWeeklyLocal = ctx.payrollTaxByRegion[regionId] ?? 0;
+    if (isQuarterEnd) { reg.accruedSmeTaxLocal = 0; reg.accruedConsumptionTaxLocal = 0; }
+    if (isMonthEnd) { reg.accruedHouseholdTaxLocal = 0; }
 
     // HH: households remit their own tax. It used to be deducted inside the income identity and
     // credited to the treasury with no payer on either side — the household half of the same
     // one-sided flow as the transfers above. On the same real calendars as the accrual.
-    if (householdTaxWeeklyUSD + consumptionTaxWeeklyUSD > 0) {
+    if (householdTaxWeeklyLocal + consumptionTaxWeeklyLocal > 0) {
       pay(ctx, {
         payer: { kind: 'HOUSEHOLD', region: regionId },
         payee: { kind: 'GOVERNMENT', region: regionId },
-        amount: householdTaxWeeklyUSD + consumptionTaxWeeklyUSD,
+        amount: householdTaxWeeklyLocal + consumptionTaxWeeklyLocal,
         currency: currencyOf(regionId),
         reason: 'household tax remittance',
       });
@@ -512,35 +512,35 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // the ones the mid-week pass already settled (the report's treasury flows, this week's) plus
     // the ones still in the journal for the close (measured §7.376: counting the journal alone
     // missed the carried rows the mid-week pass had settled, and F2 printed at the quarter).
-    const corporateTaxWeeklyUSD = (ctx.lastSettlementReport?.treasuryFlowsByRegion.get(regionId)?.get(CORPORATE_TAX_REASON) ?? 0)
+    const corporateTaxWeeklyLocal = (ctx.lastSettlementReport?.treasuryFlowsByRegion.get(regionId)?.get(CORPORATE_TAX_REASON) ?? 0)
       + dueToPayee(ctx.paymentJournal, partyId({ kind: 'GOVERNMENT', region: regionId }), internReason(CORPORATE_TAX_REASON), settlementWeek(), currencyOf(regionId), ctx.fx);
-    reg.taxCollectedCorporateUSD = Math.round(corporateTaxWeeklyUSD);
+    reg.taxCollectedCorporateLocal = Math.round(corporateTaxWeeklyLocal);
     // FISCAL_TRACE=1 — the week's ACCRUAL by base (the smooth rate, not the lumpy remittance).
     if (process.env.FISCAL_TRACE === '1') {
       console.log(`  [fiscal] ${regionId} corpAccrual ${(((ctx.taxAccruedByRegion[regionId] ?? 0)) / 1e6).toFixed(1)}M`
-        + ` sme ${(smeAccrualWeeklyUSD / 1e6).toFixed(1)}M hh ${(householdAccrualWeeklyUSD / 1e6).toFixed(1)}M`
-        + ` budget ${((reg.governmentSpendingWeeklyUSD ?? 0) / 1e6).toFixed(1)}M`);
+        + ` sme ${(smeAccrualWeeklyLocal / 1e6).toFixed(1)}M hh ${(householdAccrualWeeklyLocal / 1e6).toFixed(1)}M`
+        + ` budget ${((reg.governmentSpendingWeeklyLocal ?? 0) / 1e6).toFixed(1)}M`);
     }
-    reg.taxCollectedSmeUSD = Math.round(smeTaxWeeklyUSD);
-    reg.taxCollectedHouseholdUSD = Math.round(householdTaxWeeklyUSD);
-    reg.taxCollectedPayrollUSD = Math.round(payrollTaxWeeklyUSD);
-    reg.taxCollectedConsumptionUSD = Math.round(consumptionTaxWeeklyUSD);
+    reg.taxCollectedSmeLocal = Math.round(smeTaxWeeklyLocal);
+    reg.taxCollectedHouseholdLocal = Math.round(householdTaxWeeklyLocal);
+    reg.taxCollectedPayrollLocal = Math.round(payrollTaxWeeklyLocal);
+    reg.taxCollectedConsumptionLocal = Math.round(consumptionTaxWeeklyLocal);
     // §5-CLOSE C5: revenue IS what arrived — the collections on their own calendars, and nothing
     // else. The residual that used to top this up to `GDP x rate` ("the bases the model cannot
     // tax") credited the account from nobody, and it was a quarter of the take.
-    reg.governmentRevenueUSD = Math.round((
-      corporateTaxWeeklyUSD + smeTaxWeeklyUSD + householdTaxWeeklyUSD
-      + payrollTaxWeeklyUSD + consumptionTaxWeeklyUSD
+    reg.governmentRevenueLocal = Math.round((
+      corporateTaxWeeklyLocal + smeTaxWeeklyLocal + householdTaxWeeklyLocal
+      + payrollTaxWeeklyLocal + consumptionTaxWeeklyLocal
     ));
 
     // PUB1: the government's real interest bill. The treasury's ACCOUNT is the TGA, a liability
     // of the central bank — see stages/central-bank.ts, which moves it and the reserves with it.
     // §3.13-SOV row 2: read from the ONE store. Safe here because every writer of the array
     // reconciles the store at the moment it writes, so the two never disagree mid-week.
-    const interestWeeklyUSD = weeklyInterestExpenseUSD(materializeGovLadder(ctx.v2, regionId));
-    reg.governmentInterestWeeklyUSD = Math.round(interestWeeklyUSD);
+    const interestWeeklyLocal = weeklyInterestExpenseLocal(materializeGovLadder(ctx.v2, regionId));
+    reg.governmentInterestWeeklyLocal = Math.round(interestWeeklyLocal);
     // Reported, never debited — the bill's cost is already in the redemption leg (PUB3d).
-    reg.governmentBillDiscountAccrualUSD = Math.round(weeklyBillDiscountAccrualUSD(materializeGovLadder(ctx.v2, regionId)));
+    reg.governmentBillDiscountAccrualLocal = Math.round(weeklyBillDiscountAccrualLocal(materializeGovLadder(ctx.v2, regionId)));
     // §5-CLOSE C5: there are no holders this model does not name. Every tranche is held (the
     // seed closes, §7.350; the auction places or re-offers), and a coupon reaches a holder of
     // record on its date or it is not paid — nothing is "paid smoothly" to nobody.
@@ -550,56 +550,56 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // cannot buy what it planned has not spent the money, and the remainder is named rather
     // than assumed spent. ----
     const govBudget = decomposeGovernmentSpending(
-      reg.governmentSpendingWeeklyUSD, reg.governmentInterestWeeklyUSD ?? 0,
+      reg.governmentSpendingWeeklyLocal, reg.governmentInterestWeeklyLocal ?? 0,
       GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,
-      reg.governmentPayrollWeeklyUSD ?? 0
+      reg.governmentPayrollWeeklyLocal ?? 0
     );
-    const procurementSpentUSD = reg.governmentProcurementSpentUSD ?? 0;
-    reg.governmentOutlaysUSD = Math.round(governmentOutlaysUSD({
+    const procurementSpentLocal = reg.governmentProcurementSpentLocal ?? 0;
+    reg.governmentOutlaysLocal = Math.round(governmentOutlaysLocal({
       interestLocal: govBudget.interestLocal,
       payrollLocal: govBudget.payrollLocal,
-      transfersUSD: govBudget.transfersUSD,
-      procurementSpentUSD,
+      transfersLocal: govBudget.transfersLocal,
+      procurementSpentLocal,
     }));
-    reg.unspentProcurementBudgetUSD = Number(
-      Math.max(0, govBudget.procurementBudgetUSD - procurementSpentUSD).toFixed(0)
+    reg.unspentProcurementBudgetLocal = Number(
+      Math.max(0, govBudget.procurementBudgetLocal - procurementSpentLocal).toFixed(0)
     );
 
-    const weeklyDeficitUSD = Math.max(0, reg.governmentOutlaysUSD - reg.governmentRevenueUSD) + maturedBondPrincipalUSD;
+    const weeklyDeficitLocal = Math.max(0, reg.governmentOutlaysLocal - reg.governmentRevenueLocal) + maturedBondPrincipalLocal;
 
     // The treasury's bill rule: hold the bill share of the stock near target, leaning toward
     // bills when the front end is genuinely cheaper than the belly (positive carve of the real
     // cleared curve), away when it inverts. This is issuance policy, not a market outcome — the
     // market's answer comes back through 07f's cleared bill yields next week.
-    const totalStockUSD = liveTranches.reduce((s2, t) => s2 + t.principalLocal, 0) || 1;
-    const billStockUSD = liveTranches
+    const totalStockLocal = liveTranches.reduce((s2, t) => s2 + t.principalLocal, 0) || 1;
+    const billStockLocal = liveTranches
       .filter(t => isDiscountBill(t.tenorAtIssuanceYears))
       .reduce((s2, t) => s2 + t.principalLocal, 0);
-    const billShareOfStock = billStockUSD / totalStockUSD;
+    const billShareOfStock = billStockLocal / totalStockLocal;
     const costLean = Math.max(-0.05, Math.min(0.05, (reg.zeroRates.tenor2Y - reg.zeroRates.tenor3M) * 2));
     const billShareTarget = Math.max(0.15, Math.min(0.25, 0.18 + costLean));
     // Steer the share toward target with the new-money flow: fund more of the deficit with bills
     // when under target, less when over.
     const billShareOfNewMoney = Math.max(0, Math.min(0.5, billShareTarget + (billShareTarget - billShareOfStock) * 2));
-    const billFundedDeficitUSD = weeklyDeficitUSD * billShareOfNewMoney;
-    const marketFundedDeficitUSD = weeklyDeficitUSD - billFundedDeficitUSD;
+    const billFundedDeficitLocal = weeklyDeficitLocal * billShareOfNewMoney;
+    const marketFundedDeficitLocal = weeklyDeficitLocal - billFundedDeficitLocal;
 
     // PUB3c: bond financing is quarterly but the government spends weekly, so between auctions
     // the TGA is the only thing absorbing the gap. When it falls below its operating balance the
     // bill program issues more. Sized off REALIZED outlays, so it responds to what went out.
-    const cashBridgeIssuanceUSD = cashPositionBillIssuanceUSD({
-      treasuryAccountUSD: treasuryAccountOf(ctx.v2, regionId),
-      weeklyOutlaysUSD: reg.governmentOutlaysUSD ?? reg.governmentSpendingWeeklyUSD,
+    const cashBridgeIssuanceLocal = cashPositionBillIssuanceLocal({
+      treasuryAccountLocal: treasuryAccountOf(ctx.v2, regionId),
+      weeklyOutlaysLocal: reg.governmentOutlaysLocal ?? reg.governmentSpendingWeeklyLocal,
     });
-    reg.cashBridgeBillIssuanceUSD = Math.round(cashBridgeIssuanceUSD);
+    reg.cashBridgeBillIssuanceLocal = Math.round(cashBridgeIssuanceLocal);
 
     // Weekly bill issuance: the roll plus the bill share of new money, split across the three
     // programs, priced off the real cleared bill curve (07f ran before this stage).
     const newTranches: GovDebtTranche[] = [];
-    const weeklyBillIssuanceUSD = maturedBillPrincipalUSD + billFundedDeficitUSD + cashBridgeIssuanceUSD;
-    if (weeklyBillIssuanceUSD > 1000) {
+    const weeklyBillIssuanceLocal = maturedBillPrincipalLocal + billFundedDeficitLocal + cashBridgeIssuanceLocal;
+    if (weeklyBillIssuanceLocal > 1000) {
       ([[13, 0.25, 0.4], [26, 0.5, 0.35], [52, 1, 0.25]] as const).forEach(([weeks, tenorYears, weight]) => {
-        const principal = weeklyBillIssuanceUSD * weight;
+        const principal = weeklyBillIssuanceLocal * weight;
         if (principal < 100) return;
         newTranches.push({
           id: govBillTrancheId(regionId, weeks, nextWeek),
@@ -625,7 +625,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // next block sees the advance it drew.
     const issuanceCalendarWeek = nextWeek % 13 === 0; // large blocks roughly quarterly, not every week
 
-    let quarterlyFundingNeedUSD = 0;
+    let quarterlyFundingNeedLocal = 0;
 
     // Curve-smart tenor allocation: read the actual yield curve shape already computed for this region.
     const curveSteepness = reg.zeroRates.tenor30Y - reg.zeroRates.tenor2Y;
@@ -640,11 +640,11 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const weightSum = tenorWeights.t2 + tenorWeights.t5 + tenorWeights.t10 + tenorWeights.t30;
 
     if (issuanceCalendarWeek) {
-      quarterlyFundingNeedUSD = waysAndMeansOf(ctx.v2, regionId) + 13 * marketFundedDeficitUSD;
+      quarterlyFundingNeedLocal = waysAndMeansOf(ctx.v2, regionId) + 13 * marketFundedDeficitLocal;
 
-      if (quarterlyFundingNeedUSD > 1000) {
+      if (quarterlyFundingNeedLocal > 1000) {
         ([['t2', 2, 104], ['t5', 5, 260], ['t10', 10, 520], ['t30', 30, 1560]] as const).forEach(([key, tenorYears, tenorWeeks]) => {
-          const principal = quarterlyFundingNeedUSD * (tenorWeights[key] / weightSum);
+          const principal = quarterlyFundingNeedLocal * (tenorWeights[key] / weightSum);
           if (principal < 100) return;
           newTranches.push({
             id: govBondTrancheId(regionId, tenorYears, nextWeek),
@@ -668,10 +668,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // comment below it — building a parallel sovereign ledger that drifted from the per-bank
     // tenor books (the institutional half was even overwritten by holdings-view the same week).
     // The issuance calendar and 07c already place the paper for real.
-    void issuanceCalendarWeek; void marketFundedDeficitUSD;
+    void issuanceCalendarWeek; void marketFundedDeficitLocal;
 
-    if (updatedBankingSector.centralBankReservesUSD < 0) throw new Error("Invariant Violation: centralBankReservesUSD cannot be negative");
-    updatedBankingSector.centralBankReservesUSD = Math.round(updatedBankingSector.centralBankReservesUSD);
+    if (updatedBankingSector.centralBankReservesLocal < 0) throw new Error("Invariant Violation: centralBankReservesLocal cannot be negative");
+    updatedBankingSector.centralBankReservesLocal = Math.round(updatedBankingSector.centralBankReservesLocal);
 
     // PUB1d: the new issue is NOT force-placed. It exists, and 07c prices the enlarged bucket
     // next week against budget-constrained demand, the dealer holding what finds no buyer —
@@ -703,7 +703,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // discount a bill's proceeds, but its BUYERS pay face in the clearing books and are repaid
     // face, so the bill's cleared yield reaches nobody's cash. The auction pays what the buyers
     // paid. Owner: the bill book's price/face split.
-    reg.lastIssuanceProceedsUSD = 0;
+    reg.lastIssuanceProceedsLocal = 0;
     // PUB: what is left after every named holder has been repaid is UNSOLD PAPER, and a debt
     // nobody holds is owed to nobody. It matures and it is simply gone — no payee, no payment.
     //
@@ -714,15 +714,15 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // places costs the treasury nothing when it rolls off. The remainder here is therefore a
     // MEASURE OF UNDERSUBSCRIPTION at the front of the ladder, not a payment.
     {
-      const cbRedeemedUSD = Array.from(cbRedeemedByBond.values()).reduce((a, v) => a + v, 0);
-      reg.lastUnsoldMaturedUSD = Math.round(
-        Math.max(0, maturedPrincipalUSD - redemptionPaidUSD - cbRedeemedUSD));
+      const cbRedeemedLocal = Array.from(cbRedeemedByBond.values()).reduce((a, v) => a + v, 0);
+      reg.lastUnsoldMaturedLocal = Math.round(
+        Math.max(0, maturedPrincipalLocal - redemptionPaidLocal - cbRedeemedLocal));
     }
     // The TGA's own debit is the settlement layer's now, so the central-bank stage must not take
     // it a second time; what stays here is the REPORTED figure.
     // Only what was actually repaid: the unsold remainder above never left the account.
-    reg.lastRedemptionPaidUSD = Math.round(
-      (maturedPrincipalUSD - (reg.lastUnsoldMaturedUSD ?? 0)));
+    reg.lastRedemptionPaidLocal = Math.round(
+      (maturedPrincipalLocal - (reg.lastUnsoldMaturedLocal ?? 0)));
 
     // §3.13-SOV row 2 — THE LADDER MOVES BY WIRE, HERE, AS THE EVENTS IT IS. What matured is
     // RETIRED off its own row and what was funded is ISSUED onto a new one; the array-and-diff
@@ -742,7 +742,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       newTranches.forEach((nt) => { if (nt.principalLocal > 0.01) issueTranche(ctx.v2, govIssuer, nt, 'sovereign issuance'); });
     }
 
-    const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalLocal, 0);
+    const totalGovDebtLocal = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalLocal, 0);
 
     // ---- PUB2b: the week's open-market order. What matured is put back to work (or not, in
     // QT), plus any QE flow the blocked easing calls for. It is placed as a real BID in 07c and
@@ -752,41 +752,41 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       const cb = reg.centralBankSheet;
       // XB5: the open-market operation is about the SOVEREIGN book. FX reserves are also assets
       // but they are not what a bond purchase adds to.
-      const bookLocal = centralBankSovereignBookUSD(cb);
-      const { reinvestmentShare, netPurchaseUSD } = openMarketPolicy({
+      const bookLocal = centralBankSovereignBookLocal(cb);
+      const { reinvestmentShare, netPurchaseLocal } = openMarketPolicy({
         policyRate: reg.policyRate,
         taylorTargetRate: reg.taylorTargetRate,
         bookLocal,
-        sovereignStockUSD: totalGovDebtUSD,
+        sovereignStockLocal: totalGovDebtLocal,
       });
       // Reinvestment goes back into the bucket that matured — a maturing bill is rolled into
       // bills — so the book keeps its shape instead of drifting up the curve. New QE money is
       // spread across the book's existing shape for the same reason.
       const orders: Record<string, number> = {};
-      cbRedeemedByBond.forEach((redeemedUSD, key) => {
-        orders[key] = redeemedUSD * reinvestmentShare;
+      cbRedeemedByBond.forEach((redeemedLocal, key) => {
+        orders[key] = redeemedLocal * reinvestmentShare;
       });
-      if (netPurchaseUSD > 0 && bookLocal > 0) {
+      if (netPurchaseLocal > 0 && bookLocal > 0) {
         Object.entries(cb.sovereignHoldingsByBond).forEach(([key, held]) => {
-          orders[key] = (orders[key] ?? 0) + netPurchaseUSD * ((Number(held) || 0) / bookLocal);
+          orders[key] = (orders[key] ?? 0) + netPurchaseLocal * ((Number(held) || 0) / bookLocal);
         });
       }
       cb.plannedPurchasesByBond = orders;
       cb.reinvestmentShare = Number(reinvestmentShare.toFixed(4));
     }
-    const debtToGdpPctBottomUp = newDerivedNominalGdpUSD > 0 ? totalGovDebtUSD / newDerivedNominalGdpUSD : (reg.debtToGdpPctBottomUp || 0);
+    const debtToGdpPctBottomUp = newDerivedNominalGdpLocal > 0 ? totalGovDebtLocal / newDerivedNominalGdpLocal : (reg.debtToGdpPctBottomUp || 0);
 
     updatedRegions[regionId] = {
       ...reg,
       gdpGrowth: finalGdpGrowth,
-      estimatedNominalGdpLocal: newDerivedNominalGdpUSD,
-      derivedNominalGdpUSD: newDerivedNominalGdpUSD,
+      estimatedNominalGdpLocal: newDerivedNominalGdpLocal,
+      derivedNominalGdpLocal: newDerivedNominalGdpLocal,
       gdpGrowthBottomUp: Number(gdpGrowthBottomUp.toFixed(4)),
       smoothedWeeklyGrowthRate: smoothedWeeklyRate,
-      lastWeekNominalGdpUSD: newDerivedNominalGdpUSD,
+      lastWeekNominalGdpLocal: newDerivedNominalGdpLocal,
       nominalGdpHistory: updatedGdpHistory,
-      consumptionComponentUSD,
-      investmentComponentUSD,
+      consumptionComponentLocal,
+      investmentComponentLocal,
       // §3.13-SOV row 2: `govDebtTranches` is gone — the ladder IS the store, moved by the wires
       // below rather than rebuilt as an array and diffed back into it.
       debtToGdpPctBottomUp,

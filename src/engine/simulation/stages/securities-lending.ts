@@ -18,15 +18,15 @@ import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { GameState, RegionId, Company } from '../../../types';
 import { ensureV2, ringFill, rowOf } from '../../../engine2/world';
 import {
-  SecurityLoan, loanWeeklyFeeUSD, loanOneWeekGap, lendingReservationFeeBps, shortSizeShares,
-  stockLoanNetUSD,
+  SecurityLoan, loanWeeklyFeeLocal, loanOneWeekGap, lendingReservationFeeBps, shortSizeShares,
+  stockLoanNetLocal,
 } from '../../../domain/securities-lending';
 import { WeeklyStepContext } from './context';
-import { pay, institutionSpendableUSD } from './settlement';
+import { pay, institutionSpendableLocal } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { entityRequiredReturn, maxOverweightMultipleOf, fullSizeSpreadRangeBpsOf } from './asset-allocation';
-import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
+import { fairValuePerShare, companyBookEquityLocal, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { wireHoldingMove } from '../../ledger/holdings-ledger';
 import { realizedAnnualVol } from '../../../domain/volatility';
@@ -135,7 +135,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
         return;
       }
 
-      const feeLocal = loanWeeklyFeeUSD(loan, comp.stockPrice);
+      const feeLocal = loanWeeklyFeeLocal(loan, comp.stockPrice);
       if (feeLocal > 0) {
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id: loan.borrower.id },
@@ -151,26 +151,26 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       // the lender returns the excess when it falls. Struck once at the market value on the day
       // and never touched again, the collateral drifted away from what it secured and a squeeze
       // cost nobody anything: the lender's protection eroded exactly as the borrower's position
-      // moved against it, and `stockLoanNetUSD` was an unfunded statistic.
-      const markedUSD = loan.shares * comp.stockPrice;
-      const marginCallUSD = markedUSD - loan.collateralLocal;
-      if (Math.abs(marginCallUSD) > 1) {
-        pay(ctx, marginCallUSD > 0
+      // moved against it, and `stockLoanNetLocal` was an unfunded statistic.
+      const markedLocal = loan.shares * comp.stockPrice;
+      const marginCallLocal = markedLocal - loan.collateralLocal;
+      if (Math.abs(marginCallLocal) > 1) {
+        pay(ctx, marginCallLocal > 0
           ? {
             payer: { kind: 'INSTITUTION', id: loan.borrower.id },
             payee: { kind: 'INSTITUTION', id: loan.lender.id },
-            amount: marginCallUSD,
+            amount: marginCallLocal,
             currency: currencyOf(comp.region),
             reason: 'stock loan variation margin',
           }
           : {
             payer: { kind: 'INSTITUTION', id: loan.lender.id },
             payee: { kind: 'INSTITUTION', id: loan.borrower.id },
-            amount: -marginCallUSD,
+            amount: -marginCallLocal,
             currency: currencyOf(comp.region),
             reason: 'stock loan variation margin returned',
           });
-        loan.collateralLocal = markedUSD;
+        loan.collateralLocal = markedLocal;
       }
 
       // A recalled borrower that has managed to buy the shares back delivers them and is out.
@@ -266,8 +266,8 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
         .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapOf(c) ?? 0), 0);
     });
     const floatValueById = new Map(listed.map((c) => [c.id, c.sharesOutstanding * c.stockPrice]));
-    const totalFloatValueUSD = listed.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;
-    const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityUSD(c, cashOf(ctx.v2, c))]));
+    const totalFloatValueLocal = listed.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;
+    const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c))]));
     const netInvestmentRateById = new Map(listed.map((c) => [c.id, companyNetInvestmentRate(c)]));
     const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
 
@@ -279,25 +279,25 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     shortFunds.forEach((fund) => {
       const mandate = mandateWeightForIssuer(fund.entityType, fund.region, regionId, mcapByRegion);
       if (!(mandate > 0)) return;
-      const poolUSD = institutionTotalAssetsLocal(ctx, fund) * fund.assetAllocationTarget.equityPct * mandate;
-      if (!(poolUSD > 0)) return;
+      const poolLocal = institutionTotalAssetsLocal(ctx, fund) * fund.assetAllocationTarget.equityPct * mandate;
+      if (!(poolLocal > 0)) return;
       const requiredReturn = entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund));
       // A short is collateralised at the market value on the day it is struck, so a fund cannot
       // put on more of one than it can fund — its own cash, what this week's settlement already
       // owes it, and whatever its prime broker still has open to it.
-      let fundableUSD = institutionSpendableUSD(ctx, fund) + Math.max(0, fund.primeBrokerageAvailableUSD ?? 0);
+      let fundableLocal = institutionSpendableLocal(ctx, fund) + Math.max(0, fund.primeBrokerageAvailableLocal ?? 0);
       const wants: { companyId: string; shares: number }[] = [];
       listed.forEach((c) => {
         const fair = c.isDefaulted ? 0 : fairValuePerShare({
-          annualEarningsUSD: c.netIncome,
+          annualEarningsLocal: c.netIncome,
           sharesOutstanding: c.sharesOutstanding,
-          bookEquityUSD: bookEquityById.get(c.id) ?? 0,
+          bookEquityLocal: bookEquityById.get(c.id) ?? 0,
           netInvestmentRate: netInvestmentRateById.get(c.id) ?? 0,
           riskFreeRate,
           beta: c.beta ?? 1,
           holderRequiredReturn: requiredReturn,
         });
-        const structuralShares = (poolUSD * ((floatValueById.get(c.id) ?? 0) / totalFloatValueUSD))
+        const structuralShares = (poolLocal * ((floatValueById.get(c.id) ?? 0) / totalFloatValueLocal))
           / Math.max(0.01, c.stockPrice);
         const wantShares = shortSizeShares({
           pricePerShare: c.stockPrice,
@@ -318,9 +318,9 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
         - (a.shares * (companyById.get(a.companyId)?.stockPrice ?? 0)));
       wants.forEach((w) => {
         const price = companyById.get(w.companyId)!.stockPrice;
-        const affordableShares = Math.min(w.shares, fundableUSD / Math.max(0.01, price));
+        const affordableShares = Math.min(w.shares, fundableLocal / Math.max(0.01, price));
         if (!(affordableShares > 0)) return;
-        fundableUSD -= affordableShares * price;
+        fundableLocal -= affordableShares * price;
         const list = borrowDemandByCompany.get(w.companyId) ?? [];
         list.push({ fundId: fund.id, shares: affordableShares });
         borrowDemandByCompany.set(w.companyId, list);
@@ -524,7 +524,7 @@ function publishBook(
   book.forEach((l) => { parties.add(l.lender.id); parties.add(l.borrower.id); });
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (!parties.has(e.id)) return;
-    e.stockLoanNetUSD = Math.round(stockLoanNetUSD(book, e.id, priceOf));
+    e.stockLoanNetLocal = Math.round(stockLoanNetLocal(book, e.id, priceOf));
   });
 }
 

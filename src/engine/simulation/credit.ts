@@ -34,7 +34,7 @@ export interface CreditContext {
   /** Scale: a $50B issuer and a $500M one at identical leverage are not the same credit. */
   annualRevenueLocal?: number;
   /** The median issuer's revenue in the same market, so scale is RELATIVE and not a stated size. */
-  peerMedianRevenueUSD?: number;
+  peerMedianRevenueLocal?: number;
   /** 09-concentration-risk measures these every week and nothing has ever priced off them. */
   customerConcentration?: number;
   supplierConcentration?: number;
@@ -89,8 +89,8 @@ export function determineCreditRating(
 
   if (ctx) {
     // SCALE, relative to the issuers it is rated against — an order of magnitude either way.
-    if (ctx.annualRevenueLocal !== undefined && (ctx.peerMedianRevenueUSD ?? 0) > 0) {
-      const rel = ctx.annualRevenueLocal / ctx.peerMedianRevenueUSD!;
+    if (ctx.annualRevenueLocal !== undefined && (ctx.peerMedianRevenueLocal ?? 0) > 0) {
+      const rel = ctx.annualRevenueLocal / ctx.peerMedianRevenueLocal!;
       if (rel > 10) notch += 1;
       else if (rel < 0.1) notch -= 1;
     }

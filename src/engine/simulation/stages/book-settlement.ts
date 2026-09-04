@@ -3,7 +3,7 @@
  * (07b bonds, 07c sovereigns, 07d loans, 07e equity, 07f bills).
  *
  * Until this existed each book moved its participants' money itself: `entity.cashLocal +=`,
- * `cashReservesUSD +=`. A balance changed and no bank's book knew — the same shape as the
+ * `cashReservesLocal +=`. A balance changed and no bank's book knew — the same shape as the
  * corporate-cash leak §7.86 was found by, and the reason institutional cash volatility could
  * not be seen for what it was (§7.91): the clearing legs ARE the volatility, and they were
  * invisible to the layer that watches money move.
@@ -13,11 +13,11 @@
  * session, and the clearing house is flat by construction — it is on both sides of every trade.
  * That is exactly the invariant this buys: the dealer's leg, the desks' fees and every
  * participant's net all settle against one party, so a book that forgets a leg leaves the
- * clearing house holding money and `clearingHouseResidualUSD` says so instead of the dollars
+ * clearing house holding money and `clearingHouseResidualLocal` says so instead of the dollars
  * quietly vanishing.
  *
  * **The dealer.** It is the counterparty to every fill, so it receives exactly what the
- * participants paid (`dealerNetCashUSD`). The fee half is the desks' revenue and goes to the
+ * participants paid (`dealerNetCashLocal`). The fee half is the desks' revenue and goes to the
  * named banks by market share, cash and equity together. What is left is the week's PRIMARY
  * placement, and it goes to the ISSUERS who brought the paper, by name and in proportion to
  * what each one's deal actually placed — stage 08 reports the same proceeds on the issuer's cash
@@ -75,7 +75,7 @@ export function settleClearedBook(
   book: string,
   netCashByParticipantId: Map<string, number>,
   partyOf: (participantId: string) => PartyRef | undefined,
-  dealer: { netCashUSD: number; feeLocal: number },
+  dealer: { netCashLocal: number; feeLocal: number },
   feeDesks: FeeDesk[],
   primaryTakes: PrimaryTake[] = []
 ): void {
@@ -92,12 +92,12 @@ export function settleClearedBook(
 
   // What is left after the fees is what the week's PRIMARY placed, and it belongs to the issuers
   // who brought the paper. Paid to each by name, pro rata to what its own deal placed.
-  const tradingUSD = dealer.netCashUSD - dealer.feeLocal;
-  const takeTotalUSD = primaryTakes.reduce((a, t) => a + Math.max(0, t.amountLocal), 0);
-  const primaryUSD = Math.max(0, Math.min(takeTotalUSD, Math.max(0, tradingUSD)));
-  if (primaryUSD > 0 && takeTotalUSD > 0) {
+  const tradingLocal = dealer.netCashLocal - dealer.feeLocal;
+  const takeTotalLocal = primaryTakes.reduce((a, t) => a + Math.max(0, t.amountLocal), 0);
+  const primaryLocal = Math.max(0, Math.min(takeTotalLocal, Math.max(0, tradingLocal)));
+  if (primaryLocal > 0 && takeTotalLocal > 0) {
     primaryTakes.forEach((t) => {
-      const amountLocal = Math.max(0, t.amountLocal) * (primaryUSD / takeTotalUSD);
+      const amountLocal = Math.max(0, t.amountLocal) * (primaryLocal / takeTotalLocal);
       if (amountLocal > 0) pay(ctx, { payer: ccp, payee: t.party, amount: amountLocal, currency: quoteCurrency, reason: `${book} primary proceeds` });
     });
   }
@@ -111,22 +111,22 @@ export function settleClearedBook(
   // §5-CLOSE: with two-sided rationing a stock book leaves nothing over beyond the rounding of
   // its legs. Rounding dust has an owner too — the desks that earned the fees absorb it — and a
   // leftover past rounding is a defect here, never a line paid to nobody.
-  const leftoverUSD = tradingUSD - primaryUSD;
-  const roundingToleranceUSD = Math.max(1e4, Math.abs(dealer.netCashUSD) * 1e-6);
-  if (process.env.LEFTOVER_TRACE === '1' && Math.abs(leftoverUSD) > 1) {
-    console.log(`  [leftover] ${regionId} ${book}: leftover ${(leftoverUSD / 1e6).toFixed(3)}M`
-      + ` (dealerNet ${(dealer.netCashUSD / 1e6).toFixed(3)}M fee ${(dealer.feeLocal / 1e6).toFixed(3)}M primary ${(primaryUSD / 1e6).toFixed(3)}M)`);
+  const leftoverLocal = tradingLocal - primaryLocal;
+  const roundingToleranceLocal = Math.max(1e4, Math.abs(dealer.netCashLocal) * 1e-6);
+  if (process.env.LEFTOVER_TRACE === '1' && Math.abs(leftoverLocal) > 1) {
+    console.log(`  [leftover] ${regionId} ${book}: leftover ${(leftoverLocal / 1e6).toFixed(3)}M`
+      + ` (dealerNet ${(dealer.netCashLocal / 1e6).toFixed(3)}M fee ${(dealer.feeLocal / 1e6).toFixed(3)}M primary ${(primaryLocal / 1e6).toFixed(3)}M)`);
   }
-  if (Math.abs(leftoverUSD) > roundingToleranceUSD) defect(`${regionId} ${book} clearing left ${(leftoverUSD / 1e6).toFixed(3)}M with no owner (dealer net ${(dealer.netCashUSD / 1e6).toFixed(3)}M, fee ${(dealer.feeLocal / 1e6).toFixed(3)}M, primary ${(primaryUSD / 1e6).toFixed(3)}M)`);
+  if (Math.abs(leftoverLocal) > roundingToleranceLocal) defect(`${regionId} ${book} clearing left ${(leftoverLocal / 1e6).toFixed(3)}M with no owner (dealer net ${(dealer.netCashLocal / 1e6).toFixed(3)}M, fee ${(dealer.feeLocal / 1e6).toFixed(3)}M, primary ${(primaryLocal / 1e6).toFixed(3)}M)`);
 
   // The desks' fee income (plus the rounding dust): cash and equity together, because nothing
   // else arrived against it. Shares are normalised — the clients paid the whole fee, so the whole
   // fee reaches the desks that earned it however their market shares happen to sum.
   const totalShare = feeDesks.reduce((a, d) => a + d.share, 0);
-  const deskTotalUSD = dealer.feeLocal + leftoverUSD;
-  if (deskTotalUSD !== 0 && totalShare > 0) {
+  const deskTotalLocal = dealer.feeLocal + leftoverLocal;
+  if (deskTotalLocal !== 0 && totalShare > 0) {
     feeDesks.forEach((desk) => {
-      const amountLocal = deskTotalUSD * (desk.share / totalShare);
+      const amountLocal = deskTotalLocal * (desk.share / totalShare);
       if (amountLocal > 0) pay(ctx, { payer: ccp, payee: { kind: 'BANK', ticker: desk.ticker }, amount: amountLocal, currency: quoteCurrency, reason: `${book} dealer fee` });
       else if (amountLocal < 0) pay(ctx, { payer: { kind: 'BANK', ticker: desk.ticker }, payee: ccp, amount: -amountLocal, currency: quoteCurrency, reason: `${book} dealer fee` });
     });
@@ -147,16 +147,16 @@ export function feeDesksForRegion(ctx: WeeklyStepContext, regionId: RegionId): F
 export function primaryTakes(
   result: ClearingResult,
   partyOfIssuerId: (issuerId: string) => PartyRef | undefined,
-  valueOf: (marketTakeUSD: number, clearedStat: number) => number = (take) => take,
+  valueOf: (marketTakeLocal: number, clearedStat: number) => number = (take) => take,
   /** §5-WIRES W2: the paper behind the take — see `primaryAssetOf`. */
   assetOf?: (issuerId: string, marketTake: number, clearedStat: number) => HoldingSpec | undefined
 ): PrimaryTake[] {
   const takes: PrimaryTake[] = [];
   result.primaryOutcomeById.forEach((o, issuerId) => {
     if (o.withdrawn) return;
-    const amountLocal = valueOf(o.marketTakeUSD, o.clearedStat);
+    const amountLocal = valueOf(o.marketTakeLocal, o.clearedStat);
     const party = partyOfIssuerId(issuerId);
-    if (party && amountLocal > 0) takes.push({ party, amountLocal, asset: assetOf?.(issuerId, o.marketTakeUSD, o.clearedStat) });
+    if (party && amountLocal > 0) takes.push({ party, amountLocal, asset: assetOf?.(issuerId, o.marketTakeLocal, o.clearedStat) });
   });
   return takes;
 }

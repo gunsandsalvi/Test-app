@@ -16,7 +16,7 @@
  *
  * **What is left after this pass is that net imbalance.** It is the honest order flow for the FX
  * auction, and it is orders of magnitude smaller than the gross it replaces. Feeding it to
- * `fx-clearing` — and deleting `ctx.bilateralTradeWeeklyUSD`, a derived aggregate standing in for
+ * `fx-clearing` — and deleting `ctx.bilateralTradeWeeklyLocal`, a derived aggregate standing in for
  * orders nobody places — is the next slice; the positions this leaves are what it will read.
  *
  * The pair is squared at the rate in force, so neither side books a gain on the swap itself.

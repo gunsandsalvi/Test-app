@@ -40,30 +40,30 @@ export function centralBankParticipant(
   cb: CentralBank,
   bondIds: string[],
   statKind: 'YIELD_LIKE' | 'PRICE_LIKE' = 'YIELD_LIKE'
-): { participant: ClearingParticipant; orderedUSD: number } | null {
+): { participant: ClearingParticipant; orderedLocal: number } | null {
   const holdings = new Map<string, number>();
   const demand = new Map<string, ParticipantDemand>();
-  let orderedUSD = 0;
+  let orderedLocal = 0;
   bondIds.forEach((key) => {
     const heldLocal = Number(cb.sovereignHoldingsByBond?.[key]) || 0;
-    const orderUSD = Math.max(0, Number(cb.plannedPurchasesByBond?.[key]) || 0);
-    orderedUSD += orderUSD;
+    const orderLocal = Math.max(0, Number(cb.plannedPurchasesByBond?.[key]) || 0);
+    orderedLocal += orderLocal;
     holdings.set(key, heldLocal);
     demand.set(key, {
       reservationStat: statKind === 'PRICE_LIKE' ? NO_RESERVATION_STAT : -NO_RESERVATION_STAT,
-      maxHoldingLocal: heldLocal + orderUSD,
+      maxHoldingLocal: heldLocal + orderLocal,
       // Full size at once: any positive range would make it price-sensitive.
       fullSizeStatRange: 1e-6,
-      maxNetPurchaseUSD: orderUSD,
+      maxNetPurchaseLocal: orderLocal,
       // It does not sell what it already holds. Runoff happens through maturity, not the market
       // — a central bank selling its book outright is a rarer operation than QT and is not this.
-      minHoldingUSD: heldLocal,
+      minHoldingLocal: heldLocal,
     });
   });
-  if (orderedUSD <= 0) return null;
+  if (orderedLocal <= 0) return null;
   return {
     participant: { id: CENTRAL_BANK_PARTICIPANT_ID, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand },
-    orderedUSD,
+    orderedLocal,
   };
 }
 
@@ -93,14 +93,14 @@ export function applyCentralBankFills(
   bondIds: string[],
   newHoldings: Map<string, number>
 ): number {
-  let purchasedUSD = 0;
+  let purchasedLocal = 0;
   const book = { ...cb.sovereignHoldingsByBond };
   bondIds.forEach((key) => {
     const filledLocal = newHoldings.get(key);
     if (filledLocal === undefined) return;
-    purchasedUSD += filledLocal - (Number(book[key]) || 0);
+    purchasedLocal += filledLocal - (Number(book[key]) || 0);
     book[key] = filledLocal;
   });
   cb.sovereignHoldingsByBond = book;
-  return purchasedUSD;
+  return purchasedLocal;
 }

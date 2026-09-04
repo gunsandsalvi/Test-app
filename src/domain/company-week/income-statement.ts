@@ -17,15 +17,15 @@
 
 export interface IncomeStatement {
   ebitdaLocal: number;
-  ebitUSD: number;
-  netIncomeUSD: number;
-  epsUSD: number;
+  ebitLocal: number;
+  netIncomeLocal: number;
+  epsLocal: number;
   /** §5-TAXR — the year-rate cash tax and the rolled-forward tax attributes. */
-  taxPaidAnnualUSD: number;
-  taxLossCarryforwardUSD: number;
-  taxBasisPpeUSD: number;
+  taxPaidAnnualLocal: number;
+  taxLossCarryforwardLocal: number;
+  taxBasisPpeLocal: number;
   /** (book net PP&E − tax basis) × rate: what acceleration has deferred — a VIEW, no flow. */
-  deferredTaxLiabilityUSD: number;
+  deferredTaxLiabilityLocal: number;
 }
 
 /**
@@ -46,51 +46,51 @@ export interface IncomeStatement {
  */
 export interface TaxInputs {
   /** Book depreciation already inside EBIT — added back so the TAX schedule can replace it. */
-  bookDepreciationAnnualUSD: number;
-  taxBasisPpeUSD: number;
+  bookDepreciationAnnualLocal: number;
+  taxBasisPpeLocal: number;
   usefulLifeYears: number;
   /** Plant DELIVERED this year-rate: additions to the tax basis (IND1's real deliveries). */
-  capexDeliveredAnnualUSD: number;
-  carryforwardUSD: number;
-  bookNetPpeUSD: number;
+  capexDeliveredAnnualLocal: number;
+  carryforwardLocal: number;
+  bookNetPpeLocal: number;
 }
 export interface TaxComputation {
-  taxPaidAnnualUSD: number;
-  carryforwardUSD: number;
-  taxBasisPpeUSD: number;
-  taxDepreciationAnnualUSD: number;
-  deferredTaxLiabilityUSD: number;
+  taxPaidAnnualLocal: number;
+  carryforwardLocal: number;
+  taxBasisPpeLocal: number;
+  taxDepreciationAnnualLocal: number;
+  deferredTaxLiabilityLocal: number;
 }
 
 /**
- * ONE CALL ADVANCES THE STOCKS BY ONE WEEK. The P&L figures (`taxPaidAnnualUSD`,
- * `taxDepreciationAnnualUSD`) are year-rates like every other line on the statement; the
- * attributes (`carryforwardUSD`, `taxBasisPpeUSD`) are STOCKS, so they roll forward by the
+ * ONE CALL ADVANCES THE STOCKS BY ONE WEEK. The P&L figures (`taxPaidAnnualLocal`,
+ * `taxDepreciationAnnualLocal`) are year-rates like every other line on the statement; the
+ * attributes (`carryforwardLocal`, `taxBasisPpeLocal`) are STOCKS, so they roll forward by the
  * week's slice of those rates — a stock moved at the annual rate every week would deplete
  * fifty-two times too fast (the same stock/flow discipline as the PP&E roll-forward).
  */
 export function corporateTax(
-  preTaxUSD: number, taxRate: number, t: TaxInputs
+  preTaxLocal: number, taxRate: number, t: TaxInputs
 ): TaxComputation {
   // Double-declining balance on the tax basis, never below zero basis.
   const decliningRate = 2 / Math.max(1, t.usefulLifeYears);
-  const taxDepreciationAnnualUSD = Math.max(0, t.taxBasisPpeUSD) * decliningRate;
-  const taxBasisPpeUSD = Math.max(0,
-    t.taxBasisPpeUSD + (Math.max(0, t.capexDeliveredAnnualUSD) - taxDepreciationAnnualUSD) / 52);
+  const taxDepreciationAnnualLocal = Math.max(0, t.taxBasisPpeLocal) * decliningRate;
+  const taxBasisPpeLocal = Math.max(0,
+    t.taxBasisPpeLocal + (Math.max(0, t.capexDeliveredAnnualLocal) - taxDepreciationAnnualLocal) / 52);
   // The depreciation swap: book D&A out, the tax schedule in.
-  const taxableAnnualUSD = preTaxUSD + Math.max(0, t.bookDepreciationAnnualUSD) - taxDepreciationAnnualUSD;
-  let carryforwardUSD = Math.max(0, t.carryforwardUSD);
-  let taxPaidAnnualUSD = 0;
-  if (taxableAnnualUSD > 0) {
+  const taxableAnnualLocal = preTaxLocal + Math.max(0, t.bookDepreciationAnnualLocal) - taxDepreciationAnnualLocal;
+  let carryforwardLocal = Math.max(0, t.carryforwardLocal);
+  let taxPaidAnnualLocal = 0;
+  if (taxableAnnualLocal > 0) {
     // This week's taxable slice draws the carryforward stock down until it is gone.
-    const usedUSD = Math.min(taxableAnnualUSD / 52, carryforwardUSD);
-    carryforwardUSD -= usedUSD;
-    taxPaidAnnualUSD = (taxableAnnualUSD / 52 - usedUSD) * taxRate * 52;
+    const usedLocal = Math.min(taxableAnnualLocal / 52, carryforwardLocal);
+    carryforwardLocal -= usedLocal;
+    taxPaidAnnualLocal = (taxableAnnualLocal / 52 - usedLocal) * taxRate * 52;
   } else {
-    carryforwardUSD += -taxableAnnualUSD / 52;
+    carryforwardLocal += -taxableAnnualLocal / 52;
   }
-  const deferredTaxLiabilityUSD = Math.max(0, (t.bookNetPpeUSD - taxBasisPpeUSD)) * taxRate;
-  return { taxPaidAnnualUSD, carryforwardUSD, taxBasisPpeUSD, taxDepreciationAnnualUSD, deferredTaxLiabilityUSD };
+  const deferredTaxLiabilityLocal = Math.max(0, (t.bookNetPpeLocal - taxBasisPpeLocal)) * taxRate;
+  return { taxPaidAnnualLocal, carryforwardLocal, taxBasisPpeLocal, taxDepreciationAnnualLocal, deferredTaxLiabilityLocal };
 }
 
 /**
@@ -101,24 +101,24 @@ export function corporateTax(
  * That is the profile path's long-standing convention, kept deliberately; changing the guard
  * basis is a modelling decision for TAXR, not a cleanup.
  */
-export function netIncomeUSD(
-  ebitUSD: number,
-  annualInterestUSD: number,
+export function netIncomeLocal(
+  ebitLocal: number,
+  annualInterestLocal: number,
   taxRate: number,
   tax?: TaxInputs
-): { netUSD: number; tax: TaxComputation } {
-  const preTax = ebitUSD - annualInterestUSD;
+): { netLocal: number; tax: TaxComputation } {
+  const preTax = ebitLocal - annualInterestLocal;
   if (!tax) {
     // Legacy shape for callers with no tax attributes yet (pools, previews): the §7.255 rule
     // without carryforwards. Kept until every caller carries the base.
-    const legacyNet = ebitUSD > 0 ? preTax * (1 - taxRate) : preTax;
+    const legacyNet = ebitLocal > 0 ? preTax * (1 - taxRate) : preTax;
     return {
-      netUSD: legacyNet,
-      tax: { taxPaidAnnualUSD: Math.max(0, preTax - legacyNet), carryforwardUSD: 0, taxBasisPpeUSD: 0, taxDepreciationAnnualUSD: 0, deferredTaxLiabilityUSD: 0 },
+      netLocal: legacyNet,
+      tax: { taxPaidAnnualLocal: Math.max(0, preTax - legacyNet), carryforwardLocal: 0, taxBasisPpeLocal: 0, taxDepreciationAnnualLocal: 0, deferredTaxLiabilityLocal: 0 },
     };
   }
   const computed = corporateTax(preTax, taxRate, tax);
-  return { netUSD: preTax - computed.taxPaidAnnualUSD, tax: computed };
+  return { netLocal: preTax - computed.taxPaidAnnualLocal, tax: computed };
 }
 
 /**
@@ -130,26 +130,26 @@ export function industrialIncome(i: {
   revenueLocal: number;
   ebitdaMargin: number;
   daShareOfRevenue: number;
-  annualInterestUSD: number;
+  annualInterestLocal: number;
   taxRate: number;
   sharesOutstanding: number;
   /** §5-TAXR — the firm's tax attributes; absent = the legacy no-carryforward rule. */
-  tax?: Omit<TaxInputs, 'bookDepreciationAnnualUSD'>;
+  tax?: Omit<TaxInputs, 'bookDepreciationAnnualLocal'>;
 }): IncomeStatement {
   const ebitdaLocal = i.revenueLocal * i.ebitdaMargin;
-  const daUSD = i.revenueLocal * i.daShareOfRevenue;
-  const ebitUSD = ebitdaLocal - daUSD;
-  const r = netIncomeUSD(ebitUSD, i.annualInterestUSD, i.taxRate,
-    i.tax ? { ...i.tax, bookDepreciationAnnualUSD: daUSD } : undefined);
+  const daLocal = i.revenueLocal * i.daShareOfRevenue;
+  const ebitLocal = ebitdaLocal - daLocal;
+  const r = netIncomeLocal(ebitLocal, i.annualInterestLocal, i.taxRate,
+    i.tax ? { ...i.tax, bookDepreciationAnnualLocal: daLocal } : undefined);
   return {
     ebitdaLocal,
-    ebitUSD,
-    netIncomeUSD: r.netUSD,
-    epsUSD: i.sharesOutstanding > 0 ? r.netUSD / i.sharesOutstanding : 0,
-    taxPaidAnnualUSD: r.tax.taxPaidAnnualUSD,
-    taxLossCarryforwardUSD: r.tax.carryforwardUSD,
-    taxBasisPpeUSD: r.tax.taxBasisPpeUSD,
-    deferredTaxLiabilityUSD: r.tax.deferredTaxLiabilityUSD,
+    ebitLocal,
+    netIncomeLocal: r.netLocal,
+    epsLocal: i.sharesOutstanding > 0 ? r.netLocal / i.sharesOutstanding : 0,
+    taxPaidAnnualLocal: r.tax.taxPaidAnnualLocal,
+    taxLossCarryforwardLocal: r.tax.carryforwardLocal,
+    taxBasisPpeLocal: r.tax.taxBasisPpeLocal,
+    deferredTaxLiabilityLocal: r.tax.deferredTaxLiabilityLocal,
   };
 }
 
@@ -161,36 +161,36 @@ export function industrialIncome(i: {
  */
 export function profileIncome(i: {
   revenueLocal: number;
-  otherIncomeAnnualUSD: number;
+  otherIncomeAnnualLocal: number;
   /** The three cost lines are separate, and they are subtracted in THIS ORDER, because floating
    *  point addition is not associative: folding them into one `operatingCosts` argument changed
    *  the world at the third decimal and the three-week fingerprint caught it. An extraction that
    *  reorders arithmetic is not a refactor. */
-  inputCostAnnualUSD: number;
-  payrollAnnualUSD: number;
-  profileCostsAnnualUSD: number;
+  inputCostAnnualLocal: number;
+  payrollAnnualLocal: number;
+  profileCostsAnnualLocal: number;
   grossPPELocal: number;
   ppeDepreciationYears: number;
-  annualInterestUSD: number;
+  annualInterestLocal: number;
   taxRate: number;
   sharesOutstanding: number;
   /** §5-TAXR — the firm's tax attributes; absent = the legacy no-carryforward rule. */
-  tax?: Omit<TaxInputs, 'bookDepreciationAnnualUSD'>;
+  tax?: Omit<TaxInputs, 'bookDepreciationAnnualLocal'>;
 }): IncomeStatement {
-  const ebitdaLocal = i.revenueLocal + i.otherIncomeAnnualUSD
-    - i.inputCostAnnualUSD - i.payrollAnnualUSD - i.profileCostsAnnualUSD;
-  const bookDaUSD = i.grossPPELocal / Math.max(1, i.ppeDepreciationYears);
-  const ebitUSD = ebitdaLocal - bookDaUSD;
-  const r = netIncomeUSD(ebitUSD, i.annualInterestUSD, i.taxRate,
-    i.tax ? { ...i.tax, bookDepreciationAnnualUSD: bookDaUSD } : undefined);
+  const ebitdaLocal = i.revenueLocal + i.otherIncomeAnnualLocal
+    - i.inputCostAnnualLocal - i.payrollAnnualLocal - i.profileCostsAnnualLocal;
+  const bookDaLocal = i.grossPPELocal / Math.max(1, i.ppeDepreciationYears);
+  const ebitLocal = ebitdaLocal - bookDaLocal;
+  const r = netIncomeLocal(ebitLocal, i.annualInterestLocal, i.taxRate,
+    i.tax ? { ...i.tax, bookDepreciationAnnualLocal: bookDaLocal } : undefined);
   return {
     ebitdaLocal,
-    ebitUSD,
-    netIncomeUSD: r.netUSD,
-    epsUSD: i.sharesOutstanding > 0 ? r.netUSD / i.sharesOutstanding : 0,
-    taxPaidAnnualUSD: r.tax.taxPaidAnnualUSD,
-    taxLossCarryforwardUSD: r.tax.carryforwardUSD,
-    taxBasisPpeUSD: r.tax.taxBasisPpeUSD,
-    deferredTaxLiabilityUSD: r.tax.deferredTaxLiabilityUSD,
+    ebitLocal,
+    netIncomeLocal: r.netLocal,
+    epsLocal: i.sharesOutstanding > 0 ? r.netLocal / i.sharesOutstanding : 0,
+    taxPaidAnnualLocal: r.tax.taxPaidAnnualLocal,
+    taxLossCarryforwardLocal: r.tax.carryforwardLocal,
+    taxBasisPpeLocal: r.tax.taxBasisPpeLocal,
+    deferredTaxLiabilityLocal: r.tax.deferredTaxLiabilityLocal,
   };
 }

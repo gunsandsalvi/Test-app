@@ -18,7 +18,7 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
   // industries at once (TechHardwareSemis, AutomotiveTransport, AerospaceDefense, and
   // IndustrialsMachinery all draw on the same regional specialty_metals pool). The old structure
   // looped per DEMANDER industry and, for each one, independently recomputed and OVERWROTE the
-  // shared supplier's inventoryLevelUSD/upstreamScarcityIndex as if that industry were the only
+  // shared supplier's inventoryLevelLocal/upstreamScarcityIndex as if that industry were the only
   // consumer that week — so the persisted state simply reflected whichever industry's pass ran
   // last, silently discarding every other industry's simultaneous draw on the exact same stock.
   // Confirmed by direct instrumentation: specialty_metals inventory drained monotonically to
@@ -113,7 +113,7 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
       const supplier = reg.categoryDemand[inputCat];
       if (!supplier) return;
 
-      const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
+      const lastWeekInventory = supplier.lastWeekInventoryLevelLocal ?? supplier.inventoryLevelLocal ?? 0;
       const currentGlutSeverity = Math.max(0, 1.0 - (supplier.upstreamScarcityIndex ?? 1.0)); // how far below fair value the price currently sits
       const inventoryHoldingDecayRate = (0.015 + currentGlutSeverity * 0.35) / 52; // decay accelerates sharply the more oversupplied the market genuinely is — real obsolescence pressure, not a flat constant
       const decayedInventory = lastWeekInventory * (1 - inventoryHoldingDecayRate);
@@ -137,7 +137,7 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
       const overallFulfillmentRatio = totalBidQuantity > 0 ? quantityFulfilled / totalBidQuantity : 1;
 
       supplier.upstreamScarcityIndex = Number(newPriceIndex.toFixed(4));
-      supplier.inventoryLevelUSD = Math.max(0, totalAvailableSupply - quantityFulfilled);
+      supplier.inventoryLevelLocal = Math.max(0, totalAvailableSupply - quantityFulfilled);
       supplier._fulfillmentRatio = totalAvailableSupply > 0 ? quantityFulfilled / totalAvailableSupply : 1;
 
       demanderBidQuantities.forEach(({ demanderSubUnit }) => {
@@ -160,7 +160,7 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
     // after the loop, snapshot this week's inventory as next week's lag anchor:
     Object.keys(reg.categoryDemand).forEach(cat => {
       const entry = reg.categoryDemand[cat];
-      entry.lastWeekInventoryLevelUSD = entry.inventoryLevelUSD ?? 0;
+      entry.lastWeekInventoryLevelLocal = entry.inventoryLevelLocal ?? 0;
     });
   });
 }

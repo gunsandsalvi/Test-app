@@ -96,8 +96,8 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 the position moves because customers paid other banks' customers | `src/engine/simulation/stages/settlement.ts:runSettlementStage` | ✅ |
 | A1.a in aggregate reserves are redistributed, not changed | `src/engine/audit/money.ts:m1` | ✅ |
-| A1.b so the market has two sides without anybody being assigned one | `src/engine/simulation/stages/repo-clearing.ts:bankSurplusUSD` | ✅ |
-| A2 a bank holds a position for its own reasons | `src/engine/simulation/stages/bank-lending.ts:operatingCashBufferUSD` | ⚠️ |
+| A1.b so the market has two sides without anybody being assigned one | `src/engine/simulation/stages/repo-clearing.ts:bankSurplusLocal` | ✅ |
+| A2 a bank holds a position for its own reasons | `src/engine/simulation/stages/bank-lending.ts:operatingCashBufferLocal` | ⚠️ |
 | **A2.a the buffer is a PREFERENCE derived from its own liabilities** | `src/engine/macro/banking.ts:MIN_CASH_BUFFER_RATIO` | ⚠️ |
 | A2.b VERIFY missing it has a cost the bank can feel | — | ❌ |
 | **A3 the need is knowable only AFTER the day's flows** | `src/engine/simulation/stages/repo-clearing.ts:needByTicker` | ⚠️ |
@@ -107,24 +107,24 @@ checked by `scripts/check-atlas.sh`.
 | B2.a a doubted name pays more, or finds no bid | — | ❌ |
 | B2.b VERIFY the strongest-to-weakest spread measures stress | — | ❌ |
 | B3 secured lending prices the collateral | `src/domain/repo.ts:RepoContract` | ✅ |
-| B3.a eligibility is per asset, and something is ineligible | `src/engine/simulation/stages/repo-clearing.ts:collateralCapacityUSD` | ✅ |
+| B3.a eligibility is per asset, and something is ineligible | `src/engine/simulation/stages/repo-clearing.ts:collateralCapacityLocal` | ✅ |
 | B3.b haircuts by asset and tenor | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
 | B3.c pledged collateral is encumbered and cannot be pledged twice | `src/domain/collateral.ts:overPledgedByBond` | ✅ |
 | B4 a rate CLEARS from those schedules meeting | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
-| B5 non-bank cash is in the same market | `src/engine/simulation/stages/settlement.ts:institutionSpendableUSD` | ✅ |
+| B5 non-bank cash is in the same market | `src/engine/simulation/stages/settlement.ts:institutionSpendableLocal` | ✅ |
 | B5.a its alternative is the floor, or bills directly | `src/engine/simulation/stages/money-market-fund.ts:quoteMmfNetYieldAnnual` | ✅ |
 | B6 tenor: overnight and term, each with its own book | `src/engine/simulation/stages/repo-clearing.ts:REPO_TERM_WEEKS` | ✅ |
 | B6.a VERIFY the term/overnight spread is information | `src/engine/simulation/stages/derivative-markets/irs.ts:overnightRateAnnual` | ⚠️ |
-| **B7 the market can fail to clear for a name** | `src/engine/simulation/stages/repo-clearing.ts:unfundedTermUSD` | ⚠️ |
+| **B7 the market can fail to clear for a name** | `src/engine/simulation/stages/repo-clearing.ts:unfundedTermLocal` | ⚠️ |
 | C1 a floor: the CB pays on reserves, or takes cash at a window | `src/engine/simulation/stages/repo-clearing.ts:parkUnlentSleevesAtTheWindow` | ✅ |
 | C1.a cash parked there LEAVES the banking system | `src/engine/simulation/stages/repo-clearing.ts:drawReverseRepoAtTheClose` | ✅ |
 | C2 a ceiling: a standing facility that lends | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
 | C3 VERIFY the market rate sits inside the corridor | `src/engine/audit/prices.ts:repo` | ⚠️ |
 | C4 the facility is collateralised and priced above the market | `src/engine/simulation/stages/repo-clearing.ts:SRF_SEAT_STEP_BPS` | ✅ |
-| C4.a so a bank prefers the market; drawing is information | `src/domain/repo.ts:srfBorrowedUSD` | ✅ |
-| C4.b a bank out of eligible collateral CANNOT DRAW | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityUSD` | ⚠️ |
-| **C5 FORBID no uncollateralised, unpriced, unlimited CB credit** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanUSD` | ❌ |
-| D1 it shrinks: it sells assets, in a real book | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:liquidityFloorUSD` | ✅ |
+| C4.a so a bank prefers the market; drawing is information | `src/domain/repo.ts:srfBorrowedLocal` | ✅ |
+| C4.b a bank out of eligible collateral CANNOT DRAW | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` | ⚠️ |
+| **C5 FORBID no uncollateralised, unpriced, unlimited CB credit** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ❌ |
+| D1 it shrinks: it sells assets, in a real book | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:liquidityFloorLocal` | ✅ |
 | D2 it bids up for deposits, and depositors respond | `src/engine/macro/banking.ts:liquidityShortfallShare` | ⚠️ |
 | D3 it draws the facility, at the penalty, against collateral | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
 | **D4 it FAILS — for liquidity, with a distinct trigger** | `src/domain/bank-resolution.ts:isBankUnderPca` | ❌ |
@@ -133,7 +133,7 @@ checked by `scripts/check-atlas.sh`.
 | D5.b VERIFY a run is self-reinforcing | — | ❌ |
 | **D6 LOLR: freely, good collateral, penalty, solvent — all four** | `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` | ❌ |
 | **E1 the policy rate reaches the economy THROUGH this market** | `src/engine/simulation/stages/repo-clearing.ts:RepoSessionResult` | ⚠️ |
-| E2 VERIFY a squeeze here raises funding costs elsewhere | `src/engine/simulation/stages/repo-clearing.ts:fundableNeedUSD` | ⚠️ |
+| E2 VERIFY a squeeze here raises funding costs elsewhere | `src/engine/simulation/stages/repo-clearing.ts:fundableNeedLocal` | ⚠️ |
 | **E3 interbank exposure is a contagion path, by name** | `src/domain/repo.ts:repoPartyKey` | ⚠️ |
 
 ---

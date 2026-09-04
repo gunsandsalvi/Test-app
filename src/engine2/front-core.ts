@@ -8,7 +8,7 @@
  *           product lines / output stock / construction queues as CSR, the supply-shock
  *           snapshot flattened, per-week market tables (price, fulfillment, crowding, supplied
  *           bitmask) per (region, sub-unit), and the per-(sector, region) wage rate the payroll
- *           factors into exactly (weeklyWageBillUSD is headcount × per-worker × index ÷ 52, so
+ *           factors into exactly (weeklyWageBillLocal is headcount × per-worker × index ÷ 52, so
  *           the per-worker term is one number per sector-region pair per week — float-identical).
  *
  *   CORE  — the numeric kernel: reads lanes, the static registry tables, the lot table and the
@@ -41,7 +41,7 @@ import { revHistPush, V2World, rowOf } from './world';
 import { ladderRowsOf, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
 import { LotViews, LotStore, consumeFifoOnViews } from './lots';
 import { SUBUNITS, SUBUNIT_INDEX, NSUB } from './state';
-import { getBaseAnnualWageUSD } from '../engine/bootstrap/labor-and-wages';
+import { getBaseAnnualWageLocal } from '../engine/bootstrap/labor-and-wages';
 import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/profiles';
 import { random, getRngState, setRngState, scopedStreamSeed } from '../engine/rng';
 import { lane64, lane32, laneU32, lane8 } from './shared-lanes';
@@ -138,15 +138,15 @@ export interface FrontSeam {
   recurringBase0: Float64Array;                // NaN = undefined
   baselineGrowthRatioResolved: Float64Array;   // ?? growthCapexResolved / max(1, annualRevenue)
   baselineEbitdaMarginResolved: Float64Array;  // ?? ebitda / max(1, annualRevenue)
-  openingGrossPpeUSD: Float64Array;
-  openingNetPpeUSD: Float64Array;
-  taxBasisOpenUSD: Float64Array;               // ?? openingNet
-  carryforwardUSD: Float64Array;               // ?? 0
+  openingGrossPpeLocal: Float64Array;
+  openingNetPpeLocal: Float64Array;
+  taxBasisOpenLocal: Float64Array;               // ?? openingNet
+  carryforwardLocal: Float64Array;               // ?? 0
   usefulLifeYears: Float64Array;               // sector table ?? 12
   baselineInputRateSum: Float64Array;          // Σ firmInputIntensities values
   /** Per (sector-region pair resolved at seam): the wage-bill per-worker annual terms. */
-  perWorkerAnnualUSD: Float64Array;            // at this week's pools, per firm
-  perWorkerBaselineAnnualUSD: Float64Array;    // at reference pools, per firm
+  perWorkerAnnualLocal: Float64Array;            // at this week's pools, per firm
+  perWorkerBaselineAnnualLocal: Float64Array;    // at reference pools, per firm
 
   // per-week region×sub-unit market tables
   mktUnitPrice: Float64Array;   // ?? 1
@@ -191,13 +191,13 @@ export interface FrontSeam {
   // supply-shock CSR
   shStart: Int32Array;
   shSupplierRevenue: Float64Array;
-  shInvUSD: Float64Array;
+  shInvLocal: Float64Array;
   shStrength: Float64Array;
 
   // update scalars
-  updSalesUSD: Float64Array;
+  updSalesLocal: Float64Array;
   updHasTargetProd: Uint8Array;
-  updTargetProdUSD: Float64Array;
+  updTargetProdLocal: Float64Array;
 }
 
 /** The core's extra outputs the post phase materialises into objects. */
@@ -232,7 +232,7 @@ export interface FrontSeamInputs {
   nextWeek: number;
   companyUpdates: Record<string, CompanyWeekUpdate>;
   updatedRegions: WeeklyStepContext['updatedRegions'];
-  supplyRelsByCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeUSD: number; relationshipStrength: number }[]>;
+  supplyRelsByCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeLocal: number; relationshipStrength: number }[]>;
   supplierShockStats: Map<string, { annualRevenue: number; invUSDByCategory: Map<string, number> }>;
   suppliedSubUnitsByRegion: Map<string, Set<string>>;
   companyStore: import('./company-store').CompanyStore;
@@ -286,14 +286,14 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     recurringBase0: lane64(n),
     baselineGrowthRatioResolved: lane64(n),
     baselineEbitdaMarginResolved: lane64(n),
-    openingGrossPpeUSD: lane64(n),
-    openingNetPpeUSD: lane64(n),
-    taxBasisOpenUSD: lane64(n),
-    carryforwardUSD: lane64(n),
+    openingGrossPpeLocal: lane64(n),
+    openingNetPpeLocal: lane64(n),
+    taxBasisOpenLocal: lane64(n),
+    carryforwardLocal: lane64(n),
     usefulLifeYears: lane64(n),
     baselineInputRateSum: lane64(n),
-    perWorkerAnnualUSD: lane64(n),
-    perWorkerBaselineAnnualUSD: lane64(n),
+    perWorkerAnnualLocal: lane64(n),
+    perWorkerBaselineAnnualLocal: lane64(n),
     mktUnitPrice: lane64(R * NSUB),
     mktFulfill: lane64(R * NSUB),
     mktCrowding: lane64(R * NSUB),
@@ -324,11 +324,11 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     ucServiceWeek: lane32(nUc),
     shStart: lane32(n + 1),
     shSupplierRevenue: lane64(nSh),
-    shInvUSD: lane64(nSh),
+    shInvLocal: lane64(nSh),
     shStrength: lane64(nSh),
-    updSalesUSD: lane64(n),
+    updSalesLocal: lane64(n),
     updHasTargetProd: lane8(n),
-    updTargetProdUSD: lane64(n),
+    updTargetProdLocal: lane64(n),
   };
 
   // per-week region tables
@@ -360,9 +360,9 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     let v = perWorkerBySectorRegion.get(key);
     if (v === undefined) {
       const mix = SECTOR_OCCUPATION_MIX[sector as keyof typeof SECTOR_OCCUPATION_MIX] ?? { GENERAL: 1.0 };
-      const baseWage = getBaseAnnualWageUSD(region);
+      const baseWage = getBaseAnnualWageLocal(region);
       const pools = updatedRegions[region].occupationPools;
-      // THE SAME Σ weeklyWageBillUSD folds, taken once — reckoning step 1 caught the first form
+      // THE SAME Σ weeklyWageBillLocal folds, taken once — reckoning step 1 caught the first form
       // of this (annual/52 × 52) drifting the whole cash walk by one ULP per firm.
       let now = 0, base = 0;
       for (const occ of Object.keys(mix) as (keyof typeof mix)[]) {
@@ -411,22 +411,22 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     S.executionQuality0[row] = nn(CN.executionQuality[row], 1.0);
     S.inputConstraint0[row] = nn(CN.inputSupplyConstraintFactor[row], 1.0);
     S.fulfillEMA0[row] = nn(CN.recentFulfillmentEMA[row], 1.0);
-    S.recurringBase0[row] = CN.recurringRevenueBaseUSD[row];
+    S.recurringBase0[row] = CN.recurringRevenueBaseLocal[row];
     S.baselineGrowthRatioResolved[row] = nn(CN.baselineGrowthCapexToRevenueRatio[row],
       growthCapexResolved / Math.max(1, annualRev));
     S.baselineEbitdaMarginResolved[row] = nn(CN.baselineEbitdaMargin[row], ebitdaV / Math.max(1, annualRev));
     const openingGross = nn(CN.grossPPELocal[row], annualRev * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
-    S.openingGrossPpeUSD[row] = openingGross;
+    S.openingGrossPpeLocal[row] = openingGross;
     const openingNet = Math.max(0, openingGross - nn(CN.accumulatedDepreciationLocal[row], openingGross * 0.45));
-    S.openingNetPpeUSD[row] = openingNet;
-    S.taxBasisOpenUSD[row] = nn(CN.taxBasisPpeUSD[row], openingNet);
-    S.carryforwardUSD[row] = nn(CN.taxLossCarryforwardUSD[row], 0);
+    S.openingNetPpeLocal[row] = openingNet;
+    S.taxBasisOpenLocal[row] = nn(CN.taxBasisPpeLocal[row], openingNet);
+    S.carryforwardLocal[row] = nn(CN.taxLossCarryforwardLocal[row], 0);
     S.usefulLifeYears[row] = SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12;
     S.baselineInputRateSum[row] = Object.values(firmInputIntensities(comp.productLines, profileKeyOf(comp)))
       .reduce((a, b) => a + b, 0);
     const pw = perWorkerOf(comp.sector, comp.region as RegionId);
-    S.perWorkerAnnualUSD[row] = pw.now;
-    S.perWorkerBaselineAnnualUSD[row] = pw.base;
+    S.perWorkerAnnualLocal[row] = pw.now;
+    S.perWorkerBaselineAnnualLocal[row] = pw.base;
 
     // §7.311 — the ladder lanes fill from the row store (chain order = array order); the
     // resolved defaults are the same expressions with NaN as the absent sentinel.
@@ -472,14 +472,14 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     for (const rel of supplyRelsByCustomer.get(comp.id) ?? []) {
       const stats = supplierShockStats.get(rel.supplierCompanyId);
       S.shSupplierRevenue[atSh] = stats ? stats.annualRevenue : NaN;
-      S.shInvUSD[atSh] = stats ? (stats.invUSDByCategory.get(rel.category) ?? NaN) : NaN;
+      S.shInvLocal[atSh] = stats ? (stats.invUSDByCategory.get(rel.category) ?? NaN) : NaN;
       S.shStrength[atSh] = rel.relationshipStrength;
       atSh++;
     }
-    S.updSalesUSD[row] = update?.salesUSD ?? 0;
+    S.updSalesLocal[row] = update?.salesLocal ?? 0;
     if (update?._targetProductionUSD !== undefined) {
       S.updHasTargetProd[row] = 1;
-      S.updTargetProdUSD[row] = update._targetProductionUSD;
+      S.updTargetProdLocal[row] = update._targetProductionUSD;
     }
   }
   S.trStart[n] = atTr; S.plStart[n] = atPl; S.outStart[n] = atOut;
@@ -519,12 +519,12 @@ export function allocCoreOut(S: FrontSeam): FrontCoreOut {
 export function trancheWeekAccrual(
   principalLocal: number, isFloating: boolean, annualRate: number, policyRate: number,
   isCP: boolean, maturityWeek: number, periodWeeks: number, anchorWeek: number, week: number
-): { annualUSD: number; weeklyUSD: number; due: boolean; dueUSD: number } {
-  const annualUSD = isFloating ? principalLocal * (policyRate + annualRate) : principalLocal * annualRate;
+): { annualLocal: number; weeklyLocal: number; due: boolean; dueLocal: number } {
+  const annualLocal = isFloating ? principalLocal * (policyRate + annualRate) : principalLocal * annualRate;
   let due: boolean;
   if (isCP) due = maturityWeek === week;
   else { const since = week - anchorWeek; due = since > 0 && since % periodWeeks === 0; }
-  return { annualUSD, weeklyUSD: annualUSD / 52, due, dueUSD: due ? (annualUSD * periodWeeks) / 52 : 0 };
+  return { annualLocal, weeklyLocal: annualLocal / 52, due, dueLocal: due ? (annualLocal * periodWeeks) / 52 : 0 };
 }
 
 export function runFrontCore(
@@ -545,15 +545,15 @@ export function runFrontCore(
     const mktBase = ri * NSUB;
 
     // payroll — headcount × per-worker × index ÷ 52, the factorised identity
-    const weeklyPayrollUSD = S.employeeCount[row] > 0
-      ? (S.employeeCount[row] * S.perWorkerAnnualUSD[row] * S.offeredWageIndex[row]) / 52 : 0;
-    const baselineWeeklyPayrollUSD = S.baselineEmployeeCount[row] > 0
-      ? (S.baselineEmployeeCount[row] * S.perWorkerBaselineAnnualUSD[row] * 1) / 52 : 0;
-    F.weeklyPayrollUSD[row] = weeklyPayrollUSD;
+    const weeklyPayrollLocal = S.employeeCount[row] > 0
+      ? (S.employeeCount[row] * S.perWorkerAnnualLocal[row] * S.offeredWageIndex[row]) / 52 : 0;
+    const baselineWeeklyPayrollLocal = S.baselineEmployeeCount[row] > 0
+      ? (S.baselineEmployeeCount[row] * S.perWorkerBaselineAnnualLocal[row] * 1) / 52 : 0;
+    F.weeklyPayrollLocal[row] = weeklyPayrollLocal;
 
     // the ladder walk on read-columns
-    let annualInterest = 0, facilityInterestWeeklyUSD = 0;
-    let marketBondAccrualUSD = 0, commercialPaperAccrualUSD = 0, marketLoanAccrualUSD = 0;
+    let annualInterest = 0, facilityInterestWeeklyLocal = 0;
+    let marketBondAccrualLocal = 0, commercialPaperAccrualLocal = 0, marketLoanAccrualLocal = 0;
     let due3 = 0;
     const policy = S.policyRate[ri];
     for (let t = S.trStart[row]; t < S.trStart[row + 1]; t++) {
@@ -566,38 +566,38 @@ export function runFrontCore(
       // pass reads the same rows through the same function).
       const a = trancheWeekAccrual(S.trPrincipal[t], S.trIsFloating[t] === 1, S.trAnnualRate[t], policy,
         S.trIsCP[t] === 1, S.trMatWeek[t], S.trPeriodWeeks[t], S.trAnchorWeek[t], week);
-      annualInterest += a.annualUSD;
+      annualInterest += a.annualLocal;
       const due = a.due;
-      if (S.trIsFacility[t]) { facilityInterestWeeklyUSD += a.dueUSD; continue; }
-      if (S.trIsCP[t]) { commercialPaperAccrualUSD += a.weeklyUSD; if (due) due3 |= DUE_CP; }
-      else if (!S.trIsFloating[t]) { marketBondAccrualUSD += a.weeklyUSD; if (due) due3 |= DUE_BOND; }
-      else { marketLoanAccrualUSD += a.weeklyUSD; if (due) due3 |= DUE_LOAN; }
+      if (S.trIsFacility[t]) { facilityInterestWeeklyLocal += a.dueLocal; continue; }
+      if (S.trIsCP[t]) { commercialPaperAccrualLocal += a.weeklyLocal; if (due) due3 |= DUE_CP; }
+      else if (!S.trIsFloating[t]) { marketBondAccrualLocal += a.weeklyLocal; if (due) due3 |= DUE_BOND; }
+      else { marketLoanAccrualLocal += a.weeklyLocal; if (due) due3 |= DUE_LOAN; }
     }
     F.annualInterest[row] = annualInterest;
-    F.facilityInterestWeeklyUSD[row] = facilityInterestWeeklyUSD;
-    F.marketBondAccrualUSD[row] = marketBondAccrualUSD;
-    F.commercialPaperAccrualUSD[row] = commercialPaperAccrualUSD;
-    F.marketLoanAccrualUSD[row] = marketLoanAccrualUSD;
+    F.facilityInterestWeeklyLocal[row] = facilityInterestWeeklyLocal;
+    F.marketBondAccrualLocal[row] = marketBondAccrualLocal;
+    F.commercialPaperAccrualLocal[row] = commercialPaperAccrualLocal;
+    F.marketLoanAccrualLocal[row] = marketLoanAccrualLocal;
     F.couponDue[row] = due3;
     const effectiveDebtRate = annualInterest / Math.max(1, S.totalDebt[row]);
     F.effectiveDebtRate[row] = effectiveDebtRate;
 
     // commissioning on the construction CSR
-    let commissionedUSD = 0;
+    let commissionedLocal = 0;
     for (let u = S.ucStart[row]; u < S.ucStart[row + 1]; u++) {
-      if (S.ucServiceWeek[u] <= week) commissionedUSD += S.ucValue[u];
+      if (S.ucServiceWeek[u] <= week) commissionedLocal += S.ucValue[u];
       else O.ucKeep[u] = 1;
     }
-    F.capexCommissionedUSD[row] = commissionedUSD;
+    F.capexCommissionedLocal[row] = commissionedLocal;
 
     // carrying cost on the output CSR (entry order = the record's key order)
-    let carryingCostUSD = 0;
+    let carryingCostLocal = 0;
     for (let o = S.outStart[row]; o < S.outStart[row + 1]; o++) {
       const costLocal = S.outValue[o] * (S.outSub[o] >= 0 ? CARRY_RATE_WEEKLY[S.outSub[o]] : 0);
-      carryingCostUSD += costLocal;
+      carryingCostLocal += costLocal;
       O.outNewValue[o] = Math.max(0, S.outValue[o] - costLocal);
     }
-    F.carryingCostUSD[row] = carryingCostUSD;
+    F.carryingCostLocal[row] = carryingCostLocal;
 
     // the front half's one draw, in the firm's own stream
     const savedStream = getRngState();
@@ -611,12 +611,12 @@ export function runFrontCore(
     if (S.isProfile[row]) {
       F.isProfile[row] = 1;
       F.newRevenue[row] = 0;
-      F.measuredInputConsumptionWeeklyUSD[row] = 0;
+      F.measuredInputConsumptionWeeklyLocal[row] = 0;
       F.newEbitda[row] = 0; F.newEbit[row] = 0; F.newNetIncome[row] = 0; F.newEps[row] = 0;
-      F.taxPaidAnnualRateUSD[row] = 0;
+      F.taxPaidAnnualRateLocal[row] = 0;
       F.newInputSupplyConstraintFactor[row] = S.inputConstraint0[row];
       F.newRecentFulfillmentEMA[row] = S.fulfillEMA0[row];
-      F.targetProductionUSD[row] = 0;
+      F.targetProductionLocal[row] = 0;
       continue;
     }
     F.isProfile[row] = 0;
@@ -645,35 +645,35 @@ export function runFrontCore(
     if (!sawNeedingLine) relevantFulfillment = 1;
 
     let physicalFulfillment = 1.0;
-    let realInputConsumptionCostUSD = 0;
+    let realInputConsumptionCostLocal = 0;
     const lotRow = S.lotRow[row];
     for (let p = plLo; p < plHi; p++) {
       const si = S.plSub[p];
       if (si < 0) continue;
       const rLo = RECIPE_START[si], rHi = RECIPE_START[si + 1];
       if (rLo === rHi) continue;
-      const lineProductionUSD = (annualRevenue / 52) * S.plShare[p];
+      const lineProductionLocal = (annualRevenue / 52) * S.plShare[p];
       for (let r = rLo; r < rHi; r++) {
         const inputSi = RECIPE_INPUT[r];
-        const neededUSD = lineProductionUSD * RECIPE_INTENSITY[r];
-        if (neededUSD <= 0) continue;
+        const neededLocal = lineProductionLocal * RECIPE_INTENSITY[r];
+        if (neededLocal <= 0) continue;
         const hasRealSupply = S.suppliedMask[mktBase + inputSi] === 1 || HAS_INDUSTRY[inputSi] === 1;
         if (!hasRealSupply) continue;
         const inputUnitPrice = S.mktExists[mktBase + inputSi] ? S.mktUnitPrice[mktBase + inputSi] : 1;
-        const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice);
+        const neededUnits = neededLocal / Math.max(0.01, inputUnitPrice);
         const drawn = consumeFifoOnViews(lots, lotRow, inputSi, neededUnits, freeInto, deadSink);
         F.inputUnitsConsumed[row * NSUB + inputSi] += drawn.takenUnits;
         physicalFulfillment = Math.min(physicalFulfillment, fulfillmentRatio(drawn.availableUnits, neededUnits));
-        for (const lotCostUSD of drawn.costsUSD) realInputConsumptionCostUSD += lotCostUSD;
+        for (const lotCostLocal of drawn.costsLocal) realInputConsumptionCostLocal += lotCostLocal;
       }
     }
     const combinedFulfillment = Math.min(relevantFulfillment, physicalFulfillment);
-    F.measuredInputConsumptionWeeklyUSD[row] = realInputConsumptionCostUSD;
+    F.measuredInputConsumptionWeeklyLocal[row] = realInputConsumptionCostLocal;
     let newInputSupplyConstraintFactor = (S.inputConstraint0[row] * 0.7 + combinedFulfillment * 0.3);
 
     for (let sh = S.shStart[row]; sh < S.shStart[row + 1]; sh++) {
       const rev = S.shSupplierRevenue[sh];
-      const inv = S.shInvUSD[sh];
+      const inv = S.shInvLocal[sh];
       if (inv > rev * 0.15) {
         const distress = (inv / (rev * 0.15)) - 1;
         newInputSupplyConstraintFactor *= (1 - Math.min(0.2, distress * S.shStrength[sh] * 0.1));
@@ -683,8 +683,8 @@ export function runFrontCore(
     const baseEbitdaMargin = S.ebitda[row] / Math.max(1, annualRevenue);
     const baselineMargin = S.baselineEbitdaMarginResolved[row];
     const otherOpexRate = 1 - baselineMargin - S.baselineInputRateSum[row]
-      - (baselineWeeklyPayrollUSD * 52) / Math.max(1, baseRev);
-    const newEbitdaMargin = 1 - (realInputConsumptionCostUSD * 52 + weeklyPayrollUSD * 52
+      - (baselineWeeklyPayrollLocal * 52) / Math.max(1, baseRev);
+    const newEbitdaMargin = 1 - (realInputConsumptionCostLocal * 52 + weeklyPayrollLocal * 52
       + otherOpexRate * annualRevenue) / Math.max(1, annualRevenue);
 
     const growthCapex0 = S.growthCapexResolved[row];
@@ -717,10 +717,10 @@ export function runFrontCore(
       if (si >= 0 && INDUSTRIAL_SET[si] === 1) { O.industrialLineAt[row] = p; break; }
     }
 
-    const salesUSD = S.updSalesUSD[row];
-    const targetProductionUSD = S.updHasTargetProd[row] ? S.updTargetProdUSD[row] : annualRevenue / 52;
-    F.targetProductionUSD[row] = targetProductionUSD;
-    F.newRecentFulfillmentEMA[row] = S.fulfillEMA0[row] * 0.85 + (salesUSD > 0 ? 1.0 : 0.0) * 0.15;
+    const salesLocal = S.updSalesLocal[row];
+    const targetProductionLocal = S.updHasTargetProd[row] ? S.updTargetProdLocal[row] : annualRevenue / 52;
+    F.targetProductionLocal[row] = targetProductionLocal;
+    F.newRecentFulfillmentEMA[row] = S.fulfillEMA0[row] * 0.85 + (salesLocal > 0 ? 1.0 : 0.0) * 0.15;
 
     // revenue recognition — recurring share from the static mechanism table
     let recurring = 0, totalShare = 0;
@@ -732,53 +732,53 @@ export function runFrontCore(
     const recurringShare = totalShare > 0 ? recurring / totalShare : 0;
     const unitShare = 1 - recurringShare;
     const base0 = S.recurringBase0[row];
-    const priorRecurringUSD = recurringShare > 0
+    const priorRecurringLocal = recurringShare > 0
       ? (isNaN(base0) ? annualRevenue * recurringShare : base0)
       : 0;
-    const priorUnitAnnualUSD = Math.max(0, annualRevenue - priorRecurringUSD);
-    const unitRevenueUSD = priorUnitAnnualUSD * (1 - RECEIPTS_MEASUREMENT_WEIGHT)
-      + (salesUSD * unitShare * 52) * RECEIPTS_MEASUREMENT_WEIGHT;
-    let newRecurringBaseUSD: number;
+    const priorUnitAnnualLocal = Math.max(0, annualRevenue - priorRecurringLocal);
+    const unitRevenueLocal = priorUnitAnnualLocal * (1 - RECEIPTS_MEASUREMENT_WEIGHT)
+      + (salesLocal * unitShare * 52) * RECEIPTS_MEASUREMENT_WEIGHT;
+    let newRecurringBaseLocal: number;
     if (recurringShare > 0) {
-      newRecurringBaseUSD = priorRecurringUSD * (1 - SUBSCRIPTION_WEEKLY_CHURN)
-        + salesUSD * recurringShare * 52 * SUBSCRIPTION_WEEKLY_CHURN;
+      newRecurringBaseLocal = priorRecurringLocal * (1 - SUBSCRIPTION_WEEKLY_CHURN)
+        + salesLocal * recurringShare * 52 * SUBSCRIPTION_WEEKLY_CHURN;
       O.hasRecurringOut[row] = 1;
     } else {
       O.hasRecurringOut[row] = isNaN(base0) ? 0 : 1;
-      newRecurringBaseUSD = base0;
+      newRecurringBaseLocal = base0;
     }
-    const newRevenue = Math.max(10, (recurringShare > 0 ? newRecurringBaseUSD : 0) + unitRevenueUSD);
+    const newRevenue = Math.max(10, (recurringShare > 0 ? newRecurringBaseLocal : 0) + unitRevenueLocal);
     F.newRevenue[row] = newRevenue;
 
     const industrialPnl = industrialIncome({
       revenueLocal: newRevenue,
       ebitdaMargin: newEbitdaMargin,
       daShareOfRevenue: 0.05,
-      annualInterestUSD: annualInterest,
+      annualInterestLocal: annualInterest,
       taxRate: S.effectiveTaxRate[ri],
       sharesOutstanding: S.sharesOutstanding[row],
       tax: {
-        taxBasisPpeUSD: S.taxBasisOpenUSD[row],
+        taxBasisPpeLocal: S.taxBasisOpenLocal[row],
         usefulLifeYears: S.usefulLifeYears[row],
-        capexDeliveredAnnualUSD: commissionedUSD * 52,
-        carryforwardUSD: S.carryforwardUSD[row],
-        bookNetPpeUSD: S.openingNetPpeUSD[row],
+        capexDeliveredAnnualLocal: commissionedLocal * 52,
+        carryforwardLocal: S.carryforwardLocal[row],
+        bookNetPpeLocal: S.openingNetPpeLocal[row],
       },
     });
     F.newEbitda[row] = industrialPnl.ebitdaLocal;
-    F.newEbit[row] = industrialPnl.ebitUSD;
-    F.newNetIncome[row] = industrialPnl.netIncomeUSD;
-    F.newEps[row] = S.sharesOutstanding[row] > 0 ? round2(industrialPnl.netIncomeUSD / S.sharesOutstanding[row]) : 0;
-    F.taxPaidAnnualRateUSD[row] = industrialPnl.taxPaidAnnualUSD;
-    O.taxCarryforwardOut[row] = industrialPnl.taxLossCarryforwardUSD;
-    O.taxBasisOut[row] = industrialPnl.taxBasisPpeUSD;
-    O.deferredTaxOut[row] = industrialPnl.deferredTaxLiabilityUSD;
+    F.newEbit[row] = industrialPnl.ebitLocal;
+    F.newNetIncome[row] = industrialPnl.netIncomeLocal;
+    F.newEps[row] = S.sharesOutstanding[row] > 0 ? round2(industrialPnl.netIncomeLocal / S.sharesOutstanding[row]) : 0;
+    F.taxPaidAnnualRateLocal[row] = industrialPnl.taxPaidAnnualLocal;
+    O.taxCarryforwardOut[row] = industrialPnl.taxLossCarryforwardLocal;
+    O.taxBasisOut[row] = industrialPnl.taxBasisPpeLocal;
+    O.deferredTaxOut[row] = industrialPnl.deferredTaxLiabilityLocal;
     F.newInputSupplyConstraintFactor[row] = newInputSupplyConstraintFactor;
-    O.recurringBaseOut[row] = newRecurringBaseUSD;
+    O.recurringBaseOut[row] = newRecurringBaseLocal;
 
     const revQ = newRevenue / 4;
     O.costWage[row] = 0;
-    O.costInput[row] = (realInputConsumptionCostUSD / Math.max(1, targetProductionUSD)) * revQ;
+    O.costInput[row] = (realInputConsumptionCostLocal / Math.max(1, targetProductionLocal)) * revQ;
     O.costDecay[row] = capacityDecayPenalty * revQ;
     O.costCrowd[row] = avgCrowdingIntensity * 0.08 * revQ;
   }
@@ -811,7 +811,7 @@ export function applyFrontPost(
     if (F.isProfile[row]) {
       F.outputInv[row] = outRec;
       F.updatedProductLines[row] = comp.productLines || EMPTY_LINES;
-      F.newRecurringBaseUSD[row] = comp.recurringRevenueBaseUSD;
+      F.newRecurringBaseLocal[row] = comp.recurringRevenueBaseLocal;
       F.costDrivers[row] = undefined;
       continue;
     }
@@ -848,17 +848,17 @@ export function applyFrontPost(
     }
     F.outputInv[row] = outRec;
 
-    F.newRecurringBaseUSD[row] = O.hasRecurringOut[row] ? O.recurringBaseOut[row] : undefined;
+    F.newRecurringBaseLocal[row] = O.hasRecurringOut[row] ? O.recurringBaseOut[row] : undefined;
     revHistPush(v2, rowOf(v2, comp.id), F.newRevenue[row]);
-    comp.taxLossCarryforwardUSD = O.taxCarryforwardOut[row];
-    comp.taxBasisPpeUSD = O.taxBasisOut[row];
-    comp.deferredTaxLiabilityUSD = O.deferredTaxOut[row];
+    comp.taxLossCarryforwardLocal = O.taxCarryforwardOut[row];
+    comp.taxBasisPpeLocal = O.taxBasisOut[row];
+    comp.deferredTaxLiabilityLocal = O.deferredTaxOut[row];
 
     F.costDrivers[row] = {
-      wagePressureUSD: O.costWage[row],
-      inputPriceCostUSD: O.costInput[row],
-      capacityDecayCostUSD: O.costDecay[row],
-      crowdingCostUSD: O.costCrowd[row],
+      wagePressureLocal: O.costWage[row],
+      inputPriceCostLocal: O.costInput[row],
+      capacityDecayCostLocal: O.costDecay[row],
+      crowdingCostLocal: O.costCrowd[row],
     } as CogsCostDrivers;
   }
 }

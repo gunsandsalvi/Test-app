@@ -146,7 +146,7 @@ export function moveInputUnits(v2: V2World, from: { id: string; ticker: string }
   const drawn = consumeFifo(v2, from.id, subUnitId, units);
   const moved = Math.min(units, drawn.availableUnits);
   if (!(moved > 1e-9)) return -1;
-  let costLocal = 0; for (const c of drawn.costsUSD) costLocal += c;
+  let costLocal = 0; for (const c of drawn.costsLocal) costLocal += c;
   const n = deliverGoods({ kind: 'COMPANY', ticker: from.ticker }, { kind: 'COMPANY', ticker: to.ticker }, subUnitId, moved, costLocal / moved, reason);
   pushLot(v2, to.id, subUnitId, `ESTATE:${from.ticker}`, moved, costLocal / moved, week, n);
   return n;
@@ -161,10 +161,10 @@ export function scrapInputUnits(v2: V2World, from: { id: string; region: RegionI
 }
 
 /** Finished stock perishes or is abandoned down to a stated level: the difference is scrapped. */
-export function scrapOutputUnitsTo(comp: StockHolder, subUnitId: string, unitsAfter: number, valueAfterUSD: number): void {
+export function scrapOutputUnitsTo(comp: StockHolder, subUnitId: string, unitsAfter: number, valueAfterLocal: number): void {
   const row = comp.outputInventoryBySubUnit?.[subUnitId];
   if (!row) return;
   const lost = row.unitsHeld - unitsAfter;
   if (lost > 1e-9) scrapGoods(comp.region, subUnitId, lost);
-  row.unitsHeld = unitsAfter; row.valueLocal = valueAfterUSD;
+  row.unitsHeld = unitsAfter; row.valueLocal = valueAfterLocal;
 }

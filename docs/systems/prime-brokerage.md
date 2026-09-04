@@ -85,21 +85,21 @@ checked by `scripts/check-atlas.sh`.
 | A1 a named bank and a named client, with a contract | `src/domain/prime-brokerage.ts:PrimeBrokerageLine` | ✅ |
 | A2 the broker holds the client's assets and knows the position | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageStage` | ⚠️ |
 | **A3 the client can have more than one broker** | — | ❌ |
-| A4 financing spread, stock-borrow fees and commissions | `src/domain/prime-brokerage.ts:weeklyFinancingUSD` | ⚠️ |
-| B1 the broker lends the difference against the assets | `src/engine/simulation/stages/prime-brokerage.ts:targetDrawnUSD` | ✅ |
+| A4 financing spread, stock-borrow fees and commissions | `src/domain/prime-brokerage.ts:weeklyFinancingLocal` | ⚠️ |
+| B1 the broker lends the difference against the assets | `src/engine/simulation/stages/prime-brokerage.ts:targetDrawnLocal` | ✅ |
 | B1.a leverage is a loan from a named lender | `src/domain/prime-brokerage.ts:brokerTicker` | ✅ |
 | B2 the loan has a rate above the broker's cost of funds | `src/engine/simulation/stages/prime-brokerage.ts:rateAnnual` | ✅ |
 | B3 the broker's balance sheet grows and its capital is consumed | `src/engine/macro/banking.ts:leverageHeadroomLocal` | ✅ |
-| B4 the short side is financed too | `src/engine/simulation/stages/securities-lending.ts:fundableUSD` | ⚠️ |
+| B4 the short side is financed too | `src/engine/simulation/stages/securities-lending.ts:fundableLocal` | ⚠️ |
 | B5 VERIFY leverage read = what the broker has lent | `src/domain/prime-brokerage.ts:drawnByFund` | ✅ |
 | C1 a margin requirement on the whole portfolio | `src/engine/simulation/stages/prime-brokerage.ts:haircutRate` | ⚠️ |
 | **C1.a it accounts for offsetting positions** | — | ❌ |
 | C1.b a DECISION by the broker, not a formula | `src/engine/simulation/stages/prime-brokerage.ts:measuredHaircutsFor` | ⚠️ |
 | C2 remeasured as prices move; a shortfall is a call, in cash | `src/engine/simulation/stages/prime-brokerage.ts:deltaLocal` | ✅ |
 | **C3 the client must meet it or be liquidated** | — | ❌ |
-| C3.a and to meet it, it may have to SELL into a market | `src/engine/simulation/stages/institutional-balance-sheet.ts:availablePurchaseCapacityUSD` | ⚠️ |
+| C3.a and to meet it, it may have to SELL into a market | `src/engine/simulation/stages/institutional-balance-sheet.ts:availablePurchaseCapacityLocal` | ⚠️ |
 | C4 the broker can RAISE the requirement | `src/engine/simulation/stages/prime-brokerage.ts:measuredHaircutsFor` | ✅ |
-| **C4.a VERIFY raising margin into a falling market amplifies it** | `src/engine/simulation/stages/overdraft-sweep.ts:withinLineUSD` | ❌ |
+| **C4.a VERIFY raising margin into a falling market amplifies it** | `src/engine/simulation/stages/overdraft-sweep.ts:withinLineLocal` | ❌ |
 | **C5 FORBID no margin that is only a number** | `src/domain/portfolio.ts:isMarginCall` | ❌ |
 | **D1 a client fails a call and the broker closes the positions** | — | ❌ |
 | **D2 proceeds below the loan: the shortfall is the broker's loss** | — | ❌ |

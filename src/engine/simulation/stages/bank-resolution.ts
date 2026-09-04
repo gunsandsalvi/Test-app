@@ -20,7 +20,7 @@ import { currencyOf } from '../../../domain/geography';
 import { BankingSector, DepositLines } from '../../../domain/banking';
 import { BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
 import {
-  assumingCapitalUSD, chooseAssumingBank, isBankUnderPca, planBankResolution, restateBankSheetStatistics, PCA_CAPITAL_RATIO,
+  assumingCapitalLocal, chooseAssumingBank, isBankUnderPca, planBankResolution, restateBankSheetStatistics, PCA_CAPITAL_RATIO,
 } from '../../../domain/bank-resolution';
 import { assumeBankBooks } from '../../ledger/bank-transfer';
 import { reassignConsignments } from './goods-arrival';
@@ -38,7 +38,7 @@ import { moveFacilityLender } from '../../ledger/tranche-ledger';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../../domain/banking';
 import { moveSectorRowsToBank, bankReservesOf, bankDepositLines, heldCurrenciesOf } from '../../ledger/accounts';
 
-const sheetLinesUSD = (s: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number): number =>
+const sheetLinesLocal = (s: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number): number =>
   Math.abs(lines.householdLocal) + Math.abs(lines.corporateLocal) + Math.abs(lines.institutionalLocal)
   + Math.abs(s.clientMarginLocal ?? 0) + Math.abs(lines.smeLocal) + Math.abs(s.centralBankLoanLocal ?? 0)
   + Math.abs(s.bankEquityLocal) + Math.abs(s.srfBorrowingLocal ?? 0) + Math.abs(s.repoBorrowedLocal ?? 0)
@@ -74,11 +74,11 @@ export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionI
   // assuming bank's receivable now (its sheet already carries them).
   const fromKey = `|${partyKey({ kind: 'BANK_SECURITIES', ticker: from })}`;
   const toKey = `|${partyKey({ kind: 'BANK_SECURITIES', ticker: to })}`;
-  Array.from(ctx.sovereignAccruedInterestUSD.entries()).forEach(([k, usd]) => {
+  Array.from(ctx.sovereignAccruedInterestLocal.entries()).forEach(([k, usd]) => {
     if (!k.endsWith(fromKey)) return;
     const k2 = k.slice(0, k.length - fromKey.length) + toKey;
-    ctx.sovereignAccruedInterestUSD.set(k2, (ctx.sovereignAccruedInterestUSD.get(k2) ?? 0) + usd);
-    ctx.sovereignAccruedInterestUSD.delete(k);
+    ctx.sovereignAccruedInterestLocal.set(k2, (ctx.sovereignAccruedInterestLocal.get(k2) ?? 0) + usd);
+    ctx.sovereignAccruedInterestLocal.delete(k);
   });
   // THE DESK'S UNPAID COUPONS MOVE WITH ITS INVENTORY. `absorbBankSheet` merges the dealer books
   // into the acquirer, but what that paper has already EARNED and not been paid sits on the
@@ -87,10 +87,10 @@ export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionI
   // dropped BOTH legs of the payment — the only kind M7 ever named was `payee BANK_SECURITIES`.
   const fromDesk = dealerDeskParticipantId(from);
   const toDesk = dealerDeskParticipantId(to);
-  ctx.holderAccruedInterestUSD.forEach((byHolder) => {
-    const owedUSD = byHolder.get(fromDesk);
-    if (owedUSD === undefined) return;
-    byHolder.set(toDesk, (byHolder.get(toDesk) ?? 0) + owedUSD);
+  ctx.holderAccruedInterestLocal.forEach((byHolder) => {
+    const owedLocal = byHolder.get(fromDesk);
+    if (owedLocal === undefined) return;
+    byHolder.set(toDesk, (byHolder.get(toDesk) ?? 0) + owedLocal);
     byHolder.delete(fromDesk);
   });
   const rekeyParty = (p: DerivativeParty): DerivativeParty =>
@@ -134,27 +134,27 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       // are not diluted here (no share mechanics on a bank's equity yet — recorded), which
       // overstates what they keep; the injection itself is real money.
       const sheet = bank.bankBalanceSheet!;
-      const injectionUSD = Math.max(0, assumingCapitalUSD(sheet, facilityBookOf(ctx.v2, bank.ticker)) - sheet.bankEquityLocal);
-      if (injectionUSD > 0) {
+      const injectionLocal = Math.max(0, assumingCapitalLocal(sheet, facilityBookOf(ctx.v2, bank.ticker)) - sheet.bankEquityLocal);
+      if (injectionLocal > 0) {
         pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'BANK', ticker: bank.ticker },
-          amount: injectionUSD, currency: currencyOf(regionId), reason: 'resolution: public recapitalisation' });
+          amount: injectionLocal, currency: currencyOf(regionId), reason: 'resolution: public recapitalisation' });
         runSettlementStage(ctx);
         restateBankSheetStatistics(bank.bankBalanceSheet!, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker), facilityBookOf(ctx.v2, bank.ticker));
       }
-      console.log(`  [bank-resolution] w${week} ${regionId}:${bank.ticker} under PCA with NO assuming bank — recapitalised by the treasury ${(injectionUSD / 1e9).toFixed(2)}B, ratio now ${bank.bankBalanceSheet!.bankCapitalRatio}`);
+      console.log(`  [bank-resolution] w${week} ${regionId}:${bank.ticker} under PCA with NO assuming bank — recapitalised by the treasury ${(injectionLocal / 1e9).toFixed(2)}B, ratio now ${bank.bankBalanceSheet!.bankCapitalRatio}`);
       ctx.newsItems.push({
         id: `bank-recap-${bank.ticker}-${week}`, week,
         title: `${bank.name} recapitalised by the treasury`,
-        description: `${bank.ticker} fell below the ${(100 * PCA_CAPITAL_RATIO).toFixed(0)}% capital floor with no bank left to assume it; the ${regionId} treasury injected ${(injectionUSD / 1e9).toFixed(2)}B to bring it back to a working ratio.`,
+        description: `${bank.ticker} fell below the ${(100 * PCA_CAPITAL_RATIO).toFixed(0)}% capital floor with no bank left to assume it; the ${regionId} treasury injected ${(injectionLocal / 1e9).toFixed(2)}B to bring it back to a working ratio.`,
         category: 'CREDIT', impactBadge: '[BANK RECAPITALISED]', impactRegion: regionId, impactSector: bank.sector, affectedTicker: bank.ticker, urgent: true,
       });
       return;
     }
     const acquirer = chosen.comp;
-    const ladderUSD = ladderRowsOf(ctx.v2, bank.id).reduce((a, r) => a + ctx.v2.tranches.principalLocal[r], 0);
+    const ladderLocal = ladderRowsOf(ctx.v2, bank.id).reduce((a, r) => a + ctx.v2.tranches.principalLocal[r], 0);
     const cashLocal = bankReservesOf(ctx.v2, bank.ticker);
-    const failingFacilityBookUSD = facilityBookOf(ctx.v2, bank.ticker);
-    const plan = planBankResolution(bank.bankBalanceSheet!, ladderUSD, assumingCapitalUSD(bank.bankBalanceSheet!, failingFacilityBookUSD), cashLocal, bankDepositLines(ctx, bank.ticker), failingFacilityBookUSD);
+    const failingFacilityBookLocal = facilityBookOf(ctx.v2, bank.ticker);
+    const plan = planBankResolution(bank.bankBalanceSheet!, ladderLocal, assumingCapitalLocal(bank.bankBalanceSheet!, failingFacilityBookLocal), cashLocal, bankDepositLines(ctx, bank.ticker), failingFacilityBookLocal);
     const traceOn = process.env.BANK_RESOLUTION_TRACE === '1';
     const traceSheet = (label: string, c: typeof bank) => {
       if (!traceOn || !c.bankBalanceSheet) return;
@@ -188,9 +188,9 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
           amount: -balance, currency, reason: 'resolution: overdrawn reserves made whole' });
       }
     });
-    if (plan.guaranteeUSD > 0) {
+    if (plan.guaranteeLocal > 0) {
       pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'BANK', ticker: acquirer.ticker },
-        amount: plan.guaranteeUSD, currency: currencyOf(regionId), reason: 'resolution: deposit guarantee on the hole' });
+        amount: plan.guaranteeLocal, currency: currencyOf(regionId), reason: 'resolution: deposit guarantee on the hole' });
     }
     rekeyBankLinks(state, ctx, regionId, bank.ticker, acquirer.ticker);
     // Premises and people go with the books: the branches open on Monday under the new name.
@@ -207,12 +207,12 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // Settlement rebuilds a bank's sheet as a new object; the handles above are last week's.
     const F = bank.bankBalanceSheet!;
     traceSheet('settled', bank); traceSheet('settled', acquirer);
-    const leftUSD = sheetLinesUSD(F, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker), facilityBookOf(ctx.v2, bank.ticker));
-    if (leftUSD > 1e4) {
+    const leftLocal = sheetLinesLocal(F, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker), facilityBookOf(ctx.v2, bank.ticker));
+    if (leftLocal > 1e4) {
       const lines = Object.entries(F as unknown as Record<string, unknown>)
         .filter(([, v]) => typeof v === 'number' && Math.abs(v as number) > 1e4)
         .map(([k, v]) => `${k} ${((v as number) / 1e6).toFixed(3)}M`).join(', ');
-      throw new Error(`ENGINE DEFECT: ${bank.ticker} resolved with ${(leftUSD / 1e6).toFixed(3)}M still on its sheet — a line the transfer did not name: ${lines}`);
+      throw new Error(`ENGINE DEFECT: ${bank.ticker} resolved with ${(leftLocal / 1e6).toFixed(3)}M still on its sheet — a line the transfer did not name: ${lines}`);
     }
 
     // ---- 4. The shell: a defaulted issuer banking at its acquirer, so its register claims (its
@@ -227,27 +227,27 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     bank.creditRating = 'D';
     bank.stockPrice = 0;
     ctx.defaultedTickers.push(bank.ticker);
-    if (plan.estateUSD > 0) {
+    if (plan.estateLocal > 0) {
       pay(ctx, { payer: { kind: 'BANK', ticker: acquirer.ticker }, payee: { kind: 'COMPANY', ticker: bank.ticker },
-        amount: plan.estateUSD, currency: currencyOf(regionId), reason: 'resolution: net book value paid to the receivership' });
+        amount: plan.estateLocal, currency: currencyOf(regionId), reason: 'resolution: net book value paid to the receivership' });
       runSettlementStage(ctx);
     }
     restateBankSheetStatistics(acquirer.bankBalanceSheet!, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker), facilityBookOf(ctx.v2, acquirer.ticker));
 
     const gb = (v: number) => `${(v / 1e9).toFixed(2)}B`;
     console.log(`  [bank-resolution] w${week} ${regionId}:${bank.ticker} -> ${acquirer.ticker}`
-      + ` | net ${gb(plan.netBookUSD)} capital ${gb(plan.acquirerCapitalUSD)} cb-loan ${gb(plan.centralBankLoanAssumedUSD)}`
-      + ` ladder-bailed-in ${gb(plan.ladderBailedInUSD)} guarantee ${gb(plan.guaranteeUSD)} estate ${gb(plan.estateUSD)}`
+      + ` | net ${gb(plan.netBookLocal)} capital ${gb(plan.acquirerCapitalLocal)} cb-loan ${gb(plan.centralBankLoanAssumedLocal)}`
+      + ` ladder-bailed-in ${gb(plan.ladderBailedInLocal)} guarantee ${gb(plan.guaranteeLocal)} estate ${gb(plan.estateLocal)}`
       + ` | acquirer ratio ${acquirer.bankBalanceSheet!.bankCapitalRatio}`);
     ctx.newsItems.push({
       id: `bank-resolution-${bank.ticker}-${week}`,
       week,
       title: `${bank.name} closed by the supervisor; ${acquirer.name} assumes its deposits`,
       description: `${bank.ticker} fell below the ${(100 * PCA_CAPITAL_RATIO).toFixed(0)}% capital floor and was resolved: `
-        + `${acquirer.ticker} takes its books, every deposit and the ${gb(plan.centralBankLoanAssumedUSD)} owed to the central bank, capitalised at ${gb(plan.acquirerCapitalUSD)}`
-        + (plan.ladderBailedInUSD > 0 ? `; its own ${gb(plan.ladderBailedInUSD)} of bonds stay behind for the receivership` : '')
-        + (plan.guaranteeUSD > 0 ? `; the treasury covers ${gb(plan.guaranteeUSD)} under the deposit guarantee` : '')
-        + (plan.estateUSD > 0 ? `; ${gb(plan.estateUSD)} goes to the receivership for its bondholders and shareholders` : '')
+        + `${acquirer.ticker} takes its books, every deposit and the ${gb(plan.centralBankLoanAssumedLocal)} owed to the central bank, capitalised at ${gb(plan.acquirerCapitalLocal)}`
+        + (plan.ladderBailedInLocal > 0 ? `; its own ${gb(plan.ladderBailedInLocal)} of bonds stay behind for the receivership` : '')
+        + (plan.guaranteeLocal > 0 ? `; the treasury covers ${gb(plan.guaranteeLocal)} under the deposit guarantee` : '')
+        + (plan.estateLocal > 0 ? `; ${gb(plan.estateLocal)} goes to the receivership for its bondholders and shareholders` : '')
         + '.',
       category: 'CREDIT',
       impactBadge: '[BANK RESOLVED]',

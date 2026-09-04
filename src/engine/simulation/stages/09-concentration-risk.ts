@@ -25,17 +25,17 @@ interface PartyExposure {
   /** Annualised contract value across all of this party's contracts on this side. */
   totalLocal: number;
   /** Annualised value per counterparty, so the largest share can be found without re-scanning. */
-  byCounterpartyUSD: Map<string, number>;
+  byCounterpartyLocal: Map<string, number>;
 }
 
 function addExposure(index: Map<string, PartyExposure>, partyId: string, counterpartyId: string, valueLocal: number): void {
   let entry = index.get(partyId);
   if (!entry) {
-    entry = { totalLocal: 0, byCounterpartyUSD: new Map() };
+    entry = { totalLocal: 0, byCounterpartyLocal: new Map() };
     index.set(partyId, entry);
   }
   entry.totalLocal += valueLocal;
-  entry.byCounterpartyUSD.set(counterpartyId, (entry.byCounterpartyUSD.get(counterpartyId) ?? 0) + valueLocal);
+  entry.byCounterpartyLocal.set(counterpartyId, (entry.byCounterpartyLocal.get(counterpartyId) ?? 0) + valueLocal);
 }
 
 export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -47,9 +47,9 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
   const CT = v2.contracts;
   (Object.keys(ctx.updatedRegions) as (keyof typeof ctx.updatedRegions)[]).forEach(rid => {
     forEachContract(v2, rid as string, (row, supplierKey, customerKey) => {
-      const annualUSD = CT.qtyPerWeek[row] * CT.priceLocal[row] * 52;
-      addExposure(asSupplier, supplierKey, customerKey, annualUSD);
-      addExposure(asCustomer, customerKey, supplierKey, annualUSD);
+      const annualLocal = CT.qtyPerWeek[row] * CT.priceLocal[row] * 52;
+      addExposure(asSupplier, supplierKey, customerKey, annualLocal);
+      addExposure(asCustomer, customerKey, supplierKey, annualLocal);
     });
   });
 
@@ -67,7 +67,7 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
   ): void => {
     [index.get(ticker), index.get(id)].forEach(entry => {
       if (!entry || !(entry.totalLocal > 0)) return;
-      entry.byCounterpartyUSD.forEach((valueLocal, counterpartyId) => {
+      entry.byCounterpartyLocal.forEach((valueLocal, counterpartyId) => {
         const share = valueLocal / entry.totalLocal;
         if (share > CONCENTRATION_FLAG_THRESHOLD) {
           out.push(describe(nameOf.get(counterpartyId) || counterpartyId, share * 100));
@@ -87,7 +87,7 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
     let top = 0;
     [index.get(ticker), index.get(id)].forEach(entry => {
       if (!entry || !(entry.totalLocal > 0)) return;
-      entry.byCounterpartyUSD.forEach((valueLocal) => {
+      entry.byCounterpartyLocal.forEach((valueLocal) => {
         top = Math.max(top, valueLocal / entry.totalLocal);
       });
     });

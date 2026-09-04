@@ -39,8 +39,8 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
 
 
   const usdPolicyRate = updatedRegions.USA.policyRate;
-  ctx.weeklyInterestIncomeUSD = Math.max(0, state.portfolio.cashLocal) * (usdPolicyRate / 52);
-  ctx.attributionCarry += ctx.weeklyInterestIncomeUSD;
+  ctx.weeklyInterestIncomeLocal = Math.max(0, state.portfolio.cashLocal) * (usdPolicyRate / 52);
+  ctx.attributionCarry += ctx.weeklyInterestIncomeLocal;
 
   ctx.updatedPositions = ctx.workingPositions.map((pos) => {
     const fxRateToUsd = ctx.getFxToUsd(pos.region);
@@ -65,9 +65,9 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         if (comp) {
           currentPrice = comp.stockPrice;
           const posValueLocal = pos.quantity * currentPrice * fxRateToUsd;
-          const entryValueUSD = pos.quantity * pos.entryPrice * fxRateToUsd;
+          const entryValueLocal = pos.quantity * pos.entryPrice * fxRateToUsd;
 
-          unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueUSD : entryValueUSD - posValueLocal;
+          unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
           delta = pos.direction === 'LONG' ? posValueLocal : -posValueLocal;
 
           const carryEst = calculateExpectedCarry('EQUITY', pos.direction, posValueLocal, {
@@ -100,8 +100,8 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           if (trRow < 0) {
             currentPrice = comp.isDefaulted ? (comp.recoveryRate * 100) : 100;
             const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
-            const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
-            unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueUSD : entryValueUSD - posValueLocal;
+            const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
+            unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
 
             // A matured position realizes its P&L, not its face value. This book is
             // margin-financed — opening a position commits margin and pays the spread, never the
@@ -145,8 +145,8 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             );
             currentPrice = bondPriced.price;
             const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
-            const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
-            unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueUSD : entryValueUSD - posValueLocal;
+            const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
+            unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
             dv01 = (pos.quantity / 100) * bondPriced.dv01 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
 
             const carryEst = calculateExpectedCarry('CORP_BOND', pos.direction, posValueLocal, {
@@ -173,8 +173,8 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             );
             currentPrice = loanPricing.pricePar;
             const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
-            const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
-            unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueUSD : entryValueUSD - posValueLocal;
+            const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
+            unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
             const carryEst = calculateExpectedCarry('LEVERAGED_LOAN', pos.direction, posValueLocal, {
               policyRate: updatedRegions[pos.region].policyRate,
               cdsSpreadBps: Number.isNaN(TS.floatingMarginBps[trRow]) ? 200 : TS.floatingMarginBps[trRow]
@@ -198,9 +198,9 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         const bondPriced = priceSovereignBond(remainingTenorYears, pos.fixedRate || 0.04, sovParams);
         currentPrice = bondPriced.price;
         const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
-        const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
+        const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
 
-        unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueUSD : entryValueUSD - posValueLocal;
+        unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
         dv01 = (pos.quantity / 100) * bondPriced.dv01 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
 
         const carryEst = calculateExpectedCarry('SOV_BOND', pos.direction, posValueLocal, {
@@ -346,7 +346,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           const regPolicyRate = updatedRegions[pos.region].policyRate;
 
           const notional = pos.notional * fxRateToUsd;
-          const priceReturnUSD = notional * assetReturn;
+          const priceReturnLocal = notional * assetReturn;
 
           const carryEst = calculateExpectedCarry('TRS', pos.direction, notional, {
             policyRate: regPolicyRate,
@@ -355,7 +355,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           weeklyFinancing = carryEst.components.financingCostLocal;
           ctx.attributionCarry += carryEst.weeklyCarryLocal;
 
-          unrealizedPnL = pos.direction === 'LONG' ? priceReturnUSD : -priceReturnUSD;
+          unrealizedPnL = pos.direction === 'LONG' ? priceReturnLocal : -priceReturnLocal;
           delta = pos.direction === 'LONG' ? notional : -notional;
           const pnlMove = unrealizedPnL - prevPnL;
           ctx.attributionEquityDelta += pnlMove;
@@ -371,9 +371,9 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         if (comm) {
           currentPrice = comm.spotPrice;
           const posValueLocal = pos.quantity * currentPrice;
-          const entryValueUSD = pos.quantity * pos.entryPrice;
+          const entryValueLocal = pos.quantity * pos.entryPrice;
 
-          unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueUSD : entryValueUSD - posValueLocal;
+          unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
           delta = pos.direction === 'LONG' ? posValueLocal : -posValueLocal;
 
           const carryEst = calculateExpectedCarry('COMMODITY', pos.direction, posValueLocal, {
@@ -423,9 +423,9 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         currentPrice = greeks.price;
         const contracts = pos.quantity;
         const posValueLocal = contracts * currentPrice * fxRateToUsd;
-        const entryValueUSD = contracts * pos.entryPrice * fxRateToUsd;
+        const entryValueLocal = contracts * pos.entryPrice * fxRateToUsd;
 
-        unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueUSD : entryValueUSD - posValueLocal;
+        unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
 
         const mult = pos.direction === 'LONG' ? 1 : -1;
         delta = mult * greeks.delta * contracts * underlyingPrice * fxRateToUsd;
@@ -435,7 +435,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
 
         const carryEst = calculateExpectedCarry('OPTION', pos.direction, posValueLocal, {
           policyRate: r,
-          thetaPerContractUSD: greeks.theta * fxRateToUsd,
+          thetaPerContractLocal: greeks.theta * fxRateToUsd,
           quantity: contracts
         });
         weeklyFinancing = carryEst.components.financingCostLocal;
@@ -469,8 +469,8 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             pos.direction as 'LONG' | 'SHORT'
           );
           currentPrice = fxPair.basisSpreadBps;
-          unrealizedPnL = xcsPricing.npvUSD;
-          dv01 = xcsPricing.dv01USD;
+          unrealizedPnL = xcsPricing.npvLocal;
+          dv01 = xcsPricing.dv01Local;
 
           const pnlMove = unrealizedPnL - prevPnL;
           ctx.attributionMacroRates += pnlMove;
@@ -522,13 +522,13 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         assertNever(pos.assetType, 'position weekly mark (12-portfolio-and-positions)');
     }
 
-    ctx.weeklyFinancingCostUSD += weeklyFinancing;
-    ctx.totalRequiredMarginUSD += marginReq;
-    ctx.maintenanceMarginUSD += maintMargin;
-    ctx.netDeltaUSD += delta;
-    ctx.netGammaUSD += gamma;
-    ctx.netVegaUSD += vega;
-    ctx.netDV01USD += dv01;
+    ctx.weeklyFinancingCostLocal += weeklyFinancing;
+    ctx.totalRequiredMarginLocal += marginReq;
+    ctx.maintenanceMarginLocal += maintMargin;
+    ctx.netDeltaLocal += delta;
+    ctx.netGammaLocal += gamma;
+    ctx.netVegaLocal += vega;
+    ctx.netDV01Local += dv01;
 
     return {
       ...pos,

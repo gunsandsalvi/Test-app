@@ -9,9 +9,9 @@
  *      currency). The measurement stays with each class's market stage, because it reads that
  *      class's books.
  *   2. ABSORBANCE — what the hedger can carry itself: covenant headroom for a corporate
- *      (corporate-financing's `exposureToHedgeUSD`), capital above the floor for a bank (07g),
+ *      (corporate-financing's `exposureToHedgeLocal`), capital above the floor for a bank (07g),
  *      the large-exposure limit for a lender (cds.ts). Also the hedger's own, also class-local.
- *   3. NET THE STANDING BOOK (§7.241) — `standingCoverUSD`/`standingCoverUnits` in contract.ts,
+ *   3. NET THE STANDING BOOK (§7.241) — `standingCoverLocal`/`standingCoverUnits` in contract.ts,
  *      written once over the one book.
  *   4. THE WALK-AWAY — what removing the risk is WORTH, which is this module: the risk removed,
  *      priced at what carrying it costs the hedger. Past it, the hedger keeps the risk — which

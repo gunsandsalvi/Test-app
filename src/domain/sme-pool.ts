@@ -23,7 +23,7 @@
 export interface PoolSubUnitObservation {
   subUnitId: string;
   demandLevelAnnualLocal: number;
-  measuredRevenueUSD: number;
+  measuredRevenueLocal: number;
 }
 
 /**
@@ -35,7 +35,7 @@ export interface PoolSubUnitObservation {
 export function capacityMixShares(observations: PoolSubUnitObservation[]): Map<string, number> {
   const out = new Map<string, number>();
   const demandTotal = observations.reduce((a, o) => a + Math.max(0, o.demandLevelAnnualLocal), 0);
-  const measuredTotal = observations.reduce((a, o) => a + Math.max(0, o.measuredRevenueUSD), 0);
+  const measuredTotal = observations.reduce((a, o) => a + Math.max(0, o.measuredRevenueLocal), 0);
   if (observations.length === 0) return out;
   if (!(demandTotal > 0)) {
     const even = 1 / observations.length;
@@ -43,12 +43,12 @@ export function capacityMixShares(observations: PoolSubUnitObservation[]): Map<s
     return out;
   }
   // How much of the industry's demand this pool's book actually speaks for.
-  const coveredDemandUSD = observations.reduce(
-    (a, o) => a + (o.measuredRevenueUSD > 0 ? Math.max(0, o.demandLevelAnnualLocal) : 0), 0);
-  const trust = Math.min(1, coveredDemandUSD / demandTotal);
+  const coveredDemandLocal = observations.reduce(
+    (a, o) => a + (o.measuredRevenueLocal > 0 ? Math.max(0, o.demandLevelAnnualLocal) : 0), 0);
+  const trust = Math.min(1, coveredDemandLocal / demandTotal);
   observations.forEach((o) => {
     const demandShare = Math.max(0, o.demandLevelAnnualLocal) / demandTotal;
-    const measuredShare = measuredTotal > 0 ? Math.max(0, o.measuredRevenueUSD) / measuredTotal : 0;
+    const measuredShare = measuredTotal > 0 ? Math.max(0, o.measuredRevenueLocal) / measuredTotal : 0;
     out.set(o.subUnitId, trust * measuredShare + (1 - trust) * demandShare);
   });
   return out;

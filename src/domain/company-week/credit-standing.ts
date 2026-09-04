@@ -26,11 +26,11 @@
  */
 export function creditMetrics(i: {
   isBank: boolean;
-  totalDebtUSD: number;
+  totalDebtLocal: number;
   revenueLocal: number;
   ebitdaLocal: number;
-  ebitUSD: number;
-  annualInterestUSD: number;
+  ebitLocal: number;
+  annualInterestLocal: number;
   bankCapitalRatio: number;
   /** A bank's own equity and the annual loss rate its own book is running. */
   bankEquityLocal: number;
@@ -51,11 +51,11 @@ export function creditMetrics(i: {
   // default probability uses; on a rating ladder it turns negative for any bank under the floor,
   // rating a thin but solvent bank below a corporate with no earnings at all.
   const rawLeverage = i.isBank
-    ? i.totalDebtUSD / Math.max(1, i.bankEquityLocal)
-    : i.totalDebtUSD / Math.max(1, i.ebitdaLocal);
+    ? i.totalDebtLocal / Math.max(1, i.bankEquityLocal)
+    : i.totalDebtLocal / Math.max(1, i.ebitdaLocal);
   const rawCoverage = i.isBank
     ? Math.max(0, i.bankCapitalRatio) / Math.max(1e-4, i.bankLossRateAnnual)
-    : i.ebitUSD / Math.max(0.5, i.annualInterestUSD);
+    : i.ebitLocal / Math.max(0.5, i.annualInterestLocal);
   return {
     leverage: isFinite(rawLeverage) ? Number(Math.max(0, rawLeverage).toFixed(2)) : 5.0,
     coverage: isFinite(rawCoverage) ? Number(rawCoverage.toFixed(2)) : 1.5,
@@ -71,13 +71,13 @@ export function creditMetrics(i: {
  * default trigger is FOR**, and it is the reason this is a function rather than a constant: a
  * fixed line would either never bind or always bind, and neither is a credit market.
  */
-export function revolverDrawUSD(i: {
-  cashShortfallUSD: number;
-  headroomUSD: number;
-  alreadyDrawnUSD: number;
+export function revolverDrawLocal(i: {
+  cashShortfallLocal: number;
+  headroomLocal: number;
+  alreadyDrawnLocal: number;
 }): number {
-  const remaining = Math.max(0, i.headroomUSD - i.alreadyDrawnUSD);
-  return Math.max(0, Math.min(Math.max(0, i.cashShortfallUSD), remaining));
+  const remaining = Math.max(0, i.headroomLocal - i.alreadyDrawnLocal);
+  return Math.max(0, Math.min(Math.max(0, i.cashShortfallLocal), remaining));
 }
 
 /**
@@ -104,9 +104,9 @@ export function maturityWallShare(
   tranches: { principalLocal: number; maturityWeek?: number }[],
   week: number
 ): number {
-  const wallUSD = tranches
+  const wallLocal = tranches
     .filter((t) => (t.maturityWeek ?? Infinity) - week <= 52)
     .reduce((a, t) => a + t.principalLocal, 0);
-  const ladderUSD = Math.max(1, tranches.reduce((a, t) => a + t.principalLocal, 0));
-  return wallUSD / ladderUSD;
+  const ladderLocal = Math.max(1, tranches.reduce((a, t) => a + t.principalLocal, 0));
+  return wallLocal / ladderLocal;
 }

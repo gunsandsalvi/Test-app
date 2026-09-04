@@ -10,7 +10,7 @@ import { distributable, redeemable } from '../src/domain/fund';
 test('a fund cannot distribute money it does not have', () => {
   // THE DEFECT: requested 0.495B, drawn capital 6.551B, balance 0.
   const d = distributable(495e6, 6_551e6, 0);
-  assert.equal(d.payableUSD, 0);
+  assert.equal(d.payableLocal, 0);
   assert.equal(d.boundBy, 'cash');
 });
 
@@ -25,10 +25,10 @@ test('a distribution never exceeds either bound, over a swept range', () => {
   for (const req of [0, 1, 1e6, 1e9]) {
     for (const drawn of [0, 5e5, 2e9]) {
       for (const cash of [0, 5e5, 2e9]) {
-        const { payableUSD } = distributable(req, drawn, cash);
-        assert.ok(payableUSD <= req + 1e-9 && payableUSD <= drawn + 1e-9 && payableUSD <= cash + 1e-9,
-          `${req}/${drawn}/${cash} -> ${payableUSD}`);
-        assert.ok(payableUSD >= 0);
+        const { payableLocal } = distributable(req, drawn, cash);
+        assert.ok(payableLocal <= req + 1e-9 && payableLocal <= drawn + 1e-9 && payableLocal <= cash + 1e-9,
+          `${req}/${drawn}/${cash} -> ${payableLocal}`);
+        assert.ok(payableLocal >= 0);
       }
     }
   }

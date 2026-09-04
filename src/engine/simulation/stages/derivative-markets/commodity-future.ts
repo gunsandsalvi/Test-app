@@ -26,12 +26,12 @@ import {
 } from '../../../../domain/derivatives/classes/commodity-future';
 import { hedgeConcessionPerUnit } from '../../../../domain/derivatives/hedging';
 import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
-import { deskNotionalCapacityUSD } from '../../../../domain/derivatives/registry';
+import { deskNotionalCapacityLocal } from '../../../../domain/derivatives/registry';
 import { COMMODITY_CATEGORY_LINKAGE } from '../../../../domain/instruments';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../../domain/market-microstructure';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { isActiveCompany } from '../../../../domain/company';
-import { exposureToHedgeUSD } from '../corporate-financing';
+import { exposureToHedgeLocal } from '../corporate-financing';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
 import { strikeDerivatives } from '../derivative-lifecycle';
@@ -69,17 +69,17 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
     const producers = firms.filter((c) => c.producedCommodityId === comm.id);
     // The natural LONG: firms whose recipes draw the sub-unit this commodity is a share of. Its
     // exposure is what it will actually spend on the input, off its own product mix.
-    const consumerExposureUSD = new Map<string, number>();
+    const consumerExposureLocal = new Map<string, number>();
     if (linkage) {
       firms.forEach((c) => {
-        const spendUSD = (c.productLines || []).reduce((a, line) => {
+        const spendLocal = (c.productLines || []).reduce((a, line) => {
           const intensity = CATEGORY_INPUT_REQUIREMENTS[line.subUnitId]?.[linkage.subUnitId] ?? 0;
           return a + c.annualRevenue * (line.revenueShare ?? 0) * intensity * linkage.intensityShare;
         }, 0);
-        if (spendUSD > 0) consumerExposureUSD.set(c.id, spendUSD);
+        if (spendLocal > 0) consumerExposureLocal.set(c.id, spendLocal);
       });
     }
-    if (producers.length === 0 && consumerExposureUSD.size === 0) return;
+    if (producers.length === 0 && consumerExposureLocal.size === 0) return;
 
     FUTURES_TENOR_MONTHS.forEach((tenorMonths) => {
       const tenorYears = tenorMonths / 12;
@@ -92,15 +92,15 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       // covenant headroom cannot absorb, less what they have already sold forward.
       const sellers: { party: DerivativeParty; units: number }[] = [];
       producers.forEach((c) => {
-        const forwardRevenueUSD = c.annualRevenue * tenorYears;
-        const hedgeUSD = exposureToHedgeUSD({
-          exposureUSD: forwardRevenueUSD,
-          ebitAnnualUSD: c.ebit,
-          interestAnnualUSD: annualInterestOf(c),
+        const forwardRevenueLocal = c.annualRevenue * tenorYears;
+        const hedgeLocal = exposureToHedgeLocal({
+          exposureLocal: forwardRevenueLocal,
+          ebitAnnualLocal: c.ebit,
+          interestAnnualLocal: annualInterestOf(c),
           oneSigma,
           riskAversion: riskAversionOf(c.management),
         });
-        const units = hedgeUSD / spot
+        const units = hedgeLocal / spot
           - standing.coverUnits('COMMODITY_FUTURE', 'b', `COMPANY:${c.ticker}`, comm.id, termKey);
         if (units > 0.0001) sellers.push({ party: { kind: 'COMPANY', ticker: c.ticker }, units });
       });
@@ -120,8 +120,8 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       if (priorPrint > carryBound) {
         banks.forEach((bank) => {
           const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-          const capacityLocal = deskNotionalCapacityUSD(
-            leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'COMMODITY_FUTURE');
+          const capacityLocal = deskNotionalCapacityLocal(
+            leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeLocal(`BANK:${bank.ticker}`), 'COMMODITY_FUTURE');
           const units = capacityLocal / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
           if (units > 0.0001) {
             sellers.push({ party: { kind: 'BANK', ticker: bank.ticker }, units });
@@ -145,18 +145,18 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       // unhedged exposure costs it — the mirror of the producer's own concession, one arithmetic
       // with two signs (domain/derivatives/hedging.ts). ----
       const participants: ClearingParticipant[] = [];
-      consumerExposureUSD.forEach((spendAnnualUSD, companyId) => {
+      consumerExposureLocal.forEach((spendAnnualLocal, companyId) => {
         const c = firmById.get(companyId);
         if (!c) return;
-        const forwardSpendUSD = spendAnnualUSD * tenorYears;
-        const hedgeUSD = exposureToHedgeUSD({
-          exposureUSD: forwardSpendUSD,
-          ebitAnnualUSD: c.ebit,
-          interestAnnualUSD: annualInterestOf(c),
+        const forwardSpendLocal = spendAnnualLocal * tenorYears;
+        const hedgeLocal = exposureToHedgeLocal({
+          exposureLocal: forwardSpendLocal,
+          ebitAnnualLocal: c.ebit,
+          interestAnnualLocal: annualInterestOf(c),
           oneSigma,
           riskAversion: riskAversionOf(c.management),
         });
-        if (!(hedgeUSD > 0)) return;
+        if (!(hedgeLocal > 0)) return;
         // Its own cost of capital, the same one the equity book values it at.
         const costOfCapital = riskFreeRate + (c.beta ?? 1) * EQUITY_RISK_PREMIUM;
         const reservation = spot + hedgeConcessionPerUnit({
@@ -164,7 +164,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         });
         const demandByInstrumentId = new Map<string, ParticipantDemand>([[id, {
           reservationStat: reservation,
-          maxHoldingLocal: hedgeUSD / spot,
+          maxHoldingLocal: hedgeLocal / spot,
           // Full size once the price is a whole concession below what it would pay — the same
           // distance that sets the reservation, so the schedule has one scale, not two.
           fullSizeStatRange: Math.max(0.01, reservation - spot),
@@ -256,7 +256,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
             referenceId: comm.id,
             termKey,
             units: sizeUnits,
-            settledMarkUSD: 0,
+            settledMarkLocal: 0,
             // §3.13c: commodities are quoted in the numeraire, which is what `regionId: 'USA'` was standing in for.
             currency: NUMERAIRE,
             struckWeek: week,

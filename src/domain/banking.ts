@@ -92,7 +92,7 @@ export type BankingSectorView = Readonly<BankingSector>;
 export interface BankingSector {
   // §5-WIRES D: the two loan books are READS of the rows — `businessLoanBookOf` (Σ businessLoans)
   // and `consumerLoanBookOf` (Σ householdLoans). The regional aggregate carries no rows and so
-  // no loan book of its own: a region's book is `regionLoanBooksUSD` over its named banks.
+  // no loan book of its own: a region's book is `regionLoanBooksLocal` over its named banks.
   // §5-WIRES A3.6c: a bank's reserves are its account (`bankReservesOf`) and its four deposit
   // lines are its depositors' accounts (`DepositLines`, `depositLinesAt`) — no field carries them.
   sovereignBondHoldingsLocal: number;
@@ -101,8 +101,8 @@ export interface BankingSector {
   netInterestMarginPct: number;
   loanLossProvisionRateAnnualPct: number;
   creditConditionsIndex: number; // -1 (very loose) to +1 (very tight)
-  centralBankReservesUSD: number;
-  moneySupplyM2USD: number;
+  centralBankReservesLocal: number;
+  moneySupplyM2Local: number;
   itemizedHoldings: ItemizedHolding[];
   // Wall Street Phase 2: real central bank facility usage — a genuine, named operation each
   // week, not policyRate read as an ambient parameter. A bank short of its own target cash
@@ -155,7 +155,7 @@ export interface BankingSector {
    * simultaneously be sold — 07c/07f read this as a floor on the pledging bank's holdings and
    * exclude it from further borrowing capacity.
    */
-  repoEncumberedCollateralUSD: number;
+  repoEncumberedCollateralLocal: number;
   /** HF1 — margin loans this bank has out to hedge funds, derived from the region's
    *  prime-brokerage book. A real asset, consuming the leverage ratio like any other loan. */
   primeBrokerageLoansLocal?: number;
@@ -201,18 +201,18 @@ export interface BankingSector {
   clientMarginLocal?: number;
   /** HH — a reported weekly FLOW (not a stock): interest this bank paid its household
    *  depositors, at its own deposit rate. Part of measured household income. */
-  householdDepositInterestWeeklyUSD?: number;
+  householdDepositInterestWeeklyLocal?: number;
   /** PUB3d/§7.254 — last week's bill accretion on this bank's sovereign book, recorded by the
    *  accretion stage so the NIM income measure can count the return the book actually earned
    *  (non-cash: it is already in equity; never credit cash from it). */
-  lastBillAccretionWeeklyUSD?: number;
+  lastBillAccretionWeeklyLocal?: number;
   /** §5-CLOSE C4 — reported FLOWS the weekly evolution decides and 02b pays as settlement
    *  payments: interest on reserves (CENTRAL_BANK → this bank), interest on corporate balances
    *  (this bank → each depositor pro rata) and the dividend (this bank → the register's holders).
    *  None of them is written to cash by the evolution itself. */
-  reservesInterestWeeklyUSD?: number;
-  corporateDepositInterestWeeklyUSD?: number;
-  dividendWeeklyUSD?: number;
+  reservesInterestWeeklyLocal?: number;
+  corporateDepositInterestWeeklyLocal?: number;
+  dividendWeeklyLocal?: number;
 }
 
 /**
@@ -242,9 +242,9 @@ export type HouseholdLoanKind = 'MORTGAGE' | 'CREDIT_CARD' | 'CONSUMER_TERM';
 export interface MortgageVintage {
   principalLocal: number;
   /** The home value this vintage was written against, in the week it was written. */
-  originationCollateralUSD: number;
+  originationCollateralLocal: number;
   /** The region's median home price when it was written — the base its mark is measured from. */
-  originationHomePriceUSD: number;
+  originationHomePriceLocal: number;
   /** Fixed at origination: what this borrower actually pays, not what the book averages to. */
   rateAnnual: number;
   /** Weeks left on this vintage's own annuity clock. */
@@ -494,13 +494,13 @@ export const consumerLoanBookOf = (s: { householdLoans?: HouseholdLoanPool[] }):
 export const loanBooksOf = (s: { businessLoans?: BankLoan[]; householdLoans?: HouseholdLoanPool[] }, facilityBookLocal: number): number =>
   businessLoanBookOf(s, facilityBookLocal) + consumerLoanBookOf(s);
 /** A region's loan books: the sum over its named banks' rows (the aggregate holds no rows). */
-export function regionLoanBooksUSD<T extends { bankBalanceSheet?: BankingSector }>(banks: T[], facilityBookOf: (b: T) => number): { businessLoanUSD: number; consumerLoanUSD: number } {
-  let businessLoanUSD = 0, consumerLoanUSD = 0;
-  banks.forEach((b) => { if (b.bankBalanceSheet) { businessLoanUSD += businessLoanBookOf(b.bankBalanceSheet, facilityBookOf(b)); consumerLoanUSD += consumerLoanBookOf(b.bankBalanceSheet); } });
-  return { businessLoanUSD, consumerLoanUSD };
+export function regionLoanBooksLocal<T extends { bankBalanceSheet?: BankingSector }>(banks: T[], facilityBookOf: (b: T) => number): { businessLoanLocal: number; consumerLoanLocal: number } {
+  let businessLoanLocal = 0, consumerLoanLocal = 0;
+  banks.forEach((b) => { if (b.bankBalanceSheet) { businessLoanLocal += businessLoanBookOf(b.bankBalanceSheet, facilityBookOf(b)); consumerLoanLocal += consumerLoanBookOf(b.bankBalanceSheet); } });
+  return { businessLoanLocal, consumerLoanLocal };
 }
 
-export function householdBookRwaUSD(pools: HouseholdLoanPool[] | undefined): number {
+export function householdBookRwaLocal(pools: HouseholdLoanPool[] | undefined): number {
   return (pools ?? []).reduce(
     (a, p) => a + p.principalLocal * (p.kind === 'MORTGAGE' ? MORTGAGE_RISK_WEIGHT : CONSUMER_CREDIT_RISK_WEIGHT),
     0
@@ -519,10 +519,10 @@ export function householdBookRwaUSD(pools: HouseholdLoanPool[] | undefined): num
  * ago at 80% is a loan at 20% today; one written last year at a peak is underwater after a 15%
  * fall. That spread across vintages IS the distribution the average was hiding.
  */
-export function vintageCurrentLtv(v: MortgageVintage, medianHomePriceNowUSD: number): number {
-  const base = Math.max(1, v.originationHomePriceUSD);
-  const markedCollateralUSD = Math.max(1, v.originationCollateralUSD) * (Math.max(0, medianHomePriceNowUSD) / base);
-  return markedCollateralUSD > 0 ? v.principalLocal / markedCollateralUSD : 2;
+export function vintageCurrentLtv(v: MortgageVintage, medianHomePriceNowLocal: number): number {
+  const base = Math.max(1, v.originationHomePriceLocal);
+  const markedCollateralLocal = Math.max(1, v.originationCollateralLocal) * (Math.max(0, medianHomePriceNowLocal) / base);
+  return markedCollateralLocal > 0 ? v.principalLocal / markedCollateralLocal : 2;
 }
 
 /**
@@ -543,7 +543,7 @@ export function mortgageSeverityAtLtv(ltv: number): number {
  * actually above the kink contributes the losses, which is where every dollar of mortgage loss
  * comes from in reality.
  */
-export function bookMortgageSeverity(vintages: MortgageVintage[] | undefined, medianHomePriceNowUSD: number): number {
+export function bookMortgageSeverity(vintages: MortgageVintage[] | undefined, medianHomePriceNowLocal: number): number {
   if (!vintages || vintages.length === 0) return MORTGAGE_MIN_LOSS_SEVERITY;
   let weighted = 0;
   let total = 0;
@@ -551,17 +551,17 @@ export function bookMortgageSeverity(vintages: MortgageVintage[] | undefined, me
     const w = Math.max(0, v.principalLocal);
     if (w <= 0) return;
     total += w;
-    weighted += w * mortgageSeverityAtLtv(vintageCurrentLtv(v, medianHomePriceNowUSD));
+    weighted += w * mortgageSeverityAtLtv(vintageCurrentLtv(v, medianHomePriceNowLocal));
   });
   return total > 0 ? weighted / total : MORTGAGE_MIN_LOSS_SEVERITY;
 }
 
-export function annuityWeeklyPrincipalUSD(principalLocal: number, rateAnnual: number, wamWeeks: number): number {
+export function annuityWeeklyPrincipalLocal(principalLocal: number, rateAnnual: number, wamWeeks: number): number {
   if (!(principalLocal > 0)) return 0;
   const weeks = Math.max(1, wamWeeks);
   const r = Math.max(0, rateAnnual) / 52;
-  const paymentUSD = principalLocal * levelPaymentFactor(r, weeks);
-  return Math.max(0, Math.min(principalLocal, paymentUSD - principalLocal * r));
+  const paymentLocal = principalLocal * levelPaymentFactor(r, weeks);
+  return Math.max(0, Math.min(principalLocal, paymentLocal - principalLocal * r));
 }
 
 /** G2: one real loan to one named borrower on one named bank's book. */

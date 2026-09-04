@@ -35,7 +35,7 @@ import { bookHeadOf } from '../../../engine2/holdings';
 import { AVERAGE_HOUSEHOLD_SIZE, WealthTier } from '../../../domain/region-macro';
 import { WEALTH_TIERS } from '../../macro/household-cohorts';
 import {
-  householdDirectEquityUSD, householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD,
+  householdDirectEquityLocal, householdEtfHoldingsLocal, householdPrivateBusinessEquityLocal,
 } from '../../macro/household-portfolio';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { REGION_IDS } from '../../../domain/geography';
@@ -49,7 +49,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
   // ---- 1. Each institution records what it owes its beneficiaries. ----
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     if (!institutionProfile(entity.entityType).beneficiariesAreHouseholds) {
-      return entity.beneficiaryLiabilityUSD === undefined ? entity : { ...entity, beneficiaryLiabilityUSD: undefined };
+      return entity.beneficiaryLiabilityLocal === undefined ? entity : { ...entity, beneficiaryLiabilityLocal: undefined };
     }
     // REVERSED. This was `totalAssets − equityCapital`: the obligation derived from the
     // holdings, with equity pinned at its seed ratio and never updated, so a fund was as big as
@@ -65,13 +65,13 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // fund's own capital, so the wealth transmission this module exists to create never ran.
     // The claim grows by the week's measured investment income; the fund's capital stays what it
     // is meant to be, the surplus or deficit against what it owes.
-    const openingUSD = entity.beneficiaryLiabilityUSD
+    const openingLocal = entity.beneficiaryLiabilityLocal
       ?? (institutionTotalAssetsLocal(ctx, entity) - Math.max(0, entity.equityCapitalLocal));
-    const liabilityUSD = Math.max(0, openingUSD + Math.max(0, entity.lastWeeklyInvestmentIncomeUSD ?? 0));
+    const liabilityLocal = Math.max(0, openingLocal + Math.max(0, entity.lastWeeklyInvestmentIncomeLocal ?? 0));
     return {
       ...entity,
-      beneficiaryLiabilityUSD: liabilityUSD,
-      equityCapitalLocal: institutionTotalAssetsLocal(ctx, entity) - liabilityUSD,
+      beneficiaryLiabilityLocal: liabilityLocal,
+      equityCapitalLocal: institutionTotalAssetsLocal(ctx, entity) - liabilityLocal,
     };
   });
 
@@ -82,8 +82,8 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const H = ctx.v2.holdings;
     let heldLocal = 0;
     for (let r = bookHeadOf(ctx.v2, fund.id); r >= 0; r = H.next[r]) heldLocal += H.qtyLocal[r];
-    const navUSD = heldLocal + Math.max(0, entityCashOf(ctx.v2, fund));
-    return navUSD / shares;
+    const navLocal = heldLocal + Math.max(0, entityCashOf(ctx.v2, fund));
+    return navLocal / shares;
   };
 
   REGION_IDS.forEach((region) => {
@@ -99,9 +99,9 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // it could not find in its deposits. Both directions settle here, on the same
       // arithmetic, because they are the same transaction with the sign flipped — and a
       // redemption that credited no deposits and retired no shares would be money from nowhere.
-      const executed = ctx.householdEtfPurchasesUSD.get(fund.id);
-      const spentUSD = executed?.spentUSD ?? 0;
-      if (spentUSD === 0) return;
+      const executed = ctx.householdEtfPurchasesLocal.get(fund.id);
+      const spentLocal = executed?.spentLocal ?? 0;
+      if (spentLocal === 0) return;
       const idx = etfShares.findIndex((x) => x.fundId === fund.id);
       const heldShares = idx >= 0 ? etfShares[idx].shares : 0;
       // The price the transaction EXECUTED at (etf-flows), not a NAV re-derived from a
@@ -109,21 +109,21 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       const navPerShare = executed?.navPerShare ?? fundNavPerShare(fund);
       if (!(navPerShare > 0)) return;
       // A household cannot sell more than it holds; the executed leg is trimmed, not the books.
-      const shares = Math.max(-heldShares, spentUSD / navPerShare);
+      const shares = Math.max(-heldShares, spentLocal / navPerShare);
       if (idx >= 0) etfShares[idx] = { ...etfShares[idx], shares: etfShares[idx].shares + shares };
       else etfShares.push({ fundId: fund.id, shares });
     });
 
     // ---- 3. The claims on institutions, marked against the balance sheets that owe them. ----
     const institutionalClaims = ctx.updatedInstitutionalEntities
-      .filter((e) => e.region === region && !e.isDefaulted && (e.beneficiaryLiabilityUSD ?? 0) > 0)
-      .map((e) => ({ entityId: e.id, valueLocal: e.beneficiaryLiabilityUSD! }));
-    const institutionalClaimsUSD = institutionalClaims.reduce((a, c) => a + c.valueLocal, 0);
+      .filter((e) => e.region === region && !e.isDefaulted && (e.beneficiaryLiabilityLocal ?? 0) > 0)
+      .map((e) => ({ entityId: e.id, valueLocal: e.beneficiaryLiabilityLocal! }));
+    const institutionalClaimsLocal = institutionalClaims.reduce((a, c) => a + c.valueLocal, 0);
 
     // ---- 4. The rest of the real book, marked from this week's clears. ----
     const evMultiple = publicComparableEvMultiple(region, ctx.updatedCompanies);
-    const etfHoldingsUSD = householdEtfHoldingsUSD(ctx.v2, { etfShares }, ctx.updatedInstitutionalEntities);
-    const directEquityUSD = householdDirectEquityUSD(ctx.v2,
+    const etfHoldingsLocal = householdEtfHoldingsLocal(ctx.v2, { etfShares }, ctx.updatedInstitutionalEntities);
+    const directEquityLocal = householdDirectEquityLocal(ctx.v2,
       region, ctx.updatedCompanies, ctx.updatedInstitutionalEntities,
       regionalDeskView(
         ctx.updatedCompanies.filter((c) => c.region === region && c.isBankEntity)
@@ -131,12 +131,12 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
         'equity'
       )
     );
-    const privateBusinessEquityUSD = householdPrivateBusinessEquityUSD(region, ctx.updatedCompanies, evMultiple);
+    const privateBusinessEquityLocal = householdPrivateBusinessEquityLocal(region, ctx.updatedCompanies, evMultiple);
 
     // Household financial wealth is the claims that EXIST — fund shares,
     // the public float, private business equity, claims on institutions. The placeholder that
     // used to fill the gap to "1.5x income" (assets nobody issued, earning nothing) is deleted.
-    const realClaimsUSD = etfHoldingsUSD + directEquityUSD + privateBusinessEquityUSD + institutionalClaimsUSD;
+    const realClaimsLocal = etfHoldingsLocal + directEquityLocal + privateBusinessEquityLocal + institutionalClaimsLocal;
 
     // ---- 6. HH2: the house. Households carried the mortgage and not the asset it secures. ----
     // Built from physical units — owning households at this week's median price — rather than
@@ -147,9 +147,9 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const owningHouseholds = housingMarket
       ? (Math.max(0, reg.totalPopulation) / AVERAGE_HOUSEHOLD_SIZE) * Math.max(0, housingMarket.ownershipRatePct)
       : 0;
-    const housingStockUSD = owningHouseholds * Math.max(0, housingMarket?.medianHomePriceUSD ?? 0);
-    const mortgageUSD = hs.mortgageDebtUSD ?? 0;
-    const homeEquityUSD = housingStockUSD - mortgageUSD;
+    const housingStockLocal = owningHouseholds * Math.max(0, housingMarket?.medianHomePriceLocal ?? 0);
+    const mortgageLocal = hs.mortgageDebtLocal ?? 0;
+    const homeEquityLocal = housingStockLocal - mortgageLocal;
 
     // The cash side of the fund-share purchase is a PAYMENT now (etf-flows pays it, the
     // settlement close moves the deposit and the pending bank leg), so this view no longer
@@ -157,7 +157,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // debit died with it. Only the SHARE register settles here.
     const depositsLocal = householdDepositsOf(ctx.v2, region);
     const mmfSharesLocal = Math.max(0, hs.mmfSharesLocal ?? 0);
-    const equityHoldingsUSD = realClaimsUSD;
+    const equityHoldingsLocal = realClaimsLocal;
 
     // The tier balance sheets are DERIVED SPLITS of the same marked components —
     // tier net worth is a sum over real lines, not a drifted stock. The split weights are
@@ -165,7 +165,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // the middle tiers' net worth that moves, and when equities rally it is the top's — the
     // difference the tier wealth-effect MPCs exist to price.
     if (reg.wealthDistribution) {
-      const consumerDebtUSD = (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0);
+      const consumerDebtLocal = (hs.creditCardDebtLocal ?? 0) + (hs.otherConsumerLoanDebtLocal ?? 0);
 
       // THE DEPOSIT SPLIT IS AN OUTCOME OF WHO SAVED, not a stated weight.
       //
@@ -182,9 +182,9 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // drive this split and the three below it, so a tier's saving backed every asset class at
       // once and a house-rich, pension-rich tier looked as cash-rich as one holding deposits.
       const accumulatedByTier = WEALTH_TIERS.map((t: WealthTier) =>
-        Math.max(0, reg.wealthDistribution?.[t]?.accumulatedSavingsUSD ?? 0));
+        Math.max(0, reg.wealthDistribution?.[t]?.accumulatedSavingsLocal ?? 0));
       const liquidByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
-        Math.max(0, reg.wealthDistribution?.[t]?.liquidSavingsUSD ?? accumulatedByTier[i]));
+        Math.max(0, reg.wealthDistribution?.[t]?.liquidSavingsLocal ?? accumulatedByTier[i]));
       const liquidTotal = liquidByTier.reduce((a, b) => a + b, 0);
       const depositShareOf = (_t: WealthTier, i: number) =>
         liquidTotal > 0 ? liquidByTier[i] / liquidTotal : 0;
@@ -192,7 +192,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // AND THE OTHER FINANCIAL SPLITS FALL OUT OF THE SAME TWO MEASUREMENTS.
       //
       // A tier's holding of an asset class is the stock its own saving built, allocated by its own
-      // appetite for risk — and the model measures both: `accumulatedSavingsUSD` and
+      // appetite for risk — and the model measures both: `accumulatedSavingsLocal` and
       // `equityExposureShare`, which HH already derives per tier. So four more of stated
       // tables become one derivation:
       //
@@ -211,7 +211,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // away, split by the same appetite that decided to put it there — so the two halves of the
       // balance sheet are now two stocks rather than one wearing two hats.
       const investedByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
-        Math.max(0, reg.wealthDistribution?.[t]?.investedSavingsUSD ?? accumulatedByTier[i]));
+        Math.max(0, reg.wealthDistribution?.[t]?.investedSavingsLocal ?? accumulatedByTier[i]));
       const riskyByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
         investedByTier[i] * Math.max(0, reg.wealthDistribution?.[t]?.equityExposureShare ?? 0));
       const cautiousByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
@@ -238,7 +238,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       //   measured per tier from the cohorts' own budgets, so the split is `(1 − savings rate) x
       //   income` — the propensity to borrow times the base it is borrowed against.
       const incomeByTier = WEALTH_TIERS.map((t: WealthTier) =>
-        Math.max(0, reg.wealthDistribution?.[t]?.shareOfIncomeUSD ?? 0));
+        Math.max(0, reg.wealthDistribution?.[t]?.shareOfIncomeLocal ?? 0));
       const incomeTotal = incomeByTier.reduce((a, b) => a + b, 0);
       const incomeShareOf = (t: WealthTier, i: number) =>
         incomeTotal > 0 ? incomeByTier[i] / incomeTotal : 0;
@@ -249,27 +249,27 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
         borrowTotal > 0 ? borrowByTier[i] / borrowTotal : 0;
 
       WEALTH_TIERS.forEach((t: WealthTier, i: number) => {
-        const tierAssetsUSD =
+        const tierAssetsLocal =
           (depositsLocal + mmfSharesLocal) * depositShareOf(t, i)
-          + (etfHoldingsUSD + directEquityUSD) * riskyShareOf(t, i)
-          + privateBusinessEquityUSD * riskyShareOf(t, i)
-          + institutionalClaimsUSD * cautiousShareOf(t, i)
-          + housingStockUSD * incomeShareOf(t, i);
-        const tierDebtUSD = mortgageUSD * incomeShareOf(t, i)
-          + consumerDebtUSD * borrowShareOf(t, i);
-        const tierClaimsUSD = institutionalClaimsUSD * cautiousShareOf(t, i);
+          + (etfHoldingsLocal + directEquityLocal) * riskyShareOf(t, i)
+          + privateBusinessEquityLocal * riskyShareOf(t, i)
+          + institutionalClaimsLocal * cautiousShareOf(t, i)
+          + housingStockLocal * incomeShareOf(t, i);
+        const tierDebtLocal = mortgageLocal * incomeShareOf(t, i)
+          + consumerDebtLocal * borrowShareOf(t, i);
+        const tierClaimsLocal = institutionalClaimsLocal * cautiousShareOf(t, i);
         const prev = reg.wealthDistribution[t];
         reg.wealthDistribution[t] = {
           ...prev,
-          priorNetWorthUSD: prev.shareOfNetWorthUSD,
+          priorNetWorthLocal: prev.shareOfNetWorthLocal,
           // RULE 19 — published so the cohort build can weight by MEASURED debt and MEASURED
           // claims rather than by `TIER_DEBT_SERVICE_WEIGHT` and `TIER_RESIDUAL_RECEIPT_WEIGHT`.
           // Both were computed here already and thrown away.
-          debtLocal: Math.round(tierDebtUSD),
-          institutionalClaimsUSD: Math.round(tierClaimsUSD),
-          shareOfNetWorthUSD: Math.round((tierAssetsUSD - tierDebtUSD)),
-          homeEquityUSD: Math.round((housingStockUSD * incomeShareOf(t, i)
-            - mortgageUSD * incomeShareOf(t, i))),
+          debtLocal: Math.round(tierDebtLocal),
+          institutionalClaimsLocal: Math.round(tierClaimsLocal),
+          shareOfNetWorthLocal: Math.round((tierAssetsLocal - tierDebtLocal)),
+          homeEquityLocal: Math.round((housingStockLocal * incomeShareOf(t, i)
+            - mortgageLocal * incomeShareOf(t, i))),
         };
       });
     }
@@ -277,22 +277,22 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     reg.householdState = {
       ...hs,
       // Last week's marked net worth, so next week's wealth effect can read a CHANGE.
-      priorNetWorthUSD: hs.netWorthUSD ?? 0,
-      housingStockUSD,
-      homeEquityUSD,
+      priorNetWorthLocal: hs.netWorthLocal ?? 0,
+      housingStockLocal,
+      homeEquityLocal,
       mmfSharesLocal,
       etfShares,
-      etfHoldingsUSD,
-      directEquityUSD,
-      privateBusinessEquityUSD,
+      etfHoldingsLocal,
+      directEquityLocal,
+      privateBusinessEquityLocal,
       institutionalClaims,
-      institutionalClaimsUSD,
-      equityHoldingsUSD,
+      institutionalClaimsLocal,
+      equityHoldingsLocal,
       // The house is an ASSET at full value and the mortgage a liability, as in any set of
       // national accounts. Omitting the asset while carrying the debt understated net worth by
       // the entire housing stock.
-      netWorthUSD: depositsLocal + mmfSharesLocal + equityHoldingsUSD + housingStockUSD
-        - (mortgageUSD + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0)),
+      netWorthLocal: depositsLocal + mmfSharesLocal + equityHoldingsLocal + housingStockLocal
+        - (mortgageLocal + (hs.creditCardDebtLocal ?? 0) + (hs.otherConsumerLoanDebtLocal ?? 0)),
     };
   });
 }

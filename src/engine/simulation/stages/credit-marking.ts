@@ -41,12 +41,12 @@ export function markCreditToMarket(state: GameState, ctx: WeeklyStepContext): vo
     priceById.set(instrumentId, p);
     return p;
   };
-  let markedUSD = 0, rows = 0;
+  let markedLocal = 0, rows = 0;
   ctx.updatedInstitutionalEntities.forEach((e) => {
     const r = markCreditBook(ctx.v2, e.id, priceOf);
-    rows += r.rows; markedUSD += r.deltaLocal;
+    rows += r.rows; markedLocal += r.deltaLocal;
   });
   if (process.env.CREDIT_MARK_TRACE === '1') {
-    console.log(`  [credit-mark] w${week} ${rows} rows re-marked, ${(markedUSD / 1e9).toFixed(2)}B of value moved`);
+    console.log(`  [credit-mark] w${week} ${rows} rows re-marked, ${(markedLocal / 1e9).toFixed(2)}B of value moved`);
   }
 }

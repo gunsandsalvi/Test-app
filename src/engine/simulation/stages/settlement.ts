@@ -2,7 +2,7 @@
  * THE SETTLEMENT LAYER (CASH / SETL1) — where money actually moves.
  *
  * Until now every stage moved cash by mutating whatever field it owned: a company's `cash`, an
- * entity's `cashLocal`, a bank's `cashReservesUSD`, the treasury's account. Nothing connected them,
+ * entity's `cashLocal`, a bank's `cashReservesLocal`, the treasury's account. Nothing connected them,
  * which is exactly how corporate cash came to sit outside the banking system for the whole life
  * of the model — reported as `corporateDepositsLocal`, held by no bank, backed by no asset.
  * A leak like that cannot happen once there is one place money moves through.
@@ -213,7 +213,7 @@ export function journalPayment(ctx: PendingNetCtx, instruction: PaymentInstructi
   const payee = partyId(instruction.payee);
   journalPush(ctx.paymentJournal, payer, payee, instruction.amount, instruction.currency, internReason(instruction.reason));
   // ONE RUNNING NET. This wrote the journal and nothing else, so every payment the paying agent
-  // made — the week's coupons, dividends and redemptions — was invisible to `pendingSettlementUSD`
+  // made — the week's coupons, dividends and redemptions — was invisible to `pendingSettlementLocal`
   // until it settled. Repo's surplus, every bid sizer and the prime-brokerage sweep read that
   // number, and the close sweep had to re-derive the whole thing by walking the journal because
   // of it: two representations of one running total, the second one written to work around the
@@ -338,7 +338,7 @@ export function clearPendingNet(ctx: WeeklyStepContext): void {
  * power excludes what it has already committed. Without this the five clearing books would each
  * size their budget off the same unspent balance and buy the same dollar five times.
  */
-export function pendingSettlementUSD(ctx: WeeklyStepContext, party: PartyRef): number {
+export function pendingSettlementLocal(ctx: WeeklyStepContext, party: PartyRef): number {
   const net = ctx.pendingNetById[partyId(party)] ?? 0;
   if (net === 0) return 0;
   const home = homeCurrencyOf(ctx.v2, party);
@@ -354,7 +354,7 @@ export function pendingSettlementUSD(ctx: WeeklyStepContext, party: PartyRef): n
  * array (the lending stage rebuilds the array when it writes).
  */
 const collateralHeldByBook = new WeakMap<object, Map<string, number>>();
-export function stockLoanCollateralHeldUSD(ctx: WeeklyStepContext, entityId: string): number {
+export function stockLoanCollateralHeldLocal(ctx: WeeklyStepContext, entityId: string): number {
   let heldLocal = 0;
   for (const reg of Object.values(ctx.updatedRegions)) {
     const book = reg?.securityLoanBook;
@@ -375,15 +375,15 @@ export function stockLoanCollateralHeldUSD(ctx: WeeklyStepContext, entityId: str
 
 /** What an institution can put behind a bid this week: its balance, plus what settlement already
  *  owes it, less the stock-loan collateral it is only holding. Never negative. */
-export function institutionSpendableUSD(ctx: WeeklyStepContext, entity: { id: string }, withPending = true): number {
-  const pendingUSD = withPending ? pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }) : 0;
-  return Math.max(0, entityCashOf(ctx.v2, entity) + pendingUSD - stockLoanCollateralHeldUSD(ctx, entity.id));
+export function institutionSpendableLocal(ctx: WeeklyStepContext, entity: { id: string }, withPending = true): number {
+  const pendingLocal = withPending ? pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: entity.id }) : 0;
+  return Math.max(0, entityCashOf(ctx.v2, entity) + pendingLocal - stockLoanCollateralHeldLocal(ctx, entity.id));
 }
 
 /** The pending figure the class-budget rule takes, with the held collateral netted as if it were
  *  already owed — which it is. */
-export function institutionUnsettledLessCollateralUSD(ctx: WeeklyStepContext, entityId: string): number {
-  return pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entityId }) - stockLoanCollateralHeldUSD(ctx, entityId);
+export function institutionUnsettledLessCollateralLocal(ctx: WeeklyStepContext, entityId: string): number {
+  return pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: entityId }) - stockLoanCollateralHeldLocal(ctx, entityId);
 }
 
 export interface SettlementReport {
@@ -412,12 +412,12 @@ export interface SettlementReport {
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
   creditCreatedByBank: Map<string, number>;
   /** What the cleared books' central counterparty was left holding. Must be zero. */
-  clearingHouseResidualUSD: number;
+  clearingHouseResidualLocal: number;
   /** Reserves the central bank ISSUED this week by paying for assets with money it
    *  created (an open-market purchase), less what it extinguished by selling. It is the one
    *  party whose payments are not funded from a balance, so the reserves that appear at the
    *  sellers' banks are new — and the identity below has to know that or it reads as a leak. */
-  centralBankIssuanceUSD: number;
+  centralBankIssuanceLocal: number;
   /** M6 — the same, per region (the central bank a payment was drawn on). */
   centralBankIssuanceByRegion: Map<string, number>;
   /** M6 — reserves a bank's own SECURITIES account paid (−) or received (+): a desk
@@ -434,8 +434,8 @@ export interface SettlementReport {
    *  (measured: 3.0M on a stock of trillions). `crossBorderByRegion` stays local, because what
    *  it is compared against — the deposits that actually moved in the region — is local. */
   crossBorderNumeraireByRegion: Map<string, number>;
-  /** What the central bank's own books were left holding — see `centralBankResidualUSD`. Zero. */
-  centralBankResidualUSD: number;
+  /** What the central bank's own books were left holding — see `centralBankResidualLocal`. Zero. */
+  centralBankResidualLocal: number;
   /** C4b — per region, the money that arrived from other regions less what left for
    *  them, read off each instruction's two sides (a side with no region — the clearing house —
    *  contributes nothing; its legs attribute through their other side). Booked on the central
@@ -443,13 +443,13 @@ export interface SettlementReport {
   crossBorderByRegion: Map<string, number>;
   /** Money that could not be applied: a party that does not exist, or a holder with no bank.
    *  Must be zero. A non-zero value is money leaving the system — the defect's shape. */
-  unresolvedUSD: number;
+  unresolvedLocal: number;
   /** A — the settled rows the store could not map to a party's row. Must be zero. */
   accountRowsUnmapped: number;
   /** …and what those rows were WORTH. A count is not a size, and the money family's headline is
    *  in dollars: reported as a count alone, a leak of fifty small rows and a leak of fifty huge
    *  ones read the same. */
-  accountUnmappedUSD: number;
+  accountUnmappedLocal: number;
   /** …and WHICH KINDS of party had no row, so the next run names the hole instead of counting
    *  it. `PAYER:kind` / `PAYEE:kind` against the dollars each accounts for. */
   accountUnmappedByKind: Map<string, number>;
@@ -500,16 +500,16 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
     treasuryFlowsByRegion: mergeNested(a.treasuryFlowsByRegion, b.treasuryFlowsByRegion),
     creditCreatedByBank: mergeMap(a.creditCreatedByBank, b.creditCreatedByBank),
     bankEquityDeltaByBank: mergeMap(a.bankEquityDeltaByBank, b.bankEquityDeltaByBank),
-    clearingHouseResidualUSD: a.clearingHouseResidualUSD + b.clearingHouseResidualUSD,
-    centralBankIssuanceUSD: a.centralBankIssuanceUSD + b.centralBankIssuanceUSD,
+    clearingHouseResidualLocal: a.clearingHouseResidualLocal + b.clearingHouseResidualLocal,
+    centralBankIssuanceLocal: a.centralBankIssuanceLocal + b.centralBankIssuanceLocal,
     centralBankIssuanceByRegion: mergeMap(a.centralBankIssuanceByRegion, b.centralBankIssuanceByRegion),
     bankSecuritiesDeltaByBank: mergeMap(a.bankSecuritiesDeltaByBank, b.bankSecuritiesDeltaByBank),
-    centralBankResidualUSD: a.centralBankResidualUSD + b.centralBankResidualUSD,
+    centralBankResidualLocal: a.centralBankResidualLocal + b.centralBankResidualLocal,
     crossBorderByRegion: mergeMap(a.crossBorderByRegion, b.crossBorderByRegion),
     accountRowsUnmapped: a.accountRowsUnmapped + b.accountRowsUnmapped,
-    accountUnmappedUSD: a.accountUnmappedUSD + b.accountUnmappedUSD,
+    accountUnmappedLocal: a.accountUnmappedLocal + b.accountUnmappedLocal,
     accountUnmappedByKind: mergeMap(a.accountUnmappedByKind, b.accountUnmappedByKind),
-    unresolvedUSD: a.unresolvedUSD + b.unresolvedUSD,
+    unresolvedLocal: a.unresolvedLocal + b.unresolvedLocal,
   };
 }
 
@@ -556,15 +556,15 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     treasuryFlowsByRegion: new Map(),
     creditCreatedByBank: new Map(),
     bankEquityDeltaByBank: new Map(),
-    clearingHouseResidualUSD: 0,
-    centralBankIssuanceUSD: 0,
+    clearingHouseResidualLocal: 0,
+    centralBankIssuanceLocal: 0,
     centralBankIssuanceByRegion: new Map(),
     bankSecuritiesDeltaByBank: new Map(),
-    centralBankResidualUSD: 0,
+    centralBankResidualLocal: 0,
     crossBorderByRegion: new Map(),
-    unresolvedUSD: 0,
+    unresolvedLocal: 0,
     accountRowsUnmapped: 0,
-    accountUnmappedUSD: 0,
+    accountUnmappedLocal: 0,
     accountUnmappedByKind: new Map(),
   };
   if (nInstructions === 0) {
@@ -604,7 +604,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     const payerIdx = journal.payerId[n];
     if (!applySettledRow(accounts, payerIdx, journal.payeeId[n], amountLocal, currencyOfId(journal.currencyId[n]))) {
       report.accountRowsUnmapped++;
-      report.accountUnmappedUSD += amountLocal;
+      report.accountUnmappedLocal += amountLocal;
       // Which side had no row, and of what kind: a count says a hole exists, this says where.
       const noRow = (id: number): boolean => !accounts.rowsOfParty.get(id)?.length;
       if (noRow(payerIdx)) {
@@ -685,14 +685,14 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     report.bankSecuritiesDeltaByBank = t.bankSecuritiesDeltaByBank;
     report.bankEquityDeltaByBank = t.bankEquityDeltaByBank;
     report.tgaDeltaByRegion = t.tgaDeltaByRegion;
-    report.centralBankIssuanceUSD = t.centralBankIssuanceUSD;
+    report.centralBankIssuanceLocal = t.centralBankIssuanceLocal;
     report.centralBankIssuanceByRegion = t.centralBankIssuanceByRegion;
-    report.clearingHouseResidualUSD = t.clearingHouseResidualUSD;
-    report.unresolvedUSD += t.unresolvedUSD;
+    report.clearingHouseResidualLocal = t.clearingHouseResidualLocal;
+    report.unresolvedLocal += t.unresolvedLocal;
     // §3.13c: the central banks' identity is read in ONE money. The per-book maps above are each
     // in their own book's currency, which is right for a bank reading its own reserves and wrong
     // for an identity that spans four of them.
-    report.centralBankResidualUSD = t.centralBankResidualNumeraire;
+    report.centralBankResidualLocal = t.centralBankResidualNumeraire;
   }
 
   // ---- 3. Apply it. Every balance is the PROJECTION of the account store (`projectBooks`).
@@ -701,10 +701,10 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const bankByTicker = new Map(
     ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet).map((c) => [c.ticker, c])
   );
-  report.bankEquityDeltaByBank.forEach((equityDeltaUSD, ticker) => {
+  report.bankEquityDeltaByBank.forEach((equityDeltaLocal, ticker) => {
     const bank = bankByTicker.get(ticker);
-    if (!bank?.bankBalanceSheet) { report.unresolvedUSD += equityDeltaUSD; return; }
-    if (equityDeltaUSD !== 0) bank.bankBalanceSheet = { ...bank.bankBalanceSheet, bankEquityLocal: bank.bankBalanceSheet.bankEquityLocal + equityDeltaUSD };
+    if (!bank?.bankBalanceSheet) { report.unresolvedLocal += equityDeltaLocal; return; }
+    if (equityDeltaLocal !== 0) bank.bankBalanceSheet = { ...bank.bankBalanceSheet, bankEquityLocal: bank.bankBalanceSheet.bankEquityLocal + equityDeltaLocal };
   });
   projectBooks(ctx, accounts);
 
@@ -716,7 +716,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // §3.13c: booked in the NUMÉRAIRE, because it is one bilateral claim and not two local ones.
   report.crossBorderNumeraireByRegion.forEach((delta, region) => {
     const cb = ctx.updatedRegions[region as keyof typeof ctx.updatedRegions]?.centralBankSheet;
-    if (!cb) { report.unresolvedUSD += delta; return; }
+    if (!cb) { report.unresolvedLocal += delta; return; }
     cb.foreignOfficialClaimsUSD = (cb.foreignOfficialClaimsUSD ?? 0) + delta;
   });
 
@@ -733,7 +733,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // of its net position at the central bank — projected above. A region the tallies name but
   // the store does not is money with no account.
   report.tgaDeltaByRegion.forEach((deltaLocal, region) => {
-    if (!ctx.updatedRegions[region as RegionId]?.centralBankSheet) report.unresolvedUSD += deltaLocal;
+    if (!ctx.updatedRegions[region as RegionId]?.centralBankSheet) report.unresolvedLocal += deltaLocal;
   });
 
   if (xborderByPair) {

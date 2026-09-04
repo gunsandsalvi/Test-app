@@ -24,11 +24,11 @@ export const lines: FunctionModule = {
     const expected = c.expectedSalesUnitsBySubUnit ?? {};
     const inv = c.outputInventoryBySubUnit ?? {};
     const rows = [...ls].sort((a, b) => b.revenueShare - a.revenueShare);
-    const stockUSD = Object.values(inv).reduce((a, v) => a + v.valueLocal, 0);
+    const stockLocal = Object.values(inv).reduce((a, v) => a + v.valueLocal, 0);
     return (<>
       <Card style={{ padding: '2px 0' }}>
         <KV k="lines" hint={rows.map((l) => words(l.industry)).filter((v, i, a) => a.indexOf(v) === i).join(' · ')} v={count(rows.length)} />
-        <KV k="finished goods in stock" v={money(stockUSD)} />
+        <KV k="finished goods in stock" v={money(stockLocal)} />
         <KV k="plant mothballed" v={pctLevel(c.mothballedPpeShare ?? 0, 0)} />
         <KV k="input supply constraint" hint="1 = unconstrained" v={num(c.inputSupplyConstraintFactor, 2)} />
       </Card>

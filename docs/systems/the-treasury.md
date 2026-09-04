@@ -93,14 +93,14 @@ checked by `scripts/check-atlas.sh`.
 | A3 a balance sheet | `src/domain/government-entity.ts:GovernmentFields` | ✅ |
 | A3.a equity negative, still a read | `src/domain/government-entity.ts:FiscalWeek` | ✅ |
 | B1 spends on named things | `src/domain/government.ts:decomposeGovernmentSpending` | ✅ |
-| B2 interest is Σ over its own bonds | `src/domain/government.ts:weeklyInterestExpenseUSD` | ✅ |
-| B3 outlays have causes that vary | `src/domain/government.ts:governmentOutlaysUSD` | ✅ |
+| B2 interest is Σ over its own bonds | `src/domain/government.ts:weeklyInterestExpenseLocal` | ✅ |
+| B3 outlays have causes that vary | `src/domain/government.ts:governmentOutlaysLocal` | ✅ |
 | B4 maturing debt is repaid in cash | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ✅ |
 | C1 taxes on real bases | `src/domain/company-week/income-statement.ts:corporateTax` | ✅ |
 | C1.a paid by named payers from accounts | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ✅ |
 | C2 receipts follow the economy | `src/engine/bootstrap/national-accounts.ts:splitWageBill` | ✅ |
 | C3 receipts are Σ collected, not a rate on an aggregate | `src/engine/simulation/stages/03-category-demand.ts:runCategoryDemandStage` | ✅ |
-| D1 outlays − receipts is what must be raised | `src/domain/government.ts:governmentObligationsWeeklyUSD` | ✅ |
+| D1 outlays − receipts is what must be raised | `src/domain/government.ts:governmentObligationsWeeklyLocal` | ✅ |
 | D2 raised by issuing into a market that must clear | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
 | D2.a the treasury picks size and maturity, the market the price | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
 | **D3 FORBID no central-bank overdraft** | `src/engine/ledger/accounts.ts:waysAndMeansOf` | ❌ |

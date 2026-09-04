@@ -114,18 +114,18 @@ const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
 function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const H = mutableHoldings(v2);
   const tRef = internString(v2, spec.instrumentType), iRef = internString(v2, spec.instrumentId);
-  let leftUSD = spec.valueLocal; let leftShares = spec.shares ?? Number.NaN;
+  let leftLocal = spec.valueLocal; let leftShares = spec.shares ?? Number.NaN;
   let hit = false; let drops = false;
   // The residue of a row-by-row subtraction scales with the whole position the walk draws from,
   // not with the amount asked for: a debit of a thousand dollars taken out of a book of billions
   // carries the book's rounding, not its own.
-  let walkedUSD = 0; let walkedShares = 0;
+  let walkedLocal = 0; let walkedShares = 0;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
-    if (H.typeRef[r] === tRef && H.instrRef[r] === iRef && (leftUSD > 1e-9 || leftShares > 1e-12)) {
+    if (H.typeRef[r] === tRef && H.instrRef[r] === iRef && (leftLocal > 1e-9 || leftShares > 1e-12)) {
       hit = true;
-      walkedUSD += Math.abs(H.qtyLocal[r]);
-      const takeUSD = Math.min(leftUSD, H.qtyLocal[r]);
-      H.qtyLocal[r] -= takeUSD; leftUSD -= takeUSD;
+      walkedLocal += Math.abs(H.qtyLocal[r]);
+      const takeLocal = Math.min(leftLocal, H.qtyLocal[r]);
+      H.qtyLocal[r] -= takeLocal; leftLocal -= takeLocal;
       if (!Number.isNaN(leftShares) && !Number.isNaN(H.shares[r])) {
         walkedShares += Math.abs(H.shares[r]);
         const takeSh = Math.min(leftShares, H.shares[r]); H.shares[r] -= takeSh; leftShares -= takeSh;
@@ -135,10 +135,10 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   }
   // What is left after the walk is either float noise from the row-by-row subtraction — which
   // scales with the position it walked — or paper the holder never had.
-  if (leftUSD > 1e-9 * Math.max(1, spec.valueLocal, walkedUSD)
+  if (leftLocal > 1e-9 * Math.max(1, spec.valueLocal, walkedLocal)
     || leftShares > 1e-9 * Math.max(1, spec.shares ?? 0, walkedShares)) {
     defect(`${holderId} was debited ${spec.instrumentType} ${spec.instrumentId} beyond its position`
-      + ` — ${(leftUSD / 1e6).toFixed(6)}M and ${Number.isNaN(leftShares) ? 0 : leftShares} shares undelivered`);
+      + ` — ${(leftLocal / 1e6).toFixed(6)}M and ${Number.isNaN(leftShares) ? 0 : leftShares} shares undelivered`);
   }
   if (drops) {
     const kept: number[] = [];
@@ -278,13 +278,13 @@ export function clearedBookDelta(
     const bShares = b?.shares, aShares = a?.shares;
     const inShares = bShares !== undefined || aShares !== undefined;
     const dSh = (aShares ?? 0) - (bShares ?? 0);
-    const dUSD = (a?.valueLocal ?? 0) - (b?.valueLocal ?? 0);
-    const moved = inShares ? Math.abs(dSh) > 1e-9 : Math.abs(dUSD) > 1;
+    const dLocal = (a?.valueLocal ?? 0) - (b?.valueLocal ?? 0);
+    const moved = inShares ? Math.abs(dSh) > 1e-9 : Math.abs(dLocal) > 1;
     if (!moved) return;
     const spec: HoldingSpec = inShares
-      ? { instrumentType, instrumentId: id, issuerRegion: region, shares: Math.abs(dSh), valueLocal: Math.abs(dSh) * (px ?? (Math.abs(dUSD) / Math.max(1e-12, Math.abs(dSh)))) }
-      : { instrumentType, instrumentId: id, issuerRegion: region, valueLocal: Math.abs(dUSD) };
-    const sign = inShares ? dSh : dUSD;
+      ? { instrumentType, instrumentId: id, issuerRegion: region, shares: Math.abs(dSh), valueLocal: Math.abs(dSh) * (px ?? (Math.abs(dLocal) / Math.max(1e-12, Math.abs(dSh)))) }
+      : { instrumentType, instrumentId: id, issuerRegion: region, valueLocal: Math.abs(dLocal) };
+    const sign = inShares ? dSh : dLocal;
     if (sign > 0) wireHolding(house, holder, spec, reason); else wireHolding(holder, house, spec, reason);
     n++;
   });

@@ -9,7 +9,7 @@
 
 import { RegionId } from '../../types';
 import { NelsonSiegelParams } from '../nelsonSiegel';
-import { PRODUCTIVITY_UNIT_USD, getRegionProductivityPerCapitaUSD } from './population';
+import { PRODUCTIVITY_UNIT_USD, getRegionProductivityPerCapitaLocal } from './population';
 
 /** Chosen structural inflation-target primitive, shared by all regions. */
 export const INFLATION_TARGET = 0.02;
@@ -28,7 +28,7 @@ const TERM_PREMIUM_CURVATURE = 0.006;
 const CURVE_DECAY_LAMBDA = 2.0;
 
 export function getRegionProductivityGrowth(regionId: RegionId): number {
-  const productivity = getRegionProductivityPerCapitaUSD(regionId);
+  const productivity = getRegionProductivityPerCapitaLocal(regionId);
   const catchUpFactor = Math.pow(PRODUCTIVITY_UNIT_USD / productivity, CONVERGENCE_EXPONENT);
   return Number((BASE_TREND_GROWTH * catchUpFactor).toFixed(4));
 }

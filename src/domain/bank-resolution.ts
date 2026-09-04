@@ -17,8 +17,8 @@
  */
 
 import { BankingSector, HouseholdLoanPool , loanBooksOf, DepositLines } from './banking';
-import { bankRwaUSD, BANK_WORKING_CAPITAL_RATIO } from './bank-pricing';
-import { dealerDeskGrossUSD, DealerDeskInventory } from './dealer-desk';
+import { bankRwaLocal, BANK_WORKING_CAPITAL_RATIO } from './bank-pricing';
+import { dealerDeskGrossLocal, DealerDeskInventory } from './dealer-desk';
 
 /** Prompt corrective action: the ratio at which a bank is closed — well above zero, because a
  *  bank at zero book capital has long been insolvent at market values. Real supervision closes
@@ -27,31 +27,31 @@ export const PCA_CAPITAL_RATIO = 0.02;
 
 /** What an assuming bank must hold against a book it takes on: the ratio a bank's treasury
  *  actually runs at, on the book's own risk weight. */
-export function assumingCapitalUSD(sheet: BankingSector, facilityBookLocal: number): number {
-  return bankRwaUSD(sheet, facilityBookLocal) * BANK_WORKING_CAPITAL_RATIO;
+export function assumingCapitalLocal(sheet: BankingSector, facilityBookLocal: number): number {
+  return bankRwaLocal(sheet, facilityBookLocal) * BANK_WORKING_CAPITAL_RATIO;
 }
 
 /** Under prompt corrective action: capital below the closure ratio, or no capital at all. */
 export function isBankUnderPca(sheet: BankingSector, facilityBookLocal: number): boolean {
-  const rwaUSD = bankRwaUSD(sheet, facilityBookLocal);
-  if (rwaUSD > 0) return sheet.bankEquityLocal < rwaUSD * PCA_CAPITAL_RATIO;
+  const rwaLocal = bankRwaLocal(sheet, facilityBookLocal);
+  if (rwaLocal > 0) return sheet.bankEquityLocal < rwaLocal * PCA_CAPITAL_RATIO;
   return sheet.bankEquityLocal < 0;
 }
 
 /** Every asset on the sheet, cash included — the one asset side the identity counts. */
-export function bankSheetAssetsUSD(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
-  const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {})
+export function bankSheetAssetsLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
+  const sovLocal = Object.values(sheet.sovereignBondHoldingsByBond || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
-  return loanBooksOf(sheet, facilityBookLocal) + sovUSD + cashLocal
+  return loanBooksOf(sheet, facilityBookLocal) + sovLocal + cashLocal
     + (sheet.repoLentLocal ?? 0) + (sheet.onRrpLendingLocal ?? 0)
     + (sheet.sovereignAccruedCouponLocal ?? 0)
-    + dealerDeskGrossUSD(sheet.dealerDeskInventory)
+    + dealerDeskGrossLocal(sheet.dealerDeskInventory)
     + (sheet.primeBrokerageLoansLocal ?? 0);
 }
 
 /** The liabilities an assuming bank takes on whole: every deposit class and the secured lines.
  *  Wholesale money and equity are the two the plan decides. */
-export function bankAssumedLiabilitiesUSD(sheet: BankingSector, lines: DepositLines): number {
+export function bankAssumedLiabilitiesLocal(sheet: BankingSector, lines: DepositLines): number {
   return lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
     + lines.smeLocal + (sheet.clientMarginLocal ?? 0)
     + (sheet.repoBorrowedLocal ?? 0) + (sheet.srfBorrowingLocal ?? 0);
@@ -60,51 +60,51 @@ export function bankAssumedLiabilitiesUSD(sheet: BankingSector, lines: DepositLi
 export interface BankResolutionPlan {
   /** The shell's own traded ladder, which stays on its rows as receivership claims. Its holders
    *  take their loss through the estate; nothing here nets it against another liability. */
-  ladderBailedInUSD: number;
+  ladderBailedInLocal: number;
   /** The central bank's loan the assuming bank takes on — all of it. The central bank is never
    *  haircut: a loss with no equity behind it would be money from nowhere. */
-  centralBankLoanAssumedUSD: number;
+  centralBankLoanAssumedLocal: number;
   /** Assets minus everything assumed, before any loss is allocated: what the books are worth
    *  to whoever takes them, at book. */
-  netBookUSD: number;
+  netBookLocal: number;
   /** The capital the assuming bank must hold against the book it takes on — its bid is the net
    *  less this, and this is what its equity gains from the deal, in every case. */
-  acquirerCapitalUSD: number;
+  acquirerCapitalLocal: number;
   /** The public cost: what the net book could not cover. */
-  guaranteeUSD: number;
+  guaranteeLocal: number;
   /** What the assuming bank pays the receivership: the net above the capital it needs. */
-  estateUSD: number;
+  estateLocal: number;
 }
 
 /**
  * The least-cost bid. The assuming bank takes the books at book value and needs capital to carry
- * them — `acquirerCapitalUSD`, the working ratio on the risk it takes on. Its bid for the net is
+ * them — `acquirerCapitalLocal`, the working ratio on the risk it takes on. Its bid for the net is
  * whatever exceeds that; when the net falls short, the treasury pays the difference under the
  * deposit guarantee.
  *
  * THE CENTRAL BANK'S LOAN MOVES WHOLE. It used to be netted against the failed bank's own bond
  * ladder — `min(cbLoan, ownLadder)` stayed behind — and only the remainder was transferred,
  * while the transfer then zeroed the shell's balance outright and the central bank kept the
- * asset on `loansToBanksUSD`. A liability was deleted with no counterparty, and two different
+ * asset on `loansToBanksLocal`. A liability was deleted with no counterparty, and two different
  * things (a traded ladder on the tranche ledger, an unsecured loan from the central bank) were
  * treated as one. The ladder is bailed in where it lives: it stays on the shell's own rows and
  * its holders take their loss through the estate, like any other issuer's bondholders.
  */
 export function planBankResolution(
-  sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number, cashLocal: number, lines: DepositLines, facilityBookLocal: number,
+  sheet: BankingSector, ownLadderPrincipalLocal: number, acquirerCapitalLocal: number, cashLocal: number, lines: DepositLines, facilityBookLocal: number,
 ): BankResolutionPlan {
   const centralBankLoanLocal = Math.max(0, sheet.centralBankLoanLocal ?? 0);
-  const netBookUSD = bankSheetAssetsUSD(sheet, cashLocal, facilityBookLocal) - bankAssumedLiabilitiesUSD(sheet, lines) - centralBankLoanLocal;
-  const capitalUSD = Math.max(0, acquirerCapitalUSD);
-  const estateUSD = Math.max(0, netBookUSD - capitalUSD);
-  const shortfallUSD = Math.max(0, capitalUSD - netBookUSD);
+  const netBookLocal = bankSheetAssetsLocal(sheet, cashLocal, facilityBookLocal) - bankAssumedLiabilitiesLocal(sheet, lines) - centralBankLoanLocal;
+  const capitalLocal = Math.max(0, acquirerCapitalLocal);
+  const estateLocal = Math.max(0, netBookLocal - capitalLocal);
+  const shortfallLocal = Math.max(0, capitalLocal - netBookLocal);
   return {
-    ladderBailedInUSD: Math.max(0, ownLadderPrincipalUSD),
-    centralBankLoanAssumedUSD: centralBankLoanLocal,
-    netBookUSD,
-    acquirerCapitalUSD: capitalUSD,
-    guaranteeUSD: shortfallUSD,
-    estateUSD,
+    ladderBailedInLocal: Math.max(0, ownLadderPrincipalLocal),
+    centralBankLoanAssumedLocal: centralBankLoanLocal,
+    netBookLocal,
+    acquirerCapitalLocal: capitalLocal,
+    guaranteeLocal: shortfallLocal,
+    estateLocal,
   };
 }
 
@@ -115,7 +115,7 @@ export function planBankResolution(
  */
 export function chooseAssumingBank<T extends { sheet: BankingSector; facilityBookLocal: number }>(candidates: T[], minCapitalRatio: number): T | undefined {
   const live = candidates.filter((c) => !isBankUnderPca(c.sheet, c.facilityBookLocal));
-  const ratioOf = (c: T) => { const rwa = bankRwaUSD(c.sheet, c.facilityBookLocal); return rwa > 0 ? c.sheet.bankEquityLocal / rwa : Infinity; };
+  const ratioOf = (c: T) => { const rwa = bankRwaLocal(c.sheet, c.facilityBookLocal); return rwa > 0 ? c.sheet.bankEquityLocal / rwa : Infinity; };
   const atFloor = live.filter((c) => ratioOf(c) >= minCapitalRatio);
   const pool = atFloor.length > 0 ? atFloor : live;
   if (pool.length === 0) return undefined;
@@ -166,8 +166,8 @@ export function mergeDesks(mine: DealerDeskInventory | undefined, theirs: Dealer
 
 /** The statistics a sheet reports, re-read after its lines moved (readings, never drivers). */
 export function restateBankSheetStatistics(sheet: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number): void {
-  const rwaUSD = bankRwaUSD(sheet, facilityBookLocal);
-  sheet.bankCapitalRatio = Number((rwaUSD > 0 ? sheet.bankEquityLocal / rwaUSD : 0.13).toFixed(4));
-  sheet.centralBankReservesUSD = Math.max(0, cashLocal);
-  sheet.moneySupplyM2USD = lines.householdLocal + lines.corporateLocal;
+  const rwaLocal = bankRwaLocal(sheet, facilityBookLocal);
+  sheet.bankCapitalRatio = Number((rwaLocal > 0 ? sheet.bankEquityLocal / rwaLocal : 0.13).toFixed(4));
+  sheet.centralBankReservesLocal = Math.max(0, cashLocal);
+  sheet.moneySupplyM2Local = lines.householdLocal + lines.corporateLocal;
 }

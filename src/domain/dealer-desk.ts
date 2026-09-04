@@ -98,7 +98,7 @@ export function dealerDeskTicker(participantId: string): string | undefined {
 
 /** Gross inventory a bank's desks carry across every book — what its capital is already renting
  *  out. Gross, not net: a short is a position too, and it consumes the same balance sheet. */
-export function dealerDeskGrossUSD(inventory: DealerDeskInventory | undefined, exceptBook?: string): number {
+export function dealerDeskGrossLocal(inventory: DealerDeskInventory | undefined, exceptBook?: string): number {
   if (!inventory) return 0;
   let grossLocal = 0;
   Object.entries(inventory).forEach(([book, positions]) => {
@@ -120,18 +120,18 @@ export function dealerDeskGrossUSD(inventory: DealerDeskInventory | undefined, e
  * it, so charging the desk for paper it is about to sell would shrink its capacity by its own
  * starting inventory.
  */
-export function dealerDeskCapacityUSD(args: {
-  balanceSheetCapacityUSD: number;
+export function dealerDeskCapacityLocal(args: {
+  balanceSheetCapacityLocal: number;
   leverageHeadroomLocal: number;
   inventory: DealerDeskInventory | undefined;
   book: string;
 }): number {
-  const committedUSD = Math.max(0, args.balanceSheetCapacityUSD) * DEALER_DESK_SHARE_OF_BALANCE_SHEET;
-  const otherBooksUSD = dealerDeskGrossUSD(args.inventory, args.book);
-  const thisBookUSD = Math.max(0, dealerDeskGrossUSD(args.inventory) - otherBooksUSD);
+  const committedLocal = Math.max(0, args.balanceSheetCapacityLocal) * DEALER_DESK_SHARE_OF_BALANCE_SHEET;
+  const otherBooksLocal = dealerDeskGrossLocal(args.inventory, args.book);
+  const thisBookLocal = Math.max(0, dealerDeskGrossLocal(args.inventory) - otherBooksLocal);
   return Math.max(0, Math.min(
-    committedUSD - otherBooksUSD,
-    Math.max(0, args.leverageHeadroomLocal) + thisBookUSD
+    committedLocal - otherBooksLocal,
+    Math.max(0, args.leverageHeadroomLocal) + thisBookLocal
   ));
 }
 

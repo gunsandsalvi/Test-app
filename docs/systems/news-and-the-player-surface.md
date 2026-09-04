@@ -86,7 +86,7 @@ checked by `scripts/check-atlas.sh`.
 | A3 public state: issuer, central bank, rating agency | `src/ui/objects/centralbank.tsx:centralbank` | ✅ |
 | **A4 FORBID no observer sees another party's private state** | `src/ui/functions/diag.tsx:diag` | ❌ |
 | A5 published aggregates, with lag and revision | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:inflationIsMeasured` | ⚠️ |
-| A5.a a statistic available instantly and exactly is the internals | `src/ui/functions/macro.tsx:fxReservesUSD` | ❌ |
+| A5.a a statistic available instantly and exactly is the internals | `src/ui/functions/macro.tsx:fxReservesLocal` | ❌ |
 | B1 an event is a change of state somebody would notice | `src/engine/simulation/stages/news-derivation.ts:runNewsDerivationStage` | ✅ |
 | B2 it describes something that happened, generated FROM the state | `src/engine/simulation/stages/news-derivation.ts:outflowsOf` | ✅ |
 | **B2.a FORBID news never causes anything** | `src/engine/newsGenerator.ts:generateWeeklyNews` | ✅ |

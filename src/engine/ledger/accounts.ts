@@ -19,7 +19,7 @@
  * reserves its own row, a bank's deposit lines move by its depositors' rows, the treasury's
  * account and advance are the two signs of its net position. The nine-way switch keeps only its
  * tallies. The household sector's legs land on its region's banks by market share AT ONCE — the
- * T+1 transit (`pendingBankSettlementUSD`) is gone, and with it N's money in transit.
+ * T+1 transit (`pendingBankSettlementLocal`) is gone, and with it N's money in transit.
  *
  * §3.13c — AN ACCOUNT IS (PARTY, CURRENCY, BANK). A party used to have exactly one balance,
  * whose currency was implied by the region it sat in and read by nobody, so a payment across a
@@ -355,7 +355,7 @@ export function moveSectorRowsToBank(v2: V2World, fromTicker: string, toTicker: 
 // ---- A3.6a — A BANK'S RESERVES ARE ITS ROW, CARRIED. The bank's own account at the central
 // bank (`BANK:<ticker>`) lives on the world like every other party's: the seed opens it at the
 // number close-seed strikes, the mirror opens the pass row FROM it, the projection writes the
-// pass's result back INTO it and the sheet's `cashReservesUSD` from it. Every direct writer of
+// pass's result back INTO it and the sheet's `cashReservesLocal` from it. Every direct writer of
 // the line between two passes — 02b's rounding of the evolved sheet, a merger moving a bank
 // whole, the player's trade against a desk, the harness's reserve drain — is the row moving by
 // the same amount (`adjustBankReserves`, `moveBankReserves`), the pattern A3.4's
@@ -739,7 +739,7 @@ export interface SettledTallies {
   /** Reserves the central bank ISSUED (paid for assets with money it created), less what it
    *  extinguished — the one party whose payments are not funded from a balance. IN THE NUMÉRAIRE:
    *  it sums four central banks' books, and four monies do not add. */
-  centralBankIssuanceUSD: number;
+  centralBankIssuanceLocal: number;
   /** §3.13c — THE CENTRAL BANKS' IDENTITY, IN THE NUMÉRAIRE: every reserve row and every treasury
    *  row this pass moved, less what the central banks issued. Computed here rather than from the
    *  per-book maps because those are each in their OWN book's money and summing them across four
@@ -747,10 +747,10 @@ export interface SettledTallies {
   centralBankResidualNumeraire: number;
   centralBankIssuanceByRegion: Map<string, number>;
   /** What the cleared books' central counterparty was left holding. Must be zero. */
-  clearingHouseResidualUSD: number;
+  clearingHouseResidualLocal: number;
   /** Money that landed on a holder with no bank (a firm or fund with no house bank, a sector
    *  with no live bank in its region): counted, never dropped. Must be zero. */
-  unresolvedUSD: number;
+  unresolvedLocal: number;
 }
 
 /**
@@ -765,8 +765,8 @@ export function settledTallies(s: AccountStore, fx: FxTable): SettledTallies {
   const t: SettledTallies = {
     reserveDeltaByBank: new Map(), creditCreatedByBank: new Map(), bankSecuritiesDeltaByBank: new Map(),
     bankEquityDeltaByBank: new Map(), tgaDeltaByRegion: new Map(),
-    centralBankIssuanceUSD: 0, centralBankResidualNumeraire: 0, centralBankIssuanceByRegion: new Map(),
-    clearingHouseResidualUSD: 0, unresolvedUSD: 0,
+    centralBankIssuanceLocal: 0, centralBankResidualNumeraire: 0, centralBankIssuanceByRegion: new Map(),
+    clearingHouseResidualLocal: 0, unresolvedLocal: 0,
   };
   const addTo = (m: Map<string, number>, k: string, d: number) => m.set(k, (m.get(k) ?? 0) + d);
   /** A row's move, in the money of the book that reports it. */
@@ -812,15 +812,15 @@ export function settledTallies(s: AccountStore, fx: FxTable): SettledTallies {
       case 'VOID': {
         const p = partyOf(s.partyId[r]);
         if (p.kind === 'CENTRAL_BANK') {
-          t.centralBankIssuanceUSD -= moved(r, NUMERAIRE);
+          t.centralBankIssuanceLocal -= moved(r, NUMERAIRE);
           t.centralBankResidualNumeraire += moved(r, NUMERAIRE);
           addTo(t.centralBankIssuanceByRegion, p.region, -d);
         }
-        else if (p.kind === 'CLEARING_HOUSE') t.clearingHouseResidualUSD += d;
+        else if (p.kind === 'CLEARING_HOUSE') t.clearingHouseResidualLocal += d;
         break;
       }
       case 'CORPORATE': case 'INSTITUTIONAL': case 'SME': case 'HOUSEHOLD':
-        if (bi === AT_NOWHERE) t.unresolvedUSD += d;
+        if (bi === AT_NOWHERE) t.unresolvedLocal += d;
         break;
       case 'RESERVES': break;
     }

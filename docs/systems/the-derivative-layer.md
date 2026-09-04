@@ -125,7 +125,7 @@ checked by `scripts/check-atlas.sh`.
 | E4 VERIFY the loss chain is traceable party by party | — | ❌ |
 | F1 FORBID no position without a counterparty | `src/engine/audit/ownership.ts:o5` | ⚠️ |
 | F2 FORBID no exposure without margin or a stated reason | `src/domain/derivatives/profile.ts:initialMarginRate` | ⚠️ |
-| **F3 FORBID no netting across counterparties** | `src/domain/derivatives/registry.ts:standingPfeChargeUSD` | ✅ |
+| **F3 FORBID no netting across counterparties** | `src/domain/derivatives/registry.ts:standingPfeChargeLocal` | ✅ |
 | F4 FORBID nothing settles against a price this world does not clear | `src/engine/macro/evolution.ts:evolveCommodity` | ⚠️ |
 
 ---

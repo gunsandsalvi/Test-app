@@ -52,12 +52,12 @@ export function repoPartyKey(p: RepoParty): string {
 }
 
 /** One week's interest on a contract, at the rate it was struck at. */
-export function repoWeeklyInterestUSD(c: RepoContract): number {
+export function repoWeeklyInterestLocal(c: RepoContract): number {
   return (c.principalLocal * c.rateAnnual) / 52;
 }
 
 /** Interest owed over a contract's whole life — what settles when it matures. */
-export function repoInterestToMaturityUSD(c: RepoContract): number {
+export function repoInterestToMaturityLocal(c: RepoContract): number {
   const weeks = Math.max(1, c.maturityWeek - c.struckWeek);
   return (c.principalLocal * c.rateAnnual * weeks) / 52;
 }
@@ -72,7 +72,7 @@ export function repoLentLocal(book: RepoContract[], party: RepoParty): number {
 }
 
 /** What the central bank's window has outstanding to one bank — the sheet's `srfBorrowingLocal`. */
-export function srfBorrowedUSD(book: RepoContract[], ticker: string): number {
+export function srfBorrowedLocal(book: RepoContract[], ticker: string): number {
   return book.reduce(
     (a, c) => a + (c.borrowerTicker === ticker && c.lender.kind === 'CENTRAL_BANK' ? c.principalLocal : 0), 0
   );
@@ -93,7 +93,7 @@ export function encumberedFaceByBond(book: RepoContract[], ticker: string): Map<
 }
 
 /** Total face pledged by one bank across every bond. */
-export function encumberedFaceUSD(book: RepoContract[], ticker: string): number {
+export function encumberedFaceLocal(book: RepoContract[], ticker: string): number {
   let faceLocal = 0;
   encumberedFaceByBond(book, ticker).forEach((v) => { faceLocal += v; });
   return faceLocal;

@@ -58,8 +58,8 @@ export function speculatorReservationMoveFrac(sigma: number): number { return si
 /** And full size two sigma further out — the same scale a lender assumes for the same reason. */
 export function speculatorFullSizeRangeFrac(sigma: number): number { return 2 * sigma; }
 /** What its own capital supports at that pair's own haircut: the margin identity, again. */
-export function speculatorMaxPositionUSD(fundEquityUSD: number, sigma: number): number {
-  return Math.max(0, fundEquityUSD) / Math.max(MIN_FX_WEEKLY_SIGMA, 2 * sigma);
+export function speculatorMaxPositionLocal(fundEquityLocal: number, sigma: number): number {
+  return Math.max(0, fundEquityLocal) / Math.max(MIN_FX_WEEKLY_SIGMA, 2 * sigma);
 }
 
 /** One standard deviation of a pair's own weekly moves, as a fraction of the level. */

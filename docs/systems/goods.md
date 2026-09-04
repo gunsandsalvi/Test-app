@@ -114,7 +114,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 a sub-unit with a physical unit of measure | `src/domain/goods-physical.ts:unitMassTonnes` | ✅ |
 | A2 produced from inputs by a recipe | `src/domain/industry-registry.ts:firmInputIntensities` | ✅ |
 | **A2.a fixed input quantities per unit — Leontief, no substitution** | `src/engine2/front-core.ts:RECIPE_INTENSITY` | ❌ |
-| A2.b plus labour, plus capital services | `src/engine/simulation/stages/05-unit-bidding.ts:firmWeeklyCostUSD` | ⚠️ |
+| A2.b plus labour, plus capital services | `src/engine/simulation/stages/05-unit-bidding.ts:firmWeeklyCostLocal` | ⚠️ |
 | A3 storable or perishable | `src/domain/goods-physical.ts:shelfLifeWeeksOf` | ✅ |
 | A4 homogeneous within its sub-unit | `src/engine/simulation/stages/05-unit-bidding.ts:runSubUnitMarkets` | ✅ |
 | B1 the production DECISION, quantity the outcome | `src/engine/simulation/stages/05-unit-bidding.ts:buildRegionSupplyPlans` | ✅ |
@@ -125,7 +125,7 @@ checked by `scripts/check-atlas.sh`.
 | **B2 production consumes the inputs it consumes** | `src/engine2/front-core.ts:consumeFifoOnViews` | ⚠️ |
 | B3 work in progress, owned by somebody | `src/engine/simulation/stages/05-unit-bidding.ts:advanceProductionPipeline` | ✅ |
 | B4 yield — not everything started is finished | — | ❌ |
-| B5 unit cost = inputs + wages + capital charge | `src/engine/simulation/stages/05-unit-bidding.ts:prospectiveUnitCostUSD` | ⚠️ |
+| B5 unit cost = inputs + wages + capital charge | `src/engine/simulation/stages/05-unit-bidding.ts:prospectiveUnitCostLocal` | ⚠️ |
 | C1 sellers offer, buyers post the most they will pay | `src/engine/simulation/stages/double-auction.ts:AuctionOffer` | ✅ |
 | C2 a price clears per (good, market, period) | `src/engine/simulation/stages/double-auction.ts:clearDoubleAuction` | ✅ |
 | C3 buyers are heterogeneous and bid for their own reasons | `src/engine/simulation/stages/05-unit-bidding.ts:buildRegionDemandPlans` | ✅ |
@@ -135,7 +135,7 @@ checked by `scripts/check-atlas.sh`.
 | D1 goods move physically from seller to buyer | `src/engine/ledger/goods-ledger.ts:deliverGoods` | ✅ |
 | D2 it takes time and costs money | `src/domain/carrier.ts:laneTransitWeeks` | ✅ |
 | D3 a carrier is a named party that earns the freight | `src/engine/simulation/stages/freight-clearing.ts:isCarrier` | ✅ |
-| D4 landed cost = ex-works + freight | `src/engine/simulation/stages/sourcing-intent.ts:freightPerUnitUSD` | ✅ |
+| D4 landed cost = ex-works + freight | `src/engine/simulation/stages/sourcing-intent.ts:freightPerUnitLocal` | ✅ |
 | D5 goods in transit are owned by somebody | `src/engine/simulation/stages/goods-arrival.ts:InTransitShipment` | ✅ |
 | **E1 stock is units; value is units × a price** | `src/engine/ledger/goods-ledger.ts:setOutputStock` | ⚠️ |
 | **E2 carried at the LOWER OF COST AND NRV** | — | ❌ |
@@ -149,7 +149,7 @@ checked by `scripts/check-atlas.sh`.
 | F2 payment terms | `src/domain/trade-invoice.ts:paymentTermWeeks` | ✅ |
 | F3 trade credit is a loan between two named firms | `src/engine/simulation/stages/trade-settlement.ts:runTradeSettlementStage` | ✅ |
 | F4 the freight is paid to the carrier | `src/engine/simulation/stages/05-unit-bidding.ts:R_FREIGHT` | ✅ |
-| F5 revenue on delivery; COGS is the units that left | `src/engine2/front-core.ts:realInputConsumptionCostUSD` | ⚠️ |
+| F5 revenue on delivery; COGS is the units that left | `src/engine2/front-core.ts:realInputConsumptionCostLocal` | ⚠️ |
 | **G1 PPI and CPI are different indices** | — | ❌ |
 | **G1.a PPI — prices received at the factory gate** | — | ❌ |
 | G1.b CPI — prices paid by households | `src/engine/simulation/stages/price-index.ts:buildCpiBasket` | ✅ |

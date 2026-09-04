@@ -97,7 +97,7 @@ supplier's place in the estate.
 | **C4 Σ receivables = Σ payables, across the world** | — | ❌ |
 | **D1 a buyer can pay late, and lateness is a state** | — | ❌ |
 | **D2 a failed buyer's receivable is a claim in the estate** | `src/engine/simulation/stages/estate-resolution.ts:openEstate` | ❌ |
-| D2.a the seller takes a real loss it did not choose | `src/engine/simulation/stages/trade-settlement.ts:tradeInvoiceWriteOffUSD` | ✅ |
+| D2.a the seller takes a real loss it did not choose | `src/engine/simulation/stages/trade-settlement.ts:tradeInvoiceWriteOffLocal` | ✅ |
 | D3 the loss can push the seller into distress | `src/engine/simulation/stages/trade-settlement.ts:activeByTicker` | ✅ |
 | **D3.a the contagion path is traceable firm to firm** | — | ❌ |
 | D4 anticipation makes suppliers withdraw terms | `src/domain/trade-invoice.ts:lossGivenDefault` | ⚠️ |

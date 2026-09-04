@@ -13,8 +13,8 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // in. Its costs are the fuel it really burned at the refined-product market's own price and
   // the crew it really employs at the region's going wage, so a fuel spike or a wage round
   // lands on its margin the same week.
-  const weeklyFreightUSD = ctx.carrierFreightRevenue[comp.ticker] ?? 0;
-  const newRevenue = Math.max(10, weeklyFreightUSD * 52);
+  const weeklyFreightLocal = ctx.carrierFreightRevenue[comp.ticker] ?? 0;
+  const newRevenue = Math.max(10, weeklyFreightLocal * 52);
   { const v2r = ensureV2(state); revHistPush(v2r, rowOf(v2r, comp.id), newRevenue); }
 
   // FUEL BURNS ON VOYAGES SAILED, NOT ON THE FLEET'S EXISTENCE. This
@@ -44,16 +44,16 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // This stays as the physical burn the fleet reports; the remaining gap is that the BID is
   // sized off revenue rather than off these tonnes, which is a real difference in a fuel spike.
   const weeklyFuelTonnes = fullFleetFuelTonnes * utilization;
-  // IND-R1, rule 4: ONE payroll. This used to be `sum(asset.crewCount) x crewAnnualWageUSD` —
+  // IND-R1, rule 4: ONE payroll. This used to be `sum(asset.crewCount) x crewAnnualWageLocal` —
   // a second wage bill computed off the fleet spec, which the labor market cannot touch, while
   // `employeeCount` (which it hires and fires, and which pays the households) moved
   // independently. The crew bill is the common payroll now, charged by the caller; fuel is the
   // one cost that is genuinely a carrier's own.
   if (comp.carrierFleet) {
     comp.carrierFleet.lastWeekTonneNm = ctx.carrierTonneNm[comp.ticker] ?? 0;
-    comp.carrierFleet.lastWeekFreightRevenueUSD = weeklyFreightUSD;
+    comp.carrierFleet.lastWeekFreightRevenueLocal = weeklyFreightLocal;
     comp.carrierFleet.lastWeekFuelBurnedTonnes = weeklyFuelTonnes;
   }
 
-  return { newRevenue, profileCostsAnnualUSD: 0 };
+  return { newRevenue, profileCostsAnnualLocal: 0 };
 };

@@ -66,14 +66,14 @@ export function recordTape(tape: Tape, state: GameState): void {
     put(`region:${r}:2y`, reg.zeroRates?.tenor2Y);
     put(`region:${r}:inflation`, reg.inflation);
     put(`region:${r}:repo`, reg.repoRateAnnual);
-    put(`region:${r}:gdp`, reg.derivedNominalGdpUSD ?? reg.estimatedNominalGdpLocal);
+    put(`region:${r}:gdp`, reg.derivedNominalGdpLocal ?? reg.estimatedNominalGdpLocal);
     put(`region:${r}:wage growth`, reg.wageGrowth);
     put(`region:${r}:bank nim`, reg.bankingSector?.netInterestMarginPct);
     put(`region:${r}:bank capital`, reg.bankingSector?.bankCapitalRatio);
     put(`region:${r}:household deposits`, householdDepositsOf(ensureV2(state), r));
-    put(`region:${r}:household net worth`, reg.householdState?.netWorthUSD);
-    put(`region:${r}:government revenue`, reg.governmentRevenueUSD);
-    put(`region:${r}:government outlays`, reg.governmentOutlaysUSD ?? reg.governmentSpendingWeeklyUSD);
+    put(`region:${r}:household net worth`, reg.householdState?.netWorthLocal);
+    put(`region:${r}:government revenue`, reg.governmentRevenueLocal);
+    put(`region:${r}:government outlays`, reg.governmentOutlaysLocal ?? reg.governmentSpendingWeeklyLocal);
     put(`region:${r}:tightness`, reg.laborMarketTightness);
     const z = reg.zeroRates;
     if (z) { put(`curve:${r}:3M`, z.tenor3M); put(`curve:${r}:2Y`, z.tenor2Y); put(`curve:${r}:5Y`, z.tenor5Y); put(`curve:${r}:10Y`, z.tenor10Y); put(`curve:${r}:30Y`, z.tenor30Y); }
@@ -81,9 +81,9 @@ export function recordTape(tape: Tape, state: GameState): void {
     if (cb) {
       put(`centralbank:${r}:treasury account`, treasuryAccountOf(ensureV2(state), r));
       put(`centralbank:${r}:sovereign book`, Object.values(cb.sovereignHoldingsByBond ?? {}).reduce((a, v) => a + (Number(v) || 0), 0));
-      put(`centralbank:${r}:currency`, cb.currencyInCirculationUSD);
+      put(`centralbank:${r}:currency`, cb.currencyInCirculationLocal);
       put(`centralbank:${r}:foreign claims`, cb.foreignOfficialClaimsUSD);
-      put(`centralbank:${r}:reserves`, reg.bankingSector?.centralBankReservesUSD);
+      put(`centralbank:${r}:reserves`, reg.bankingSector?.centralBankReservesLocal);
     }
     Object.entries(reg.categoryDemand).forEach(([su, d]) => {
       if (!d) return;
@@ -101,10 +101,10 @@ export function recordTape(tape: Tape, state: GameState): void {
     });
     (reg.householdState?.cohorts ?? []).forEach((c) => {
       const k = `cohort:${r}:${c.occupation}:${c.tier}`;
-      put(`${k}:budget`, c.consumptionBudgetUSD);
-      put(`${k}:disposable income`, c.disposableIncomeUSD);
+      put(`${k}:budget`, c.consumptionBudgetLocal);
+      put(`${k}:disposable income`, c.disposableIncomeLocal);
       put(`${k}:employed`, c.employedCount);
-      put(`${k}:savings`, c.savingsUSD);
+      put(`${k}:savings`, c.savingsLocal);
     });
     Object.entries(reg.occupationPools ?? {}).forEach(([occ, p]) => {
       put(`occupation:${r}:${occ}:wage index`, p.wageIndex);

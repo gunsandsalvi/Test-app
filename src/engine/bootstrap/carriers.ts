@@ -31,7 +31,7 @@ import { FxToUsd } from '../../domain/currency';
 import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
 import { determineCreditRating } from '../simulation/credit';
 import { generateDebtTranches } from '../companyGenerator';
-import { crewAnnualWageUSD, fuelPriceUsdPerTonne, runFreightClearing } from '../simulation/stages/freight-clearing';
+import { crewAnnualWageLocal, fuelPriceUsdPerTonne, runFreightClearing } from '../simulation/stages/freight-clearing';
 import { RATING_OAS_SPREADS } from '../pricing';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../equity-valuation';
 import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financing';
@@ -64,7 +64,7 @@ export function specMarginalRatePerTonneLaneMoney(
   const mode = freightModeForLane(from, to);
   const spec = FREIGHT_ASSET_SPEC[mode];
   const fuelUsdPerTonne = fuelPriceUsdPerTonne(regions[from], unitMassTonnes);
-  const wage = crewAnnualWageUSD(regions[from], from);
+  const wage = crewAnnualWageLocal(regions[from], from);
 
   const fuelPerTonneNm = (spec.fuelTonnesPerNm * fuelUsdPerTonne) / spec.capacityTonnes;
   const roundTripWeeks = (2 * distanceNm) / (spec.speedKnots * 24 * 7);
@@ -192,13 +192,13 @@ export function generateCarriers(
   const provisional = staffed.map((c, i) => ({
     ticker: `SEED_CARRIER_${i}`,
     region: c.region,
-    carrierFleet: { assets: c.assets, fuelInventoryTonnes: 0, lastWeekTonneNm: 0, lastWeekFreightRevenueUSD: 0 },
+    carrierFleet: { assets: c.assets, fuelInventoryTonnes: 0, lastWeekTonneNm: 0, lastWeekFreightRevenueLocal: 0 },
   })) as unknown as Company[];
   const clearing = runFreightClearing({ carriers: provisional, regions, unitMassTonnes, bookings, fxToUsd });
 
   return staffed.map((c, idx) => buildCarrierCompany(
     c.region, c.assets, idx, regions, unitMassTonnes,
-    clearing.carrierRevenueUSD.get(`SEED_CARRIER_${idx}`) ?? 0,
+    clearing.carrierRevenueLocal.get(`SEED_CARRIER_${idx}`) ?? 0,
     clearing.carrierTonnesCarried.get(`SEED_CARRIER_${idx}`) ?? 0,
     existingTickers, existingNames
   ));
@@ -221,7 +221,7 @@ function buildCarrierCompany(
   idx: number,
   regions: Record<RegionId, Region>,
   unitMassTonnes: Record<string, number>,
-  clearedWeeklyRevenueUSD: number,
+  clearedWeeklyRevenueLocal: number,
   clearedWeeklyTonnesCarried: number,
   existingTickers: Set<string>,
   existingNames: Set<string>
@@ -230,9 +230,9 @@ function buildCarrierCompany(
   const name = generateUniqueName(`${region} Logistics`, 'Industrials', existingNames);
 
   const fuelUsdPerTonne = fuelPriceUsdPerTonne(regions[region], unitMassTonnes);
-  const wage = crewAnnualWageUSD(regions[region], region);
+  const wage = crewAnnualWageLocal(regions[region], region);
 
-  const annualRevenue = clearedWeeklyRevenueUSD * 52;
+  const annualRevenue = clearedWeeklyRevenueLocal * 52;
   let fullSailAnnualFuelCost = 0;
   let fleetWeeklyTonnes = 0;
   let grossPPELocal = 0;
@@ -241,7 +241,7 @@ function buildCarrierCompany(
     const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);
     const weeklyTonnes = weeklyCapacityTonnes(asset, distanceNm);
     const spec = FREIGHT_ASSET_SPEC[asset.mode];
-    grossPPELocal += spec.capitalCostUSD;
+    grossPPELocal += spec.capitalCostLocal;
     crewCount += asset.crewCount;
     fleetWeeklyTonnes += weeklyTonnes;
     // Voyages a week AT FULL SAIL, and what each burns — scaled to real utilization below.
@@ -280,9 +280,9 @@ function buildCarrierCompany(
   // covenant ceiling this model already applies to every other borrower (see
   // corporate-financing.ts). Without that second leg the seed produced carriers at 21x leverage,
   // which is not a shipping cycle, it is a cold start that defaults in the first weeks.
-  const assetBackedUSD = grossPPELocal * SHIP_FINANCE_LOAN_TO_VALUE;
-  const cashFlowBackedUSD = Math.max(0, ebitda) * COVENANT_LEVERAGE_CEILING.B;
-  const debtBase = Math.round(Math.min(assetBackedUSD, cashFlowBackedUSD));
+  const assetBackedLocal = grossPPELocal * SHIP_FINANCE_LOAN_TO_VALUE;
+  const cashFlowBackedLocal = Math.max(0, ebitda) * COVENANT_LEVERAGE_CEILING.B;
+  const debtBase = Math.round(Math.min(assetBackedLocal, cashFlowBackedLocal));
   const annualInterest = debtBase * (policyRate + 0.02);
   const coverage = annualInterest > 0 ? ebit / annualInterest : 99;
   const leverage = ebitda > 0 ? debtBase / ebitda : 99;
@@ -295,7 +295,7 @@ function buildCarrierCompany(
     assets,
     fuelInventoryTonnes: 0,
     lastWeekTonneNm: 0,
-    lastWeekFreightRevenueUSD: 0,
+    lastWeekFreightRevenueLocal: 0,
   };
 
   // Carriers are LISTED. The shipping majors are public companies in reality, and it is also what
@@ -303,11 +303,11 @@ function buildCarrierCompany(
   // ladder, equity clearing, default — instead of needing a special case in each. Seeded through
   // the SAME valuation function the market itself prices with, never a multiple.
   const sharesOutstanding = Math.max(1, Math.round(grossPPELocal / 1000));
-  const bookEquityUSD = grossPPELocal * (1 - 0.35) - debtBase + Math.max(0, ebitda) * 0.6;
+  const bookEquityLocal = grossPPELocal * (1 - 0.35) - debtBase + Math.max(0, ebitda) * 0.6;
   const stockPrice = Number(fairValuePerShare({
-    annualEarningsUSD: Math.round((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE)),
+    annualEarningsLocal: Math.round((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE)),
     sharesOutstanding,
-    bookEquityUSD,
+    bookEquityLocal,
     netInvestmentRate: 0,
     riskFreeRate: policyRate,
     beta: 1.0,

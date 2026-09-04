@@ -17,7 +17,7 @@
 
 import { AssetType, Company, Dealer } from '../types';
 import { assertNever } from '../domain/defect';
-import { dealerDeskCapacityUSD, dealerDeskGrossUSD, DESK_SPREAD_BPS_BY_BOOK } from '../domain/dealer-desk';
+import { dealerDeskCapacityLocal, dealerDeskGrossLocal, DESK_SPREAD_BPS_BY_BOOK } from '../domain/dealer-desk';
 
 export { DESK_SPREAD_BPS_BY_BOOK };
 import { BASEL_MIN_LEVERAGE_RATIO, leverageHeadroomLocal } from './macro/banking';
@@ -54,9 +54,9 @@ export function dealersFromBanks(
     .filter((b) => b.isBankEntity && b.bankBalanceSheet)
     .map((bank, i) => {
       const sheet = bank.bankBalanceSheet!;
-      const grossLocal = dealerDeskGrossUSD(sheet.dealerDeskInventory);
-      const capacityLocal = dealerDeskCapacityUSD({
-        balanceSheetCapacityUSD: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
+      const grossLocal = dealerDeskGrossLocal(sheet.dealerDeskInventory);
+      const capacityLocal = dealerDeskCapacityLocal({
+        balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
         leverageHeadroomLocal: leverageHeadroomLocal(sheet, reservesOf(bank), facilityBookOf(bank)),
         inventory: sheet.dealerDeskInventory,
         book: '',
@@ -77,8 +77,8 @@ export function dealersFromBanks(
         axeDescription: 'Fills from its own book where it is long; elsewhere it has to source the '
           + 'paper and its own schedule prices the size.',
         axeAssetClasses,
-        creditLimitUSD: Math.round(capacityLocal),
-        currentExposureUSD: Math.round(grossLocal),
+        creditLimitLocal: Math.round(capacityLocal),
+        currentExposureLocal: Math.round(grossLocal),
         acceptedAssetClasses: ALL_ASSET_CLASSES,
         color: DEALER_COLORS[i % DEALER_COLORS.length],
       };
@@ -86,7 +86,7 @@ export function dealersFromBanks(
 }
 
 /** What this desk holds of one instrument right now. */
-export function deskInventoryUSD(bank: Company | undefined, book: string, instrumentId: string): number {
+export function deskInventoryLocal(bank: Company | undefined, book: string, instrumentId: string): number {
   const rows = bank?.bankBalanceSheet?.dealerDeskInventory?.[book] ?? [];
   return rows.filter((r) => r.instrumentId === instrumentId).reduce((a, r) => a + r.inventoryLocal, 0);
 }
@@ -103,20 +103,20 @@ export function deskInventoryUSD(bank: Company | undefined, book: string, instru
 export function quoteDeskFillBps(args: {
   bookSpreadBps: number;
   /** What the desk is long in this instrument (negative = short). */
-  deskInventoryUSD: number;
+  deskInventoryLocal: number;
   /** What it could still take on, across all its books. */
-  deskCapacityUSD: number;
-  orderUSD: number;
+  deskCapacityLocal: number;
+  orderLocal: number;
   isBuy: boolean;
 }): { spreadBps: number; impactBps: number; totalBps: number } {
   const spreadBps = args.bookSpreadBps / 2;
   // Buying, the desk sells from stock first and sources the rest; selling, everything it takes
   // is new inventory.
-  const sourcedUSD = args.isBuy
-    ? Math.max(0, args.orderUSD - Math.max(0, args.deskInventoryUSD))
-    : args.orderUSD;
-  const impactBps = args.deskCapacityUSD > 0
-    ? args.bookSpreadBps * (sourcedUSD / args.deskCapacityUSD)
+  const sourcedLocal = args.isBuy
+    ? Math.max(0, args.orderLocal - Math.max(0, args.deskInventoryLocal))
+    : args.orderLocal;
+  const impactBps = args.deskCapacityLocal > 0
+    ? args.bookSpreadBps * (sourcedLocal / args.deskCapacityLocal)
     : args.bookSpreadBps * 10; // a full desk quotes a level nobody wants to trade at
   return { spreadBps, impactBps, totalBps: spreadBps + impactBps };
 }

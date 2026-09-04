@@ -17,7 +17,7 @@
 
 import { RegionId } from './geography';
 import {
-  decomposeGovernmentSpending, governmentOutlaysUSD, weeklyInterestExpenseUSD,
+  decomposeGovernmentSpending, governmentOutlaysLocal, weeklyInterestExpenseLocal,
 } from './government';
 import { GovDebtTrancheView } from './region-macro';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../engine/bootstrap/national-accounts';
@@ -25,15 +25,15 @@ import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../engine/bootstrap/national-
 /** The government's own lines, as they sit on `Region` today. Narrowed so the object cannot reach
  *  the rest of the region — the point of extracting it. */
 export interface GovernmentFields {
-  governmentRevenueUSD: number;
-  governmentSpendingWeeklyUSD: number;
-  governmentInterestWeeklyUSD?: number;
-  governmentBillDiscountAccrualUSD?: number;
-  governmentPayrollWeeklyUSD?: number;
-  governmentTransfersWeeklyUSD?: number;
+  governmentRevenueLocal: number;
+  governmentSpendingWeeklyLocal: number;
+  governmentInterestWeeklyLocal?: number;
+  governmentBillDiscountAccrualLocal?: number;
+  governmentPayrollWeeklyLocal?: number;
+  governmentTransfersWeeklyLocal?: number;
   governmentProcurementBudgetByCategory?: Record<string, number>;
-  governmentProcurementSpentUSD?: number;
-  governmentOutlaysUSD?: number;
+  governmentProcurementSpentLocal?: number;
+  governmentOutlaysLocal?: number;
   fiscalStanceScore: number;
 }
 
@@ -43,15 +43,15 @@ export interface FiscalWeek {
   interestLocal: number;
   payrollLocal: number;
   /** Discretionary, what is left after the contractual lines. */
-  procurementBudgetUSD: number;
-  transfersUSD: number;
+  procurementBudgetLocal: number;
+  transfersLocal: number;
   /** What the budget actually permits this week. */
-  budgetUSD: number;
+  budgetLocal: number;
   /** What was actually paid out. */
-  outlaysUSD: number;
+  outlaysLocal: number;
   /** Positive = spending beyond the stance's allowance. THE row, as a number on the object
    *  rather than a violation discovered forty weeks downstream. */
-  overrunUSD: number;
+  overrunLocal: number;
 }
 
 export class Government {
@@ -66,17 +66,17 @@ export class Government {
   /**
    * The coupon bill on the real debt stack, and only that. The discount the bills accrete is a
    * statistic, not a debit: their cost lands in the redemption leg, so charging it here as well
-   * is the double count `weeklyBillDiscountAccrualUSD` documents. Bills are about a fifth of the
+   * is the double count `weeklyBillDiscountAccrualLocal` documents. Bills are about a fifth of the
    * stack, so the inflated figure shrank the primary budget every reader of this object saw —
    * and it is what the fiscal red line tests a region against, biasing every one of them toward
    * consolidation. Stage 11 always used the coupon alone; now they agree.
    */
-  interestWeeklyUSD(): number {
-    return weeklyInterestExpenseUSD(this.ladder);
+  interestWeeklyLocal(): number {
+    return weeklyInterestExpenseLocal(this.ladder);
   }
 
-  payrollWeeklyUSD(): number {
-    return Math.max(0, this.f.governmentPayrollWeeklyUSD ?? 0);
+  payrollWeeklyLocal(): number {
+    return Math.max(0, this.f.governmentPayrollWeeklyLocal ?? 0);
   }
 
   /**
@@ -87,25 +87,25 @@ export class Government {
    */
   week(): FiscalWeek {
     const parts = decomposeGovernmentSpending(
-      this.f.governmentSpendingWeeklyUSD,
-      this.interestWeeklyUSD(),
+      this.f.governmentSpendingWeeklyLocal,
+      this.interestWeeklyLocal(),
       GOV_PROCUREMENT_SHARE_OF_SPENDING,
       this.f.fiscalStanceScore,
-      this.payrollWeeklyUSD(),
+      this.payrollWeeklyLocal(),
     );
-    const budgetUSD = parts.interestLocal + parts.payrollLocal + parts.procurementBudgetUSD + parts.transfersUSD;
-    const outlaysUSD = governmentOutlaysUSD({
+    const budgetLocal = parts.interestLocal + parts.payrollLocal + parts.procurementBudgetLocal + parts.transfersLocal;
+    const outlaysLocal = governmentOutlaysLocal({
       interestLocal: parts.interestLocal,
       payrollLocal: parts.payrollLocal,
-      transfersUSD: this.f.governmentTransfersWeeklyUSD ?? parts.transfersUSD,
-      procurementSpentUSD: this.f.governmentProcurementSpentUSD ?? 0,
+      transfersLocal: this.f.governmentTransfersWeeklyLocal ?? parts.transfersLocal,
+      procurementSpentLocal: this.f.governmentProcurementSpentLocal ?? 0,
     });
-    return { ...parts, budgetUSD, outlaysUSD, overrunUSD: Math.max(0, outlaysUSD - budgetUSD) };
+    return { ...parts, budgetLocal, outlaysLocal, overrunLocal: Math.max(0, outlaysLocal - budgetLocal) };
   }
 
   /** The deficit this week: what it spent less what it took. */
-  deficitWeeklyUSD(): number {
-    return this.week().outlaysUSD - this.f.governmentRevenueUSD;
+  deficitWeeklyLocal(): number {
+    return this.week().outlaysLocal - this.f.governmentRevenueLocal;
   }
 
   /**
@@ -117,17 +117,17 @@ export class Government {
    * Interest and payroll are contractual (PUB1e) and are never the overrun: an outlay above budget
    * means a DISCRETIONARY line grew past what the stance allows, so the answer names which.
    */
-  overrun(): { overrunUSD: number; contractualUSD: number; discretionaryUSD: number } {
+  overrun(): { overrunLocal: number; contractualLocal: number; discretionaryLocal: number } {
     const w = this.week();
     return {
-      overrunUSD: w.overrunUSD,
-      contractualUSD: w.interestLocal + w.payrollLocal,
-      discretionaryUSD: w.outlaysUSD - w.interestLocal - w.payrollLocal,
+      overrunLocal: w.overrunLocal,
+      contractualLocal: w.interestLocal + w.payrollLocal,
+      discretionaryLocal: w.outlaysLocal - w.interestLocal - w.payrollLocal,
     };
   }
 
   /** Total debt outstanding — the stack, not a stated level. */
-  debtOutstandingUSD(): number {
+  debtOutstandingLocal(): number {
     return this.ladder.reduce((a, t) => a + Math.max(0, t.principalLocal ?? 0), 0);
   }
 }

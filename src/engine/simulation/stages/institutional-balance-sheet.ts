@@ -6,7 +6,7 @@ import { entityCashOf } from '../../ledger/accounts';
  * Before this module existed, an institution's bid was bounded by a policy ceiling and by
  * nothing else. Measured, entity cash went from +5.7% of assets to −10% by week 20 and stayed
  * there — the sector was running ~10% leverage that nobody decided on, buying with money it did
- * not have. And `totalAssetsUSD`, the size weight behind every entity's structural share in all
+ * not have. And `totalAssetsLocal`, the size weight behind every entity's structural share in all
  * three clearing stages, was written once at initialization and never again.
  *
  * Three real mechanisms fix this, together:
@@ -19,7 +19,7 @@ import { entityCashOf } from '../../ledger/accounts';
  *     not pay them yet (its interest expense does not exist — /BP5), and crediting the
  *     holder without debiting the payer would create money.
  *
- *  2. **Marking.** `totalAssetsUSD` becomes what it is: cash plus the book, recomputed weekly
+ *  2. **Marking.** `totalAssetsLocal` becomes what it is: cash plus the book, recomputed weekly
  *     after the clearing stages. A derived sum, not a stored parameter.
  *
  *  3. **Budgets.** What an entity can ADD to its positions in a week is its real available
@@ -41,8 +41,8 @@ import { isActiveCompany } from '../../../domain/company';
 import { mandatePctOf } from '../../../domain/institutions';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
-import { pendingSettlementUSD } from './settlement';
-import { ladderTotalUSD } from '../../../engine2/tranches';
+import { pendingSettlementLocal } from './settlement';
+import { ladderTotalLocal } from '../../../engine2/tranches';
 import { materializeGovLadder } from '../../../engine2/tranches';
 
 /**
@@ -68,13 +68,13 @@ import { materializeGovLadder } from '../../../engine2/tranches';
  * receivable as spendable would let the entity buy securities with money it had already lent.
  * It is part of the BOOK (markInstitutionalBooks), never of the budget.
  */
-export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashLocal: number, totalAssetsUSD: number, unsettledUSD = 0): number {
+export function availablePurchaseCapacityLocal(entity: InstitutionalEntity, cashLocal: number, totalAssetsLocal: number, unsettledLocal = 0): number {
   // HF1: what its prime broker will actually lend it this week, less what it has already drawn.
   // Negative when the line has been CUT below the draw — which makes the fund a net seller in
   // this week's auctions, at whatever they clear, which is what a margin call is.
   // Whether a kind levers, and through what, is a registry fact.
-  const allowanceUSD = institutionProfile(entity.entityType).leverage === 'PRIME_BROKERAGE'
-    ? (entity.primeBrokerageAvailableUSD ?? 0)
+  const allowanceLocal = institutionProfile(entity.entityType).leverage === 'PRIME_BROKERAGE'
+    ? (entity.primeBrokerageAvailableLocal ?? 0)
     : 0;
   // A fund does not spend to the last dollar: it runs a CASH SLEEVE, and what it invests is the
   // excess over it. The target is the entity's own `cashPct` — already its stated policy, so no
@@ -83,13 +83,13 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashLo
   // clearing residual swinging 72B → 23B → 32B → 18B week to week, and once institutional
   // balances became real bank liabilities (SETL5) that swing went straight into bank reserves
   //. Below the sleeve an entity is a net seller, which is what a fund short of cash is.
-  const sleeveTargetUSD = Math.max(0, entity.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, totalAssetsUSD);
+  const sleeveTargetLocal = Math.max(0, entity.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, totalAssetsLocal);
   // Plus what this week's already-agreed trades will settle — negative once the fund has
   // committed, so the five books cannot each spend the same balance. The clearing legs are
   // payment instructions now (stages/book-settlement.ts) and the cash moves at the settlement
   // pass, so the unsettled position is where a commitment lives until then.
-  const investableCashUSD = Math.max(0, cashLocal + unsettledUSD - sleeveTargetUSD);
-  return investableCashUSD + allowanceUSD;
+  const investableCashLocal = Math.max(0, cashLocal + unsettledLocal - sleeveTargetLocal);
+  return investableCashLocal + allowanceLocal;
 }
 
 /**
@@ -98,19 +98,19 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashLo
  * each books its trades as unsettled commitments, so the next stage reads capacity net of what
  * the previous one actually agreed — the ordering is the settlement reality, not an artifact.
  */
-export function stagePurchaseBudgetUSD(
+export function stagePurchaseBudgetLocal(
   ctx: WeeklyStepContext,
   entity: InstitutionalEntity,
   /** D: the entity's live total assets (`institutionTotalAssetsLocal`), the sleeve's base. */
-  totalAssetsUSD: number,
+  totalAssetsLocal: number,
   assetClass: 'CORP_BOND' | 'GOV_BOND' | 'LEVERAGED_LOAN',
-  unsettledUSD = 0
+  unsettledLocal = 0
 ): number {
   const t = entity.assetAllocationTarget;
   const investedPcts = t.corpBondPct + t.govBondPct + t.loanPct;
   if (investedPcts <= 0) return 0;
   const classPct = mandatePctOf(t, assetClass);
-  return availablePurchaseCapacityUSD(entity, entityCashOf(ctx.v2, entity), totalAssetsUSD, unsettledUSD) * (classPct / investedPcts);
+  return availablePurchaseCapacityLocal(entity, entityCashOf(ctx.v2, entity), totalAssetsLocal, unsettledLocal) * (classPct / investedPcts);
 }
 
 /**
@@ -127,7 +127,7 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
   const sovCouponByRegion = new Map<string, Map<string, number>>();
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
-    let weeklyIncomeUSD = 0;
+    let weeklyIncomeLocal = 0;
     // CAL — SOVEREIGN COUPONS ARE ON THE CALENDAR NOW (`sovereign-calendar.ts`), so they are no
     // longer credited here. Interest accrues to whoever holds the paper that week and the
     // bond's coupon date turns the balance into cash, with the TREASURY on the same dates —
@@ -150,14 +150,14 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       }
       const couponRate = cb.get(h.instrumentId);
       if (couponRate === undefined) return;
-      weeklyIncomeUSD += ((h.quantityOrNotionalLocal ?? 0) * couponRate) / 52;
+      weeklyIncomeLocal += ((h.quantityOrNotionalLocal ?? 0) * couponRate) / 52;
     });
     // A week with no income is written as ZERO, not skipped. Returned unchanged, the field kept
     // last week's number for ever and every reader — the pension entitlement above all — credited
     // income that was never earned again.
-    if (weeklyIncomeUSD <= 0 && !(entity.lastWeeklyInvestmentIncomeUSD ?? 0)) return entity;
+    if (weeklyIncomeLocal <= 0 && !(entity.lastWeeklyInvestmentIncomeLocal ?? 0)) return entity;
     // Stage 08 reports this on the listed shell rather than inventing a portfolio yield of its own.
-    return { ...entity, lastWeeklyInvestmentIncomeUSD: Math.max(0, weeklyIncomeUSD) };
+    return { ...entity, lastWeeklyInvestmentIncomeLocal: Math.max(0, weeklyIncomeLocal) };
   });
 }
 
@@ -169,11 +169,11 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
  * book, not a half-settled one. Replaces `markInstitutionalBooks`, the week-end mark that every
  * sizing pass read a week stale.
  */
-export function institutionBookUSD(v2: V2World, entityId: string): number {
-  let holdingsUSD = 0;
+export function institutionBookLocal(v2: V2World, entityId: string): number {
+  let holdingsLocal = 0;
   const H = v2.holdings;
-  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) holdingsUSD += H.qtyLocal[r];
-  return holdingsUSD;
+  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) holdingsLocal += H.qtyLocal[r];
+  return holdingsLocal;
 }
 
 const evMultipleMemo = new WeakMap<object, Map<RegionId, number>>();
@@ -186,21 +186,21 @@ function comparableMultiple(memoKey: object, region: RegionId, listed: Company[]
 }
 
 /** HC4: a sponsor's assets are its portfolio companies at the public comparable, at its stake. */
-function sponsorPortfolioUSD(entity: InstitutionalEntity, evMultiple: number, privateById: Map<string, Company>, v2: V2World): number {
+function sponsorPortfolioLocal(entity: InstitutionalEntity, evMultiple: number, privateById: Map<string, Company>, v2: V2World): number {
   if (!entity.peFund) return 0;
   return entity.peFund.portfolioCompanyIds.reduce((a, id) => {
     const c = privateById.get(id);
     if (!c || c.isDefaulted) return a;
-    return a + Math.max(0, evMultiple * c.ebitda - ladderTotalUSD(v2, c.id)) * (c.ownership?.peSponsorPct ?? 0);
+    return a + Math.max(0, evMultiple * c.ebitda - ladderTotalLocal(v2, c.id)) * (c.ownership?.peSponsorPct ?? 0);
   }, 0);
 }
 
 export function institutionTotalAssetsLocal(ctx: WeeklyStepContext, entity: InstitutionalEntity): number {
-  const pendingUSD = ctx.holdingsStore ? 0 : pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id });
-  const portfolioUSD = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
-    ? sponsorPortfolioUSD(entity, comparableMultiple(ctx, entity.region, ctx.prevActiveFirms), privateFirmIndex(ctx), ctx.v2)
+  const pendingLocal = ctx.holdingsStore ? 0 : pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: entity.id });
+  const portfolioLocal = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
+    ? sponsorPortfolioLocal(entity, comparableMultiple(ctx, entity.region, ctx.prevActiveFirms), privateFirmIndex(ctx), ctx.v2)
     : 0;
-  return totalAssetsRead(entity, entityCashOf(ctx.v2, entity), institutionBookUSD(ctx.v2, entity.id), pendingUSD, portfolioUSD);
+  return totalAssetsRead(entity, entityCashOf(ctx.v2, entity), institutionBookLocal(ctx.v2, entity.id), pendingLocal, portfolioLocal);
 }
 const privateIndexMemo = new WeakMap<object, Map<string, Company>>();
 function privateFirmIndex(ctx: WeeklyStepContext): Map<string, Company> {
@@ -212,9 +212,9 @@ function privateFirmIndex(ctx: WeeklyStepContext): Map<string, Company> {
 /** The same read off a closed state (the UI, the harness): nothing is pending between weeks. */
 export function institutionTotalAssetsFromState(state: GameState, entity: InstitutionalEntity): number {
   const v2 = ensureV2(state);
-  const portfolioUSD = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
-    ? sponsorPortfolioUSD(entity, comparableMultiple(state, entity.region, state.companies.filter((c) => isActiveCompany(c))),
+  const portfolioLocal = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
+    ? sponsorPortfolioLocal(entity, comparableMultiple(state, entity.region, state.companies.filter((c) => isActiveCompany(c))),
         new Map(state.companies.filter((c) => !c.isBankEntity).map((c) => [c.id, c])), v2)
     : 0;
-  return totalAssetsRead(entity, entityCashOf(v2, entity), institutionBookUSD(v2, entity.id), 0, portfolioUSD);
+  return totalAssetsRead(entity, entityCashOf(v2, entity), institutionBookLocal(v2, entity.id), 0, portfolioLocal);
 }

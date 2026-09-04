@@ -61,7 +61,7 @@ export interface Position {
   unrealizedPnL: number;
   realizedPnL: number;
   weeklyFinancingCost: number;
-  expectedWeeklyCarryUSD?: number;
+  expectedWeeklyCarryLocal?: number;
   
   // Greeks / DV01
   delta?: number;
@@ -84,9 +84,9 @@ export interface Dealer {
   /** Where this desk is actually long paper right now — a real axe, measured, not declared. */
   axeAssetClasses: AssetType[];
   /** What the desk could still take on: its own dealer capacity. */
-  creditLimitUSD: number;
+  creditLimitLocal: number;
   /** What it already carries, gross, across every book. */
-  currentExposureUSD: number;
+  currentExposureLocal: number;
   acceptedAssetClasses: AssetType[];
   color: string;
 }

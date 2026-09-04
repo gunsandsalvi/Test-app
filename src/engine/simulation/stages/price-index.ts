@@ -30,7 +30,7 @@
 
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { Region } from '../../../types';
-import { shelfPriceUSD } from '../../../domain/distribution';
+import { shelfPriceLocal } from '../../../domain/distribution';
 
 /**
  * THE PRICE THIS INDEX IS BUILT ON, ON BOTH SIDES OF EVERY RATIO.
@@ -43,22 +43,22 @@ import { shelfPriceUSD } from '../../../domain/distribution';
  * reader — the Taylor rule, real growth, the labour market's real-revenue signal — took it as
  * real. Deriving the missing one keeps a single concept on both sides.
  *
- * `??` was also the wrong guard: `shelfUnitPriceUSD` is NaN on a category the auction has not
+ * `??` was also the wrong guard: `shelfUnitPriceLocal` is NaN on a category the auction has not
  * cleared, and NaN is neither null nor undefined, so the fallback did not fire and the category
  * dropped out of the basket entirely.
  */
 function shelfPriceFor(
-  demand: { shelfUnitPriceUSD?: number; unitPriceLocal?: number } | undefined,
+  demand: { shelfUnitPriceLocal?: number; unitPriceLocal?: number } | undefined,
   subUnitId: string,
   region: Region
 ): number {
   if (!demand) return 0;
-  const written = demand.shelfUnitPriceUSD;
+  const written = demand.shelfUnitPriceLocal;
   if (typeof written === 'number' && isFinite(written) && written > 0) return written;
   const landed = demand.unitPriceLocal;
   if (!(typeof landed === 'number' && isFinite(landed) && landed > 0)) return 0;
   const shortRate = region.zeroRates?.tenor3M ?? region.policyRate ?? 0;
-  return shelfPriceUSD(landed, subUnitId, shortRate);
+  return shelfPriceLocal(landed, subUnitId, shortRate);
 }
 
 /**
@@ -100,18 +100,18 @@ export function buildCpiBasket(region: Region, week: number, baseIndexLevel: num
       // channel's cost out of the household's cost of living entirely.
       const price = shelfPriceFor(demand, su.unitId, region);
       if (!demand || !(price > 0)) return;
-      const spendUSD = demand.demandLevelAnnualLocal * su.buyerMix.HOUSEHOLD;
-      if (!(spendUSD > 0)) return;
-      householdSpendBySubUnit[su.unitId] = spendUSD;
+      const spendLocal = demand.demandLevelAnnualLocal * su.buyerMix.HOUSEHOLD;
+      if (!(spendLocal > 0)) return;
+      householdSpendBySubUnit[su.unitId] = spendLocal;
       basePriceBySubUnit[su.unitId] = price;
     });
   });
 
-  const totalSpendUSD = Object.values(householdSpendBySubUnit).reduce((sum, v) => sum + v, 0);
+  const totalSpendLocal = Object.values(householdSpendBySubUnit).reduce((sum, v) => sum + v, 0);
   const weightBySubUnit: Record<string, number> = {};
-  if (totalSpendUSD > 0) {
-    Object.entries(householdSpendBySubUnit).forEach(([unitId, spendUSD]) => {
-      weightBySubUnit[unitId] = spendUSD / totalSpendUSD;
+  if (totalSpendLocal > 0) {
+    Object.entries(householdSpendBySubUnit).forEach(([unitId, spendLocal]) => {
+      weightBySubUnit[unitId] = spendLocal / totalSpendLocal;
     });
   }
 

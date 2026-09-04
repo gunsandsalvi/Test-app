@@ -52,8 +52,8 @@ function exportFlowUSDBySubUnit(
     const units = split.unitsByOrigin[comp.region] ?? 0;
     const landed = split.expectedLandedCostByOrigin[comp.region] ?? 0;
     if (!(units > 0) || !(landed > 0)) return;
-    const flowUSD = units * landed * 52 * Math.max(0, line.categoryMarketShare ?? 0);
-    if (flowUSD > 0) out[line.subUnitId] = flowUSD;
+    const flowLocal = units * landed * 52 * Math.max(0, line.categoryMarketShare ?? 0);
+    if (flowLocal > 0) out[line.subUnitId] = flowLocal;
   });
   return out;
 }
@@ -135,7 +135,7 @@ export function runForeignDirectInvestment(
       // The parent PAYS the opening balance, or the deal does not happen — the same discipline
       // as a capital call that comes up short and the financing cap: FDI spends
       // the cash pile above the treasurer's own operating buffer, never money that isn't there.
-      const deployableUSD = Math.max(0,
+      const deployableLocal = Math.max(0,
         cashOf(ctx.v2, comp) - comp.annualRevenue * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversionOf(comp.management));
       // THE TWO SIDES ARE IN DIFFERENT MONEY. The subsidiary's opening balance is denominated in
       // ITS region's money and the parent's deployable cash in the parent's; compared raw, the
@@ -143,10 +143,10 @@ export function runForeignDirectInvestment(
       // file's own header says this goes through the same FX path every cross-border payment
       // takes. It does now: converted into the payer's money, which is the convention every
       // cross-border leg in the model uses.
-      const needParentMoneyUSD = convertLocal(
+      const needParentMoneyLocal = convertLocal(
         Math.max(0, openingCashOf(sub)), sub.region as RegionId, comp.region as RegionId, ctx.getFxToUsd);
-      const openingCashUSD = Math.min(needParentMoneyUSD, deployableUSD);
-      if (!(openingCashUSD > 0)) continue;
+      const openingCashLocal = Math.min(needParentMoneyLocal, deployableLocal);
+      if (!(openingCashLocal > 0)) continue;
       sub.parentTicker = comp.ticker;
       // The stake is the PARENT's, not a founder household's: the private-business residual
       // (OWN4) excludes it by the same founderPct subtraction that defines it.
@@ -154,7 +154,7 @@ export function runForeignDirectInvestment(
       pay(ctx, {
         payer: { kind: 'COMPANY', ticker: comp.ticker },
         payee: { kind: 'COMPANY', ticker: sub.ticker },
-        amount: openingCashUSD,
+        amount: openingCashLocal,
         currency: currencyOf(sub.region as RegionId),
         reason: 'FDI: subsidiary capitalized from the parent',
       });

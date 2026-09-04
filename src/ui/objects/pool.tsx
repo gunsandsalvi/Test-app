@@ -83,8 +83,8 @@ export const pool = defineObject<Pool>({
         <Card style={{ padding: '2px 0' }}>
           <KV k="debt" hint={`${((s.blendedMarginBps ?? 0)).toFixed(0)}bp over policy`} v={money(s.debtLocal)} />
           <KV k="cash" v={money(poolCashOf(ensureV2(world.state), p.region as RegionId, s.industry))} />
-          <KV k="investment" hint="annualised" v={money(s.capexUSD)} />
-          <KV k="tax accrued" v={money(s.accruedTaxUSD)} />
+          <KV k="investment" hint="annualised" v={money(s.capexLocal)} />
+          <KV k="tax accrued" v={money(s.accruedTaxLocal)} />
           <KV k="named firms carved out" v={count(named.length)} />
         </Card>
         <Card style={{ padding: '2px 0' }}>

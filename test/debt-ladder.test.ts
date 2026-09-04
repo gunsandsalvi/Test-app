@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { callEconomics, callableAmountUSD, callSavingPvPerDollar, tranchesDueWithin, dropExhausted }
+import { callEconomics, callableAmountLocal, callSavingPvPerDollar, tranchesDueWithin, dropExhausted }
   from '../src/domain/company-week/debt-ladder';
 
 test('a make-whole premium neutralises a purely rate-driven call', () => {
@@ -39,17 +39,17 @@ test('a floating tranche has nothing to refinance into and never calls', () => {
 
 test('the callable size is smaller than the free version, because cash covers the premium', () => {
   // 100 of cash over the floor at a 25% premium buys 80 of principal, not 100.
-  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 1000, cashLocal: 100, cashFloorUSD: 0,
+  assert.equal(callableAmountLocal({ tranchePrincipalLocal: 1000, cashLocal: 100, cashFloorLocal: 0,
     premiumPerDollar: 0.25 }), 80);
   // And never more than the tranche itself.
-  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 50, cashLocal: 1e9, cashFloorUSD: 0,
+  assert.equal(callableAmountLocal({ tranchePrincipalLocal: 50, cashLocal: 1e9, cashFloorLocal: 0,
     premiumPerDollar: 0 }), 50);
 });
 
 test('a firm at or below its cash floor calls nothing', () => {
-  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 1000, cashLocal: 100, cashFloorUSD: 100,
+  assert.equal(callableAmountLocal({ tranchePrincipalLocal: 1000, cashLocal: 100, cashFloorLocal: 100,
     premiumPerDollar: 0 }), 0);
-  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 1000, cashLocal: -1e9, cashFloorUSD: 0,
+  assert.equal(callableAmountLocal({ tranchePrincipalLocal: 1000, cashLocal: -1e9, cashFloorLocal: 0,
     premiumPerDollar: 0 }), 0);
 });
 

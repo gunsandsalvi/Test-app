@@ -13,7 +13,7 @@ import {
   GameState, Company, NewsItem, RegionId,
 } from '../../../types';
 import { currencyOfId } from '../../../engine2/world';
-import { isActiveCompany, getOutputInventoryUSD } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryLocal } from '../../../domain/company';
 import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } from './shared-helpers';
 import { openCorporateSweepBooks, settleCorporateSweepBooks } from './money-market-fund';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
@@ -38,7 +38,7 @@ const roundN = (v: number, pow: number) => Math.round(v * pow) / pow;
 
 /** SCALE: the supply list's own derived indexes, memoised on the array that produced them. */
 interface GroupedSupply {
-  byCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeUSD: number; relationshipStrength: number }[]>;
+  byCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeLocal: number; relationshipStrength: number }[]>;
   categoriesBySupplier: Map<string, Set<string>>;
 }
 const groupedSupplyByList = new WeakMap<object, GroupedSupply>();
@@ -93,7 +93,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const firmById = new Map(prevActiveFirms.map(c => [c.id, c]));
   // CRD-R1 — the median issuer's revenue, so SCALE in the rating is relative to the firms a
   // credit is actually rated against rather than a stated size (§7.184).
-  const regionMedianRevenueUSD = (() => {
+  const regionMedianRevenueLocal = (() => {
     const revs = prevActiveFirms.map(c => c.annualRevenue).filter(r => r > 0).sort((a, b) => a - b);
     return revs.length > 0 ? revs[Math.floor(revs.length / 2)] : 1;
   })();
@@ -121,7 +121,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     if (!supplier) return;
     const invUSDByCategory = new Map<string, number>();
     categories.forEach((category) => {
-      invUSDByCategory.set(category, getOutputInventoryUSD(supplier, category));
+      invUSDByCategory.set(category, getOutputInventoryLocal(supplier, category));
     });
     supplierShockStats.set(supplierId, { annualRevenue: supplier.annualRevenue, invUSDByCategory });
   });
@@ -161,7 +161,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
   // WS8: this week's priced offerings, indexed by issuer, and the pending queue by issuer so a
   // company never runs two books at once. Lead banks are chosen per region from the named banks.
-  const primarySettlementByIssuerId = new Map<string, { offering: PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; issuedUSD: number; proceedsUSD: number }>();
+  const primarySettlementByIssuerId = new Map<string, { offering: PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>();
   ctx.primarySettlements.forEach((s) => primarySettlementByIssuerId.set(s.offering.issuerId, s));
   const pendingOfferingIssuerIds = new Set(ctx.primaryOfferingsWorking.map((o) => o.issuerId));
   // G3c: mandates go to the bank that carries the issuer's credit, and — with no incumbent —
@@ -218,7 +218,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const backLanes = buildBackLanes(state.companies, updatedRegions, companyUpdates, new Set(state.institutionalEntities.map(e => e.id)), ctx.carrierFreightRevenue, ctx.channelMarginRevenue, companyStore, v2);
   const backDeps: import('../../../engine2/stage08-back').BackKernelDeps = {
     state, ctx, v2, F, backLanes, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
-    regionMedianRevenueUSD, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
+    regionMedianRevenueLocal, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
     primarySettlementByIssuerId, pendingOfferingIssuerIds, leadBankFor, enqueueOffering,
     pushNews: (n: NewsItem) => refinanceNews.push(n),
   };
@@ -272,8 +272,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     news: refinanceNews,
     taxAccrued: ctx.taxAccruedByRegion,
     journal: ctx.paymentJournal,
-    holderAccruals: ctx.pendingHolderAccrualUSD,
-    holderCash: ctx.pendingHolderCashUSD,
+    holderAccruals: ctx.pendingHolderAccrualLocal,
+    holderCash: ctx.pendingHolderCashLocal,
     holderPayout: ctx.pendingHolderAccrualPayout,
     holderSettlements: ctx.pendingHolderSettlements,
   });
@@ -285,8 +285,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     refinanceNews = a.news;
     ctx.taxAccruedByRegion = a.taxAccrued;
     ctx.paymentJournal = a.journal;
-    ctx.pendingHolderAccrualUSD = a.holderAccruals;
-    ctx.pendingHolderCashUSD = a.holderCash;
+    ctx.pendingHolderAccrualLocal = a.holderAccruals;
+    ctx.pendingHolderCashLocal = a.holderCash;
     ctx.pendingHolderAccrualPayout = a.holderPayout;
     ctx.pendingHolderSettlements = a.holderSettlements;
   };
@@ -323,10 +323,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (deferMergeAppliesNet) applyPendingLeg(ctx, mine.journal.payerId[k], mine.journal.payeeId[k], mine.journal.amount[k], currencyOfId(mine.journal.currencyId[k]), mine.journal.settleWeek[k]);
     }
     mine.holderAccruals.forEach((v, k) => {
-      ctx.pendingHolderAccrualUSD.set(k, (ctx.pendingHolderAccrualUSD.get(k) ?? 0) + v);
+      ctx.pendingHolderAccrualLocal.set(k, (ctx.pendingHolderAccrualLocal.get(k) ?? 0) + v);
     });
     mine.holderCash.forEach((v, k) => {
-      ctx.pendingHolderCashUSD.set(k, (ctx.pendingHolderCashUSD.get(k) ?? 0) + v);
+      ctx.pendingHolderCashLocal.set(k, (ctx.pendingHolderCashLocal.get(k) ?? 0) + v);
     });
     mine.holderPayout.forEach((k) => ctx.pendingHolderAccrualPayout.add(k));
     mine.holderSettlements.forEach((v, k) => {
@@ -390,7 +390,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const redPaid = new Float64Array(n);
     const sweepDelta = new Float64Array(n);
     const taxCapture = {
-      accrueUSD: new Float64Array(n).fill(NaN),
+      accrueLocal: new Float64Array(n).fill(NaN),
     };
     backDeps.taxCapture = taxCapture;
     // §7.325 W2 — the A POOL: workers run core-A for every active non-profile firm while the
@@ -436,7 +436,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         for (const sh of shards) {
           for (let i = sh.lo; i < sh.hi; i++) {
             shardByRow[i] = sh;
-            if (!Number.isNaN(sh.taxAccrue[i])) taxCapture.accrueUSD[i] = sh.taxAccrue[i];
+            if (!Number.isNaN(sh.taxAccrue[i])) taxCapture.accrueLocal[i] = sh.taxAccrue[i];
             const cross = sh.crossings[i];
             if (cross) {
               // The full A crossing, rebuilt: fresh poster continuing the worker's exact cash
@@ -495,11 +495,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       }
       for (let k = st(sh.holderAccMark); k < sh.holderAccMark[i]; k++) {
         const [key, v] = sh.holderAcc[k];
-        ctx.pendingHolderAccrualUSD.set(key, (ctx.pendingHolderAccrualUSD.get(key) ?? 0) + v);
+        ctx.pendingHolderAccrualLocal.set(key, (ctx.pendingHolderAccrualLocal.get(key) ?? 0) + v);
       }
       for (let k = st(sh.holderCashMark); k < sh.holderCashMark[i]; k++) {
         const [key, v] = sh.holderCash[k];
-        ctx.pendingHolderCashUSD.set(key, (ctx.pendingHolderCashUSD.get(key) ?? 0) + v);
+        ctx.pendingHolderCashLocal.set(key, (ctx.pendingHolderCashLocal.get(key) ?? 0) + v);
       }
       for (let k = st(sh.holderPayMark); k < sh.holderPayMark[i]; k++) ctx.pendingHolderAccrualPayout.add(sh.holderPay[k]);
     };
@@ -521,11 +521,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         }
         for (let k = s(marks.hAcc); k < marks.hAcc[i]; k++) {
           const [key, v] = sl.hAcc[k];
-          ctx.pendingHolderAccrualUSD.set(key, (ctx.pendingHolderAccrualUSD.get(key) ?? 0) + v);
+          ctx.pendingHolderAccrualLocal.set(key, (ctx.pendingHolderAccrualLocal.get(key) ?? 0) + v);
         }
         for (let k = s(marks.hCash); k < marks.hCash[i]; k++) {
           const [key, v] = sl.hCash[k];
-          ctx.pendingHolderCashUSD.set(key, (ctx.pendingHolderCashUSD.get(key) ?? 0) + v);
+          ctx.pendingHolderCashLocal.set(key, (ctx.pendingHolderCashLocal.get(key) ?? 0) + v);
         }
         for (let k = s(marks.hPay); k < marks.hPay[i]; k++) ctx.pendingHolderAccrualPayout.add(sl.hPay[k]);
         for (let k = s(marks.hSettle); k < marks.hSettle[i]; k++) {
@@ -534,19 +534,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         }
       }
       const regKey = backLanes.region[i];
-      if (!Number.isNaN(taxCapture.accrueUSD[i])) {
-        ctx.taxAccruedByRegion[regKey] = (ctx.taxAccruedByRegion[regKey] ?? 0) + taxCapture.accrueUSD[i];
+      if (!Number.isNaN(taxCapture.accrueLocal[i])) {
+        ctx.taxAccruedByRegion[regKey] = (ctx.taxAccruedByRegion[regKey] ?? 0) + taxCapture.accrueLocal[i];
       }
     }
     // §7.321 — the region books' netInflow REBUILT on the exact per-firm deltas in the
     // interleaved loop's order [red_i, sweep_i] per firm, so the settle-time float sum keeps
     // the serial tree bit-exactly (the 13wk ULP cascade this replaces was the record's).
-    mmfSweepBooks.forEach((b) => { b.netInflowUSD = 0; });
+    mmfSweepBooks.forEach((b) => { b.netInflowLocal = 0; });
     for (let i = 0; i < n; i++) {
       const b = mmfSweepBooks.get(backLanes.region[i]);
       if (!b) continue;
-      if (redPaid[i] > 0) b.netInflowUSD -= redPaid[i];
-      if (sweepDelta[i] !== 0) b.netInflowUSD += sweepDelta[i];
+      if (redPaid[i] > 0) b.netInflowLocal -= redPaid[i];
+      if (sweepDelta[i] !== 0) b.netInflowLocal += sweepDelta[i];
     }
   } else {
   runShardedVoid(companyRows.length, (range) => {

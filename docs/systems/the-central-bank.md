@@ -89,11 +89,11 @@ checked by `scripts/check-atlas.sh`.
 | A1 the monopoly issuer of reserves | `src/engine/ledger/party.ts:CENTRAL_BANK` | ✅ |
 | A1.a it can always meet an obligation in its own money | `src/engine/simulation/stages/central-bank-demand.ts:applyCentralBankFills` | ✅ |
 | A2 it has a balance sheet, and a real one | `src/domain/central-bank.ts:CentralBank` | ✅ |
-| A2.a liabilities: reserves, currency, the TGA, the RRP window | `src/domain/central-bank.ts:centralBankLiabilitiesUSD` | ✅ |
-| A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsUSD` | ✅ |
+| A2.a liabilities: reserves, currency, the TGA, the RRP window | `src/domain/central-bank.ts:centralBankLiabilitiesLocal` | ✅ |
+| A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsLocal` | ✅ |
 | A2.c VERIFY it closes weekly, with a revaluation account | `src/engine/audit/money.ts:m1` | ✅ |
 | A3 a mandate: a stated objective | `src/domain/region-macro.ts:targetInflation` | ⚠️ |
-| A4 operationally independent, financially owned | `src/domain/central-bank.ts:remittanceUSD` | ✅ |
+| A4 operationally independent, financially owned | `src/domain/central-bank.ts:remittanceLocal` | ✅ |
 | B1 it SETS a rate, as a decision, on a rule | `src/engine/macro/evolution.ts:taylorTarget` | ✅ |
 | B1.a against its mandate: inflation and activity | `src/engine/macro/evolution.ts:inflation_gap` | ✅ |
 | B2 administered, not traded | `src/domain/region-macro.ts:policyRate` | ✅ |
@@ -109,19 +109,19 @@ checked by `scripts/check-atlas.sh`.
 | C4 reinvestment is a separate decision; the difference is QT | `src/domain/central-bank.ts:reinvestmentShare` | ✅ |
 | D1 the standing facility lends against collateral at a stated rate | `src/engine/macro/banking.ts:SRF_SPREAD_BPS` | ✅ |
 | D2 eligibility and haircuts are ITS choice, a policy instrument | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ⚠️ |
-| **D3 lender of last resort: freely, good collateral, penalty, solvent** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanUSD` | ❌ |
+| **D3 lender of last resort: freely, good collateral, penalty, solvent** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ❌ |
 | **D3.a FORBID it does not lend to an insolvent bank** | `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` | ❌ |
 | **D4 it can REFUSE, and refusal must be reachable** | — | ❌ |
 | E1 the treasury banks with it; the account is a liability | `src/engine/ledger/accounts.ts:treasuryAccountOf` | ✅ |
 | **E2 FORBID no automatic overdraft** | `src/engine/ledger/accounts.ts:waysAndMeansOf` | ❌ |
-| E3 remittance: its net income goes to the treasury | `src/domain/central-bank.ts:remittanceUSD` | ✅ |
-| E3.a income, not revaluation | `src/domain/central-bank.ts:fxRevaluationUSD` | ✅ |
+| E3 remittance: its net income goes to the treasury | `src/domain/central-bank.ts:remittanceLocal` | ✅ |
+| E3.a income, not revaluation | `src/domain/central-bank.ts:fxRevaluationLocal` | ✅ |
 | E4 it can make a loss, which reduces its equity | `src/engine/simulation/stages/central-bank.ts:runCentralBankStage` | ⚠️ |
-| E5 VERIFY consolidated economically, not in the accounts | `src/domain/central-bank.ts:centralBankSovereignBookUSD` | ❌ |
+| E5 VERIFY consolidated economically, not in the accounts | `src/domain/central-bank.ts:centralBankSovereignBookLocal` | ❌ |
 | F1 it holds reserves in other currencies, as real assets | `src/domain/central-bank.ts:fxReservesByRegion` | ✅ |
-| F2 it can intervene, bounded by F1 | `src/engine/simulation/stages/fx-clearing.ts:defenceBudgetUSD` | ✅ |
-| F2.a which is why a peg breaks: the constraint is real | `src/engine/simulation/stages/fx-clearing.ts:cbBoughtUSD` | ✅ |
-| F3 foreign claims revalue into A2.c's account | `src/engine/simulation/stages/fx-revaluation.ts:fxRevaluationUSD` | ✅ |
+| F2 it can intervene, bounded by F1 | `src/engine/simulation/stages/fx-clearing.ts:defenceBudgetLocal` | ✅ |
+| F2.a which is why a peg breaks: the constraint is real | `src/engine/simulation/stages/fx-clearing.ts:cbBoughtLocal` | ✅ |
+| F3 foreign claims revalue into A2.c's account | `src/engine/simulation/stages/fx-revaluation.ts:fxRevaluationLocal` | ✅ |
 | F4 claims on other central banks are bilateral and sum to zero | `src/domain/central-bank.ts:foreignOfficialClaimsUSD` | ✅ |
 
 ---

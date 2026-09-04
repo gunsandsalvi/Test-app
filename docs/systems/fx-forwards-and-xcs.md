@@ -98,7 +98,7 @@ checked by `scripts/check-atlas.sh`.
 | B1 the forward rate is cleared from what participants will do | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:clearedBasisBps` | ⚠️ |
 | **B2 VERIFY it sits near spot adjusted for the two funding costs** | — | ❌ |
 | B2.a CIP is a consequence of an arbitrage somebody takes, never an identity | `src/domain/derivatives/classes/fx-forward.ts:hedgedReservationAdjustmentBps` | ⚠️ |
-| B2.b the arbitrage is not free — balance sheet, capital, credit lines | `src/domain/derivatives/registry.ts:deskNotionalCapacityUSD` | ✅ |
+| B2.b the arbitrage is not free — balance sheet, capital, credit lines | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ✅ |
 | **B3 the cross-currency basis is the deviation, a real price** | `src/engine/macro/evolution.ts:evolveFxPair` | ⚠️ |
 | B3.a it widens when funding in one currency is scarce | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:entityHedgeToleranceBps` | ✅ |
 | B4 VERIFY a region with a foreign-currency funding deficit pays the basis | — | ❌ |

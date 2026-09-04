@@ -457,7 +457,7 @@ export const isTrancheId = (v2: V2World, instrumentId: string): boolean => {
 };
 
 /** §5-WIRES D: the ladder's face on the live rows — total debt as a read. */
-export function ladderTotalUSD(v2: V2World, companyId: string): number {
+export function ladderTotalLocal(v2: V2World, companyId: string): number {
   const S = v2.tranches;
   let total = 0;
   for (const r of ladderRowsOf(v2, companyId)) total += S.principalLocal[r];

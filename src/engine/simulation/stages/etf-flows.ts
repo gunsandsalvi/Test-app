@@ -29,16 +29,16 @@ import { transferHolding, issueHolding, retireHolding, markHolding } from '../..
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
-import { pay, institutionSpendableUSD } from './settlement';
+import { pay, institutionSpendableLocal } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { mandatePctOf } from '../../../domain/institutions';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 import { INDEX_DEFINITIONS, IndexDefinition } from '../../../domain/indexes';
-import { apWeeklyCapacityUSD, basketAssemblyCostRate, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
+import { apWeeklyCapacityLocal, basketAssemblyCostRate, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
 import { ItemizedHolding } from '../../../domain/banking';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
-import { householdEtfHoldingsUSD } from '../../macro/household-portfolio';
+import { householdEtfHoldingsLocal } from '../../macro/household-portfolio';
 import { BUFFER_TARGET_WEEKS } from '../../macro/household-cohorts';
 import { measuredWeeklyMove, medianOf } from '../../../domain/volatility';
 import { ringFill, rowOf } from '../../../engine2/world';
@@ -50,7 +50,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 
 
 /** An entity's money for one asset class, from its own mandate weights. */
-function classAppetiteUSD(ctx: WeeklyStepContext, entity: InstitutionalEntity, def: IndexDefinition): number {
+function classAppetiteLocal(ctx: WeeklyStepContext, entity: InstitutionalEntity, def: IndexDefinition): number {
   return Math.max(0, institutionTotalAssetsLocal(ctx, entity)) * mandatePctOf(entity.assetAllocationTarget, def.assetClass);
 }
 
@@ -71,11 +71,11 @@ function indexedShare(ctx: WeeklyStepContext, entity: InstitutionalEntity, nameC
 
 /** NAV of a fund: its real basket at this week's cleared marks, plus cash it has not deployed. */
 // Read off the rows — mid-week the persistent store is the book's authority.
-function fundNavUSD(v2: import('../../../engine2/world').V2World, fund: InstitutionalEntity): number {
+function fundNavLocal(v2: import('../../../engine2/world').V2World, fund: InstitutionalEntity): number {
   const H = v2.holdings;
-  let holdingsUSD = 0;
-  for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyLocal[r];
-  return holdingsUSD + Math.max(0, entityCashOf(v2, fund));
+  let holdingsLocal = 0;
+  for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) holdingsLocal += H.qtyLocal[r];
+  return holdingsLocal + Math.max(0, entityCashOf(v2, fund));
 }
 
 export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -87,13 +87,13 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // ---- 1. The sponsor's fee, out of the fund's assets. A real flow between two named books. ----
   const navByFundId = new Map<string, number>();
   funds.forEach((fund) => {
-    const navUSD = fundNavUSD(ctx.v2, fund);
+    const navLocal = fundNavLocal(ctx.v2, fund);
     // A fee is paid FROM CASH THE FUND HAS. Charging the full ratio into a
     // fund whose cash-plus-pending was already spent dug the small persistent overdrafts the
     // harness flags (USAIGX −18M, the IGX/LLX residue); the sponsor of a cash-short fund waits,
     // and next week's ratio is computed fresh off the NAV as before.
-    const payableCapUSD = institutionSpendableUSD(ctx, fund);
-    const feeLocal = Math.min((navUSD * fund.etf!.expenseRatioAnnual) / 52, payableCapUSD);
+    const payableCapLocal = institutionSpendableLocal(ctx, fund);
+    const feeLocal = Math.min((navLocal * fund.etf!.expenseRatioAnnual) / 52, payableCapLocal);
     // ONE fee, ONE payment. The old form computed the fee twice from two different NAVs
     // the sponsor's credit off the pre-flow book here, the fund's debit off the post-flow book
     // in the apply pass — so the two sides of one fee disagreed by the week's flow, silently.
@@ -106,7 +106,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         reason: 'etf expense ratio to sponsor',
       });
     }
-    navByFundId.set(fund.id, Math.max(0, navUSD - feeLocal));
+    navByFundId.set(fund.id, Math.max(0, navLocal - feeLocal));
   });
 
   // ---- 2. What every investor wants to hold in each fund next week. ----
@@ -149,24 +149,24 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // tilt actually are. Routing purely by tier left the all-cap funds with no possible buyer, and
     // routing purely to all-cap would have lost the real fact that a house able to research two
     // dozen large caps still cannot staff a hundred and fifty small ones.
-    const equityAppetiteUSD = allCapFund
-      ? classAppetiteUSD(ctx, investor, defById.get(allCapFund.etf!.indexId)!)
+    const equityAppetiteLocal = allCapFund
+      ? classAppetiteLocal(ctx, investor, defById.get(allCapFund.etf!.indexId)!)
       : 0;
     const coreShare = tierIndexedShares.length > 0
       ? Math.min(...tierIndexedShares.map((x) => x.share))
       : 0;
-    if (allCapFund && coreShare > 0 && equityAppetiteUSD > 0) {
-      desiredByFund.get(allCapFund.id)!.set(investor.id, equityAppetiteUSD * coreShare);
+    if (allCapFund && coreShare > 0 && equityAppetiteLocal > 0) {
+      desiredByFund.get(allCapFund.id)!.set(investor.id, equityAppetiteLocal * coreShare);
     }
-    const allCapValueUSD = indexById.get(allCapFund?.etf?.indexId ?? '')?.totalValueUSD ?? 0;
+    const allCapValueLocal = indexById.get(allCapFund?.etf?.indexId ?? '')?.totalValueLocal ?? 0;
     tierIndexedShares.forEach(({ fund, share }) => {
       const tiltShare = share - coreShare;
       if (!(tiltShare > 0)) return;
       const def = defById.get(fund.etf!.indexId)!;
-      const tierValueUSD = indexById.get(def.id)?.totalValueUSD ?? 0;
-      const tierShareOfMarket = allCapValueUSD > 0 ? tierValueUSD / allCapValueUSD : 0;
-      const wantUSD = classAppetiteUSD(ctx, investor, def) * tierShareOfMarket * tiltShare;
-      if (wantUSD > 0) desiredByFund.get(fund.id)!.set(investor.id, wantUSD);
+      const tierValueLocal = indexById.get(def.id)?.totalValueLocal ?? 0;
+      const tierShareOfMarket = allCapValueLocal > 0 ? tierValueLocal / allCapValueLocal : 0;
+      const wantLocal = classAppetiteLocal(ctx, investor, def) * tierShareOfMarket * tiltShare;
+      if (wantLocal > 0) desiredByFund.get(fund.id)!.set(investor.id, wantLocal);
     });
 
     // Credit: one book per index, indexed by the same coverage rule.
@@ -175,8 +175,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       .forEach((fund) => {
         const def = defById.get(fund.etf!.indexId)!;
         const share = indexedShare(ctx, investor, indexById.get(def.id)?.constituents.length ?? 0);
-        const wantUSD = classAppetiteUSD(ctx, investor, def) * share;
-        if (wantUSD > 0) desiredByFund.get(fund.id)!.set(investor.id, wantUSD);
+        const wantLocal = classAppetiteLocal(ctx, investor, def) * share;
+        if (wantLocal > 0) desiredByFund.get(fund.id)!.set(investor.id, wantLocal);
       });
   });
 
@@ -199,9 +199,9 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const listed = ctx.updatedCompanies.filter(
       (c) => c.region === region && isActiveCompany(c) && isPubliclyListed(c) && marketCapOf(c) > 0
     );
-    const capUSD = listed.reduce((a2, c) => a2 + marketCapOf(c), 0);
-    const earningsUSD = listed.reduce((a2, c) => a2 + c.netIncome, 0);
-    const earningsYield = capUSD > 0 ? earningsUSD / capUSD : 0;
+    const capLocal = listed.reduce((a2, c) => a2 + marketCapOf(c), 0);
+    const earningsLocal = listed.reduce((a2, c) => a2 + c.netIncome, 0);
+    const earningsYield = capLocal > 0 ? earningsLocal / capLocal : 0;
     // What household cash earns as an alternative: the region's money fund's own cleared net
     // yield (WS7), which is the real competing rate deposits are priced against.
     const mmf = ctx.updatedInstitutionalEntities.find(
@@ -217,7 +217,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // DIST — AND HOUSEHOLDS CAN SELL NOW, WHICH IS THE POINT OF THIS BLOCK.
     //
     // It was `Math.max(0, saving x equityShare)`: a household could buy funds or not buy funds,
-    // and there was no household term in `grossRedeemUSD` anywhere. Unemployment could only ever
+    // and there was no household term in `grossRedeemLocal` anywhere. Unemployment could only ever
     // SLOW purchases, never force a sale — so a drawdown had no household seller in it, which is
     // precisely the amplifier that makes one self-reinforcing.
     //
@@ -225,28 +225,28 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // shortfall is not to sell at once: it runs its cash down first and sells only what its
     // deposits cannot cover. That ordering is why forced selling is rare, and why it is violent
     // when it comes — every buffer is exhausted at the same time, near the bottom.
-    const weeklySavingUSD = (reg.estimatedHouseholdIncomeLocal * (hs.savingsRate ?? 0)) / 52;
-    let intoFundsUSD: number;
-    if (weeklySavingUSD >= 0) {
-      intoFundsUSD = weeklySavingUSD * equityShareOfSaving;
-      hs.pendingDirectEquitySaleUSD = 0;
+    const weeklySavingLocal = (reg.estimatedHouseholdIncomeLocal * (hs.savingsRate ?? 0)) / 52;
+    let intoFundsLocal: number;
+    if (weeklySavingLocal >= 0) {
+      intoFundsLocal = weeklySavingLocal * equityShareOfSaving;
+      hs.pendingDirectEquitySaleLocal = 0;
     } else {
       // The floor is the SAME buffer the saving decision is taken against — it is the same
       // buffer, so it is the same number (rule 4).
-      const bufferFloorUSD = (reg.estimatedHouseholdIncomeLocal / 52) * BUFFER_TARGET_WEEKS;
-      const depositHeadroomUSD = Math.max(0, householdDepositsOf(ctx.v2, region) - bufferFloorUSD);
+      const bufferFloorLocal = (reg.estimatedHouseholdIncomeLocal / 52) * BUFFER_TARGET_WEEKS;
+      const depositHeadroomLocal = Math.max(0, householdDepositsOf(ctx.v2, region) - bufferFloorLocal);
       // Sell only the part of the gap the cash cannot meet, and never more than is held.
-      const heldLocal = householdEtfHoldingsUSD(ctx.v2, hs, ctx.updatedInstitutionalEntities);
-      const cashGapUSD = Math.max(0, -weeklySavingUSD - depositHeadroomUSD);
-      intoFundsUSD = -Math.min(Math.max(0, heldLocal), cashGapUSD);
+      const heldLocal = householdEtfHoldingsLocal(ctx.v2, hs, ctx.updatedInstitutionalEntities);
+      const cashGapLocal = Math.max(0, -weeklySavingLocal - depositHeadroomLocal);
+      intoFundsLocal = -Math.min(Math.max(0, heldLocal), cashGapLocal);
       // The ladder's NEXT rung. What neither the deposit buffer nor the fund shares
       // could cover is announced as a direct-equity sale, and next week's 07e session executes
       // it against the households' own residual shares — a holding that cannot be sold is not a
       // holding, so the residual has to be sellable. Announce-then-price,
       // the same one-week rhythm every flow in this stage follows.
-      hs.pendingDirectEquitySaleUSD = Math.round(Math.max(0, cashGapUSD - Math.max(0, heldLocal)));
+      hs.pendingDirectEquitySaleLocal = Math.round(Math.max(0, cashGapLocal - Math.max(0, heldLocal)));
     }
-    if (Math.abs(intoFundsUSD) < 1) return;
+    if (Math.abs(intoFundsLocal) < 1) return;
 
     // Households buy the BROAD market: they are not picking a size tier, which is exactly what an
     // all-cap fund is for and why it had no buyer while institutions were the only investors.
@@ -254,7 +254,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       const def = defById.get(f.etf!.indexId);
       return !!def && def.region === region && def.assetClass === 'EQUITY' && def.tier === 'ALL_CAP';
     });
-    if (broad) householdDemandByFund.set(broad.id, (householdDemandByFund.get(broad.id) ?? 0) + intoFundsUSD);
+    if (broad) householdDemandByFund.set(broad.id, (householdDemandByFund.get(broad.id) ?? 0) + intoFundsLocal);
   });
 
   // ---- 3. The authorised participants' capacity: real dealer balance sheet, per region. ----
@@ -267,8 +267,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const scratch: number[] = [];
     const moves = ctx.updatedCompanies.filter((c) => c.region === r && c.listingStatus !== 'PRIVATE' && !c.isDefaulted)
       .map((c) => measuredWeeklyMove(ringFill(ctx.v2.priceRing, rowOf(ctx.v2, c.id), scratch))).filter((v): v is number => v !== undefined);
-    apCapacityByRegion.set(r, apWeeklyCapacityUSD({
-      dealerEquityUSD: equityLocal, bookWeeklyMove: medianOf(moves) ?? 0,
+    apCapacityByRegion.set(r, apWeeklyCapacityLocal({
+      dealerEquityLocal: equityLocal, bookWeeklyMove: medianOf(moves) ?? 0,
     }));
   });
 
@@ -277,7 +277,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // Allocating the whole regional capacity to every fund independently would let ten funds each
   // spend the same dollar of dealer equity.
   const netFlowByFund = new Map<string, number>();
-  const householdExecutedByFund = new Map<string, { spentUSD: number; navPerShare: number }>();
+  const householdExecutedByFund = new Map<string, { spentLocal: number; navPerShare: number }>();
   const holdingsDeltaByInvestor = new Map<string, Map<string, number>>();
   /** Redeemer id -> fund id -> the value of the basket the fund owes it this week. */
   const inKindRedemptionsByInvestor = new Map<string, Map<string, number>>();
@@ -286,7 +286,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
    *  execution, because the AP capacity split depends on the whole week's demand at once. */
   const flowPlanByFund = new Map<string, {
     navPerShare: number; carryPricePerShare: number; wantDelta: Map<string, number>;
-    grossCreateUSD: number; grossRedeemUSD: number; householdLocal: number;
+    grossCreateLocal: number; grossRedeemLocal: number; householdLocal: number;
   }>();
   // One pass over the investors' books instead of a `.find` per investor PER FUND — the same
   // first-match-wins row each per-fund scan used to stop at (per-item scans in per-item loops:
@@ -322,17 +322,17 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   const budgetOf = (inv: { id: string }): number => {
     const existing = budgetRemainingByInvestor.get(inv.id);
     if (existing !== undefined) return existing;
-    const opening = institutionSpendableUSD(ctx, inv);
+    const opening = institutionSpendableLocal(ctx, inv);
     budgetRemainingByInvestor.set(inv.id, opening);
     return opening;
   };
 
   funds.forEach((fund) => {
     const desired = desiredByFund.get(fund.id)!;
-    const navUSD = navByFundId.get(fund.id) ?? 0;
+    const navLocal = navByFundId.get(fund.id) ?? 0;
     const sharesOutstanding = fund.etf!.sharesOutstanding;
-    const navPerShare = sharesOutstanding > 0 && navUSD > 0
-      ? navUSD / sharesOutstanding
+    const navPerShare = sharesOutstanding > 0 && navLocal > 0
+      ? navLocal / sharesOutstanding
       : ETF_INCEPTION_NAV_PER_SHARE;
 
     // What each investor holds today, in dollars at the current NAV.
@@ -343,42 +343,42 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     });
 
     // Gross flow both ways, netted — an AP only has to carry the net basket.
-    let grossCreateUSD = 0;
-    let grossRedeemUSD = 0;
+    let grossCreateLocal = 0;
+    let grossRedeemLocal = 0;
     const wantDeltaByInvestor = new Map<string, number>();
     const ids = new Set([...desired.keys(), ...heldByInvestor.keys()]);
     ids.forEach((id) => {
       const investor = investorById.get(id);
       if (!investor) return;
-      const wantUSD = desired.get(id) ?? 0;
-      const haveUSD = heldByInvestor.get(id) ?? 0;
+      const wantLocal = desired.get(id) ?? 0;
+      const haveLocal = heldByInvestor.get(id) ?? 0;
       // A buyer can only pay with money it has, and only once: the budget is what is LEFT after
       // the funds already visited this week, plus whatever this week's clearing books have
-      // already committed of it (`pendingSettlementUSD`). A seller is unconstrained.
-      const deltaLocal = wantUSD > haveUSD
-        ? Math.min(wantUSD - haveUSD, budgetOf(investor))
-        : wantUSD - haveUSD;
+      // already committed of it (`pendingSettlementLocal`). A seller is unconstrained.
+      const deltaLocal = wantLocal > haveLocal
+        ? Math.min(wantLocal - haveLocal, budgetOf(investor))
+        : wantLocal - haveLocal;
       if (Math.abs(deltaLocal) < 1) return;
       if (deltaLocal > 0) budgetRemainingByInvestor.set(id, budgetOf(investor) - deltaLocal);
       wantDeltaByInvestor.set(id, deltaLocal);
-      if (deltaLocal > 0) grossCreateUSD += deltaLocal; else grossRedeemUSD += -deltaLocal;
+      if (deltaLocal > 0) grossCreateLocal += deltaLocal; else grossRedeemLocal += -deltaLocal;
     });
 
     // Household saving is a creation order like any other and competes for the same AP capacity.
     //...and a household REDEMPTION is a redemption like any other, which is what makes a forced
     // household sale reach the fund's own basket and the prices in it.
     const householdLocal = householdDemandByFund.get(fund.id) ?? 0;
-    if (householdLocal > 0) grossCreateUSD += householdLocal;
-    else if (householdLocal < 0) grossRedeemUSD += -householdLocal;
+    if (householdLocal > 0) grossCreateLocal += householdLocal;
+    else if (householdLocal < 0) grossRedeemLocal += -householdLocal;
     flowPlanByFund.set(fund.id, {
       navPerShare,
       // What the register's rows are CARRYING these shares at right now — last week's close,
       // which is the traded price where the fund has one and net asset value where it does not.
       // Read here, before this week's clearing overwrites `marketPricePerShare`.
       carryPricePerShare: (fund.etf!.marketPricePerShare ?? 0) > 0 ? fund.etf!.marketPricePerShare! : navPerShare,
-      wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD, householdLocal,
+      wantDelta: wantDeltaByInvestor, grossCreateLocal, grossRedeemLocal, householdLocal,
     });
-    netFlowByFund.set(fund.id, grossCreateUSD - grossRedeemUSD);
+    netFlowByFund.set(fund.id, grossCreateLocal - grossRedeemLocal);
   });
 
   // Split each region's dealer capacity across the funds competing for it, by the size of the net
@@ -397,12 +397,12 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   funds.forEach((fund) => {
     const plan = flowPlanByFund.get(fund.id);
     if (!plan) return;
-    const { navPerShare, wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD, householdLocal } = plan;
+    const { navPerShare, wantDelta: wantDeltaByInvestor, grossCreateLocal, grossRedeemLocal, householdLocal } = plan;
     const sharesOutstanding = fund.etf!.sharesOutstanding;
-    const netUSD = grossCreateUSD - grossRedeemUSD;
+    const netLocal = grossCreateLocal - grossRedeemLocal;
     const capacityLocal = capacityByFund.get(fund.id) ?? 0;
-    const absorbedUSD = Math.min(Math.abs(netUSD), capacityLocal);
-    const fillRatio = Math.abs(netUSD) > 0 ? absorbedUSD / Math.abs(netUSD) : 1;
+    const absorbedLocal = Math.min(Math.abs(netLocal), capacityLocal);
+    const fillRatio = Math.abs(netLocal) > 0 ? absorbedLocal / Math.abs(netLocal) : 1;
 
     // Everyone's order is filled in the same proportion — the AP cannot choose whose basket to
     // carry. Redemptions net against creations first, so only the residual consumes capacity.
@@ -417,7 +417,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // no cash at all. That is the next slice of this row, and it is why the cap here is a
     // constraint rather than a fix — until the basket moves, a fund short of cash genuinely
     // cannot honour the redemption.
-    const fundCashAvailableUSD = institutionSpendableUSD(ctx, fund);
+    const fundCashAvailableLocal = institutionSpendableLocal(ctx, fund);
     // AND NOW IT IS IN KIND, which is what makes the cash cap unnecessary rather than
     // merely honest. An institutional redemption hands over the BASKET: the fund delivers the
     // redeemer its pro-rata slice of everything it owns — securities and cash together — and no
@@ -429,68 +429,68 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // redemption is the one that still needs the fund to find money, so the cash ration now
     // applies where it is genuinely a constraint instead of to everybody.
     const householdCashFillRatio = householdLocal < 0
-      ? Math.min(1, fundCashAvailableUSD / Math.max(1, -householdLocal))
+      ? Math.min(1, fundCashAvailableLocal / Math.max(1, -householdLocal))
       : 1;
     const executedByInvestor = new Map<string, number>();
     wantDeltaByInvestor.forEach((deltaLocal, id) => {
       // The netted part always clears; only the imbalance is rationed.
-      const nettedShare = Math.abs(netUSD) > 0
-        ? (deltaLocal > 0 ? Math.min(grossCreateUSD, grossRedeemUSD) / Math.max(1, grossCreateUSD)
-                        : Math.min(grossCreateUSD, grossRedeemUSD) / Math.max(1, grossRedeemUSD))
+      const nettedShare = Math.abs(netLocal) > 0
+        ? (deltaLocal > 0 ? Math.min(grossCreateLocal, grossRedeemLocal) / Math.max(1, grossCreateLocal)
+                        : Math.min(grossCreateLocal, grossRedeemLocal) / Math.max(1, grossRedeemLocal))
         : 1;
       const imbalanceShare = 1 - nettedShare;
-      const executedUSD = deltaLocal * (nettedShare + imbalanceShare * fillRatio);
-      if (Math.abs(executedUSD) >= 1) executedByInvestor.set(id, executedUSD);
+      const executedLocal = deltaLocal * (nettedShare + imbalanceShare * fillRatio);
+      if (Math.abs(executedLocal) >= 1) executedByInvestor.set(id, executedLocal);
     });
 
     // The household leg, rationed at the same fill the institutions get — the AP cannot choose
     // whose basket to carry. Paid for out of the deposits stage 02 credited this week, so the
     // money genuinely leaves the household balance sheet to buy the shares.
-    let householdExecutedUSD = householdLocal * fillRatio * householdCashFillRatio;
+    let householdExecutedLocal = householdLocal * fillRatio * householdCashFillRatio;
     // A household cannot redeem more than it holds — the register has always trimmed the
     // share leg at the holding (household-balance-sheet); now that the CASH leg is a real
     // payment, the same trim applies to it, or a household would be paid for shares it does not
     // hold. One number for both legs.
-    if (householdExecutedUSD < 0) {
+    if (householdExecutedLocal < 0) {
       const held = ctx.updatedRegions[fund.region]?.householdState?.etfShares
         ?.find((x) => x.fundId === fund.id);
       const heldLocal = (held?.shares ?? 0) * navPerShare;
-      householdExecutedUSD = Math.max(-heldLocal, householdExecutedUSD);
+      householdExecutedLocal = Math.max(-heldLocal, householdExecutedLocal);
     }
-    if (householdExecutedUSD !== 0) {
+    if (householdExecutedLocal !== 0) {
       // A REAL payment now, signed by direction. A purchase pays the fund out of the
       // household's deposits; a redemption pays the household out of the fund's cash. Settlement
       // moves the household deposit and the pending bank leg (T+1 to the banks, the standing
       // convention) and the fund's cash with its home bank's institutional line — so
       // household-balance-sheet no longer debits the deposit view or the pending itself, which
       // was the hand-off's other half. The SHARE register still settles there.
-      pay(ctx, householdExecutedUSD > 0
+      pay(ctx, householdExecutedLocal > 0
         ? {
           payer: { kind: 'HOUSEHOLD', region: fund.region },
           payee: { kind: 'INSTITUTION', id: fund.id },
-          amount: householdExecutedUSD,
+          amount: householdExecutedLocal,
           currency: currencyOf(fund.region),
           reason: 'etf household flow',
         }
         : {
           payer: { kind: 'INSTITUTION', id: fund.id },
           payee: { kind: 'HOUSEHOLD', region: fund.region },
-          amount: -householdExecutedUSD,
+          amount: -householdExecutedLocal,
           currency: currencyOf(fund.region),
           reason: 'etf household flow',
         });
       // The register settles shares at the SAME price this cash leg paid — the fund's
       // book is mid-flight when household-balance-sheet reads it (the payment applies at the
       // close), so a re-derived NAV divided by an empty week-one book there.
-      householdExecutedByFund.set(fund.id, { spentUSD: householdExecutedUSD, navPerShare });
+      householdExecutedByFund.set(fund.id, { spentLocal: householdExecutedLocal, navPerShare });
     }
-    executedByInvestor.forEach((executedUSD, id) => {
-      if (executedUSD < 0) {
+    executedByInvestor.forEach((executedLocal, id) => {
+      if (executedLocal < 0) {
         // IN KIND: the basket goes out, not money. Recorded here and delivered in one pass below,
         // because the fund's own book has to be sliced once for every redeemer at once rather
         // than shrunk under each of them in turn.
         const byFund = inKindRedemptionsByInvestor.get(id) ?? new Map<string, number>();
-        byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + -executedUSD);
+        byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + -executedLocal);
         inKindRedemptionsByInvestor.set(id, byFund);
       } else {
         // A creation is a PAYMENT — this file used to contain no pay call at all, so
@@ -499,12 +499,12 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id },
           payee: { kind: 'INSTITUTION', id: fund.id },
-          amount: executedUSD,
+          amount: executedLocal,
           currency: currencyOf(fund.region),
           reason: 'etf shares created',
         });
       }
-      const shares = executedUSD / navPerShare;
+      const shares = executedLocal / navPerShare;
       const byFund = holdingsDeltaByInvestor.get(id) ?? new Map<string, number>();
       byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + shares);
       holdingsDeltaByInvestor.set(id, byFund);
@@ -512,16 +512,16 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
 
     // Shares are cancelled whether the redemption paid cash or a basket, so the register moves on
     // the whole executed flow — not just the part that moved money.
-    let executedNetUSD = householdExecutedUSD;
-    executedByInvestor.forEach((usd) => { executedNetUSD += usd; });
-    const createdShares = executedNetUSD / navPerShare;
-    const unabsorbedUSD = Math.abs(netUSD) - absorbedUSD;
+    let executedNetLocal = householdExecutedLocal;
+    executedByInvestor.forEach((usd) => { executedNetLocal += usd; });
+    const createdShares = executedNetLocal / navPerShare;
+    const unabsorbedLocal = Math.abs(netLocal) - absorbedLocal;
     fund.etf = {
       ...fund.etf!,
       sharesOutstanding: Math.max(0, sharesOutstanding + createdShares),
       // The share of THIS WEEK'S FLOW the arbitrage could not carry — bounded in [-1, 1] because
       // it is a fraction of the flow, not of the fund.
-      unmetFlowShare: Math.abs(netUSD) > 0 ? (Math.sign(netUSD) * unabsorbedUSD) / Math.abs(netUSD) : 0,
+      unmetFlowShare: Math.abs(netLocal) > 0 ? (Math.sign(netLocal) * unabsorbedLocal) / Math.abs(netLocal) : 0,
     };
   });
 
@@ -537,7 +537,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   if (inKindOwedByFund.size > 0) {
     const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
     let delivered = false;
-    const fundAssetsUSD = new Map<string, number>();
+    const fundAssetsLocal = new Map<string, number>();
     // The cash the slice loop has NOT yet promised. The payments below settle at the
     // close, so `fund.cashLocal` never falls between redeemers — while `share` renormalizes
     // against the SHRUNKEN total. Two 40%-of-the-fund redeemers therefore took 0.4 + 0.667 of
@@ -550,19 +550,19 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       const fund = entityById.get(fundId);
       if (!fund) return;
       // holdings flip: row walk on the mirror.
-      let holdingsUSD = 0;
-      { const H = ctx.v2.holdings; for (let r = bookHeadOf(ctx.v2, fundId); r >= 0; r = H.next[r]) holdingsUSD += H.qtyLocal[r]; }
-      fundAssetsUSD.set(fundId, holdingsUSD + institutionSpendableUSD(ctx, fund, false));
-      remainingCashByFund.set(fundId, institutionSpendableUSD(ctx, fund, false));
+      let holdingsLocal = 0;
+      { const H = ctx.v2.holdings; for (let r = bookHeadOf(ctx.v2, fundId); r >= 0; r = H.next[r]) holdingsLocal += H.qtyLocal[r]; }
+      fundAssetsLocal.set(fundId, holdingsLocal + institutionSpendableLocal(ctx, fund, false));
+      remainingCashByFund.set(fundId, institutionSpendableLocal(ctx, fund, false));
     });
     inKindRedemptionsByInvestor.forEach((byFund, investorId) => {
-      byFund.forEach((owedUSD, fundId) => {
+      byFund.forEach((owedLocal, fundId) => {
         const fund = entityById.get(fundId);
-        const totalLocal = fundAssetsUSD.get(fundId) ?? 0;
-        if (!fund || !(totalLocal > 0) || !(owedUSD > 0)) return;
+        const totalLocal = fundAssetsLocal.get(fundId) ?? 0;
+        if (!fund || !(totalLocal > 0) || !(owedLocal > 0)) return;
         // A redeemer cannot take more of the fund than there is; a fund whose whole book is owed
         // out is a fund being wound up, which is a real outcome rather than a failure to settle.
-        const share = Math.min(1, owedUSD / totalLocal);
+        const share = Math.min(1, owedLocal / totalLocal);
         const rows: ItemizedHolding[] = [];
         // The basket slice reads the fund's rows; W2 then moves it by wire,
         // fund → investor, BEFORE the next redeemer reads the fund — its slice is of what is left
@@ -609,19 +609,19 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         // fund owns, and leaving the cash behind would hand the last redeemer a fund of pure
         // cash. Sliced from the REMAINING balance — the same base the renormalized
         // `share` divides — never from the live field the settlement has not yet debited.
-        const remainingCashUSD = remainingCashByFund.get(fundId) ?? 0;
-        const cashSliceUSD = remainingCashUSD * share;
-        remainingCashByFund.set(fundId, remainingCashUSD - cashSliceUSD);
-        if (cashSliceUSD > 0) {
+        const remainingCashLocal = remainingCashByFund.get(fundId) ?? 0;
+        const cashSliceLocal = remainingCashLocal * share;
+        remainingCashByFund.set(fundId, remainingCashLocal - cashSliceLocal);
+        if (cashSliceLocal > 0) {
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: fundId },
             payee: { kind: 'INSTITUTION', id: investorId },
-            amount: cashSliceUSD,
+            amount: cashSliceLocal,
             currency: obligationCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: fundId }),
             reason: 'etf in-kind redemption: cash slice',
           });
         }
-        fundAssetsUSD.set(fundId, totalLocal * (1 - share));
+        fundAssetsLocal.set(fundId, totalLocal * (1 - share));
       });
     });
     if (delivered) bumpRegister(ctx);
@@ -696,19 +696,19 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         ? fund.etf!.marketPricePerShare : navPerShare,
       statKind: 'PRICE_LIKE',
       durationYears: 0,
-      primaryOfferingUSD: apCreationShares,
+      primaryOfferingLocal: apCreationShares,
       // An AP does not create shares to sell below what the basket behind them is worth.
       primaryWithdrawStat: navPerShare,
     };
 
     const participants: ClearingParticipant[] = [];
     heldSharesByInvestor.forEach((shares, investorId) => {
-      const wantUSD = plan.wantDelta.get(investorId) ?? 0;
+      const wantLocal = plan.wantDelta.get(investorId) ?? 0;
       // A HOLDER MAY SELL. Floored at what it already owns, no participant could ever post a
       // target below its position: the only supply in the book was the AP's primary offering,
       // so the print was pinned at the reservation whenever AP capacity was short — a premium
       // that was a bound, not a clearing. A share count cannot go negative; nothing else bounds it.
-      const targetShares = Math.max(0, shares + wantUSD / navPerShare);
+      const targetShares = Math.max(0, shares + wantLocal / navPerShare);
       participants.push({
         id: investorId,
         currentHoldingsByInstrumentId: new Map([[instrumentId, shares]]),
@@ -782,7 +782,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.entityType !== 'ETF' || !e.etf) return;
     const shares = e.etf.sharesOutstanding;
-    const navPerShare = shares > 0 ? fundNavUSD(ctx.v2, e) / shares : ETF_INCEPTION_NAV_PER_SHARE;
+    const navPerShare = shares > 0 ? fundNavLocal(ctx.v2, e) / shares : ETF_INCEPTION_NAV_PER_SHARE;
     const marketPrice = e.etf.marketPricePerShare;
     finalNavPerShareByFund.set(e.id, marketPrice && marketPrice > 0 ? marketPrice : navPerShare);
   });
@@ -804,5 +804,5 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
 
   // The household creation leg is handed to `household-balance-sheet.ts`, which owns the
   // household books. This stage owns the FLOW — who wanted what, and what the dealers could carry.
-  ctx.householdEtfPurchasesUSD = householdExecutedByFund;
+  ctx.householdEtfPurchasesLocal = householdExecutedByFund;
 }

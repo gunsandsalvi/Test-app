@@ -56,7 +56,7 @@ function p2(state: GameState, week: number): AuditFinding[] {
   const closed = (state.estates ?? []).filter((e) => e.closedWeek !== undefined);
   if (closed.length >= 5) {
     const owed = sum(closed, (e) => sum(e.claims.filter((c) => c.seniority < 99 && c.instrumentType !== 'EQUITY'), (c) => c.principalLocal));
-    const got = sum(closed, (e) => sum(e.claims.filter((c) => c.seniority < 99 && c.instrumentType !== 'EQUITY'), (c) => c.recoveredUSD));
+    const got = sum(closed, (e) => sum(e.claims.filter((c) => c.seniority < 99 && c.instrumentType !== 'EQUITY'), (c) => c.recoveredLocal));
     const rec = owed > 0 ? got / owed : NaN;
     if (Number.isFinite(rec) && Math.abs(rec - 0.4) > 0.2) out.push({ family: 'P', check: 'P2 recovery priced = recovery delivered', week, usd: rec, message: `${closed.length} closed estates paid ${pct(rec)} of debt claims; every spread is priced at 40%` });
   }
@@ -156,7 +156,7 @@ function p5(state: GameState, week: number): AuditFinding[] {
     issuerById: (id: string) => byId.get(id),
     regionById: (r: string) => state.regions[r as RegionId],
   };
-  let faceLocal = 0, markedUSD = 0, impliedUSD = 0, rows = 0, unpriced = 0;
+  let faceLocal = 0, markedLocal = 0, impliedLocal = 0, rows = 0, unpriced = 0;
   let widest = { id: '', gapLocal: 0 };
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
@@ -167,16 +167,16 @@ function p5(state: GameState, week: number): AuditFinding[] {
       const price = trancheClearedPricePerFace(world, v2, h.instrumentId, week);
       if (price === undefined) { unpriced++; return; }
       faceLocal += face;
-      markedUSD += h.quantityOrNotionalLocal ?? 0;
-      impliedUSD += face * price;
+      markedLocal += h.quantityOrNotionalLocal ?? 0;
+      impliedLocal += face * price;
       rows++;
       const gap = (h.quantityOrNotionalLocal ?? 0) - face * price;
       if (Math.abs(gap) > Math.abs(widest.gapLocal)) widest = { id: h.instrumentId, gapLocal: gap };
     });
   });
-  const gapLocal = markedUSD - impliedUSD;
+  const gapLocal = markedLocal - impliedLocal;
   if (rows > 0 && Math.abs(gapLocal) > 1e6) {
-    out.push({ family: 'P', check: 'P5 the register marks credit at its cleared spread', week, usd: gapLocal, message: `${rows} credit rows on ${B(faceLocal)} of face are marked at ${B(markedUSD)} against ${B(impliedUSD)} implied by their own cleared spreads — a ${B(gapLocal)} gap (widest ${widest.id} by ${B(widest.gapLocal)}${unpriced ? `; ${unpriced} rows could not be priced` : ''})` });
+    out.push({ family: 'P', check: 'P5 the register marks credit at its cleared spread', week, usd: gapLocal, message: `${rows} credit rows on ${B(faceLocal)} of face are marked at ${B(markedLocal)} against ${B(impliedLocal)} implied by their own cleared spreads — a ${B(gapLocal)} gap (widest ${widest.id} by ${B(widest.gapLocal)}${unpriced ? `; ${unpriced} rows could not be priced` : ''})` });
   }
   return out;
 }
@@ -247,7 +247,7 @@ export function auditPrices(state: GameState, week: number): AuditFinding[] {
 function p8(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
-  let faceLocal = 0, impliedUSD = 0, rungs = 0;
+  let faceLocal = 0, impliedLocal = 0, rungs = 0;
   const byRegion: string[] = [];
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
@@ -263,14 +263,14 @@ function p8(state: GameState, week: number): AuditFinding[] {
       rungs++;
     });
     if (face > 0) {
-      faceLocal += face; impliedUSD += implied;
+      faceLocal += face; impliedLocal += implied;
       byRegion.push(`${r} ${pct(implied / face - 1)}`);
     }
   });
-  const gapLocal = faceLocal - impliedUSD;
+  const gapLocal = faceLocal - impliedLocal;
   if (rungs > 0 && Math.abs(gapLocal) > 1e6) {
     out.push({ family: 'P', check: 'P8 the sovereign book is carried at par', week, usd: gapLocal,
-      message: `${rungs} sovereign rungs on ${B(faceLocal)} of face are carried at face against ${B(impliedUSD)} implied by the curve this book itself cleared — a ${B(gapLocal)} gap (${byRegion.join(' | ')}); the auction prices it now, and the register still carries it at par` });
+      message: `${rungs} sovereign rungs on ${B(faceLocal)} of face are carried at face against ${B(impliedLocal)} implied by the curve this book itself cleared — a ${B(gapLocal)} gap (${byRegion.join(' | ')}); the auction prices it now, and the register still carries it at par` });
   }
   return out;
 }

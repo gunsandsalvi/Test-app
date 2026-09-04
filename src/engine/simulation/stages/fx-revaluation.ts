@@ -24,7 +24,7 @@
 import { GameState, RegionId } from '../../../types';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { openFxWeek } from '../../../engine2/world';
-import { centralBankAssetsUSD, centralBankLiabilitiesUSD } from '../../../domain/central-bank';
+import { centralBankAssetsLocal, centralBankLiabilitiesLocal } from '../../../domain/central-bank';
 import { bankReservesOf, treasuryAccountOf, waysAndMeansOf, stateDepositLines } from '../../ledger/accounts';
 import { depositsOf } from '../../../domain/banking';
 
@@ -50,8 +50,8 @@ const centralBankNetOf = (state: GameState, region: RegionId): number => {
   const reserves = state.companies
     .filter((c) => c.region === region && c.isBankEntity && c.bankBalanceSheet)
     .reduce((a, c) => a + bankReservesOf(v2, c.ticker), 0);
-  return centralBankAssetsUSD(cb, waysAndMeansOf(v2, region), currencyOf(region), v2.fx)
-    - centralBankLiabilitiesUSD(cb, reserves, treasuryAccountOf(v2, region));
+  return centralBankAssetsLocal(cb, waysAndMeansOf(v2, region), currencyOf(region), v2.fx)
+    - centralBankLiabilitiesLocal(cb, reserves, treasuryAccountOf(v2, region));
 };
 
 export function runFxRevaluationStage(state: GameState): void {
@@ -66,7 +66,7 @@ export function runFxRevaluationStage(state: GameState): void {
 
   // The rate the last auction cleared becomes the rate in force. Nothing else in the week may
   // move it: two reads of one balance at two rates is a revaluation reported as a leak.
-  let bankGainUSD = 0, cbGainUSD = 0;
+  let bankGainLocal = 0, cbGainLocal = 0;
   openFxWeek(state.v2!);
 
   banks.forEach((b) => {
@@ -75,7 +75,7 @@ export function runFxRevaluationStage(state: GameState): void {
     // depositor's book (a ledger read) and against the bank as a liability, and the two net.
     const gain = bankNetOf(state, b.ticker) - (bankBefore.get(b.ticker) ?? 0);
     if (Math.abs(gain) > MIN_MARK) b.bankBalanceSheet!.bankEquityLocal += gain;
-    bankGainUSD += gain;
+    bankGainLocal += gain;
   });
 
   REGION_IDS.forEach((r) => {
@@ -84,11 +84,11 @@ export function runFxRevaluationStage(state: GameState): void {
     // A central bank's revaluation account, which is what the account is FOR: the gain is
     // unrealised and is not remitted (the sheet's "no retained earnings" note is about income).
     const gain = centralBankNetOf(state, r) - (cbBefore.get(r) ?? 0);
-    if (Math.abs(gain) > MIN_MARK) cb.fxRevaluationUSD = (cb.fxRevaluationUSD ?? 0) + gain;
-    cbGainUSD += gain;
+    if (Math.abs(gain) > MIN_MARK) cb.fxRevaluationLocal = (cb.fxRevaluationLocal ?? 0) + gain;
+    cbGainLocal += gain;
   });
   state.lastFxRevaluation = {
-    bookedUSD: bankGainUSD + cbGainUSD,
+    bookedLocal: bankGainLocal + cbGainLocal,
     fxBefore,
     fxAfter: { ...(state.v2!.fx as unknown as Record<string, number>) },
   };

@@ -49,7 +49,7 @@ export const institution = defineObject<InstitutionalEntity>({
   },
   overview({ world, obj: e, nav }) {
     const book = bookOf(world, e.id);
-    const holdingsUSD = book.reduce((a, r) => a + r.usd, 0);
+    const holdingsLocal = book.reduce((a, r) => a + r.usd, 0);
     const assets = tapeSeries(world, `institution:${e.id}:assets`).values;
     const manager = world.state.companies.find((c) => c.id === e.id || (c.managesEntityIds ?? []).includes(e.id));
     const bank = e.homeBankTicker ? world.state.companies.find((b) => b.ticker === e.homeBankTicker) : undefined;
@@ -58,8 +58,8 @@ export const institution = defineObject<InstitutionalEntity>({
     const contracts = contractsOf(world, { kind: 'INSTITUTION', key: e.id });
     const strategy = hedgeFundStrategyProfile(e);
     const t = e.assetAllocationTarget;
-    const totalAssetsUSD = institutionTotalAssetsFromState(world.state, e);
-    const eCashUSD = entityCashOf(ensureV2(world.state), e);
+    const totalAssetsLocal = institutionTotalAssetsFromState(world.state, e);
+    const eCashLocal = entityCashOf(ensureV2(world.state), e);
     return (
       <>
         <ObjectHeader
@@ -71,16 +71,16 @@ export const institution = defineObject<InstitutionalEntity>({
           flag={e.isDefaulted ? 'in default' : undefined}
         />
         <StatGrid>
-          <Stat label="assets" value={money(totalAssetsUSD)} sub={<ChangeSub series={assets} />} />
-          <Stat label="cash" value={money(eCashUSD)} sub={totalAssetsUSD > 0 ? `${pctLevel(eCashUSD / totalAssetsUSD, 0)} of assets` : ''} neg={eCashUSD < 0} />
-          <Stat label="equity" value={money(e.equityCapitalLocal)} sub={totalAssetsUSD > 0 ? `${pctLevel(e.equityCapitalLocal / totalAssetsUSD, 0)} of assets` : ''} />
+          <Stat label="assets" value={money(totalAssetsLocal)} sub={<ChangeSub series={assets} />} />
+          <Stat label="cash" value={money(eCashLocal)} sub={totalAssetsLocal > 0 ? `${pctLevel(eCashLocal / totalAssetsLocal, 0)} of assets` : ''} neg={eCashLocal < 0} />
+          <Stat label="equity" value={money(e.equityCapitalLocal)} sub={totalAssetsLocal > 0 ? `${pctLevel(e.equityCapitalLocal / totalAssetsLocal, 0)} of assets` : ''} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
-          <KV k="holdings" hint={`${book.length} positions`} v={money(holdingsUSD)} onTap={() => nav.go('holdings')} />
+          <KV k="holdings" hint={`${book.length} positions`} v={money(holdingsLocal)} onTap={() => nav.go('holdings')} />
           {[...byType.entries()].sort((a, b) => b[1] - a[1]).map(([ty, usd]) => <KV key={ty} k={words(ty)} v={money(usd)} />)}
-          {e.beneficiaryLiabilityUSD !== undefined ? <KV k="owed to beneficiaries" v={money(e.beneficiaryLiabilityUSD)} /> : null}
+          {e.beneficiaryLiabilityLocal !== undefined ? <KV k="owed to beneficiaries" v={money(e.beneficiaryLiabilityLocal)} /> : null}
           {e.stockPrice > 0 ? <KV k="price per share" v={num(e.stockPrice)} /> : null}
-          {e.primeBrokerageAvailableUSD !== undefined ? <KV k="prime brokerage line" v={money(e.primeBrokerageAvailableUSD)} /> : null}
+          {e.primeBrokerageAvailableLocal !== undefined ? <KV k="prime brokerage line" v={money(e.primeBrokerageAvailableLocal)} /> : null}
           {e.etf ? <KV k="tracks" v={<Link to={{ type: 'index', id: e.etf.indexId }} nav={nav}>{e.etf.indexId}</Link>} /> : null}
           {e.peFund ? <KV k="portfolio companies" v={count(e.peFund.portfolioCompanyIds?.length ?? 0)} onTap={() => nav.go('links')} /> : null}
         </Card>

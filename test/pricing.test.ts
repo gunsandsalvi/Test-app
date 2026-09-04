@@ -9,7 +9,7 @@ import {
   zeroRateAt, priceFromSpreadBps, spreadBpsFromPrice, priceFromYield, yieldFromPrice, ZeroCurve,
 } from '../src/domain/pricing';
 import { ASSET_REGISTRY } from '../src/domain/assets';
-import { discountBillProceedsUSD, billYieldFromPrice } from '../src/domain/government';
+import { discountBillProceedsLocal, billYieldFromPrice } from '../src/domain/government';
 
 const FLAT: ZeroCurve = { tenor3M: 0.04, tenor2Y: 0.04, tenor5Y: 0.04, tenor10Y: 0.04, tenor30Y: 0.04 };
 
@@ -130,12 +130,12 @@ test('a bill round trips on SIMPLE interest, which is not what a coupon bond use
   // turn a yield into a price.
   for (const years of [0.25, 0.5, 1]) {
     for (const y of [0, 0.02, 0.05, 0.10]) {
-      const p = discountBillProceedsUSD(1, y, years);
+      const p = discountBillProceedsLocal(1, y, years);
       assert.ok(Math.abs(billYieldFromPrice(p, years) - y) < 1e-12, `bill round trip at ${y}, ${years}y`);
     }
   }
   // And they are genuinely different numbers, so neither can stand in for the other.
-  const simple = discountBillProceedsUSD(1, 0.05, 0.25);
+  const simple = discountBillProceedsLocal(1, 0.05, 0.25);
   const compound = priceFromYield({ annualCouponRate: 0, periodWeeks: 13, weeksToMaturity: 13 }, 0.05);
   assert.ok(Math.abs(simple - compound) > 1e-5, 'simple and compound differ on a 13-week bill');
 });

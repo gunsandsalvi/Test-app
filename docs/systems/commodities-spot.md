@@ -108,7 +108,7 @@ checked by `scripts/check-atlas.sh`.
 | E3 a producing region's terms of trade move with the price | — | ❌ |
 | E4 VERIFY the shock propagates along the chain, not directly | — | ❌ |
 | **F1 FORBID no consumption without production or inventory** | `src/engine/macro/evolution.ts:demandUnits` | ❌ |
-| **F2 FORBID no negative inventory** | `src/engine/simulation/stages/04-input-output.ts:inventoryLevelUSD` | ⚠️ |
+| **F2 FORBID no negative inventory** | `src/engine/simulation/stages/04-input-output.ts:inventoryLevelLocal` | ⚠️ |
 | **F3 FORBID no price from a written path** | `src/engine/macro/evolution.ts:safeDriftExponent` | ❌ |
 
 ---
