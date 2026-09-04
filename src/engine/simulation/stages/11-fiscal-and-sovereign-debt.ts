@@ -29,6 +29,7 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { encumberedFaceByBond, repoBorrowedLocal, srfBorrowedLocal } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
 import { instrumentEntries, type InstrumentId } from '../../../domain/ids';
+import { governmentEntityId } from '../../../domain/entity-keys';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds = REGION_IDS;
@@ -728,7 +729,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // this replaces derived the same two wires from a rebuilt list, one step further from what
     // happened. `reconcileLadderByWire` goes with it.
     {
-      const govIssuer = { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' as const };
+      const govIssuer = { id: governmentEntityId(regionId), ticker: governmentEntityId(regionId), region: regionId, kind: 'GOVERNMENT' as const };
       const S = ctx.v2.tranches;
       const matured = new Set(maturedTranches.map((m) => m.id));
       const keep: number[] = [];

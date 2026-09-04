@@ -22,6 +22,7 @@ import { InstrumentId, asInstrumentId } from '../domain/ids';
 import { forgetClearedPrice } from './prices';
 import { defect } from '../domain/defect';
 import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type TickerRef, type EntityRef } from './refs';
+import { governmentEntityId } from '../domain/entity-keys';
 
 export const TR_FLOATING = 1;
 export const TR_CP = 2;
@@ -365,7 +366,7 @@ export function materializeTranche(v2: V2World, r: number): DebtTranche {
  * separately.
  */
 export function materializeGovLadder(v2: V2World, regionId: string): GovDebtTrancheView[] {
-  return materializeLadder(v2, `GOV_${regionId}`).map((t) => govTrancheView({
+  return materializeLadder(v2, governmentEntityId(regionId as Parameters<typeof governmentEntityId>[0])).map((t) => govTrancheView({
     ...t,
     // A sovereign always states a coupon — fixed on a bond, and on a bill the rate its discount
     // is struck from (`bond.md` N5). Absent is not "zero", it is a rung that was written without

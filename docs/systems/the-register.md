@@ -93,6 +93,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.c the quantity is in the instrument's own unit | `src/engine2/holdings.ts:HoldingStore` | ✅ |
 | A2 a holding is a claim on a named issuer | `src/engine2/holdings.ts:pushBookRow` | ✅ |
 | A2.a it pays to whoever the register says holds it, then | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
+| **A4 FORBID no holding without an issuer** — the SEED's half | `src/engine/ledger/holdings-ledger.ts:issuerOfHoldingRow` · `src/domain/entity-keys.ts:governmentEntityId` | ✅ |
 | **A3 FORBID no holding without a holder** | `src/engine2/holdings.ts:bookHeadOf` | ✅ |
 | **A4 FORBID no holding without an issuer** | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | B1 an instrument has an issued amount | `src/engine/ledger/tranche-ledger.ts:issueTranche` | ✅ |
@@ -189,6 +190,27 @@ named. Under one table that question had no answer — ~15 type tags and 5 regio
 among thousands of ids — and it is the question slice (d)'s instrument index is built on.
 
 F1 stays `⚠️` overall for the reason below, which is about a key, not about the spaces.
+
+### ✅ A4 — CLOSED AT THE SEED: EVERY OPENING CREDIT ROW NAMED AN ISSUER THAT DOES NOT EXIST
+
+A4 forbids a holding without an issuer. The seed opens every institution's book by wiring each
+holding FROM its issuer, and it found that issuer by looking the row's `instrumentId` up in a map
+keyed by COMPANY id. That worked while a corporate bond's row named its company. It stopped at
+§9.13-CREDIT row 1, when those rows began naming a TRANCHE: `corporateTrancheId` builds `ACME-T1`,
+`companyEntityId` builds `USA_ACME`, and the two are never equal — so the lookup could not hit, and
+**every seeded corporate-bond and leveraged-loan row was issued from `{ INSTITUTION, id:
+'<trancheId>' }`**, a party with no entity behind it, interned into the party table and wired from.
+
+Both seed paths carried the rule, written out twice and identically — including the comment
+asserting the thing that had become false. They are one function now
+(`holdings-ledger.ts:issuerOfHoldingRow`), which asks `issuerIdOf` instead of assuming: a tranche
+resolves to its issuer, and anything that is not a tranche is its own issuer, so equity and fund
+shares resolve exactly as before. `test/seed-issuer.test.ts` pins both halves and fails without the
+fix.
+
+**How it hid.** Two copies of a rule are two places for it to rot, and these rotted together — and
+`O8`, which checks that parties are alive, reads the derivatives book rather than the register's
+issuer side, so nothing was looking.
 
 ### ⚠️ F1 / F1.a — ONE INSTRUMENT, TWO KEYS: THE ETF SHARE
 

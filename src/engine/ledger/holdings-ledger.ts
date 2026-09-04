@@ -26,6 +26,8 @@ import { wire, AssetKind, ASSET_KINDS } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { RegionId } from '../../domain/geography';
 import { defect } from '../../domain/defect';
+import { issuerIdOf } from '../../engine2/tranches';
+import { holdingClassOf } from '../../domain/assets';
 
 export type HoldingKind = ItemizedHolding['instrumentType'];
 
@@ -77,6 +79,31 @@ const holderIdOf = (p: PartyRef): string | undefined => (
   p.kind === 'INSTITUTION' ? p.id
     : p.kind === 'HOUSEHOLD' ? householdBookId(p.region)
       : undefined);
+
+/**
+ * §3.13-BOOK slice (c) — WHO ISSUED THE PAPER ON THIS ROW.
+ *
+ * Written twice, identically, in `core.ts` and `simulation/initialization.ts` — the two paths that
+ * open a book by wiring each holding from its issuer. Both carried the same comment claiming a
+ * corporate bond's row names its COMPANY, and both were wrong about it in the same way: since
+ * §9.13-CREDIT row 1 those rows name a TRANCHE (`ACME-T1`), while the ticker map is keyed by the
+ * company id (`USA_ACME`), so the lookup could never hit and every seeded corporate-bond and
+ * leveraged-loan row was issued from `{ INSTITUTION, id: <trancheId> }` — a party that does not
+ * exist, interned into the party table and wired from.
+ *
+ * Asking `issuerIdOf` is the fix and it is also why this is one function now: two copies of a
+ * rule are two places for it to rot, and these two rotted together.
+ */
+export function issuerOfHoldingRow(
+  v2: V2World, h: ItemizedHolding, tickerByEntityId: ReadonlyMap<string, string>,
+): PartyRef {
+  // The registry says which kinds are sovereign; this does not switch on the kind itself.
+  if (holdingClassOf(h.instrumentType) === 'SOVEREIGN') return { kind: 'GOVERNMENT', region: h.issuerRegion };
+  // A tranche resolves to its issuer; anything else — equity, a fund's own shares — is its own
+  // issuer, so those two resolve exactly as they did before.
+  const ticker = tickerByEntityId.get(issuerIdOf(v2, h.instrumentId));
+  return ticker ? { kind: 'COMPANY', ticker } : { kind: 'INSTITUTION', id: h.instrumentId };
+}
 
 /**
  * EVERY BOOK THE REGISTER HOLDS, and the party each one pays and is paid as.

@@ -476,9 +476,22 @@ written from here):
     b. **SPLIT THE INTERN TABLE — DONE, in §9.** Seven spaces, seven numberings, the whole table
        behind fifteen functions in `world.ts`, and `refs.instruments.strings` is now the list of
        every instrument the world has named — which is what (d) is built on.
-    c. **THE ENTITY REGISTRY** — one store; `PartyRef` becomes a VIEW of it rather than a parallel
-       union; the ByTicker maps collapse; `O8`'s party arm widens from the derivatives book to
-       every party-keyed store.
+    c. **THE ENTITY REGISTRY.** **c1 is done, in §9** — the seed defect it found, and one name for
+       the treasury where there were five. **The branding is c2, and it must be sliced the way (b)
+       was.** A first attempt branded `Company.id` and `InstitutionalEntity.id` together and reached
+       ~70 outstanding errors across 30 files with the tree red throughout; three automated passes
+       each had to be partly reverted, because the compiler cannot tell an ENTITY id from a
+       PARTICIPANT id (`DESK-<ticker>`) or from a REGION, and a WRONG brand is worse than none — it
+       is a lie the compiler then enforces. So c2 is:
+         · **c2a** `Company.id` alone, reading every site.
+         · **c2b** `InstitutionalEntity.id` and `PartyRef`'s INSTITUTION arm.
+         · **c2c** the stages, one file at a time.
+       Each small enough that every site is read rather than pattern-matched. The measurement that
+       says this is necessary: 128 `ByTicker` maps and 756 `.ticker` references are the real size of
+       (c), and nothing about it is mechanical.
+    c-then. **ONE STORE**; `PartyRef` becomes a VIEW of it rather than a parallel union; the
+       ByTicker maps collapse; `O8`'s party arm widens from the derivatives book to every
+       party-keyed store.
     d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
        share and contract gets a row: kind, issuer, **currency**, issued units, and nothing else.
        Terms stay in the class store, so the index copies no quantity and cannot drift.
@@ -1559,6 +1572,32 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c1) — THE SEED WIRED EVERY CORPORATE BOND FROM A PARTY THAT DOES NOT EXIST.**
+Going after the entity registry found the defect before it found the registry. The seed opens each
+institution's book by wiring every holding FROM its issuer, and it found that issuer by looking the
+row's `instrumentId` up in a map keyed by COMPANY id. True while a corporate bond's row named its
+company; false since §9.13-CREDIT row 1, when those rows began naming a TRANCHE. `ACME-T1` is never
+`USA_ACME`, so the lookup could not hit and **every seeded corporate-bond and leveraged-loan row was
+issued from `{ INSTITUTION, id: '<trancheId>' }`** — a party with no entity behind it, interned into
+the party table and wired from. Both seed paths held the rule, written out twice and identically,
+including the comment asserting the part that had become false; they are one function now
+(`holdings-ledger.ts:issuerOfHoldingRow`) that ASKS `issuerIdOf` rather than assuming, so a tranche
+resolves to its issuer and anything else stays its own. `test/seed-issuer.test.ts` pins both halves
+and was checked to fail without the fix.
+
+Also: **the treasury's id existed in five places** — a private `govIssuerId` in the seed, a bare
+template inside `materializeGovLadder`, and three identical `govIssuer` literals in the three stages
+that retire sovereign paper. `domain/entity-keys.ts` is the one statement of it, and the home the
+entity mints will use.
+
+**And what did NOT land, with the measurement.** Branding `Company.id` and `InstitutionalEntity.id`
+was attempted and reverted at ~70 outstanding errors across 30 files. The reason is worth keeping:
+the compiler cannot tell an ENTITY id from a clearing PARTICIPANT id (`DESK-<ticker>`) or from a
+REGION, so a pattern-matched brand is a guess, and three automated passes each had to be partly
+undone after branding a region, a company object and a participant as entities. A wrong brand is
+worse than no brand — it is a lie the compiler then enforces. §3 now carries (c) split into c2a/b/c,
+each small enough that every site is read. Gates green (150 tests); no run.
 
 **13-BOOK — THE READ VIEW REACHES THE OTHER THREE STORES, AND MONEY WAS THE ONE MISSING IT.**
 Inserted here (rule 10) rather than left to the end, because it is the user's own test of the step

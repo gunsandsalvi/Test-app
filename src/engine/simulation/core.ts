@@ -68,12 +68,12 @@ import { runTradeSettlementStage } from './stages/trade-settlement';
 // Side effect only: registers the (Node-only, env-gated) clearing worker pool with the engine.
 import './stages/clearing-worker-pool';
 import { ensureV2 } from '../../engine2/world';
-import {  assertLaddersInSync, materializeLadder, facilityBookOf, ensureLaddersSynced } from '../../engine2/tranches';
+import { assertLaddersInSync, materializeLadder, facilityBookOf, ensureLaddersSynced } from '../../engine2/tranches';
 import { seedLadder } from '../ledger/tranche-ledger';
-import { seedBook } from '../ledger/holdings-ledger';
+import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
 import type { ItemizedHolding } from '../../domain/banking';
 import type { PartyRef } from '../ledger/party';
-import { holdingClassOf } from '../../domain/assets';
+
 import { ensureBooksSynced, assertBooksInSync, materializeBook, clearDirtyBooks } from '../../engine2/holdings';
 import './stages/native-kernels';
 import { runFreightClearingStage } from './stages/freight-clearing';
@@ -159,12 +159,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // firm for equity and corporate paper (the id IS the company's), the treasury for a sovereign
     // tranche, the fund itself for its own shares.
     const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
-    const issuerOfHolding = (h: ItemizedHolding): PartyRef => {
-      // The registry says which kinds are sovereign; this does not switch on the kind itself.
-      if (holdingClassOf(h.instrumentType) === 'SOVEREIGN') return { kind: 'GOVERNMENT', region: h.issuerRegion };
-      const ticker = tickerById.get(h.instrumentId);
-      return ticker ? { kind: 'COMPANY', ticker } : { kind: 'INSTITUTION', id: h.instrumentId };
-    };
+    const issuerOfHolding = (h: ItemizedHolding): PartyRef => issuerOfHoldingRow(v2, h, tickerById);
     for (const e of state.institutionalEntities ?? []) {
       if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
     }

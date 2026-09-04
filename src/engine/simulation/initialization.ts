@@ -77,9 +77,9 @@ import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAnd
 import { openAccount, openingCashOf, stashOpeningCash, sectorRowAt, stashSeedHouseholdLine, seedGovLadderOf, mutableAccounts } from '../ledger/accounts';
 import { newWireJournal, setActiveWireJournal, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { seedLadder } from '../ledger/tranche-ledger';
-import { seedBook } from '../ledger/holdings-ledger';
+import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
 import type { PartyRef } from '../ledger/party';
-import { holdingClassOf } from '../../domain/assets';
+
 import { reasonText } from './stages/settlement';
 import { ensureV2 } from '../../engine2/world';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
@@ -108,12 +108,7 @@ import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageLocal } from '../bootstrap/labor-and-wages';
 import { decomposeGovernmentSpending, governmentObligationsWeeklyLocal } from '../../domain/government';
 import { marketCapOf, totalDebtOf } from '../../domain/company';
-import {
-  computeExpenditureGdpLocal,
-  GOV_PROCUREMENT_SHARE_OF_SPENDING,
-  computeHouseholdDisposableIncomeLocal,
-  UNEMPLOYMENT_REPLACEMENT_RATE,
-} from '../bootstrap/national-accounts';
+import { computeExpenditureGdpLocal, GOV_PROCUREMENT_SHARE_OF_SPENDING, computeHouseholdDisposableIncomeLocal, UNEMPLOYMENT_REPLACEMENT_RATE } from '../bootstrap/national-accounts';
 import { seedInstitutionTotalAssetsLocal } from '../../domain/institutions';
 import { equityInstrumentId, peFundInterestId } from '../../domain/instrument-keys';
 import type { InstrumentId } from '../../domain/ids';
@@ -399,11 +394,7 @@ function openSeededMirrors(state: GameState): void {
       seedLadder(v2, { id: govIssuerId(regionId), ticker: govIssuerId(regionId), region: regionId, kind: 'GOVERNMENT' }, ladder);
     });
     const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
-    const issuerOfHolding = (h: ItemizedHolding): PartyRef => {
-      if (holdingClassOf(h.instrumentType) === 'SOVEREIGN') return { kind: 'GOVERNMENT', region: h.issuerRegion };
-      const ticker = tickerById.get(h.instrumentId);
-      return ticker ? { kind: 'COMPANY', ticker } : { kind: 'INSTITUTION', id: h.instrumentId };
-    };
+    const issuerOfHolding = (h: ItemizedHolding): PartyRef => issuerOfHoldingRow(v2, h, tickerById);
     for (const e of state.institutionalEntities ?? []) {
       if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
     }
@@ -1810,6 +1801,4 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   };
   return state;
 }
-
-
 
