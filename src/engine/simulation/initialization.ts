@@ -112,6 +112,7 @@ import { computeExpenditureGdpLocal, GOV_PROCUREMENT_SHARE_OF_SPENDING, computeH
 import { seedInstitutionTotalAssetsLocal } from '../../domain/institutions';
 import { equityInstrumentId, peFundInterestId } from '../../domain/instrument-keys';
 import type { InstrumentId } from '../../domain/ids';
+import { governmentEntityId } from '../../domain/entity-keys';
 
 /**
  * Build a world. The same seed always builds the same world and, stepped the same number of
@@ -370,7 +371,6 @@ let seedV2: import('../../engine2/world').V2World;
  */
 /** The treasury's issuer id in the tranche store — one per region, stable for the run. It is a
  *  GOVERNMENT party (`TrancheIssuer.kind`), so its wires name the treasury and not a company. */
-const govIssuerId = (regionId: RegionId): string => `GOV_${regionId}`;
 
 function openSeededMirrors(state: GameState): void {
   const v2 = ensureV2(state);
@@ -391,7 +391,7 @@ function openSeededMirrors(state: GameState): void {
     (Object.keys(state.regions) as RegionId[]).forEach((regionId) => {
       const ladder = seedGovLadderOf(state.regions[regionId]);
       if (!ladder.length) return;
-      seedLadder(v2, { id: govIssuerId(regionId), ticker: govIssuerId(regionId), region: regionId, kind: 'GOVERNMENT' }, ladder);
+      seedLadder(v2, { id: governmentEntityId(regionId), ticker: governmentEntityId(regionId), region: regionId, kind: 'GOVERNMENT' }, ladder);
     });
     const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
     const issuerOfHolding = (h: ItemizedHolding): PartyRef => issuerOfHoldingRow(v2, h, tickerById);
@@ -1613,10 +1613,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // `corpBondOwnership.institutionalShare` of a ladder that included both, so the private
     // tier opened with a gap in the paper that IS traded and a double count in the paper that
     // is not.
-    const fixedOf = (f: Company) => (f.debtTranches || [])
-      .filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((a, t) => a + t.principalLocal, 0);
-    const floatOf = (f: Company) => (f.debtTranches || [])
-      .filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((a, t) => a + t.principalLocal, 0);
     const IG = ['AAA', 'AA', 'A', 'BBB'];
     const sleeve = (t: InstitutionalEntityType, ig: boolean) =>
       ig ? 1 : t === 'INSURER' ? 0.08 : t === 'PENSION_FUND' ? 0.10 : t === 'ASSET_MANAGER' ? 2.0 : 4.0;
@@ -1629,7 +1625,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const KIND_PCT: Record<'CORP_BOND' | 'LEVERAGED_LOAN', (e: InstitutionalEntity) => number> = {
       CORP_BOND: (e) => e.assetAllocationTarget.corpBondPct, LEVERAGED_LOAN: (e) => e.assetAllocationTarget.loanPct,
     };
-    void fixedOf; void floatOf;
     firms.forEach(f => {
       const ig = IG.includes(f.creditRating);
       (['CORP_BOND', 'LEVERAGED_LOAN'] as const).forEach(kind => {

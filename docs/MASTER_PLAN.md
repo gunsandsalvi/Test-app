@@ -1589,7 +1589,11 @@ and was checked to fail without the fix.
 Also: **the treasury's id existed in five places** — a private `govIssuerId` in the seed, a bare
 template inside `materializeGovLadder`, and three identical `govIssuer` literals in the three stages
 that retire sovereign paper. `domain/entity-keys.ts` is the one statement of it, and the home the
-entity mints will use.
+entity mints will use. **CORRECTION (same day):** that step landed FOUR of the five. The seed's own
+`govIssuerId` survived — the edit's replace did not match and the commit claimed a deletion that had
+not happened, because the claim was never checked against the file. It is deleted now, and the
+check that would have caught it is the one this step should have run: `grep` for the shape, not for
+the symbol.
 
 **And what did NOT land, with the measurement.** Branding `Company.id` and `InstitutionalEntity.id`
 was attempted and reverted at ~70 outstanding errors across 30 files. The reason is worth keeping:
