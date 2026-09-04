@@ -40,6 +40,7 @@ import { publicComparableEvMultiple } from './pe-lifecycle';
 import { REGION_IDS } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { } from '../../../domain/dealer-desk';
+import { ladderTotalLocal } from '../../../engine2/tranches';
 
 // Whose beneficiaries are households is the kind registry's `beneficiariesAreHouseholds` row
 // (domain/institution-profiles.ts) — a new kind states it or fails to build.
@@ -119,10 +120,10 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const institutionalClaimsLocal = institutionalClaims.reduce((a, c) => a + c.valueLocal, 0);
 
     // ---- 4. The rest of the real book, marked from this week's clears. ----
-    const evMultiple = publicComparableEvMultiple(region, ctx.updatedCompanies);
+    const evMultiple = publicComparableEvMultiple((c) => ladderTotalLocal(ctx.v2, c.id), region, ctx.updatedCompanies);
     const etfHoldingsLocal = householdEtfHoldingsLocal(ctx.v2, { etfShares }, ctx.updatedInstitutionalEntities);
     const directEquityLocal = householdDirectEquityLocal(ctx.v2, region);
-    const privateBusinessEquityLocal = householdPrivateBusinessEquityLocal(region, ctx.updatedCompanies, evMultiple);
+    const privateBusinessEquityLocal = householdPrivateBusinessEquityLocal(ctx.v2, region, ctx.updatedCompanies, evMultiple);
 
     // Household financial wealth is the claims that EXIST — fund shares,
     // the public float, private business equity, claims on institutions. The placeholder that

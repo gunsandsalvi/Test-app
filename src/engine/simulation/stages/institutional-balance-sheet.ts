@@ -177,11 +177,11 @@ export function institutionBookLocal(v2: V2World, entityId: string): number {
 }
 
 const evMultipleMemo = new WeakMap<object, Map<RegionId, number>>();
-function comparableMultiple(memoKey: object, region: RegionId, listed: Company[]): number {
+function comparableMultiple(v2: V2World, memoKey: object, region: RegionId, listed: Company[]): number {
   let m = evMultipleMemo.get(memoKey);
   if (!m) { m = new Map(); evMultipleMemo.set(memoKey, m); }
   let v = m.get(region);
-  if (v === undefined) { v = publicComparableEvMultiple(region, listed); m.set(region, v); }
+  if (v === undefined) { v = publicComparableEvMultiple((c) => ladderTotalLocal(v2, c.id), region, listed); m.set(region, v); }
   return v;
 }
 
@@ -198,7 +198,7 @@ function sponsorPortfolioLocal(entity: InstitutionalEntity, evMultiple: number, 
 export function institutionTotalAssetsLocal(ctx: WeeklyStepContext, entity: InstitutionalEntity): number {
   const pendingLocal = ctx.holdingsStore ? 0 : pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: entity.id });
   const portfolioLocal = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
-    ? sponsorPortfolioLocal(entity, comparableMultiple(ctx, entity.region, ctx.prevActiveFirms), privateFirmIndex(ctx), ctx.v2)
+    ? sponsorPortfolioLocal(entity, comparableMultiple(ctx.v2, ctx, entity.region, ctx.prevActiveFirms), privateFirmIndex(ctx), ctx.v2)
     : 0;
   return totalAssetsRead(entity, entityCashOf(ctx.v2, entity), institutionBookLocal(ctx.v2, entity.id), pendingLocal, portfolioLocal);
 }
@@ -213,7 +213,7 @@ function privateFirmIndex(ctx: WeeklyStepContext): Map<string, Company> {
 export function institutionTotalAssetsFromState(state: GameState, entity: InstitutionalEntity): number {
   const v2 = ensureV2(state);
   const portfolioLocal = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
-    ? sponsorPortfolioLocal(entity, comparableMultiple(state, entity.region, state.companies.filter((c) => isActiveCompany(c))),
+    ? sponsorPortfolioLocal(entity, comparableMultiple(ensureV2(state), state, entity.region, state.companies.filter((c) => isActiveCompany(c))),
         new Map(state.companies.filter((c) => !c.isBankEntity).map((c) => [c.id, c])), v2)
     : 0;
   return totalAssetsRead(entity, entityCashOf(v2, entity), institutionBookLocal(v2, entity.id), 0, portfolioLocal);

@@ -17,11 +17,11 @@ import { statementLocal, pct, pctLevel, ratio, changePct, money } from '../forma
 import { formatDate, quarterLabel } from '../calendar';
 import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
 import { bankRwaLocal } from '../../domain/bank-pricing';
-import { totalDebtOf } from '../../domain/company';
+
 import { cashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { entityCashOf } from '../../engine/ledger/accounts';
-import { facilityBookOf } from '../../engine2/tranches';
+import { facilityBookOf, ladderTotalLocal } from '../../engine2/tranches';
 
 interface Line { label: string; usd?: number; prior?: number; total?: boolean; text?: string }
 
@@ -148,7 +148,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
         { label: 'Cash', usd: cashOf(ensureV2(world.state), c) },
         { label: 'Gross plant', usd: c.grossPPELocal },
         { label: 'Accumulated depreciation', usd: -(c.accumulatedDepreciationLocal ?? 0) },
-        { label: 'Total debt', usd: totalDebtOf(c), total: true },
+        { label: 'Total debt', usd: ladderTotalLocal(ensureV2(world.state), c.id), total: true },
       ]} />
     );
   } else if (active === 'cash flow') {

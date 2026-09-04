@@ -37,7 +37,7 @@ import { STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../../credit-price';
 import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche } from '../../ledger/tranche-ledger';
-import { marketCapOf, totalDebtOf } from '../../../domain/company';
+import { marketCapOf } from '../../../domain/company';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, openingCashOf, entityCashOf, poolCashOf, obligationCurrencyOf } from '../../ledger/accounts';
 import { issueHolding } from '../../ledger/holdings-ledger';
@@ -69,6 +69,17 @@ const PATIENT_HOLDER_REQUIRED_RETURN = Math.min(
  * comparable earnings fetch is what they fetch.
  */
 export function publicComparableEvMultiple(
+  /**
+   * §3.13-READ C1 — THE LADDER, READ BY THE CALLER. It cannot be read here, because the two kinds
+   * of caller have two different sources and both are right. Inside a week the ladder is the
+   * tranche STORE (`ladderTotalLocal`): `Company.debtTranches` is rebuilt from it once, at
+   * `core.ts:450`, after every stage has run, so a mid-week read of the array is last week's
+   * leverage. At the SEED it is the array: `buildSeededGameState` runs before
+   * `openSeededMirrors`, so the store has no rows yet and the objects the generator wrote ARE the
+   * source. Naming the read at the call site is what keeps the seed's choice a decision rather
+   * than the accident it was when both sides silently took the array.
+   */
+  debtOf: (c: Company) => number,
   regionId: RegionId,
   listedCompanies: Company[]
 ): number {
@@ -76,7 +87,7 @@ export function publicComparableEvMultiple(
   const everywhere: number[] = [];
   listedCompanies.forEach((c) => {
     if (!isActiveCompany(c) || c.listingStatus === 'PRIVATE' || !(c.ebitda > 0) || !(marketCapOf(c) > 0)) return;
-    const m = (marketCapOf(c) + totalDebtOf(c)) / c.ebitda;
+    const m = (marketCapOf(c) + debtOf(c)) / c.ebitda;
     everywhere.push(m);
     if (c.region === regionId) inRegion.push(m);
   });
@@ -252,8 +263,12 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountLocal:
 
 const ebitdaOf = (c: Company) => Math.max(0, c.ebitda);
 const enterpriseValueLocal = (c: Company, evMultiple: number) => evMultiple * ebitdaOf(c);
-const equityValueLocal = (c: Company, evMultiple: number) =>
-  Math.max(0, enterpriseValueLocal(c, evMultiple) - totalDebtOf(c));
+/** §3.13-READ C1: the ladder is read from the STORE. `totalDebtOf` sums `Company.debtTranches`,
+ *  which `core.ts:450` rebuilds once a week after every stage has run — so mid-week it is last
+ *  week's ladder, and line 481 below already read the store for the same company in the same
+ *  expression. One firm, two debts, four lines apart. */
+const equityValueLocal = (v2: V2World, c: Company, evMultiple: number) =>
+  Math.max(0, enterpriseValueLocal(c, evMultiple) - ladderTotalLocal(v2, c.id));
 
 /**
  * One region's weekly lifecycle pass. Runs after stage 08 (fundamentals are this week's) and
@@ -284,7 +299,7 @@ export function runPeLifecycleForRegion(
   // earnings. The purchase price, the exit test and HC4's NAV mark all read it, so a portfolio is
   // never bought on one number and marked on another. No comps at all means no basis on which to
   // price a private company, and therefore no deals this week.
-  const markEvMultiple = publicComparableEvMultiple(regionId, ctx.updatedCompanies);
+  const markEvMultiple = publicComparableEvMultiple((c) => ladderTotalLocal(ctx.v2, c.id), regionId, ctx.updatedCompanies);
   if (!(markEvMultiple > 0)) return;
   const pendingIssuers = new Set(ctx.primaryOfferingsWorking.map((o) => o.issuerId));
   // §3.13 row 3: the region's loan market level, taken off the LOANS — each borrower's own
@@ -363,7 +378,7 @@ export function runPeLifecycleForRegion(
     const listCandidate = portfolio.find((c) => {
       if (pendingIssuers.has(c.id) || c.listingStatus !== 'PRIVATE') return false;
       if (nextWeek - (c.ownership?.acquiredWeek ?? 0) < MIN_HOLD_WEEKS) return false;
-      return ebitdaOf(c) > 0 && equityValueLocal(c, markEvMultiple) > 0;
+      return ebitdaOf(c) > 0 && equityValueLocal(ctx.v2, c, markEvMultiple) > 0;
     });
     if (listCandidate) {
       // What the public market pays for a comparable listed name, from real cleared prices.
@@ -420,10 +435,10 @@ export function runPeLifecycleForRegion(
     const saleCandidate = portfolio.find((c) => {
       if (pendingIssuers.has(c.id) || c.listingStatus !== 'PRIVATE') return false;
       if (nextWeek - (c.ownership?.acquiredWeek ?? 0) < PE_FUND_LIFE_WEEKS) return false;
-      return ebitdaOf(c) > 0 && equityValueLocal(c, markEvMultiple) > 0;
+      return ebitdaOf(c) > 0 && equityValueLocal(ctx.v2, c, markEvMultiple) > 0;
     });
     if (saleCandidate) {
-      const priceLocal = equityValueLocal(saleCandidate, markEvMultiple);
+      const priceLocal = equityValueLocal(ctx.v2, saleCandidate, markEvMultiple);
       // Whichever OTHER sponsor in this region can actually fund it. A buyer that cannot pay is
       // not a buyer, so a company nobody can afford stays where it is — an illiquid exit window,
       // which is a real thing for a fund at the end of its life.
@@ -476,13 +491,13 @@ export function runPeLifecycleForRegion(
         && !owned.has(c.id) && !c.ownership?.peSponsorId && !pendingIssuers.has(c.id)
         && ebitdaOf(c) > 0
         && ladderTotalLocal(ctx.v2, c.id) / Math.max(1, ebitdaOf(c)) < LBO_MAX_LEVERAGE - 2
-        && equityValueLocal(c, markEvMultiple) > 0
-        && equityValueLocal(c, markEvMultiple)
-             - Math.min(equityValueLocal(c, markEvMultiple), Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(c) - ladderTotalLocal(ctx.v2, c.id)))
+        && equityValueLocal(ctx.v2, c, markEvMultiple) > 0
+        && equityValueLocal(ctx.v2, c, markEvMultiple)
+             - Math.min(equityValueLocal(ctx.v2, c, markEvMultiple), Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(c) - ladderTotalLocal(ctx.v2, c.id)))
              < availablePowderLocal
       );
       if (target) {
-        const priceLocal = equityValueLocal(target, markEvMultiple);
+        const priceLocal = equityValueLocal(ctx.v2, target, markEvMultiple);
         // As far as the covenant goes; the loan market decides whether it funds it.
         const debtLocal = Math.min(
           priceLocal,
@@ -541,7 +556,8 @@ export function runPeLifecycleForRegion(
         // the last seller is willing to tender. Never below the printed price: nobody sells the
         // market a discount.
         const patientValuePerShare = companyFairValuePerShare(
-          listedTarget, cashOf(ctx.v2, listedTarget), riskFreeRate, PATIENT_HOLDER_REQUIRED_RETURN
+          listedTarget, cashOf(ctx.v2, listedTarget), riskFreeRate, PATIENT_HOLDER_REQUIRED_RETURN,
+          ladderTotalLocal(ctx.v2, listedTarget.id)
         );
         const takeoutPricePerShare = Math.max(listedTarget.stockPrice, patientValuePerShare);
         const takeoutValueLocal = takeoutPricePerShare * listedTarget.sharesOutstanding;

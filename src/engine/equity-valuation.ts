@@ -22,7 +22,6 @@
 
 import { Company } from '../types';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from './simulation/constants';
-import { totalDebtOf } from '../domain/company';
 
 /** Compensation for equity's residual risk, over the holder's own cost of capital. */
 export const EQUITY_RISK_PREMIUM = 0.035;
@@ -98,7 +97,18 @@ export function companyNetInvestmentRate(comp: Company): number {
 }
 
 /** Real book equity: the balance sheet's own shareholders' equity where a filing exists. */
-export function companyBookEquityLocal(comp: Company, cashLocal: number, totalDebtLocal: number = totalDebtOf(comp)): number {
+/**
+ * §3.13-READ C1 — `totalDebtLocal` IS REQUIRED, and every caller names the read it made.
+ *
+ * It used to default to `totalDebtOf(comp)`, which sums `Company.debtTranches` — and that array
+ * is materialised from the tranche store ONCE a week, at `core.ts:450`, AFTER every stage has
+ * run. So mid-week it is the previous week's ladder, and three of this function's four callers
+ * took the default: 07e priced every listed company's equity, `securities-lending` priced the
+ * whole borrow book, and `pe-lifecycle` struck its takeout, all against a debt figure that 07b
+ * and 07d had already changed ten stages earlier. A default that silently reads a stale mirror is
+ * the shape rule 19 names; making the parameter required is what stops it coming back.
+ */
+export function companyBookEquityLocal(comp: Company, cashLocal: number, totalDebtLocal: number): number {
   // A BANK's book equity is the equity line of its own balance sheet, not a PP&E-and-cash
   // reckoning built for an operating company. Its assets are loans, securities and reserves and
   // its liabilities are deposits and borrowings; the generic formula below sees almost none of
@@ -124,9 +134,9 @@ export function companyFairValuePerShare(
   cashLocal: number,
   riskFreeRate: number,
   holderRequiredReturn: number,
-  /** §5-WIRES D: the ladder's face as the caller knows it mid-week (stage 08's fresh total);
-   *  the week-end view otherwise. */
-  totalDebtLocal: number = totalDebtOf(comp)
+  /** §5-WIRES D / §3.13-READ C1: the ladder's face, read by the caller. Required — see
+   *  `companyBookEquityLocal`; the default this had was last week's mirror. */
+  totalDebtLocal: number
 ): number {
   if (comp.isDefaulted) return 0;
   return fairValuePerShare({

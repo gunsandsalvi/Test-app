@@ -890,7 +890,16 @@ export function managedEntityIdsOf(comp: { id: string; managesEntityIds?: string
 export const marketCapOf = (c: { stockPrice: number; sharesOutstanding: number }): number =>
   (c.stockPrice > 0 && c.sharesOutstanding > 0 ? c.stockPrice * c.sharesOutstanding : 0);
 
-/** Total debt is the ladder's face — the week-end VIEW (`debtTranches`); inside a week the engine
- *  reads the live rows (`ladderTotalLocal` in engine2/tranches.ts). */
+/**
+ * Total debt off the OBJECT ARRAY. §3.13-READ C1 left this with exactly three callers, all in the
+ * seed, and they are the only correct ones: `buildSeededGameState` runs before
+ * `openSeededMirrors`, so the tranche store has no rows yet and `debtTranches` is what the
+ * generator wrote rather than a copy of anything.
+ *
+ * Everywhere else, read `ladderTotalLocal(v2, id)`. `core.ts:450` rebuilds this array from the
+ * store ONCE a week, after every stage has run, so a mid-week read of it is the PREVIOUS week's
+ * ladder — which is what 07e's equity marks, the borrow book, the LBO takeout, the merger
+ * capacity test and the household private-equity line were all silently taking.
+ */
 export const totalDebtOf = (c: { debtTranches?: DebtTranche[] }): number =>
   (c.debtTranches ?? []).reduce((s, t) => s + t.principalLocal, 0);

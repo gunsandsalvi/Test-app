@@ -432,9 +432,6 @@ written from here):
     **B. THE DEAD CODE — DONE, in §9. −188 lines.**
 
     **C. THE SECOND ANSWERS — rule 19 conversions, each naming its read.**
-    C1. `totalDebtOf` → `ladderTotalLocal` (9 sites). Two files mark THE SAME private companies by
-        the two different routes. `initialization:532` and `:1485` run pre-sync — check, or keep the
-        object read at seed only.
     C2. Book totals off stale arrays → `institutionBookLocal`. `irs.ts:174` is confirmed stale (it
         mixes a live read and a stale one in one subtraction); the other three are pre-store and
         want a row walk rather than the helper.
@@ -1668,6 +1665,29 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ C1 — SEVEN ENGINE READERS WERE PRICING ON LAST WEEK'S LEVERAGE.** `totalDebtOf` sums
+`Company.debtTranches`, and `core.ts:450` rebuilds that array from the tranche store ONCE a week,
+after every stage has run. So for the whole of a week it is the PREVIOUS week's ladder — and 07b
+and 07d issue, retire and default paper at stages 270 and 272.
+
+The worst of it was a DEFAULT PARAMETER. `companyBookEquityLocal` and `companyFairValuePerShare`
+both defaulted `totalDebtLocal` to `totalDebtOf(comp)`, and three of their four callers took the
+default: **07e priced every listed company's equity** on it (stage 282), **`securities-lending`
+priced the whole borrow book** on it (280), and **`pe-lifecycle` struck its LBO takeout** on it.
+Only `stage08-back` passed a fresh total. The parameter is required now, which is what stops the
+next caller taking it back. With it: `pe-lifecycle`'s `equityValueLocal` (which read the array
+FOUR LINES from a site that read the store for the same company), the EV-multiple screen, the
+merger's debt-capacity test, and the household private-business equity line.
+
+`publicComparableEvMultiple` gained a `debtOf` reader rather than a `v2`, because its two kinds of
+caller have two different sources and BOTH ARE RIGHT: inside a week the ladder is the store; at
+the seed it is the array, because `buildSeededGameState` runs before `openSeededMirrors` and the
+store has no rows yet. Naming the read at the call site makes the seed's choice a decision instead
+of the accident it was when both sides silently took the array. That is the whole of `totalDebtOf`
+now — three seed callers, documented as such, and its docstring says so.
+
+The three UI readers convert too: the views hold `ensureV2(world.state)` already.
 
 **13-READ PART B — −188 LINES OF CODE THAT NOTHING COULD REACH, AND A TREE NODE THAT WAS RESTING
 ON IT.**

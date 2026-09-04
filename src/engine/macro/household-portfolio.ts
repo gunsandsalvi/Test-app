@@ -20,14 +20,15 @@
  */
 
 import { bookHeadOf } from '../../engine2/holdings';
-import { internType, internRegion } from '../../engine2/world';
+import { internType, internRegion, V2World } from '../../engine2/world';
 import { Company, RegionId } from '../../types';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { HouseholdState } from '../../domain/region-macro';
 import { isActiveCompany, isPubliclyListed } from '../../domain/company';
-import { totalDebtOf } from '../../domain/company';
+
 import { entityCashOf } from '../ledger/accounts';
 import { householdBookId } from '../ledger/holdings-ledger';
+import { ladderTotalLocal } from '../../engine2/tranches';
 
 /**
  * Founder stakes in this region's private tier, at the multiple the public market clears for
@@ -35,6 +36,7 @@ import { householdBookId } from '../ledger/holdings-ledger';
  * a private company is worth one thing no matter who is holding it.
  */
 export function householdPrivateBusinessEquityLocal(
+  v2: V2World,
   regionId: RegionId,
   companies: Company[],
   evMultiple: number
@@ -44,7 +46,9 @@ export function householdPrivateBusinessEquityLocal(
     if (c.region !== regionId || !isActiveCompany(c) || isPubliclyListed(c)) return sum;
     const founderPct = c.ownership?.founderPct ?? 1;
     if (!(founderPct > 0)) return sum;
-    const equityLocal = Math.max(0, evMultiple * c.ebitda - totalDebtOf(c));
+    // §3.13-READ C1: the ladder from the store. `Company.debtTranches` is rebuilt once a week
+    // after every stage, so mid-week it values a private firm on last week's leverage.
+    const equityLocal = Math.max(0, evMultiple * c.ebitda - ladderTotalLocal(v2, c.id));
     return sum + equityLocal * founderPct;
   }, 0);
 }

@@ -529,6 +529,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // The carves. Debt: serviceable ladders only (see HC1's finding on the segment debt
         // primitive). Revenue, employment and capex: exactly what the named tier now carries.
         const namedRevenueLocal = segFirms.reduce((a, f) => a + f.annualRevenue, 0);
+        // §3.13-READ C1: the object, deliberately — pre-`openSeededMirrors`, it is the source.
         seg.debtLocal = Math.round(Math.max(0, seg.debtLocal - segFirms.reduce((a, f) => a + totalDebtOf(f), 0)));
         seg.employment = Math.max(1000, Math.round(seg.employment - segFirms.reduce((a, f) => a + f.employeeCount, 0)));
         seg.annualRevenueLocal = Math.max(1, Math.round(seg.annualRevenueLocal - namedRevenueLocal));
@@ -1481,7 +1482,10 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // region's LISTED comps are worth per dollar of EBITDA — so week 0's NAV is not a different
     // valuation from week 1's. A bare `8 *` here and in the weekly mark was one company valued
     // two ways, and it made every seeded holding's entry basis a number nothing had cleared.
-    const seedEvMultiple = publicComparableEvMultiple(regionId, companies);
+    // §3.13-READ C1: THE OBJECT, DELIBERATELY. This runs inside `buildSeededGameState`, before
+    // `openSeededMirrors` opens the tranche store, so `debtTranches` is not a mirror here — it is
+    // what the generator wrote, and what the store is about to be filled FROM.
+    const seedEvMultiple = publicComparableEvMultiple(totalDebtOf, regionId, companies);
     const stakeValue = (f: Company) => Math.max(0, seedEvMultiple * f.ebitda - totalDebtOf(f)) * 0.75;
 
     // WS7: one money market fund per region. Born EMPTY — no fabricated share stock (§7.4's

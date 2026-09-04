@@ -7,10 +7,10 @@ import { Card, KV, Link, Stat, StatGrid, T } from '../ui';
 import { money, pct, pctLevel, ratio, num, bps, count } from '../format';
 import { formatMonth, formatSpan } from '../calendar';
 import { companyOf, companyPriceHistory, companyRatingHistory, companyRevenueHistory, holdersOf, bankLinesTo, contractsOf, displayWeek } from '../world';
-import { materializeLadder, facilityBookOf } from '../../engine2/tranches';
+import { materializeLadder, facilityBookOf, ladderTotalLocal } from '../../engine2/tranches';
 import { isActiveCompany } from '../../domain/company';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, ringed, taped } from './common';
-import { marketCapOf, totalDebtOf } from '../../domain/company';
+import { marketCapOf } from '../../domain/company';
 import { cashOf, bankReservesOf, stateDepositLines } from '../../engine/ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 
@@ -116,7 +116,7 @@ export const company = defineObject<Company>({
     const heldLocal = equityHolders.reduce((a, h) => a + h.usd, 0);
     const floatShare = marketCapOf(c) > 0 ? heldLocal / marketCapOf(c) : undefined;
     const cashLocal = cashOf(ensureV2(world.state), c);
-    const netDebt = (totalDebtOf(c) ?? 0) - cashLocal;
+    const netDebt = ladderTotalLocal(ensureV2(world.state), c.id) - cashLocal;
     const sheet = c.bankBalanceSheet;
     const lines = bankLinesTo(world, c.id);
     const contracts = contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker });

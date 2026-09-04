@@ -38,6 +38,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
 import type { InstrumentId } from '../../../domain/ids';
 import { sblInstrumentId, equityInstrumentId } from '../../../domain/instrument-keys';
+import { ladderTotalLocal } from '../../../engine2/tranches';
 
 export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
 
@@ -268,7 +269,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     });
     const floatValueById = new Map(listed.map((c) => [c.id, c.sharesOutstanding * c.stockPrice]));
     const totalFloatValueLocal = listed.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;
-    const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c))]));
+    const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id))]));
     const netInvestmentRateById = new Map(listed.map((c) => [c.id, companyNetInvestmentRate(c)]));
     const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
 

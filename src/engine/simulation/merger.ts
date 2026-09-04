@@ -3,9 +3,10 @@ import { SupplyRelationship } from '../../domain/market-microstructure';
 import { isActiveCompany } from '../../domain/company';
 import { formatCurrency } from '../formatters';
 import { random } from '../rng';
-import { marketCapOf, totalDebtOf } from '../../domain/company';
+import { marketCapOf } from '../../domain/company';
 import { cashOf } from '../ledger/accounts';
 import { V2World } from '../../engine2/world';
+import { ladderTotalLocal } from '../../engine2/tranches';
 
 export interface MergerCandidate {
   acquirerTicker: string;
@@ -43,7 +44,8 @@ export function checkForMerger(
 
   for (const acquirer of activeCompanies) {
     if (!isActiveCompany(acquirer) || !igRatings.includes(acquirer.creditRating)) continue;
-    if (cashOf(v2, acquirer) < 2 * Math.max(1, totalDebtOf(acquirer)) && totalDebtOf(acquirer) > 0) continue;
+    const acquirerDebtLocal = ladderTotalLocal(v2, acquirer.id);
+    if (cashOf(v2, acquirer) < 2 * Math.max(1, acquirerDebtLocal) && acquirerDebtLocal > 0) continue;
     // (§7.240's `cash < 500` guard — dollars against books in billions, dead-open since the
     // dollar rescale — deleted rather than rescaled: the debt-cover gate above is the real test.)
 
