@@ -60,10 +60,15 @@ export function indexFundsForBook(
   entities: InstitutionalEntity[],
   indexes: MarketIndex[],
   indexIds: string[],
-  /** SCALE C1: while the holdings store is live, a fund's book value must be read through it
-   * (the entity's own array is a stale week-start snapshot between the store's build and its
-   * write-back). Callers outside that span omit this and the entity's array is read directly. */
-  holdingsUsdOf?: (e: InstitutionalEntity) => number
+  /**
+   * SCALE C1 / §3.13-READ B3 — A FUND'S BOOK VALUE, READ THROUGH THE STORE. Required, not
+   * optional: the entity's own `itemizedHoldings` array is a STALE week-start snapshot between
+   * the store's build and its write-back, and all three callers (07b, 07d, 07e) run inside that
+   * window and all three already pass `holdingsUsdOf`. The fallback that read the array directly
+   * was reachable only from a caller that does not exist, and rule 19 says a stale mirror with no
+   * reader is a defect waiting for one.
+   */
+  holdingsUsdOf: (e: InstitutionalEntity) => number
 ): { fund: InstitutionalEntity; index: MarketIndex; investableLocal: number }[] {
   const wanted = new Set(indexIds);
   const indexById = new Map(indexes.map((i) => [i.id, i]));
@@ -79,9 +84,7 @@ export function indexFundsForBook(
     // ever sold, nothing ever refilled, and one small dip printed as a violation every week
     // (the sticky overdraft singles of §7.262/§7.265). A fund short of money liquidates —
     // that is the refill path a real fund has, and the one this one was missing.
-    const holdingsLocal = holdingsUsdOf
-      ? holdingsUsdOf(e)
-      : e.itemizedHoldings.reduce((s, h) => s + (h.quantityOrNotionalLocal ?? 0), 0);
+    const holdingsLocal = holdingsUsdOf(e);
     // §7.273 — THE FUND KEEPS ITS OWN FEE AS A CASH SLEEVE. Fully invested, a fund that pays
     // its sponsor and its trading spreads out of a zero cash line orbits at dust-negative
     // forever: each refill sale nets proceeds-minus-fee and lands just below zero again

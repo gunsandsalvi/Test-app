@@ -429,15 +429,7 @@ written from here):
 
     **A. THE LIVE DEFECTS — DONE, all eleven, in §9.**
 
-    **B. THE DEAD CODE — pure deletion, ~165 lines, no behaviour.**
-    B1. `HoldingsTable`'s object-graph half (~95 lines): `build()` is unreachable because `ctx.v2`
-        is a required field, so only `buildFromRows` runs. `holdingAt`, `rowsOfInstrument`,
-        `holderStart`, `byInstrument`, `rowInHolder`, `issuerRegion`, `shares` go with it.
-    B2. `RegisterIndex` (~60 lines): the store keeps per-entity chains and a `typeRef` column, and
-        `HoldingsTable.buildFromRows` produces the same grouping. No cross-file reader exists.
-        `bumpRegister` stays — six stages import it. §2's "register-index.ts is live" is true of
-        `bumpRegister` only and is corrected with it.
-    B3. `indexFundsForBook`'s object-array fallback: all three callers pass `holdingsUsdOf`.
+    **B. THE DEAD CODE — DONE, in §9. −188 lines.**
 
     **C. THE SECOND ANSWERS — rule 19 conversions, each naming its read.**
     C1. `totalDebtOf` → `ladderTotalLocal` (9 sites). Two files mark THE SAME private companies by
@@ -1410,6 +1402,20 @@ at week zero. The rest of PART VII stays in the order below.
 
 ### PART VIII — MEASURE ONCE (rule 11)
 
+13-ATLAS-GATE. **A CITATION MUST RESOLVE TO A SYMBOL, NOT TO A MENTION.** Inserted by §3.13-READ
+    part B, which found it by tripping it. `check-atlas.sh` proves that every `file:symbol` in
+    `docs/systems/*.md` still resolves, and it does that by searching the file's TEXT — so a
+    citation is satisfied by the symbol appearing in a COMMENT. Deleting `buildRegisterIndex` left
+    the gate green, because the replacement file's own docstring names it while explaining that it
+    is gone. This is the gate CLAUDE.md tells the reader to trust for "a cited `file:symbol` stops
+    resolving", and it is the one that catches a deletion, so a comment satisfying it is the whole
+    hole. The fix is to resolve against a DECLARATION — `export (function|const|class|type|interface)
+    <symbol>`, a class member, or a bare `function <symbol>` — and to keep the current text search
+    only as the fallback for the handful of citations that name something else (a field, a literal).
+    Cheap: it is a grep pattern change in one script, and the 921 existing citations are the test —
+    any that stop resolving are either a real rot or a citation that should have named a declaration.
+
+
 13c-FX-3. **THE FX NET IMBALANCE — MEASURE, THEN DECIDE.** *(All the rest of 13c is done, §9.13c-*.
     This is the one bullet that cannot be closed by reading, so it sits HERE, beside the run that
     settles it, rather than as an open bullet on a finished step.)* §9.13c-FX-2
@@ -1662,6 +1668,44 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ PART B — −188 LINES OF CODE THAT NOTHING COULD REACH, AND A TREE NODE THAT WAS RESTING
+ON IT.**
+
+**B1.** `HoldingsTable` carried two builders. `build()` read the `itemizedHoldings` object arrays
+and maintained a by-instrument transpose; `buildFromRows` reads the persistent row mirror and
+deliberately skips it — `rowsOfInstrument` THREW if asked for the transpose on the row path, and
+said so in its own message. `build()`'s only entry point is `getHoldingsTable`, which checks
+`ctx.v2`, a REQUIRED field of `WeeklyStepContext`: the row path was always taken. Gone with it:
+`holdingAt` (the last reader that resolved a row back to a holding object), `holderStart`, the
+`byInstrument` map, and the `rowInHolder`, `issuerRegion`, `shares` and `qtyLocal` columns — the
+table's one weekly consumer reads `byType`, `typeRange`, `instrumentId`, `entityRow` and `units`,
+and now that is all the class has.
+
+**B2.** `RegisterIndex` was a second compressed-sparse-row grouping of the same register, built
+from the same object arrays, grouped by the same types in the same order. `buildFromRows` produces
+that grouping from the row mirror without touching an object, and NOTHING outside the file ever
+took the index: `buildRegisterIndex`, `typeSlice`, `REGISTER_TYPES` and the `ctx.registerIndex`
+slot had no consumers at all. `bumpRegister` stays — six stages import it — and now drops one
+cache instead of two. §2's "register-index.ts is live" was true of `bumpRegister` only; corrected.
+
+**B3.** `indexFundsForBook`'s `holdingsUsdOf` was optional, with the entity's own array as the
+fallback. All three callers (07b, 07d, 07e) run inside the store window where that array is a
+stale week-start snapshot, and all three already passed the reader. The parameter is required now.
+
+**AND THE ATLAS NODE THIS EXPOSED.** `the-register.md` D2 — "who holds this instrument?" — read ✅
+against `HoldingsTable`. That mark was resting on the unreachable builder: the one direction the
+node names was answerable only by code nothing could call. It is ❌ now, and the entry says what
+is true instead — the store indexes the HOLDER side (`H.head`/`H.next`, one chain per party) and
+the instrument side has no index at all, so every caller that needs it scans the register. D2.a
+falls to ⚠️ with it, cited at the chain walk. This is exactly the failure mode `CLAUDE.md` warns
+about: `check-atlas.sh` proves a citation RESOLVES, and both citations did, so the gate was green
+while the node was false.
+
+**A hole in that gate, found in passing and INSERTED at §3 PART VIII rather than fixed here:**
+`check-atlas.sh` resolves a `file:symbol` citation by searching the file's TEXT, so a citation is
+satisfied by a mention in a COMMENT. Deleting `buildRegisterIndex` left the gate green because the
+replacement file's own docstring names it while explaining that it is gone.
 
 **13-READ A8..A11 — THE FIRST FALL: −81 LINES, AND THE HARNESS STOPS DISAGREEING WITH THE AUDIT.**
 

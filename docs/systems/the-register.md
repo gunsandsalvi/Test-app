@@ -111,11 +111,11 @@ checked by `scripts/check-atlas.sh`.
 | **C4 FORBID no short by accident** | `src/engine/ledger/holdings-ledger.ts:debitRow` | ✅ |
 | C5 VERIFY Σ bought = Σ sold, instrument by instrument | `src/engine/audit/wires.ts:auditWires` | ✅ |
 | D1 what does this party hold? | `src/engine2/holdings.ts:bookRowsOf` | ✅ |
-| D2 who holds this instrument? | `src/engine/columns/holdings-table.ts:HoldingsTable` | ✅ |
-| D2.a both directions answerable without reconstruction | `src/engine/simulation/stages/register-index.ts:buildRegisterIndex` | ✅ |
+| **D2 who holds this instrument?** | — | ❌ |
+| D2.a both directions answerable without reconstruction | `src/engine2/holdings.ts:bookRowsOf` | ⚠️ |
 | D3 what is it worth? — quantity × a market price | `src/engine/ledger/holdings-ledger.ts:markBookToMarket` | ✅ |
 | **D4 what did it cost? — the basis** | — | ❌ |
-| E1 a coupon or dividend pays the holders of record | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
+| E1 a coupon or dividend pays the holders of record | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` · `src/engine/columns/holdings-table.ts:buildFromRows` · `src/engine/simulation/stages/register-index.ts:bumpRegister` | ✅ |
 | E2 an amortisation or maturity pays its face | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ✅ |
 | E3 a default converts the holding into a recovery claim | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | E4 a split, buyback or new issue moves both sides at once | `src/engine/ledger/holdings-ledger.ts:scaleHoldings` | ✅ |
@@ -281,6 +281,27 @@ estate and the merger paths. `clearedBookDelta` takes a UNIT delta and prices it
 what moved and what it fetched (C2.a). And `register-marking` is WIRED IN, at the close, after every
 stage that can write a row: a credit row's value is `units × the price that paper's own auction
 printed` (D3), and the books go on claiming `units`, so a mark never looks like a trade.
+
+### ❌ D2 — THE HOLDER SIDE IS INDEXED; THE INSTRUMENT SIDE IS A SCAN
+
+This node read ✅ against `HoldingsTable`, and §3.13-READ B1 showed that mark was resting on
+unreachable code. The table had two builders: `build()`, which read the `itemizedHoldings` object
+arrays and maintained a by-instrument transpose, and `buildFromRows`, which reads the persistent
+row mirror and deliberately skips it — `rowsOfInstrument` THREW if a caller asked for the transpose
+on the row path, and said so in its own message. `build()`'s only entry point checks `ctx.v2`,
+which is a required field of `WeeklyStepContext`, so the row path was always taken and the
+transpose was never built. The one direction this tree calls D2 was answerable only by a builder
+nothing could reach.
+
+**What is true instead:** the store keeps per-entity chains (`H.head`/`H.next`), so D1 — "what does
+this party hold" — is a walk of one chain. "Who holds this instrument" has no index at all: every
+caller that needs it scans `0..used` filtering on `H.instrRef`, or walks every holder's chain. The
+audit does exactly that, as do the ETF creation basket and the estate walk. It is correct and it is
+O(register) per question.
+
+D2.a drops to ⚠️ with it: the two directions are no longer symmetric, and the honest citation is
+the chain walk rather than an index that answers both. Nothing RECONSTRUCTS the register — that
+half of D2.a, which is what its diff entry below is about, is still closed.
 
 ### ✅ D2.a / F1.a — CLOSED: NO BOOK CLEARS BY ISSUER, AND NOTHING RECONSTRUCTS THE REGISTER
 

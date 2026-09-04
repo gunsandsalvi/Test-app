@@ -1,128 +1,45 @@
 /**
- * SCALE wave 2, decision 3 — THE REGISTER AS COMPRESSED SPARSE ROWS.
+ * §3.13-READ B2 — WHAT INVALIDATES THE REGISTER'S COLUMN TABLE, and nothing else.
  *
- * The institutional register is a bipartite graph: ~75 holders against ~10,000 instruments,
- * ~110,000 positions, and it is traversed in BOTH directions every week — "what does this holder
- * own" and "who holds this instrument". Held as nested arrays of objects, either direction is a
- * pointer chase over the whole thing: measured, one full sweep costs ~90 ms, or 0.84 µs a row,
- * for what is a map lookup and two field reads.
+ * This file used to hold `RegisterIndex` as well: a second compressed-sparse-row grouping of the
+ * institutional register, built from the `itemizedHoldings` object arrays, carrying (holder,
+ * row-in-holder) pairs grouped by instrument type. `HoldingsTable.buildFromRows` produces the
+ * same grouping from the persistent row mirror without touching an object, and no reader outside
+ * this file ever took the index — `buildRegisterIndex`, `typeSlice`, `REGISTER_TYPES` and the
+ * `ctx.registerIndex` slot had no consumers at all. They are deleted; §2's "register-index.ts is
+ * live" was true of `bumpRegister` only, and is corrected with them.
  *
- * Here it is two flat `Int32Array`s — the holder's position in the entities array, and the row's
- * position in that holder's book — grouped by instrument type by counting sort, with a start
- * offset per type. A consumer that wants one type walks only that type's slice; nothing is
- * allocated per row, and the arrays are the shape a worker could take over a `SharedArrayBuffer`
- * when the rest of wave 2 lands.
- *
- * **The index caches across stages and is INVALIDATED explicitly.** It holds positions, not
- * object references, so a stage that re-maps the entity list (several do, preserving order and
- * length) does not disturb it, and neither does a change to a row's quantity — those are read
- * through. What invalidates it is a change to WHICH ROWS EXIST: the five weekly writers listed in
- * `bumpRegister`'s callers. Adding a sixth without bumping is the failure mode to watch for, and
- * it is why the bump lives next to each write rather than in a scheduler.
+ * **The table caches across stages and is INVALIDATED explicitly.** It holds positions, not object
+ * references, so a stage that re-maps the entity list (several do, preserving order and length)
+ * does not disturb it, and neither does a change to a row's quantity — those are read through.
+ * What invalidates it is a change to WHICH ROWS EXIST: the weekly writers listed in
+ * `bumpRegister`'s callers. Adding one without bumping is the failure mode to watch for, and it is
+ * why the bump lives next to each write rather than in a scheduler.
  */
 
-import { ItemizedHolding, InstitutionalEntity } from '../../../types';
+import { InstitutionalEntity } from '../../../types';
 import { HoldingsTable } from '../../columns/holdings-table';
 
-/** The instrument types, in the order the index groups them. */
-export const REGISTER_TYPES: ItemizedHolding['instrumentType'][] = [
-  'EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER',
-  'PE_FUND_INTEREST', 'ETF_SHARE',
-];
-const TYPE_SLOT = new Map<string, number>(REGISTER_TYPES.map((t, i) => [t, i]));
-
-export interface RegisterIndex {
-  /** Position of the holder in the entities array, per row. */
-  entAt: Int32Array;
-  /** Position of the row inside that holder's own book. */
-  rowAt: Int32Array;
-  /** `start[t] … start[t + 1]` is type `t`'s slice of the two arrays above. */
-  start: Int32Array;
-  rows: number;
-}
-
-export function buildRegisterIndex(entities: InstitutionalEntity[]): RegisterIndex {
-  const nTypes = REGISTER_TYPES.length;
-  const counts = new Int32Array(nTypes + 1);
-  let rows = 0;
-  for (let e = 0; e < entities.length; e++) {
-    const book = entities[e].itemizedHoldings;
-    if (!book) continue;
-    for (let r = 0; r < book.length; r++) {
-      const slot = TYPE_SLOT.get(book[r].instrumentType);
-      if (slot === undefined) continue;
-      counts[slot]++;
-      rows++;
-    }
-  }
-  // Prefix sum gives each type its slice; a moving cursor fills it in register order, so within a
-  // type the rows keep the order they had — which is what makes every consumer's accumulation
-  // order the same as the nested walk it replaces.
-  const start = new Int32Array(nTypes + 1);
-  for (let t = 0; t < nTypes; t++) start[t + 1] = start[t] + counts[t];
-  const cursor = Int32Array.from(start.subarray(0, nTypes));
-  const entAt = new Int32Array(rows);
-  const rowAt = new Int32Array(rows);
-  for (let e = 0; e < entities.length; e++) {
-    const book = entities[e].itemizedHoldings;
-    if (!book) continue;
-    for (let r = 0; r < book.length; r++) {
-      const slot = TYPE_SLOT.get(book[r].instrumentType);
-      if (slot === undefined) continue;
-      const at = cursor[slot]++;
-      entAt[at] = e;
-      rowAt[at] = r;
-    }
-  }
-  return { entAt, rowAt, start, rows };
-}
-
-/** The slice of the index carrying one instrument type. */
-export function typeSlice(index: RegisterIndex, type: ItemizedHolding['instrumentType']): [number, number] {
-  const slot = TYPE_SLOT.get(type);
-  if (slot === undefined) return [0, 0];
-  return [index.start[slot], index.start[slot + 1]];
-}
-
-/** Drop the cached index AND the column table. Call beside every write that changes which rows
- *  exist — the two are built from the same graph and go stale together. */
-export function bumpRegister(
-  ctx: { registerIndex?: RegisterIndex; holdingsTable?: import('../../columns/holdings-table').HoldingsTable }
-): void {
-  ctx.registerIndex = undefined;
-  ctx.holdingsTable = undefined;
-}
-
 /**
- * SCALE phase 2 — the register as COLUMNS, built on the same invalidation as the index above.
- *
- * The index holds positions into the object graph, so a sweep still chases a pointer per row to
- * read a quantity. The table holds the quantity itself, so a converted sweep does not touch an
- * object at all. Both exist while readers migrate; the table is the read path and the object
- * arrays remain the write path, which is the seam that lets readers move one at a time.
+ * The register as columns, cached on the week's context and rebuilt from the row mirror. The
+ * object-graph builder is gone (B1): `ctx.v2` is a required field, so it was never reached.
  */
 export function getHoldingsTable(
   ctx: {
-    holdingsTable?: import('../../columns/holdings-table').HoldingsTable;
+    holdingsTable?: HoldingsTable;
     updatedInstitutionalEntities: InstitutionalEntity[];
-    v2?: import('../../../engine2/world').V2World;
+    v2: import('../../../engine2/world').V2World;
   }
-): import('../../columns/holdings-table').HoldingsTable {
+): HoldingsTable {
   if (!ctx.holdingsTable) {
     const t = new HoldingsTable();
-    // §7.307 holdings flip: built from the persistent row mirror when the week's context carries
-    // it — no object is touched. The object-graph build remains for callers outside the week.
-    if (ctx.v2) t.buildFromRows(ctx.v2, ctx.updatedInstitutionalEntities);
-    else t.build(ctx.updatedInstitutionalEntities);
+    t.buildFromRows(ctx.v2, ctx.updatedInstitutionalEntities);
     ctx.holdingsTable = t;
   }
   return ctx.holdingsTable;
 }
 
-/** The index for this moment, built if a writer has invalidated it. */
-export function getRegisterIndex(
-  ctx: { registerIndex?: RegisterIndex; updatedInstitutionalEntities: InstitutionalEntity[] }
-): RegisterIndex {
-  if (!ctx.registerIndex) ctx.registerIndex = buildRegisterIndex(ctx.updatedInstitutionalEntities);
-  return ctx.registerIndex;
+/** Drop the cached column table. Call beside every write that changes which rows exist. */
+export function bumpRegister(ctx: { holdingsTable?: HoldingsTable }): void {
+  ctx.holdingsTable = undefined;
 }

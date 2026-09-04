@@ -971,7 +971,7 @@ export function applyHolderInterestAccruals(
     accrualsByType.forEach((_byId, type) => {
       deskHoldings.set(type, deskHoldingsByInstrument(ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
     });
-    const holdings = getHoldingsTable(ctx as never);
+    const holdings = getHoldingsTable(ctx);
     const entities = ctx.updatedInstitutionalEntities;
     // Resolved once, so the row loop reads a dense string array rather than dereferencing an
     // entity object per row.
