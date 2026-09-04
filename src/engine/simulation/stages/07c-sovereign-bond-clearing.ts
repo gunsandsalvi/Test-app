@@ -637,7 +637,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const entityIds = new Set(biddingEntities.map((e) => e.id));
     const bankTickers = new Set(regionBanks.map((b) => b.ticker));
     settleClearedBook(
-      ctx, regionId, BOOK,
+      ctx, regionId, currencyOf(regionId), BOOK,
       result.netCashDeltaByParticipantId,
       (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id }
         : bankTickers.has(id) ? { kind: 'BANK_SECURITIES', ticker: id }

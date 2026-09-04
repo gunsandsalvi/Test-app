@@ -46,7 +46,7 @@ import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
@@ -673,7 +673,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       console.log(`  [equity-legs] ${regionId} dealerNet ${(dealerNetUSD / 1e6).toFixed(1)}M fee ${(bookFeeUSD / 1e6).toFixed(1)}M | ${legs} | primary: ${prim || 'none'}`);
     }
     settleClearedBook(
-      ctx, regionId, BOOK,
+      ctx, regionId, currencyOf(regionId), BOOK,
       netCashByEntityId,
       (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id }
         : id === householdParticipantId ? { kind: 'HOUSEHOLD', region: regionId }

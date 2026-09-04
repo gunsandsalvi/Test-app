@@ -73,7 +73,7 @@ import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
-import { REGION_IDS } from '../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
 
@@ -562,7 +562,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // SETL6: the book's whole cash side, through the clearing house.
     const entityIds = new Set(bookEntities.map((e) => e.id));
     settleClearedBook(
-      ctx, regionId, BOOK,
+      ctx, regionId, currencyOf(regionId), BOOK,
       result.netCashDeltaByParticipantId,
       (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
       { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },

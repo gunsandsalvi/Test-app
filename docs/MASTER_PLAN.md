@@ -414,9 +414,13 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
     **PARTS 1 AND 2 ARE DONE (§9.13c).** What is LEFT of 13c:
     · **the rename** — 11,243 `…USD` identifiers, of which a handful are now literally true
       (`foreignOfficialClaimsUSD` is a numéraire claim and says so). Mechanical, and last;
-    · **clearing** — an instrument's quote currency. Every book still clears in the money of the
-      region that runs it, which is right for a domestic auction and unexamined for a
-      cross-listed one; and `financial-clearing-engine`'s `unitValueUSD` has no currency at all;
+    · ~~**clearing**~~ (DONE, §9.13c-DENOM). The BOOK names its money once and its five cash legs
+      read it. Putting it on the INSTRUMENT was considered and is not the shape: settlement is per
+      book, every instrument in a book shares its currency, and a per-instrument field would be
+      one nothing could act on — the `quotedAs` mistake again. **The cross-listing question stays a
+      finding, not a step:** it is about an instrument the model does not have yet, and it becomes
+      real the day one is listed in two books. Same for `unitValueUSD`, which is a price per unit
+      in the book's own money and needs a currency only when a book clears in more than one;
     · ~~**the contracts with no denomination**~~ (DONE, §9.13c-DENOM). Two of the three were reading
       a proxy and now state their own money; the third was reading the fact, and the finding is
       the CONDITION under which that stops being true — recorded at `pe-lifecycle.ts`, not as a
@@ -431,10 +435,26 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
       small (a capacity question — XB2b's number); the flow is genuinely one-way and something
       real should be financing it (a capital-account question, and a persistent trade imbalance
       financed by the banking system IS a real phenomenon); or the invoice-currency convention in
-      `05-unit-bidding` makes it one-way by construction (buyer money for firms at :1957, ORIGIN
-      money for households at :2191 — two conventions in one auction, which is worth settling on
-      its own). Measure which before touching any of them, and per rule 11 do not judge the
-      levels on the way.
+      `05-unit-bidding` makes it one-way by construction.
+
+      **That third candidate is the whole of what was listed separately as "stage 05's household
+      leg", and the two are one question.** The firm leg converts the price to BUYER money inside
+      the auction (`exWorksBuyerMoney`) and pays in buyer money, so no short arises and no order is
+      placed; the household leg keeps the ORIGIN price and pays in origin money, so the buyer IS
+      short and must buy it. Same auction, same purchase, and the FX flow lands somewhere different
+      depending on who bought.
+
+      **The decision, stated so the measurement knows what it is deciding:** ONE convention for
+      what money a goods payment settles in, owned in one place. The mechanism-consistent answer is
+      the SELLER's — a factory-gate price is quoted in the seller's money, and 13c-FX already
+      established that a payment moves one currency and a party short of it BUYS it. That would
+      delete `exWorksBuyerMoney`'s price conversion: a conversion with no counterparty, the same
+      defect 13c-FX deleted at the ledger, still standing inside the auction. It cannot be settled
+      by reading, because flipping the firm leg makes every importing firm short the seller's money
+      and turns a price conversion into real orders — and whether the book absorbs that IS
+      candidate one. There is no interim shape either: a function returning today's two answers
+      would have to switch on the BUYER'S KIND, which rule 15 forbids. Measure first (step 38); per
+      rule 11 do not judge the levels on the way.
     · ~~**13c-FX — CONVERTING AT THE LEDGER IS THE WRONG MECHANISM, AND IT IS MINE**~~ (DONE,
       §9.13c-FX; kept here because the reasoning is the step) (user, 2026-09-03:
       *"is that the cleanest and the real world way of doing that?"* — it is not).
@@ -462,11 +482,6 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
       draw). **And it pays for itself:** once the shorts are real orders,
       `ctx.bilateralTradeWeeklyUSD` at `fx-clearing:108` — a derived aggregate standing in for
       orders nobody places — is deleted, which is rule 3 on the flow that sets the rate;
-    · **stage 05's household leg.** `05-unit-bidding:2191` pays `units × book.clearedPriceUSD`
-      for a household, segment or treasury buyer — the ORIGIN auction's money — where the firm
-      loop two hundred lines above converts to buyer money first (`exWorksBuyerMoney`). Both are
-      now honestly labelled, so the household leg converts at the ledger instead of not at all;
-      that it was ever a raw number was a 34% discount on every foreign good a household bought.
 
 13b. **Coupon accruals are dated wires.** `pendingHolderAccrualUSD` is a side map beside the
     paper. It should be a dated wire that RE-KEYS with the paper when the paper moves, landing on
@@ -1385,7 +1400,7 @@ numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` �
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**13c-DENOM — an obligation says what it is denominated in.** `TradeInvoice` was the only one that
+**13c-DENOM — an obligation, and a book, say what they are denominated in.** `TradeInvoice` was the only one that
 did; the rest re-derived it at each payment site from a proxy. `SecurityLoan` read
 `issuer ? currencyOf(issuer.region) : <the lender's own money>` — in the very branch whose condition
 is that there may be no issuer, and that `!` threw in week 5 of the reference run. A
@@ -1393,6 +1408,11 @@ is that there may be no issuer, and that `!` threw in week 5 of the reference ru
 IRS and CDS, the HOLDER's region for an FX forward, and a hard-coded `'USA'` for a commodity future
 — the region field standing in for the fact that commodities are quoted in the numéraire. Both now
 carry `currency`, set once at strike, and every payment reads it.
+
+`settleClearedBook` re-derived `currencyOf(regionId)` at each of its five cash legs; the book now
+names its money once and the legs read it. It was NOT put on `ClearingInstrument`: settlement is per
+book, every instrument in a book shares a currency, and a per-instrument field would be one nothing
+could act on — which is how `quotedAs` came to exist unread.
 
 The PE commitments are NOT the same case and no field was added: a commitment is to the FUND and is
 payable in the fund's money, so reading the sponsor's is the fact rather than a stand-in, and a

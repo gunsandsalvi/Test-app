@@ -593,7 +593,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // desks' fees, and the dealer's own inventory leg.
       const billEntityIds = new Set(regionEntities.map((e) => e.id));
       settleClearedBook(
-        ctx, regionId, BOOK,
+        ctx, regionId, currencyOf(regionId), BOOK,
         result.netCashDeltaByParticipantId,
         (id) => (billEntityIds.has(id) ? { kind: 'INSTITUTION', id }
           : id.startsWith('BANK-') ? { kind: 'BANK_SECURITIES', ticker: id.slice(5) }
@@ -1048,7 +1048,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // clearing house to each ISSUER for the paper its own program actually placed.
       const cpEntityIds = new Set(cpEntities.map((e) => e.id));
       settleClearedBook(
-        ctx, regionId, CP_BOOK,
+        ctx, regionId, currencyOf(regionId), CP_BOOK,
         cpResult.netCashDeltaByParticipantId,
         (id) => (cpEntityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, cpDeskTickers)),
         { netCashUSD: cpResult.dealerNetCashUSD, feeUSD: cpResult.totalDealerRevenueUSD },
