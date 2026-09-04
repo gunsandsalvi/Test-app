@@ -5,11 +5,13 @@ says what, §4 says what must be green, §9 records it in a line. Nothing else i
 
 ## The plan, section by section
 
-- **§1 RULES OF ENGAGEMENT** — 18 standing user directives. Read all of them. The four broken most:
+- **§1 RULES OF ENGAGEMENT** — 19 standing user directives. Read all of them. The five broken most:
   **§1.10** work §3 strictly in order, one step at a time, and a new idea is INSERTED at its right
   position rather than appended; **§1.11** no run, no test, no measurement, no diagnosis until the
   list is finished — the harness is deliberately red and its violations ARE the unbuilt steps;
-  **§1.13** never roll a derivation back because its print got uglier; **§1.12** fix the cause.
+  **§1.13** never roll a derivation back because its print got uglier; **§1.12** fix the cause;
+  **§1.19** READ THE SOURCE, do not re-derive it — where a store holds a fact, read it, and every
+  deletion under that rule names the read that replaces it.
 - **§2 THE MAP** — the codebase map, and the legend for the `§` markers in the code. Read the
   legend before chasing one: `§7.N` is a FINDING ID, not a section, and ~700 comments carry one.
 - **§3 THE PROJECT** — the work order, in eight PARTS, and the only work list. It holds what is

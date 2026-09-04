@@ -173,6 +173,32 @@ Standing user directives. Not suggestions. Eighteen; none of them restates anoth
     re-baseline, named in its record. New column stores are SAB-backed with copy-on-grow, and every
     growth path copies.
 
+19. **READ THE SOURCE. DO NOT RE-DERIVE IT.** (user, 2026-09-05: *"a lot of the data now is present
+    inside the entities and doesn't need to be calculated anymore"*, and *"this needs to apply to all
+    the changes we're making — if there is a property from an object that's the source that needs to
+    be used"*.) Every fact in this model has ONE place that holds it: the register holds who holds
+    what and in what UNITS, `v2.tranches` holds the ladder, `v2.prices` holds what a market printed,
+    `v2.accounts` holds money. Where such a place exists, code READS it. It does not recompute the
+    fact, sum a second copy of it, infer it by subtraction, or model a price the market already
+    printed. This is rule 4 pointed at the READ side, and it has four failure modes, all of them
+    measured in this repo:
+
+    · **The wrong quantity.** Reading `qtyLocal` (the MARK) where the question is FACE, or the
+      reverse. Two numbers that were equal at par and stopped being equal the week prices moved.
+    · **The stale mirror.** Reading `itemizedHoldings` or `debtTranches` mid-week. Those arrays are
+      a WEEK-END VIEW materialized at the close; between the store's build and its write-back they
+      are week-start snapshots and the rows are the authority.
+    · **The residual.** Inferring a holding as `total − Σ(known holders)`. A residual with no holder
+      is rule 2's defect; now that the household sector and the desks have real books, the
+      subtraction has no remaining excuse.
+    · **The re-derived price.** Discounting to a price for an instrument whose own auction printed
+      one. A bidder's RESERVATION is legitimately its own opinion and is not this; a MARK is not an
+      opinion.
+
+    So: before adding a derivation, name the store that already answers it. When changing a site,
+    convert it. **Every deletion under this rule names the read that replaces it** — that is what
+    makes it a deletion rather than a guess.
+
 ## 2. THE MAP
 
 ### What the `§` markers in the code mean
@@ -1572,6 +1598,21 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK — 07C OFFERED PAPER THAT WAS ALREADY HELD, and it is rule 19's first application.**
+`sovereign-register.ts` exists because five places open-coded the walk over the stores that keep a
+government bond. 07c held a SIXTH, and being a copy is not what made it matter — it had rotted
+twice. It summed `quantityOrNotionalLocal`, the MARK, and subtracted it from `outstandingLocal`,
+the ladder's FACE; since register-marking began pricing sovereign rows at their cleared print, mark
+< face for any bond below par, so the shortfall was overstated by the whole discount. That
+shortfall is not a diagnostic — 07c assigns it straight to `primaryOfferingLocal`, so **the
+treasury re-offered paper somebody already held, every week, by the size of the discount on its own
+curve**. It also read `e.itemizedHoldings` from inside the window `context.ts` states those arrays
+are stale in. `sovereignHeldByBond` answers both: it returns `units` off the store, so the two
+sides of the subtraction are the same quantity and the walk sees the week's real positions. Net
+−9 lines. Atlas: `sovereign-credit` E1.a re-cited and written up; it stays `⚠️` because 07f's bill
+book still computes `primaryOfferingLocal` from bidders alone, so a corporate treasury's bill
+holding is still re-offered there — same shape, fix not yet made. Gates green; no run.
 
 **13-BOOK slice (c1) — THE SEED WIRED EVERY CORPORATE BOND FROM A PARTY THAT DOES NOT EXIST.**
 Going after the entity registry found the defect before it found the registry. The seed opens each

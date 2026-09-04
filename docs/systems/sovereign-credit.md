@@ -190,7 +190,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | D5 repo collateral, at the smallest haircut of any asset | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
 | D6 VERIFY the bid-offer is a consequence, not a prior | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
 | **E1 a register: who holds how much of WHICH LINE** | `src/engine/sovereign-register.ts:forEachSovereignPosition` | ✅ |
-| E1.a · and ONE walk answers it, over every store that keeps one | `src/engine/sovereign-register.ts:sovereignHeldByClass` | ⚠️ |
+| E1.a · and ONE walk answers it, over every store that keeps one | `src/engine/sovereign-register.ts:sovereignHeldByBond` | ⚠️ |
 | E2 holder classes hold for different reasons | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
 | E2.a banks — the regulatory liquidity buffer | `src/engine/macro/banking.ts:liquidityDrivenSovereignFloorLocal` | ✅ |
 | E2.b insurers and pensions — duration against liabilities | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:durationPremiumBps` | ⚠️ |
@@ -220,6 +220,30 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 ---
 
 ## 3. THE DIFF
+
+### ⚠️ E1.a — A SIXTH COPY OF THE WALK, AND IT WAS OFFERING PAPER THAT WAS ALREADY HELD
+
+`sovereign-register.ts` exists because five places open-coded the walk over the five stores that
+keep a government bond, and its header says so. **07c held a sixth**, and being a copy is not what
+made it interesting — it had rotted twice over:
+
+- It summed `quantityOrNotionalLocal`, the MARK, and subtracted it from `outstandingLocal`, which
+  is the ladder's FACE. Since §9.13's register marking began pricing sovereign rows at their
+  cleared print, mark < face for any bond below par — so the shortfall was overstated by the whole
+  discount. That shortfall is not a diagnostic: `07c` assigns it straight to
+  `primaryOfferingLocal`, so **the treasury re-offered paper somebody already held**, every week,
+  by the size of the discount on its own curve.
+- It read `e.itemizedHoldings` from inside the window where `context.ts` states those arrays are
+  stale week-start snapshots (the store is authoritative between the build before 07b and the
+  write-back after 07e; 07c runs between them).
+
+Replaced by `sovereignHeldByBond`, which returns `units` — the face — off the store, so both sides
+of the subtraction are now the same quantity and the walk sees the week's real positions.
+
+E1.a stays `⚠️`: one walk answers the question now, but 07f's bill book still computes its own
+`primaryOfferingLocal` from bidders alone, so a corporate treasury's bill holding is still re-offered
+there. Same shape, same fix, not yet made.
+
 
 **68 rows: 30 ✅, 13 ⚠️, 25 ❌** — COUNTED at §9.13-BILL and again at §9.13-OUTSIDE, which added
 E1.a's row, not adjusted. It read 25/15/27 against a

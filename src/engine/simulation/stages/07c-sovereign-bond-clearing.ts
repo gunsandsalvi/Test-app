@@ -76,8 +76,9 @@ import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLoca
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
-import { instrumentEntries, type InstrumentId } from '../../../domain/ids';
+import { instrumentEntries, asInstrumentId, type InstrumentId } from '../../../domain/ids';
 import { governmentEntityId } from '../../../domain/entity-keys';
+import { sovereignHeldByBond } from '../../sovereign-register';
 
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
@@ -92,7 +93,6 @@ const BANK_PREFERRED_TENOR_YEARS = 3; // a bank's HQLA book skews shorter/more l
 // (domain/institution-profiles.ts) — one owner per fact about a kind (rule 15).
 
 const INSTITUTIONAL_PREFERRED_TENOR_YEARS = 12; // insurers/pension funds match long-dated liabilities
-
 
 /** Extra yield a holder wants for committing duration away from its preferred maturity. */
 function durationPremiumBps(tenorYears: number, preferredTenorYears: number): number {
@@ -146,7 +146,6 @@ function computeSovereignReservationYieldBps(
     + INSTITUTIONAL_REAL_RETURN_BPS
     + durationPremiumBps(tenorYears, preferredTenorYears);
 }
-
 
 /**
  * Every holder's view of what a bond is really paying: its nominal yield less the inflation the
@@ -268,34 +267,26 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     //     for by whoever takes it, and offered again next week if nobody does. An undersubscribed
     //     auction is then a real event with a real consequence for the treasury's account,
     //     instead of a silent placement.
+    // §3.13-BOOK — WHO ALREADY HOLDS THIS PAPER, asked of the one walk rather than re-enumerated.
+    //
+    // This was a sixth open-coded copy of the five-store sovereign walk `sovereign-register.ts`
+    // was written to end, and it had rotted in two independent ways.
+    //
+    //  · It summed `quantityOrNotionalLocal` — the MARK — against `outstandingLocal`, which is the
+    //    ladder's FACE. Since `register-marking` began marking sovereign rows at their cleared
+    //    price, mark < face for any bond below par, so `unheld` was overstated by the whole
+    //    discount. `unheld` IS `primaryOfferingLocal` (below), so the treasury re-offered paper
+    //    that somebody already held. `sovereignHeldByBond` returns `units` — the face — so the two
+    //    sides of the subtraction are the same quantity now.
+    //  · It read `e.itemizedHoldings` at a point where those arrays are stale week-start snapshots
+    //    (`context.ts`: the store is live between the build before 07b and the write-back after
+    //    07e, and 07c runs inside that window). The walk reads the store.
+    const heldFaceById = sovereignHeldByBond(ctx.v2, state, regionId);
     const realHoldingsById = new Map<InstrumentId, number>();
-    const addReal = (id: InstrumentId | undefined, usd: number) => {
-      if (!id || !heldById.has(id) || !(usd > 0)) return;
-      realHoldingsById.set(id, (realHoldingsById.get(id) ?? 0) + usd);
-    };
-    ctx.prevActiveFirms.forEach((c) => {
-      if (c.region === regionId && c.bankBalanceSheet) {
-        instrumentEntries(c.bankBalanceSheet.sovereignBondHoldingsByBond)
-          .forEach(([id, usd]) => addReal(id, Number(usd) || 0));
-      }
-      (c.treasuryHoldings || []).forEach((h) =>
-        addReal(h.instrumentId, h.quantityOrNotionalLocal ?? 0));
+    heldFaceById.forEach((faceLocal, id) => {
+      const instrumentId = asInstrumentId(id);
+      if (heldById.has(instrumentId) && faceLocal > 0) realHoldingsById.set(instrumentId, faceLocal);
     });
-    ctx.updatedInstitutionalEntities.forEach((e) => {
-      if (e.isDefaulted) return;
-      (e.itemizedHoldings || []).forEach((h) => {
-        if (holdingClassOf(h.instrumentType) !== 'SOVEREIGN' || h.issuerRegion !== regionId) return;
-        addReal(h.instrumentId, h.quantityOrNotionalLocal ?? 0);
-      });
-    });
-    if (reg.centralBankSheet) {
-      instrumentEntries(reg.centralBankSheet.sovereignHoldingsByBond)
-        .forEach(([id, usd]) => addReal(id, Number(usd) || 0));
-    }
-    // The desks' own book is held paper like any other: it comes out of what is reservable.
-    // (This read named a field that does not exist on the row — `bondId` for `bondId` —
-    // so the dealer's position had never once been subtracted. G3a.)
-    (reg.bankingSector.sovBondDealerInventory || []).forEach((pos) => addReal(pos.bondId, pos.inventoryLocal));  // bondId now carries the bond id
     const unheldById = new Map<InstrumentId, number>();
     bonds.forEach((b) => unheldById.set(b.id, Math.max(0, b.outstandingLocal - (realHoldingsById.get(b.id) ?? 0))));
 
