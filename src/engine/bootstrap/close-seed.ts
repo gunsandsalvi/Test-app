@@ -1,4 +1,5 @@
 import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf, stashSeedGovLadder, seedGovLadderOf } from '../ledger/accounts';
+import { accruedPerFace, weeksAccrued } from '../../domain/company';
 import { currencyOf } from '../../domain/geography';
 import { V2World } from '../../engine2/world';
 /**
@@ -32,7 +33,6 @@ import { accrueHoldersInterest, applyHolderInterestAccruals } from '../simulatio
 import { accrueSovereignHolders } from '../simulation/stages/sovereign-calendar';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { sovereignCouponByBond } from '../../domain/government';
-import { COUPON_PERIOD_WEEKS } from '../../domain/pricing';
 
 const sumByTenor = (byTenor: Record<string, number> | undefined): number =>
   Object.values(byTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0);
@@ -169,13 +169,13 @@ export function seedOpeningAccruals(
         : (Number.isNaN(TS.couponRate[tr]) ? TRANCHE_DEFAULT_COUPON : TS.couponRate[tr]);
       // A floater's coupon is policy + margin; at the seed the policy rate is the region's own.
       const policyRate = floating ? (regions[c.region]?.policyRate ?? 0) : 0;
-      const { periodWeeks, anchorWeek } = trancheScheduleOf(TS, tr);
-      // Weeks elapsed in the CURRENT period. A rung issued this week has accrued nothing.
-      const since = currentWeek - anchorWeek;
-      const elapsedWeeks = since <= 0 ? 0 : since % periodWeeks;
-      if (elapsedWeeks === 0) continue;
-      const annualLocal = TS.principalLocal[tr] * (floating ? policyRate + annualRate : annualRate);
-      const accruedLocal = (annualLocal * elapsedWeeks) / 52;
+      // §3.13b: `accruedPerFace` is the one owner of "what has accrued on a unit of face" — the
+      // same read the weekly accrual and the buyer-pays-seller leg take, so the three cannot
+      // disagree about a tranche's position in its own period.
+      const { anchorWeek } = trancheScheduleOf(TS, tr);
+      const accruedLocal = TS.principalLocal[tr] * accruedPerFace(
+        { originationWeek: anchorWeek, paymentsPerYear: Number.isNaN(TS.paymentsPerYear[tr]) ? undefined : TS.paymentsPerYear[tr], rateType: floating ? 'FLOATING' : 'FIXED' },
+        floating ? policyRate + annualRate : annualRate, currentWeek);
       if (!(accruedLocal > 0)) continue;
       accrueHoldersInterest({ pendingHolderAccrualLocal },
         v2.internedStrings[TS.idRef[tr]], floating ? 'LEVERAGED_LOAN' : 'CORP_BOND', accruedLocal);
@@ -186,11 +186,9 @@ export function seedOpeningAccruals(
   (Object.keys(regions) as RegionId[]).forEach((regionId) => {
     const ladder = materializeGovLadder(v2, regionId);
     const couponByBond = sovereignCouponByBond(ladder);
-    const elapsedByBond = new Map<string, number>();
-    ladder.forEach((b) => {
-      const since = currentWeek - b.originationWeek;
-      elapsedByBond.set(b.id, since <= 0 ? 0 : since % COUPON_PERIOD_WEEKS);
-    });
+    // §3.13b: the same owner as the credit side above, in the weeks the holder walk takes. This
+    // counted `since % 26` itself — one more copy of "where is this bond in its period".
+    const elapsedByBond = new Map<string, number>(ladder.map((b) => [b.id, weeksAccrued(b, currentWeek)]));
     accrueSovereignHolders(
       { v2, updatedInstitutionalEntities: institutionalEntities, updatedCompanies: companies,
         sovereignAccruedInterestLocal },

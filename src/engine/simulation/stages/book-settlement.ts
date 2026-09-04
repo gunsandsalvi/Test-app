@@ -61,6 +61,54 @@ export interface PrimaryTake {
   asset?: HoldingSpec;
 }
 
+/**
+ * §3.13b / `../../../../docs/instruments/bond.md` N9.b — THE ACCRUED THE PAPER CARRIES.
+ *
+ * A quoted bond price is a CLEAN price. The interest that has accrued since the paper's last
+ * coupon date belongs to whoever held it while it accrued, so the buyer pays it to the seller on
+ * top of the price — and then collects the whole coupon on the date. Without the leg the seller
+ * financed the issuer interest-free until that date.
+ *
+ * `byParticipantId` is what each participant owes (positive) or is owed (negative) for the face it
+ * took or gave up. It does NOT net to zero: the participants' face deltas sum to what the week's
+ * PRIMARY placed, and seasoned paper the issuer places carries accrued the issuer has never paid
+ * anyone for. So the net is the ISSUER's, and its receivable to the holders rises by exactly the
+ * cash it just took for it.
+ */
+export interface AccruedLeg {
+  byParticipantId: Map<string, number>;
+  issuer: PartyRef;
+}
+
+/**
+ * What each participant owes for the accrued on the face it bought — and is owed on the face it
+ * sold. One unit of face carries one accrued, whoever holds it, so a participant's leg is its own
+ * face delta times that; `onMove` re-keys the same amount on the accrual ledger, which is the
+ * other half of the same trade (rule 5).
+ */
+export function accruedOnFills(
+  participants: readonly { id: string; currentHoldingsByInstrumentId: ReadonlyMap<string, number> }[],
+  newHoldingsByParticipantId: ReadonlyMap<string, ReadonlyMap<string, number>>,
+  accruedPerFaceOf: (instrumentId: string) => number,
+  onMove: (instrumentId: string, participantId: string, deltaLocal: number) => void
+): Map<string, number> {
+  const byParticipantId = new Map<string, number>();
+  participants.forEach((p) => {
+    const after = newHoldingsByParticipantId.get(p.id);
+    let owedLocal = 0;
+    new Set([...p.currentHoldingsByInstrumentId.keys(), ...(after?.keys() ?? [])]).forEach((id) => {
+      const perFace = accruedPerFaceOf(id);
+      if (!(perFace > 0)) return;
+      const usd = ((after?.get(id) ?? 0) - (p.currentHoldingsByInstrumentId.get(id) ?? 0)) * perFace;
+      if (usd === 0) return;
+      owedLocal += usd;
+      onMove(id, p.id, usd);
+    });
+    if (owedLocal !== 0) byParticipantId.set(p.id, owedLocal);
+  });
+  return byParticipantId;
+}
+
 export function settleClearedBook(
   ctx: WeeklyStepContext,
   regionId: RegionId,
@@ -77,7 +125,9 @@ export function settleClearedBook(
   partyOf: (participantId: string) => PartyRef | undefined,
   dealer: { netCashLocal: number; feeLocal: number },
   feeDesks: FeeDesk[],
-  primaryTakes: PrimaryTake[] = []
+  primaryTakes: PrimaryTake[] = [],
+  /** §3.13b: the accrued the paper carried into this session, settled through the same house. */
+  accrued?: AccruedLeg
 ): void {
   const ccp: PartyRef = { kind: 'CLEARING_HOUSE', region: regionId };
   const reason = `${book} clearing`;
@@ -89,6 +139,23 @@ export function settleClearedBook(
     if (deltaLocal > 0) pay(ctx, { payer: ccp, payee: party, amount: deltaLocal, currency: quoteCurrency, reason: legReason });
     else pay(ctx, { payer: party, payee: ccp, amount: -deltaLocal, currency: quoteCurrency, reason: legReason });
   });
+
+  // §3.13b: the accrued, on the same clean price the legs above settled. Every participant faces
+  // the house here too, and the house passes the net to the ISSUER, whose receivable to the
+  // holders rose by the same amount when the accrual ledger re-keyed.
+  if (accrued) {
+    let netLocal = 0;
+    accrued.byParticipantId.forEach((owedLocal, participantId) => {
+      if (!owedLocal) return;
+      const party = partyOf(participantId) ?? defect(`${book} accrued: participant '${participantId}' names no party this model can pay`);
+      const legReason = `${book} accrued interest`;
+      if (owedLocal > 0) pay(ctx, { payer: party, payee: ccp, amount: owedLocal, currency: quoteCurrency, reason: legReason });
+      else pay(ctx, { payer: ccp, payee: party, amount: -owedLocal, currency: quoteCurrency, reason: legReason });
+      netLocal += owedLocal;
+    });
+    if (netLocal > 0) pay(ctx, { payer: ccp, payee: accrued.issuer, amount: netLocal, currency: quoteCurrency, reason: `${book} accrued interest` });
+    else if (netLocal < 0) pay(ctx, { payer: accrued.issuer, payee: ccp, amount: -netLocal, currency: quoteCurrency, reason: `${book} accrued interest` });
+  }
 
   // What is left after the fees is what the week's PRIMARY placed, and it belongs to the issuers
   // who brought the paper. Paid to each by name, pro rata to what its own deal placed.

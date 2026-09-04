@@ -783,6 +783,42 @@ export function trancheePaymentsPerYear(t: DebtTranche): number {
  * The field stays for paper that genuinely re-anchors (a re-opening taps an existing line's
  * dates); it is no longer the only thing standing between a tranche and a schedule.
  */
+/**
+ * CAL / `bond.md` N9.b — WHAT HAS ACCRUED ON ONE UNIT OF FACE, as a fraction of face.
+ *
+ * `annual rate × weeks since this tranche's own last coupon date / 52`. One owner, because three
+ * things need the same number and must not disagree: the seed's opening ledger, the weekly accrual,
+ * and the ACCRUED A BUYER PAYS A SELLER when the paper moves (N9.b, §3.13b) — the leg that makes a
+ * quoted price a CLEAN price. A tranche in its first week has accrued nothing.
+ */
+export function accruedPerFace(
+  t: TrancheSchedule,
+  annualRate: number,
+  week: number,
+): number {
+  return (annualRate * weeksAccrued(t, week)) / 52;
+}
+
+/** What `accruedPerFace` needs of a tranche to place it in its own coupon period. */
+type TrancheSchedule = {
+  originationWeek: number; paymentAnchorWeek?: number; paymentsPerYear?: number;
+  isCommercialPaper?: boolean; rateType?: string;
+};
+
+/**
+ * HOW MANY WEEKS THIS TRANCHE HAS RUN SINCE ITS OWN LAST COUPON DATE — the same number in weeks
+ * that `accruedPerFace` states as a fraction of face, and the form the sovereign calendar's holder
+ * walk takes (`weeksOf`). Split out so the two cannot disagree about where a bond sits in its
+ * period: the seed's sovereign side counted `since % 26` itself, which is the same arithmetic
+ * written twice and reads a period the tranche did not state.
+ */
+export function weeksAccrued(t: TrancheSchedule, week: number): number {
+  const periodWeeks = Math.max(1, Math.round(52 / trancheePaymentsPerYear(t as DebtTranche)));
+  const since = week - tranchePaymentAnchorWeek(t);
+  // Commercial paper has no periods: it accrues from ISSUE to maturity and pays once, there.
+  return t.isCommercialPaper ? Math.max(0, since) : (since <= 0 ? 0 : since % periodWeeks);
+}
+
 export function tranchePaymentAnchorWeek(t: { paymentAnchorWeek?: number; originationWeek: number }): number {
   return t.paymentAnchorWeek ?? t.originationWeek;
 }

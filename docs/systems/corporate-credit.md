@@ -329,8 +329,14 @@ to whoever holds it on the date, which is what the depth-2 diff claimed. What is
 the leg N9.b actually names: a buyer does not pay the seller its accrued at settlement, so the
 seller finances the issuer's coupon interest-free until the date, and the split is weekly-granular —
 a position opened and closed inside one week accrues by the week's-end register, not by the days
-held. **Already §3 step 13b**, which owns the accrual's storage; this is its trade-time half and is
-worth one line in that step.
+held.
+
+Step 13b built that leg and **the sovereign has it** (`book-settlement.ts:accruedOnFills`): the
+buyer pays the accrued on the face it took, the ledger re-keys by the same amount, and the net goes
+to the issuer. The corporate cannot follow while `07b` clears one instrument per COMPANY and the
+accrual ledger is keyed per TRANCHE — there is no face delta on a tranche for the accrued to ride.
+It lands with **§3 step 12's tail** (clearing per tranche), which already owns three findings from
+the same key mismatch.
 
 ### ⚠️ G4 — THE ESTATE SELLS AT A DISCOUNT OFF BOOK, NOT AT A PRICE
 

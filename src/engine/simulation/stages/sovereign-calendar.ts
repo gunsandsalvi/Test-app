@@ -113,6 +113,26 @@ export function accrueSovereignHolders(
 const accrualKey = (regionId: RegionId, bondId: string, party: PartyRef) =>
   `${regionId}|${bondId}|${partyKey(party)}`;
 
+/**
+ * §3.13b / `../../../../docs/instruments/bond.md` N9.b — THE ACCRUED RE-KEYS WHEN THE PAPER MOVES.
+ *
+ * A quoted bond price is a CLEAN price: the interest that has accrued since the last coupon date
+ * is paid by the buyer to the seller on top of it. The cash leg settles through the book's own
+ * clearing house (`book-settlement.ts`); this is the other half — the BALANCE moving with the
+ * face, so that the coupon date pays the accrued to whoever bought it rather than to whoever
+ * happened to earn it. Without it the seller financed the issuer interest-free until the date.
+ *
+ * A balance that reaches zero leaves the ledger, exactly as the payout path leaves it.
+ */
+export function moveSovereignAccrued(
+  accrued: Map<string, number>, regionId: RegionId, bondId: string, party: PartyRef, deltaLocal: number
+): void {
+  if (!Number.isFinite(deltaLocal) || deltaLocal === 0) return;
+  const k = accrualKey(regionId, bondId, party);
+  const next = (accrued.get(k) ?? 0) + deltaLocal;
+  if (next === 0) accrued.delete(k); else accrued.set(k, next);
+}
+
 
 /**
  * Accrue this week's sovereign interest to every holder of record, then pay out the bonds whose

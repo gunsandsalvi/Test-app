@@ -56,7 +56,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { stagePurchaseBudgetLocal } from './institutional-balance-sheet';
 import { pendingSettlementLocal, institutionUnsettledLessCollateralLocal } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -65,6 +65,11 @@ import { holdingClassOf } from '../../../domain/assets';
 import { centralBankParticipant, applyCentralBankFills, wireCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { clearedBookDelta } from '../../ledger/holdings-ledger';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityLocal } from './repo-clearing';
+import { accruedPerFace } from '../../../domain/company';
+import { sovereignCouponByBond } from '../../../domain/government';
+import { moveSovereignAccrued } from './sovereign-calendar';
+import { defect } from '../../../domain/defect';
+import { PartyRef } from './settlement';
 import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
@@ -185,6 +190,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     if (process.env.SOV_TRACE === '1') console.log(`  [sov-entry] ${regionId} live=${liveTranches.length} bonds=${bonds.length} cw=${state.currentWeek}`);
     if (bonds.length === 0) return;
     const bondIds = bonds.map((b) => b.id);
+    // §3.13b / `../instruments/bond.md` N9.b — WHAT ONE UNIT OF FACE HAS ACCRUED. This auction
+    // clears a CLEAN price, so the interest that has run since each bond's own last coupon date is
+    // paid by the buyer to the seller on top of it, and re-keys on the accrual ledger with the
+    // paper. A bill pays no coupon and accrues nothing (`sovereignCouponByBond` omits it).
+    const couponByBond = sovereignCouponByBond(liveTranches);
+    const accruedPerFaceById = new Map<string, number>(liveTranches.map(
+      (t) => [t.id, accruedPerFace(t, couponByBond[t.id] ?? 0, state.currentWeek)]));
     const totalBondOutstandingLocal = bonds.reduce((s, b) => s + b.outstandingLocal, 0) || 1;
 
     // PUB2b: the central bank's open-market order, placed by stage 11 last week. It is a size
@@ -497,9 +509,11 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     });
     const deskTickers = deskTickersOf(deskParticipants);
 
+    const participants = [...entityParticipants, ...bankParticipants, ...(cbOrder ? [cbOrder.participant] : []), ...deskParticipants];
+
     const result = clearFinancialAsset(
       instruments,
-      [...entityParticipants, ...bankParticipants, ...(cbOrder ? [cbOrder.participant] : []), ...deskParticipants],
+      participants,
       priorDealerInventoryById,
       {
         dealerSpreadBps: DEALER_SPREAD_BPS,
@@ -636,17 +650,37 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // reserves land at the sellers' banks through their own legs above.
     const entityIds = new Set(biddingEntities.map((e) => e.id));
     const bankTickers = new Set(regionBanks.map((b) => b.ticker));
+    // ONE reading of who a participant is, for both halves of its settlement: the money and the
+    // accrual ledger's key. The accrual walk names its holders the same way
+    // (`sovereign-calendar.ts:accrueSovereignHolders`), so a balance moved here is a balance that
+    // walk will find.
+    const partyOfParticipant = (id: string): PartyRef | undefined => (
+      entityIds.has(id) ? { kind: 'INSTITUTION', id }
+        : bankTickers.has(id) ? { kind: 'BANK_SECURITIES', ticker: id }
+          : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
+            : dealerDeskPartyOf(id, deskTickers));
+    // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
+    // through the same clearing house as the paper.
+    const accruedByParticipantId = accruedOnFills(
+      participants, result.newParticipantHoldings,
+      (id) => accruedPerFaceById.get(id) ?? 0,
+      (bondId, participantId, usd) => moveSovereignAccrued(
+        ctx.sovereignAccruedInterestLocal, regionId, bondId,
+        partyOfParticipant(participantId)
+          ?? defect(`${BOOK} accrued: participant '${participantId}' names no holder of record`),
+        usd)
+    );
     settleClearedBook(
       ctx, regionId, currencyOf(regionId), BOOK,
       result.netCashDeltaByParticipantId,
-      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id }
-        : bankTickers.has(id) ? { kind: 'BANK_SECURITIES', ticker: id }
-          : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
-            : dealerDeskPartyOf(id, deskTickers)),
+      partyOfParticipant,
       { netCashLocal: result.dealerNetCashLocal, feeLocal: result.totalDealerRevenueLocal },
       feeDesksForRegion(ctx, regionId),
       // PUB: the treasury is paid for the paper this week's auction actually placed.
-      primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }), undefined, primaryAssetOf('GOV_BOND', regionId))
+      primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }), undefined, primaryAssetOf('GOV_BOND', regionId)),
+      // The net is the ISSUER's: seasoned paper the primary placed carries accrued nobody has been
+      // paid for yet, and the treasury's receivable to the holders rose by the same amount.
+      { byParticipantId: accruedByParticipantId, issuer: { kind: 'GOVERNMENT', region: regionId } }
     );
 
     // §5-CLOSE O1: what this auction did not place is withdrawn from the ladder — paper nobody

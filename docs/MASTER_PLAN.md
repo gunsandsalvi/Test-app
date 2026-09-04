@@ -373,10 +373,23 @@ written from here):
     `register-split.ts` goes with them (its own header says so).
     Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
     DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
-13b. **Coupon accruals are dated wires.** `pendingHolderAccrualUSD` is a side map beside the
-    paper. It should be a dated wire that RE-KEYS with the paper when the paper moves, landing on
-    the per-tranche register — the same treatment every other claim now gets. Step 13 keeps
-    accrual on FACE; this makes the accrual itself an instruction rather than a number in a bag.
+    **AND THE CORPORATE ACCRUED LEG** (13b's other half, `bond.md` N9.b): a buyer pays the seller
+    what has accrued on the face it takes. The sovereign has it; the corporate cannot until the
+    clear names a tranche, because there is no per-tranche face delta for the accrued to ride.
+    `book-settlement.ts:accruedOnFills` is the leg — 07b/07d call it with the same arguments 07c
+    does once they clear per tranche.
+13e. **A HOLDER OF RECORD IS EVERY HOLDER.** `sovereign-calendar.ts:accrueSovereignHolders` walks
+    the institutional register and the banks' investment books — so a bank's govvie DESK inventory
+    and the CENTRAL BANK's own book accrue nothing, and their share of every sovereign coupon is
+    paid out to the other holders instead. It is the exact shape already fixed on the corporate
+    side ("THE DESKS ARE HOLDERS OF RECORD TOO", `shared-helpers.ts:applyHolderInterestAccruals`
+    pass 3), never carried across. Found while building 13b, which now moves accrued balances onto
+    those two holders when they buy.
+13f. **An accrued coupon is an ASSET, and only the banks carry it.** The ledger holds the balance;
+    a bank shows it as `sovereignAccruedCouponLocal`, an institution shows nothing. So an
+    institution that pays a seller's accrued at settlement (13b) has the cash gone and no
+    receivable standing against it until the coupon date, and the same is true of every week it
+    accrues. One line on the institutional sheet, read from the same ledger the bank's is.
 
 14. **Nomenclature** (rule 9). A tranche's display name is issuer + coupon + maturity
     (`KRLN 4.75% 2031`), a loan issuer + margin + maturity (`KRLN L+350 2029`), a bill issuer +
@@ -1321,6 +1334,30 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13b — a bond's price is CLEAN, so the buyer pays the seller what has already accrued.** The
+accrual ledger was correct per holder and nobody ever paid for it: the seller carried the interest
+it had earned until the coupon date, financing the issuer free, and the buyer collected a coupon it
+had only partly earned. The leg is `book-settlement.ts:accruedOnFills` — each participant's own face
+delta times what one unit of that bond has accrued since its own last coupon date — settled through
+the same clearing house as the paper, with the accrual ledger re-keyed by the same amount in the
+same pass (rule 5). The net is not zero and must not be: the participants' deltas sum to what the
+week's PRIMARY placed, and seasoned paper the treasury places carries accrued nobody has been paid
+for, so the net goes to the treasury and its receivable to the holders rose with it.
+
+One owner for "where is this bond in its period": `weeksAccrued`, split out of `accruedPerFace`, now
+read by the seed's credit side, the seed's sovereign side (which counted `since % 26` itself, off a
+period the tranche did not state) and the trade leg. The leg does NOT live in `clearedBookDelta`,
+where the first draft put it: that function sees only the holders whose books a stage happens to
+rewrite, so an accrued computed there covers part of a session and nets to nothing anyone can pay.
+
+Sovereign only. 07f has nothing to move — a bill pays no coupon and its whole return is the discount
+— and 07b/07d cannot until they clear per tranche, because the ledger is keyed per tranche and the
+auction names a company: re-homed onto step 12's tail, which already owns three findings from that
+same key mismatch. Two findings it turned up are §3 13e (a bank's govvie desk and the central bank
+hold sovereign paper and accrue nothing) and 13f (an institution's accrued coupon is on no balance
+sheet). Atlas: `bond.md` N9.b sov ✅, corp ⚠️ with its blocker named; `corporate-credit.md` D7 the
+same.
 
 **13c — currency is a universal characteristic, and the step is closed.** Parts 1 and 2 built the
 type and put it in settlement and accounts; this run closed the rest — the obligations and the

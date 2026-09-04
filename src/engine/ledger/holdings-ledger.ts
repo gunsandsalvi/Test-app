@@ -262,15 +262,21 @@ export function scaleHoldings(
  * (holder → house). The rows themselves are rebuilt by the holdings store's write-back; this
  * records the moves. Returns the number of wires.
  */
+/**
+ * §3.13b: THE ACCRUED IS NOT WIRED HERE. What the buyer owes the seller for interest that ran
+ * before it bought is settled per PARTICIPANT, against the book's own clearing house, alongside
+ * the money for the paper itself — `book-settlement.ts:accruedOnFills`. This function sees only
+ * the holders whose books it happens to rewrite, so an accrued leg computed here would cover part
+ * of a session and net to nothing anyone could pay.
+ */
 export function clearedBookDelta(
   holder: PartyRef, region: RegionId, instrumentType: HoldingKind,
   before: Map<string, { valueLocal: number; shares?: number }>,
   after: Map<string, { valueLocal: number; shares?: number }>,
   priceOf: (instrumentId: string) => number | undefined,
-  reason: string
-): number {
+  reason: string,
+): void {
   const house: PartyRef = { kind: 'CLEARING_HOUSE', region };
-  let n = 0;
   const ids = new Set<string>([...before.keys(), ...after.keys()]);
   ids.forEach((id) => {
     const b = before.get(id), a = after.get(id);
@@ -286,9 +292,7 @@ export function clearedBookDelta(
       : { instrumentType, instrumentId: id, issuerRegion: region, valueLocal: Math.abs(dLocal) };
     const sign = inShares ? dSh : dLocal;
     if (sign > 0) wireHolding(house, holder, spec, reason); else wireHolding(holder, house, spec, reason);
-    n++;
   });
-  return n;
 }
 
 /**

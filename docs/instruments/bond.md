@@ -111,7 +111,7 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 | N9.a · corp two legs in the same pass | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
 | N9.a · sov two legs in the same pass | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
 | N9.b · corp accrued interest travels with it | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ⚠️ |
-| N9.b · sov accrued interest travels with it | `src/engine/simulation/stages/sovereign-calendar.ts:runSovereignCalendarStage` | ⚠️ |
+| N9.b · sov accrued interest travels with it | `src/engine/simulation/stages/book-settlement.ts:accruedOnFills` | ✅ |
 | N10 · corp REDEMPTION, and it ceases to exist | `src/engine/ledger/tranche-ledger.ts:retireTranche` | ✅ |
 | N10 · sov REDEMPTION, and it ceases to exist | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
 | N11 · corp an EARLY-TERMINATION REGIME | `src/domain/call-protection.ts:callProtectionForIssue` | ✅ |
@@ -206,14 +206,24 @@ at the bucket's PRINCIPAL-WEIGHTED AVERAGE coupon rather than at its own bond's.
 periodicity is part of the number; here it is part of the bucket. Folds into **§3 step 13-SOV**,
 whose conversion deletes the bucket and makes the bill a `DebtTranche` with `N5.c` in its own row.
 
-### ⚠️ N9.b BOTH TYPES — THE ACCRUAL FOLLOWS THE HOLDER, NOT THE PAPER
+### ⚠️ N9.b · corp — THE ACCRUAL FOLLOWS THE HOLDER, NOT THE PAPER
 
 Both types run the same mechanism and it is better than the contract feared: the accrual ledger
 accumulates per (instrument, holder) and the coupon date pays every accrued balance, **including a
-holder that has since sold** (`shared-helpers.ts:1041`, `sovereign-calendar.ts:112`). So the coupon
-is not a windfall to whoever holds it on the date. What is missing is the leg N9.b names — the buyer
-paying the seller its accrued at settlement — so the seller finances the issuer interest-free until
-the date, and the apportionment is weekly rather than daily. **Already §3 step 13b.**
+holder that has since sold** (`shared-helpers.ts:applyHolderInterestAccruals`,
+`sovereign-calendar.ts:runSovereignCalendarStage`). So the coupon is not a windfall to whoever holds
+it on the date.
+
+**The sovereign now settles the leg** (`book-settlement.ts:accruedOnFills`, step 13b): a bond's
+price is CLEAN, the buyer pays the accrued on the face it took, the accrual ledger re-keys by the
+same amount, and the net — the accrued on seasoned paper the primary placed — goes to the treasury,
+whose receivable rose with it. The apportionment is still weekly rather than daily, which is the
+model's clock everywhere.
+
+**The corporate cannot yet**, and the reason is not this node: `07b` clears one instrument per
+COMPANY while the accrual ledger is keyed per TRANCHE, so there is no face delta on a tranche to
+carry an accrued. It lands with **§3 step 12's tail** (clearing per tranche), which is where the
+same key mismatch already owns three findings.
 
 ### ⚠️ N13.a · corp — A RANKING THAT NOTHING EVER RANKS
 
