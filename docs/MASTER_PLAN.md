@@ -364,19 +364,6 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
     `register-split.ts` goes with them (its own header says so).
     Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
     DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
-13-SOV. **THE SOVEREIGN IS A BOND — FINISH THE CONVERSION.** *(Rows 1–4 done — §9.13-SOV. Row 5
-    is what is left, and it is step 25's defect seen from this side.)* (user, 2026-09-03: *"the sovereign needs to be completely converted. it
-    should have the same construction of a normal bond, they are a normal bond with some different
-    characteristics."*) A sovereign is a fixed-rate senior bullet bond whose issuer is a
-    government: it has no characteristic a corporate bond lacks, it only LACKS some (no seniority
-    stack, no call protection, no floating leg). ONE of the five parallel structures is left.
-
-    · **Row 5, the parallel curve.** `reg.zeroRates` is written BY the clearing rather than read
-      FROM it. It becomes a derived read of the cleared bond prices, which is step 25's
-      two-curve-owners defect and cannot be fixed before row 4 (done). Deletes
-      `computeSovereignBookAnnualYield`'s separate path and `assets/index.ts`'s `YIELD_LIKE` row.
-
-
 13c. **CURRENCY IS THE OTHER UNIVERSAL CHARACTERISTIC** (user, 2026-09-03: *"Every single asset
     has a specific currency in which it's issued and in which is priced on, that's another key
     universal characteristic… why is so much stuff called USD?"*)
@@ -780,10 +767,15 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
     lowers quits. Labour is rationed by posted vacancies, not cleared on price, and the comment at
     `:578` says otherwise. The ~13 bare constants in `region-macro.ts:489-621` ARE the labour
     market's answer today (rule 2).
-25. **One curve owner. SIZED: `P6` measures all 20 tenor points disagreeing, worst 36bp.** `07f:461` refits `yieldCurveParams` through bills+bonds while leaving
-    `zeroRates.tenor2Y…30Y` at 07c's cleared values, against 07c's own header claiming sole
-    ownership — one real curve in two disagreeing representations, with consumers split between
-    them. One owner refits once through all cleared points and derives every field from that fit.
+25. **A CURVE POINT SAYS WHETHER IT WAS TRADED OR INTERPOLATED.** *(The two-owners half is DONE —
+    §9.13-SOV row 5. `sovereign-curve.ts` fits once through every cleared point and publishes every
+    field as a read of it, and `P6` is now the guard on that rather than a measurement of it.)*
+    What is left is the atlas's D3.b, one level down: `calculateNelsonSiegelZeroRate` is called at
+    15 sites to produce a rate for a tenor nobody traded — a coupon at `11-fiscal`, a make-whole
+    discount at `call-protection.ts:96`, a refinancing's fair rate at `stage08-back.ts:1432` — and
+    **no consumer can tell an interpolated point from a cleared one, because the return type is a
+    number.** A fitted curve should hand back points that carry their own provenance, so a
+    mechanism that must not price off an invented point can say so.
 26. **The remaining formula prices, deleted — and WHAT PLANT IS, decided once.** *(11e's last
     slice folded in here, deliberately: the seed and every birth assign `grossPPEUSD` with no
     wire and there is no asset kind for plant — `ASSET_KINDS` carries `HOUSE`, not plant. You
@@ -1393,6 +1385,20 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-SOV row 5 — the curve has ONE owner, and the sovereign conversion is complete.** A region's
+zero curve was carried twice and the two could not agree: 07c fitted `yieldCurveParams` through the
+bonds it cleared and published all five `zeroRates` off that fit; 07f then refitted the parameters
+through its bills PLUS four synthetic points read straight back off `zeroRates` — a fit through the
+previous fit's own output — and wrote only `tenor3M`, leaving 2Y–30Y at 07c's values. Parameters
+described one curve, published points another, consumers split between them (`P6`: all 20 points
+disagreeing, worst 36bp). `sovereign-curve.ts` is the one owner: both sessions clear against the
+curve standing at week start — which is what a real session prices against — and deposit what they
+observed, and it fits ONCE through all of it and publishes every field as a read. A week with no
+cleared point leaves the curve alone, which is the answer and not a fallback. `P6` becomes the
+guard on that rather than a measurement of it. Also deleted: `computeSovereignBookAnnualYield`'s
+private copy of the tenor interpolation (`zeroRateAt` is the one read), and `SOV_BOND`'s stale
+`quotedAs: 'YIELD_LIKE'`, which row 4 made false. **All five parallel structures are gone.**
 
 **13-SOV row 2 — the sovereign ladder IS the store; the array is gone.** `reg.govDebtTranches` was
 the second of the five parallel structures: a plain array beside the one tranche store, rebuilt by

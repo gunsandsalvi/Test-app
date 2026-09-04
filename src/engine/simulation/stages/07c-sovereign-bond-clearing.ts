@@ -26,18 +26,17 @@
  * corporate bonds — real primary-dealer market-making, distinct from their own real portfolio
  * holdings above.
  *
- * After clearing the 4 real tenor yields, the Nelson-Siegel curve (yieldCurveParams) is refit to
- * pass through them (fitNelsonSiegelParams) — the standard real-world technique for building a
- * full curve from a handful of actually observed points — so every other consumer of the curve
- * (corporate bond and loan pricing, swaps, FX, position mark-to-market) keeps working unchanged,
- * now riding on real cleared prices.
+ * §3.13-SOV row 5 — THIS STAGE DOES NOT OWN THE CURVE. It clears bonds against the curve standing
+ * at week start, which is what a real session prices against, and deposits each bond's observed
+ * (tenor, yield) on `ctx.sovereignCurvePoints`. `sovereign-curve.ts` fits ONCE through those and
+ * the bill session's, and publishes every field from that one fit. It used to fit here and write
+ * all five `zeroRates`, which 07f then partly overwrote from a second, differently-sourced fit.
  *
- * This stage is the curve's ONLY owner. macro/evolution.ts used to recompute beta0/beta1/beta2
- * from macro formulas every week and overwrite whatever cleared here; that write is gone. Macro
- * conditions reach the curve exclusively through the participants' own attractiveness views
- * below: the administered policy rate via banks' real front-end arbitrage against central-bank
- * reserves, and inflation expectations via every holder's real yield and how much duration it is
- * being paid for.
+ * Macro conditions reach the curve exclusively through the participants' own views below —
+ * `macro/evolution.ts` used to recompute beta0/beta1/beta2 from formulas every week and overwrite
+ * whatever cleared, and that write is gone: the administered policy rate reaches it via banks'
+ * real front-end arbitrage against central-bank reserves, and inflation expectations via every
+ * holder's real yield and how much duration it is being paid for.
  *
  * Must run after stage 2b (so banks' own balance sheets already reflect this week) and before
  * stage 8, 11, and 12 (all of which read yieldCurveParams/zeroRates as already-real values).
@@ -53,7 +52,6 @@ import { materializeGovLadder, ladderRowsOf, trancheRowOf } from '../../../engin
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
-import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
@@ -528,21 +526,19 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       console.log(`  [sov-trace] ${regionId} w${ctx.nextWeek}: bonds=${bonds.length} points=${observedPoints.length} ` +
         bonds.slice(0, 4).map((b) => `${b.id}@${b.years.toFixed(2)}y out=${(b.outstandingUSD / 1e9).toFixed(1)}B float=${((instruments.find((i) => i.id === b.id)?.tradableFloatUSD ?? 0) / 1e9).toFixed(1)}B px=${result.newStatById.get(b.id)?.toFixed(5) ?? 'none'}`).join(' | '));
     }
-    const fittedParams = observedPoints.length > 0
-      ? fitNelsonSiegelParams(observedPoints, reg.yieldCurveParams.lambda)
-      : reg.yieldCurveParams;
-    // The published tenor points are READS of the fitted curve at those tenors — they are what
-    // the curve says, not a fifth and sixth place a rate is stored (rule 4). A bond at 7.3 years
-    // informs the 5Y and 10Y points through the fit, which is what a curve is FOR.
-    const newZeroRates = {
-      tenor3M: calculateNelsonSiegelZeroRate(0.25, fittedParams),
-      tenor2Y: calculateNelsonSiegelZeroRate(2, fittedParams),
-      tenor5Y: calculateNelsonSiegelZeroRate(5, fittedParams),
-      tenor10Y: calculateNelsonSiegelZeroRate(10, fittedParams),
-      tenor30Y: calculateNelsonSiegelZeroRate(30, fittedParams),
-    };
-    reg.yieldCurveParams = fittedParams;
-    reg.zeroRates = newZeroRates;
+    // §3.13-SOV row 5 / §3.25 — THIS STAGE DOES NOT OWN THE CURVE. It cleared bonds against the
+    // curve standing at week start, which is what a real session prices against, and deposits what
+    // it observed. `sovereign-curve.ts` fits ONCE through these points and the bill session's, and
+    // publishes every field from that one fit.
+    //
+    // It used to fit here and write all five `zeroRates`, and then 07f refitted
+    // `yieldCurveParams` through the BILLS plus four synthetic points read back off this fit while
+    // leaving 2Y–30Y at this stage's values. Two representations of one curve, each partly derived
+    // from the other, and `P6` measured all twenty points disagreeing, worst 36bp.
+    ctx.sovereignCurvePoints.set(regionId, [
+      ...(ctx.sovereignCurvePoints.get(regionId) ?? []),
+      ...observedPoints,
+    ]);
 
     // Apply: each entity's real new holdings — foreign holders included, which is what makes
     // the foreign share a measured outcome rather than a parameter.

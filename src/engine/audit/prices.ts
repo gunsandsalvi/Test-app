@@ -182,7 +182,7 @@ function p5(state: GameState, week: number): AuditFinding[] {
 }
 
 /**
- * P6 — ONE CURVE, ONE ANSWER (rule 4, and step 25 owns the fix).
+ * P6 — ONE CURVE, ONE ANSWER (rule 4).
  *
  * A region carries its yield curve TWICE: `zeroRates` — the five tenors the books strike and
  * every consumer reads — and `yieldCurveParams`, the Nelson-Siegel fit that `stage08-back` prices
@@ -190,6 +190,11 @@ function p5(state: GameState, week: number): AuditFinding[] {
  * two disagree, a bond issued at "the cleared terms" is born away from par, because the coupon
  * was struck on one curve and the paper is valued on the other. That is not a market moving; it
  * is two answers to one question, and it feeds `P5` directly.
+ *
+ * §3.13-SOV row 5 made `sovereign-curve.ts` the one owner: it fits once through every point the
+ * week's sessions cleared and publishes `zeroRates` as READS of that fit, so the two agree by
+ * construction. This check stops being a measurement of a known defect and becomes the guard on
+ * that: it fires again the moment a second writer appears, which is exactly how the defect arose.
  *
  * Reported in basis points at the tenors both representations claim to express.
  */

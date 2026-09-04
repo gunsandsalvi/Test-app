@@ -39,7 +39,7 @@ import { GameState, RegionId, ItemizedHolding, DebtTranche, NewsItem, Company } 
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { computeAnnualDefaultProbability, creditRecoveryRate, payHoldersAccruedInterest, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
-import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
+import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetUSD } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
@@ -486,21 +486,20 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           yield: px === undefined ? reg.zeroRates.tenor3M : billYieldFromPrice(px, b.years),
         };
       });
-      const bondPoints = [
-        { tenorYears: 2, yield: reg.zeroRates.tenor2Y },
-        { tenorYears: 5, yield: reg.zeroRates.tenor5Y },
-        { tenorYears: 10, yield: reg.zeroRates.tenor10Y },
-        { tenorYears: 30, yield: reg.zeroRates.tenor30Y },
-      ];
-      reg.yieldCurveParams = fitNelsonSiegelParams([...billPoints, ...bondPoints], reg.yieldCurveParams.lambda);
+      // §3.13-SOV row 5 / §3.25 — the bill session deposits what it cleared and fits nothing. It
+      // used to refit `yieldCurveParams` through these points plus four SYNTHETIC ones read off
+      // `zeroRates` — a fit through the previous fit's own output — and then write only `tenor3M`,
+      // leaving 2Y–30Y at 07c's values. `sovereign-curve.ts` owns the fit now.
+      ctx.sovereignCurvePoints.set(regionId, [
+        ...(ctx.sovereignCurvePoints.get(regionId) ?? []),
+        ...billPoints,
+      ]);
       if (process.env.BILL_TRACE === '1') {
         console.log(`  [bill-trace] ${regionId} w${ctx.nextWeek}: ` + activeBills.map((b) => {
           const px = result.newStatById.get(b.key);
           return `${b.key} px=${px === undefined ? 'none' : px.toFixed(8)} y=${(billPoints.find((p) => p.tenorYears === b.years)!.yield * 100).toFixed(4)}%`;
         }).join(' | '));
       }
-      const cleared13w = billPoints.find((p) => p.tenorYears === 0.25);
-      reg.zeroRates = { ...reg.zeroRates, tenor3M: cleared13w ? cleared13w.yield : calculateNelsonSiegelZeroRate(0.25, reg.yieldCurveParams) };
 
       // Apply bank books (their bills live beside their bonds in the one book).
       // The write goes to `companyUpdates`, which is the ONLY bank-sheet write that survives:

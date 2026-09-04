@@ -1,4 +1,5 @@
 import { riskAversionOf } from '../../domain/preferences';
+import { zeroRateAt } from '../../domain/pricing';
 import { loanBooksOf, DepositLines } from '../../domain/banking';
 import { BankingSector, householdBookRwaUSD, CONSUMER_CREDIT_RISK_WEIGHT, WHOLESALE_FUNDING_SPREAD_BPS } from '../../types';
 import { dealerDeskGrossUSD } from '../../domain/dealer-desk';
@@ -189,20 +190,9 @@ export function computeSovereignBookAnnualYield(
   zeroRates: { tenor3M: number; tenor2Y: number; tenor5Y: number; tenor10Y: number; tenor30Y: number },
   tenorYearsOf: (bondId: string) => number | undefined
 ): number {
-  const points: [number, number][] = [
-    [0.25, zeroRates.tenor3M], [2, zeroRates.tenor2Y], [5, zeroRates.tenor5Y],
-    [10, zeroRates.tenor10Y], [30, zeroRates.tenor30Y],
-  ];
-  const yieldAt = (years: number): number => {
-    if (years <= points[0][0]) return points[0][1];
-    for (let i = 1; i < points.length; i++) {
-      if (years <= points[i][0]) {
-        const [y0, r0] = points[i - 1]; const [y1, r1] = points[i];
-        return r0 + (r1 - r0) * ((years - y0) / (y1 - y0));
-      }
-    }
-    return points[points.length - 1][1];
-  };
+  // §3.13-SOV row 5: the yield at a tenor is `pricing/bond.ts:zeroRateAt`, the same read every
+  // other consumer of the curve takes. This carried its own copy of that interpolation — a second
+  // answer to one question (rule 4), and the second place the curve was effectively re-expressed.
   let bookUSD = 0; let incomeUSD = 0;
   Object.entries(byBond || {}).forEach(([bondId, usd]) => {
     const v = Number(usd) || 0;
@@ -211,7 +201,7 @@ export function computeSovereignBookAnnualYield(
     // A line whose bond cannot be found is not valued at a guessed tenor — it is not valued.
     if (years === undefined) return;
     bookUSD += v;
-    incomeUSD += v * yieldAt(years);
+    incomeUSD += v * zeroRateAt(zeroRates, years);
   });
   return bookUSD > 0 ? incomeUSD / bookUSD : 0;
 }

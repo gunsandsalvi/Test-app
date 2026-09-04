@@ -330,6 +330,10 @@ export interface WeeklyStepContext {
   tradeInvoiceWriteOffUSD: number;
   /** XB3a-2 — what the freight market cleared, read by stage 08 for the carriers' P&L. */
   freightClearing?: import('./freight-clearing').FreightClearing;
+  /** §3.13-SOV row 5 / §3.25 — what the week's sovereign sessions actually cleared, per region:
+   *  one (tenor, yield) point per bond and bill that traded, deposited by 07c and 07f and read by
+   *  `sovereign-curve.ts`, which is the ONE owner that fits the curve and publishes its points. */
+  sovereignCurvePoints: Map<RegionId, { tenorYears: number; yield: number }[]>;
 
   // Stage 11 output, read by stage 13
   weeklyInterestIncomeUSD: number;
@@ -462,6 +466,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     sovereignAccruedInterestUSD: state.sovereignAccruedInterestUSD,
     tradeInvoiceFxGainUSD: 0,
     tradeInvoiceWriteOffUSD: 0,
+    sovereignCurvePoints: new Map(),
 
     weeklyInterestIncomeUSD: 0,
     weeklyFinancingCostUSD: 0,

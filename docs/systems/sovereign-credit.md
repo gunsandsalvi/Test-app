@@ -181,10 +181,10 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | C5 weak demand resolves as a higher yield or a cut size | `src/engine/ledger/tranche-ledger.ts:retireTranche` | ✅ |
 | C6 proceeds reach the treasury's account | `src/engine/simulation/stages/book-settlement.ts:primaryTakes` | ✅ |
 | C7 paper nobody bid for is withdrawn | `src/engine/ledger/tranche-ledger.ts:retireTranche` | ✅ |
-| **D1 it trades: a PRICE per unit** | — | ❌ |
-| **D2 the yield is DERIVED from the price and never sets it** | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ❌ |
-| D3 the curve is a fit through observed points | `src/engine/nelsonSiegel.ts:fitNelsonSiegelParams` | ⚠️ |
-| **D3.a one owner of the curve** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ❌ |
+| **D1 it trades: a PRICE per unit** | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
+| **D2 the yield is DERIVED from the price and never sets it** | `src/domain/pricing/bond.ts:yieldFromPrice` | ✅ |
+| D3 the curve is a fit through observed points | `src/engine/simulation/stages/sovereign-curve.ts:runSovereignCurveStage` | ✅ |
+| **D3.a one owner of the curve** | `src/engine/simulation/stages/sovereign-curve.ts:runSovereignCurveStage` | ✅ |
 | D3.b a point is a trade, or is labelled as interpolated | `src/engine/nelsonSiegel.ts:calculateNelsonSiegelZeroRate` | ❌ |
 | D4 it is the benchmark other credit is spread to | `src/domain/pricing/bond.ts:zeroRateAt` | ✅ |
 | D5 repo collateral, at the smallest haircut of any asset | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
@@ -234,7 +234,7 @@ Branches D and E fall out of the first; the whole of G and half of A out of the 
 | 2 store | ✅ DONE — the ONE tranche store | `reg.govDebtTranches` — 20 read sites across `src`, all of them `(reg.govDebtTranches ?? []).filter/reduce`; the withdrawal rebuilt the array with `.map(t => ({...t}))` |
 | 3 holdings | ✅ DONE — every store keys by BOND | `banking.ts:129` `sovereignBondHoldingsByBond` for banks, `centralBankSheet.sovereignHoldingsByBond` for the CB, `sovBondDealerInventory[].bondId` for the desks, `GOV_BOND` register rows on the tranche id for institutions. Four stores, one id space; `audit/ownership.ts:o11` is the invariant and `o3` no longer exempts sovereigns |
 | 4 clearing | `07c` clears a **YIELD** | `07c:331` `statKind: 'YIELD_LIKE'`, `currentStat: currentYieldDecimal * 10000`; `financial-clearing-engine.ts:956` then values every fill at `1` because the stat is not `PRICE_LIKE` |
-| 5 curve | its own object | `07c:517-524` writes `reg.zeroRates` from the cleared yields and `reg.yieldCurveParams` from a fit through them, in the same pass |
+| 5 curve | ✅ DONE — ONE owner | `sovereign-curve.ts` fits once through every point the week's sessions cleared and publishes every field as a read of that fit; the auctions clear against the standing curve and deposit what they observed |
 
 Row 3 cost the most nodes and is DONE: E1 asks who holds how much of which LINE, and every store
 now answers by bond — F1's coupon is the bond's own (`government.ts:sovereignCouponByBond`), F3's
@@ -321,11 +321,16 @@ fail and withdraws the unplaced paper. That is the more honest mechanism. But th
 survivable here is the overdraft, not a dealer's obligation — so the node is ❌ and the tree's own
 claim should be revisited when A3.b is fixed.
 
-### ❌ D3.a / D3.b / D6 — THE CURVE HAS TWO OWNERS AND THE SPREAD HAS NONE
+### ✅ D3.a (closed) / ❌ D3.b / D6 — THE CURVE HAD TWO OWNERS AND THE SPREAD HAS NONE
 
-**Already §3 step 25** for D3.a: `07f:461` refits `yieldCurveParams` through bills-plus-bonds while
-leaving `zeroRates.tenor2Y…30Y` at 07c's cleared values, against `07c`'s own header claiming sole
-ownership. D3.b is the same defect one level down and is not in the step: `calculateNelsonSiegelZeroRate`
+D3.a is closed by §3.13-SOV row 5. It was: `07f` refitted `yieldCurveParams` through its bills plus
+four SYNTHETIC points read back off `zeroRates`, then wrote only `tenor3M` and left 2Y–30Y at 07c's
+values — the parameters describing one curve and the published points another, each partly derived
+from the other, with `P6` measuring all twenty points disagreeing. `sovereign-curve.ts` is the one
+owner now: both sessions clear against the standing curve and deposit what they observed, and it
+fits once through all of it and publishes every field as a read.
+
+D3.b is the same defect one level down and is not yet in a step: `calculateNelsonSiegelZeroRate`
 is called at 15 sites to produce a rate for a tenor nobody traded — a coupon at `11-fiscal:615,656`,
 a make-whole discount rate at `call-protection.ts:96`, a refinancing's fair rate at
 `stage08-back.ts:1432` — and **no consumer can tell an interpolated point from a cleared one**,

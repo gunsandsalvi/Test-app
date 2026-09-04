@@ -41,6 +41,7 @@ import { accrueInstitutionalIncome } from './stages/institutional-balance-sheet'
 import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
 import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clearing';
 import { runShortDebtClearingStage } from './stages/07f-short-debt-clearing';
+import { runSovereignCurveStage } from './stages/sovereign-curve';
 import { runEquityClearingStage } from './stages/07e-equity-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { auditCompanyStore, syncCompanyField } from '../../engine2/company-store';
@@ -274,6 +275,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('07c-sovereign-bond-clearing', () => runSovereignBondClearingStage(state, ctx));
   run('07d-leveraged-loan-clearing', () => runLeveragedLoanClearingStage(state, ctx));
   run('07f-short-debt-clearing', () => runShortDebtClearingStage(state, ctx));
+  // §3.13-SOV row 5 / §3.25: ONE owner fits the region's curve, once, through every point the
+  // week's sovereign sessions cleared — after both of them, because both produce points.
+  run('sovereign-curve', () => runSovereignCurveStage(ctx));
   syncCompanyField(state, 'totalDebt');
   // HF: the borrow is located and struck BEFORE the equity book opens, so a short sells its
   // borrowed shares into this week's real bid and a recalled one buys in against it.
