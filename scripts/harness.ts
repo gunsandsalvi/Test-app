@@ -22,7 +22,7 @@ import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, householdDeposit
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
-import { facilityBookOf, facilityRowsOf, materializeGovLadder } from '../src/engine2/tranches';
+import { facilityBookOf, materializeGovLadder } from '../src/engine2/tranches';
 
 // Same seed, same world. Pass SEED=<n> to check a result against a genuinely different economy
 // rather than against the noise an unseeded run used to produce.
@@ -121,7 +121,7 @@ if (process.env.TIMING_REPORT) {
 }
 
 import { advanceWeeklyStep, advanceWeeklyStepProfiled } from '../src/engine/simulation/core';
-import { GameState, RegionId, Position, Company, InstitutionalEntity, DebtTranche, OccupationType, ItemizedHolding } from '../src/types';
+import { GameState, RegionId, Position, Company, InstitutionalEntity, OccupationType, ItemizedHolding } from '../src/types';
 import { GovDebtTranche, OccupationPool } from '../src/domain/region-macro';
 import { ProductLine } from '../src/domain/company';
 import { HouseholdLoanPool, MortgageVintage } from '../src/domain/banking';
@@ -151,6 +151,7 @@ import { isCarrier } from '../src/engine/simulation/stages/freight-clearing';
 import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
 import { DERIVATIVE_CLASSES } from '../src/domain/derivatives/registry';
 import { auditWeek, auditSeed, auditSummary, AuditFinding } from '../src/engine/audit';
+import { ownershipCoverage } from '../src/engine/audit/ownership';
 import { instrumentEntries, type InstrumentId } from '../src/domain/ids';
 
 interface Violation {
@@ -211,110 +212,24 @@ const clone = (s: GameState): GameState => structuredClone(s);
  * than the instrument's outstanding, some formula is minting claims.
  */
 /**
- * Nobody can hold more of an instrument than exists — the ledger-minting test.
+ * §3.13-READ A9/A10/A11 — THE OWNERSHIP TRACES, and the CHECK is the audit's.
  *
- * OWN7 step 1: this compared the wrong two numbers for as long as XB1 has existed. It filtered
- * holders on the HOLDER's region and then counted every position they held regardless of the
- * ISSUER's, so a JPN insurer's USA bonds were scored against JPN outstanding. And it left three
- * real holders off the held side entirely — the central bank's sovereign book, corporate
- * treasuries, and the banks' own `businessLoans` (which ARE floating corporate debt) — so the
- * test was understated by exactly those, on top of being mis-keyed.
+ * `checkHoldingsLedgerConservation` used to stand here: a second copy of `audit/ownership.ts:o1`
+ * that had rotted apart from it on four counts, all of which made the harness's answer the wrong
+ * one — it summed each row's MONEY where the audit reads its FACE, it added the register's
+ * `GOV_BOND` rows on top of the banks' own sovereign books, it counted paper issued THIS week
+ * (which is still in the auction and is nobody's yet), and it tested one side only, so "paper
+ * with no owner" could not fail. It also had no `isBankFacility` guard, so drawn facilities
+ * landed in the corporate and loan buckets that O4 already tests on the lender's book. And it
+ * open-coded the sovereign walk twice, reaching three of the four stores a government holding
+ * sits in — the fifth and sixth copies `sovereign-register.ts` was written to end.
  *
- * Both sides are keyed to the ISSUER's region now, the same way `measuredOwnershipAllRegions`
- * keys the ownership register. It stays a ONE-SIDED test: households and other unnamed holders
- * are the residual and are not itemised anywhere, so `held` is legitimately below `outstanding`
- * — only exceeding it is a defect.
+ * `auditWeek` already runs `o1` on every week of every run, so the check was never the harness's
+ * to make. What is left is the two instruments §8 names, now reading the audit's own measurement
+ * (`ownershipCoverage`) instead of a private walk that disagreed with it.
  */
-function checkHoldingsLedgerConservation(state: GameState, week: number): Violation[] {
-  const out: Violation[] = [];
+function printOwnershipTraces(state: GameState, week: number): void {
   const regionIds = REGION_IDS;
-  type Book = { corp: number; loan: number; sov: number; cp: number };
-  const held: Record<string, Book> = {};
-  const outstanding: Record<string, Book> = {};
-  regionIds.forEach((r) => {
-    held[r] = { corp: 0, loan: 0, sov: 0, cp: 0 };
-    outstanding[r] = { corp: 0, loan: 0, sov: 0, cp: 0 };
-  });
-
-  const companyRegionById = new Map<string, string>();
-  state.companies.forEach((c: Company) => {
-    companyRegionById.set(c.id, c.region);
-    // A DEFAULTED issuer's paper is still a claim. Its estate has not distributed yet, so its
-    // holders' rows are still on their books — and excluding its ladder here scored a workout in
-    // progress as a ledger minting claims (measured: a steady 6.5% "over" in the USA from the
-    // week defaults began). A MERGED one is different: 10-mergers reassigns the paper to the
-    // acquirer, whose ladder is counted, so counting it here as well would double it.
-    if (c.mergerAcquired) return;
-    const o = outstanding[c.region];
-    if (!o) return;
-    (c.debtTranches || []).forEach((t: DebtTranche) => {
-      // CP has its own book (07f) and its own holders; counting it as a corporate BOND was the
-      // same conflation that had its coupon paid to the bondholders.
-      if (t.isCommercialPaper) o.cp += t.principalLocal;
-      else if (t.rateType === 'FIXED') o.corp += t.principalLocal;
-      else o.loan += t.principalLocal;
-    });
-  });
-  regionIds.forEach((r) => {
-    outstanding[r].sov = materializeGovLadder(ensureV2(state), r).reduce((a: number, t: GovDebtTranche) => a + t.principalLocal, 0);
-  });
-
-  const addHolding = (h: ItemizedHolding) => {
-    const b = held[h.issuerRegion];
-    if (!b) return;
-    const v = h.quantityOrNotionalLocal ?? 0;
-    if (h.instrumentType === 'CORP_BOND') b.corp += v;
-    else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v;
-    else if (h.instrumentType === 'GOV_BOND') b.sov += v;
-    else if (h.instrumentType === 'COMMERCIAL_PAPER') b.cp += v;
-  };
-  state.institutionalEntities.forEach((e: InstitutionalEntity) => {
-    if (e.isDefaulted) return;
-    e.itemizedHoldings.forEach(addHolding);
-  });
-  state.companies.forEach((c: Company) => {
-    if (c.mergerAcquired) return;
-    // A corporate treasury parks cash in its own government's paper (07f).
-    (c.treasuryHoldings || []).forEach(addHolding);
-    if (c.isDefaulted) return;
-    const bs = c.bankBalanceSheet;
-    if (!bs) return;
-    // A bank's liquidity buffer is its OWN sovereign — 07c/07f give it no foreign bucket, and
-    // the buckets are keyed by bare tenor, so the bank's region IS the issuer's.
-    const b = held[c.region];
-    if (b) {
-      b.sov += (Object.values(bs.sovereignBondHoldingsByBond || {}) as number[])
-        .reduce((a: number, v: number) => a + (Number(v) || 0), 0);
-    }
-    // A drawn facility is floating corporate debt on the BORROWER's region, which is not
-    // necessarily the lender's. Pool loans are excluded: an SME pool's debt is a scalar on the
-    // pool (`seg.debtLocal`), not a tranche on any company, so it has no outstanding to score
-    // against and counting it here reported 41% over from week 1. §5-FINALIZATION step 10: the
-    // bank's facilities are the borrowers' ladder rows, read from the lender's side.
-    facilityRowsOf(ensureV2(state), c.ticker).forEach((l) => {
-      const region = companyRegionById.get(l.borrowerId);
-      if (!region) return;
-      const lb = held[region];
-      // §7.246: unclamped — a negative principal is a defect this sum exists to EXPOSE (§7.46 L7:
-      // a measurement that clamps is a measurement that lies).
-      if (lb) lb.loan += l.principalLocal;
-    });
-  });
-  regionIds.forEach((r) => {
-    const reg = state.regions[r];
-    (reg.bankingSector.corpBondDealerInventory || []).forEach((p: { inventoryLocal: number }) => { held[r].corp += p.inventoryLocal; });
-    // The CP desks' book lives only on the named banks (no regional array — G3a's doctrine).
-    state.companies.forEach((c: Company) => {
-      if (c.region !== r || !c.bankBalanceSheet) return;
-      (c.bankBalanceSheet.dealerDeskInventory?.['commercial paper'] || [])
-        .forEach((p: { inventoryLocal: number }) => { held[r].cp += p.inventoryLocal; });
-    });
-    (reg.bankingSector.loanDealerInventory || []).forEach((p: { inventoryLocal: number }) => { held[r].loan += p.inventoryLocal; });
-    (reg.bankingSector.sovBondDealerInventory || []).forEach((p: { inventoryLocal: number }) => { held[r].sov += p.inventoryLocal; });
-    Object.values(reg.centralBankSheet?.sovereignHoldingsByBond || {}).forEach((usd: number) => {
-      held[r].sov += Number(usd) || 0; // §7.246: unclamped (§7.46 L7)
-    });
-  });
 
   // MINT_TRACE=1 — per-issuer decomposition of a minting class: who carries the excess, and is
   // the issuer live, dead, or a bank (the §7.286 paydown exclusion). Read-only.
@@ -324,12 +239,14 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     // phantom "excess" that was simply the OTHER classes' real holdings (§7.292 — this
     // instrument's own first version did exactly that; §7.221's lesson, self-inflicted).
     const heldByIssuer = new Map<string, { usd: number; cls: string }>();
-    const addTrace = (h: { instrumentType: string; instrumentId: string; quantityOrNotionalLocal?: number }) => {
+    const addTrace = (h: ItemizedHolding) => {
       if (h.instrumentType !== 'LEVERAGED_LOAN' && h.instrumentType !== 'CORP_BOND'
         && h.instrumentType !== 'COMMERCIAL_PAPER') return;
       const key = `${h.instrumentId}|${h.instrumentType}`;
       const cur = heldByIssuer.get(key) ?? { usd: 0, cls: h.instrumentType };
-      cur.usd += h.quantityOrNotionalLocal ?? 0;
+      // §3.13-READ A9: face, like the audit — a trace that measures a different quantity from
+      // the check it is meant to explain sends the reader after the spread instead of the defect.
+      cur.usd += h.units ?? h.quantityOrNotionalLocal ?? 0;
       heldByIssuer.set(key, cur);
     };
     state.institutionalEntities.forEach((e) => { if (!e.isDefaulted) e.itemizedHoldings.forEach(addTrace); });
@@ -338,72 +255,38 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     heldByIssuer.forEach((v, key) => {
       const id = key.split('|')[0];
       const c = byId.get(id);
-      const outLocal = c ? (c.debtTranches || []).reduce((a: number, t) => {
-        const cls = t.isCommercialPaper ? 'COMMERCIAL_PAPER' : t.rateType === 'FIXED' ? 'CORP_BOND' : 'LEVERAGED_LOAN';
-        return a + (cls === v.cls ? t.principalLocal : 0);
-      }, 0) : 0;
-      const excess = v.usd - outLocal;
-      if (excess > 50e6) {
-        const flag = !c ? 'GONE' : c.isBankEntity ? 'BANK' : c.isDefaulted ? 'DEAD' : c.mergerAcquired ? 'MERGED' : 'live';
-        rows.push(`${(excess / 1e6).toFixed(0)}M ${v.cls} ${c?.ticker ?? id} [${flag}]`
-          + ` out ${(outLocal / 1e6).toFixed(0)}M cash ${((c ? cashOf(ensureV2(state), c) : 0) / 1e6).toFixed(0)}M`);
+      if (!c || v.usd <= 0) return;
+      const ladderLocal = (c.debtTranches ?? [])
+        .filter((t) => !t.isBankFacility
+          && (v.cls === 'COMMERCIAL_PAPER' ? t.isCommercialPaper
+            : v.cls === 'CORP_BOND' ? (!t.isCommercialPaper && t.rateType === 'FIXED')
+              : (!t.isCommercialPaper && t.rateType !== 'FIXED')))
+        .reduce((a, t) => a + t.principalLocal, 0);
+      if (v.usd > ladderLocal * 1.02 && v.usd - ladderLocal > 1e8) {
+        rows.push(`${c.ticker}|${v.cls}: held ${(v.usd / 1e9).toFixed(2)}B vs ladder ${(ladderLocal / 1e9).toFixed(2)}B`
+          + `${c.isDefaulted ? ' [defaulted]' : ''}${c.isBankEntity ? ' [bank]' : ''}`);
       }
     });
-    if (rows.length > 0) console.log(`  [mint] w${week} excess>50M: ${rows.sort((a, b) => parseFloat(b) - parseFloat(a)).slice(0, 12).join(' | ')}`);
-    // The top excess name's holders, so the unswept path names itself.
-    let topId = ''; let topExcess = 0;
-    heldByIssuer.forEach((v, key) => {
-      const id = key.split('|')[0];
-      const c = byId.get(id);
-      const outLocal = c ? (c.debtTranches || []).reduce((a: number, t) => {
-        const cls = t.isCommercialPaper ? 'COMMERCIAL_PAPER' : t.rateType === 'FIXED' ? 'CORP_BOND' : 'LEVERAGED_LOAN';
-        return a + (cls === v.cls ? t.principalLocal : 0);
-      }, 0) : 0;
-      if (v.usd - outLocal > topExcess) { topExcess = v.usd - outLocal; topId = id; }
-    });
-    if (topId) {
-      const holders: string[] = [];
-      state.institutionalEntities.forEach((e) => {
-        if (e.isDefaulted) return;
-        const usd = e.itemizedHoldings.reduce((a: number, h) =>
-          a + (h.instrumentId === topId ? (h.quantityOrNotionalLocal ?? 0) : 0), 0);
-        if (usd > 100e6) holders.push(`${e.id}:${(usd / 1e6).toFixed(0)}M[${e.entityType}${e.region === byId.get(topId)?.region ? '' : '/x-border'}]`);
-      });
-      console.log(`  [mint-top] ${byId.get(topId)?.ticker}: ${holders.sort((a, b) => parseFloat(b.split(':')[1]) - parseFloat(a.split(':')[1])).slice(0, 6).join(' ')}`);
-    }
+    if (rows.length > 0) console.log(`  [mint-trace] w${week}: ${rows.slice(0, 8).join(' · ')}`);
   }
 
   // OWN_TRACE=1 — the COVERAGE, both sides: what the register and every named desk hold of each
-  // kind against the ladders' face (the battery below reports only the "over" side).
+  // kind against the ladders' face.
   if (process.env.OWN_TRACE === '1') {
-    const deskLocal: Record<string, { corp: number; loan: number; cp: number }> = {};
-    regionIds.forEach((r) => { deskLocal[r] = { corp: 0, loan: 0, cp: 0 }; });
+    const { held, outstanding } = ownershipCoverage(state);
+    const deskFace: Record<string, { corp: number; loan: number; cp: number }> = {};
+    regionIds.forEach((r) => { deskFace[r] = { corp: 0, loan: 0, cp: 0 }; });
     state.companies.forEach((c) => {
-      const inv = c.bankBalanceSheet?.dealerDeskInventory; if (!inv || !deskLocal[c.region]) return;
-      (inv['corporate bond'] ?? []).forEach((p) => { deskLocal[c.region].corp += p.inventoryLocal; });
-      (inv['leveraged loan'] ?? []).forEach((p) => { deskLocal[c.region].loan += p.inventoryLocal; });
+      const inv = c.bankBalanceSheet?.dealerDeskInventory; if (!inv || !deskFace[c.region]) return;
+      const face = (book: string): number =>
+        (inv[book] ?? []).reduce((a, p) => a + (p.units ?? p.inventoryLocal), 0);
+      deskFace[c.region].corp += face('corporate bond');
+      deskFace[c.region].loan += face('leveraged loan');
+      deskFace[c.region].cp += face('commercial paper');
     });
-    // `held` already folds the desks in through the region's desk view; the named desks are shown inside it.
-    console.log(`  [own-trace] w${week}: ` + regionIds.map((r) => `${r} corp ${(held[r].corp / 1e9).toFixed(2)} (desks ${(deskLocal[r].corp / 1e9).toFixed(2)}) of ${(outstanding[r].corp / 1e9).toFixed(2)}B | loan ${(held[r].loan / 1e9).toFixed(2)} (desks ${(deskLocal[r].loan / 1e9).toFixed(2)}) of ${(outstanding[r].loan / 1e9).toFixed(2)}B | cp ${(held[r].cp / 1e9).toFixed(2)} of ${(outstanding[r].cp / 1e9).toFixed(2)}B`).join(' || '));
+    // `held` already folds the desks in; the named desks are shown inside it.
+    console.log(`  [own-trace] w${week}: ` + regionIds.map((r) => `${r} corp ${(held[r].corp / 1e9).toFixed(2)} (desks ${(deskFace[r].corp / 1e9).toFixed(2)}) of ${(outstanding[r].corp / 1e9).toFixed(2)}B | loan ${(held[r].loan / 1e9).toFixed(2)} (desks ${(deskFace[r].loan / 1e9).toFixed(2)}) of ${(outstanding[r].loan / 1e9).toFixed(2)}B | cp ${(held[r].cp / 1e9).toFixed(2)} (desks ${(deskFace[r].cp / 1e9).toFixed(2)}) of ${(outstanding[r].cp / 1e9).toFixed(2)}B`).join(' || '));
   }
-  regionIds.forEach((r) => {
-    const cases: [string, number, number][] = [
-      ['corporate bonds', held[r].corp, outstanding[r].corp],
-      ['leveraged loans', held[r].loan, outstanding[r].loan],
-      ['sovereign bonds', held[r].sov, outstanding[r].sov],
-      ['commercial paper', held[r].cp, outstanding[r].cp],
-    ];
-    cases.forEach(([label, h, o]) => {
-      if (o <= 0) return;
-      if (h > o * 1.02) {
-        out.push({
-          week,
-          message: `${r} ${label}: real books hold ${(h / 1e9).toFixed(1)}B against ${(o / 1e9).toFixed(1)}B outstanding (${((h / o - 1) * 100).toFixed(1)}% over) — a ledger is minting claims`
-        });
-      }
-    });
-  });
-  return out;
 }
 
 /** A region's institutional book — cash (the account, §5-WIRES A3.2), repo lent, the rows. */
@@ -879,7 +762,6 @@ function checkNavIdentity(state: GameState, week: number) {
     });
   }
 }
-
 
 function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
   const seedState = createInitialGameState(SEED);
@@ -2428,7 +2310,7 @@ function runHarness() {
     checkHouseholdCohortIdentity(state, w);
     checkLaborMarketIdentity(state, w);
     checkCentralBankIdentity(state, w);
-    violations.push(...checkHoldingsLedgerConservation(state, w));
+    printOwnershipTraces(state, w); // the CHECK is the audit's O1, run below
     checkBeneficiaryClaimsHaveHolders(state, w);
     checkSettlementClosed(state, w);
     checkGuards(state, w);

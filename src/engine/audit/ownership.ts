@@ -16,10 +16,30 @@ import { materializeGovLadder } from '../../engine2/tranches';
 import { isTrancheKind } from '../../domain/assets';
 import { bookHeadOf } from '../../engine2/holdings';
 
-/** O1 — two-sided: what the books hold of each debt class equals what is outstanding, in both directions. */
-function o1(state: GameState, week: number): AuditFinding[] {
-  const out: AuditFinding[] = [];
-  type Book = { corp: number; loan: number; sov: number; cp: number };
+/** One region's debt books, by class, in FACE. */
+export type OwnershipBook = { corp: number; loan: number; sov: number; cp: number };
+
+/**
+ * §3.13-READ A9/A10/A11 — WHAT IS HELD AND WHAT IS OUTSTANDING, of every debt class, by the
+ * ISSUER's region, and the only walk that answers it.
+ *
+ * O1's measurement is extracted here because the harness carried a second copy of it that had
+ * rotted apart on four separate counts, and every one of them made the harness's answer the wrong
+ * one: it summed the row's MONEY where this reads its FACE (so every basis point of credit spread
+ * was reported as paper that does not exist, the moment credit stopped printing at par); it added
+ * the register's `GOV_BOND` rows AND the banks' own sovereign books, double-counting the overlap;
+ * it counted paper issued THIS week, which is still in the auction and is nobody's yet; and it
+ * tested one side only, so "paper with no owner" could not fail. It also had no `isBankFacility`
+ * guard, so drawn facilities — which O4 tests on the lender's book — landed in the corporate and
+ * loan buckets as well.
+ *
+ * The sovereign arm is `sovereignHeldByClass`, which is the ONE walk over the four stores a
+ * government holding can sit in. The harness open-coded it twice and reached three of them.
+ */
+export function ownershipCoverage(
+  state: GameState
+): { held: Record<string, OwnershipBook>; outstanding: Record<string, OwnershipBook> } {
+  type Book = OwnershipBook;
   const held: Record<string, Book> = {}; const outstanding: Record<string, Book> = {};
   REGION_IDS.forEach((r) => { held[r] = { corp: 0, loan: 0, sov: 0, cp: 0 }; outstanding[r] = { corp: 0, loan: 0, sov: 0, cp: 0 }; });
   const regionById = new Map(state.companies.map((c) => [c.id, c.region]));
@@ -72,6 +92,15 @@ function o1(state: GameState, week: number): AuditFinding[] {
     held[r].sov = sovByClass.REGISTER + sovByClass.BANK + sovByClass.DESK
       + sovByClass.CENTRAL_BANK + sovByClass.TREASURY;
     void regionById;
+  });
+  return { held, outstanding };
+}
+
+/** O1 — two-sided: what the books hold of each debt class equals what is outstanding, in both directions. */
+function o1(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const { held, outstanding } = ownershipCoverage(state);
+  REGION_IDS.forEach((r) => {
     (['corp', 'loan', 'sov', 'cp'] as const).forEach((k) => {
       const h = held[r][k], o = outstanding[r][k];
       if (o <= 0 && h <= 0) return;

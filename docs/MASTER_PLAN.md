@@ -427,17 +427,7 @@ written from here):
     SHRINKS the surface the later slices cross. Sized by four surveys of the clearing books, the
     seed/audit paths, the remaining stages, and the derivations a store now answers.
 
-    **A. THE LIVE DEFECTS — each is wrong today, in this order.**
-    A8. **The player's corporate bond is marked by round-tripping its own print** through
-        `rowSpreadBps` → `priceCorporateBond`, while the register marks the same tranche at the
-        print. One instrument, two values. (`12-portfolio` already does it right for floaters.)
-    A9. **The harness's O1 is a second, rotted copy** of `audit/ownership.ts:o1`: money where the
-        audit reads face, GOV_BOND double-counted, this week's issue included, one-sided tolerance.
-    A10. **The harness open-codes the sovereign walk twice** and misses household books and company
-        treasuries — the fifth and sixth copies `sovereign-register.ts` was written to end.
-    A11. **The tranche-kind rule is written 11 times, 4 divergent** — the harness copies have no
-        facility guard, so bank facilities land in the corporate and loan buckets. Read:
-        `trancheKindOf`, which already exists and has three adopters.
+    **A. THE LIVE DEFECTS — DONE, all eleven, in §9.**
 
     **B. THE DEAD CODE — pure deletion, ~165 lines, no behaviour.**
     B1. `HoldingsTable`'s object-graph half (~95 lines): `build()` is unreachable because `ctx.v2`
@@ -1672,6 +1662,38 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ A8..A11 — THE FIRST FALL: −81 LINES, AND THE HARNESS STOPS DISAGREEING WITH THE AUDIT.**
+
+**A8, one tranche worth two numbers.** The player's fixed-rate corporate position marked itself by
+round trip: `rowSpreadBps` is `spreadBpsFromPrice` OF the tranche's own cleared price, and feeding
+that straight back into `priceCorporateBond` asks two functions that are not each other's inverse
+to agree. They did not have to, so the register marked the tranche at the print and the player's
+book marked it at a re-derivation of the print. It now reads the print, like the floating branch
+beside it already did. `dv01` still comes from the analytic — a sensitivity is a derivative of the
+price curve rather than a point on it — struck at the print's OWN spread, which is what makes it
+the sensitivity OF the printed mark. The coupon fallback stays: paper the book has not printed
+carries no view, and its own coupon is the fair rate.
+
+**A9+A10+A11, one function.** `checkHoldingsLedgerConservation` in the harness was a second copy
+of `audit/ownership.ts:o1` that had rotted apart from it on four counts, and every one made the
+harness's answer the wrong one: it summed each row's MONEY where the audit reads its FACE (so
+every basis point of spread reported as paper that does not exist, the moment credit stopped
+printing at par); it added the register's `GOV_BOND` rows ON TOP OF the banks' own sovereign
+books; it counted paper issued THIS week, which is still in the auction and is nobody's yet; and
+it tested one side only, so "paper with no owner" could not fail. It had no `isBankFacility`
+guard either, so drawn facilities landed in the corporate and loan buckets that O4 already tests
+on the lender's book (A11) — and it open-coded the sovereign walk twice, reaching three of the
+four stores a government holding sits in (A10). `auditWeek` has been running `o1` on every week of
+every run the whole time, so the CHECK was never the harness's to make.
+
+The fix is the shape rule 4 asks for: `o1`'s measurement is extracted as `ownershipCoverage`, `o1`
+reports from it, and the harness keeps only the two instruments §8 names — `MINT_TRACE` and
+`OWN_TRACE` — now reading that same measurement instead of a private walk that disagreed with it.
+Both traces also measured money; both now measure face, because a trace that measures a different
+quantity from the check it explains sends the reader after the spread instead of the defect.
+
+**−81 lines, 96 in and 177 out.** Gates green.
 
 **13-READ A5+A6+A7 — THREE READS THAT WENT ROUND THE SOURCE, AND ONE OF THEM WAS A THROW WAITING
 FOR A GAP TO OPEN.** All three are rule 19, and only A6 was wrong on a number today.

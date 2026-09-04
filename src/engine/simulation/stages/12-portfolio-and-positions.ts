@@ -138,20 +138,28 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           // price-setter duplicating (and disagreeing with) the real auction in 07b.
           // §3.13: and the stat is THIS TRANCHE's, off the price its own book printed. Paper the
           // book has not printed carries no view, and its own coupon is the fair rate.
+          const couponRate = Number.isNaN(TS.couponRate[trRow]) ? 0.05 : TS.couponRate[trRow];
           const adjustedOasSpreadBps = rowSpreadBps(v2, updatedRegions[pos.region], trRow, nextWeek)
-            ?? ((Number.isNaN(TS.couponRate[trRow]) ? 0.05 : TS.couponRate[trRow])
-              - zeroRateAt(updatedRegions[pos.region].zeroRates, remainingTenorYears)) * 10000;
+            ?? (couponRate - zeroRateAt(updatedRegions[pos.region].zeroRates, remainingTenorYears)) * 10000;
 
           if (!(TS.flags[trRow] & TR_FLOATING)) {
+            // §3.13-READ A8 — THE POSITION MARKS AT THE PRINT, and the analytic is kept for the
+            // SENSITIVITY only. This used to round-trip: `rowSpreadBps` is `spreadBpsFromPrice` of
+            // the tranche's own cleared price, and feeding that straight back into
+            // `priceCorporateBond` asks two functions that are not each other's inverse to agree.
+            // They did not have to, so the same tranche was worth one number on the register (the
+            // print) and another in the player's book. The floating branch below already read the
+            // print; this is the fixed side of the same rule. `dv01` is a derivative of the price
+            // curve rather than a point on it, so it still comes from the analytic — struck at the
+            // print's OWN spread, which is what makes it the sensitivity of the printed mark.
             const bondPriced = priceCorporateBond(
-              remainingTenorYears,
-              Number.isNaN(TS.couponRate[trRow]) ? 0.05 : TS.couponRate[trRow],
-              sovParams,
-              adjustedOasSpreadBps,
-              comp.isDefaulted,
-              comp.recoveryRate
+              remainingTenorYears, couponRate, sovParams,
+              adjustedOasSpreadBps, comp.isDefaulted, comp.recoveryRate
             );
-            currentPrice = bondPriced.price;
+            // Paper the book has not printed carries no view, and its own coupon is the fair rate
+            // — which is exactly what the analytic at the coupon-implied spread says.
+            const printed = clearedPriceOf(v2, trancheIdOf(v2, trRow));
+            currentPrice = printed !== undefined && printed > 0 ? printed * 100 : bondPriced.price;
             const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
             const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
             unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
@@ -159,7 +167,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
 
             const carryEst = calculateExpectedCarry('CORP_BOND', pos.direction, posValueLocal, {
               policyRate: updatedRegions[pos.region].policyRate,
-              couponRate: Number.isNaN(TS.couponRate[trRow]) ? 0.05 : TS.couponRate[trRow],
+              couponRate,
               cdsSpreadBps: comp.cdsSpreadBps
             });
             weeklyFinancing = carryEst.components.financingCostLocal;
