@@ -4,7 +4,7 @@
  * and their count; the identity in each message is the relation asserted.
  */
 
-import { GameState, RegionId } from '../../types';
+import { GameState } from '../../types';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, spearman, sum } from './types';
@@ -192,11 +192,6 @@ function x2(state: GameState, week: number): AuditFinding[] {
 function p5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
-  const byId = new Map(state.companies.map((c) => [c.id, c]));
-  const world = {
-    issuerById: (id: string) => byId.get(id),
-    regionById: (r: string) => state.regions[r as RegionId],
-  };
   let faceLocal = 0, markedLocal = 0, impliedLocal = 0, rows = 0, unpriced = 0;
   let widest = { id: '', gapLocal: 0 };
   state.institutionalEntities.forEach((e) => {
@@ -205,7 +200,7 @@ function p5(state: GameState, week: number): AuditFinding[] {
       if (!isTrancheKind(h.instrumentType)) return;
       const face = h.faceLocal ?? h.quantityOrNotionalLocal ?? 0;
       if (!(Math.abs(face) > 0)) return;
-      const price = trancheClearedPricePerFace(world, v2, h.instrumentId, week);
+      const price = trancheClearedPricePerFace(v2, h.instrumentId);
       if (price === undefined) { unpriced++; return; }
       faceLocal += face;
       markedLocal += h.quantityOrNotionalLocal ?? 0;

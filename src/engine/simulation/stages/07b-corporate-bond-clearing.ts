@@ -17,9 +17,10 @@
  *     FACE whatever its coupon and whatever the market said. That is "credit always trades at
  *     par" (rule 3), and it is the defect §9.13-SOV row 4 removed from the sovereign;
  *   - an ISSUER IS NOT A PIECE OF PAPER. A 4.75% 2031 and a 3% 2029 of one borrower are two
- *     instruments with two prices; pricing the borrower forced `register-split.ts` to invent a
- *     mapping back onto the register's tranche rows, and that invention IS `O7` (holders claiming
- *     past a tranche's face) and `O8` (a position keyed as though a company were a security);
+ *     instruments with two prices; pricing the borrower forced a SPLIT that invented a mapping
+ *     back onto the register's tranche rows, and that invention IS `O7` (holders claiming past a
+ *     tranche's face) and `O8` (a position keyed as though a company were a security). The file
+ *     that did it died with the last book that needed it (§9.13-CREDIT row 4);
  *   - and ONE SPREAD PER BORROWER IS NO TERM STRUCTURE. Every holder's reservation was computed
  *     against a single blended issuer duration, so a two-year rung and a thirty-year rung of the
  *     same name were required to pay the same spread. The arithmetic to do better was already
@@ -55,8 +56,8 @@
  * This adapter only covers FIXED-rate capital-markets tranches (real corporate bonds). Floating
  * tranches are real leveraged loans — a genuinely different market with a different investor
  * base (CLOs/loan funds, not bond funds) and different technicals — and get their own real
- * clearing (07d-leveraged-loan-clearing.ts), not a byproduct split of this one's fills. They
- * still clear a per-issuer discount margin; §3.13's next credit row moves them here.
+ * clearing (07d-leveraged-loan-clearing.ts), not a byproduct split of this one's fills — and since
+ * §9.13-CREDIT row 3 they clear a PRICE per tranche there, in this same shape.
  *
  * The actual auction — the demand-schedule solve, cores-first rationing, cash legs, dealer
  * residual — lives once in the shared engine; sovereign bonds, bills, loans, equity and the
@@ -226,8 +227,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     /**
      * §3.13 — THE INSTRUMENTS ARE THE TRANCHES. Each carries its own coupon, its own remaining
-     * life, its own capital charge and its own price. `register-split.ts` has nothing left to do
-     * on this book: a fill already names the paper it bought.
+     * life, its own capital charge and its own price. The issuer-level register split has nothing
+     * left to do on this book: a fill already names the paper it bought.
      */
     type BondInstrument = {
       id: string; ci: number;
@@ -661,7 +662,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // deleted it with no cash leg and charged it to equity as a phantom fee (see 07d).
 
     // Apply: each entity's real new CORP_BOND holdings. The rows name the TRANCHE the auction
-    // priced — there is nothing left to split (register-split.ts).
+    // priced — the issuer-level split that had to invent them is deleted (§9.13-CREDIT row 4).
     // SCALE C1: the entities here ARE the store's working copies, and the fill rows are appended
     // to the store for the single write-back after 07e. SETL6: the cash leg is settled below as
     // payment instructions, not mutated here.

@@ -17,13 +17,15 @@
  *
  * Commercial paper. An issuer is a company whose OWN ledger projects a genuine working-capital
  * gap over the next quarter — fixed outflows (interest, maintenance capex, dividends) against
- * cash plus operating inflow — and whose rating still has market access. Size is the gap: CP
- * is not opportunistic funding, it is the bridge a treasurer actually runs. It prices off the
- * cleared 13-week bill plus the issuer's short-horizon expected loss (the annual structural PD
- * scaled to a quarter), and it ROLLS weekly: a roll that finds no bid — rating fallen below
- * access, or distress-level default risk — draws the bank revolver instead, at a real penalty
- * margin. That failure path is the actual mechanism of a funding squeeze (the G2 hook), and it
- * exists here from day one rather than being added after the first crisis needs it.
+ * cash plus operating inflow. Size is the gap: CP is not opportunistic funding, it is the bridge
+ * a treasurer actually runs. §9.13-CREDIT row 4 made the book clear a PRICE PER PIECE OF PAPER:
+ * every live programme and every deal brought this week is its own instrument, each buyer states
+ * its reservation as a yield over the region's cleared front end at that paper's own tenor and
+ * bids the price that yield implies, and what the book prints is deposited per tranche. CP ROLLS
+ * weekly, and a roll the market will not fund at a level the treasurer will wear draws the bank
+ * revolver instead, at a real penalty margin. That failure path is the actual mechanism of a
+ * funding squeeze (the G2 hook), and it exists here from day one rather than being added after
+ * the first crisis needs it.
  *
  * Runs after 07c (bond yields cleared; the NS refit here needs both) and before stage 08 (whose
  * interest arithmetic picks CP up off the ladder like any other tranche).
@@ -32,22 +34,27 @@
 import { riskAversionOf } from '../../../domain/preferences';
 
 import { ensureV2 } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf, trancheRowOf } from '../../../engine2/tranches';
-import { splitAcrossTranches, primarySliceOf } from './register-split';
+import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf, trancheRowOf, trancheScheduleOf } from '../../../engine2/tranches';
+import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
+import { issuerSpreadAtOnCurve, IS_CP_ROW, RegionRates } from '../../credit-price';
+import { reconcileHolderPrincipal } from './holder-paydown';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
-import { computeAnnualDefaultProbability, creditRecoveryRate, payHoldersAccruedInterest, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
+import { computeAnnualDefaultProbability, creditRecoveryRate, payHoldersAccruedInterest, moveCorporateAccrued, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
-import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetLocal } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetLocal, accruedPerFace } from '../../../domain/company';
+import type { CreditRating } from '../../../domain/company';
+import { priceFromYield, zeroRateAt } from '../../../domain/pricing';
+import type { PaperTerms } from '../../../domain/pricing';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityLocal } from './repo-clearing';
 import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
-import { pay, pendingSettlementLocal, institutionSpendableLocal } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, PrimaryTake } from './book-settlement';
+import { pay, pendingSettlementLocal, institutionSpendableLocal, PartyRef } from './settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, PrimaryTake } from './book-settlement';
 import { clearedBookDelta, transferHolding } from '../../ledger/holdings-ledger';
 import { wireCentralBankFills } from './central-bank-demand';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
@@ -657,13 +664,28 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: [...bondDealerRows, ...billDealerRows] };
     }
 
-    // ---- Commercial paper: a real book (CP) ----
+    // ---- Commercial paper: a real book (CP), ONE INSTRUMENT PER PIECE OF PAPER ----
     //
     // Why this used to be a formula and what it cost is written up once, in
     // domain/commercial-paper.ts. In short: CP arrived with the bills and its buyers did not
     // exist yet, so it was priced at `bill + expected loss + 15bp`, sized entirely by the issuer,
-    // rationed only by a binary rating gate, and paid for by nobody. It clears now.
-    const billYield13wBps = reg.zeroRates.tenor3M * 10000;
+    // rationed only by a binary rating gate, and paid for by nobody. It cleared after that — but
+    // as ONE YIELD PER ISSUER, which is the last of the three defects §3.13's credit rows remove:
+    //
+    //   - a YIELD IS NOT A PRICE. `financial-clearing-engine` values a fill at `unitValueLocal = 1`
+    //     for anything that is not PRICE_LIKE, so every piece of commercial paper in the model
+    //     changed hands at FACE whatever the auction said it was worth;
+    //   - an ISSUER IS NOT A PIECE OF PAPER. A programme rolled last week with nine weeks to run
+    //     and one struck today are two instruments; pricing the borrower forced a SPLIT to invent
+    //     the mapping back onto the register's tranche rows, which is what `O7` and `O8` count —
+    //     and this was the last book holding it up, so the split is deleted with this change;
+    //   - and ONE YIELD PER BORROWER IS NO TERM STRUCTURE, even across thirteen weeks: a roll with
+    //     four weeks left and a fresh thirteen-week issue had to clear at the same level.
+    //
+    // Nothing about anyone's REASON changes. A cash buyer's reservation genuinely is a YIELD — its
+    // alternative is the bill its money would otherwise sit in — so it still computes one, and then
+    // states it as the PRICE that yield implies on THIS paper's own remaining life. That is the
+    // sovereign's own move (§9.13-SOV row 4, `pricing/bond.ts`), applied to the corporate front end.
     const cpRecoveryRate = creditRecoveryRate(reg);
     const revolverWalkAwayBps = (reg.policyRate * 10000) + REVOLVER_MARGIN_BPS;
 
@@ -731,110 +753,117 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const store = ctx.holdingsStore!;
       const cpIssuerIds = new Set(cpIssuers.map((i) => i.comp.id));
       const issuerById = new Map(cpIssuers.map((i) => [i.comp.id, i]));
-
-      // ---- 1. MATURITIES. The issuer repays its holders of record and their claim shrinks by
-      // exactly what they were paid. This used to be one payment to the boundary, because there
-      // was no register of who held the paper.
       const cpEntities = ctx.updatedInstitutionalEntities.filter((e) => !e.isDefaulted);
-      const heldByIssuerByEntity = new Map<string, Map<string, number>>();
-      // 13b: a holder's rows name TRANCHES — kept per tranche too, so a matured programme's rows
-      // are repaid exactly (a row that still names its issuer shares the issuer's surviving ratio).
+      const cpBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+
+      // ---- 1. MATURITIES, PER PIECE OF PAPER. The issuer repays the holders of the tranche that
+      // came due, at its own face — not every holder of that borrower scaled by a surviving ratio,
+      // which is what pricing the ISSUER forced and what migrated a claim on retired paper onto
+      // whatever else the borrower had outstanding (§3.13's `O7`).
+      const TSd = v2Mirror.tranches;
+      const maturedFaceById = new Map<string, number>();
+      cpIssuers.forEach((iss) => {
+        for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
+          if (!(TSd.flags[r] & TR_CP) || TSd.maturityWeek[r] > ctx.nextWeek) continue;
+          maturedFaceById.set(v2Mirror.internedStrings[TSd.idRef[r]], TSd.principalLocal[r]);
+        }
+      });
+
+      // What each institution holds, by the paper it names. A row written before this book cleared
+      // per tranche may still name its ISSUER; it resolves through `issuerIdOf` like any other and
+      // is repaid below as a claim on paper this session does not price.
       const heldByTrancheByEntity = new Map<string, Map<string, number>>();
       cpEntities.forEach((entity) => {
-        const byIssuer = new Map<string, number>();
         const byTranche = new Map<string, number>();
         store.scan(entity.id, 'COMMERCIAL_PAPER', (h) => {
-          const issuerId = issuerIdOf(v2Mirror, h.instrumentId); // 13b: a row names a tranche or its issuer
-          if (!cpIssuerIds.has(issuerId)) return false;
-          byIssuer.set(issuerId, (byIssuer.get(issuerId) ?? 0) + h.quantityOrNotionalLocal);
-          byTranche.set(h.instrumentId, (byTranche.get(h.instrumentId) ?? 0) + h.quantityOrNotionalLocal);
+          if (!cpIssuerIds.has(issuerIdOf(v2Mirror, h.instrumentId))) return false;
+          // A book trades FACE. The row carries it; a row written before face was stored falls
+          // back to its value, which par pricing made the same number.
+          const faceLocal = h.faceLocal ?? h.quantityOrNotionalLocal ?? 0;
+          byTranche.set(h.instrumentId, (byTranche.get(h.instrumentId) ?? 0) + faceLocal);
           return true;
         });
-        heldByIssuerByEntity.set(entity.id, byIssuer);
         heldByTrancheByEntity.set(entity.id, byTranche);
       });
 
       // A DESK IS A HOLDER, and its paper matures like anyone else's. Scaling only the
       // institutions left the desks carrying a claim on CP that had already been repaid, and the
       // ledger check caught it immediately: holders at 117% of the EUR stock by week ten.
-      const cpBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
       const deskCpRows = new Map<string, { instrumentId: string; inventoryLocal: number; units?: number }[]>();
       cpBanks.forEach((bank) => {
         const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
         if (sheet?.dealerDeskInventory?.[CP_BOOK]) deskCpRows.set(bank.ticker, sheet.dealerDeskInventory[CP_BOOK]);
       });
 
-      cpIssuers.forEach((iss) => {
-        const preLocal = iss.survivingLocal + iss.maturedLocal;
-        if (!(iss.maturedLocal > 0) || !(preLocal > 0)) return;
-        const survivingShare = iss.survivingLocal / preLocal;
+      const issuerPartyOfInstrument = (instrumentId: string): PartyRef | undefined => {
+        const iss = issuerById.get(issuerIdOf(v2Mirror, instrumentId));
+        return iss ? { kind: 'COMPANY', ticker: iss.comp.ticker } : undefined;
+      };
+
+      maturedFaceById.forEach((_face, instrumentId) => {
+        const payer = issuerPartyOfInstrument(instrumentId);
+        if (!payer) return;
         deskCpRows.forEach((rows, ticker) => {
+          // A MATURITY PAYS FACE, not the mark. The desk's row carries both — `units` is the face
+          // it holds and `inventoryLocal` is that face at the last price the book printed — and now
+          // that CP prints a price other than par the two are different numbers. Paying the mark
+          // would pocket the pull-to-par on the issuer's behalf.
           let repaidLocal = 0;
           rows.forEach((r) => {
-            if (r.instrumentId !== iss.comp.id) return;
-            repaidLocal += r.inventoryLocal * (1 - survivingShare);
-            r.inventoryLocal *= survivingShare;
-            if (r.units !== undefined) r.units *= survivingShare;
+            if (r.instrumentId !== instrumentId) return;
+            repaidLocal += r.units ?? r.inventoryLocal;
+            r.inventoryLocal = 0;
+            if (r.units !== undefined) r.units = 0;
           });
           if (repaidLocal > 0) {
             pay(ctx, {
-              payer: { kind: 'COMPANY', ticker: iss.comp.ticker },
+              payer,
               payee: { kind: 'BANK_SECURITIES', ticker },
               amount: repaidLocal,
-              currency: currencyOf(iss.comp.region),
+              currency: currencyOf(regionId),
               reason: 'commercial paper redeemed',
             });
             // Step 13 (W2): the matured paper leaves the desk by wire, to the house (the ladder's
             // retirement wire meets it there).
             transferHolding(ctx.v2, { kind: 'BANK_SECURITIES', ticker }, { kind: 'CLEARING_HOUSE', region: regionId },
-              { instrumentType: 'COMMERCIAL_PAPER', instrumentId: iss.comp.id, issuerRegion: regionId, valueLocal: repaidLocal }, 'commercial paper redeemed: desk paper matured');
+              { instrumentType: 'COMMERCIAL_PAPER', instrumentId, issuerRegion: regionId, valueLocal: repaidLocal }, 'commercial paper redeemed: desk paper matured');
           }
         });
-        heldByIssuerByEntity.forEach((byIssuer, entityId) => {
-          const heldLocal = byIssuer.get(iss.comp.id) ?? 0;
-          if (!(heldLocal > 0)) return;
-          // 13b: the matured tranches' rows are what is repaid; a row keyed by the issuer itself
-          // (no tranche behind it) shares the issuer's surviving ratio as before.
-          let repaidLocal = 0;
-          const TSm = v2Mirror.tranches;
-          (heldByTrancheByEntity.get(entityId) ?? new Map<string, number>()).forEach((usd, instrumentId) => {
-            if (issuerIdOf(v2Mirror, instrumentId) !== iss.comp.id) return;
-            const tr = trancheRowOf(v2Mirror, instrumentId);
-            if (tr === undefined) repaidLocal += usd * (1 - survivingShare);
-            else if ((TSm.flags[tr] & TR_CP) && TSm.maturityWeek[tr] <= ctx.nextWeek) repaidLocal += usd;
+        heldByTrancheByEntity.forEach((byTranche, entityId) => {
+          const repaidLocal = byTranche.get(instrumentId) ?? 0;
+          if (!(repaidLocal > 0)) return;
+          byTranche.set(instrumentId, 0);
+          pay(ctx, {
+            payer,
+            payee: { kind: 'INSTITUTION', id: entityId },
+            amount: repaidLocal,
+            currency: currencyOf(regionId),
+            reason: 'commercial paper redeemed',
           });
-          repaidLocal = Math.min(heldLocal, repaidLocal);
-          byIssuer.set(iss.comp.id, heldLocal - repaidLocal);
-          if (repaidLocal > 0) {
-            pay(ctx, {
-              payer: { kind: 'COMPANY', ticker: iss.comp.ticker },
-              payee: { kind: 'INSTITUTION', id: entityId },
-              amount: repaidLocal,
-              currency: currencyOf(iss.comp.region),
-              reason: 'commercial paper redeemed',
-            });
-          }
         });
-        {
-          // §5-WIRES W3: matured paper hands its face back to the issuer by wire, then leaves the chain.
-          const TSr = v2Mirror.tranches;
-          const cpIssuer = { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId };
-          const kept: number[] = [];
-          for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
-            if ((TSr.flags[r] & TR_CP) && TSr.maturityWeek[r] <= ctx.nextWeek) {
-              // STEP 1: THE PAPER'S INTEREST FALLS DUE WHERE THE PAPER IS REDEEMED. Commercial
-              // paper is retired HERE, before stage 08 runs, so the register's accrual loop never
-              // saw a CP tranche in its own maturity week — and `trancheWeekAccrual` makes CP due
-              // ONLY then. The result was that CP interest accrued to holders every week from
-              // issue and was never once paid. Marking the payout here settles it in the same
-              // week: `applyHolderInterestAccruals` (stage 08) pays every holder of record
-              // exactly what it accrued, from the issuer, and clears the balance.
-              payHoldersAccruedInterest(ctx, v2Mirror.internedStrings[TSr.idRef[r]], 'COMMERCIAL_PAPER');
-              if (TSr.principalLocal[r] > 0.01) retireTranche(v2Mirror, cpIssuer, r, TSr.principalLocal[r], 'commercial paper matured');
-            } else kept.push(r);
-          }
-          commitLadder(v2Mirror, cpIssuer, kept);
+      });
+
+      // §5-WIRES W3: matured paper hands its face back to the issuer by wire, then leaves the chain.
+      cpIssuers.forEach((iss) => {
+        const TSr = v2Mirror.tranches;
+        const cpIssuer = { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId };
+        const kept: number[] = [];
+        let retiredAny = false;
+        for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
+          if ((TSr.flags[r] & TR_CP) && TSr.maturityWeek[r] <= ctx.nextWeek) {
+            // STEP 1: THE PAPER'S INTEREST FALLS DUE WHERE THE PAPER IS REDEEMED. Commercial
+            // paper is retired HERE, before stage 08 runs, so the register's accrual loop never
+            // saw a CP tranche in its own maturity week — and `trancheWeekAccrual` makes CP due
+            // ONLY then. The result was that CP interest accrued to holders every week from
+            // issue and was never once paid. Marking the payout here settles it in the same
+            // week: `applyHolderInterestAccruals` (stage 08) pays every holder of record
+            // exactly what it accrued, from the issuer, and clears the balance.
+            payHoldersAccruedInterest(ctx, v2Mirror.internedStrings[TSr.idRef[r]], 'COMMERCIAL_PAPER');
+            if (TSr.principalLocal[r] > 0.01) retireTranche(v2Mirror, cpIssuer, r, TSr.principalLocal[r], 'commercial paper matured');
+            retiredAny = true;
+          } else kept.push(r);
         }
+        if (retiredAny) commitLadder(v2Mirror, cpIssuer, kept);
       });
 
       deskCpRows.forEach((rows, ticker) => {
@@ -850,74 +879,224 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         });
       });
 
-      // ---- 2. THE BOOK. One instrument per issuer, the surviving stock plus what it brings.
-      const heldByInstitutionsLocal = new Map<string, number>();
-      heldByIssuerByEntity.forEach((byIssuer) => byIssuer.forEach((usd, issuerId) => {
-        if (usd > 0) heldByInstitutionsLocal.set(issuerId, (heldByInstitutionsLocal.get(issuerId) ?? 0) + usd);
-      }));
-      const cpInstruments: ClearingInstrument[] = cpIssuers.map((iss) => {
-        const TSb = v2Mirror.tranches;
-        let survCouponSum = 0;
+      const cpHoldingRow = (instrumentId: string, faceLocal: number): ItemizedHolding =>
+        // Written in PAR space, as every other credit book's fills are: the row carries the FACE
+        // it holds and the cash leg paid the cleared price for it. What the register is WORTH is
+        // `face × price` — §3.13's item 4, which cannot land one book at a time (§9.13 part 3).
+        ({ instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalLocal: faceLocal, faceLocal, units: faceLocal });
+
+      // ---- 2. THE BOOK. Every live piece of this region's commercial paper, plus the deals
+      // brought this week — each with its own remaining life and its own price.
+      type CpPaper = {
+        id: string;
+        issuerId: string;
+        /** Face outstanding — 0 for a deal that has not priced yet. */
+        faceLocal: number;
+        /** This week's offering ON THIS PAPER — non-zero only for the primary. */
+        offeringLocal: number;
+        terms: PaperTerms;
+        tenorYears: number;
+        annualPd: number;
+        creditRating: CreditRating;
+        isPrimary: boolean;
+      };
+      const papers: CpPaper[] = [];
+      const accruedPerFaceById = new Map<string, number>();
+      const TSb = v2Mirror.tranches;
+      cpIssuers.forEach((iss) => {
         for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
-          if (TSb.flags[r] & TR_CP) survCouponSum += TSb.principalLocal[r] * (Number.isNaN(TSb.couponRate[r]) ? 0 : TSb.couponRate[r]);
+          if (!(TSb.flags[r] & TR_CP) || !(TSb.principalLocal[r] > 0.01)) continue;
+          const weeksToMaturity = TSb.maturityWeek[r] - ctx.nextWeek;
+          // Paper that is due redeems at its face; it does not trade for a price.
+          if (!(weeksToMaturity > 0)) continue;
+          const id = v2Mirror.internedStrings[TSb.idRef[r]];
+          const couponRate = Number.isNaN(TSb.couponRate[r]) ? 0 : TSb.couponRate[r];
+          // §3.13b / `bond.md` N9.b — WHAT ONE UNIT OF FACE HAS ACCRUED. This auction clears a
+          // CLEAN price, so the interest that has run since the programme was struck is paid by
+          // the buyer to the seller on top of it, and re-keys on the accrual ledger with the
+          // paper. Read at the CURRENT week: `applyHolderInterestAccruals` runs in stage 08,
+          // after this book, so the ledger these balances move on stands at last week's accrual.
+          accruedPerFaceById.set(id, accruedPerFace({
+            originationWeek: TSb.originationWeek[r],
+            paymentAnchorWeek: Number.isNaN(TSb.paymentAnchorWeek[r]) ? undefined : TSb.paymentAnchorWeek[r],
+            paymentsPerYear: Number.isNaN(TSb.paymentsPerYear[r]) ? undefined : TSb.paymentsPerYear[r],
+            isCommercialPaper: true,
+            rateType: 'FIXED',
+          }, couponRate, state.currentWeek));
+          papers.push({
+            id, issuerId: iss.comp.id, faceLocal: TSb.principalLocal[r], offeringLocal: 0,
+            terms: { annualCouponRate: couponRate, periodWeeks: trancheScheduleOf(TSb, r).periodWeeks, weeksToMaturity },
+            tenorYears: weeksToMaturity / 52,
+            annualPd: iss.annualPd, creditRating: iss.comp.creditRating, isPrimary: false,
+          });
         }
-        const weightedCouponBps = iss.survivingLocal > 0 ? survCouponSum / iss.survivingLocal * 10000 : 0;
-        const fairOpeningBps = cpReservationYieldBps({
-          clearedBillYieldBps: billYield13wBps,
-          annualDefaultProbability: iss.annualPd,
-          recoveryRate: cpRecoveryRate,
-          tenorWeeks: CP_TENOR_WEEKS,
+      });
+      // A DEAL IS ITS OWN PIECE OF PAPER, and the book prices it beside the outstanding stock. It
+      // is STRUCK AT PAR — its rate fixed at launch off the region's own cleared front end plus
+      // what this borrower's printed paper says it pays there — and the market decides what it
+      // will pay for it. The concession then shows up where it belongs, as a price below par, and
+      // the issuer receives price × face instead of par whatever it cleared.
+      const cpRates: RegionRates = { zeroRates: reg.zeroRates, policyRate: reg.policyRate };
+      const cpTenorYears = CP_TENOR_WEEKS / 52;
+      const primaryIdByIssuerId = new Map<string, string>();
+      const primaryTermsById = new Map<string, { couponRate: number }>();
+      cpIssuers.forEach((iss) => {
+        if (!(iss.wantedLocal > 0)) return;
+        const id = `${iss.comp.ticker}-CP-${ctx.nextWeek}`;
+        // A borrower with printed paper launches on its own curve; one with none launches on the
+        // loss its buyers price, which is exactly what their reservation is made of.
+        const talkBps = issuerSpreadAtOnCurve(v2Mirror, cpRates, iss.comp.id, ctx.nextWeek, cpTenorYears, IS_CP_ROW)?.spreadBps
+          ?? issuerSpreadAtOnCurve(v2Mirror, cpRates, iss.comp.id, ctx.nextWeek, cpTenorYears)?.spreadBps
+          ?? iss.annualPd * (1 - cpRecoveryRate) * 10000;
+        const couponRate = zeroRateAt(reg.zeroRates, cpTenorYears) + talkBps / 10000;
+        primaryIdByIssuerId.set(iss.comp.id, id);
+        primaryTermsById.set(id, { couponRate });
+        papers.push({
+          id, issuerId: iss.comp.id, faceLocal: 0, offeringLocal: iss.wantedLocal,
+          terms: { annualCouponRate: couponRate, periodWeeks: CP_TENOR_WEEKS, weeksToMaturity: CP_TENOR_WEEKS },
+          tenorYears: cpTenorYears,
+          annualPd: iss.annualPd, creditRating: iss.comp.creditRating, isPrimary: true,
         });
-        return {
-          id: iss.comp.id,
-          // OWN7: what the INSTITUTIONS hold, before the desks are built. Their own positions are
-          // added below — the desks have to be sized against a live float, and a float of zero
-          // makes `buildDealerDeskParticipants` return no desk at all.
-          outstandingLocal: iss.survivingLocal,
-          tradableFloatLocal: heldByInstitutionsLocal.get(iss.comp.id) ?? 0,
-          currentStat: weightedCouponBps > 0 ? weightedCouponBps : Math.max(1, fairOpeningBps),
-          statKind: 'YIELD_LIKE',
-          durationYears: CP_TENOR_WEEKS / 52,
-          primaryOfferingLocal: iss.wantedLocal,
-          // THE TREASURER'S WALK-AWAY IS ITS COMMITTED LINE. Nobody pays more for paper than the
-          // revolver beside it costs, so above this the deal is pulled and the line is drawn —
-          // which is the funding squeeze the old rating gate asserted, now priced.
-          primaryWithdrawStat: iss.wantedLocal > 0 ? revolverWalkAwayBps : undefined,
-        };
       });
 
+      // A reservation stated as a YIELD — which is what a cash buyer's reservation IS, because its
+      // alternative is the bill its money would otherwise sit in — restated as the price it implies
+      // on THIS paper's own remaining life.
+      const priceAtYieldBps = (p: CpPaper, yieldBps: number): number => priceFromYield(p.terms, yieldBps / 10000);
+      /** What this money earns instead, at the paper's own tenor: the curve standing at WEEK START,
+       *  which is what every other session in this model prices against (`07b`, `07c`) and what a
+       *  real session prices against. `sovereign-curve.ts` republishes it after this stage from the
+       *  bill points the auction above deposited — a session cannot price off its own print. */
+      const alternativeYieldBpsOf = (p: CpPaper): number => zeroRateAt(reg.zeroRates, p.tenorYears) * 10000;
+      const reservationYieldBpsOf = (p: CpPaper): number => cpReservationYieldBps({
+        alternativeYieldBps: alternativeYieldBpsOf(p),
+        annualDefaultProbability: p.annualPd,
+        recoveryRate: cpRecoveryRate,
+      });
+      /**
+       * Where the paper stands before this session: what it last cleared at, else the price its own
+       * buyers' reservation implies — which for a programme nobody has printed is the honest
+       * opening, and for the primary is the par it is struck at.
+       */
+      const openingPrice = papers.map((p) => {
+        const stored = p.isPrimary ? undefined : clearedPriceOf(v2Mirror, p.id);
+        if (stored !== undefined && stored > 0) return stored;
+        const px = priceAtYieldBps(p, reservationYieldBpsOf(p));
+        return px > 0 && isFinite(px) ? px : 1;
+      });
+
+      const cpInstruments: ClearingInstrument[] = papers.map((p, pi) => ({
+        id: p.id,
+        outstandingLocal: p.faceLocal,
+        // OWN7: what the HOLDERS hold, filled in below — the institutions first, then the desks,
+        // because a desk is sized against a LIVE float and a float of zero makes
+        // `buildDealerDeskParticipants` hand back no desk at all.
+        tradableFloatLocal: 0,
+        currentStat: openingPrice[pi],      // price per unit of face
+        statKind: 'PRICE_LIKE',
+        durationYears: p.tenorYears,
+        primaryOfferingLocal: p.offeringLocal > 0 ? p.offeringLocal : undefined,
+        // THE TREASURER'S WALK-AWAY IS ITS COMMITTED LINE, as the PRICE that line's cost implies.
+        // Nobody sells paper for less than the revolver beside it would raise, so below this the
+        // deal is pulled and the line is drawn — which is the funding squeeze the old rating gate
+        // asserted, now priced.
+        primaryWithdrawStat: p.isPrimary ? priceAtYieldBps(p, revolverWalkAwayBps) : undefined,
+      }));
+
+      // §7.259 — settle the borrowers' retired principal ON THE HOLDERS before this book clears
+      // (see holder-paydown.ts). Keyed by the PAPER, so a claim on a programme that has run off
+      // is repaid by its own borrower rather than re-keyed onto that borrower's live paper.
+      const cpFaceById = new Map(papers.map((p) => [p.id, p.faceLocal]));
+      const outstandingByInstrumentId = new Map(papers.filter((p) => !p.isPrimary).map((p) => [p.id, p.faceLocal]));
+      const issuerOfInstrument = new Map<string, Company>();
+      papers.forEach((p) => issuerOfInstrument.set(p.id, issuerById.get(p.issuerId)!.comp));
+      heldByTrancheByEntity.forEach((byTranche) => byTranche.forEach((_face, instrumentId) => {
+        if (outstandingByInstrumentId.has(instrumentId)) return;
+        outstandingByInstrumentId.set(instrumentId, 0);
+        const iss = issuerById.get(issuerIdOf(v2Mirror, instrumentId));
+        if (iss) issuerOfInstrument.set(instrumentId, iss.comp);
+      }));
+      reconcileHolderPrincipal({
+        ctx, regionId,
+        outstandingByInstrumentId,
+        issuerOfInstrument,
+        holdingsByEntity: heldByTrancheByEntity,
+        banks: cpBanks,
+        deskBook: CP_BOOK, instrumentType: 'COMMERCIAL_PAPER',
+        reason: 'commercial paper principal paydown to holders',
+      });
+
+      // Every programme in this region has run off and nobody is bringing a deal: the maturities
+      // and the paydown above are the whole of its CP week. What a holder still claims on paper no
+      // ladder carries stays claimed and is written back — a stage may only rewrite what it
+      // CLEARED, and dropping a claimed row here would delete a position with no cash leg (§7.34).
+      if (papers.length === 0) {
+        heldByTrancheByEntity.forEach((byTranche, entityId) => {
+          const rows: ItemizedHolding[] = [];
+          byTranche.forEach((faceLocal, instrumentId) => {
+            if (faceLocal > 1) rows.push(cpHoldingRow(instrumentId, faceLocal));
+          });
+          store.append(entityId, rows);
+        });
+        return;
+      }
+
+      const heldByInstitutionsLocal = new Map<string, number>();
+      heldByTrancheByEntity.forEach((byTranche) => byTranche.forEach((faceLocal, id) => {
+        if (faceLocal > 0 && cpFaceById.has(id)) heldByInstitutionsLocal.set(id, (heldByInstitutionsLocal.get(id) ?? 0) + faceLocal);
+      }));
+      cpInstruments.forEach((inst) => { inst.tradableFloatLocal = heldByInstitutionsLocal.get(inst.id) ?? 0; });
+
       // ---- 3. THE BUYERS. The money funds and the cash sleeves that already run through the
-      // bill and repo books, plus the banks' own desks. A buyer's reservation is its own
-      // alternative — the cleared 13-week bill, which is exactly what this money earns instead —
-      // plus the loss it expects on THIS issuer over the paper's actual life. Credit policy is a
-      // SIZE, never a veto (domain/commercial-paper.ts).
+      // bill and repo books, plus the banks' own desks. Credit policy is a SIZE, never a veto
+      // (domain/commercial-paper.ts) — and the single-issuer limit is a limit on the ISSUER, so
+      // it is divided across that issuer's own papers rather than posted whole against each.
+      const papersByIssuerId = new Map<string, number[]>();
+      papers.forEach((p, pi) => {
+        const list = papersByIssuerId.get(p.issuerId);
+        if (list) list.push(pi); else papersByIssuerId.set(p.issuerId, [pi]);
+      });
+      const issuerShareOfPaper = new Float64Array(papers.length);
+      papersByIssuerId.forEach((list) => {
+        let sizeLocal = 0;
+        list.forEach((pi) => { sizeLocal += papers[pi].faceLocal + papers[pi].offeringLocal; });
+        list.forEach((pi) => {
+          issuerShareOfPaper[pi] = sizeLocal > 0
+            ? (papers[pi].faceLocal + papers[pi].offeringLocal) / sizeLocal
+            : 1 / list.length;
+        });
+      });
       const cpParticipants: ClearingParticipant[] = [];
       cpEntities.forEach((entity) => {
         const sleeveLocal = institutionTotalAssetsLocal(ctx, entity) * entity.assetAllocationTarget.cashPct * CP_SHARE_OF_TERM_SLEEVE;
-        const holdings = heldByIssuerByEntity.get(entity.id) ?? new Map<string, number>();
+        const holdings = heldByTrancheByEntity.get(entity.id) ?? new Map<string, number>();
         if (!(sleeveLocal > 0) && holdings.size === 0) return;
         const cashLocal = institutionSpendableLocal(ctx, entity) * CP_SHARE_OF_TERM_SLEEVE;
         const demand = new Map<string, ParticipantDemand>();
         // §7.340 — ONE sleeve, many bids: the per-issuer limit is a CONCENTRATION rule, not a
-        // budget, and with fifty issuers in the book fifty bids at 5% each offered the same
+        // budget, and with fifty names in the book fifty bids at 5% each offered the same
         // dollar two and a half times over. The engine has no cross-instrument budget (each
         // bid is affordable on its own), so the cash is divided across the bids it is put
         // behind: no bid can take more than its share, and the sum can never exceed the sleeve.
         // Measured: a private-equity fund closed a week overdrawn by 2.9M on a 960M balance
         // — bills at their cap, then CP at 2× what was left.
-        const bidShare = Math.min(CP_SINGLE_ISSUER_LIMIT, 1 / Math.max(1, cpIssuers.length));
-        cpIssuers.forEach((iss) => {
-          const lineLocal = sleeveLocal * CP_SINGLE_ISSUER_LIMIT * cpCreditPolicyShare(iss.comp.creditRating);
-          demand.set(iss.comp.id, {
-            reservationStat: cpReservationYieldBps({
-              clearedBillYieldBps: billYield13wBps,
-              annualDefaultProbability: iss.annualPd,
-              recoveryRate: cpRecoveryRate,
-              tenorWeeks: CP_TENOR_WEEKS,
-            }),
-            maxHoldingLocal: lineLocal,
-            fullSizeStatRange: CP_FULL_SIZE_YIELD_RANGE_BPS,
-            maxNetPurchaseLocal: cashLocal * bidShare,
+        const bidShare = Math.min(CP_SINGLE_ISSUER_LIMIT, 1 / Math.max(1, papers.length));
+        papers.forEach((p, pi) => {
+          const px = Math.max(1e-9, openingPrice[pi]);
+          const reservationBps = reservationYieldBpsOf(p);
+          const reservationPrice = priceAtYieldBps(p, reservationBps);
+          // A willingness-to-move stated in yield, restated as the price move it implies on THIS
+          // paper at its own level. The remaining life does the conversion, which is what
+          // duration IS — so a four-week roll moves a fraction of what a fresh issue moves.
+          const rangePrice = Math.max(1e-9, Math.abs(reservationPrice - priceAtYieldBps(p, reservationBps + CP_FULL_SIZE_YIELD_RANGE_BPS)));
+          const lineLocal = sleeveLocal * CP_SINGLE_ISSUER_LIMIT * cpCreditPolicyShare(p.creditRating) * issuerShareOfPaper[pi];
+          demand.set(p.id, {
+            // The bounds are posted in FACE, which is what this book allocates; the money they
+            // stand for buys that face at the price the book opened at.
+            reservationStat: reservationPrice,
+            maxHoldingLocal: lineLocal / px,
+            fullSizeStatRange: rangePrice,
+            maxNetPurchaseLocal: (cashLocal * bidShare) / px,
           });
         });
         cpParticipants.push({ id: entity.id, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
@@ -926,20 +1105,22 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const cpDeskParticipants = buildDealerDeskParticipants({
         ctx, banks: cpBanks, book: CP_BOOK, instruments: cpInstruments,
         spreadBps: DESK_SPREAD_BPS_BY_BOOK[CP_BOOK],
+        unitPriceOf: (i) => openingPrice[i],
       });
       const cpDeskTickers = deskTickersOf(cpDeskParticipants);
 
       // OWN7: and now the desks' own books join the float, which is complete once they exist.
       const cpDeskHeldLocal = new Map<string, number>();
       cpDeskParticipants.forEach((p) =>
-        p.currentHoldingsByInstrumentId.forEach((usd, id) => {
-          if (usd > 0) cpDeskHeldLocal.set(id, (cpDeskHeldLocal.get(id) ?? 0) + usd);
+        p.currentHoldingsByInstrumentId.forEach((faceLocal, id) => {
+          if (faceLocal > 0) cpDeskHeldLocal.set(id, (cpDeskHeldLocal.get(id) ?? 0) + faceLocal);
         }));
       cpInstruments.forEach((inst) => {
         inst.tradableFloatLocal = (heldByInstitutionsLocal.get(inst.id) ?? 0) + (cpDeskHeldLocal.get(inst.id) ?? 0);
       });
 
-      const cpResult = clearFinancialAsset(cpInstruments, [...cpParticipants, ...cpDeskParticipants], new Map(), {
+      const cpAllParticipants = [...cpParticipants, ...cpDeskParticipants];
+      const cpResult = clearFinancialAsset(cpInstruments, cpAllParticipants, new Map(), {
         dealerSpreadBps: DESK_SPREAD_BPS_BY_BOOK[CP_BOOK],
         // OWN7: the float here is a stock these participants already hold, so an unsold
         // position stays with its holder rather than falling to a dealer nobody names.
@@ -948,45 +1129,62 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       ctx.damperBoundInstrumentIds.push(...cpResult.damperBoundInstrumentIds.map((id) => `commercial paper:${id}`));
       if (!cpResult.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} commercial paper`);
 
-      // ---- 4. APPLY. Holders' books from the fills; the issuer's new paper at the CLEARED rate
-      // for exactly what placed; the committed line for the roll it could not place.
-      // 13b: the rows name TRANCHES — the week's placed paper first (its tranche is issued just
-      // below, `${ticker}-CP-${week}`), the rest across the surviving programmes (register-split.ts).
-      const cpBoughtByIssuer = new Map<string, number>();
-      [...cpParticipants, ...cpDeskParticipants].forEach((p) => {
-        const fills = cpResult.newParticipantHoldings.get(p.id); if (!fills) return;
-        fills.forEach((usd, issuerId) => { const b = usd - (p.currentHoldingsByInstrumentId.get(issuerId) ?? 0); if (b > 0) cpBoughtByIssuer.set(issuerId, (cpBoughtByIssuer.get(issuerId) ?? 0) + b); });
+      /**
+       * THE PRINT, DEPOSITED — but only where there was something to trade. A book with no float
+       * and no offering has no clearing level: the solve's target is zero, nothing crosses it, and
+       * what comes back is the numerical bracket (§3.21). Such a piece of paper KEEPS the price it
+       * had, which is the honest answer and the one §3.21 asks every adapter to give.
+       */
+      const cpClearedPriceById = new Map<string, number>();
+      papers.forEach((p, pi) => {
+        const outcome = cpResult.primaryOutcomeById.get(p.id);
+        const placedLocal = outcome && !outcome.withdrawn ? Math.max(0, outcome.marketTakeLocal) : 0;
+        const tradedSomething = cpInstruments[pi].tradableFloatLocal > 0 || placedLocal > 0;
+        const px = cpResult.newStatByIndex[pi];
+        const printed = tradedSomething && px > 0 && isFinite(px);
+        cpClearedPriceById.set(p.id, printed ? px : openingPrice[pi]);
+        if (printed) setClearedPrice(v2Mirror, p.id, px);
       });
+
+      // ---- 4. APPLY. The rows name the TRANCHE the auction priced — there is nothing left to
+      // split: the issuer-level split file is deleted with this book, its last caller.
+      const cpPiById = new Map(cpAllParticipants.map((pp, pi) => [pp.id, pi]));
       cpEntities.forEach((entity) => {
-        const fills = cpResult.newParticipantHoldings.get(entity.id);
-        if (!fills) return;
+        const pi = cpPiById.get(entity.id);
+        const claimed = heldByTrancheByEntity.get(entity.id);
         const rows: ItemizedHolding[] = [];
-        const prior = heldByIssuerByEntity.get(entity.id);
-        fills.forEach((usd, issuerId) => {
-          if (!(usd > 1)) return;
-          const iss = issuerById.get(issuerId);
-          const outcome = cpResult.primaryOutcomeById.get(issuerId);
-          const primary = iss && outcome && !outcome.withdrawn && outcome.marketTakeLocal > 1
-            ? { trancheId: `${iss.comp.ticker}-CP-${ctx.nextWeek}`, sliceLocal: primarySliceOf(usd - (prior?.get(issuerId) ?? 0), cpBoughtByIssuer.get(issuerId) ?? 0, outcome.marketTakeLocal) }
-            : undefined;
-          splitAcrossTranches(v2Mirror, issuerId, 'COMMERCIAL_PAPER', usd, primary).forEach((t) => {
-            if (t.usd > 1) rows.push({ instrumentId: t.instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalLocal: t.usd, units: t.usd, faceLocal: t.usd });
-          });
+        if (pi !== undefined) {
+          const base = pi * cpResult.nInstruments;
+          for (let bi = 0; bi < cpResult.nInstruments; bi++) {
+            const faceLocal = cpResult.holdingsMatrix[base + bi];
+            if (faceLocal > 1) rows.push(cpHoldingRow(papers[bi].id, faceLocal));
+          }
+        }
+        // A stage may only rewrite what it CLEARED (§7.34): a claimed row this book did not price
+        // — paper that has run off, standing at whatever the borrower's cash could not reach —
+        // survives the session, and so does every row of an entity that got no seat at all.
+        if (claimed) claimed.forEach((faceLocal, instrumentId) => {
+          if (!(faceLocal > 1)) return;
+          if (pi !== undefined && cpFaceById.has(instrumentId)) return;
+          rows.push(cpHoldingRow(instrumentId, faceLocal));
         });
         store.append(entity.id, rows);
       });
 
       cpIssuers.forEach((iss) => {
-        const outcome = cpResult.primaryOutcomeById.get(iss.comp.id);
-        const clearedBps = cpResult.newStatById.get(iss.comp.id) ?? 0;
+        const primaryId = primaryIdByIssuerId.get(iss.comp.id);
+        const outcome = primaryId ? cpResult.primaryOutcomeById.get(primaryId) : undefined;
         const placedLocal = outcome && !outcome.withdrawn ? Math.max(0, outcome.marketTakeLocal) : 0;
         // No floor on the level (rule 6): the paper exists at whatever the auction printed.
-        if (placedLocal > 1) {
+        if (primaryId && placedLocal > 1) {
           issueTranche(v2Mirror, { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId }, {
-            id: `${iss.comp.ticker}-CP-${ctx.nextWeek}`,
+            id: primaryId,
             principalLocal: placedLocal,
             rateType: 'FIXED',
-            couponRate: Number((clearedBps / 10000).toFixed(4)),
+            // The paper the market priced is the paper that gets issued: the rate it was STRUCK
+            // at, not the price it cleared at. A deal that conceded raises less cash for the same
+            // face, which is what a concession is — it does not silently re-cut its own coupon.
+            couponRate: Number(primaryTermsById.get(primaryId)!.couponRate.toFixed(4)),
             originationWeek: ctx.nextWeek,
             maturityWeek: ctx.nextWeek + CP_TENOR_WEEKS,
             seniority: 'SENIOR',
@@ -1042,22 +1240,36 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       });
 
       // The desks' own CP inventory, on the banks that took it.
-      applyDealerDeskFills({ ctx, banks: cpBanks, book: CP_BOOK, instruments: cpInstruments, result: cpResult });
+      applyDealerDeskFills({
+        piById: cpPiById, ctx, banks: cpBanks, book: CP_BOOK, instruments: cpInstruments, result: cpResult,
+        unitPriceOf: (id) => cpClearedPriceById.get(id) ?? 1,
+      });
 
       // SETL6: the whole cash side — buyers to the clearing house, the desks' fee, and the
-      // clearing house to each ISSUER for the paper its own program actually placed.
+      // clearing house to each ISSUER for the paper its own programme actually placed.
       const cpEntityIds = new Set(cpEntities.map((e) => e.id));
+      const cpPartyOfParticipant = (id: string): PartyRef | undefined =>
+        (cpEntityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, cpDeskTickers));
+      // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
+      // through the same clearing house as the paper. CP could not do this while the auction named
+      // a COMPANY and the ledger names a tranche; row 4 made every fill name its paper.
+      const cpAccruedLeg = accruedOnFills(
+        cpAllParticipants, cpResult.newParticipantHoldings,
+        (id) => accruedPerFaceById.get(id) ?? 0,
+        (instrumentId, participantId, usd) => moveCorporateAccrued(
+          ctx.holderAccruedInterestLocal, 'COMMERCIAL_PAPER', instrumentId, participantId, usd)
+      );
       settleClearedBook(
         ctx, regionId, currencyOf(regionId), CP_BOOK,
         cpResult.netCashDeltaByParticipantId,
-        (id) => (cpEntityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, cpDeskTickers)),
+        cpPartyOfParticipant,
         { netCashLocal: cpResult.dealerNetCashLocal, feeLocal: cpResult.totalDealerRevenueLocal },
         feeDesksForRegion(ctx, regionId),
+        // The CCP pays each issuer for the paper its deal actually placed, AT THE PRICE it placed
+        // at — a deal that conceded raises less, which is what a concession is.
         // The paper's leg is the tranche's own wire (issuer → house at issue, W3) — no asset here.
-        primaryTakes(cpResult, (issuerId) => {
-          const iss = issuerById.get(issuerId);
-          return iss ? { kind: 'COMPANY', ticker: iss.comp.ticker } : undefined;
-        })
+        primaryTakes(cpResult, issuerPartyOfInstrument, (takeLocal, clearedPrice) => takeLocal * clearedPrice),
+        { ...cpAccruedLeg, issuerOf: issuerPartyOfInstrument }
       );
     }
   });

@@ -18,7 +18,7 @@
  *     LINEARISED out of the cleared margin (`100 − ΔDM × duration × 100`) — `bond.md` N7.b's
  *     forbidden direction, running, and reaching the loan index and the player's book;
  *   - an ISSUER is not a piece of paper, so the register's tranche rows had to be invented from
- *     an issuer-level fill by `register-split.ts`;
+ *     an issuer-level fill by a split that is now deleted (§9.13-CREDIT row 4);
  *   - and one margin per borrower is no term structure, for the same reason: the capital a
  *     position consumes and the distressed bid's discount are both the PAPER's own duration's.
  *
@@ -563,7 +563,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const bookCapacityLocal = totalDeskCapacityLocal(ctx, regionBanks, BOOK);
 
     // Apply: each entity's real new LEVERAGED_LOAN holdings. The rows name the TRANCHE the auction
-    // priced — there is nothing left to split (register-split.ts).
+    // priced — the issuer-level split that had to invent them is deleted (§9.13-CREDIT row 4).
     // SCALE C1: fills append to the store for the single write-back after 07e. SETL6: the cash leg
     // is settled below as payment instructions.
     const holdingRow = (instrumentId: string, faceLocal: number): ItemizedHolding =>

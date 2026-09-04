@@ -24,7 +24,7 @@ import {
   trancheRowOf, issuerIdOf, ladderRowsOf, trancheScheduleOf,
   TR_FLOATING, TR_CP, TR_FACILITY,
 } from '../engine2/tranches';
-import { pricePerFace, priceFromSpreadBps, spreadBpsFromPrice } from '../domain/pricing';
+import { priceFromSpreadBps, spreadBpsFromPrice } from '../domain/pricing';
 import type { ZeroCurve, PaperTerms } from '../domain/pricing';
 import { spreadAtTenor, CreditCurvePoint, CreditCurveRead } from '../domain/credit-curve';
 
@@ -47,10 +47,11 @@ export interface RegionRates {
 }
 
 /** Which ladder rows a market clears and deposits a price for. A bank FACILITY is its lender's
- *  own loan and trades nowhere; commercial paper is 07f's book and still clears a yield. */
+ *  own loan and trades nowhere; every other kind of corporate paper has a book that prints one. */
 export const IS_BOND_ROW = (flags: number): boolean => !(flags & (TR_FLOATING | TR_CP | TR_FACILITY));
 export const IS_LOAN_ROW = (flags: number): boolean => (flags & TR_FLOATING) !== 0 && !(flags & (TR_CP | TR_FACILITY));
-const isPricedRow = (flags: number): boolean => IS_BOND_ROW(flags) || IS_LOAN_ROW(flags);
+export const IS_CP_ROW = (flags: number): boolean => (flags & TR_CP) !== 0 && !(flags & TR_FACILITY);
+const isPricedRow = (flags: number): boolean => !(flags & TR_FACILITY);
 
 /**
  * What a tranche pays and when, off its own row — the schedule its price discounts. A FLOATER's
@@ -71,46 +72,22 @@ export function trancheTerms(v2: V2World, row: number, week: number, policyRate:
 }
 
 /**
- * WHAT ONE UNIT OF FACE FETCHES.
+ * WHAT ONE UNIT OF FACE FETCHES — WHAT SOMEBODY PAID FOR IT, AND NOTHING ELSE.
  *
- * A tranche the market printed is worth what it printed — that is the whole of rule 3, and it is
- * why this reads the price store first. Paper no book clears yet (a floater, commercial paper)
- * still has to be valued, and for those the price is derived from the spread its own book cleared,
- * which is the causation §3.13's remaining rows remove one book at a time.
- * Returns undefined for paper it cannot price rather than guessing — a caller leaves such a row
- * alone, and the audit counts it.
+ * §9.13-CREDIT row 4 emptied this function of arithmetic. Every kind of corporate paper a market
+ * makes now has a book that prints a price per tranche — bonds (row 1), loans (row 3), commercial
+ * paper (row 4) — so there is no longer a class whose price has to be DERIVED from a spread
+ * somebody else cleared, which was the last of the forbidden direction (`bond.md` N7.b) on this
+ * side of the model. A bank FACILITY is its lender's own loan and trades nowhere.
+ *
+ * Returns undefined for paper no session has printed rather than guessing — a caller leaves such
+ * a row alone, and the audit counts it.
  */
-export function trancheClearedPricePerFace(
-  world: CreditPriceWorld, v2: V2World, instrumentId: string, week: number
-): number | undefined {
+export function trancheClearedPricePerFace(v2: V2World, instrumentId: string): number | undefined {
   const row = trancheRowOf(v2, instrumentId);
   if (row === undefined) return undefined;
-  const S = v2.tranches;
-  // The market's own print, for the books that clear one — bonds (§9.13-CREDIT row 1) and loans
-  // (row 3). No derivation at all: this is what somebody paid.
-  if (isPricedRow(S.flags[row])) return clearedPriceOf(v2, instrumentId);
-  const issuerId = issuerIdOf(v2, instrumentId);
-  const comp = world.issuerById(issuerId);
-  if (!comp) return undefined;
-  const reg = world.regionById(comp.region);
-  if (!reg?.zeroRates) return undefined;
-  const rates: RegionRates = { zeroRates: reg.zeroRates, policyRate: reg.policyRate ?? 0 };
-  // COMMERCIAL PAPER has no cleared price of its own until §3.13's row 4 (07f still clears a
-  // yield per issuer), so it is valued on the issuer's OWN credit curve read at its own very short
-  // tenor — the borrower's shortest printed paper, which is the nearest thing anyone has quoted
-  // for it. A borrower with nothing printed cannot be priced, and the caller is told so.
-  const weeksToMaturity = S.maturityWeek[row] - week;
-  const spreadBps = issuerSpreadAtOnCurve(v2, rates, issuerId, week, Math.max(0, weeksToMaturity) / 52)?.spreadBps;
-  if (spreadBps === undefined) return undefined;
-  return pricePerFace({
-    isFloating: false,
-    couponRate: Number.isNaN(S.couponRate[row]) ? 0 : S.couponRate[row],
-    floatingMarginBps: 0,
-    paysOnlyAtMaturity: (S.flags[row] & TR_CP) !== 0,
-    weeksToMaturity,
-    policyRate: rates.policyRate,
-    clearedSpreadBps: spreadBps,
-  }, rates.zeroRates);
+  if (!isPricedRow(v2.tranches.flags[row])) return undefined;
+  return clearedPriceOf(v2, instrumentId);
 }
 
 /**

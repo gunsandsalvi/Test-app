@@ -96,11 +96,11 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 | N5 · sov a COUPON in exactly one of three shapes | `src/domain/government.ts:isDiscountBill` | ⚠️ |
 | N6 · corp a PERIODICITY and an accrual convention | `src/domain/company.ts:paymentsPerYear` | ✅ |
 | N6 · sov a PERIODICITY and an accrual convention | `src/domain/government.ts:sovereignCouponDueShare` | ⚠️ |
-| N7 · corp a PRICE per unit of par it changes hands at | `src/engine2/prices.ts:setClearedPrice` | ⚠️ |
+| N7 · corp a PRICE per unit of par it changes hands at | `src/engine2/prices.ts:setClearedPrice` | ✅ |
 | N7 · sov a PRICE per unit of par it changes hands at | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:priceAtYieldBps` | ✅ |
 | N7.a · corp cleared from real demand against real supply | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ⚠️ |
 | N7.a · sov cleared from real demand against real supply | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ⚠️ |
-| **N7.b · corp FORBID the price is never derived from the spread** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ❌ |
+| **N7.b · corp FORBID the price is never derived from the spread** | `src/engine/credit-price.ts:trancheClearedPricePerFace` | ✅ |
 | N7.b · sov FORBID the price is never derived from the yield | `src/domain/government.ts:billYieldFromPrice` | ✅ |
 | N8 · corp a HOLDER OF RECORD: who owns how many units | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
 | N8 · sov a HOLDER OF RECORD: who owns how many units | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ✅ |
@@ -131,23 +131,22 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-**42 rows — 21 nodes (the fourteen plus their seven sub-nodes) × 2 types: 24 ✅, 13 ⚠️, 5 ❌.**
+**42 rows — 21 nodes (the fourteen plus their seven sub-nodes) × 2 types: 26 ✅, 12 ⚠️, 4 ❌.**
 
 *Re-marked 2026-09-04 at §9.13-CREDIT row 2, catching up four rows the commits that closed them
-left behind: N7 · sov and N7.b · sov (13-SOV row 4 made both books clear a price), N8 · sov (13-SOV
-row 3 — its DIFF entry below already said "closed all of it" while the row above still read ❌), and
-N7 · corp (13-CREDIT row 1). The count above was COUNTED rather than adjusted, because it had
-drifted on its own too: it read 20/13/9 against a table that summed to 21/13/8. The lesson is the
-file's own: `check-atlas.sh` proves every citation RESOLVES and can say nothing about whether a mark
-is still TRUE, so a row nobody re-marks — and a tally nobody recounts — is the one kind of drift the
-gate cannot catch.*
+left behind, and again at row 4, which closed N7 · corp and N7.b · corp: commercial paper was the
+last book on either side deriving a price from a cleared spread. Each count above was COUNTED
+rather than adjusted, because the tally had drifted on its own too — it once read 20/13/9 against a
+table that summed to 21/13/8. The lesson is the file's own: `check-atlas.sh` proves every citation
+RESOLVES and can say nothing about whether a mark is still TRUE, so a row nobody re-marks — and a
+tally nobody recounts — is the one kind of drift the gate cannot catch.*
 
 The contract's own thesis is confirmed and sharpened: the two types differ correctly at N11, N13
 and N13.a — the sovereign genuinely has no call machinery and no seniority field, which is the
-right answer and rule 4's — and they fail IDENTICALLY at N7, N7.b and N14, which is where the
-model's real defect lives.
+right answer and rule 4's. They used to fail IDENTICALLY at N7, N7.b and N14; N7 and N7.b are now
+closed on both types, and N14 is where what is left of the model's real defect lives.
 
-### ⚠️ N7 / N7.b — THE SOVEREIGN AND THE CORPORATE BOND HAVE A PRICE; THE LOAN AND THE PAPER DO NOT
+### ✅ N7 / N7.b — CLOSED ON BOTH TYPES: EVERY BOND-SHAPED THING HAS A PRICE IT CHANGES HANDS AT
 
 **What this entry said when it was written, and what has landed since.** It said no bond in this
 model had a price per unit of par that it changes hands at: `financial-clearing-engine` values a
@@ -157,7 +156,7 @@ INVERTED — `priceFromSpreadBps` was called and `spreadBpsFromPrice` was called
 step 13's pair-swap, moving the derivation to the participant's side and the inverse to after the
 clear, was exactly the fix.
 
-That fix has now landed on three of the five books, and this is where it stands:
+That fix has now landed on all five books, and this is where it stands:
 
 - **SOVEREIGN ✅, both books** (§9.13-SOV row 4). `07c` clears a PRICE per bond, stating each
   holder's reservation yield as the price it implies on that bond's own schedule, and derives the
@@ -165,14 +164,19 @@ That fix has now landed on three of the five books, and this is where it stands:
   convention, which is their own and stays theirs (rule 8). `discountBillProceedsLocal` is still the
   price-from-yield direction and that is now PERMITTED, because it sits on the bidder's side: N7.b
   forbids deriving the CLEARED price from a cleared yield, not stating a reservation as a price.
-- **CORPORATE BONDS ⚠️** (§9.13-CREDIT row 1). `07b` clears a price per TRANCHE, deposits it in
+- **CORPORATE BONDS ✅** (§9.13-CREDIT row 1). `07b` clears a price per TRANCHE, deposits it in
   `engine2/prices.ts`, and every spread in the model is read back off it — there is no issuer spread
   left to derive a price from.
 - **LOANS ✅** (§9.13-CREDIT row 3). `07d` clears a price per loan and `pricePar` — the price
   linearised out of a cleared discount margin, the forbidden direction, on the surface through the
   loan index and the player's book — is deleted with `pricing.ts:priceLeveragedLoan`.
-- **COMMERCIAL PAPER ❌**, which is why N7 · corp is ⚠️ and N7.b · corp is still ❌: `07f` clears a
-  yield per issuer and the register carries its paper at what that yield implies. §3.13's row 4.
+- **COMMERCIAL PAPER ✅** (§9.13-CREDIT row 4), the last book on either side that derived a price
+  from a cleared level. `07f` prices one instrument per piece of paper and states each buyer's
+  reservation YIELD as the price it implies over that paper's own remaining life — the permitted
+  direction, on the bidder's side, exactly as the sovereign does. What proves N7.b rather than
+  merely asserting it is that `credit-price.ts:trancheClearedPricePerFace` now contains no
+  arithmetic at all: it is a lookup of what somebody paid, and there is no branch left for paper
+  whose price has to be made up.
 
 ### ✅ N8 · sov — A HOLDER OF RECORD OF WHAT? (closed, 13-SOV row 3)
 

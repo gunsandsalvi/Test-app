@@ -89,7 +89,7 @@ Two instruments answer this tree and they answer it differently, so a row that s
 | A1.b maturity under a year | `src/engine/simulation/stages/shared-helpers.ts:SOV_BILL_MAX_TENOR_YEARS` | ✅ |
 | A1.c senior unsecured, ranking with other senior debt | `src/domain/estate.ts:CLAIM_SENIORITY` | ✅ |
 | A1.d optionality: none — too short to be worth an option | `src/domain/call-protection.ts:callProtectionForIssue` | ✅ |
-| **A2 its PRICE is what it clears at; the yield is derived** | — | ❌ |
+| **A2 its PRICE is what it clears at; the yield is derived** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:cpInstruments` | ✅ |
 | A2.a on a stated day-count and quoting convention | — | ❌ |
 | A3 types by issuer: state (bills), bank (CD), firm (CP) | `src/engine/simulation/stages/07f-short-debt-clearing.ts:CP_BOOK` | ⚠️ |
 | B1 to fund a short, known need | `src/engine/simulation/stages/07f-short-debt-clearing.ts:WORKING_CAPITAL_SHARE_OF_REVENUE` | ✅ |
@@ -104,10 +104,10 @@ Two instruments answer this tree and they answer it differently, so a row that s
 | C2.a a real substitute for a deposit — a policy-rate channel | `src/engine/simulation/stages/07f-short-debt-clearing.ts:BANK_BILL_PICKUP_BPS` | ⚠️ |
 | C3 a buyer has a limit per issuer | `src/domain/commercial-paper.ts:CP_SINGLE_ISSUER_LIMIT` | ✅ |
 | C4 VERIFY the bill yield moves with the policy rate | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ⚠️ |
-| D1 it trades after issue, at a cleared price | `src/engine/simulation/stages/07f-short-debt-clearing.ts:priceFractionById` | ⚠️ |
-| D2 its price responds to short rates and to the issuer's credit | `src/domain/commercial-paper.ts:cpCreditPolicyShare` | ⚠️ |
+| D1 it trades after issue, at a cleared price | `src/engine/simulation/stages/07f-short-debt-clearing.ts:cpClearedPriceById` | ✅ |
+| D2 its price responds to short rates and to the issuer's credit | `src/domain/commercial-paper.ts:cpReservationYieldBps` | ✅ |
 | D3 it is **collateral**, with a haircut | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ⚠️ |
-| D4 VERIFY a spread over the equivalent-tenor bill is a derived read | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
+| D4 VERIFY a spread over the equivalent-tenor bill is a derived read | `src/engine/credit-price.ts:rowSpreadBps` | ✅ |
 | E1 FORBID **no automatic roll** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:cpIssuers` | ✅ |
 | **E2 FORBID no price without a market** | `src/engine/simulation/stages/bill-accretion.ts:weeklyAccretionRate` | ❌ |
 | E3 FORBID no negative outstanding, no maturity without cash | `src/engine/simulation/stages/07f-short-debt-clearing.ts:maturedLocal` | ✅ |
@@ -116,29 +116,32 @@ Two instruments answer this tree and they answer it differently, so a row that s
 
 ## 3. THE DIFF
 
-**27 nodes: 12 ✅, 12 ⚠️, 3 ❌.** The best-mapped of the four credit trees, and for a reason worth
+**27 nodes: 16 ✅, 9 ⚠️, 2 ❌.** The best-mapped of the four credit trees, and for a reason worth
 recording: **`07f` is the youngest book and the only one written after rule 3 was stated**, so its
-issuer side, its buyer side and its failure path are all real. What it inherits from the rest of
-the model is the same one defect — the thing that clears is a yield.
+issuer side, its buyer side and its failure path are all real. What it inherited from the rest of
+the model was the one defect the credit rows have now removed — the thing that cleared was a yield.
 
-### ❌ A2 / A2.a / E2 — THE SHORT END CLEARS A YIELD, AND THE BILL'S RETURN IS RE-SET WEEKLY
+### ✅ A2 / D1 / D2 / D4 — CLOSED: BOTH HALVES OF THE SHORT END CLEAR A PRICE
 
-**KNOWN(13)** for the first half: `07f:138` and `:838` both open with `statKind: 'YIELD_LIKE'`, so a
-bill and a piece of CP change hands in the secondary at a dollar of face like everything else. A2's
-"the yield is derived from price and days to maturity" is exactly inverted.
+**Was KNOWN(13).** `07f`'s two books both opened `statKind: 'YIELD_LIKE'`, so a bill and a piece of
+CP changed hands in the secondary at a dollar of face like everything else, and A2's "the yield is
+derived from price and days to maturity" was exactly inverted.
 
-But **07f is also the one book that gets it half right, and the half it gets right is worth
-protecting**. `07f:372-376` computes a real primary price:
+§9.13-SOV row 4 closed the BILL half and §9.13-CREDIT row 4 the CP half, in the same shape: the
+buyer's reservation stays a YIELD — which is genuinely what a cash investor has, since its
+alternative is the paper its money would otherwise sit in — and is stated as the PRICE that yield
+implies on the paper's own remaining life (`pricing/bond.ts:priceFromYield`). CP now prices one
+instrument per piece of paper rather than one per issuer, so a roll with four weeks left and a
+fresh thirteen-week issue are two prices, and D4's spread is read back off the cleared price at the
+paper's own tenor (`credit-price.ts:rowSpreadBps`) rather than being the thing that was cleared.
 
-```
-priceFractionById.set(id, discountBillProceedsUSD(1, max(0, yieldAnnual), b.years));
-```
+The half `07f` always got right and which is now the general case: `priceFractionById` computes a
+real primary price and rebates both legs of the primary instruction, so the buyer books at cost and
+the treasury receives the discount. The comment beside it records what it fixed (*"every primary
+placement minted its own discount into the holders' books while the treasury was overpaid by the
+same amount"*).
 
-and rebates both legs of the primary instruction so the buyer books at cost and the treasury
-receives the discount. That is the only place in the whole model where a unit of anything changes
-hands at other than par, and the comment beside it records what it fixed (*"every primary placement
-minted its own discount into the holders' books while the treasury was overpaid by the same
-amount"*). **When step 13 lands, this is the shape to generalise, not to replace.**
+### ❌ A2.a / E2 — NO STATED CONVENTION, AND THE BILL'S RETURN IS STILL RE-SET WEEKLY
 
 **E2's FORBID is the sharp finding and it is NEW.** `bill-accretion.ts:26-35` accretes a held bill
 at *this week's* curve, not at the yield it was bought at:
@@ -157,6 +160,10 @@ while the holders accumulate accretion at `yₜ`, and the two only agree if `y�
 measures the gap. **Becomes a §3 step** (shared with `sovereign-credit.md` F2, where the same finding
 is recorded from the instrument's side) — small, and it folds into 13-SOV, which has to store the
 bill's issue price anyway.
+
+**Row 4 did not touch E2**, and the plan's row-4 line claiming it would is wrong: the accretion is
+a BILL mechanism on the sovereign side, not the CP book, and it is untouched. It stays ❌ until the
+bill's own issue price is what it pulls to par at.
 
 A2.a has no code at all: nothing in `07f`, `government.ts` or `commercial-paper.ts` names a
 day-count or a quoting convention. `discountBillProceedsUSD` is `face/(1 + y·t)` — simple money-market

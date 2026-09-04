@@ -40,13 +40,18 @@
  *    what the book will not fund at that level simply does not place.
  *  - **The buyers are the money funds and the cash sleeves** that already run through the bill
  *    and repo books, plus the banks' own desks. A buyer's reservation is its own alternative —
- *    the cleared 13-week bill, which is exactly what its money earns instead — plus the issuer's
- *    own expected loss over the paper's actual life. Below that it does not want the paper at any
- *    size; above it, it scales in. **The 15bp liquidity premium is gone**: the premium is now
- *    whatever the cleared level turns out to be over bills, which is what a liquidity premium IS.
+ *    the region's cleared front end at the paper's own tenor, which is exactly what its money
+ *    earns instead — plus the issuer's own expected loss. Below that it does not want the paper
+ *    at any size; above it, it scales in. **The 15bp liquidity premium is gone**: the premium is
+ *    now whatever the cleared level turns out to be over bills, which is what one IS.
  *  - **Credit policy is a SIZE, never a prohibition** — the same doctrine as the sub-investment-
  *    grade sleeve in the bond book. A fund does not post "no" to a weak name; it posts a smaller
  *    line, and the concentration limit below binds every name alike.
+ *
+ * **And what the book clears is a PRICE** (§9.13-CREDIT row 4). The reservation stays a yield —
+ * that is genuinely what a cash buyer has — and is stated as the price it implies on each piece
+ * of paper's own remaining life, so a roll with four weeks to run and a fresh thirteen-week issue
+ * are two instruments with two prices instead of one borrower with one rate.
  */
 
 import { CreditRating } from './company';
@@ -89,18 +94,23 @@ export function cpCreditPolicyShare(rating: CreditRating): number {
 }
 
 /**
- * What a buyer requires to hold THIS issuer's paper instead of the bills its money would
- * otherwise sit in: its own alternative, plus the loss it expects over the paper's actual life.
- * Everything above that is the market's, and it is the number the auction solves for.
+ * What a buyer requires to hold THIS issuer's paper instead of the sovereign paper its money
+ * would otherwise sit in: its own alternative at the SAME tenor, plus the loss it expects on
+ * this borrower. Everything above that is the market's, and it is the number the auction solves.
+ *
+ * BOTH TERMS ARE ANNUAL (rule 9). This used to scale the expected loss by `tenorWeeks / 52` and
+ * add the result to an ANNUAL alternative — a loss over thirteen weeks added to a rate per year,
+ * which quartered the credit compensation on every piece of thirteen-week paper in the model and
+ * disagreed with the bond book's own `computeReservationSpreadBps` about what an expected loss
+ * is. The horizon belongs in the DISCOUNTING, where §9.13-CREDIT row 4 put it: the reservation is
+ * a yield, and the price it implies is that yield over the paper's own remaining life.
  */
 export function cpReservationYieldBps(args: {
-  clearedBillYieldBps: number;
+  /** What this money earns instead, at the paper's own tenor — the region's cleared front end. */
+  alternativeYieldBps: number;
   annualDefaultProbability: number;
   recoveryRate: number;
-  tenorWeeks: number;
 }): number {
-  const { clearedBillYieldBps, annualDefaultProbability, recoveryRate, tenorWeeks } = args;
-  const horizonLossBps =
-    annualDefaultProbability * (tenorWeeks / 52) * (1 - recoveryRate) * 10000;
-  return clearedBillYieldBps + horizonLossBps;
+  const { alternativeYieldBps, annualDefaultProbability, recoveryRate } = args;
+  return alternativeYieldBps + annualDefaultProbability * (1 - recoveryRate) * 10000;
 }

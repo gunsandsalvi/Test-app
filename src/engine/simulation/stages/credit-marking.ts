@@ -23,21 +23,13 @@ import { GameState } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { markCreditBook } from '../../ledger/holdings-ledger';
 import { trancheClearedPricePerFace } from '../../credit-price';
-import { RegionId } from '../../../types';
 
 export function markCreditToMarket(state: GameState, ctx: WeeklyStepContext): void {
   const week = ctx.nextWeek;
   const priceById = new Map<string, number | undefined>();
-  // The FRESHEST view of the world: this week's companies and regions, not last week's state.
-  const byId = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
-  state.companies.forEach((c) => { if (!byId.has(c.id)) byId.set(c.id, c); });
-  const world = {
-    issuerById: (id: string) => byId.get(id),
-    regionById: (r: string) => ctx.updatedRegions[r as RegionId] ?? state.regions[r as RegionId],
-  };
   const priceOf = (instrumentId: string): number | undefined => {
     if (priceById.has(instrumentId)) return priceById.get(instrumentId);
-    const p = trancheClearedPricePerFace(world, ctx.v2, instrumentId, week);
+    const p = trancheClearedPricePerFace(ctx.v2, instrumentId);
     priceById.set(instrumentId, p);
     return p;
   };

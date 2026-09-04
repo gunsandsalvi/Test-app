@@ -176,8 +176,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | C7.a it can be left holding, as its own position | `src/domain/dealer-desk.ts:DealerDeskPosition` | ✅ |
 | C7.b VERIFY the fee and the risk are related | `src/domain/primary-market.ts:oneWeekPriceRiskBps` | ✅ |
 | D1 holders and buyers post schedules; who trades is the outcome | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:runCorporateBondClearingStage` | ✅ |
-| **D2 a PRICE clears (bond N7)** | `src/engine2/prices.ts:setClearedPrice` | ⚠️ |
-| D2 · bonds and loans — both books clear and deposit one | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:runLeveragedLoanClearingStage` | ✅ |
+| **D2 a PRICE clears (bond N7)** | `src/engine2/prices.ts:setClearedPrice` | ✅ |
 | D3 a dealer intermediates, a real party | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
 | D3.a it quotes both sides out of its own inventory | `src/engine/simulation/stages/dealer-desks.ts:applyDealerDeskFills` | ✅ |
 | D3.b bounded by its balance sheet and capital | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
@@ -186,8 +185,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | D5 VERIFY an unsold seller keeps its paper | `src/engine/simulation/stages/financial-clearing-engine.ts:unsoldStaysWithHolder` | ✅ |
 | D6 two legs in the same pass (N9.a) | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
 | D7 accrued interest transfers with the paper (N9.b) | `src/engine/simulation/stages/shared-helpers.ts:moveCorporateAccrued` | ⚠️ |
-| **D8 FORBID no derived measure may set the price (N7.b)** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ❌ |
-| D8 · bonds and loans — the price is the primitive, the spread is read off it | `src/engine/credit-price.ts:rowSpreadBps` | ✅ |
+| **D8 FORBID no derived measure may set the price (N7.b)** | `src/engine/credit-price.ts:trancheClearedPricePerFace` | ✅ |
 | E1 a register of holders (N8) | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
 | E2 VERIFY Σ held = issued (N8.a) | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | **E3 the holder marks at the cleared price** | `src/engine/simulation/stages/credit-marking.ts:markCreditToMarket` | ❌ |
@@ -229,33 +227,38 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-**78 rows: 44 ✅, 24 ⚠️, 10 ❌** — COUNTED, not adjusted (§5's lesson from §9.13-CREDIT row 2:
-a tally nobody recounts drifts as silently as a mark nobody re-marks). Re-marked at rows 1 and 3,
-which moved D2 ❌→⚠️, C3 and H1 ⚠️→✅ and added the two cleared-price rows. Ordered by how much each
-changes, not by branch. The depth-2 diff's findings all appear below under their new ids; nothing
-has been dropped in the renumbering.
+**76 rows: 44 ✅, 23 ⚠️, 9 ❌** — COUNTED, not adjusted (§5's lesson from §9.13-CREDIT row 2:
+a tally nobody recounts drifts as silently as a mark nobody re-marks). Re-marked at rows 1, 3 and
+4; row 4 moved D2 ⚠️→✅ and D8 ❌→✅ and DELETED the two "bonds and loans" sub-rows it added at
+row 1, which had nothing left to say once every book cleared. Ordered by how much each changes,
+not by branch. The depth-2 diff's findings all appear below under their new ids; nothing has been
+dropped in the renumbering.
 
-### ⚠️ D2 / D8 / E3 — THE BOND BOOK CLEARS A PRICE NOW; THE LOAN AND PAPER BOOKS DO NOT
+### ✅ D2 / D8 — CLOSED: EVERY CREDIT BOOK CLEARS A PRICE, PER PIECE OF PAPER (❌ E3 remains)
 
-**PARTLY CLOSED, §9.13-CREDIT row 1.** `07b` prices one instrument per TRANCHE, `statKind:
-'PRICE_LIKE'`, and deposits what it printed in `engine2/prices.ts` — so a corporate bond changes
-hands at its price and every spread in the model is read back off that price at the paper's own
-remaining life (`engine/credit-price.ts`). `Company.oasSpreadBps` is deleted: a borrower has a
-CREDIT CURVE (`domain/credit-curve.ts`) and not a spread, which is what makes two tranches of one
-name able to disagree.
+**§9.13-CREDIT row 1** made `07b` price one instrument per TRANCHE, `statKind: 'PRICE_LIKE'`, and
+deposit what it printed in `engine2/prices.ts` — so a corporate bond changes hands at its price and
+every spread in the model is read back off that price at the paper's own remaining life
+(`engine/credit-price.ts`). `Company.oasSpreadBps` is deleted: a borrower has a CREDIT CURVE
+(`domain/credit-curve.ts`) and not a spread, which is what makes two tranches of one name able to
+disagree.
 
-**Row 3 did the same to the LOAN book** (§9.13-CREDIT row 3): `07d` prices one instrument per
-tranche, `Company.leveragedLoan` is deleted whole — a price, a spread, two duplicates of the ladder
-and three constants — and a borrower's loan market is its own LOAN CURVE, kept apart from its bond
+**Row 3 did the same to the LOAN book**: `07d` prices one instrument per tranche,
+`Company.leveragedLoan` is deleted whole — a price, a spread, two duplicates of the ladder and
+three constants — and a borrower's loan market is its own LOAN CURVE, kept apart from its bond
 curve because a first lien and an unsecured claim are two risks on one name. `07d:pricePar`, the
 price linearised out of a cleared margin, is gone with `pricing.ts:priceLeveragedLoan`.
 
-What is still open under these three nodes, and why D2 is ⚠️ rather than ✅:
+**Row 4 finished it on the COMMERCIAL PAPER book**, which was the last holder of N7.b's forbidden
+direction anywhere in the model. `07f` prices one instrument per piece of CP; the buyer's
+reservation stays a YIELD — a cash fund's alternative genuinely is the paper its money would
+otherwise sit in — and is stated as the price that yield implies over each piece's own remaining
+life. `credit-price.ts:trancheClearedPricePerFace` is now a lookup with no arithmetic in it at all,
+which is the sharpest way to say D8 holds: there is no longer a class of corporate paper whose
+price is derived from a spread somebody else cleared.
 
-- **`07f` (bills and commercial paper) still clears a yield per ISSUER**, so D8's FORBID is still
-  violated by the one remaining book. That is §3.13's row 4, and `register-split.ts` dies with it.
 - **E3 is unchanged**: `credit-marking` is still not wired in, and cannot be one book at a time
-  (§9.13 part 3). Both credit books write their fills in PAR space exactly as the sovereign does,
+  (§9.13 part 3). Every credit book writes its fills in PAR space exactly as the sovereign does,
   and `P5` measures the gap between the face carried and the price cleared — which is the finding,
   not a defect of these rows.
 
@@ -343,7 +346,7 @@ filling up gets smaller and never dearer. The node asks for a reason and the cod
 **Already named in §3 step 26** ("`dealer-desk.ts:117` charges a stated real-market spread table as a
 real cost in five books").
 
-### ⚠️ D7 — THE BOND BOOK SETTLES THE ACCRUED NOW; THE LOAN AND PAPER BOOKS DO NOT
+### ⚠️ D7 — EVERY BOOK SETTLES THE ACCRUED NOW; THE APPORTIONMENT IS STILL WEEKLY
 
 Better than the depth-2 mapping recorded, and still not N9.b. `shared-helpers.ts:872`
 apportions each issuer's WEEKLY interest across holders of record, accumulates it per
@@ -360,13 +363,13 @@ buyer pays the accrued on the face it took, the ledger re-keys by the same amoun
 to the issuer. The corporate could not follow while `07b` cleared one instrument per COMPANY and the
 accrual ledger is keyed per TRANCHE — there was no face delta on a tranche for the accrued to ride.
 
-**§9.13-CREDIT rows 1 and 2 closed that for the BOND book**: the clear names the paper, the leg
-settles through the same house, and `moveCorporateAccrued` re-keys the balance. The node stays ⚠️
-because `07d` and `07f` still clear per issuer and carry no leg, and because the apportionment is
-weekly rather than daily — the model's clock everywhere. Row 2 also found that pass 3 of the weekly
-walk, the half that makes the DESKS holders of record, had been looking a tranche-keyed desk book up
-by ISSUER and missing every position since 13b: the desks accrued nothing at all until it was
-repaired.
+**§9.13-CREDIT rows 1 and 2 closed that for the BOND book**, row 3 for the LOANS and row 4 for the
+PAPER: every credit clear names the paper, the leg settles through the same house, and
+`moveCorporateAccrued` re-keys the balance. **The node stays ⚠️ for one reason only** — the
+apportionment is weekly rather than daily, which is the model's clock everywhere. Row 2 also found
+that pass 3 of the weekly walk, the half that makes the DESKS holders of record, had been looking a
+tranche-keyed desk book up by ISSUER and missing every position since 13b: the desks accrued
+nothing at all until it was repaired.
 
 ### ⚠️ G4 — THE ESTATE SELLS AT A DISCOUNT OFF BOOK, NOT AT A PRICE
 

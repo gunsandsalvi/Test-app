@@ -188,8 +188,9 @@ export function seedOpeningCreditPrices(
     const spreadBps = RATING_OAS_SPREADS[c.creditRating]?.baseBps;
     if (spreadBps === undefined) return;
     for (const tr of ladderRowsOf(v2, c.id)) {
-      // The two cleared credit books' paper only: a facility sits on its lender's own book, and
-      // commercial paper is 07f's, which still clears a yield.
+      // The traded books' paper only: a facility sits on its lender's own book and trades
+      // nowhere, and the seed opens no commercial paper at all — every piece of CP in the model
+      // is struck by 07f's own auction, which deposits its price in the session that placed it.
       if (TS.flags[tr] & (TR_FACILITY | TR_CP)) continue;
       const weeksToMaturity = TS.maturityWeek[tr] - currentWeek;
       if (!(weeksToMaturity > 0) || !(TS.principalLocal[tr] > 0)) continue;

@@ -67,7 +67,7 @@ export type UnitOfMeasure =
 export const ASSET_REGISTRY: Record<AssetType, AssetModule> = {
   EQUITY:         { assetClass: 'EQUITY',     carriesCoupon: false, lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'SHARES' },
   CORP_BOND:      { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: true,  hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR_USD' },
-  LEVERAGED_LOAN: { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'PAR_USD' },
+  LEVERAGED_LOAN: { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR_USD' },
   SOV_BOND:       { assetClass: 'SOVEREIGN',  carriesCoupon: true,  lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'PAR_USD' },
   CDS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS' },
   IRS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS' },

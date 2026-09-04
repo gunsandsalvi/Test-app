@@ -336,17 +336,20 @@ written from here):
     4. **The equity row's stored value has to go**, or it drifts exactly as face did.
     5. *(Done — 13-SOV row 3: sovereign holdings are register rows naming a bond, so there is
        something to attach a price to.)*
-    6. **The clearing engine's `unitValueLocal = statKind === 'PRICE_LIKE' ? clearedStat : 1`**
-       is the financial half's one line. *(Done for the BOND book — §9.13-CREDIT row 1: the
-       participant values on its spread and bids the price that spread implies on the paper's own
-       schedule, and `Company.oasSpreadBps` is deleted rather than demoted to a report, because a
-       borrower has no spread at all (user, 2026-09-04). What is left is `07d`'s
-       `leveragedLoan.discountMarginBps` and `07f`'s bill/CP yield — the same move, one book at a
-       time, and `07d`'s `pricePar` linearisation dies with it.)*
-       **AND THE REGISTRY MUST BE WHAT THE ADAPTER READS** (atlas corporate-credit D2, point 3):
-       `assets/index.ts` declares `quotedAs` and every adapter hard-codes `statKind` beside it —
-       two representations of one fact, and row 1 added a third agreement rather than removing the
-       second.
+    6. *(Done for CREDIT — §9.13-CREDIT rows 1, 3 and 4. The clearing engine's
+       `unitValueLocal = statKind === 'PRICE_LIKE' ? clearedStat : 1` was the financial half's one
+       line: every credit participant now values on its own reservation — a spread on a bond or a
+       loan, a yield on commercial paper — and bids the PRICE that reservation implies on the
+       paper's own schedule. `Company.oasSpreadBps` and `Company.leveragedLoan` are deleted rather
+       than demoted to reports, because a borrower has no spread at all (user, 2026-09-04), and
+       `07d`'s `pricePar` linearisation went with them.)*
+       **WHAT IS LEFT IS THAT THE REGISTRY MUST BE WHAT THE ADAPTER READS** (atlas corporate-credit
+       D2, point 3): `assets/index.ts` declares `quotedAs` and every adapter hard-codes `statKind`
+       beside it — two representations of one fact, and row 1 added a third agreement rather than
+       removing the second. Row 4 corrected the declaration itself (`LEVERAGED_LOAN` still read
+       `SPREAD_LIKE` a row after its book started printing prices) and that is exactly the point:
+       nothing reads `quotedAs`, so nothing could have caught it. `COMMERCIAL_PAPER` is not even an
+       `AssetType`, so the registry cannot describe the book at all.
 
     **IT MUST NOT BE BYTE-IDENTICAL.** The moment value becomes units × cleared price, every
     balance sheet in the model moves, because today's stored values are costs, pars and stale
@@ -368,15 +371,11 @@ written from here):
     **13-CREDIT, the credit class, one book at a time** (user, 2026-09-04: *"there shouldn't be any
     spread per issuer. The spread is per asset, assets with different maturities should have
     different risk levels and so different spreads. There is no spread quantity associated with an
-    issuer aside from the CDS."*). Rows 1, 2 and 3 are in §9. What is left, in order:
-    · **row 4 — `07f`, commercial paper**: the last credit book clearing a YIELD per issuer, and
-      the last holder of the forbidden direction (`bond.md` N7.b). It closes atlas short-term-debt
-      A2/E2 — the short end clears a yield, so a bill's return is re-set weekly — and
-      `register-split.ts` and the desks' issuer-keyed split die with it. (The BILL half of 07f
-      already clears a price, §9.13-SOV row 4; what is left is the corporate CP book.)
+    issuer aside from the CDS."*). Rows 1, 2, 3 and 4 are in §9 — every credit book now prices the
+    PAPER. What is left is one row:
     · **row 5 — the mark**: the register carries FACE and `P5`/`P8` measure the gap to the cleared
-      price on both classes. It cannot land one book at a time (§9.13 part 3) — it lands when
-      every credit book prints a price and every reader takes `faceLocal`.
+      price on all three classes. It cannot land one book at a time (§9.13 part 3) — it lands now
+      that every credit book prints a price, and it lands when every reader takes `faceLocal`.
 
     **13-EQUITY, the equity class** — the stored value goes (WHAT THIS FORCES, point 4), **and
     HOUSEHOLDS BECOME HOLDERS IN THE SAME COMMIT** (user, 2026-09-04, reading a company's
@@ -410,24 +409,23 @@ written from here):
     NS sites are `11-fiscal`, `call-protection` and `12-portfolio`, which step 25 and step 26
     own.)*
 
-    **AND IT OWNS 11f AND STEP 12's TAIL** — one file, three findings, one cause: the register is
-    keyed by TRANCHE and the auctions clear by ISSUER, so `register-split.ts` has to invent the
-    mapping. `O7` reports ~55 tranches a week claimed beyond their face because `:65` spreads an
-    ISSUER-level position across tranches with no cap; `O8` reports **0.42B on 219 positions**
-    because `:63` falls back to the ISSUER's own id when the ladder of that kind is empty at split
-    time — a position in paper that does not exist, keyed as though it were the issuer. It cannot
-    be deleted before the clear moves: drop the row and the holder's cash leg has no security
-    (rule 5); key it anywhere else and it is the same invention under a new name.
-    *(The BOND and LOAN books are done — §9.13-CREDIT rows 1 and 3. Both clear per tranche, so no
-    split is invented and a claim on paper that has retired is REPAID by its borrower at its own
-    face instead of migrating onto that borrower's other paper. `register-split.ts` survives for
-    `07f` and the desks' issuer-keyed books alone, and it goes with row 4.)*
-    Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
-    DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
+    **IT OWNED 11f AND STEP 12's TAIL, AND THEY ARE CLOSED** — one file, three findings, one
+    cause: the register was keyed by TRANCHE and the auctions cleared by ISSUER, so
+    `register-split.ts` had to invent the mapping. `O7` reported ~55 tranches a week claimed beyond
+    their face (an ISSUER-level position spread across tranches with no cap) and `O8` **0.42B on
+    219 positions** (the fallback booking the position under the ISSUER's own id when no tranche of
+    the kind was live). *(Rows 1, 3 and 4 moved every credit book to the paper and `register-split.ts`
+    is DELETED, along with the same roll-up on the desks' side — `dealer-desks.ts`'s `clearingKeyOf`,
+    which had outlived the books it was written for and was handing each per-tranche session a desk
+    that declared itself flat in paper it was carrying. A claim on paper that has retired is now
+    REPAID by its borrower at its own face instead of migrating onto that borrower's other paper.
+    What is left of `O7` and `O8` is the SEED's own rounding, §3.13's 37-SEED (b).)* Two hypotheses
+    were spent on the way: incomplete claims — DISPROVED; the issuer/tranche oscillation — DISPROVED
+    AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
     **AND THE CORPORATE ACCRUED LEG** (13b's other half, `bond.md` N9.b): a buyer pays the seller
-    what has accrued on the face it takes. *(Done for BONDS — §9.13-CREDIT row 2 — and for LOANS
-    with row 3, which gave the leg the per-tranche face delta it rides on. `07f` follows in row 4,
-    for the same reason and in the same shape.)*
+    what has accrued on the face it takes. *(Done on all three books — §9.13-CREDIT rows 2, 3 and 4.
+    What is left of `bond.md` D7 is that the apportionment is weekly rather than daily, which is the
+    model's clock everywhere.)*
 13e. **A HOLDER OF RECORD IS EVERY HOLDER.** `sovereign-calendar.ts:accrueSovereignHolders` walks
     the institutional register and the banks' investment books — so a bank's govvie DESK inventory
     and the CENTRAL BANK's own book accrue nothing, and their share of every sovereign coupon is
@@ -1421,6 +1419,38 @@ numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` �
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
+**13-CREDIT row 4 — THE PAPER BOOK CLEARS A PRICE, AND THE ISSUER-LEVEL SPLIT IS DELETED FROM THE
+WHOLE MODEL.** The same three-part correction, on the last book still making it. `07f` prices one
+instrument per piece of COMMERCIAL PAPER — every live programme at its own remaining life plus the
+week's deal as its own tranche — `statKind: 'PRICE_LIKE'`, with each buyer's reservation still
+computed as a YIELD (a cash fund's alternative genuinely is the paper its money would otherwise sit
+in) and stated as the price that yield implies over that paper's own life, which is the sovereign's
+own move from §9.13-SOV row 4. The treasurer's walk-away is the revolver restated as a price floor.
+The primary is struck at PAR off the region's cleared front end plus what the borrower's own printed
+paper says it pays there, so a concession shows up as a price below par and the issuer receives
+price × face. `credit-price.ts:trancheClearedPricePerFace` is now a LOOKUP WITH NO ARITHMETIC IN IT:
+with bonds, loans and paper all printing prices there is no class left whose price has to be derived
+from somebody else's cleared spread, which closes `bond.md` N7.b on both types and
+short-term-debt A2/D1/D2/D4.
+
+Three things died with it. **`register-split.ts` is DELETED** — 07f was its last caller, so `O7`'s
+migration of a claim onto a borrower's other paper and `O8`'s position keyed as though a company
+were a security are gone from every credit book (what remains of both is the seed's own rounding).
+**`dealer-desks.ts`'s `clearingKeyOf` is deleted too, and it was live damage**: it rolled a desk's
+stored per-tranche positions up to the ISSUER for the auction's benefit, which was right while books
+cleared per issuer and became wrong the moment they stopped — so since rows 1 and 3 (and since
+13-SOV rows 3–4 for the sovereign and bill books) every desk entered every session declaring itself
+FLAT in paper it was carrying, and `applyDealerDeskFills` then marked none of it. **And
+`cpReservationYieldBps` had a rule-9 units defect**: it scaled the expected loss by `tenorWeeks / 52`
+and added a THIRTEEN-WEEK loss to an ANNUAL alternative, quartering the credit compensation on every
+piece of CP in the model and disagreeing with the bond book's own `computeReservationSpreadBps`
+about what an expected loss is. Both terms are annual now; the horizon does its work in the
+discounting, where it belongs. `assets/index.ts` also had `LEVERAGED_LOAN: quotedAs: 'SPREAD_LIKE'`
+a row after that book started printing prices — corrected, and worth recording because NOTHING reads
+`quotedAs`, which is exactly step 13's item 6.
+
+Gates green; no run (rule 11).
+
 **13-CREDIT row 3 — THE LOAN BOOK CLEARS A PRICE TOO, AND `leveragedLoan` IS DELETED WHOLE.** The
 same three-part correction row 1 made to the bond book: a discount margin is not a price (the engine
 valued a `YIELD_LIKE` fill at 1, so a unit of loan par changed hands at a dollar), an issuer is not a
@@ -1447,8 +1477,7 @@ exactly the per-tranche face delta this row created. Step 18's `07d:86-88` durat
 way `07b`'s did — with the issuer instrument, not by being fixed. The seed deposits an opening price
 for floaters too, at the rating table's spread discounted for the first lien.
 
-Gates green; no run (rule 11). `07f`'s commercial paper is the last book clearing a yield per issuer
-and the last holder of N7.b's forbidden direction — row 4, which `register-split.ts` dies with.
+Gates green; no run (rule 11).
 
 **13-CREDIT row 2 — THE BUYER PAYS THE SELLER WHAT THE BOND HAS ALREADY ACCRUED, AND THE DESKS
 TURN OUT NEVER TO HAVE BEEN HOLDERS OF RECORD AT ALL.** 13b built the leg for the sovereign and
