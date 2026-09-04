@@ -48,7 +48,7 @@ export interface V2World {
   contracts: ReadonlyContractTable;
   /** §7.307/§7.310 — the debt ladder as rows (rows are the authority since §7.313). */
   tranches: ReadonlyTrancheStore;
-  /** §7.307 — the institutional register as rows (stage 1: a synced mirror of itemizedHoldings). */
+  /** §7.307 — the institutional register as rows; `entity.itemizedHoldings` is its week-end view (§3.13-BOOK d1). */
   holdings: ReadonlyHoldingStore;
   /** §3.13 — WHAT ONE UNIT OF AN INSTRUMENT LAST CLEARED AT (engine2/prices.ts). A position is
    *  (asset, units) and its value is units × this; a market writes only what it cleared, and an

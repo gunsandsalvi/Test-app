@@ -18,7 +18,8 @@ import { bankPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf } from '../../.
 import { GameState, RegionId, Region } from '../../../types';
 import { currencyOf } from '../../../domain/geography';
 import { measuredWeeklyMove, medianOf } from '../../../domain/volatility';
-import { ringFill, rowOf } from '../../../engine2/world';
+import { ringFill, rowOf, typeOf } from '../../../engine2/world';
+import { bookHeadOf } from '../../../engine2/holdings';
 import { computeSovereignRepoHaircuts } from './repo-clearing';
 import { PrimeBrokerageLine, maxDrawnLocal, drawnByFund, lentByBroker } from '../../../domain/prime-brokerage';
 import { issuerSpreadAtOnCurve } from '../../credit-price';
@@ -90,6 +91,8 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
   // §3.13-BOOK (c-then-3b): `homeBankId` names the broker in the ENTITY space, so it is a lookup.
   const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   void state;
+  const v2 = ctx.v2;
+  const H = v2.holdings;
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
@@ -150,13 +153,15 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       let bookLocal = 0;
       let weightedHaircutLocal = 0;
       let largestLocal = 0;
-      (fund.itemizedHoldings || []).forEach((h) => {
-        const usd = Math.max(0, h.quantityOrNotionalLocal ?? 0);
-        if (usd <= 0) return;
+      // §3.13-BOOK d1: THE ROWS — the fund's register, read at the source (this pass runs before
+      // the clearing store opens, so it is the week's opening book either way).
+      for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) {
+        const usd = Math.max(0, H.qtyLocal[r]);
+        if (usd <= 0) continue;
         bookLocal += usd;
-        weightedHaircutLocal += usd * (haircuts[h.instrumentType] ?? haircuts.DEFAULT);
+        weightedHaircutLocal += usd * (haircuts[typeOf(v2, H.typeRef[r])] ?? haircuts.DEFAULT);
         if (usd > largestLocal) largestLocal = usd;
-      });
+      }
       const baseHaircut = bookLocal > 0 ? weightedHaircutLocal / bookLocal : haircuts.DEFAULT;
       const concentration = bookLocal > 0 ? largestLocal / bookLocal : 1;
       const haircutRate = Math.min(1, baseHaircut * (1 + concentration));

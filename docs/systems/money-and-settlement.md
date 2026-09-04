@@ -224,6 +224,9 @@ What is true now, and where the record is:
   store handle, and `check-hygiene.sh` fails the first that does; the seed sets a sector row
   through `accounts.ts:openSectorRow` and nothing in a week sets one.
 
+- **One register** (§9.13-BOOK d1): the holdings rows are the register, not a mirror of
+  `entity.itemizedHoldings`; the array is the week-end view and nothing in a week reads it.
+
 What the collapse handed to slice (d): `DerivativeContract.referenceId` holds four id spaces
 (`the-derivative-layer.md` A1), and `O3` passes a fund share whose fund is gone (`the-register.md`
 A1.b).

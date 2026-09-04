@@ -68,7 +68,7 @@ import { runGoodsArrivalStage } from './stages/goods-arrival';
 import { runTradeSettlementStage } from './stages/trade-settlement';
 // Side effect only: registers the (Node-only, env-gated) clearing worker pool with the engine.
 import './stages/clearing-worker-pool';
-import { ensureV2 } from '../../engine2/world';
+import { ensureV2, typeRefOf } from '../../engine2/world';
 import { assertLaddersInSync, materializeLadder, facilityBookOf, ensureLaddersSynced } from '../../engine2/tranches';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
@@ -76,7 +76,7 @@ import { buildEntityIndex } from '../ledger/entity-index';
 import type { ItemizedHolding } from '../../domain/banking';
 import type { PartyRef } from '../ledger/party';
 
-import { ensureBooksSynced, assertBooksInSync, materializeBook, clearDirtyBooks } from '../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt, materializeBook, clearDirtyBooks } from '../../engine2/holdings';
 import './stages/native-kernels';
 import { runFreightClearingStage } from './stages/freight-clearing';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
@@ -167,7 +167,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     for (const e of state.institutionalEntities ?? []) {
       if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
     }
-    ensureBooksSynced(v2, state.institutionalEntities ?? []);
   }
   const cbTrace = centralBankIdentityTraceEnabled() ? new CentralBankIdentityTrace() : undefined;
   cbTrace?.begin(state, baseCtx);
@@ -215,15 +214,21 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         const focusIds = new Set(
           baseCtx.updatedCompanies.filter((c) => c.ticker === mintFocus).map((c) => c.id));
         let usd = 0;
+        // THE ROWS, mid-week: the array is the week's opening view and would never move between
+        // stages, which is the one thing this instrument exists to see.
+        const v2m = ensureV2(state);
+        const Hm = v2m.holdings;
+        // Debug instrument, not dispatch: the class literal lives in a const so the
+        // ASSET_SWITCH ratchet keeps counting real dispatch sites only.
+        const corpBond: string = 'CORP_BOND';
+        const corpBondRef = typeRefOf(v2m, corpBond);
         baseCtx.updatedInstitutionalEntities.forEach((e) => {
-          if (!e.isDefaulted) e.itemizedHoldings.forEach((h) => {
-            // Debug instrument, not dispatch: the class literal lives in a const so the
-            // ASSET_SWITCH ratchet keeps counting real dispatch sites only.
-            const corpBond: string = 'CORP_BOND';
-            if (focusIds.size > 0 ? focusIds.has(equityIssuerId(h.instrumentId)) : h.instrumentId === mintFocus) {
-              if (h.instrumentType === corpBond) usd += h.quantityOrNotionalLocal ?? 0;
-            }
-          });
+          if (e.isDefaulted) return;
+          for (let r = bookHeadOf(v2m, e.id); r >= 0; r = Hm.next[r]) {
+            if (Hm.typeRef[r] !== corpBondRef) continue;
+            const id = instrumentIdAt(v2m, r);
+            if (focusIds.size > 0 ? focusIds.has(equityIssuerId(id)) : id === mintFocus) usd += Hm.qtyLocal[r];
+          }
         });
         if (focusIds.size > 1) console.log(`  [mint-stage] NOTE: ${focusIds.size} ids share ticker ${mintFocus}`);
         const prev = (globalThis as { __mintPrevLocal?: number }).__mintPrevLocal ?? usd;
@@ -452,12 +457,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // replaces the per-writer syncs and every mid-week object rebuild.
     const v2 = ensureV2(state);
     for (const c of nextState.companies) c.debtTranches = materializeLadder(v2, c.id);
-    // §7.313 flip, holdings — same pattern: the rows are the register's authority; the object
-    // books are a view materialized here for the UI, STATE_DUMP and the seed-time readers —
-    // but only the books a writer touched (§7.315): a clean book's view from last close is
-    // still exact, and nothing mutates view arrays any more (all writers are row-native), so
-    // carrying the array forward aliases nothing. A missed dirty mark cannot survive gating:
-    // HOLDINGS_SYNC_CHECK compares EVERY book to its rows.
+    // §7.313 flip, holdings — same pattern: the rows ARE the register; the object books are a
+    // view materialized here for the UI, STATE_DUMP and the seed-time readers — but only the
+    // books a writer touched (§7.315): a clean book's view from last close is still exact, and
+    // nothing in a week reads or writes the arrays (§3.13-BOOK d1), so carrying one forward
+    // aliases nothing.
     const dirtyBooks = v2.holdings.dirty;
     for (const e of nextState.institutionalEntities ?? []) {
       if (dirtyBooks.has(e.id)) e.itemizedHoldings = materializeBook(v2, e.id);
@@ -465,7 +469,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     clearDirtyBooks(v2);
   }
   if (process.env.TRANCHE_SYNC_CHECK === '1') assertLaddersInSync(ensureV2(state), nextState.companies);
-  if (process.env.HOLDINGS_SYNC_CHECK === '1') assertBooksInSync(ensureV2(state), nextState.institutionalEntities ?? []);
   idTrace?.report(baseCtx.nextWeek);
   cbTrace?.report(baseCtx.nextWeek);
 

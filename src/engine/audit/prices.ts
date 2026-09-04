@@ -10,7 +10,8 @@ import { isActiveCompany, banksOf } from '../../domain/company';
 import { AuditFinding, B, pct, spearman, sum } from './types';
 import { marketCapOf } from '../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
-import { ensureV2 } from '../../engine2/world';
+import { ensureV2, typeOf } from '../../engine2/world';
+import { bookHeadOf, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { isTrancheKind } from '../../domain/assets';
 import { trancheClearedPricePerFace, issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../credit-price';
 import { materializeGovLadder, TR_SUBORDINATED } from '../../engine2/tranches';
@@ -196,21 +197,29 @@ function p5(state: GameState, week: number): AuditFinding[] {
   const v2 = ensureV2(state);
   let faceLocal = 0, markedLocal = 0, impliedLocal = 0, rows = 0, unpriced = 0;
   let widest = { id: '', gapLocal: 0 };
+  const H = v2.holdings;
+  const trancheByRef: boolean[] = [];
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
-    e.itemizedHoldings.forEach((h) => {
-      if (!isTrancheKind(h.instrumentType)) return;
-      const face = h.units;
-      if (!(Math.abs(face) > 0)) return;
-      const price = trancheClearedPricePerFace(v2, h.instrumentId);
-      if (price === undefined) { unpriced++; return; }
+    // §3.13-BOOK d1: the register's rows, read at the source (the type test resolved once per
+    // interned type).
+    for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
+      const tref = H.typeRef[r];
+      let isTranche = trancheByRef[tref];
+      if (isTranche === undefined) { isTranche = isTrancheKind(typeOf(v2, tref)); trancheByRef[tref] = isTranche; }
+      if (!isTranche) continue;
+      const face = rowUnits(H, r);
+      if (!(Math.abs(face) > 0)) continue;
+      const id = instrumentIdAt(v2, r);
+      const price = trancheClearedPricePerFace(v2, id);
+      if (price === undefined) { unpriced++; continue; }
       faceLocal += face;
-      markedLocal += h.quantityOrNotionalLocal ?? 0;
+      markedLocal += H.qtyLocal[r];
       impliedLocal += face * price;
       rows++;
-      const gap = (h.quantityOrNotionalLocal ?? 0) - face * price;
-      if (Math.abs(gap) > Math.abs(widest.gapLocal)) widest = { id: h.instrumentId, gapLocal: gap };
-    });
+      const gap = H.qtyLocal[r] - face * price;
+      if (Math.abs(gap) > Math.abs(widest.gapLocal)) widest = { id, gapLocal: gap };
+    }
   });
   const gapLocal = markedLocal - impliedLocal;
   if (rows > 0 && Math.abs(gapLocal) > 1e6) {

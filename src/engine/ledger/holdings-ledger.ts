@@ -18,7 +18,7 @@
 import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
 import { companyParty } from '../../domain/party';
 import {
-  HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
+  HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
 import { PartyRef } from './party';
 import { REGION_IDS } from '../../domain/geography';
@@ -307,7 +307,8 @@ export function seedBook(
 ): void {
   const holderId = holderIdOf(holder);
   if (!holderId) return;
-  syncBookRows(v2, holderId, []);
+  // The chain is claimed empty (and the book marked opened) before the first issue lands.
+  relinkBook(v2, holderId, []);
   for (const h of book ?? []) {
     issueHolding(v2, issuerOf(h), holder, {
       instrumentType: h.instrumentType,

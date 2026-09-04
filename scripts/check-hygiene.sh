@@ -70,7 +70,7 @@ fi
 #    from engine2/holdings.ts bypasses the wire ledger; only the ledger, the store's own write-back
 #    and the engine's materialization may. (The type-level seal makes a column write a compile
 #    error; this catches the function-level path.)
-MUTATORS='(pushBookRow|relinkBook|newBookRow|freeBookRow|setBookChain|syncBookRows|mutableHoldings|pruneEmptyRows|clearDirtyBooks)'
+MUTATORS='(pushBookRow|relinkBook|newBookRow|freeBookRow|setBookChain|mutableHoldings|pruneEmptyRows|clearDirtyBooks)'
 MUT_STRAY=$(grep -rnE "import \{[^}]*\b${MUTATORS}\b[^}]*\} from '[^']*engine2/holdings'" src --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE '^src/engine/ledger/|^src/engine2/|^src/engine/simulation/stages/holdings-store\.ts:|^src/engine/simulation/core\.ts:' || true)
 if [ -n "$MUT_STRAY" ]; then

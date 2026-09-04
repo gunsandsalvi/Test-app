@@ -68,11 +68,10 @@ export class HoldingsTable {
   }
 
   /**
-   * §7.307 holdings flip — build from the PERSISTENT ROW MIRROR (engine2/holdings): every column
-   * fill is typed-array loads plus interned-int translation, and no holding object is touched.
-   * Valid wherever the mirror is current — after the clearing write-back, since every writer
-   * syncs at its own site (HOLDINGS_SYNC_CHECK proves it). Chain order = book order, so every
-   * grouping comes out in register order.
+   * §7.307 holdings flip — build from the PERSISTENT ROWS (engine2/holdings), which are the
+   * register: every column fill is typed-array loads plus interned-int translation, and no
+   * holding object is touched. Chain order = book order, so every grouping comes out in register
+   * order.
    */
   buildFromRows(v2: V2World, entities: InstitutionalEntity[]): void {
     const H = v2.holdings;

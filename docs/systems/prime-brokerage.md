@@ -202,7 +202,7 @@ read.
 
 ### ⚠️ A2 / A4 / B4 — THE BROKER FINANCES BUT DOES NOT CUSTODY, AND EARNS ONE OF THREE INCOMES
 
-**A2**: the broker READS `fund.itemizedHoldings` to size the haircut but never holds them —
+**A2**: the broker READS the fund's register rows to size the haircut but never holds them —
 there is no custody relation, the fund's rows stay in the fund's own book, and nothing is pledged.
 So the loan at B1 is unsecured in the register even though it is priced as if secured, and D1's
 "selling collateral" would have nothing to sell. This is the same gap `securities-lending.md` C5

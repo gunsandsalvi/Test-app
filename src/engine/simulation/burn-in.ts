@@ -36,6 +36,8 @@ import { productionLeadWeeksOf } from '../../domain/industry-registry';
 import { INDUSTRY_SUBUNITS } from '../../domain/industry';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
+import { ensureV2 } from '../../engine2/world';
+import { bookHeadOf } from '../../engine2/holdings';
 
 /** One quantity §7.4 is about: what the seed asserted, and where the engine took it. */
 export interface SteadyStateProbe {
@@ -70,7 +72,13 @@ export function probeSteadyState(s: GameState): Record<string, number> {
   out['wip weeks of throughput'] = frontUnits > 0 ? wipUnits / frontUnits : 0;
 
   // The register: §6.1 measured it opening at ~32k rows and reaching ~106k by week 2.
-  out['register rows'] = s.institutionalEntities.reduce((a, e) => a + (e.itemizedHoldings?.length ?? 0), 0);
+  {
+    // §3.13-BOOK d1: counted on the register itself.
+    const v2 = ensureV2(s);
+    let rows = 0;
+    for (const e of s.institutionalEntities) for (let r = bookHeadOf(v2, e.id); r >= 0; r = v2.holdings.next[r]) rows++;
+    out['register rows'] = rows;
+  }
 
   // The goods market: what share of what is asked for is actually delivered.
   let demanded = 0;

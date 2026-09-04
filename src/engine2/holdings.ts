@@ -1,12 +1,13 @@
 /**
  * THE INSTITUTIONAL REGISTER AS PERSISTENT ROWS.
  *
- * Stage 1: a SYNCED MIRROR — `entity.itemizedHoldings` stays authoritative and every writer
- * mirrors the books it touched (`syncBookRows`); `HOLDINGS_SYNC_CHECK=1` compares canonical
- * projections at each week end and throws on the first mismatch, so a missed writer is found
- * empirically, exactly how the tranche mirror's check found the birth path and the
- * clone-aliasing bug. Readers then flip file by file, writers go row-native last, and the
- * arrays become a week-end materialized view.
+ * The rows ARE the register. Every position an institution holds is a row on its chain here, put
+ * there by a wire through `engine/ledger/holdings-ledger.ts` — the seed's opening books included
+ * (`seedBook`), so a book is the replay of its wires from week 0. `entity.itemizedHoldings` is a
+ * VIEW: `core.ts` materialises the books a writer touched once at the week end, for the UI, the
+ * state dump and the seed-time readers, and nothing in a week reads or writes it. §3.13-BOOK d1
+ * deleted the mirror this file used to be (`syncBookRows`, `ensureBooksSynced`,
+ * `HOLDINGS_SYNC_CHECK`): there is no second representation left to keep in step.
  *
  * ~75 holders, ~110k rows at steady state — the same plain-data
  * rules as the lot/contract/tranche stores: typed arrays, interned strings, per-entity chains
@@ -41,13 +42,15 @@ export interface HoldingStore {
   /** Per entity row (world.ts rowOf on the ENTITY id): chain head/tail, -1 = empty. */
   head: Int32Array;
   tail: Int32Array;
-  /** Entities whose book has ever been synced — the week-start catch-up spots newcomers. */
+  /** Entities whose book has been OPENED — by the seed's wires, or by the week-start catch-up
+   *  that opens a newborn's book the same way. The catch-up spots newcomers by their absence. */
   synced: Set<string>;
   /** Scratch per-row mark for relink's keep test — an epoch stamp, never a Set. */
   mark: Int32Array;
   markEpoch: number;
   /** Books a writer touched since the last materialization — the week-end view rebuilds only
-   *  these (a missed mark is caught by HOLDINGS_SYNC_CHECK comparing EVERY book to its rows). */
+   *  these. Every writer is a ledger operation and every ledger operation marks, so a missed mark
+   *  is a ledger bug, not a stage's. */
   dirty: Set<string>;
 }
 
@@ -130,39 +133,7 @@ function slotFor(H: HoldingStore, entRow: number): number {
   return entRow;
 }
 
-/** Mirror one entity's whole book into rows, replacing whatever the chain held. */
-export function syncBookRows(v2: V2World, entityId: string, book: ItemizedHolding[] | undefined): void {
-  const H = mutableHoldings(v2);
-  H.synced.add(entityId);
-  H.dirty.add(entityId);
-  const entRow = rowOf(v2, entityId);
-  const slot = slotFor(H, entRow);
-  for (let r = H.head[slot]; r >= 0; ) {
-    const nxt = H.next[r];
-    freeRow(H, r);
-    r = nxt;
-  }
-  H.head[slot] = -1;
-  H.tail[slot] = -1;
-  if (!book || book.length === 0) return;
-  let prev = -1;
-  for (let i = 0; i < book.length; i++) {
-    const h = book[i];
-    const r = allocRow(H);
-    H.typeRef[r] = internType(v2, h.instrumentType);
-    H.instrRef[r] = internInstrument(v2, h.instrumentId);
-    H.regionRef[r] = internRegion(v2, h.issuerRegion);
-    H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
-    H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
-    H.units[r] = h.units;
-    H.next[r] = -1;
-    if (prev >= 0) H.next[prev] = r; else H.head[slot] = r;
-    prev = r;
-  }
-  H.tail[slot] = prev;
-}
-
-/** Head row of the entity's mirrored book, -1 when it has none — for direct chain walks
+/** Head row of the entity's book, -1 when it has none — for direct chain walks
  *  (`for (let r = bookHeadOf(...); r >= 0; r = H.next[r])`) that allocate nothing. */
 export function bookHeadOf(v2: V2World, entityId: string): number {
   const H = mutableHoldings(v2);
@@ -241,8 +212,8 @@ export function newBookRow(v2: V2World, h: ItemizedHolding): number {
   H.regionRef[r] = internRegion(v2, h.issuerRegion);
   H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
   H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
-  // §9.13-CREDIT row 5 — THE QUANTITY, WHICH THIS DID NOT COPY. `syncBookRows` and `pushBookRow`
-  // both carry `units` across; this one dropped it, and it is the row builder THE CLEARING
+  // §9.13-CREDIT row 5 — THE QUANTITY, WHICH THIS DID NOT COPY. `pushBookRow` carries `units`
+  // across; this one dropped it, and it is the row builder THE CLEARING
   // WRITE-BACK USES — so every fill every book has ever written lost its face here. What the row
   // then reported depended on where the row came from: a recycled row kept `freeRow`'s NaN and
   // materialised as the VALUE, a fresh one kept the lane's zero and materialised as ZERO. One
@@ -291,7 +262,7 @@ export function setBookChain(v2: V2World, entityId: string, ids: number[]): void
 }
 
 /** Direct column writers (in-place qty/shares scaling) call this so the week-end view knows to
- *  re-materialize the book; a missed call is caught by HOLDINGS_SYNC_CHECK. */
+ *  re-materialize the book. */
 export function markBookDirty(v2: V2World, entityId: string): void {
   mutableHoldings(v2).dirty.add(entityId);
 }
@@ -387,41 +358,6 @@ export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[
     out.push(h);
   }
   return out;
-}
-
-/** Idempotent catch-up (seed and any unhooked creation path). */
-export function ensureBooksSynced(v2: V2World, entities: { id: string; itemizedHoldings?: ItemizedHolding[] }[]): void {
-  for (const e of entities) {
-    if (!v2.holdings.synced.has(e.id)) syncBookRows(v2, e.id, e.itemizedHoldings);
-  }
-}
-
-function canonical(h: ItemizedHolding): string {
-  return `${h.instrumentType}|${h.instrumentId}|${h.issuerRegion}|${h.quantityOrNotionalLocal ?? 0}|${h.quantityShares ?? 'x'}|${h.units}`;
-}
-
-function canonicalRow(v2: V2World, r: number): string {
-  const H = mutableHoldings(v2);
-  const sh = H.shares[r];
-  return `${typeOf(v2, H.typeRef[r])}|${instrumentOf(v2, H.instrRef[r])}|${regionOf(v2, H.regionRef[r])}|${H.qtyLocal[r]}|${Number.isNaN(sh) ? 'x' : sh}|${H.units[r]}`;
-}
-
-/** HOLDINGS_SYNC_CHECK=1 — throw on the first entity whose rows disagree with its book. */
-export function assertBooksInSync(v2: V2World, entities: { id: string; entityType?: string; itemizedHoldings?: ItemizedHolding[] }[]): void {
-  for (const e of entities) {
-    const book = e.itemizedHoldings ?? [];
-    const rows = bookRowsOf(v2, e.id);
-    if (rows.length !== book.length) {
-      throw new Error(`HOLDINGS SYNC: ${e.id} (${e.entityType ?? '?'}) has ${book.length} book rows but ${rows.length} mirrored — a writer is not syncing`);
-    }
-    for (let i = 0; i < book.length; i++) {
-      const a = canonical(book[i]);
-      const b = canonicalRow(v2, rows[i]);
-      if (a !== b) {
-        throw new Error(`HOLDINGS SYNC: ${e.id}[${i}] diverges\n  obj: ${a}\n  row: ${b}`);
-      }
-    }
-  }
 }
 
 /** Week end: every book has been materialized; the dirty set starts empty. Ledger-internal. */

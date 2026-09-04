@@ -462,13 +462,13 @@ written from here):
     have, made total. `structuredClone` on the host state must keep working, so these are plain
     data with private accessors, never classes.
 
-    **THE WALL IS UP ON ALL SIX STORES AND HAS ONE DOOR — d0 in §9.** No file outside
-    `engine/ledger/` and `engine2/` names a mutable handle, and `check-hygiene.sh` fails the first
-    that does. What is LEFT is that the register itself is still TWO representations —
-    `engine2/holdings.ts` calls itself *"Stage 1: a SYNCED MIRROR"* of `entity.itemizedHoldings`,
-    the seed pushes rows straight into the object array (`initialization.ts:1570,1619`), and
-    `core.ts:463` materialises the array back each week under a sync check that runs only behind
-    an env flag. Slice (d1) below is that sentence.
+    **THE WALL IS UP ON ALL SIX STORES, HAS ONE DOOR, AND THE REGISTER IS ONE REPRESENTATION — d0
+    and d1 in §9.** No file outside `engine/ledger/` and `engine2/` names a mutable handle, and
+    `check-hygiene.sh` fails the first that does; the rows are the register, `entity.itemizedHoldings`
+    is the week-end view `core.ts` materialises and nothing in a week reads, and the mirror's sync
+    machinery is deleted. What is LEFT on the enforcement side is the write that does not resolve
+    its parties (d2) and the books outside the register (d3) — and the LADDER still has the mirror
+    the register just lost (d1b).
 
     **THE CROSS-TABLE CHECK IS AT THE WRITE, NOT IN A GATE** (reviewed 2026-09-04: a scan of four
     tables needs a STATE, so "a gate in `check-hygiene.sh`" is either a run — rule 11 forbids it —
@@ -509,11 +509,14 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d1. **THE MIRROR DIES.** `entity.itemizedHoldings` becomes the week-end materialised view its
-        own header promises, never a writer's target: the seed wires its rows through the ledger like
-        everyone else, `syncBookRows` and `HOLDINGS_SYNC_CHECK` go, and every reader of the array is
-        a reader of the store. Byte-identical in state; the precondition for "sealed" meaning
-        anything.
+    d1b. **THE LADDER MIRROR DIES TOO** (inserted 2026-09-04 at d1: the same defect on the tranche
+        store, found while deleting the register's). `engine2/tranches.ts` still carries
+        `syncLadderRows`, `ensureLaddersSynced` and `assertLaddersInSync` / `TRANCHE_SYNC_CHECK`,
+        `holdings-view.ts:measuredOwnershipAllRegions` still catches ladders up from the
+        `c.debtTranches` arrays, and `core.ts:462` materialises the arrays back. Same shape as d1:
+        `seedLadder` claims the chain through `relinkLadder`, the catch-up and the check go, every
+        in-week reader of `debtTranches` reads the store, and `initialization.ts:336`'s note about
+        the seed marking ladders synced becomes moot. Byte-identical in state.
     d2. **THE WRITE THROWS.** `wire()` and every ledger operation resolve `from`, `to`, the holder
         and the issuer through `entity-index.ts` and the instrument through its store, and
         `defect()` on a miss. Needs only an *instrument-exists* resolver over the tranche store,
@@ -1631,7 +1634,7 @@ Dump/diff: `STATE_DUMP=<f> STATE_DUMP_WEEK=<n>`, then `DIFF_STATE=a.json,b.json 
 
 **Instruments, env-gated.** Adding one costs nothing now and step 38's runs carry it free, so a
 step that needs evidence later leaves an instrument behind instead of a run: `FP`, `STAGE_TRACE`,
-`BANK_IDENTITY_TRACE`, `COMPANY_STORE_AUDIT`, `TRANCHE_SYNC_CHECK`, `HOLDINGS_SYNC_CHECK`,
+`BANK_IDENTITY_TRACE`, `COMPANY_STORE_AUDIT`, `TRANCHE_SYNC_CHECK`,
 `OWN_TRACE`, `W2_TRACE`, `SPLIT_TRACE`, `WIRE_TRACE`, `DESK_TRACE`, `PNL_TRACE`, `DEFAULT_TRACE`,
 `LABOR_CAUSES`, `SEED_BURN_IN`, `COUPON_TRACE`, `SOV_TRACE`, `BILL_TRACE`.
 
@@ -1735,6 +1738,27 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d1 — THE MIRROR DIES.** The register is one representation: the rows. `engine2/holdings.ts`
+no longer calls itself a mirror — `syncBookRows`, `ensureBooksSynced`, `assertBooksInSync` and
+`HOLDINGS_SYNC_CHECK` are deleted; `seedBook` claims the chain through `relinkBook` and issues each
+opening row by wire as before. `entity.itemizedHoldings` is the week-end view `core.ts` materialises
+for dirty books and nothing in a week reads: the clearing store builds its opening book from
+`materializeBook` (so its index-for-row pairing is true by construction and the two defect guards
+for a desync are gone), and the four in-week readers of the array read the rows —
+`institutional-balance-sheet` (sovereign coupon income), `prime-brokerage` (the haircut),
+`audit/prices` P5 and burn-in's row count; `MINT_STAGE_TRACE` read the array between stages,
+where it cannot move, and now reads the rows. Both stage readers run before the clearing store
+opens, so the rows they see are the opening book the array showed: byte-identical in state. The
+seed-ordering worry the plan carried was not a defect — the week-0 sector projection ran on a
+THROWAWAY host (an object with no world), so the mirror's catch-up there never touched the real
+store and `openSeededMirrors` did open every book by wire — but that host had no accounts either,
+so the sector's opening CASH projected as zero. The projection now runs after `openSeededMirrors`
+on the state's own world (`projectSeededSectorViews`); week 0's `institutionalSector.cashLocal` and
+`sectorEquityLocal` are the display change, and nothing in week 1 reads them before stage 11
+rewrites them. Found and inserted: the LADDER has the identical mirror (d1b). `the-register` F3
+now cites W5 (`auditWires` / `registerQtyByKind`), which is the check that survives. Gates green;
+no run.
 
 **13-BOOK d0 — ONE DOOR.** No file outside `engine/ledger/` and `engine2/` names a mutable store
 handle now, and `check-hygiene.sh` fails the first that does — one guard over all five handles

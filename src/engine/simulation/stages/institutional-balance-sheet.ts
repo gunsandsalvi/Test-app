@@ -33,10 +33,10 @@ import { entityCashOf } from '../../ledger/accounts';
 
 import { institutionProfile } from '../../../domain/institution-profiles';
 
-import { bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { RegionId, InstitutionalEntity, Company, GameState } from '../../../types';
 import { institutionTotalAssetsLocal as totalAssetsRead } from '../../../domain/institutions';
-import { V2World, ensureV2, typeOf } from '../../../engine2/world';
+import { V2World, ensureV2, typeOf, typeRefOf, regionOf } from '../../../engine2/world';
 import { isActiveCompany } from '../../../domain/company';
 import { mandatePctOf } from '../../../domain/institutions';
 import { publicComparableEvMultiple } from './pe-lifecycle';
@@ -127,6 +127,8 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
   // The sovereign ladder is a pure function of one region's stack and was being walked
   // once per gov-bond ROW — the same arithmetic once, memoized for the week.
   const sovCouponByRegion = new Map<string, Map<string, number>>();
+  const H = ctx.v2.holdings;
+  const govBondRef = typeRefOf(ctx.v2, 'GOV_BOND');
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     let weeklyIncomeLocal = 0;
@@ -138,22 +140,25 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
     // What is still reported here is the INCOME, because an income statement is smooth: the
     // accrual is the entity's earnings for the week whether or not a coupon fell due (rule 8 — an
     // expense and a payment are different numbers with different periods).
-    entity.itemizedHoldings.forEach((h) => {
-      if (h.instrumentType !== 'GOV_BOND') return;
-      const issuerReg = ctx.updatedRegions[h.issuerRegion];
-      if (!issuerReg) return;
+    // §3.13-BOOK d1: THE ROWS. This runs before the clearing store opens, so the register here
+    // is the week's opening book — the same positions the array used to show, read at the source.
+    for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
+      if (H.typeRef[r] !== govBondRef) continue;
+      const issuerRegion = regionOf(ctx.v2, H.regionRef[r]) as RegionId;
+      const issuerReg = ctx.updatedRegions[issuerRegion];
+      if (!issuerReg) continue;
       // §3.13-SOV row 3: the coupon is THIS BOND's, off the ladder. It used to be the
       // face-weighted average of whatever group the id parsed into, so a holder of a 2% rung
       // was paid its neighbours' coupon.
-      let cb = sovCouponByRegion.get(h.issuerRegion);
+      let cb = sovCouponByRegion.get(issuerRegion);
       if (!cb) {
-        cb = new Map(materializeGovLadder(ctx.v2, h.issuerRegion).map((t) => [t.id, t.couponRate] as const));
-        sovCouponByRegion.set(h.issuerRegion, cb);
+        cb = new Map(materializeGovLadder(ctx.v2, issuerRegion).map((t) => [t.id, t.couponRate] as const));
+        sovCouponByRegion.set(issuerRegion, cb);
       }
-      const couponRate = cb.get(h.instrumentId);
-      if (couponRate === undefined) return;
-      weeklyIncomeLocal += ((h.quantityOrNotionalLocal ?? 0) * couponRate) / 52;
-    });
+      const couponRate = cb.get(instrumentIdAt(ctx.v2, r));
+      if (couponRate === undefined) continue;
+      weeklyIncomeLocal += (H.qtyLocal[r] * couponRate) / 52;
+    }
     // A week with no income is written as ZERO, not skipped. Returned unchanged, the field kept
     // last week's number for ever and every reader — the pension entitlement above all — credited
     // income that was never earned again.

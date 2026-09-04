@@ -29,8 +29,8 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
-import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, instrumentIdAt, setRowShares, foldRowInto } from '../../../engine2/holdings';
-import { V2World, instrumentRefOf } from '../../../engine2/world';
+import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, materializeBook, setRowShares, foldRowInto } from '../../../engine2/holdings';
+import { V2World } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 import { clearedBookDelta, registerBooks, BookEntry } from '../../ledger/holdings-ledger';
@@ -71,25 +71,13 @@ export class HoldingsStore {
     const H = v2.holdings;
     entities.forEach((source) => {
       const entity: InstitutionalEntity = { ...source };
-      const rows = entity.itemizedHoldings || [];
-      // The objects are last close's materialized view and the chain holds the same book in the
-      // same order, so pairing index-for-row is one linear walk — and the pairing is only safe
-      // while the two agree. `finalize` KEEPS rowIds[i] for an unclaimed i and FREES it for a
-      // claimed one, so a one-row desync keeps and frees the wrong register rows and rewrites
-      // ownership in silence. Checked here, where it is still cheap to name.
+      // §3.13-BOOK d1: the week's opening book is read off the REGISTER, not the entity's array.
+      // `rows[i]` is the object view of chain row `rowIds[i]` by construction — one walk in
+      // chain order produces both — so the pairing `finalize` relies on (keep rowIds[i] for an
+      // unclaimed i, free it for a claimed one) cannot be off by a row.
+      const rows = materializeBook(v2, entity.id);
       const rowIds: number[] = [];
       for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) rowIds.push(r);
-      if (rowIds.length !== rows.length) {
-        defect(`${entity.id} has ${rows.length} book objects against ${rowIds.length} register rows`
-          + ' — the store pairs them by position and cannot tell which row is which');
-      }
-      for (let i = 0; i < rows.length; i++) {
-        const iRef = instrumentRefOf(v2, rows[i].instrumentId);
-        if (iRef >= 0 && H.instrRef[rowIds[i]] !== iRef) {
-          defect(`${entity.id}[${i}] pairs ${rows[i].instrumentId} with register row`
-            + ` ${instrumentIdAt(v2, rowIds[i])} — the book and the chain have diverged`);
-        }
-      }
       const byType = new Map<string, number[]>();
       rows.forEach((h, i) => {
         if (!BOOK_TYPES.includes(h.instrumentType)) return;

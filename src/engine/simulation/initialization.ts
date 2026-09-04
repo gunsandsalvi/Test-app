@@ -415,6 +415,33 @@ function openSeededMirrors(state: GameState): void {
   }
 }
 
+/**
+ * S7: project the real seeded books onto the sector aggregates before the first week runs, so
+ * week 0's displayed numbers are the same derivation every later week uses. The aggregates
+ * written inside `buildSeededGameState` are the SEEDS the entity targets were sized against (they
+ * have to exist first); this replaces them with what the resulting real books actually hold —
+ * notably including the HC private tier, which the share-times-outstanding seeds never saw.
+ *
+ * §3.13-BOOK d1: this runs AFTER `openSeededMirrors`, on the state's own world. It used to run
+ * inside `buildSeededGameState` on a throwaway host with no world at all, where the mirror's
+ * catch-up copied the object arrays into an empty store so the view had rows to read — and every
+ * account was absent there, so the sector's opening CASH projected as zero. The mirror is gone;
+ * the view reads the register the seed just wired, and the cash it reads is the cash that was
+ * opened.
+ */
+function projectSeededSectorViews(state: GameState): void {
+  // OWN1: and the ownership register, from the same seeded books — so week 0 shows the same
+  // measurement stage 11 will take at the end of week 1, rather than an empty one.
+  const ownershipByRegion = measuredOwnershipAllRegions(state);
+  (Object.keys(state.regions) as RegionId[]).forEach(regionId => {
+    refreshRegionalHoldingsView(state, regionId, state.regions[regionId]);
+    const m = ownershipByRegion[regionId];
+    state.regions[regionId].equityOwnership = ownershipSharesFromRegister(m.equity);
+    state.regions[regionId].corpBondOwnership = ownershipSharesFromRegister(m.corpBond);
+    state.regions[regionId].sovBondOwnership = ownershipSharesFromRegister(m.sovBond);
+  });
+}
+
 export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {
   // §5-WIRES A3: the persistent world is born with the seed — the accounts the seed opens below
   // (a firm's, an entity's, a pool's rows at its banks) live on it, and the state carries it.
@@ -426,6 +453,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   // §5-BRAINS — every deciding entity is born with its two preference primitives.
   ensureManagements(state.companies, state.institutionalEntities ?? [], 0);
   openSeededMirrors(state);
+  projectSeededSectorViews(state);
   // §5-STRUCT step 6 — OFF unless asked for. Burn-in hands back a world the ENGINE produced rather
   // than one this function asserted, which is the end state for every §7.4 defect. It changes every
   // number in the project at once, so it is a switch someone turns deliberately after reading the
@@ -1669,25 +1697,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // zero), the central bank's book backs reserves and the treasury's account to the dollar, and
   // every sovereign bond has a holder. Runs after every book exists and before the projection.
   closeSeedMoney(regions, companies, institutionalEntities, seedV2);
-
-  // S7: project the real seeded books onto the sector aggregates before the first week runs, so
-  // week 0's displayed numbers are the same derivation every later week uses. The aggregates
-  // written earlier in this function are the SEEDS the entity targets were sized against (they
-  // have to exist first); this replaces them with what the resulting real books actually hold —
-  // notably including the HC private tier, which the share-times-outstanding seeds never saw.
-  {
-    const seeded = { regions, companies, institutionalEntities } as unknown as GameState;
-    // OWN1: and the ownership register, from the same seeded books — so week 0 shows the same
-    // measurement stage 11 will take at the end of week 1, rather than an empty one.
-    const ownershipByRegion = measuredOwnershipAllRegions(seeded);
-    (Object.keys(regions) as RegionId[]).forEach(regionId => {
-      refreshRegionalHoldingsView(seeded, regionId, regions[regionId]);
-      const m = ownershipByRegion[regionId];
-      regions[regionId].equityOwnership = ownershipSharesFromRegister(m.equity);
-      regions[regionId].corpBondOwnership = ownershipSharesFromRegister(m.corpBond);
-      regions[regionId].sovBondOwnership = ownershipSharesFromRegister(m.sovBond);
-    });
-  }
 
   // §3.37-SEED / D2: the accrual ledger opens at what the aged ladders have actually accrued —
   // built here so the state below opens with it rather than empty (the maps stay REQUIRED, §7.274).

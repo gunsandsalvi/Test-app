@@ -87,7 +87,7 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a holding is holder + instrument + quantity | `src/domain/banking.ts:ItemizedHolding` | ✅ |
+| A1 a holding is holder + instrument + quantity | `src/engine2/holdings.ts:HoldingStore` · `src/domain/banking.ts:ItemizedHolding` | ✅ |
 | A1.a the holder exists and can be paid | `src/engine/ledger/holdings-ledger.ts:holderIdOf` | ⚠️ |
 | A1.b the instrument is one the issuer issued | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | A1.c the quantity is in the instrument's own unit | `src/engine2/holdings.ts:HoldingStore` | ✅ |
@@ -123,7 +123,7 @@ checked by `scripts/check-atlas.sh`.
 | F1 an instrument has a stable identity for its whole life | `src/domain/ids.ts:InstrumentId` · `src/engine2/refs.ts:RefColumn` | ⚠️ |
 | F1.a two instruments with the same terms are still two | `src/domain/instrument-keys.ts:corporateTrancheId` | ⚠️ |
 | F2 a dead party leaves its holdings to a named successor | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
-| F3 VERIFY the register survives a week boundary unchanged | `src/engine2/holdings.ts:assertBooksInSync` | ✅ |
+| F3 VERIFY the register survives a week boundary unchanged | `src/engine/audit/wires.ts:auditWires` · `src/engine/audit/snapshot.ts:registerQtyByKind` | ✅ |
 
 ---
 
@@ -344,6 +344,18 @@ and was handing each per-tranche session a desk that declared itself flat.
 Sovereigns were worse in the same direction — the holding was a tenor BUCKET, so every gilt of the
 same tenor was one instrument and F1.a was false by construction. §3.13-SOV row 3 closed that: a
 sovereign holding is a row naming a tranche, in the same store and the same id space as the rest.
+
+### ✅ F3 / A1 — CLOSED: THE ROWS ARE THE REGISTER, AND THERE IS NO SECOND COPY TO CHECK AGAINST
+
+`engine2/holdings.ts` called itself *"Stage 1: a SYNCED MIRROR"* of `entity.itemizedHoldings` —
+two representations, kept in step by `syncBookRows` at every writer and compared by
+`assertBooksInSync` behind `HOLDINGS_SYNC_CHECK=1`, which is what F3 cited. §9.13-BOOK d1 deleted
+the mirror: the rows are the register, the seed opens every book by wire (`seedBook`, A4), the
+array is the week-end view `core.ts` materialises and nothing in a week reads, and the clearing
+store builds its opening book from `materializeBook` rather than pairing the array against the
+chain by position. F3's check is now W5 — the register's change per asset kind is the replay of
+the week's wires, in units — which is the stronger statement: not "the copy agrees" but "nothing
+moved without a wire".
 
 ### ✅ C4 — NO SHORT BY ACCIDENT, AND IT IS ENFORCED TWICE
 
