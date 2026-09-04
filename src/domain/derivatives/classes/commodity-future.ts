@@ -5,7 +5,7 @@
  * this module is the CONTRACT: no principal, a weekly exchange of the mark, cash settlement to
  * spot in the delivery week.
  *
- * strike: the price struck, per unit. units: the physical size. referenceId: the commodity id.
+ * strike: the price struck, per unit. units: the physical size. reference: the commodity.
  * termKey: '1M'|'3M'|'6M'.
  *
  * THE DEFECT THE REBUILD CLOSED (rule 5's class): the old book re-marked carried positions to
@@ -18,6 +18,7 @@
  */
 
 import { DerivativeClassProfile } from '../profile';
+import { commodityReferenceOf } from '../contract';
 
 export const FUTURES_TENOR_MONTHS = [1, 3, 6] as const;
 export type FuturesTenorMonths = (typeof FUTURES_TENOR_MONTHS)[number];
@@ -73,7 +74,7 @@ export const COMMODITY_FUTURE_PROFILE: DerivativeClassProfile = {
    *  the size. In the delivery week the mark IS spot — that is what cash settlement means. */
   markToMarketUSDToA: (c, m) => {
     const atDelivery = c.maturityWeek <= m.week;
-    const px = atDelivery ? m.commoditySpot(c.referenceId) : m.commodityPrint(c.referenceId, c.termKey);
+    const px = atDelivery ? m.commoditySpot(commodityReferenceOf(c)) : m.commodityPrint(commodityReferenceOf(c), c.termKey);
     if (!(px > 0)) return null; // no fresh print this week — nothing marks, nothing pays
     return (px - c.strike) * (c.units ?? 0);
   },
@@ -81,6 +82,6 @@ export const COMMODITY_FUTURE_PROFILE: DerivativeClassProfile = {
   markReasonFinal: 'futures settled to spot',
   /** A commodity that stopped existing leaves nothing to settle against: the contract ends flat,
    *  exactly as the old book dropped it. */
-  eventTermination: (c, m) => (Number.isFinite(m.commoditySpot(c.referenceId)) ? null : { usdToB: 0, reason: 'futures settled to spot' }),
+  eventTermination: (c, m) => (Number.isFinite(m.commoditySpot(commodityReferenceOf(c))) ? null : { usdToB: 0, reason: 'futures settled to spot' }),
   closeOutUSDToB: () => 0, // mark-leg class: the lifecycle closes out at the mark
 };

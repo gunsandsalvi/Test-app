@@ -263,7 +263,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
             b: seller,
             notional: Math.round(notional),
             strike: Number(clearedBps.toFixed(1)),
-            referenceId: issuer.id,
+            reference: { kind: 'ISSUER', issuerId: issuer.id },
             termKey: '',
             // §3.13c: the market it clears in.
             currency: currencyOf(regionId),

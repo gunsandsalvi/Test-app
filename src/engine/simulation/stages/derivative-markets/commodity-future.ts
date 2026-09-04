@@ -270,7 +270,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
             b: s.party,
             notional: sizeUnits * strike,
             strike,
-            referenceId: comm.id,
+            reference: { kind: 'COMMODITY', commodityId: comm.id },
             termKey,
             units: sizeUnits,
             settledMarkLocal: 0,

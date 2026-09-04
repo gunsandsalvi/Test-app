@@ -4,11 +4,12 @@
  * OAS is the BASIS) stays documented at the market stage (07h); this module is the CONTRACT:
  * premium weekly, par-less-recovery on a credit event, terminated.
  *
- * strike: the spread struck, in bps of notional per year (rule 8). referenceId: the reference
+ * strike: the spread struck, in bps of notional per year (rule 8). reference: the reference
  * COMPANY id — the same key the bond book prices. termKey: ''.
  */
 
 import { DerivativeClassProfile } from '../profile';
+import { issuerReferenceOf } from '../contract';
 
 /**
  * The standard tenor. Five years is where single-name CDS liquidity actually sits, and a tenor
@@ -58,7 +59,7 @@ export const CDS_PROFILE: DerivativeClassProfile = {
   /** A defaulted reference entity terminates the contract: the seller pays par less what the
    *  workout actually recovers (G5, §7.192), which is what makes buying protection worth it. */
   eventTermination: (c, m) => {
-    if (!m.isIssuerDefaulted(c.referenceId)) return null;
+    if (!m.isIssuerDefaulted(issuerReferenceOf(c))) return null;
     const recovery = Math.max(0, Math.min(1, m.recoveryRate(c.regionId)));
     const payoutLocal = c.notional * Math.max(0, 1 - recovery);
     return payoutLocal > 0 ? { usdToB: -payoutLocal, reason: 'CDS credit event settled' } : { usdToB: 0, reason: 'CDS credit event settled' };
@@ -66,7 +67,7 @@ export const CDS_PROFILE: DerivativeClassProfile = {
   // Replacement value to the buyer: the spread move since striking, over the remaining life —
   // the premium it would now save (or newly pay) replacing the contract at the current print.
   closeOutUSDToB: (c, m) => {
-    const current = m.cdsSpreadBps(c.referenceId);
+    const current = m.cdsSpreadBps(issuerReferenceOf(c));
     if (!Number.isFinite(current)) return 0;
     const remainingYears = Math.max(0, c.maturityWeek - m.week) / 52;
     return -(((current - c.strike) / 10000) * c.notional * remainingYears);

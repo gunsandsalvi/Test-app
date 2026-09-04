@@ -419,9 +419,8 @@ function o8(state: GameState, week: number): AuditFinding[] {
   (state.derivativesBook ?? []).forEach((c) => {
     if (!partyExists(c.a)) bump('derivative contracts');
     if (!partyExists(c.b)) bump('derivative contracts');
-    // A CDS names the issuer it is written on by COMPANY ID; the futures and FX classes name a
-    // commodity or a region, which are their own spaces and are not company keys.
-    if (c.classId === 'CDS' && !companyById.has(asEntityId(c.referenceId))) deadRef++;
+    // §3.13-BOOK dIIb: a reference is typed by class — only the issuer arm names a company.
+    if (c.reference.kind === 'ISSUER' && !companyById.has(c.reference.issuerId)) deadRef++;
   });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];

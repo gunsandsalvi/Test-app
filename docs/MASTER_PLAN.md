@@ -512,12 +512,6 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    dIIb. **A CONTRACT'S REFERENCE IS TYPED BY CLASS.** `DerivativeContract.referenceId` is four
-        id spaces in one `string` — an issuer's entity id (CDS), a commodity id (futures), a
-        REGION (FX forward), `''` (swap) — discriminated by `classId` alone, so
-        `DerivativeMarketView`'s accessors take a `string` and are right only on the CDS path
-        (`the-derivative-layer.md`). The field splits by class: each class's reference is its own
-        typed field, and the CDS's is the reference issuer's `EntityId`. Byte-identical.
     dIII. **THE ETF SHARE HAS ONE KEY.** `etfShareInstrumentId` (the clearing book's
         `ETFSHARE-<fund>`) or `etfShareRegisterId` (the fund's own id) is deleted — the register
         and the index keep one, the clearing book and its price move to it, and `etfShareFundId`
@@ -1731,6 +1725,18 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK dIIb — A CONTRACT'S REFERENCE IS TYPED BY CLASS.** `DerivativeContract.referenceId:
+string` — an issuer's entity id (CDS), a commodity id (futures), a REGION (FX forward), `''` (swap),
+discriminated by `classId` alone — is `reference: DerivativeReference`, one arm per class
+(`ISSUER`/`COMMODITY`/`REGION`/`RATE`). The four writers state their arm; the class profiles ask for
+their own through `issuerReferenceOf` / `commodityReferenceOf` / `regionReferenceOf` and defect on
+any other; `DerivativeMarketView`'s credit accessors, the standing book's grade callback and
+`pfeAddOnRateOf` take an `EntityId` and the three `asEntityId` casts in `buildDerivativeMarketView`
+go; `O8`'s dead-reference arm reads the issuer arm; the UI reads the arm instead of probing the
+commodity and company stores to guess a string's space. The standing book keys cover by
+`referenceKeyOf` — the strings the field held — so every cover lookup answers as before.
+`the-derivative-layer.md` A1 closes. Byte-identical. Gates green; no run.
 
 **13-BOOK dII — THE MINTED IDS ARE DECLARED.** Every id `instrument-keys.ts` mints for a book
 the adapters clear — a swap tenor (`IRS`), a single-name CDS (`CDS`), a spot pair (`FX_SPOT`, in

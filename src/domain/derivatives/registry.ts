@@ -9,6 +9,8 @@
  */
 
 import { DerivativeClassId, DerivativeContract, derivativePartyKey } from './contract';
+import { issuerReferenceOf } from './contract';
+import type { EntityId } from '../ids';
 import { DerivativeClassProfile } from './profile';
 import { IRS_PROFILE } from './classes/irs';
 import { CDS_PROFILE } from './classes/cds';
@@ -52,7 +54,7 @@ export function standingPfeChargeLocal(
   partyKey: string,
   week: number,
   /** The reference's grade this week; absent, every class charges its flat rate. */
-  isInvestmentGrade?: (referenceId: string) => boolean
+  isInvestmentGrade?: (issuerId: EntityId) => boolean
 ): number {
   let usd = 0;
   for (const c of book) {
@@ -65,9 +67,10 @@ export function standingPfeChargeLocal(
 }
 
 /** One contract's add-on rate: the class's contract-level rule when it has one, else its flat rate. */
-export function pfeAddOnRateOf(c: DerivativeContract, isInvestmentGrade?: (referenceId: string) => boolean): number {
+export function pfeAddOnRateOf(c: DerivativeContract, isInvestmentGrade?: (issuerId: EntityId) => boolean): number {
   const profile = DERIVATIVE_CLASSES[c.classId];
-  if (profile.pfeAddOnRateFor && isInvestmentGrade) return profile.pfeAddOnRateFor(c, isInvestmentGrade(c.referenceId));
+  // The contract-level rule is the credit one, whose reference is an issuer (dIIb: typed).
+  if (profile.pfeAddOnRateFor && isInvestmentGrade) return profile.pfeAddOnRateFor(c, isInvestmentGrade(issuerReferenceOf(c)));
   return profile.pfeAddOnRate;
 }
 

@@ -18,6 +18,7 @@
  */
 
 import { riskAversionOf } from '../../../../domain/preferences';
+import { regionReferenceOf } from '../../../../domain/derivatives/contract';
 import { bankBookAssetsLocal } from '../../../desk-register';
 import type { EntityId } from '../../../../domain/ids';
 import { bankPartyOf, bankSecuritiesPartyOf, companyParty } from '../../../../domain/party';
@@ -147,7 +148,8 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     const desk = desks.get(c.b.id);
     if (!desk) continue;
     desk.book.grossNotionalLocal += c.notional;
-    desk.book.netNotionalByRegion[c.referenceId] = (desk.book.netNotionalByRegion[c.referenceId] ?? 0) + c.notional;
+    const foreign = regionReferenceOf(c);
+    desk.book.netNotionalByRegion[foreign] = (desk.book.netNotionalByRegion[foreign] ?? 0) + c.notional;
     desk.book.initialMarginHeldLocal += initialMarginLocal(c);
   }
   // The dealers a holder in each region can face, in the order the roster lists them.
@@ -358,7 +360,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         // hands the hedger an instant gain at inception and the dealer an instant loss on every
         // ticket — measured as bank NIM going to -2.2% before the sign was fixed.
         strike: ctx.getFxToUsd(issuer) * (1 - basisBps / 10000),
-        referenceId: issuer,
+        reference: { kind: 'REGION', regionId: issuer },
         termKey: '',
         settledMarkLocal: 0,
         // §3.13c: the holder settles in its own money.

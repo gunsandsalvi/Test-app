@@ -17,6 +17,7 @@ import { RegionId, CurrencyCode } from '../geography';
 import { bankPartyOf, companyPartyOf } from '../party';
 import type { CounterpartyRef } from '../party';
 import type { EntityId } from '../ids';
+import { defect } from '../defect';
 
 /**
  * The subset of the ledger's parties that can stand on a bilateral derivative. The arms are
@@ -53,6 +54,35 @@ export const institutionPartyKey = (id: EntityId): string => derivativePartyKey(
 /** The classes the registry knows. A new derivative adds a member here and a profile module. */
 export type DerivativeClassId = 'IRS' | 'CDS' | 'COMMODITY_FUTURE' | 'FX_FORWARD';
 
+/**
+ * §3.13-BOOK dIIb — WHAT A CONTRACT IS ON, typed by class. This was `referenceId: string`, four
+ * id spaces in one field discriminated by `classId` alone — an issuer's entity id, a commodity
+ * id, a REGION, the empty string — so every reader took a `string` and was right only on the
+ * path its writer meant. Each class now states its own reference, and a reader that wants the
+ * issuer asks for the issuer arm and defects on any other.
+ */
+export type DerivativeReference =
+  /** A single-name CDS: the reference entity whose default the contract pays on. */
+  | { kind: 'ISSUER'; issuerId: EntityId }
+  /** A commodity future: the good it settles against. */
+  | { kind: 'COMMODITY'; commodityId: string }
+  /** An FX forward: the FOREIGN region — the currency the holder is short. */
+  | { kind: 'REGION'; regionId: RegionId }
+  /** A swap: the underlying is a rate, which is the class's own, and no thing. */
+  | { kind: 'RATE' };
+
+/** The standing book keys cover by reference; this is that key — the string the field used to
+ *  hold, so a cover lookup by `issuer.id`, `comm.id` or a region still finds its contracts. */
+export const referenceKeyOf = (r: DerivativeReference): string =>
+  r.kind === 'ISSUER' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' ? r.regionId : '';
+
+export const issuerReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): EntityId =>
+  c.reference.kind === 'ISSUER' ? c.reference.issuerId : defect(`${c.classId} contract read as if it named an issuer`);
+export const commodityReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): string =>
+  c.reference.kind === 'COMMODITY' ? c.reference.commodityId : defect(`${c.classId} contract read as if it named a commodity`);
+export const regionReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): RegionId =>
+  c.reference.kind === 'REGION' ? c.reference.regionId : defect(`${c.classId} contract read as if it named a region`);
+
 export interface DerivativeContract {
   id: string;
   classId: DerivativeClassId;
@@ -79,8 +109,8 @@ export interface DerivativeContract {
    * foreign rate (FX). The profile is the only reader, so the unit cannot silently mix (§1.8).
    */
   strike: number;
-  /** What the contract is ON: issuer id (CDS), commodity id (futures), foreign region (FX). */
-  referenceId: string;
+  /** What the contract is ON — §3.13-BOOK dIIb: typed by class (`DerivativeReference`). */
+  reference: DerivativeReference;
   /** The tenor bucket its market quotes: 's2'|'s5'|'s10' (IRS), '1M'|'3M'|'6M' (futures). */
   termKey: string;
   /** Physical size, for classes quoted per unit (futures). USD-sized classes leave it unset. */
@@ -111,7 +141,7 @@ export function standingCoverLocal(
   let usd = 0;
   for (const c of book) {
     if (c.classId !== classId || c.maturityWeek <= week) continue;
-    if (referenceId !== undefined && c.referenceId !== referenceId) continue;
+    if (referenceId !== undefined && referenceKeyOf(c.reference) !== referenceId) continue;
     if (termKey !== undefined && c.termKey !== termKey) continue;
     if (derivativePartyKey(side === 'a' ? c.a : c.b) === partyKey) usd += c.notional;
   }
@@ -131,7 +161,7 @@ export function standingCoverUnits(
   let units = 0;
   for (const c of book) {
     if (c.classId !== classId || c.maturityWeek <= week) continue;
-    if (c.referenceId !== referenceId || c.termKey !== termKey) continue;
+    if (referenceKeyOf(c.reference) !== referenceId || c.termKey !== termKey) continue;
     if (derivativePartyKey(side === 'a' ? c.a : c.b) === partyKey) units += c.units ?? 0;
   }
   return units;

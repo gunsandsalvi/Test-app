@@ -250,7 +250,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
             b: { kind: 'INSTITUTION', id: entityId },
             notional: Math.round(notional),
             strike: parByTenor[k],
-            referenceId: '',
+            reference: { kind: 'RATE' },
             termKey: k,
             // §3.13c: the market it clears in.
             currency: currencyOf(regionId),

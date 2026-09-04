@@ -20,10 +20,10 @@ export const contracts: FunctionModule = {
   render({ world, ref, args, nav }) {
     const book = world.state.derivativesBook ?? [];
     let mine: DerivativeContract[];
-    if (ref.type === 'company') { const c = companyOf(world, ref.id); mine = c ? [...contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker }), ...book.filter((k) => k.classId === 'CDS' && k.referenceId === c.id)] : []; }
+    if (ref.type === 'company') { const c = companyOf(world, ref.id); mine = c ? [...contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker }), ...book.filter((k) => k.reference.kind === 'ISSUER' && k.reference.issuerId === c.id)] : []; }
     else if (ref.type === 'institution') mine = contractsOf(world, { kind: 'INSTITUTION', key: ref.id });
-    else if (ref.type === 'commodity') mine = book.filter((k) => k.referenceId === ref.id);
-    else if (ref.type === 'fx') { const [base, quote] = ref.id.split('/'); mine = book.filter((k) => k.classId === 'FX_FORWARD' && (k.referenceId === base || k.referenceId === quote)); }
+    else if (ref.type === 'commodity') mine = book.filter((k) => k.reference.kind === 'COMMODITY' && k.reference.commodityId === ref.id);
+    else if (ref.type === 'fx') { const [base, quote] = ref.id.split('/'); mine = book.filter((k) => k.reference.kind === 'REGION' && (k.reference.regionId === base || k.reference.regionId === quote)); }
     else mine = book.filter((k) => k.regionId === ref.id);
     mine = [...new Map(mine.map((k) => [k.id, k])).values()];
     const classes = [...new Set(mine.map((k) => k.classId))];

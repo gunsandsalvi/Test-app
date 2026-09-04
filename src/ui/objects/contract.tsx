@@ -1,6 +1,7 @@
 /** AU · object: contract — one derivative contract on the one book: a swap, a CDS, a future, a forward. Reached from a party or a class. */
 
 import { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
+import { referenceKeyOf } from '../../domain/derivatives/contract';
 import { defineObject } from './registry';
 import { Card, KV, Link, Stat, StatGrid } from '../ui';
 import { money, pctLevel, num } from '../format';
@@ -34,7 +35,9 @@ export const contract = defineObject<DerivativeContract>({
   overview({ world, obj: k, nav }) {
     const a = partyRef(world, k.a); const b = partyRef(world, k.b);
     const left = k.maturityWeek - world.state.currentWeek;
-    const ref = k.referenceId ? (world.state.commodities.find((c) => c.id === k.referenceId) ? { type: 'commodity' as const, id: k.referenceId } : world.state.companies.find((c) => c.id === k.referenceId) ? { type: 'company' as const, id: k.referenceId } : undefined) : undefined;
+    // §3.13-BOOK dIIb: the reference says what it is; nothing probes two stores to find out.
+    const refKey = referenceKeyOf(k.reference);
+    const ref = k.reference.kind === 'COMMODITY' ? { type: 'commodity' as const, id: k.reference.commodityId } : k.reference.kind === 'ISSUER' ? { type: 'company' as const, id: k.reference.issuerId } : undefined;
     return (
       <>
         <ObjectHeader name={`${classWord(k.classId)}, ${partyName(world, k.a)} × ${partyName(world, k.b)}`} sub={<><RegionLink id={k.regionId} nav={nav} />{k.termKey ? ` · ${k.termKey}` : ''} · {k.id}</>} />
@@ -46,7 +49,7 @@ export const contract = defineObject<DerivativeContract>({
         <Card style={{ padding: '2px 0' }}>
           <KV k="party a" hint={k.classId === 'IRS' ? 'pays fixed' : k.classId === 'CDS' ? 'buys protection' : 'long'} v={a ? <Link to={a} nav={nav}>{partyName(world, k.a)}</Link> : partyName(world, k.a)} />
           <KV k="party b" hint={k.classId === 'IRS' ? 'receives fixed' : k.classId === 'CDS' ? 'sells protection' : 'short'} v={b ? <Link to={b} nav={nav}>{partyName(world, k.b)}</Link> : partyName(world, k.b)} />
-          {k.referenceId ? <KV k="reference" v={ref ? <Link to={ref} nav={nav}>{k.referenceId}</Link> : k.referenceId} /> : null}
+          {refKey ? <KV k="reference" v={ref ? <Link to={ref} nav={nav}>{refKey}</Link> : refKey} /> : null}
           <KV k="struck" v={formatDate(displayWeek(world.state, k.struckWeek))} />
           {k.settledMarkLocal !== undefined ? <KV k="settled mark" v={money(k.settledMarkLocal)} /> : null}
         </Card>

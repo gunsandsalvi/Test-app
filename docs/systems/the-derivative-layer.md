@@ -94,7 +94,7 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a long-lived bilateral obligation | `src/domain/derivatives/contract.ts:DerivativeContract` | ⚠️ |
+| A1 a long-lived bilateral obligation | `src/domain/derivatives/contract.ts:DerivativeContract` · `src/domain/derivatives/contract.ts:DerivativeReference` | ✅ |
 | A2 the exposure is managed, and how is this system | `src/engine/simulation/stages/derivatives.ts:runDerivativesStage` | ✅ |
 | A3 the same obligation twice, one number from two sides | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ✅ |
 | **A4 VERIFY Σ marks = 0 per contract and in aggregate** | — | ❌ |
@@ -132,22 +132,19 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ⚠️ A1 — `referenceId` IS FOUR ID SPACES IN ONE `string` FIELD (§3.13-BOOK c-then-1)
+### ✅ A1 — CLOSED: A CONTRACT'S REFERENCE IS TYPED BY CLASS (§9.13-BOOK dIIb)
 
-`DerivativeContract.referenceId` (`contract.ts:79`) is typed `string` because its four writers put
-four different kinds of thing in it, discriminated by `classId` and by nothing the compiler can
-see: an **entity id** from the CDS book (`derivative-markets/cds.ts:255`), a **commodity id** from
-the future (`commodity-future.ts:261`), a **REGION** from the FX forward (`fx-forward.ts:357`),
-and the **empty string** from the swap (`irs.ts:247`, whose underlying is a rate, not a thing).
-`DerivativeMarketView`'s three issuer accessors (`profile.ts:26,32,34`) therefore take a `string`
-and are correct only on the CDS path.
-
-Found by branding the entity index's key: the accessors were reading an unbranded id out of a map
-keyed by `EntityId`, and the cast that answers it is now named at the one site that knows which
-space it is in (`derivative-lifecycle.ts:buildDerivativeMarketView`). It is the same shape as
-`indices`' `instrumentId` holding ISSUERS (§3.13-BOOK slice (a)), and it resolves the same way:
-the field splits by class, or each class states its own reference. Not fixed here — it belongs
-with slice (d), where the instrument index decides what a reference names.
+`DerivativeContract.referenceId` was a `string` holding four id spaces — an entity id from the CDS
+book, a commodity id from the future, a REGION from the FX forward, the empty string from the
+swap — discriminated by `classId` and by nothing the compiler could see, so `DerivativeMarketView`'s
+issuer accessors took a `string` and were right only on the CDS path (found at §9.13-BOOK
+c-then-1 by branding the entity index's key). It is `reference: DerivativeReference` now: each
+class states its own arm (`ISSUER` with an `EntityId`, `COMMODITY`, `REGION`, `RATE`), the
+accessors take an `EntityId` and nothing is cast, a class profile asks for its own arm through
+`issuerReferenceOf` / `commodityReferenceOf` / `regionReferenceOf` and defects on any other, and
+the standing book keys cover by `referenceKeyOf` — the same strings the field held, so every
+cover lookup is unchanged. `O8`'s dead-reference arm and the UI read the arm rather than probing
+two stores to guess which space a string was in.
 
 `DerivativeParty` was a second party union re-declaring three of `PartyRef`'s arms; it is
 `CounterpartyRef`, an `Extract` view of the one union, since §9.13-BOOK c-then-3a.

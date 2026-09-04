@@ -16,6 +16,7 @@
 
 import { RegionId } from '../geography';
 import { DerivativeClassId, DerivativeContract } from './contract';
+import type { EntityId } from '../ids';
 
 /** Flat market inputs the lifecycle hands a profile — everything a leg may price off.
  *  Party LIVENESS is deliberately absent: a dead counterparty is the lifecycle's own close-out,
@@ -23,15 +24,15 @@ import { DerivativeClassId, DerivativeContract } from './contract';
 export interface DerivativeMarketView {
   week: number;
   /** CDS reference entities: absent counts as defaulted, exactly as the book always read it. */
-  isIssuerDefaulted(issuerId: string): boolean;
+  isIssuerDefaulted(issuerId: EntityId): boolean;
   /** The cleared GC repo print — the floating leg's index (OIS, §7.194). */
   overnightRateAnnual(regionId: RegionId): number;
   /** Last cleared swap par rate for a tenor; NaN when none has printed. */
   parRateAnnual(regionId: RegionId, termKey: string): number;
   /** Last cleared CDS spread for an issuer; NaN when none has printed. */
-  cdsSpreadBps(issuerId: string): number;
+  cdsSpreadBps(issuerId: EntityId): number;
   /** Whether the reference is investment grade this week — the CEM add-on's one split. */
-  isInvestmentGrade(issuerId: string): boolean;
+  isInvestmentGrade(issuerId: EntityId): boolean;
   recoveryRate(regionId: RegionId): number;
   /** This week's futures print for (commodity, tenor bucket); NaN when the book did not clear. */
   commodityPrint(commodityId: string, termKey: string): number;

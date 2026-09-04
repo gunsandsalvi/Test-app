@@ -6,13 +6,13 @@
  * variation margin against the dealer desk.
  *
  * strike: home-per-foreign rate struck at inception (CIP moved AGAINST the client by the
- * cleared basis — the desk charges for its balance sheet). referenceId: the foreign region —
+ * cleared basis — the desk charges for its balance sheet). reference: the foreign region —
  * the currency being sold forward. termKey: ''.
  */
 
 import { institutionProfile, hedgeFundStrategyProfile } from '../../institution-profiles';
+import { regionReferenceOf } from '../contract';
 import type { InstitutionalEntityType, HedgeFundStrategy } from '../../institutions';
-import { RegionId } from '../../geography';
 import { DerivativeClassProfile } from '../profile';
 
 /** Short-dated forwards rolled continuously — how a bond book is actually hedged. */
@@ -59,7 +59,7 @@ export const FX_FORWARD_PROFILE: DerivativeClassProfile = {
   /** A holder short the foreign currency gains when it FALLS — the assets it is hedging lost
    *  the same amount. The desk carries the mirror, so the pair nets to zero by construction. */
   markToMarketUSDToA: (c, m) => {
-    const rate = m.fxToUsd(c.referenceId as RegionId);
+    const rate = m.fxToUsd(regionReferenceOf(c));
     if (!(c.strike > 0) || !(rate > 0)) return null;
     return c.notional * ((c.strike - rate) / c.strike);
   },

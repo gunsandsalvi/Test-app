@@ -19,6 +19,8 @@
  */
 
 import { DerivativeClassId, DerivativeContract, derivativePartyKey } from './contract';
+import { referenceKeyOf } from './contract';
+import type { EntityId } from '../ids';
 import { DERIVATIVE_CLASS_IDS, pfeAddOnRateOf } from './registry';
 
 interface Cover { usd: number; units: number }
@@ -39,7 +41,7 @@ export class StandingBook {
     /** The week the questions are asked in: a contract at or past maturity is not standing. */
     readonly week: number,
     /** The reference's grade, for the class whose add-on depends on it (CDS, §7.341). */
-    private readonly isInvestmentGrade: (referenceId: string) => boolean
+    private readonly isInvestmentGrade: (issuerId: EntityId) => boolean
   ) {}
 
   /** Fold every contract not yet indexed, in book order. */
@@ -53,8 +55,9 @@ export class StandingBook {
     const aKey = derivativePartyKey(c.a);
     const bKey = derivativePartyKey(c.b);
     const units = c.units ?? 0;
-    this.addCover(this.sideBook(aKey, sideIndex(c.classId, 'a')), c.referenceId, c.termKey, c.notional, units);
-    this.addCover(this.sideBook(bKey, sideIndex(c.classId, 'b')), c.referenceId, c.termKey, c.notional, units);
+    const refKey = referenceKeyOf(c.reference);
+    this.addCover(this.sideBook(aKey, sideIndex(c.classId, 'a')), refKey, c.termKey, c.notional, units);
+    this.addCover(this.sideBook(bKey, sideIndex(c.classId, 'b')), refKey, c.termKey, c.notional, units);
     // Charged on either side, once per contract (a party standing on both sides is one charge).
     const chargeLocal = c.notional * pfeAddOnRateOf(c, this.isInvestmentGrade);
     this.chargeLocal.set(aKey, (this.chargeLocal.get(aKey) ?? 0) + chargeLocal);
