@@ -8,7 +8,7 @@ import { InstrumentId, type EntityId, type Ticker } from './ids';
 import { RegionId } from './geography';
 import { defect } from './defect';
 import { Industry } from './industry';
-import { ItemizedHolding, BankingSector } from './banking';
+import { BankingSector } from './banking';
 import { HedgeFundStrategy } from './institutions';
 
 export type FinancialStatementProfile = 'STANDARD_OPERATING' | 'INSURER' | 'ASSET_MANAGER' | 'BANK' | 'REIT' | 'CARRIER';
@@ -626,7 +626,8 @@ export interface Company {
    * hiring difficulty, and the input to the wage push above. */
   unfilledVacancyShare?: number;
   lastWeekPurchasesLocal?: number;
-  treasuryHoldings: ItemizedHolding[];
+  // §3.13-BOOK d3c: `treasuryHoldings` is deleted — a firm's own book (bills, since it bids in
+  // 07f) is its register rows under the `COMPANY` party (`sovereign-register.ts:sovereignRowsOf`).
   producedCommodityId?: string;
 }
 /**

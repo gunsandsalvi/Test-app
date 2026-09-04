@@ -372,7 +372,6 @@ function buildCarrierCompany(
     inputSupplyConstraintFactor: 1.0,
     outputInventoryBySubUnit: {},
     recentFulfillmentEMA: 1.0,
-    treasuryHoldings: [],
     _carrierIndex: idx,
   } as unknown as Company;
   stashSeedRevenueHistory(__c, [annualRevenue]); // §4.C II.5 — lands on the ring at drain

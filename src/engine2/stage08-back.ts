@@ -11,6 +11,7 @@
  */
 
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
+import { sovereignBookLocalOf } from '../engine/sovereign-register';
 import { bankCreditPartyOf, bankPartyOf, companyPartyOf } from '../domain/party';
 import { currencyOf, RegionId } from '../domain/geography';
 import { GameState, Company, DebtTranche, NewsItem, SegmentFinancial } from '../types';
@@ -2050,7 +2051,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // one block. 07f runs the treasurer's bid through the bill auction against real sellers
     // (domain/company.ts owns the sleeve arithmetic), and this stage now simply carries what
     // that auction filled.
-    const newTreasuryHoldings = weekUpdate?.treasuryHoldings ?? comp.treasuryHoldings ?? [];
 
     // Buyback Execution (Part AH)
     let updatedSharesOutstanding = L8.sharesOutstanding[row];
@@ -2100,8 +2100,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     const quarterIdx = Math.floor((nextWeek - 1) / 13) + 4;
     const prevSnapshot = comp.historicalFundamentals ? comp.historicalFundamentals[comp.historicalFundamentals.length - 1] : undefined;
-    const currentTreasuryHoldingsLocal = (newTreasuryHoldings || [])
-      .reduce((s: number, h: { quantityOrNotionalLocal: number }) => s + h.quantityOrNotionalLocal, 0);
+    // §3.13-BOOK d3c: the treasury's book is its register rows, at their marked value.
+    const currentTreasuryHoldingsLocal = sovereignBookLocalOf(d.v2, comp.id);
     // Real current-portion-of-debt: tranches actually maturing within a year, from this
     // company's own updated ladder — not a flat 15% guess.
     // Settle this week's corporate actions against the real holders of this issuer's paper. A
@@ -2429,7 +2429,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
       // Already real and already-cleared (07d-leveraged-loan-clearing.ts) — passed through as-is.
 
-    comp.treasuryHoldings = newTreasuryHoldings;
     if (S08K_PROF) s08k.tail += performance.now() - __k3;
     return comp;
   };

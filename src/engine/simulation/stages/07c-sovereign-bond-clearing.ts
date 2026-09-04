@@ -79,7 +79,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 import { asInstrumentId, type InstrumentId } from '../../../domain/ids';
 import { governmentIssuer } from '../../../domain/entity-keys';
-import { sovereignHeldByBond, centralBankPositions, bankSovereignFaceByBond, bankSovereignBookLocal } from '../../sovereign-register';
+import { sovereignHeldByBond, centralBankPositions, bankSovereignFaceByBond, bankSovereignBookLocal, sovereignRowsOf } from '../../sovereign-register';
 
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
@@ -242,10 +242,10 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // at its face.
       centralBankPositions(ctx.v2, regionId).forEach((p) => reserveBond(p.bondId, p.faceLocal));
     }
+    // §3.13-BOOK d3c: a treasury's book is its register rows, reserved at face.
     ctx.prevActiveFirms.forEach((c) => {
       if (c.region !== regionId) return;
-      (c.treasuryHoldings || []).forEach((h) =>
-        reserveBond(h.instrumentId, h.quantityOrNotionalLocal ?? 0));
+      sovereignRowsOf(ctx.v2, c.id).forEach((p) => reserveBond(p.bondId, p.faceLocal));
     });
 
     //   - AND THE THIRD, which OWN7 missed, IS NOT A HOLDER AT ALL — it is UNSOLD PAPER, and it

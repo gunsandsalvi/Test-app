@@ -588,7 +588,7 @@ export function applyPendingCorporateActionSettlements(
   // sector a larger share of the company for free, and `O2` would report the register above the
   // issue. The institutions come first and in order, so the entity array is rebuilt off the same
   // hit flags below.
-  const books = registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), (ctx.updatedCompanies ?? []).filter((c) => c.isBankEntity && c.bankBalanceSheet !== undefined).map((c) => c.id));
+  const books = registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), ctx.updatedCompanies ?? []);
   const entityHit: boolean[] = new Array(books.length);
   books.forEach((entity, ei) => {
     let anyHit = false;

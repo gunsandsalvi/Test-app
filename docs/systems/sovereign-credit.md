@@ -236,10 +236,10 @@ of the second.
 
 E1 asks who holds how much of WHICH LINE, and §3.13-SOV row 3 answered it: every store keys by the
 bond's own tranche id. What row 3 did not give them is one SHAPE. A government holding sits in the
-register (institutions, since §9.13-EQUITY households, since §9.13-BOOK d3a the CENTRAL BANK and
-since d3b the BANKS' OWN BOOKS), in each bank's desk inventory, and in a company's
-`treasuryHoldings` — because two holder classes are not in the register yet (`the-register.md`
-A1.a, the tree's own statement of its boundary; §3.13-BOOK d3c–d3d bring them in).
+register (institutions, since §9.13-EQUITY households, since §9.13-BOOK d3a the CENTRAL BANK,
+since d3b the BANKS' OWN BOOKS and since d3c the companies' TREASURY BOOKS) and in each bank's
+desk inventory — because one holder class is not in the register yet (`the-register.md` A1.a, the
+tree's own statement of its boundary; §3.13-BOOK d3d brings it in).
 
 **Five places open-coded the walk over those stores**: the seed's stock reconciliation,
 `holdings-view`'s ownership shares, `O1`'s sovereign arm, `O11`'s stray-id check and the UI's

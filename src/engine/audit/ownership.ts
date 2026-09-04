@@ -109,7 +109,9 @@ export function ownershipCoverage(
   state.institutionalEntities.forEach((e) => { if (!e.isDefaulted) materializeBook(v2o1, e.id).forEach(add); });
   state.companies.forEach((c) => {
     if (c.mergerAcquired) return;
-    ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; units?: number; quantityOrNotionalLocal?: number }[] }).treasuryHoldings ?? []).forEach(add);
+    // §3.13-BOOK d3c: a company's own book is its register rows (bills today; `add` keeps its
+    // credit kinds, so a treasury that ever held corporate paper would count here).
+    materializeBook(v2o1, c.id).forEach(add);
     const bs = c.bankBalanceSheet; if (!bs || c.isDefaulted) return;
     // §9.13-CREDIT row 5 — THE DESKS, READ OFF THE BANKS THAT CARRY THEM. This used to take the
     // three REGIONAL arrays, which are a derived roll-up (`regionalDeskView`) that keeps only the

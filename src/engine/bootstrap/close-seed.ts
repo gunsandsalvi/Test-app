@@ -128,10 +128,8 @@ export function closeSeedMoney(
       if (e.isDefaulted) return;
       (e.itemizedHoldings ?? []).forEach((h) => { if (holdingClassOf(h.instrumentType) === 'SOVEREIGN' && h.issuerRegion === regionId) add(h.instrumentId, h.quantityOrNotionalLocal ?? 0); });
     });
-    companies.forEach((c) => {
-      ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; instrumentId: string; quantityOrNotionalLocal?: number }[] }).treasuryHoldings ?? [])
-        .forEach((h) => { if (holdingClassOf(h.instrumentType) === 'SOVEREIGN' && h.issuerRegion === regionId) add(h.instrumentId, h.quantityOrNotionalLocal ?? 0); });
-    });
+    // §3.13-BOOK d3c: no company is seeded a treasury book — a firm's bills are what 07f fills
+    // from week 1, on its register book.
     (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => add(p.bondId, p.inventoryLocal));
     // §3.13-SOV row 2: the seed's ladder is a stash, not a field — `openSeededBooks` issues
     // its rows next and the stash is gone. The outstanding of a bond IS what its holders hold:

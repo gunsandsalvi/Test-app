@@ -204,7 +204,7 @@ export function holdersOf(world: World, instrumentId: string): RegisterRow[] {
   const ref = instrumentRefOf(world.v2, asInstrumentId(instrumentId));
   if (ref < 0) return out;
   const H = world.v2.holdings;
-  registerBooks(world.state.institutionalEntities.map((e) => e.id), world.state.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet !== undefined).map((c) => c.id)).forEach((b) => {
+  registerBooks(world.state.institutionalEntities.map((e) => e.id), world.state.companies).forEach((b) => {
     for (let r = bookHeadOf(world.v2, b.id); r >= 0; r = H.next[r]) {
       if (H.instrRef[r] !== ref && issuerIdOf(world.v2, instrumentIdAt(world.v2, r)) !== instrumentId) continue;
       out.push({

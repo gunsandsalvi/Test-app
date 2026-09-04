@@ -732,7 +732,6 @@ export function generateInitialCompanies(
         inputSupplyConstraintFactor: 1.0,
         outputInventoryBySubUnit: {},
         recentFulfillmentEMA: 1.0,
-        treasuryHoldings: [],
         producedCommodityId: tmpl.producedCommodityId,
       };
 
@@ -1367,7 +1366,6 @@ export function generatePrivateCompanies(
       inputSupplyConstraintFactor: 1.0,
       outputInventoryBySubUnit: {},
       recentFulfillmentEMA: 1.0,
-      treasuryHoldings: [],
     } as unknown as Company;
     stashSeedRing(pc, 'rating', [rating]); // §4.C II.5
     stashOpeningCash(pc, Math.round(ebitda * 0.6)); // §5-WIRES A3.1: a birth pays it

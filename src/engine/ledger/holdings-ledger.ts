@@ -85,7 +85,16 @@ export const centralBankBookId = (region: RegionId): string => partyKey({ kind: 
  * (`the-register.md` A1.a) — that is the tree's own statement of its boundary, and it is not
  * this step's.
  */
-const holderIdOf = (p: PartyRef): string | undefined => (
+/**
+ * WHICH BOOK A PARTY HOLDS ON, for the instruction in hand — `undefined` where the party is not a
+ * holder in this register. §3.13-BOOK d3c: a COMPANY is a holder of OTHER issuers' paper (its
+ * treasury book: bills, since it bids for them in 07f) and never of its own — the same `COMPANY`
+ * party stands on the ISSUER side of every corporate action, merger exchange and placement wire
+ * of its own equity and its own tranches, and an issuer retiring or placing its paper holds
+ * nothing. So the company arm answers only when the instrument's issuer is somebody else; the
+ * seed's `seedBook` passes no instruction and a company is never seeded a book.
+ */
+const holderIdOf = (v2: V2World, p: PartyRef, spec?: { instrumentId: InstrumentId }): string | undefined => (
   p.kind === 'INSTITUTION' ? p.id
     : p.kind === 'HOUSEHOLD' ? householdBookId(p.region)
       // §3.13-BOOK d3a: the central bank holds its sovereign book here, like any holder.
@@ -93,7 +102,8 @@ const holderIdOf = (p: PartyRef): string | undefined => (
         // §3.13-BOOK d3b: a bank's OWN book (its liquidity buffer) is the entity's book, under the
         // party whose money buys it — its reserves. Its desk (`BANK_SECURITIES`) is d3d's.
         : p.kind === 'BANK' ? p.id
-          : undefined);
+          : p.kind === 'COMPANY' ? (spec !== undefined && (issuerIdOf(v2, spec.instrumentId) as string) !== (p.id as string) ? p.id : undefined)
+            : undefined);
 
 /**
  * §3.13-BOOK slice (c) — WHO ISSUED THE PAPER ON THIS ROW.
@@ -134,11 +144,12 @@ export function issuerOfHoldingRow(
  * sector free shares. The institutions come first and in the order given, so a caller that still
  * needs to rebuild its entity array off the same flags can index straight into them.
  */
-export function registerBooks(entityIds: readonly EntityId[], bankIds: readonly EntityId[]): { id: string; payee: PartyRef }[] {
+export function registerBooks(entityIds: readonly EntityId[], companies: readonly { id: EntityId; isBankEntity?: boolean; bankBalanceSheet?: unknown }[]): { id: string; payee: PartyRef }[] {
   return [
     ...entityIds.map((id) => ({ id, payee: { kind: 'INSTITUTION' as const, id } })),
-    // §3.13-BOOK d3b: the banks' own books, paid as the bank (its reserves).
-    ...bankIds.map((id) => ({ id, payee: bankPartyOf(id) })),
+    // §3.13-BOOK d3b/d3c: every company's own book — a bank's liquidity buffer, paid as the bank
+    // (its reserves); any other firm's treasury book, paid as the company.
+    ...companies.map((c) => ({ id: c.id as string, payee: (c.isBankEntity && c.bankBalanceSheet ? bankPartyOf(c.id) : companyParty(c)) as PartyRef })),
     ...REGION_IDS.map((region) => ({ id: householdBookId(region), payee: { kind: 'HOUSEHOLD' as const, region } })),
     // §3.13-BOOK d3a: and the central banks' books — consolidated and marked with everyone else's.
     ...REGION_IDS.map((region) => ({ id: centralBankBookId(region), payee: { kind: 'CENTRAL_BANK' as const, region } })),
@@ -284,7 +295,7 @@ function wireHolding(from: PartyRef, to: PartyRef, spec: HoldingSpec, reason: st
 /** A holding moves from one holder to another. Returns the wire number. */
 export function transferHolding(v2: V2World, from: PartyRef, to: PartyRef, spec: HoldingSpec, reason: string): number {
   if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
-  const fromId = holderIdOf(from), toId = holderIdOf(to);
+  const fromId = holderIdOf(v2, from, spec), toId = holderIdOf(v2, to, spec);
   const n = wireHolding(from, to, spec, reason);
   if (fromId) debitRow(v2, fromId, spec);
   if (toId) creditRow(v2, toId, spec);
@@ -301,7 +312,7 @@ export function transferHolding(v2: V2World, from: PartyRef, to: PartyRef, spec:
 export function issueHolding(v2: V2World, issuer: PartyRef, holder: PartyRef, spec: HoldingSpec, reason: string): number {
   if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const n = wireHolding(issuer, holder, spec, reason);
-  const toId = holderIdOf(holder);
+  const toId = holderIdOf(v2, holder, spec);
   if (toId) creditRow(v2, toId, spec);
   return n;
 }
@@ -322,7 +333,7 @@ export function seedBook(
   v2: V2World, holder: PartyRef, book: ItemizedHolding[] | undefined,
   issuerOf: (h: ItemizedHolding) => PartyRef
 ): void {
-  const holderId = holderIdOf(holder);
+  const holderId = holderIdOf(v2, holder);
   if (!holderId) return;
   // The chain is claimed empty (and the book marked opened) before the first issue lands.
   relinkBook(v2, holderId, []);
@@ -344,7 +355,7 @@ export function seedBook(
 export function retireHolding(v2: V2World, holder: PartyRef, issuer: PartyRef, spec: HoldingSpec, reason: string): number {
   if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const n = wireHolding(holder, issuer, spec, reason);
-  const fromId = holderIdOf(holder);
+  const fromId = holderIdOf(v2, holder, spec);
   if (fromId) debitRow(v2, fromId, spec);
   return n;
 }
@@ -357,7 +368,7 @@ export function scaleHoldings(
   v2: V2World, holder: PartyRef, issuer: PartyRef, instrumentType: HoldingKind, instrumentId: InstrumentId,
   ratio: number, reason: string
 ): number {
-  const holderId = holderIdOf(holder);
+  const holderId = holderIdOf(v2, holder, { instrumentId });
   if (!holderId || !(ratio >= 0) || Math.abs(ratio - 1) < 1e-12) return 0;
   const H = mutableHoldings(v2);
   const tRef = internType(v2, instrumentType), iRef = internInstrument(v2, instrumentId);

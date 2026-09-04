@@ -509,23 +509,16 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d3. **THE OUTSIDE BOOKS COME IN — 13-OUTSIDE, moved up from (f).** `Company.treasuryHoldings`
-        and the desks' inventories become
-        register rows (the central bank's `sovereignHoldingsByBond` and the banks' own books already
-        have — d3a and d3b in §9), so
-        `sovereign-register.ts` collapses from a four-store walk to a filter and the last book that
+    d3. **THE OUTSIDE BOOKS COME IN — 13-OUTSIDE, moved up from (f).** The desks' inventories
+        become register rows (the central bank's book, the banks' own books and the companies'
+        treasury books already have — d3a, d3b and d3c in §9), so
+        `sovereign-register.ts` collapses from a two-store walk to a filter and the last book that
         stores a VALUE with no quantity (`sovereign-credit.md` E3) stops existing. This one moves
         numbers (the marks meet the audit), and that is the finding. **Split 2026-09-04 into one
         holder class per commit, because a holder arm in `holderIdOf` and its store's migration
         must land together** — every existing `transferHolding` that names a company or a desk as
         a party would otherwise debit an EMPTY register book and defect at the site (found
         writing d3a: the issuer side of a merger's share exchange is a `companyParty` too):
-        d3c. **`Company.treasuryHoldings`.** A company holds OTHER issuers' paper on its own book
-            (`COMPANY` party as HOLDER — `holderIdOf` must answer the id only when the instrument's
-            issuer is not the company itself, since the same party stands on the ISSUER side of
-            its own equity in every corporate action and merger wire). Writers: `07f` (bills),
-            `stage08-back` (the treasury sleeve), `11-fiscal` (maturities). Readers: `07c`, `07f`,
-            `sovereign-register`, `audit/ownership`, `close-seed`.
         d3d. **THE DESKS' INVENTORIES.** `dealerDeskInventory[book]` and the regional roll-ups
             (`sovBondDealerInventory`, `corpBondDealerInventory`, …) → rows on the desk's book
             (`BANK_SECURITIES` party). Writers: `applyDealerDeskFills` in every clearing book,
@@ -1741,6 +1734,27 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d3c — A COMPANY'S TREASURY BOOK IS REGISTER ROWS.** `Company.treasuryHoldings` is
+deleted. A firm's own book (bills, since it bids for them in 07f) is rows on the entity's register
+book under the `COMPANY` party, and the ledger's holder read learned the one rule that made this
+safe to switch on: `holderIdOf` answers a `COMPANY` only when the instruction's instrument was
+issued by SOMEBODY ELSE — the same party stands on the issuer side of every corporate-action,
+merger-exchange and placement wire of its own equity and its own tranches, and an issuer placing
+or retiring its paper holds nothing (`issuerIdOf` on the instrument decides; the seed passes no
+instruction and seeds no company a book). `registerBooks` takes the companies whole now — a bank's
+book paid as the bank, any other firm's as the company — so consolidation, the mark, the
+corporate-action walk and the UI's holder list reach the treasuries with no third parameter. The
+writers: `07f`'s treasury fills are `transferHolding` against the house in face under the
+company's own party (it built the party from a ticker lookup that fell back to a TICKER AS AN ID
+— gone), stage 11's maturities are `retireHolding` with the government repaying face, and stage
+08's carry of the array (`companyUpdates.treasuryHoldings`, the week-update field) is deleted;
+its treasury-holdings total reads `sovereignBookLocalOf`. Readers: `07c`'s reserve, `07f`'s bidder
+sizing, `O1`'s credit arm (which walks every company's register book now, so a treasury that
+ever held corporate paper would count) and the sovereign walk, which reports the class
+`TREASURY` off the register and has TWO stores left: the register and the desks. Byte-identical
+in state where the book is empty, which is everywhere at the seed; a treasury's bills are marked
+`units × price` at the close from here on. Gates green; no run.
 
 **13-BOOK d3b — THE BANKS' OWN SOVEREIGN BOOK IS REGISTER ROWS.** `BankingSector.
 sovereignBondHoldingsByBond` and its stored total `sovereignBondHoldingsLocal` are deleted — from

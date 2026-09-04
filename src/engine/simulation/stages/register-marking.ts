@@ -82,7 +82,7 @@ export function markRegisterToMarket(state: GameState, ctx: WeeklyStepContext): 
   let markedLocal = 0, rows = 0;
   // §9.13-EQUITY: every book the register holds — the household sector's shares are marked like
   // any other holder's, which is what makes household net worth a read of real rows.
-  registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet !== undefined).map((c) => c.id)).forEach((b) => {
+  registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), ctx.updatedCompanies).forEach((b) => {
     const r = markBookToMarket(ctx.v2, b.id, priceOfRow);
     rows += r.rows; markedLocal += r.deltaLocal;
   });

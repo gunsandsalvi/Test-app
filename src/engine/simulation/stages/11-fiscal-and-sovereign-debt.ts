@@ -20,7 +20,7 @@ import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-acco
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { weeklyInterestExpenseLocal, decomposeGovernmentSpending, governmentOutlaysLocal, weeklyBillDiscountAccrualLocal, isDiscountBill } from '../../../domain/government';
 import { openMarketPolicy, cashPositionBillIssuanceLocal } from '../../../domain/central-bank';
-import { centralBankPositions, centralBankBookLocal, bankSovereignPositions } from '../../sovereign-register';
+import { centralBankPositions, centralBankBookLocal, bankSovereignPositions, sovereignRowsOf } from '../../sovereign-register';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay, dueToPayee, partyId, internReason, CORPORATE_TAX_REASON, settlementWeek } from './settlement';
@@ -346,18 +346,21 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
       // CASH: and the CORPORATE TREASURIES, which hold bills since they started bidding for them
       // in 07f. Their paper matured like everyone else's and nothing repaid them.
-      ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
-        if (c.region !== regionId || c.isBankEntity) return c;
-        const held = c.treasuryHoldings;
-        if (!held || held.length === 0) return c;
+      // §3.13-BOOK d3c: the treasury's book is register rows — a matured slice is RETIRED to the
+      // treasury by wire, the ledger debits the row, and the government repays FACE.
+      ctx.updatedCompanies.forEach(c => {
+        if (c.region !== regionId || c.isBankEntity) return;
         let redeemedLocal = 0;
-        const newHeld = held.map(h => {
-          const fraction = redeemedFractionByBond.get(h.instrumentId) ?? 0;
-          if (fraction <= 0) return h;
-          redeemedLocal += h.quantityOrNotionalLocal * fraction;
-          return { ...h, quantityOrNotionalLocal: h.quantityOrNotionalLocal * (1 - fraction) };
-        }).filter(h => h.quantityOrNotionalLocal > 1);
-        if (!(redeemedLocal > 0)) return c;
+        sovereignRowsOf(ctx.v2, c.id).forEach((p) => {
+          const fraction = redeemedFractionByBond.get(p.bondId) ?? 0;
+          if (!(fraction > 0)) return;
+          const faceLocal = p.faceLocal * fraction;
+          if (!(faceLocal > 0)) return;
+          retireHolding(ctx.v2, companyParty(c), { kind: 'GOVERNMENT', region: regionId },
+            { instrumentType: 'GOV_BOND', instrumentId: p.bondId, issuerRegion: regionId, valueLocal: p.valueLocal * fraction, units: faceLocal }, 'sovereign redemption');
+          redeemedLocal += faceLocal;
+        });
+        if (!(redeemedLocal > 0)) return;
         redemptionPaidLocal += redeemedLocal;
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
@@ -366,7 +369,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           currency: currencyOf(regionId),
           reason: 'sovereign redemption',
         });
-        return { ...c, treasuryHoldings: newHeld };
       });
 
       // PUB2b: the central bank is a holder too, and used to be the one holder that never got

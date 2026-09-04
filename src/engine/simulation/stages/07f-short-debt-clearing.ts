@@ -33,7 +33,7 @@
 
 import { riskAversionOf } from '../../../domain/preferences';
 import { asEntityId } from '../../../domain/ids';
-import { bankCreditPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf, bankPartyOf, companyParty, companyPartyOf } from '../../../domain/party';
+import { bankCreditPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf, bankPartyOf, companyParty } from '../../../domain/party';
 import { asInstrumentId, InstrumentId } from '../../../domain/ids';
 
 import { ensureV2 } from '../../../engine2/world';
@@ -58,7 +58,7 @@ import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLoca
 import { centralBankParticipant, bookCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementLocal, institutionSpendableLocal, PartyRef } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, PrimaryTake, participantPartyOf, bankIdOfTickerFor, parHoldingRow, writeBackClearedFills } from './book-settlement';
-import { clearedBookDelta, transferHolding } from '../../ledger/holdings-ledger';
+import { transferHolding } from '../../ledger/holdings-ledger';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
@@ -71,7 +71,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { commercialPaperTrancheId } from '../../../domain/instrument-keys';
 import { governmentIssuer } from '../../../domain/entity-keys';
-import { forEachSovereignPosition, bankSovereignFaceByBond, bankSovereignBookLocal } from '../../sovereign-register';
+import { forEachSovereignPosition, bankSovereignFaceByBond, bankSovereignBookLocal, sovereignRowsOf } from '../../sovereign-register';
 import { bankParticipantId, treasuryParticipantId } from '../../../domain/participant-keys';
 import type { EntityId } from '../../../domain/ids';
 import type { Ticker } from '../../../domain/ids';
@@ -301,14 +301,12 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       );
       const treasuryByTicker = new Map<Ticker, typeof treasuryBidders[number]>();
       treasuryBidders.forEach((comp) => {
+        // §3.13-BOOK d3c: the treasury's bills are its REGISTER ROWS, read in face by bond.
+        // §3.13-SOV row 3: a row is a bill if its id names one of THIS region's live bills.
         const heldByBond = new Map<string, number>();
-        (comp.treasuryHoldings || []).forEach((h) => {
-          // §7.241: the old prefix-slice also matched TRANCHE ids, yielding keys like 'B13-41'
-          // that failed the lowercase test — so bill tranches held here silently dropped out of
-          // the treasurer's sizing and the tranche fallback below was dead code.
-          // §3.13-SOV row 3: a row is a bill if its id names one of THIS region's live bills.
-          if (!billIds.has(h.instrumentId)) return;
-          heldByBond.set(h.instrumentId, (heldByBond.get(h.instrumentId) ?? 0) + (h.quantityOrNotionalLocal ?? 0));
+        sovereignRowsOf(ctx.v2, comp.id).forEach((p) => {
+          if (!billIds.has(p.bondId)) return;
+          heldByBond.set(p.bondId, (heldByBond.get(p.bondId) ?? 0) + p.faceLocal);
         });
         const cashLocal = cashOf(ctx.v2, comp);
         const targetLocal = corporateTreasuryTargetLocal(cashLocal, comp.annualRevenue ?? 0, riskAversionOf(comp.management));
@@ -594,23 +592,23 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       treasuryByTicker.forEach((comp, ticker) => {
         const fills = result.newParticipantHoldings.get(treasuryParticipantId(ticker));
         if (!fills) return;
-        const kept = (comp.treasuryHoldings || []).filter((h) => !billIds.has(h.instrumentId));
-        const billRows: ItemizedHolding[] = [];
+        // §3.13-BOOK d3c: the treasury's bill book is REGISTER ROWS — each bill this auction priced
+        // moves by `transferHolding` against the house, in face, under the COMPANY party (the
+        // primary slice books at cost: the rebate is the same instruction's booking half). The
+        // party is the company's own, not a ticker lookup that fell back to a ticker as an id.
+        const heldFace = new Map<InstrumentId, number>();
+        sovereignRowsOf(ctx.v2, comp.id).forEach((p) => heldFace.set(p.bondId, (heldFace.get(p.bondId) ?? 0) + p.faceLocal));
+        const house = { kind: 'CLEARING_HOUSE' as const, region: regionId };
         fills.forEach((usd, instrumentId) => {
+          if (!billIds.has(instrumentId)) return;
           const bookedLocal = usd - rebateOf(treasuryParticipantId(ticker), instrumentId);
-          if (bookedLocal > 1) billRows.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalLocal: bookedLocal, units: bookedLocal });
+          const afterLocal = bookedLocal > 1 ? bookedLocal : 0;
+          const deltaLocal = afterLocal - (heldFace.get(instrumentId) ?? 0);
+          if (!(Math.abs(deltaLocal) > 1)) return;
+          const spec = { instrumentType: 'GOV_BOND' as const, instrumentId, issuerRegion: regionId, valueLocal: Math.abs(deltaLocal), units: Math.abs(deltaLocal) };
+          if (deltaLocal > 0) transferHolding(ctx.v2, house, companyParty(comp), spec, 'bill clearing fill');
+          else transferHolding(ctx.v2, companyParty(comp), house, spec, 'bill clearing fill');
         });
-        // Step 13 (W2): the treasury's bill rows move by wire against the house (its rows are
-        // keyed by bill id, as every other holder's are).
-        const tBefore = new Map<InstrumentId, { valueLocal: number }>(), tAfter = new Map<InstrumentId, { valueLocal: number }>();
-        (comp.treasuryHoldings || []).forEach((h) => {
-          if (!billIds.has(h.instrumentId)) return;
-          tBefore.set(h.instrumentId, { valueLocal: (tBefore.get(h.instrumentId)?.valueLocal ?? 0) + (h.quantityOrNotionalLocal ?? 0) });
-        });
-        billRows.forEach((h) => tAfter.set(h.instrumentId, { valueLocal: (tAfter.get(h.instrumentId)?.valueLocal ?? 0) + (h.quantityOrNotionalLocal ?? 0) }));
-        clearedBookDelta(companyPartyOf(bankIdOfTicker(ticker) ?? asEntityId(ticker)), regionId, 'GOV_BOND', tBefore, tAfter, () => undefined, 'bill clearing fill');
-        if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
-        ctx.companyUpdates[ticker].treasuryHoldings = [...kept, ...billRows];
       });
 
       // SETL6: the book's whole cash side, through the clearing house — participants, the

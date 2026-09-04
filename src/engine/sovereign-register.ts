@@ -6,11 +6,10 @@
  * a sovereign holding lives in FOUR places, because only one holder class is in the register
  * (`the-register.md` A1.a is that boundary, stated by the tree itself) —
  *
- *   · the institutions, the households, the CENTRAL BANK (§3.13-BOOK d3a) and the BANKS' OWN
- *     BOOKS (d3b), as `GOV_BOND` rows on the register (`registerBooks` lists every book it holds);
- *   · the banks' desks, as `dealerDeskInventory['sovereign bond' | 'bill']` on each bank's sheet;
- *   · a company's own treasury book, `comp.treasuryHoldings` — which only the seed's
- *     reconciliation and `O1`'s credit arms knew about and no sovereign walk did.
+ *   · the institutions, the households, the CENTRAL BANK (§3.13-BOOK d3a), the BANKS' OWN BOOKS
+ *     (d3b) and the companies' TREASURY BOOKS (d3c), as `GOV_BOND` rows on the register
+ *     (`registerBooks` lists every book it holds);
+ *   · the banks' desks, as `dealerDeskInventory['sovereign bond' | 'bill']` on each bank's sheet.
  *
  * **AND FIVE PLACES OPEN-CODED THE WALK.** The seed's stock reconciliation, `holdings-view`'s
  * ownership shares, `O1`'s sovereign arm, `O11`'s stray-id check and the UI's holder list each
@@ -28,7 +27,6 @@ import { GameState, RegionId } from '../types';
 import { V2World, typeRefOf, regionRefOf, regionOf } from '../engine2/world';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../engine2/holdings';
 import { isActiveCompany } from '../domain/company';
-import { holdingClassOf } from '../domain/assets';
 import { registerBooks, centralBankBookId } from './ledger/holdings-ledger';
 import type { InstrumentId } from '../domain/ids';
 
@@ -68,13 +66,13 @@ export function forEachSovereignPosition(
   // A bank's book reports under its TICKER (the key every consumer of this walk has always seen
   // for a bank), and a bank holds its OWN sovereign as its liquidity buffer (07c's domestic
   // mandate), so the row's region test is the issuer's, as for every other book.
-  const activeBanks = state.companies.filter((c) => isActiveCompany(c) && c.bankBalanceSheet !== undefined);
-  const bankTickerById = new Map(activeBanks.map((c) => [c.id as string, c.ticker as string]));
+  const activeCompanies = state.companies.filter((c) => isActiveCompany(c));
+  const tickerById = new Map(activeCompanies.map((c) => [c.id as string, c.ticker as string]));
   if (govRef >= 0 && regRef >= 0) {
-    registerBooks((state.institutionalEntities ?? []).filter((e) => !e.isDefaulted).map((e) => e.id), activeBanks.map((c) => c.id))
+    registerBooks((state.institutionalEntities ?? []).filter((e) => !e.isDefaulted).map((e) => e.id), activeCompanies)
       .forEach((b) => {
-        const holderClass: SovereignHolderClass = b.payee.kind === 'CENTRAL_BANK' ? 'CENTRAL_BANK' : b.payee.kind === 'BANK' ? 'BANK' : 'REGISTER';
-        const holderKey = holderClass === 'CENTRAL_BANK' ? 'CB' : holderClass === 'BANK' ? (bankTickerById.get(b.id) ?? b.id) : b.id;
+        const holderClass: SovereignHolderClass = b.payee.kind === 'CENTRAL_BANK' ? 'CENTRAL_BANK' : b.payee.kind === 'BANK' ? 'BANK' : b.payee.kind === 'COMPANY' ? 'TREASURY' : 'REGISTER';
+        const holderKey = holderClass === 'CENTRAL_BANK' ? 'CB' : (holderClass === 'BANK' || holderClass === 'TREASURY') ? (tickerById.get(b.id) ?? b.id) : b.id;
         for (let r = bookHeadOf(v2, b.id); r >= 0; r = H.next[r]) {
           if (H.typeRef[r] !== govRef || H.regionRef[r] !== regRef) continue;
           const faceLocal = rowUnits(H, r);
@@ -100,17 +98,6 @@ export function forEachSovereignPosition(
     });
   });
 
-  // 3. A COMPANY'S OWN TREASURY BOOK. `stage08-back` writes it, `O1`'s credit arms counted it and
-  // no sovereign walk ever did — so a treasury's government paper was outstanding, held, and
-  // invisible to every check that asks who holds a bond.
-  state.companies.forEach((c) => {
-    if (!isActiveCompany(c)) return;
-    (c.treasuryHoldings ?? []).forEach((h) => {
-      if (h.issuerRegion !== regionId || holdingClassOf(h.instrumentType) !== 'SOVEREIGN') return;
-      const faceLocal = h.units ?? h.quantityOrNotionalLocal ?? 0;
-      if (faceLocal !== 0) visit({ bondId: h.instrumentId, holderKey: c.ticker, holderClass: 'TREASURY', faceLocal });
-    });
-  });
 }
 
 /** What each BOND of a region's ladder is claimed by, summed over every store. */
