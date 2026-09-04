@@ -427,7 +427,8 @@ function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Es
       const region = index.v2.internedStrings[H.regionRef[r]] as RegionId;
       const id = index.v2.internedStrings[H.instrRef[r]];
       transferHolding(index.v2, { kind: 'INSTITUTION', id: holderId }, { kind: 'CLEARING_HOUSE', region },
-        { instrumentType: type, instrumentId: id, issuerRegion: region, valueLocal: leftLocal },
+        { instrumentType: type, instrumentId: id, issuerRegion: region, valueLocal: leftLocal,
+          units: Number.isNaN(H.units[r]) ? leftLocal : H.units[r] },
         'estate closed: residue written off');
       const dead = index.companyById.get(estate.companyId);
       if (dead && isTrancheKind(type)) {
@@ -462,12 +463,18 @@ function reduceHolding(
       // The paper goes back to the estate by wire — recovered (cash arrived) or
       // written off (nothing did); the ledger debits the rows.
       const H = index.v2.holdings;
-      const takes: { type: ItemizedHolding['instrumentType']; region: RegionId; usd: number; id: string }[] = [];
+      const takes: { type: ItemizedHolding['instrumentType']; region: RegionId; usd: number; units: number; id: string }[] = [];
       for (let i = 0; i < rows.length && leftLocal > 0; i++) {
         const r = rows[i];
         const takeLocal = Math.min(leftLocal, H.qtyLocal[r]);
         leftLocal -= takeLocal;
-        if (takeLocal > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeLocal, id: index.v2.internedStrings[H.instrRef[r]] });
+        // §9.13-CREDIT row 5 — WHAT PAPER LEFT, beside what it was worth. `retireLadderFace` below
+        // takes a FACE and was being handed this take's VALUE, so the moment a claim marks away
+        // from par the estate would retire the wrong amount of the dead issuer's ladder. The take
+        // is a fraction of a row, so the paper in it is that same fraction of the row's own units.
+        const rowUnits = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
+        const takeUnits = H.qtyLocal[r] > 0 ? rowUnits * (takeLocal / H.qtyLocal[r]) : 0;
+        if (takeLocal > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeLocal, units: takeUnits, id: index.v2.internedStrings[H.instrRef[r]] });
       }
       // The holder's paper goes to the region's clearing house (the register side);
       // the dead issuer's ladder retires the same face against the house (the ladder side), so the
@@ -475,9 +482,9 @@ function reduceHolding(
       const dead = index.companyById.get(companyId);
       takes.forEach((t) => {
         transferHolding(index.v2, { kind: 'INSTITUTION', id }, { kind: 'CLEARING_HOUSE', region: t.region },
-          { instrumentType: t.type, instrumentId: t.id, issuerRegion: t.region, valueLocal: t.usd }, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
+          { instrumentType: t.type, instrumentId: t.id, issuerRegion: t.region, valueLocal: t.usd, units: t.units }, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
         if (dead && isTrancheKind(t.type)) {
-          retireLadderFace(index.v2, { id: dead.id, ticker: dead.ticker, region: dead.region }, t.type as 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER', t.usd, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
+          retireLadderFace(index.v2, { id: dead.id, ticker: dead.ticker, region: dead.region }, t.type as 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER', t.units, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
         }
       });
       index.touchedEntityIds.add(id);
@@ -519,10 +526,13 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   const claims: EstateClaim[] = [];
   const addClaim = (c: EstateClaim) => { if (c.principalLocal > 1) claims.push(c); };
   // ONE BASIS FOR THE WHOLE WATERFALL, AND IT IS FACE. A bank's facility claim is the face on
-  // the dead firm's ladder; a register holder's claim is the quantity its row carries, which is
-  // face while the wire layer prices credit at par. The two must never drift apart, so what the
-  // register claims of each tranche is checked below against what the ladder says that tranche
-  // is: claims worth more than the debt would be a mint inside the waterfall.
+  // the dead firm's ladder; a register holder's claim is the QUANTITY its row carries — `units`,
+  // which for credit IS the face. §9.13-CREDIT row 5: this read `qtyLocal`, the row's money, and
+  // called it face in its own variable name — true only while credit marks at par, and a silent
+  // mispricing of the whole waterfall the moment it does not. What the register claims of each
+  // tranche is checked below against what the ladder says that tranche is: claims worth more than
+  // the debt would be a mint inside the waterfall, and that check only means something when both
+  // sides are faces.
   const claimedFaceByInstrument = new Map<string, number>();
 
   // Bondholders and loan holders, from the books that actually hold the paper.
@@ -532,8 +542,12 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
       // A row names a tranche or its issuer; the claim is on the issuer either way.
       if (issuerIdOf(ctx.v2, ctx.v2.internedStrings[H.instrRef[r]]) !== comp.id) continue;
-      const usd = H.qtyLocal[r];
       const instrumentType = ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
+      // A CREDIT claim is on FACE and an EQUITY claim is the residual on what the shares are
+      // worth, so the two take different lanes of the same row on purpose.
+      const usd = instrumentType === 'EQUITY'
+        ? H.qtyLocal[r]
+        : (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]);
       if (instrumentType !== 'EQUITY') {
         const id = ctx.v2.internedStrings[H.instrRef[r]];
         claimedFaceByInstrument.set(id, (claimedFaceByInstrument.get(id) ?? 0) + usd);

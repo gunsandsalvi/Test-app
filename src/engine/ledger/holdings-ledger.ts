@@ -40,10 +40,17 @@ export interface HoldingSpec {
   valueLocal: number;
   /** Shares moved (equity, fund shares); undefined for notional-only paper. */
   shares?: number;
-  /** HOW MANY UNITS moved, in the instrument's own unit — par for credit, shares for equity.
-   *  `valueLocal` is units x price, so the wire carries a real price instead of the 1.00 every
-   *  notional instrument used to move at. Defaults to shares, then to the value. */
-  faceLocal?: number;
+  /**
+   * HOW MANY UNITS moved, in the instrument's own unit — FACE for credit, shares for equity.
+   * `valueLocal` is units × price, so the wire carries a real price instead of the 1.00 every
+   * notional instrument used to move at. Defaults to shares, then to the value — and the value is
+   * the right default exactly while a book's price is one, which is what makes this safe to
+   * introduce before the mark is wired.
+   *
+   * It was called `faceLocal` and no caller ever set it: the field was read three times and
+   * written nowhere, so every credit wire in the model has moved at a price of exactly 1.
+   */
+  units?: number;
 }
 
 /** The register's own read of a party as a holder: only institutions hold register rows today. */
@@ -58,9 +65,13 @@ const holderIdOf = (p: PartyRef): string | undefined => (p.kind === 'INSTITUTION
  */
 function priceOf(spec: HoldingSpec): { quantity: number; priceLocal: number } {
   if (spec.shares !== undefined && spec.shares > 0) return { quantity: spec.shares, priceLocal: spec.valueLocal / spec.shares };
-  if (spec.faceLocal !== undefined && spec.faceLocal > 0) return { quantity: spec.faceLocal, priceLocal: spec.valueLocal / spec.faceLocal };
+  if (spec.units !== undefined && spec.units > 0) return { quantity: spec.units, priceLocal: spec.valueLocal / spec.units };
   return { quantity: spec.valueLocal, priceLocal: 1 };
 }
+
+/** WHAT QUANTITY THIS INSTRUCTION MOVES — shares where the instrument is share-counted, else the
+ *  units the caller named, else the value, which is the units at a price of one. */
+const unitsOf = (spec: HoldingSpec): number => spec.shares ?? spec.units ?? spec.valueLocal;
 
 /** Add to (or open) the holder's row of this instrument. */
 function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
@@ -70,17 +81,17 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
     H.qtyLocal[r] += spec.valueLocal;
     if (spec.shares !== undefined) H.shares[r] = (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]) + spec.shares;
-    const movedUnits = spec.shares ?? spec.faceLocal ?? spec.valueLocal;
-    H.units[r] = (Number.isNaN(H.units[r]) ? 0 : H.units[r]) + movedUnits;
+    // A row whose units were never stored has none to add to, and the only honest reading of what
+    // it already holds is its value — which is what par pricing made them equal to.
+    const priorUnits = Number.isNaN(H.units[r]) ? H.qtyLocal[r] - spec.valueLocal : H.units[r];
+    H.units[r] = priorUnits + unitsOf(spec);
     markBookDirty(v2, holderId);
     return;
   }
   pushBookRow(v2, holderId, {
     instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
-    quantityOrNotionalLocal: spec.valueLocal, quantityShares: spec.shares, faceLocal: spec.faceLocal,
-    // UNITS: shares where the instrument is share-counted, else par — which today equals the
-    // value, because credit's price is still pinned at 1 (step 13 is what unpins it).
-    units: spec.shares ?? spec.faceLocal ?? spec.valueLocal,
+    quantityOrNotionalLocal: spec.valueLocal, quantityShares: spec.shares,
+    units: unitsOf(spec),
   });
 }
 
@@ -125,10 +136,23 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
       hit = true;
       walkedLocal += Math.abs(H.qtyLocal[r]);
       const takeLocal = Math.min(leftLocal, H.qtyLocal[r]);
+      // §9.13-CREDIT row 5 — AND THE QUANTITY LEAVES WITH THE VALUE. This took value and shares
+      // and left `units` where it was, so every debit of a credit row drove the two apart: a
+      // holder that sold half its position still reported the whole face. The units taken are the
+      // row's OWN — what fraction of its value is leaving, applied to what it holds — so the
+      // ledger never needs the caller to know, and while value and units are the same number this
+      // subtracts exactly what the value line does.
+      const rowUnits = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
+      const takeUnits = H.qtyLocal[r] > 0 ? rowUnits * (takeLocal / H.qtyLocal[r]) : 0;
       H.qtyLocal[r] -= takeLocal; leftLocal -= takeLocal;
+      H.units[r] = rowUnits - takeUnits;
       if (!Number.isNaN(leftShares) && !Number.isNaN(H.shares[r])) {
         walkedShares += Math.abs(H.shares[r]);
         const takeSh = Math.min(leftShares, H.shares[r]); H.shares[r] -= takeSh; leftShares -= takeSh;
+        // A share-counted row's units ARE its shares (`unitsOf` says so on the way in), so it
+        // takes the share line rather than the value proportion — the two agree only while the
+        // row's own price and the instruction's are the same number.
+        H.units[r] = H.shares[r];
       }
     }
     if (!keepsRow(H, r)) drops = true;
@@ -244,15 +268,18 @@ export function scaleHoldings(
   if (!holderId || !(ratio >= 0) || Math.abs(ratio - 1) < 1e-12) return 0;
   const H = mutableHoldings(v2);
   const tRef = internString(v2, instrumentType), iRef = internString(v2, instrumentId);
-  let valueLocal = 0, shares = 0, anyShares = false, region: RegionId | undefined;
+  let valueLocal = 0, shares = 0, units = 0, anyShares = false, region: RegionId | undefined;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
     valueLocal += H.qtyLocal[r] * Math.abs(1 - ratio);
     if (!Number.isNaN(H.shares[r])) { anyShares = true; shares += H.shares[r] * Math.abs(1 - ratio); }
+    // §9.13-CREDIT row 5: a corporate action scales the QUANTITY, and the value follows from it.
+    // Reading only the value left the ratio applied to the money and not to the face.
+    units += (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]) * Math.abs(1 - ratio);
     region = v2.internedStrings[H.regionRef[r]] as RegionId;
   }
   if (!(valueLocal > 0) || !region) return 0;
-  const spec: HoldingSpec = { instrumentType, instrumentId, issuerRegion: region, valueLocal, shares: anyShares ? shares : undefined };
+  const spec: HoldingSpec = { instrumentType, instrumentId, issuerRegion: region, valueLocal, units, shares: anyShares ? shares : undefined };
   return ratio < 1 ? retireHolding(v2, holder, issuer, spec, reason) : issueHolding(v2, issuer, holder, spec, reason);
 }
 

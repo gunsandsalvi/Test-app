@@ -321,7 +321,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const claimed = new Map<string, number>();
       store.scan(entity.id, 'LEVERAGED_LOAN', (h) => {
         if (!regionIssuerIds.has(issuerIdOf(v2, h.instrumentId))) return false;
-        const faceLocal = h.faceLocal ?? h.quantityOrNotionalLocal ?? 0;
+        const faceLocal = h.units;
         claimed.set(h.instrumentId, (claimed.get(h.instrumentId) ?? 0) + faceLocal);
         return true;
       });
@@ -570,7 +570,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // Written in PAR space, as the bond book's and the sovereign's fills are: the row carries the
       // FACE it holds and the cash leg above paid the cleared price for it. `P5` measures the gap
       // until the mark lands — §3.13's item 4, which cannot land one book at a time.
-      ({ instrumentId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalLocal: faceLocal, faceLocal, units: faceLocal });
+      ({ instrumentId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalLocal: faceLocal, units: faceLocal });
     bookEntities.forEach((entity) => {
       const pi = piById.get(entity.id);
       const claimed = claimedByEntity.get(entity.id);

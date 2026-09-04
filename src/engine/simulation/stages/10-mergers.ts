@@ -420,14 +420,14 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       // rows exchange like the bonds' (it was the one company-keyed kind the exchange skipped).
       const cpRef = internString(ctx.v2, 'COMMERCIAL_PAPER');
       ctx.updatedInstitutionalEntities.forEach((e) => {
-        const swaps: { type: ItemizedHolding['instrumentType']; valueLocal: number; shares: number | undefined; id: string }[] = [];
+        const swaps: { type: ItemizedHolding['instrumentType']; valueLocal: number; units: number; shares: number | undefined; id: string }[] = [];
         for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
           // A row names a tranche or its issuer; the target's paper is what resolves to it.
           const rowId = ctx.v2.internedStrings[H.instrRef[r]];
           if (H.instrRef[r] !== targetIdRef && issuerIdOf(ctx.v2, rowId) !== target.id) continue;
           const t = H.typeRef[r];
           if (t !== equityRefR && t !== corpBondRef && t !== levLoanRef && t !== cpRef) continue;
-          swaps.push({ type: ctx.v2.internedStrings[t] as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r], id: rowId });
+          swaps.push({ type: ctx.v2.internedStrings[t] as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], units: Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r], id: rowId });
         }
         if (swaps.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };
@@ -439,14 +439,18 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           // A credit row re-keys to the tranche it becomes on the acquirer's ladder (the
           // consolidation's map); a row that still names the issuer re-keys to the acquirer.
           const newInstrumentId = isEquity ? acquirer.id : (newIdByOldTrancheId.get(sw.id) ?? acquirer.id);
-          const oldSpec = { instrumentType: sw.type, instrumentId: sw.id, issuerRegion: target.region, valueLocal: sw.valueLocal, shares: sw.shares };
+          const oldSpec = { instrumentType: sw.type, instrumentId: sw.id, issuerRegion: target.region, valueLocal: sw.valueLocal, units: sw.units, shares: sw.shares };
           transferHolding(ctx.v2, holder, { kind: 'CLEARING_HOUSE', region: target.region }, oldSpec, 'merger: target paper exchanged');
           // The equity issuers' sides — the target's shares are cancelled (house →
           // target), the acquirer's created (acquirer → house); the credit kinds' are the ladders'.
           if (isEquity) transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: target.region }, { kind: 'COMPANY', ticker: target.ticker }, oldSpec, 'merger: target shares cancelled');
           const newValueLocal = isEquity ? sw.valueLocal * stockRatio : sw.valueLocal;
           if (newValueLocal > 1) {
-            const newSpec = { instrumentType: sw.type, instrumentId: newInstrumentId, issuerRegion: acquirer.region, valueLocal: newValueLocal, shares: isEquity && acquirer.stockPrice > 0 ? newValueLocal / acquirer.stockPrice : sw.shares };
+            const newShares = isEquity && acquirer.stockPrice > 0 ? newValueLocal / acquirer.stockPrice : sw.shares;
+            // §9.13-CREDIT row 5 — the QUANTITY the holder receives. Equity converts at the share
+            // ratio and its units ARE its shares; the credit kinds keep their face, because a
+            // merger re-keys the paper onto the acquirer rather than repricing it.
+            const newSpec = { instrumentType: sw.type, instrumentId: newInstrumentId, issuerRegion: acquirer.region, valueLocal: newValueLocal, units: newShares ?? sw.units, shares: newShares };
             if (isEquity) transferHolding(ctx.v2, { kind: 'COMPANY', ticker: acquirer.ticker }, { kind: 'CLEARING_HOUSE', region: acquirer.region }, newSpec, 'merger: acquirer shares issued');
             transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: acquirer.region }, holder, newSpec, 'merger: acquirer paper delivered');
           }
@@ -456,19 +460,19 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       // The ACQUIRER's own tranches that consolidated into a bucket re-key their holders'
       // rows too — the same paper under the bucket's id, through the house (old out, new in).
       ctx.updatedInstitutionalEntities.forEach((e) => {
-        const rekeys: { type: ItemizedHolding['instrumentType']; valueLocal: number; id: string; newId: string }[] = [];
+        const rekeys: { type: ItemizedHolding['instrumentType']; valueLocal: number; units: number; id: string; newId: string }[] = [];
         for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
           const rowId = ctx.v2.internedStrings[H.instrRef[r]];
           const newId = newIdByOldTrancheId.get(rowId);
           if (newId === undefined || newId === rowId || H.instrRef[r] === targetIdRef) continue;
           if (issuerIdOf(ctx.v2, rowId) === target.id) continue; // exchanged above
-          rekeys.push({ type: ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], id: rowId, newId });
+          rekeys.push({ type: ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], units: Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r], id: rowId, newId });
         }
         if (rekeys.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };
         rekeys.forEach((rk) => {
-          transferHolding(ctx.v2, holder, { kind: 'CLEARING_HOUSE', region: acquirer.region }, { instrumentType: rk.type, instrumentId: rk.id, issuerRegion: acquirer.region, valueLocal: rk.valueLocal }, 'merger: acquirer paper consolidated');
-          transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: acquirer.region }, holder, { instrumentType: rk.type, instrumentId: rk.newId, issuerRegion: acquirer.region, valueLocal: rk.valueLocal }, 'merger: acquirer paper consolidated');
+          transferHolding(ctx.v2, holder, { kind: 'CLEARING_HOUSE', region: acquirer.region }, { instrumentType: rk.type, instrumentId: rk.id, issuerRegion: acquirer.region, valueLocal: rk.valueLocal, units: rk.units }, 'merger: acquirer paper consolidated');
+          transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: acquirer.region }, holder, { instrumentType: rk.type, instrumentId: rk.newId, issuerRegion: acquirer.region, valueLocal: rk.valueLocal, units: rk.units }, 'merger: acquirer paper consolidated');
         });
         bumpRegister(ctx);
       });

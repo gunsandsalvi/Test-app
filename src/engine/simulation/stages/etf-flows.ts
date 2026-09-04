@@ -587,13 +587,17 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
             if (seen) {
               seen.quantityOrNotionalLocal += qty;
               if (!Number.isNaN(sh)) seen.quantityShares = (seen.quantityShares ?? 0) + sh * share;
+              seen.units += (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]) * share;
               continue;
             }
             const out: ItemizedHolding = {
               instrumentId,
               instrumentType,
               issuerRegion: ctx.v2.internedStrings[H.regionRef[r]] as ItemizedHolding['issuerRegion'],
-              quantityOrNotionalLocal: qty, units: qty,
+              quantityOrNotionalLocal: qty,
+              // §9.13-CREDIT row 5: the slice's QUANTITY is the row's own units scaled, not its
+              // money — the two are the same number only while the paper marks at par.
+              units: (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]) * share,
             };
             if (!Number.isNaN(sh)) out.quantityShares = sh * share;
             byInstrument.set(key, out);
@@ -602,7 +606,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         }
         for (const h of rows) {
           transferHolding(ctx.v2, { kind: 'INSTITUTION', id: fundId }, { kind: 'INSTITUTION', id: investorId },
-            { instrumentType: h.instrumentType, instrumentId: h.instrumentId, issuerRegion: h.issuerRegion, valueLocal: h.quantityOrNotionalLocal, shares: h.quantityShares }, 'etf in-kind redemption: basket delivered');
+            { instrumentType: h.instrumentType, instrumentId: h.instrumentId, issuerRegion: h.issuerRegion, valueLocal: h.quantityOrNotionalLocal, shares: h.quantityShares, units: h.units }, 'etf in-kind redemption: basket delivered');
         }
         if (rows.length > 0) delivered = true;
         // The cash slice of the basket travels with it: a pro-rata claim is on everything the

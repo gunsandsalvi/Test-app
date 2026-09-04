@@ -230,6 +230,14 @@ export function newBookRow(v2: V2World, h: ItemizedHolding): number {
   H.regionRef[r] = internString(v2, h.issuerRegion);
   H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
   H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
+  // §9.13-CREDIT row 5 — THE QUANTITY, WHICH THIS DID NOT COPY. `syncBookRows` and `pushBookRow`
+  // both carry `units` across; this one dropped it, and it is the row builder THE CLEARING
+  // WRITE-BACK USES — so every fill every book has ever written lost its face here. What the row
+  // then reported depended on where the row came from: a recycled row kept `freeRow`'s NaN and
+  // materialised as the VALUE, a fresh one kept the lane's zero and materialised as ZERO. One
+  // book, two answers, decided by the free list. That is why the face could never diverge from
+  // the value: it was never stored.
+  H.units[r] = h.units;
   H.next[r] = -1;
   return r;
 }

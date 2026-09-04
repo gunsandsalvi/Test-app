@@ -196,12 +196,15 @@ export class HoldingsStore {
         const next = held + take;
         row.quantityShares = next;
         row.quantityOrNotionalLocal = next * pricePerShare;
+        row.units = next;
         // The persistent row is the authority; the delivery lands on it too.
         const rid = slot.rowIds[i];
         if (rid >= 0) {
           const H = mutableHoldings(this.v2);
           H.shares[rid] = next;
           H.qtyLocal[rid] = next * pricePerShare;
+          // A share-counted row's units ARE its shares (`holdings-ledger.ts:unitsOf`).
+          H.units[rid] = next;
           markBookDirty(this.v2, entityId);
         }
         remaining -= take;
@@ -394,6 +397,12 @@ export function consolidateRegister(ctx: WeeklyStepContext): void {
         const cur = H.shares[first];
         Hm.shares[first] = (Number.isNaN(cur) ? 0 : cur) + sh;
       }
+      // §9.13-CREDIT row 5 — and the QUANTITY merges with the value. Two rows of one instrument
+      // hold one position; folding only the money left the survivor reporting one row's face
+      // against both rows' value.
+      const uKeep = Number.isNaN(H.units[first]) ? H.qtyLocal[first] : H.units[first];
+      const uDrop = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
+      Hm.units[first] = uKeep + uDrop;
     }
     relinkBook(v2, entity.id, kept);
     bumpRegister(ctx);

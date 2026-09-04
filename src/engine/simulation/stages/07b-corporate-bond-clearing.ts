@@ -383,9 +383,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       const claimed = new Map<string, number>();
       store.scan(entity.id, 'CORP_BOND', (h) => {
         if (!regionIssuerIds.has(issuerIdOf(v2, h.instrumentId))) return false;
-        // A book trades FACE. The row carries it; a row written before face was stored falls back
-        // to its value, which par pricing made the same number.
-        const faceLocal = h.faceLocal ?? h.quantityOrNotionalLocal ?? 0;
+        // A book trades FACE, and `units` IS the face (`domain/banking.ts`) — one lane, carried
+        // through the store, so what this claims is what the register holds.
+        const faceLocal = h.units;
         claimed.set(h.instrumentId, (claimed.get(h.instrumentId) ?? 0) + faceLocal);
         return true;
       });
@@ -671,7 +671,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // FACE it holds and the cash leg above paid the cleared price for it. What the register is
       // WORTH is `face × price`, and `P5` measures the gap until the mark lands — §3.13's item 4,
       // which cannot land one book at a time (§9.13 part 3).
-      ({ instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalLocal: faceLocal, faceLocal, units: faceLocal });
+      ({ instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalLocal: faceLocal, units: faceLocal });
     bookEntities.forEach((entity) => {
       const pi = piById.get(entity.id);
       const claimed = claimedByEntity.get(entity.id);

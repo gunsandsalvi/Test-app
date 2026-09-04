@@ -777,9 +777,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const byTranche = new Map<string, number>();
         store.scan(entity.id, 'COMMERCIAL_PAPER', (h) => {
           if (!cpIssuerIds.has(issuerIdOf(v2Mirror, h.instrumentId))) return false;
-          // A book trades FACE. The row carries it; a row written before face was stored falls
-          // back to its value, which par pricing made the same number.
-          const faceLocal = h.faceLocal ?? h.quantityOrNotionalLocal ?? 0;
+          // A book trades FACE, and `units` IS the face (`domain/banking.ts`).
+          const faceLocal = h.units;
           byTranche.set(h.instrumentId, (byTranche.get(h.instrumentId) ?? 0) + faceLocal);
           return true;
         });
@@ -883,7 +882,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // Written in PAR space, as every other credit book's fills are: the row carries the FACE
         // it holds and the cash leg paid the cleared price for it. What the register is WORTH is
         // `face × price` — §3.13's item 4, which cannot land one book at a time (§9.13 part 3).
-        ({ instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalLocal: faceLocal, faceLocal, units: faceLocal });
+        ({ instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalLocal: faceLocal, units: faceLocal });
 
       // ---- 2. THE BOOK. Every live piece of this region's commercial paper, plus the deals
       // brought this week — each with its own remaining life and its own price.

@@ -198,7 +198,7 @@ function p5(state: GameState, week: number): AuditFinding[] {
     if (e.isDefaulted) return;
     e.itemizedHoldings.forEach((h) => {
       if (!isTrancheKind(h.instrumentType)) return;
-      const face = h.faceLocal ?? h.quantityOrNotionalLocal ?? 0;
+      const face = h.units;
       if (!(Math.abs(face) > 0)) return;
       const price = trancheClearedPricePerFace(v2, h.instrumentId);
       if (price === undefined) { unpriced++; return; }

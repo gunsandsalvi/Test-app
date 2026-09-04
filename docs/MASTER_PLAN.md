@@ -374,8 +374,23 @@ written from here):
     issuer aside from the CDS."*). Rows 1, 2, 3 and 4 are in §9 — every credit book now prices the
     PAPER. What is left is one row:
     · **row 5 — the mark**: the register carries FACE and `P5`/`P8` measure the gap to the cleared
-      price on all three classes. It cannot land one book at a time (§9.13 part 3) — it lands now
-      that every credit book prints a price, and it lands when every reader takes `faceLocal`.
+      price on all three classes. It cannot land one book at a time (§9.13 part 3), and the archive
+      names its two blockers: FACE LEAKS, and the mark not being the last word.
+      *(**The leaks are closed** — commit "row 5a". They were bigger than the archive's reading and
+      the cause was one thing: `faceLocal` and `units` were two representations of one number
+      (rule 4) and only `units` had a lane in the store, so the books wrote a face that was dropped
+      at the week's materialisation. `faceLocal` is DELETED; `units` is the face. And every writer
+      maintains it now: `newBookRow` — the CLEARING WRITE-BACK's own row builder — never copied it
+      at all, `debitRow` never subtracted it, the duplicate-row merge never folded it,
+      `scaleHoldings` scaled the money and not the paper, and the estate read `qtyLocal` into a
+      variable it called `claimedFaceByInstrument` and handed it to `retireLadderFace`. All
+      value-preserving while the price is one, which is exactly why they land before the mark.)*
+      **What is left is the second blocker**: with the mark on, stages after `holdings-writeback`
+      and next week's books write rows back in par space, so the register ends the week part marked
+      and part not. Every reader that means FACE has to take `units` — `audit/ownership.ts`'s whole
+      O family compares `quantityOrNotionalLocal` against issued face, which is what fired O1 at
+      −92B and O6 at −461B on the first attempt — and `clearedBookDelta`'s wire has to carry the
+      units moved rather than the money.
 
     **13-EQUITY, the equity class** — the stored value goes (WHAT THIS FORCES, point 4), **and
     HOUSEHOLDS BECOME HOLDERS IN THE SAME COMMIT** (user, 2026-09-04, reading a company's

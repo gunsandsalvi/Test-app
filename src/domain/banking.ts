@@ -39,20 +39,17 @@ export interface ItemizedHolding {
    */
   quantityShares?: number;
   /**
-   * HOW MANY UNITS, in the instrument's own unit (`countedIn`). Required: a position that cannot
-   * say how much of something it is cannot be valued, and every kind that could not say ended up
-   * storing a dollar total and losing the price that made it.
+   * HOW MANY UNITS, in the instrument's own unit (`countedIn`) — SHARES for equity, FACE for
+   * credit. Required: a position that cannot say how much of something it is cannot be valued,
+   * and every kind that could not say ended up storing a dollar total and losing the price that
+   * made it. `quantityOrNotionalLocal` is units × price, a derived view of this.
+   *
+   * §9.13-CREDIT row 5 deleted `faceLocal`, which said the same thing for credit alone. It was a
+   * second representation of one fact (rule 4) and it was the LOSING one: the columnar store has
+   * no lane for it, so it was written by the books, dropped at the week's materialisation, and
+   * every reader then fell back to the value. A face that cannot survive a week is not a face.
    */
   units: number;
-  /**
-   * CREDIT only: the FACE the row holds. `quantityOrNotionalLocal` is then face x price — a derived
-   * view of this, for exactly the reason `quantityShares` exists for equity: storing only the
-   * value would make the size of the book depend on the price the book is supposed to set.
-   *
-   * Absent means the row predates the mark or is not credit; a reader that needs face and finds
-   * none falls back to the value, which is what par pricing made them equal to anyway.
-   */
-  faceLocal?: number;
 }
 
 /**
