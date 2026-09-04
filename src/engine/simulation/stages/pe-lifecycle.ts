@@ -31,7 +31,7 @@ import { random } from '../../rng';
 import { companyFairValuePerShare } from '../../equity-valuation';
 import { REQUIRED_RETURN_ON_CAPITAL } from './asset-allocation';
 import { settleCorporateActionOnHolders, payHoldersCash } from './shared-helpers';
-import { pay, pendingSettlementLocal } from './settlement';
+import { pay, pendingSettlementLocal, institutionSpendableLocal } from './settlement';
 import { smePoolSubUnits } from '../../../domain/industry-registry';
 import { STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../../credit-price';
@@ -175,9 +175,10 @@ function callCapitalLocal(ctx: WeeklyStepContext, sponsorId: string, requestedLo
     // An LP's real budget is its cash PLUS what it has already committed to pay or is due
     // to receive at this week's settlement — the calls below are payments now, so without the
     // pending term two calls in one week could draw the same dollar twice.
-    const lpBudgetLocal = lp
-      ? Math.max(0, entityCashOf(ctx.v2, lp) + pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: c.lpEntityId }))
-      : 0;
+    // §1.19: the one statement of what an institution can spend — which nets the stock-loan
+    // collateral it is only HOLDING. This copy did not, so an LP could answer a capital call with
+    // money that belongs to whoever it borrowed the stock from.
+    const lpBudgetLocal = lp ? institutionSpendableLocal(ctx, lp) : 0;
     return {
       commitment: c,
       availableLocal: Math.min(Math.max(0, c.committedLocal - c.drawnLocal), lpBudgetLocal),
@@ -228,8 +229,10 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountLocal:
   // had it: a fund moves what it has. measured what its absence cost — PEF1 wired 0.495B
   // out of a 0.000B account and carried -0.50B for forty weeks.
   // The fund's payable budget includes what settlement already owes or is owed it.
-  const sponsorBudgetLocal = entityCashOf(ctx.v2, sponsor)
-    + pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: sponsorId });
+  // §1.19: same read. This copy dropped the collateral net AND the `max(0, …)` clamp, so a
+  // sponsor whose pending settlement was negative handed `distributable` a NEGATIVE budget — the
+  // case the paragraph above says this block exists to abolish.
+  const sponsorBudgetLocal = institutionSpendableLocal(ctx, sponsor);
   const { payableLocal: paidLocal } = distributable(amountLocal, totalDrawnLocal, sponsorBudgetLocal);
   if (!(paidLocal > 0)) return;
   sponsor.peFund.lpCommitments.forEach((c) => {

@@ -20,7 +20,7 @@ import { computeSovereignRepoHaircuts } from './repo-clearing';
 import { PrimeBrokerageLine, maxDrawnLocal, drawnByFund, lentByBroker } from '../../../domain/prime-brokerage';
 import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { WeeklyStepContext, updateBankSheet } from './context';
-import { pay, pendingSettlementLocal } from './settlement';
+import { pay, pendingSettlementLocal, institutionUnsettledLessCollateralLocal } from './settlement';
 import { leverageHeadroomLocal } from '../../macro/banking';
 import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
@@ -258,8 +258,12 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
       if (fund.region !== regionId || fund.entityType !== 'HEDGE_FUND' || fund.isDefaulted) return fund;
       const brokerTicker = fund.homeBankTicker;
       if (!brokerTicker) return fund;
+      // §1.19: the SIGNED figure, because this is an overdraft test and the clamped
+      // `institutionSpendableLocal` would report every fund as solvent. The collateral it is only
+      // holding is netted here for the first time: a fund sitting on stock-loan collateral looked
+      // funded by exactly that much, so its draw was short by the same amount.
       const cashPlusPendingLocal = entityCashOf(ctx.v2, fund)
-        + pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: fund.id });
+        + institutionUnsettledLessCollateralLocal(ctx, fund.id);
       if (cashPlusPendingLocal >= -1) return fund;
       const drawLocal = Math.min(fund.primeBrokerageAvailableLocal ?? 0, -cashPlusPendingLocal);
       if (drawLocal <= 1) return fund;

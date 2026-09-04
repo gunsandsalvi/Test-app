@@ -24,7 +24,7 @@ import { InstitutionalEntity } from '../../../../domain/institutions';
 import { hedgedAsFixedIncome } from '../../../../domain/assets';
 import { bookHeadOf } from '../../../../engine2/holdings';
 import { V2World, regionOf, typeOf } from '../../../../engine2/world';
-import { pay, pendingSettlementLocal } from '../settlement';
+import { pay, pendingSettlementLocal, institutionSpendableLocal } from '../settlement';
 import { isActiveCompany } from '../../../../domain/company';
 import { invoiceCurrencyOf } from '../../../../domain/invoice-currency';
 import { exposureToHedgeLocal } from '../corporate-financing';
@@ -325,10 +325,14 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   const struck: DerivativeContract[] = [];
   const strikeFor = (
     holder: DerivativeParty, holderRegion: RegionId, participantId: string, gaps: Map<RegionId, number>,
-    cashLocal: number
+    // §1.19: the caller states the budget, because the two callers read it from two different
+    // places — an institution's is `institutionSpendableLocal`, a company's has no stock-loan
+    // collateral term at all (`LendingParty` is INSTITUTION-only, so a company is never a stock
+    // borrower). Computing it here was a fourth copy of the rule that had lost the collateral net.
+    spendableLocal: number
   ): void => {
     const holderKey = derivativePartyKey(holder);
-    let budgetLocal = Math.max(0, cashLocal + pendingSettlementLocal(ctx, holder)) + (settledNetByParty.get(holderKey) ?? 0);
+    let budgetLocal = spendableLocal + (settledNetByParty.get(holderKey) ?? 0);
     gaps.forEach((gapLocal, issuer) => {
       const dealer = pickDealerBank(dealerBanksByRegion.get(holderRegion), desks);
       if (!dealer) return;
@@ -380,14 +384,15 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   ctx.updatedInstitutionalEntities.forEach((entity) => {
     const gaps = gapByEntityRegion.get(entity.id);
     if (!gaps) return;
-    strikeFor({ kind: 'INSTITUTION', id: entity.id }, entity.region, entity.id, gaps, entityCashOf(ctx.v2, entity));
+    strikeFor({ kind: 'INSTITUTION', id: entity.id }, entity.region, entity.id, gaps, institutionSpendableLocal(ctx, entity));
   });
   // DER5 — the corporates' side, struck against the same desks at the same cleared basis. A
   // hedged exporter genuinely feels less of a currency move than an unhedged one.
   ctx.updatedCompanies.forEach((c) => {
     const gaps = corpGapByTicker.get(c.ticker);
     if (!gaps) return;
-    strikeFor({ kind: 'COMPANY', ticker: c.ticker }, c.region, `CORP-${c.ticker}`, gaps, cashOf(ctx.v2, c));
+    strikeFor({ kind: 'COMPANY', ticker: c.ticker }, c.region, `CORP-${c.ticker}`, gaps,
+      Math.max(0, cashOf(ctx.v2, c) + pendingSettlementLocal(ctx, { kind: 'COMPANY', ticker: c.ticker })));
   });
   strikeDerivatives(ctx, state, struck);
 

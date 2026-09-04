@@ -428,10 +428,6 @@ written from here):
     seed/audit paths, the remaining stages, and the derivations a store now answers.
 
     **A. THE LIVE DEFECTS — each is wrong today, in this order.**
-    A2. **Four copies of "what can this entity spend" drop the stock-loan collateral term**, so an
-        entity can spend collateral it is only holding. `pe-lifecycle:231` also drops the
-        `max(0, …)` clamp and hands a NEGATIVE budget to `distributable` — the thing the comment
-        above it says it was written to abolish. Read: `institutionSpendableLocal`.
     A3. **The two halves of the model disagree about when a price is real.** §3.21 says print only
         if something traded; 07b/07d/07f-CP test what was PLACED (`outcome.marketTakeLocal`),
         07c/07f-bills test what was OFFERED (`inst.primaryOfferingLocal`). A sovereign whose
@@ -1690,6 +1686,21 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ A2 — FOUR BUDGETS SPENT COLLATERAL THAT WAS NOT THEIRS.** `institutionSpendableLocal`
+nets the stock-loan collateral an entity is only HOLDING; four sites re-derived the rule inline and
+all four dropped that term. An LP could answer a capital call, and a hedge fund's overdraft could
+look funded, with money belonging to whoever it borrowed the stock from. `pe-lifecycle`'s sponsor
+copy also dropped the `max(0, …)` clamp, so a negative pending settlement handed `distributable` a
+NEGATIVE budget — the case the paragraph directly above it says the block exists to abolish.
+
+The four do not all want the same read, which is why they had drifted: two are BUDGETS and take the
+clamped `institutionSpendableLocal`; `prime-brokerage` is an OVERDRAFT TEST and takes the signed
+`institutionUnsettledLessCollateralLocal`, because the clamped form would report every fund as
+solvent; and `fx-forward`'s `strikeFor` now takes the budget from its callers, since its two callers
+read it from two different places and a company is never a stock borrower (`LendingParty` is
+INSTITUTION-only). Naming which read each site wants is what stops the fourth copy coming back.
+Gates green; no run.
 
 **13-READ A1 — AND 07F HAD IT WORSE: A BILL IS DISCOUNT PAPER.** 07c's defect again, with a
 mechanism that makes it systematic rather than occasional. 07f's `primaryOfferingLocal` subtracted
