@@ -37,6 +37,7 @@ import { WeeklyStepContext } from './context';
  *  the two parties that bank at the central bank (the government and the central bank itself). */
 export type { PartyRef } from '../../ledger/party';
 import { PartyRef, partyId, partyOf } from '../../ledger/party';
+import { EntityIndex, buildEntityIndex, regionOfParty } from '../../ledger/entity-index';
 import { fundForeignCurrencyShortfalls } from './fx-funding';
 import { squareInterbankFxPositions } from './fx-squaring';
 import { activeWireJournal, wirePush, MONEY_ASSET_ID_BY_CURRENCY, ASSET_KINDS } from '../../ledger/wire';
@@ -46,11 +47,8 @@ import { CURRENCY_ID, currencyOfId } from '../../../engine2/world';
 import { homeCurrencyOf } from '../../ledger/accounts';
 const MONEY_KIND_ID = ASSET_KINDS.indexOf('MONEY');
 import { PaymentCategory, categoryOfReason } from '../../ledger/payment-category';
-import { assertNever } from '../../../domain/defect';
 import { banksOf } from '../../../domain/company';
-import type { Company, InstitutionalEntity } from '../../../types';
 import type { EntityId } from '../../../domain/ids';
-import type { Ticker } from '../../../domain/ids';
 import { asTicker } from '../../../domain/ids';
 
 export interface PaymentInstruction {
@@ -524,46 +522,19 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
  * house is the hub its legs pass through and belongs to no region.
  */
 /**
- * §3.13-READ D9 — THE TWO PARTY INDEXES THIS STAGE NEEDS, built once per pass.
- *
- * `partyRegionOf` used to build them itself, and `runSettlementStage` — its only caller —
- * builds the same two a few lines later, so one settlement pass indexed every company and every
- * institution TWICE. They are passed now.
- *
- * **They are deliberately NOT memoised on `ctx`, which is what the survey proposed.** The obvious
- * cache — keyed on the array's identity, invalidated when its length changes — is WRONG here:
- * `08-company-fundamentals.ts:468` replaces elements of `updatedCompanies` IN PLACE, at the same
- * index and the same length, so a cache keyed that way hands back last week's company object for
- * a live ticker. That is the stale-mirror failure rule 19 names, installed by the fix meant to
- * tidy it. A memo would need an explicit invalidation call at every such writer — a new invariant
- * of exactly the kind `bumpRegister`'s comment warns about — and the duplication here is two map
- * builds in one stage, which is not worth an invariant.
+ * §3.13-BOOK (c-then-1) — THE PARTY INDEX THIS STAGE NEEDS, built once per pass, from the ONE
+ * builder. §3.13-READ D9 found two builds of it in one pass; this file then still held TWO copies
+ * of the region switch itself — `partyRegionOf` here and `regionOfParty` inline in
+ * `runSettlementStage` sixty lines below, the same nine cases written twice. Both are now
+ * `ledger/entity-index.ts:regionOfParty`, which is also where the reason it is NOT memoised lives.
  */
-export interface PartyIndex {
-  companyByTicker: ReadonlyMap<Ticker, Company>;
-  entityById: ReadonlyMap<string, InstitutionalEntity>;
+export function partyIndexOf(ctx: WeeklyStepContext): EntityIndex {
+  return buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
 }
 
-export function partyIndexOf(ctx: WeeklyStepContext): PartyIndex {
-  return {
-    companyByTicker: new Map(ctx.updatedCompanies.map((c) => [c.ticker, c])),
-    entityById: new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e])),
-  };
-}
-
-export function partyRegionOf(index: PartyIndex): (ref: PartyRef) => RegionId | undefined {
-  const { companyByTicker, entityById } = index;
-  return (ref: PartyRef): RegionId | undefined => {
-    switch (ref.kind) {
-      case 'COMPANY': return companyByTicker.get(ref.ticker)?.region;
-      case 'INSTITUTION': return entityById.get(ref.id)?.region;
-      case 'BANK': case 'BANK_SECURITIES': case 'BANK_CREDIT': return companyByTicker.get(ref.ticker)?.region;
-      case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': return ref.region;
-      case 'CLEARING_HOUSE': return undefined;
-      default: return assertNever(ref, 'partyRegionOf');
-    }
-  };
-}
+/** Curried for `fundForeignCurrencyShortfalls`, which takes the resolver rather than the index. */
+export const partyRegionOf = (index: EntityIndex) =>
+  (ref: PartyRef): RegionId | undefined => regionOfParty(index, ref);
 
 export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const priorReport = ctx.lastSettlementReport;
@@ -611,20 +582,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
 
   // ---- 1. Apply every due row to the account store by the one rule and keep the
   // per-reason ledgers the sector parties' income statements are built from.
-  const { companyByTicker, entityById } = partyIndex;
-  // C4b — which central bank's system a side of a payment lives in. Every party but
-  // the clearing house has one; the clearing house is the hub its legs pass through, so a leg
-  // to or from it attributes through its other side and the hub itself contributes nothing.
-  const regionOfParty = (ref: PartyRef): RegionId | undefined => {
-    switch (ref.kind) {
-      case 'COMPANY': return companyByTicker.get(ref.ticker)?.region;
-      case 'INSTITUTION': return entityById.get(ref.id)?.region;
-      case 'BANK': case 'BANK_SECURITIES': case 'BANK_CREDIT': return companyByTicker.get(ref.ticker)?.region;
-      case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': return ref.region;
-      case 'CLEARING_HOUSE': return undefined;
-      default: return assertNever(ref, 'regionOfParty');
-    }
-  };
+  // C4b — which central bank's system a side of a payment lives in: `entity-index.ts:regionOfParty`,
+  // the same resolver `fundForeignCurrencyShortfalls` was handed above.
+  const partyRegion = (ref: PartyRef): RegionId | undefined => regionOfParty(partyIndex, ref);
   const xborderByPair = process.env.XBORDER_TRACE ? new Map<string, number>() : undefined;
   const traceUnresolved = process.env.UNRESOLVED_TRACE === '1';
   const sheetByTicker = traceUnresolved
@@ -675,8 +635,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     }
     // C4b: the official-settlement leg. A same-region payment nets to nothing here; a
     // cross-region one is money leaving one central bank's system for another's.
-    const payerRegion = regionOfParty(payerRef);
-    const payeeRegion = regionOfParty(payeeRef);
+    const payerRegion = partyRegion(payerRef);
+    const payeeRegion = partyRegion(payeeRef);
     if (payerRegion !== payeeRegion) {
       const numeraireLeg = convert(amountLocal, legCurrency, NUMERAIRE, ctx.fx);
       if (payerRegion !== undefined) { addTo(report.crossBorderByRegion, payerRegion, -inMoneyOf(payerRegion)); addTo(report.crossBorderNumeraireByRegion, payerRegion, -numeraireLeg); }

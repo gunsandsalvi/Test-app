@@ -129,6 +129,25 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
+### ⚠️ B1 — O3 EXEMPTS A FUND SHARE WHOSE FUND IS GONE (§3.13-BOOK c-then-1)
+
+The register keys a fund's shares by the **FUND'S OWN ENTITY ID** — `etfShareRegisterId` is the
+identity function, and `peFundInterestId` is the same — which is the two-keys conflation slice (a)
+found, seen from the other side. `audit/ownership.ts:o3` therefore passes any row whose instrument
+id resolves to an institution, and that line is right: a live fund share is not an orphan. Naming
+the crossing (`etfShareFundId`) made the NEXT line legible, and it is the finding:
+
+```
+if (ent.get(etfShareFundId(h.instrumentId))) return;                              // fund alive
+if (h.instrumentType === 'PE_FUND_INTEREST' || h.instrumentType === 'ETF_SHARE') return;
+```
+
+Both types are entity-id-keyed, so the first line already passes every fund share whose fund still
+exists. **The second line passes exactly the rest — a share of a fund that no longer exists**,
+which is the orphan B1 asks O3 to find. Left as it stands (rule 11); it closes with slice (d),
+which deletes one of the ETF share's two keys and gives the row an instrument to be checked
+against.
+
 ### ❌ C3.a / C3.b — DELIVERY AND PAYMENT ARE TWO EVENTS, AND THE PAPER LEG IS THE LARGER ONE
 
 The two legs of a cleared trade are written in different stages of the week and are not tied

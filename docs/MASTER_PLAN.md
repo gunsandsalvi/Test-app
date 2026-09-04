@@ -533,7 +533,31 @@ written from here):
        (c), and nothing about it is mechanical.
     c-then. **ONE STORE**; `PartyRef` becomes a VIEW of it rather than a parallel union; the
        ByTicker maps collapse; `O8`'s party arm widens from the derivatives book to every
-       party-keyed store.
+       party-keyed store. **Sliced the way (b) and (c2) were, and for the same reason** — the
+       measurement is 155 `ByTicker` maps, 845 `.ticker` references and **thirty entity-index
+       builds**, which is three (c2)-sized jobs in one line:
+         · **c-then-1** the index EXISTS and the LEDGER'S identity reads it — **DONE, in §9.**
+         · **c-then-2** THE STAGE-LOCAL INDEXES. The other ~24 builds, in `audit/wires.ts` (three
+           in one file), `audit/snapshot.ts`, `core.ts` (two), `context.ts`, `index-calculation`,
+           `08-company-fundamentals`, `pe-lifecycle` (three), `etf-flows`, `shared-helpers` (two),
+           `register-marking`, `initialization` (two), `news-derivation`, `goods-arrival`,
+           `merger.ts`, and 07b/07d. Three known findings ride on it, all found by c-then-1:
+           **the private-firm fold is a no-op** in 07b and 07d (the read that proves it:
+           `context.ts:432` opens the week as `updatedCompanies: [...state.companies]` and every
+           reassignment is a length-preserving `.map`, so `prevActivePrivateFirms` — itself a
+           `state.companies` FILTER at `context.ts:401` — is a strict subset and the `if (!has)`
+           guard cannot fire; two of the four are already deleted); **`05-unit-bidding`'s `byKey`
+           map holds TICKERS AND IDS in one map** and casts `asTicker(c.id)` to decide which,
+           which is the id-space lie 13-BOOK exists to end; and `institutional-balance-sheet.ts:218`
+           memoises an index on `ctx`, which is the pattern `entity-index.ts` documents as unsafe —
+           read whether its array is one stage 08 replaces before keeping it.
+         · **c-then-3** `PartyRef`'S FOUR TICKER ARMS KEY BY `EntityId`, which is what makes it a
+           VIEW rather than a union. `partyKey`'s string changes with it, so
+           `holderAccruedInterestLocal` and `sovereignAccruedInterestLocal` move too. **And
+           `DerivativeParty` (`contract.ts:25`) is a SECOND party union** — `PartyRef`'s COMPANY /
+           BANK / INSTITUTION arms re-declared — which ends here or it drifts alone.
+         · **c-then-4** `O8`'S PARTY ARM WIDENS from the derivatives book to every party-keyed
+           store, which one index can now answer.
     d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
        share and contract gets a row: kind, issuer, **currency**, issued units, and nothing else.
        Terms stay in the class store, so the index copies no quantity and cannot drift.
@@ -1628,6 +1652,54 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c-then-1) — WHO A PARTY IS WAS ANSWERED IN THIRTY PLACES, AND ONE OF THEM WAS
+WRITTEN TWICE IN THE SAME FILE.** The entity store is two arrays and every consumer that needed an
+id or a ticker back built its own map over them: **thirty index builds**, and inside `settlement.ts`
+the nine-case region switch behind the interbank leg and the per-book statement appeared **twice,
+sixty lines apart** — `partyRegionOf` and an inline `regionOfParty`, identical (rule 4). One
+`ledger/entity-index.ts` now: one shape, one builder, one `regionOfParty`, one `companyOfParty`,
+and the memo policy stated once instead of thrice — memoised on the STATE in the audit, never in
+the engine, because `08-company-fundamentals.ts:470` replaces companies in place at the same length
+(rule 19's stale mirror; the audit's `WeakMap` stays where it was and only its SHAPE moved).
+
+**THE INDEX CARRIES NO FILTER, AND THAT IS THE FIRST FINDING.** The four `bankByTicker` builds it
+replaces did not agree on what a bank is — `isBankEntity` alone (the audit's O4, stage 08's lanes),
+`bankBalanceSheet` alone (estate resolution), live-sheet-and-active (`banksOf`, in settlement) —
+and all four were RIGHT for their site: an estate resolves a bank that has DIED, so a live filter
+there would leave every bank estate unresolvable. Collapsing them would have picked one of three
+answers silently. An index is a lookup; a filter is a claim, and each claim now sits at its own use
+site where it can be read. Estate resolution's dropped a `!` on the way (`company.bankBalanceSheet!`
+became a narrowing that the site does).
+
+**BRANDING THE INDEX'S KEY THEN FOUND THREE MORE, EACH IN A DIFFERENT SYSTEM.** The old maps were
+`Map<string, …>`, so anything at all could be looked up in them; `Map<EntityId, …>` refuses.
+(1) `audit/ownership.ts:o3` was reading an `InstrumentId` out of the institution map — correct, and
+it is the fund-share crossing, since the register keys a fund's shares by the FUND'S OWN ENTITY ID.
+Named it (`etfShareFundId`, a no-op cast), which made the NEXT line legible: it exempts
+`PE_FUND_INTEREST` and `ETF_SHARE` unconditionally, and since the line above already passes every
+one whose fund is ALIVE, all that second line passes is **a share of a fund that no longer exists**
+— the orphan O3 exists to find. `the-register` B1, left for slice (d).
+(2) `DerivativeContract.referenceId` is typed `string` because it holds **four id spaces**,
+discriminated by `classId` and nothing the compiler sees: an entity id from the CDS book, a
+commodity id from the future, a REGION from the FX forward, `''` from the swap. The same shape as
+`indices`' `instrumentId` holding ISSUERS (slice (a)). The three `DerivativeMarketView` accessors
+are the CDS path; the cast is named there now. `the-derivative-layer` A1.
+(3) `estate-resolution`'s `touchedEntityIds` was a `Set<string>` beside an `EntityId`-keyed map.
+
+**AND ONE DEAD LOOP, DELETED AGAINST A READ RATHER THAN A RUN (rule 19).** `derivative-lifecycle`
+built its maps and then walked `prevActivePrivateFirms` to fold in "companies the working copy
+might not hold" — twice, in two functions. It holds all of them: `context.ts:432` opens the week as
+`updatedCompanies: [...state.companies]`, every reassignment is a length-preserving `.map`, and
+`prevActivePrivateFirms` is itself a `state.companies` filter (`context.ts:401`), so the
+`if (!has(id))` guard could never fire. 07b and 07d carry the same loop; they are c-then-2's.
+What it was guarding against is real — a CDS reference can be a private firm and most stages see
+only the public `prevActiveFirms` — and the index is neither of those arrays: it is the whole store.
+
+108 new lines (57 of them the reasoning above), **−28 net across `src`**, 5 files. Atlas:
+`money-and-settlement` E4 and C1.a gain the new module, with the thirty builds written up there;
+`the-register` and `the-derivative-layer` gain a diff entry each for findings (1) and (2). Gates
+green (150 tests); no run.
 
 **13-BOOK slice (c2c) — `Ticker` WAS MINTED IN SLICE (a) AND NEVER APPLIED, AND THAT IS WHY THE
 FIRST ATTEMPT AT (c) FAILED.** The type existed with ZERO uses: `Company.ticker` was still

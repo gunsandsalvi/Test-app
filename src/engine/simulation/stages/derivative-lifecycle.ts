@@ -26,9 +26,11 @@ import { DerivativeMarketView } from '../../../domain/derivatives/profile';
 import { derivativeProfile } from '../../../domain/derivatives/registry';
 import { StandingBook } from '../../../domain/derivatives/standing-book';
 import { WeeklyStepContext } from './context';
+import { buildEntityIndex, companyOfParty } from '../../ledger/entity-index';
 import { pay } from './settlement';
 import { creditRecoveryRate } from './shared-helpers';
 import type { Ticker } from '../../../domain/ids';
+import { asEntityId } from '../../../domain/ids';
 
 /** Legs under a dollar are dust; every book skipped them and the ledger need not carry them. */
 const MIN_LEG_LOCAL = 1;
@@ -59,9 +61,10 @@ export function standingBookOf(ctx: WeeklyStepContext, state: GameState): Standi
   const book = derivativesBookOf(ctx, state);
   const memo = ctx.derivativeStanding;
   if (memo && memo.book === book) { memo.index.extend(book); return memo.index; }
+  // §3.13-BOOK (c-then-1): the same private-firm fold, and the same no-op — see
+  // `buildDerivativeMarketView` for the read that proves `updatedCompanies` is the whole store.
   const ratingById = new Map<string, CreditRating>();
   for (const c of ctx.updatedCompanies) ratingById.set(c.id, c.creditRating);
-  for (const c of ctx.prevActivePrivateFirms) if (!ratingById.has(c.id)) ratingById.set(c.id, c.creditRating);
   const index = new StandingBook(ctx.nextWeek, (referenceId) => isInvestmentGradeRating(ratingById.get(referenceId)));
   index.extend(book);
   ctx.derivativeStanding = { book, index };
@@ -80,20 +83,20 @@ export type DerivativeLifecycleView = ReturnType<typeof buildDerivativeMarketVie
 
 /**
  * The flat view every profile prices off, built once per settle call from the live context.
- * Companies are looked up across public AND private firms: a CDS reference can be either, and
- * "absent" is a default for a reference and a vanishing for a party.
+ *
+ * §3.13-BOOK (c-then-1) — ONE INDEX, AND THE PRIVATE-FIRM PASS WAS ALWAYS A NO-OP. This built
+ * three maps of its own and then walked `prevActivePrivateFirms` to fold in "companies the working
+ * copy might not hold". It holds all of them: `context.ts:432` opens the week as
+ * `updatedCompanies: [...state.companies]` and every writer that reassigns it does so through a
+ * length-preserving `.map`, so `prevActivePrivateFirms` — itself a `state.companies` FILTER
+ * (`context.ts:401`) — is a strict subset and the `if (!has(id))` guard could never fire. Deleted
+ * against that read (rule 19), not against a run. What it was protecting against is real, though,
+ * and the comment it carried said so: a CDS reference can be a private firm, and `prevActiveFirms`
+ * is the public-only array most stages see. The index below is neither — it is the whole store.
  */
 export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMarketView & { partyState(p: DerivativeParty): PartyState } {
-  const companyByTicker = new Map<Ticker, { isDefaulted?: boolean; isActive: boolean; cdsSpreadBps?: number }>();
-  const companyById = new Map<string, { isDefaulted?: boolean; cdsSpreadBps?: number; creditRating?: CreditRating }>();
-  for (const c of ctx.updatedCompanies) {
-    companyByTicker.set(c.ticker, { isDefaulted: c.isDefaulted, isActive: isActiveCompany(c), cdsSpreadBps: c.cdsSpreadBps });
-    companyById.set(c.id, { isDefaulted: c.isDefaulted, cdsSpreadBps: c.cdsSpreadBps, creditRating: c.creditRating });
-  }
-  for (const c of ctx.prevActivePrivateFirms) {
-    if (!companyById.has(c.id)) companyById.set(c.id, { isDefaulted: c.isDefaulted, cdsSpreadBps: c.cdsSpreadBps, creditRating: c.creditRating });
-  }
-  const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
+  const entities = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
+  const { companyById } = entities;
   const commodityById = new Map(ctx.updatedCommodities.map((c) => [c.id, c]));
   const region = (id: RegionId) => ctx.updatedRegions[id];
 
@@ -101,14 +104,24 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
     week: ctx.nextWeek,
     partyState: (p) => {
       if (p.kind === 'INSTITUTION') {
-        const e = entityById.get(p.id);
+        const e = entities.institutionById.get(p.id);
         return !e ? 'GONE' : e.isDefaulted ? 'DEFAULTED' : 'ALIVE';
       }
-      const c = companyByTicker.get(p.ticker);
-      return !c ? 'GONE' : (c.isDefaulted || !c.isActive) ? 'DEFAULTED' : 'ALIVE';
+      // `DerivativeParty` is `PartyRef`'s COMPANY / BANK / INSTITUTION arms and nothing else — a
+      // second party union beside the ledger's, which is what (c-then-3) ends.
+      const c = companyOfParty(entities, p);
+      return !c ? 'GONE' : (c.isDefaulted || !isActiveCompany(c)) ? 'DEFAULTED' : 'ALIVE';
     },
+    // §3.13-BOOK (c-then-1) — `referenceId` IS FOUR ID SPACES IN ONE FIELD, and only one of them
+    // is an entity. `contract.ts:79` types it `string` because the four class writers put four
+    // different things in it: the CDS book writes an ISSUER'S ENTITY ID (`derivative-markets/cds.ts:255`),
+    // the commodity future a COMMODITY id (`:261`), the FX forward a REGION (`fx-forward.ts:357`),
+    // and the swap the empty string (`irs.ts:247`, the underlying being a rate). Discriminated by
+    // `classId` alone, so the compiler cannot help — the same shape `indices`' `instrumentId`
+    // carries (slice (a)). These three accessors are the CDS path, where it IS an entity id; the
+    // cast is that statement, and splitting the field by class is a §3 step, not this one.
     isIssuerDefaulted: (issuerId) => {
-      const c = companyById.get(issuerId);
+      const c = companyById.get(asEntityId(issuerId));
       return !c || !!c.isDefaulted;
     },
     overnightRateAnnual: (r) => { const reg = region(r); return reg?.repoRateAnnual ?? reg?.policyRate ?? 0; },
@@ -117,10 +130,10 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
       return typeof v === 'number' ? v : Number.NaN;
     },
     cdsSpreadBps: (issuerId) => {
-      const v = companyById.get(issuerId)?.cdsSpreadBps;
+      const v = companyById.get(asEntityId(issuerId))?.cdsSpreadBps;
       return typeof v === 'number' && v > 0 ? v : Number.NaN;
     },
-    isInvestmentGrade: (issuerId) => isInvestmentGradeRating(companyById.get(issuerId)?.creditRating),
+    isInvestmentGrade: (issuerId) => isInvestmentGradeRating(companyById.get(asEntityId(issuerId))?.creditRating),
     recoveryRate: (r) => creditRecoveryRate(region(r)),
     commodityPrint: (commodityId, termKey) => {
       const comm = commodityById.get(commodityId);

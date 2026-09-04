@@ -24,13 +24,14 @@ import { closeOutDerivativesOfParty } from './derivative-lifecycle';
 import { retireLadderFace, rebuildLadder } from '../../ledger/tranche-ledger';
 import { transferHolding } from '../../ledger/holdings-ledger';
 import { isTrancheKind } from '../../../domain/assets';
-import { GameState, RegionId, Company, InstitutionalEntity, ItemizedHolding } from '../../../types';
+import { GameState, RegionId, Company, ItemizedHolding } from '../../../types';
 import {
   Estate, EstateClaim, CLAIM_SENIORITY, estateAssetsLocal, claimsAtSeniority, outstandingLocal,
   realisedDebtRecoveryRate,
 } from '../../../domain/estate';
 import { getOutputInventoryLocal, isActiveCompany } from '../../../domain/company';
 import { bumpRegister } from './register-index';
+import { EntityIndex, buildEntityIndex, companyOfParty } from '../../ledger/entity-index';
 import { BankingSector } from '../../../domain/banking';
 import { bookPnL } from '../../ledger/bank-book';
 import { WeeklyStepContext } from './context';
@@ -70,11 +71,8 @@ const holderRef = (c: EstateClaim): PartyRef =>
  * Nothing about the arithmetic changes — same operations in the same order on the same values.
  * What changes is that each answer is computed once instead of once per claim.
  */
-interface EstateIndex {
+interface EstateIndex extends EntityIndex {
   v2: import('../../../engine2/world').V2World;
-  entityById: Map<string, InstitutionalEntity>;
-  bankByTicker: Map<Ticker, Company>;
-  companyById: Map<string, Company>;
   /** SCALE (retired: receivables are the real invoice book now; kept doc for history)
    *  per ticker but each miss scanned the whole book, so the cost was
    *  O(distinct issuers x invoices) — and both grow with the world. Measured: estate-resolution
@@ -87,20 +85,18 @@ interface EstateIndex {
    *  inner key is an entity id, not an instrument's: a claim in a workout is on the BORROWER. */
   rowsByEntityInstrument: Map<EntityId, Map<EntityId, number[]>>;
   /** Entities whose book was written, so the sub-$1 compaction runs once each at the end. */
-  touchedEntityIds: Set<string>;
+  touchedEntityIds: Set<EntityId>;
 }
 
 function buildEstateIndex(ctx: WeeklyStepContext): EstateIndex {
-  const entityById = new Map<EntityId, InstitutionalEntity>();
-  ctx.updatedInstitutionalEntities.forEach((e) => entityById.set(e.id, e));
-  const bankByTicker = new Map<Ticker, Company>();
-  const companyById = new Map<EntityId, Company>();
-  ctx.updatedCompanies.forEach((c) => {
-    companyById.set(c.id, c);
-    if (c.bankBalanceSheet) bankByTicker.set(c.ticker, c);
-  });
+  // §3.13-BOOK (c-then-1): the ONE builder. What was here filtered banks by `bankBalanceSheet`
+  // ALONE — not `isBankEntity`, not `isActiveCompany` — while three other files filtered the same
+  // map three other ways. That predicate is DELIBERATE here and it is why the index does not carry
+  // one: an estate resolves a bank that has DIED, so a live-bank filter would leave every bank
+  // estate unresolvable. It now sits at its one use site, where it can be read.
   return {
-    v2: ctx.v2, entityById, bankByTicker, companyById,
+    v2: ctx.v2,
+    ...buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities),
     ppeWeeksByRegion: new Map(),
     rowsByEntityInstrument: new Map(), touchedEntityIds: new Set(),
   };
@@ -116,7 +112,7 @@ function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
   // The index holds ROW IDS in the persistent store; a claim's write-down is a
   // column write on exactly those rows.
   needed.forEach((id) => {
-    const e = index.entityById.get(id);
+    const e = index.institutionById.get(id);
     if (!e) return;
     const H = index.v2.holdings;
     const byInstrument = new Map<EntityId, number[]>();
@@ -274,7 +270,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   // The sub-$1 rows a written-down book leaves behind, dropped once per holder instead of once
   // per claim — the same set removed, at the end of the same stage.
   index.touchedEntityIds.forEach((id) => {
-    const e = index.entityById.get(id);
+    const e = index.institutionById.get(id);
     if (!e) return;
     closeEmptyPositions(ctx.v2, id);
     bumpRegister(ctx);
@@ -461,7 +457,7 @@ function reduceHolding(
     // holder's whole book once per claim; with ~11,000 claims open against ~300 institutions,
     // every book was being walked about thirty-seven times a week to change a handful of rows.
     const id = claim.holder.id;
-    const e = index.entityById.get(id);
+    const e = index.institutionById.get(id);
     if (!e) return;
     let leftLocal = amountLocal;
     const rows = index.rowsByEntityInstrument.get(id)?.get(companyId);
@@ -500,13 +496,16 @@ function reduceHolding(
   }
   if (claim.holder.kind === 'BANK') {
     const ticker = claim.holder.ticker;
-    const company = index.bankByTicker.get(ticker);
-    if (!company) return;
+    const company = companyOfParty(index, claim.holder);
+    // A bank claim is written down against a SHEET. Dead or alive is not the test — an estate
+    // exists to resolve the dead — but having a book to write down is, and the narrowing here is
+    // what lets the read below drop its `!`.
+    if (!company?.bankBalanceSheet) return;
     // THE LIVE SHEET. This stage runs AFTER stage 08, the only applier of
     // `companyUpdates.bankBalanceSheet`, so the old channel write here went to NOWHERE: a
     // defaulted borrower's loan was never written off the lender's book and the write-down
     // never reached its equity — silently, both legs together.
-    const sheet: BankingSector = company.bankBalanceSheet!;
+    const sheet: BankingSector = company.bankBalanceSheet;
     // The bank's claim IS the facility rows on the dead firm's ladder
     // (there is no loan row to write down); what the ladder still carries for this lender bounds
     // what this write can extinguish.

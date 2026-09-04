@@ -10,13 +10,13 @@ import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
 import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf, trancheKindOfRow, trancheIdOf } from '../../engine2/tranches';
 import { materializeBook, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { householdBookId } from '../ledger/holdings-ledger';
+import { EntityIndex, buildEntityIndex } from '../ledger/entity-index';
 import { sovereignHeldByClass, forEachSovereignPosition } from '../sovereign-register';
 import { holdingClassOf } from '../../domain/assets';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { isTrancheKind } from '../../domain/assets';
 import { bookHeadOf } from '../../engine2/holdings';
-import type { Company, InstitutionalEntity } from '../../types';
-import { equityIssuerId } from '../../domain/instrument-keys';
+import { equityIssuerId, etfShareFundId } from '../../domain/instrument-keys';
 import { asEntityId, asTicker } from '../../domain/ids';
 import type { Ticker } from '../../domain/ids';
 import type { EntityId } from '../../domain/ids';
@@ -28,30 +28,20 @@ const O1_BUCKET_BY_TRANCHE_KIND: Partial<Record<
 >> = { CORP_BOND: 'corp', LEVERAGED_LOAN: 'loan', COMMERCIAL_PAPER: 'cp' };
 
 /**
- * §3.13-READ D9 — THE AUDIT'S PARTY INDEXES, built once per state.
+ * §3.13-BOOK (c-then-1) — THE AUDIT'S PARTY INDEX: THE ONE BUILDER, MEMOISED ON THE STATE.
  *
- * `o1`, `o3`, `o4` and `o5` each built their own company-by-id, company-by-ticker and
- * entity-by-id maps: nine index builds over the same two arrays in one pass. Memoised on the
- * STATE here, which is safe in the audit and nowhere else — the audit runs at the close, over a
- * world no stage is still writing, and `auditWeek` is handed a fresh state object each week. The
- * engine's own equivalent is deliberately NOT cached (see `settlement.ts:partyIndexOf`): mid-week,
- * `08-company-fundamentals` replaces elements of `updatedCompanies` in place at the same length,
- * so any cache keyed on the array would hand back last week's object for a live ticker.
+ * §3.13-READ D9 found `o1`, `o3`, `o4` and `o5` each building their own company-by-id,
+ * company-by-ticker and entity-by-id maps — nine index builds over the same two arrays in one
+ * pass — and memoised them here. The SHAPE is now `ledger/entity-index.ts`, shared with the
+ * engine; what stays here is the memo, because this is the one place a memo is sound: the audit
+ * runs at the close over a world no stage is still writing, and `auditWeek` is handed a fresh
+ * state object each week. See `entity-index.ts` for why the engine's own is not cached.
  */
-interface AuditPartyIndex {
-  companyById: ReadonlyMap<string, Company>;
-  companyByTicker: ReadonlyMap<Ticker, Company>;
-  entityById: ReadonlyMap<string, InstitutionalEntity>;
-}
-const AUDIT_PARTY_INDEX = new WeakMap<GameState, AuditPartyIndex>();
-function partyIndexOfState(state: GameState): AuditPartyIndex {
+const AUDIT_PARTY_INDEX = new WeakMap<GameState, EntityIndex>();
+function partyIndexOfState(state: GameState): EntityIndex {
   const hit = AUDIT_PARTY_INDEX.get(state);
   if (hit) return hit;
-  const companyById = new Map<string, Company>();
-  const companyByTicker = new Map<Ticker, Company>();
-  for (const c of state.companies) { companyById.set(c.id, c); companyByTicker.set(c.ticker, c); }
-  const entityById = new Map((state.institutionalEntities ?? []).map((e) => [e.id, e]));
-  const index: AuditPartyIndex = { companyById, companyByTicker, entityById };
+  const index = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
   AUDIT_PARTY_INDEX.set(state, index);
   return index;
 }
@@ -198,7 +188,7 @@ function o2(state: GameState, week: number): AuditFinding[] {
 /** O3 — register integrity: every row names a live instrument and a live holder; nothing references an acquired firm. */
 function o3(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  const { companyById: live, entityById: ent } = partyIndexOfState(state);
+  const { companyById: live, institutionById: ent } = partyIndexOfState(state);
   const v2o3 = ensureV2(state); // 13b: a row names a tranche or its issuer
   let orphan = 0, orphanLocal = 0, merged = 0, mergedLocal = 0, deadHolders = 0;
   state.institutionalEntities.forEach((e) => {
@@ -215,7 +205,17 @@ function o3(state: GameState, week: number): AuditFinding[] {
       // 13b: a tranche's row is live only while the tranche is (retired paper on a book is an orphan).
       if (c && isTrancheId(v2o3, h.instrumentId) && trancheRowOf(v2o3, h.instrumentId) === undefined) { orphan++; orphanLocal += v; return; }
       if (c) { if (c.mergerAcquired) { merged++; mergedLocal += v; } return; }
-      if (ent.get(h.instrumentId)) return;
+      // §3.13-BOOK (c-then-1): THE FUND-SHARE CROSSING, NAMED. A fund's shares are keyed in the
+      // register by the FUND'S OWN ENTITY ID (`etfShareRegisterId`, and `peFundInterestId` the
+      // same way), so an instrument id that resolves to an institution is a live fund share, not
+      // an orphan. Branding the index's key found this line reading an `InstrumentId` out of an
+      // entity map; the cast is a no-op, so behaviour is unchanged — what changes is that the
+      // crossing is a named function slice (d) can delete rather than an implicit truth.
+      if (ent.get(etfShareFundId(h.instrumentId))) return;
+      // AND WHAT THIS SECOND LINE ACTUALLY EXEMPTS, now that the first one is legible: a fund
+      // share whose FUND IS GONE. Both types above are entity-id-keyed, so the line above already
+      // passes every one whose fund still exists — this one passes the rest, which is exactly the
+      // orphan O3 is here to find. Left as it stands (rule 11: not this step); recorded in §3.
       if (h.instrumentType === 'PE_FUND_INTEREST' || h.instrumentType === 'ETF_SHARE') return;
       orphan++; orphanLocal += v;
     });
@@ -420,7 +420,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
 /** O5 — contracts, estates, indices, shipments: parties alive, claims bounded, weights whole. */
 function o5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  const { companyByTicker: tickers, entityById: ents } = partyIndexOfState(state);
+  const { companyByTicker: tickers, institutionById: ents } = partyIndexOfState(state);
   let deadParty = 0, deadLocal = 0;
   (state.derivativesBook ?? []).forEach((k) => {
     const alive = (p: { kind: string; ticker?: Ticker; id?: EntityId }) => p.kind === 'INSTITUTION' ? !!ents.get(p.id!) && !ents.get(p.id!)!.isDefaulted : !!tickers.get(p.ticker!) && isActiveCompany(tickers.get(p.ticker!)!);

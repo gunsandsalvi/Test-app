@@ -116,7 +116,7 @@ checked by `scripts/check-atlas.sh`.
 | B3.b a bank overdrawn at the CB borrows, priced by the corridor | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ⚠️ |
 | **B3.c FORBID an overdraft is never a silent negative** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ✅ |
 | C1 a payment is an instruction | `src/engine/simulation/stages/settlement.ts:PaymentInstruction` | ✅ |
-| C1.a it names both sides | `src/engine/ledger/wire.ts:wirePush` | ✅ |
+| C1.a it names both sides | `src/engine/ledger/wire.ts:wirePush`, `src/engine/ledger/entity-index.ts:companyOfParty` | ✅ |
 | C1.b it carries the reason | `src/engine/ledger/payment-category.ts:categoryOfReason` | ✅ |
 | C1.c it may be dated | `src/engine/simulation/stages/settlement.ts:rowDue` | ✅ |
 | C2 settlement applies each instruction by one rule | `src/engine/ledger/accounts.ts:applySettledRow` | ✅ |
@@ -140,7 +140,7 @@ checked by `scripts/check-atlas.sh`.
 | E2 settlement is final | `src/engine/simulation/stages/settlement.ts:journalAppendRow` | ✅ |
 | E2.a an error is corrected by a new payment | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
 | **E3 order matters within a pass, and the order is defined** | `src/engine/simulation/stages/settlement.ts:runSettlementStage` | ⚠️ |
-| E4 a party that ceases to exist is settled or refused by name | `src/engine/ledger/accounts.ts:applySettledRow` | ✅ |
+| E4 a party that ceases to exist is settled or refused by name | `src/engine/ledger/accounts.ts:applySettledRow`, `src/engine/ledger/entity-index.ts:regionOfParty` | ✅ |
 | F1 a statement per book, in that book's own money | `src/engine/simulation/stages/settlement.ts:SettlementReport` | ✅ |
 | F1.a treasury, household, bank, pool statements | `src/engine/simulation/stages/settlement.ts:treasuryFlowsByRegion` | ✅ |
 | **F1.b FORBID a per-book statement is never a sum across currencies** | `src/engine/simulation/stages/settlement.ts:grossByCurrency` | ✅ |
@@ -194,6 +194,33 @@ collateral, eligibility and a cap. (2) 20-LLR's reading of the auctions is confi
 independently here: `unsoldStaysWithHolder: true` is set at 07b:482, 07c:504, 07d:440, 07e:456 and
 07f:354/905, and the residual dealer is zero by construction on those books
 (`financial-clearing-engine.ts:887`).
+
+### E4 / C1.a — WHO A PARTY IS WAS ANSWERED IN THIRTY PLACES (§3.13-BOOK c-then-1)
+
+Not a divergence in what E4 requires — the legs are settled or counted by name, and F4 catches the
+rest — but in how many copies of "who is this" the answer was spread across. Measured before
+`ledger/entity-index.ts` existed: **thirty index builds** over `companies` and
+`institutionalEntities`, three of them inside `settlement.ts`, where the region switch behind
+C2.a's interbank leg and F1.a's per-book statement was written **twice**, sixty lines apart, nine
+identical cases each (`partyRegionOf` and an inline `regionOfParty`). One builder now, one switch,
+and the memo policy stated once — memoised on the STATE in the audit, never in the engine, because
+`08-company-fundamentals.ts:470` replaces companies in place at the same length.
+
+Four things the collapse found by reading, none of them E4's own:
+
+- **`bankByTicker` was four different filters.** `isBankEntity` alone (the audit's O4, stage 08's
+  lanes), `bankBalanceSheet` alone (estate resolution), and live-sheet-and-active (`banksOf`, in
+  settlement). All four were right for their site — an estate resolves a bank that has DIED — so
+  the index carries no filter at all and each predicate now sits where it can be read.
+- **The private-firm fold was always a no-op**, in three files. `context.ts:432` opens the week as
+  `updatedCompanies: [...state.companies]` and every reassignment is a length-preserving `.map`,
+  so `prevActivePrivateFirms` — a `state.companies` FILTER — is a strict subset and the
+  `if (!has(id))` guard could not fire. Two are deleted here (`derivative-lifecycle.ts`); 07b and
+  07d carry the third and fourth.
+- **`DerivativeContract.referenceId` is four id spaces in one `string` field**, discriminated by
+  `classId` alone: an entity id from the CDS book, a commodity id, a REGION from the FX forward,
+  and `''` from the swap. See `the-derivative-layer`.
+- **O3's fund-share line**, in `the-register`.
 
 ### ⚠️ E3 — "TWO INSTRUCTIONS THAT BOTH DRAW ON ONE BALANCE CANNOT BOTH SUCCEED BY LUCK"
 

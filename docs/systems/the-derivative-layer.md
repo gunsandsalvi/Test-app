@@ -132,6 +132,27 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
+### ⚠️ A1 — `referenceId` IS FOUR ID SPACES IN ONE `string` FIELD (§3.13-BOOK c-then-1)
+
+`DerivativeContract.referenceId` (`contract.ts:79`) is typed `string` because its four writers put
+four different kinds of thing in it, discriminated by `classId` and by nothing the compiler can
+see: an **entity id** from the CDS book (`derivative-markets/cds.ts:255`), a **commodity id** from
+the future (`commodity-future.ts:261`), a **REGION** from the FX forward (`fx-forward.ts:357`),
+and the **empty string** from the swap (`irs.ts:247`, whose underlying is a rate, not a thing).
+`DerivativeMarketView`'s three issuer accessors (`profile.ts:26,32,34`) therefore take a `string`
+and are correct only on the CDS path.
+
+Found by branding the entity index's key: the accessors were reading an unbranded id out of a map
+keyed by `EntityId`, and the cast that answers it is now named at the one site that knows which
+space it is in (`derivative-lifecycle.ts:buildDerivativeMarketView`). It is the same shape as
+`indices`' `instrumentId` holding ISSUERS (§3.13-BOOK slice (a)), and it resolves the same way:
+the field splits by class, or each class states its own reference. Not fixed here — it belongs
+with slice (d), where the instrument index decides what a reference names.
+
+**`DerivativeParty` is also a second party union** — `contract.ts:25` re-declares `PartyRef`'s
+COMPANY / BANK / INSTITUTION arms and no others, so the derivative book's notion of who a
+counterparty is drifts independently of the ledger's. §3.13-BOOK (c-then-3) ends that.
+
 ### ❌ C2–C5 — THERE IS NO CENTRAL COUNTERPARTY, SO SECTION C IS HALF A SYSTEM
 
 Every contract in `derivativesBook` is bilateral (`contract.ts` `a`/`b`), and the model has no
