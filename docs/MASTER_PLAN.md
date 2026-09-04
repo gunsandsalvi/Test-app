@@ -420,6 +420,100 @@ written from here):
     **13-BILL — DONE, in §9.** A bill's return is the pull to par its own auction printed, for
     every holder class. What it left behind is one finding, and it is the next thing here:
 
+    **13-READ — READ THE SOURCE (rule 19), AND COLLAPSE THE RULES WRITTEN MORE THAN ONCE.**
+    INSERTED HERE, before 13-BOOK's remaining slices, because it is their prerequisite: an
+    instrument index cannot be built while eleven sites re-derive what kind a tranche is, and the
+    id branding cannot be done safely while identity is hand-built at 449 sites. Every item below
+    SHRINKS the surface the later slices cross. Sized by four surveys of the clearing books, the
+    seed/audit paths, the remaining stages, and the derivations a store now answers.
+
+    **A. THE LIVE DEFECTS — each is wrong today, in this order.**
+    A1. **07f re-offers bills that are already held.** Its `primaryOfferingLocal` counts BIDDERS
+        only, so a corporate treasury's bill holding is offered again. The same defect 07c had;
+        the same fix — `sovereignHeldByBond`. (`sovereign-credit` E1.a closes with this.)
+    A2. **Four copies of "what can this entity spend" drop the stock-loan collateral term**, so an
+        entity can spend collateral it is only holding. `pe-lifecycle:231` also drops the
+        `max(0, …)` clamp and hands a NEGATIVE budget to `distributable` — the thing the comment
+        above it says it was written to abolish. Read: `institutionSpendableLocal`.
+    A3. **The two halves of the model disagree about when a price is real.** §3.21 says print only
+        if something traded; 07b/07d/07f-CP test what was PLACED (`outcome.marketTakeLocal`),
+        07c/07f-bills test what was OFFERED (`inst.primaryOfferingLocal`). A sovereign whose
+        offering went entirely unplaced still deposits a print. Decide which reading is right, once.
+    A4. **07f disagrees with itself about which banks exist** — `:179` filters `updatedCompanies`
+        with `isActiveCompany`, `:768` filters `prevActiveFirms` without it, one region loop apart.
+    A5. **Stock loans pay in the wrong money.** Five of six `pay()` legs re-derive the currency from
+        the issuer's region; only one reads `loan.currency`, which §3.13c says is where it lives.
+    A6. **The store's materializer and every stage reader disagree** on a row with `shares` and no
+        `units`: `holdings.ts` falls back through `shares`, the fifteen stage copies do not.
+    A7. **07b/07d's `issuerPartyOf` can `defect()` on retired paper** — its map is built over this
+        week's book only, and it is passed as `AccruedLeg.issuerOf`. 07f's reads the tranche store
+        and cannot fail that way.
+    A8. **The player's corporate bond is marked by round-tripping its own print** through
+        `rowSpreadBps` → `priceCorporateBond`, while the register marks the same tranche at the
+        print. One instrument, two values. (`12-portfolio` already does it right for floaters.)
+    A9. **The harness's O1 is a second, rotted copy** of `audit/ownership.ts:o1`: money where the
+        audit reads face, GOV_BOND double-counted, this week's issue included, one-sided tolerance.
+    A10. **The harness open-codes the sovereign walk twice** and misses household books and company
+        treasuries — the fifth and sixth copies `sovereign-register.ts` was written to end.
+    A11. **The tranche-kind rule is written 11 times, 4 divergent** — the harness copies have no
+        facility guard, so bank facilities land in the corporate and loan buckets. Read:
+        `trancheKindOf`, which already exists and has three adopters.
+
+    **B. THE DEAD CODE — pure deletion, ~165 lines, no behaviour.**
+    B1. `HoldingsTable`'s object-graph half (~95 lines): `build()` is unreachable because `ctx.v2`
+        is a required field, so only `buildFromRows` runs. `holdingAt`, `rowsOfInstrument`,
+        `holderStart`, `byInstrument`, `rowInHolder`, `issuerRegion`, `shares` go with it.
+    B2. `RegisterIndex` (~60 lines): the store keeps per-entity chains and a `typeRef` column, and
+        `HoldingsTable.buildFromRows` produces the same grouping. No cross-file reader exists.
+        `bumpRegister` stays — six stages import it. §2's "register-index.ts is live" is true of
+        `bumpRegister` only and is corrected with it.
+    B3. `indexFundsForBook`'s object-array fallback: all three callers pass `holdingsUsdOf`.
+
+    **C. THE SECOND ANSWERS — rule 19 conversions, each naming its read.**
+    C1. `totalDebtOf` → `ladderTotalLocal` (9 sites). Two files mark THE SAME private companies by
+        the two different routes. `initialization:532` and `:1485` run pre-sync — check, or keep the
+        object read at seed only.
+    C2. Book totals off stale arrays → `institutionBookLocal`. `irs.ts:174` is confirmed stale (it
+        mixes a live read and a stale one in one subtraction); the other three are pre-store and
+        want a row walk rather than the helper.
+    C3. `aggregateRegionalHoldings` inlines `materializeBook` field for field.
+    C4. `audit/prices.ts:p8` re-derives a sovereign price where a print now exists — its own
+        docstring says it goes green when the register carries the mark. Run the audit and decide.
+    C5. The audit's object walks (`ownership.ts:29,48,88,129,240`) — correct today because the audit
+        runs after materialisation, so rule-4 duplicates rather than bugs. Convert, but read
+        `wires.ts:71` first: the W3 replay may want the view deliberately.
+
+    **D. THE RULES WRITTEN MORE THAN ONCE — collapse, and the branding then becomes small.**
+    D1. The participant→party lambda: **6 copies, 3 incompatible conventions** for how a bank's own
+        book is named (a ticker Set, a `BANK-` prefix re-parsed with a hardcoded `slice(5)`, and no
+        bank arm at all). Home: a factory beside `settleClearedBook`, which owns the contract.
+    D2. The "may only rewrite what it CLEARED" write-back loop: 3 copies × ~22 lines, the largest
+        verbatim block in the set.
+    D3. The `ItemizedHolding` row builder: 6 copies (3 named, 3 inline) + 2 in one file for shares.
+    D4. The float build, both halves: 5 + 5 copies.
+    D5. The credit demand build: 2 copies × ~80 lines, and **07b applies a sub-investment-grade
+        factor that 07d does not**. One copy carries a rule the other lost.
+    D6. The credit index-fund participant block: 2 × ~46 lines; and the ETF selection filter
+        ignores the index's region while `bookIndexIds` requires it, so a foreign-index ETF is
+        admitted as a participant and then given no demand.
+    D7. `isActiveCompany` written longhand 6×, and `harness:2589` checks no liveness at all — a
+        resolved bank's sheet is reconciled against a book it no longer owns.
+    D8. "This region's live banks with a sheet": 14 filter sites, 4 spellings. Home: `banksOf`.
+    D9. Lookup maps rebuilt from the same source: **38 construction sites**, including three alive
+        in one scope in `wires.ts` and two rebuilt inside a `forEach`. Home: memoised on `ctx`.
+    D10. `derivativePartyKey` hand-built 10×; `repoLenderParty` 3×; `partyRegionOf` twice in one
+        file; the government issuer LITERAL 4× (the constructor was extracted, the object was not).
+    D11. Entity id templates still inline: `${region}_${ticker}` ×4 (one with a `_PRV_` infix),
+        `_MMF_1`, `_ETF` — three lines from a PE fund that already uses its constructor.
+    D12. The C+I+G → Leontief seed, 3 copies, **divergent by accident** — the file's own comment
+        says "the reason the same fix has to be made three times is itself the defect".
+    D13. The seed's bank-assignment pass, written 3× because two ran too early — its own comment
+        says so. One pass at the end.
+
+    **THE TEST THIS STEP MUST PASS.** Net lines must FALL. 13-BOOK slices (a)+(b) added ~680 lines
+    of vocabulary; this step is where that is repaid, and if it is not, the vocabulary was not worth
+    having. Report the number.
+
     **13-BOOK — THE ONE BOOK: ONE ID SPACE, ONE WRITE PATH, AND TABLES THAT CAN BE CHECKED
     AGAINST EACH OTHER** (user, 2026-09-05: *"I want a single source of truth for whatever is
     possible to do so, at any cost"*, *"make it impossible for something to change an object or an
@@ -487,7 +581,8 @@ written from here):
     to run in `check-hygiene.sh` beside the atlas gate, which means it runs on every commit rather
     than waiting for step 38. `O3`, `O8` and `O11` become its consumers rather than its substitutes.
 
-    **THE SLICES, each its own commit, in this order.**
+    **THE SLICES, each its own commit, in this order — and 13-READ runs BEFORE the ones still
+    open, because it is what makes them small.**
     a. **BRAND THE STORE KEYS — DONE, in §9.** What it left for the slices below: the ENTITY
        space is untouched (`ClearingParticipant.id` is still a plain string, and the equity
        crossing — a company's listed equity keyed by the company's own id — is now a named
