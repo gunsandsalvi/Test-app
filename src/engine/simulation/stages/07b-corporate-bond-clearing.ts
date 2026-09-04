@@ -73,9 +73,9 @@ import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY, issuerIdOf, trancheScheduleOf } from '../../../engine2/tranches';
 import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
 import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
-import { isActiveCompany, accruedPerFace } from '../../../domain/company';
+import { isActiveCompany, accruedPerFace, defaultPeriodWeeks } from '../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate, moveCorporateAccrued } from './shared-helpers';
-import { priceFromSpreadBps, zeroRateAt, COUPON_PERIOD_WEEKS } from '../../../domain/pricing';
+import { priceFromSpreadBps, zeroRateAt } from '../../../domain/pricing';
 import type { PaperTerms, ZeroCurve } from '../../../domain/pricing';
 import { issuerSpreadAt, CreditPriceWorld } from '../../credit-price';
 import {
@@ -306,7 +306,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       primaryTermsById.set(id, { couponRate, maturityWeek: week + STANDARD_CORP_TENOR_YEARS * 52 });
       bonds.push(bondOf(ci, id, 0, o.sizeLocal, {
         annualCouponRate: couponRate,
-        periodWeeks: COUPON_PERIOD_WEEKS,
+        // The period the tranche stage 08 issues will carry, from the one owner of that default.
+        periodWeeks: defaultPeriodWeeks({ originationWeek: week, rateType: 'FIXED' }),
         weeksToMaturity: STANDARD_CORP_TENOR_YEARS * 52,
       }, true));
     });

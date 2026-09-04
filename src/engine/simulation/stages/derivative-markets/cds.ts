@@ -57,7 +57,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
      * number nobody traded.
      */
     const cashSpreadBpsOf = (c: { id: string; region: string }): number | undefined =>
-      issuerSpreadAtOnCurve(ctx.v2, ctx.updatedRegions[c.region as RegionId].zeroRates, c.id,
+      issuerSpreadAtOnCurve(ctx.v2, ctx.updatedRegions[c.region as RegionId], c.id,
         ctx.nextWeek, CDS_TENOR_WEEKS / 52)?.spreadBps;
 
     // ---- 1. WHO NEEDS PROTECTION, and how much. A bank's exposure to one name beyond what its

@@ -132,8 +132,9 @@ export interface BankingSector {
   // shared-regional-dealer-desk role banks play for corporate bonds (corpBondDealerInventory),
   // distinct from banks' own real investment-portfolio holdings above (sovereignBondHoldingsByBond).
   sovBondDealerInventory: { bondId: string; inventoryLocal: number }[];
-  // Same shared-regional-dealer-desk role for leveraged loans. See 07d-leveraged-loan-clearing.ts.
-  loanDealerInventory: { companyId: string; inventoryLocal: number }[];
+  // Same shared-regional-dealer-desk role for leveraged loans, keyed by the PIECE OF PAPER for
+  // the same reason the bond book is (§3.13 row 3). See 07d-leveraged-loan-clearing.ts.
+  loanDealerInventory: { instrumentId: string; inventoryLocal: number }[];
   /**
    * WS6 — this bank's overnight general-collateral repo book, struck fresh each week by
    * stages/repo-clearing.ts and matured (principal AND interest, as explicit flows) at the

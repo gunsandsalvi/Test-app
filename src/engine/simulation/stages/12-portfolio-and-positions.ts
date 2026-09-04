@@ -15,11 +15,12 @@ import { assertNever } from '../../../domain/defect';
 import { calculateBlackScholesGreeks } from '../../blackScholes';
 import { calculateExpectedCarry } from '../../carryCalculator';
 import { priceSovereignBond } from '../../nelsonSiegel';
-import { priceCorporateBond, priceLeveragedLoan, priceInterestRateSwap, priceCreditDefaultSwap, priceCrossCurrencyBasisSwap } from '../../pricing';
+import { priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceCrossCurrencyBasisSwap } from '../../pricing';
 import { getUnifiedInitialMarginRate } from '../../dealers';
 import { calculateCompositeIndices } from '../../macro/indices';
 import { WeeklyStepContext } from './context';
 import { rowSpreadBps } from '../../credit-price';
+import { clearedPriceOf } from '../../../engine2/prices';
 import { zeroRateAt } from '../../../domain/pricing';
 import { realizedAnnualVol } from '../../../domain/volatility';
 import { regionIndexOf } from '../../macro/indices';
@@ -137,7 +138,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           // price-setter duplicating (and disagreeing with) the real auction in 07b.
           // §3.13: and the stat is THIS TRANCHE's, off the price its own book printed. Paper the
           // book has not printed carries no view, and its own coupon is the fair rate.
-          const adjustedOasSpreadBps = rowSpreadBps(v2, updatedRegions[pos.region].zeroRates, trRow, nextWeek)
+          const adjustedOasSpreadBps = rowSpreadBps(v2, updatedRegions[pos.region], trRow, nextWeek)
             ?? ((Number.isNaN(TS.couponRate[trRow]) ? 0.05 : TS.couponRate[trRow])
               - zeroRateAt(updatedRegions[pos.region].zeroRates, remainingTenorYears)) * 10000;
 
@@ -169,16 +170,11 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             marginReq = pos.notional * fxRateToUsd * marginRate;
             maintMargin = marginReq * 0.65;
           } else {
-            // S6: marked off the loan's own CLEARED discount margin (07d), not a re-derived one.
-            const clearedDmBps = comp.leveragedLoan?.discountMarginBps ?? (Number.isNaN(TS.floatingMarginBps[trRow]) ? 200 : TS.floatingMarginBps[trRow]);
-            const loanPricing = priceLeveragedLoan(
-              Number.isNaN(TS.floatingMarginBps[trRow]) ? 200 : TS.floatingMarginBps[trRow],
-              clearedDmBps,
-              remainingTenorYears,
-              comp.isDefaulted,
-              comp.recoveryRate
-            );
-            currentPrice = loanPricing.pricePar;
+            // §3.13 row 3: marked at the price THIS LOAN cleared at (07d), not at a price
+            // linearised out of a cleared margin — `bond.md` N7.b's forbidden direction, which is
+            // what `priceLeveragedLoan` was and why it is deleted with this read. Paper the book
+            // has not printed keeps par, which is what a loan struck at its own margin is worth.
+            currentPrice = (clearedPriceOf(v2, v2.internedStrings[TS.idRef[trRow]]) ?? 1) * 100;
             const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
             const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
             unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;

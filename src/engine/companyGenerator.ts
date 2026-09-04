@@ -585,9 +585,6 @@ export function generateInitialCompanies(
 
       const historicalFundamentals = [snapQ1, snapQ2, snapQ3, snapQ4];
 
-      const quotedMarginBps = Math.round(oasSpreadBps * 0.85 + 35);
-      const discountMarginBps = Math.round(oasSpreadBps * 0.85);
-      const loanRef = region === 'USA' ? 'SOFR' : region === 'EUR' ? 'EURIBOR' : region === 'UK' ? 'SONIA' : 'TONA';
       const earningsWeekModulo = (companies.length % 13) + 1;
       
       const alphaEps = Number((eps * 0.97).toFixed(2));
@@ -662,19 +659,8 @@ export function generateInitialCompanies(
         lastEarningsSurprisePct: 0,
         lastManagementCommentary: 'Management reaffirmed structural operating margins and disciplined leverage management.',
         
-        // Only a company with floating-rate debt has a loan to quote. See Company.leveragedLoan.
-        leveragedLoan: debtTranches.some((t) => t.rateType === 'FLOATING')
-          ? {
-              quotedMarginBps,
-              referenceBenchmark: loanRef,
-              pricePar: 98.75,
-              discountMarginBps,
-              tenorYears: 5,
-              seniority: 'Senior Secured First Lien',
-              recoveryRate: 0.65,
-            }
-          : undefined,
-        
+        // §3.13 row 3: a borrower has no loan quote. Its LOANS open with prices
+        // (`seedOpeningCreditPrices`) and the margin each carries is on its own ladder row.
         leverage,
         interestCoverage,
         creditRating: tmpl.initialRating,

@@ -296,7 +296,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         // curve, since the wholesale roll it is paying for is a week long, read off the bonds the
         // corporate book actually printed for it. A bank with none printed pays the wholesale
         // spread, which is the only quote anyone has given it.
-        issuerSpreadAtOnCurve(ctx.v2, reg.zeroRates, bank.id, ctx.nextWeek, 1 / 52)?.spreadBps
+        issuerSpreadAtOnCurve(ctx.v2, reg, bank.id, ctx.nextWeek, 1 / 52)?.spreadBps
           ?? WHOLESALE_FUNDING_SPREAD_BPS,
         // The households' own measured split, so the funding-pressure denominator and the
         // inflow it is measured against are the SAME number.
@@ -541,7 +541,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         ...deskView('sovereign bond').map(([instrumentId, inventoryLocal]) => ({ bondId: instrumentId, inventoryLocal })),
         ...deskView('bill').map(([instrumentId, inventoryLocal]) => ({ bondId: instrumentId, inventoryLocal })),
       ],
-      loanDealerInventory: deskView('leveraged loan').map(([companyId, inventoryLocal]) => ({ companyId, inventoryLocal })),
+      loanDealerInventory: deskView('leveraged loan').map(([instrumentId, inventoryLocal]) => ({ instrumentId, inventoryLocal })),
       // The region's overnight book is the sum of the named banks' real positions. The
       // RATE is one market print per region and lives on reg.repoRateAnnual — never a second
       // copy on any sheet.

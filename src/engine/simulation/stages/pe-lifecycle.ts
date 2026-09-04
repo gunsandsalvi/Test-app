@@ -34,7 +34,7 @@ import { settleCorporateActionOnHolders, payHoldersCash } from './shared-helpers
 import { pay, pendingSettlementLocal } from './settlement';
 import { smePoolSubUnits } from '../../../domain/industry-registry';
 import { STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
-import { issuerSpreadAtOnCurve } from '../../credit-price';
+import { issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../../credit-price';
 import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { marketCapOf, totalDebtOf } from '../../../domain/company';
@@ -284,12 +284,16 @@ export function runPeLifecycleForRegion(
   const markEvMultiple = publicComparableEvMultiple(regionId, ctx.updatedCompanies);
   if (!(markEvMultiple > 0)) return;
   const pendingIssuers = new Set(ctx.primaryOfferingsWorking.map((o) => o.issuerId));
+  // §3.13 row 3: the region's loan market level, taken off the LOANS — each borrower's own
+  // five-year point on its own loan curve, read from what its paper cleared at. A market with no
+  // printed loan has no level, and the sponsor's own recap threshold stands in for one.
   const loanMarketDmBps = (() => {
     const dms = ctx.updatedCompanies
-      .filter((c) => c.region === regionId && c.leveragedLoan && isActiveCompany(c))
-      .map((c) => c.leveragedLoan!.discountMarginBps)
+      .filter((c) => c.region === regionId && isActiveCompany(c))
+      .map((c) => issuerSpreadAtOnCurve(ctx.v2, reg, c.id, ctx.nextWeek, STANDARD_CORP_TENOR_YEARS, IS_LOAN_ROW)?.spreadBps)
+      .filter((v): v is number => v !== undefined)
       .sort((a, b) => a - b);
-    return dms.length ? dms[Math.floor(dms.length / 2)] : 9999;
+    return dms.length ? dms[Math.floor(dms.length / 2)] : RECAP_DM_THRESHOLD_BPS;
   })();
 
   sponsors.forEach((sponsor) => {
@@ -551,7 +555,7 @@ export function runPeLifecycleForRegion(
         // nothing printed is underwritten at the sponsor's recap threshold, which is the price the
         // loan market has actually quoted this kind of deal.
         const debtCostAnnual = reg.policyRate
-          + (issuerSpreadAtOnCurve(ctx.v2, reg.zeroRates, listedTarget.id, ctx.nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
+          + (issuerSpreadAtOnCurve(ctx.v2, reg, listedTarget.id, ctx.nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
             ?? RECAP_DM_THRESHOLD_BPS) / 10000;
         const leveredCashFlowLocal = ebitdaOf(listedTarget) - allInDebtLocal * debtCostAnnual;
         const clearsHurdle =

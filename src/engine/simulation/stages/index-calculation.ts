@@ -44,27 +44,15 @@ const INDEXABLE_EXCLUDED = TR_FACILITY | TR_CP;
  * A tranche no session has printed contributes nothing rather than a guess — an index of what
  * traded is what an index is.
  */
-function fixedMarketValueLocal(v2: V2World, comp: Company, week: number): number {
+function creditMarketValueLocal(v2: V2World, comp: Company, floating: boolean): number {
   const S = v2.tranches;
   let sum = 0;
   for (const r of ladderRowsOf(v2, comp.id)) {
-    if (S.flags[r] & (INDEXABLE_EXCLUDED | TR_FLOATING)) continue;
+    if (S.flags[r] & INDEXABLE_EXCLUDED) continue;
+    if (((S.flags[r] & TR_FLOATING) !== 0) !== floating) continue;
     const price = clearedPriceOf(v2, v2.internedStrings[S.idRef[r]]);
     if (price === undefined || !(price > 0)) continue;
     sum += S.principalLocal[r] * price;
-  }
-  return sum;
-}
-
-function floatingMarketValueLocal(v2: V2World, comp: Company): number {
-  // 07d clears a price to par for every loan it quotes; par is the honest fallback for a tranche
-  // whose issuer has no quote yet (a debut in its first week).
-  const pricePerDollar = (comp.leveragedLoan?.pricePar ?? 100) / 100;
-  const S = v2.tranches;
-  let sum = 0;
-  for (const r of ladderRowsOf(v2, comp.id)) {
-    if ((S.flags[r] & INDEXABLE_EXCLUDED) || !(S.flags[r] & TR_FLOATING)) continue;
-    sum += S.principalLocal[r] * Math.max(0, pricePerDollar);
   }
   return sum;
 }
@@ -82,13 +70,13 @@ function indexValueLocal(v2: V2World, def: IndexDefinition, comp: Company, week:
     return marketCapOf(comp);
   }
 
-  if (def.assetClass === 'LEVERAGED_LOAN') return floatingMarketValueLocal(v2, comp);
+  if (def.assetClass === 'LEVERAGED_LOAN') return creditMarketValueLocal(v2, comp, true);
 
   // Corporate bonds, split by the issuer's own cleared rating.
   const ig = isInvestmentGrade(comp.creditRating);
   if (def.tier === 'IG' && !ig) return 0;
   if (def.tier === 'HY' && ig) return 0;
-  return fixedMarketValueLocal(v2, comp, week);
+  return creditMarketValueLocal(v2, comp, false);
 }
 
 /**

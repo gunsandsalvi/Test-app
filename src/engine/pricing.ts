@@ -241,42 +241,10 @@ export function priceCommodityFutures(
  * Default Recovery = 65% of Par
  */
 /**
- * S6: a pure converter from a CLEARED discount margin to price/yield — never a price-setter.
- * The DM is set once, by the real loan auction (07d); this maps it to points-of-par for
- * display and P&L. The old version re-derived a DM from OAS via a demand-premium-adjusted
- * senior-lien multiple — a second, parallel price-setter for an asset that already clears.
+ * §3.13 row 3 — `priceLeveragedLoan` IS DELETED. It computed `pricePar = 100 − ΔDM × duration ×
+ * 100`: a price linearised out of a cleared discount margin, which is `bond.md` N7.b's forbidden
+ * direction. 07d clears the price itself now and every reader takes it from the price store.
  */
-export function priceLeveragedLoan(
-  quotedMarginBps: number,
-  clearedDiscountMarginBps: number,
-  tenorYears: number = 5,
-  isDefaulted: boolean = false,
-  recoveryRate: number = 0.65
-): { pricePar: number; discountMarginBps: number; effectiveYield: number; duration: number } {
-  if (isDefaulted) {
-    return {
-      pricePar: recoveryRate * 100, // 65 on 100 par
-      discountMarginBps: 3000,
-      effectiveYield: 0.40,
-      duration: 0,
-    };
-  }
-
-  // Floating rate loans have low interest rate duration (approx 0.25y) but credit spread duration ~ 3.5y
-  const creditDuration = Math.min(4.0, tenorYears * 0.7);
-  const discountMarginBps = Math.round(clearedDiscountMarginBps);
-  const marginDeltaBps = discountMarginBps - quotedMarginBps;
-  // Price in points of par
-  const pricePar = (100 - (marginDeltaBps / 10000) * creditDuration * 100);
-  const effectiveYield = (quotedMarginBps / 10000) + ((100 - pricePar) / creditDuration) / 100;
-
-  return {
-    pricePar: Number(pricePar.toFixed(2)),
-    discountMarginBps,
-    effectiveYield,
-    duration: creditDuration,
-  };
-}
 
 /**
  * Cross-Currency Basis Swap (XCS) Pricing & MTM

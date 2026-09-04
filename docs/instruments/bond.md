@@ -100,7 +100,7 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 | N7 · sov a PRICE per unit of par it changes hands at | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:priceAtYieldBps` | ✅ |
 | N7.a · corp cleared from real demand against real supply | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ⚠️ |
 | N7.a · sov cleared from real demand against real supply | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ⚠️ |
-| **N7.b · corp FORBID the price is never derived from the spread** | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:pricePar` | ❌ |
+| **N7.b · corp FORBID the price is never derived from the spread** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ❌ |
 | N7.b · sov FORBID the price is never derived from the yield | `src/domain/government.ts:billYieldFromPrice` | ✅ |
 | N8 · corp a HOLDER OF RECORD: who owns how many units | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
 | N8 · sov a HOLDER OF RECORD: who owns how many units | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ✅ |
@@ -168,11 +168,11 @@ That fix has now landed on three of the five books, and this is where it stands:
 - **CORPORATE BONDS ⚠️** (§9.13-CREDIT row 1). `07b` clears a price per TRANCHE, deposits it in
   `engine2/prices.ts`, and every spread in the model is read back off it — there is no issuer spread
   left to derive a price from.
-- **LOANS AND COMMERCIAL PAPER ❌**, which is why N7 · corp is ⚠️ and N7.b · corp is still ❌.
-  `07d:pricePar = 100 − DM_delta × duration × 100` is a price linearised out of a cleared discount
-  margin — the forbidden direction, still running, still on the surface through the loan index and
-  the player's position book — and `07f`'s commercial-paper book still clears a yield. They are
-  §3.13's rows 3 and 4.
+- **LOANS ✅** (§9.13-CREDIT row 3). `07d` clears a price per loan and `pricePar` — the price
+  linearised out of a cleared discount margin, the forbidden direction, on the surface through the
+  loan index and the player's book — is deleted with `pricing.ts:priceLeveragedLoan`.
+- **COMMERCIAL PAPER ❌**, which is why N7 · corp is ⚠️ and N7.b · corp is still ❌: `07f` clears a
+  yield per issuer and the register carries its paper at what that yield implies. §3.13's row 4.
 
 ### ✅ N8 · sov — A HOLDER OF RECORD OF WHAT? (closed, 13-SOV row 3)
 

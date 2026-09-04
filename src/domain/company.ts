@@ -223,18 +223,20 @@ export interface ConsensusForecast {
   consensusRevenue: number;
 }
 
-export interface LeveragedLoanInfo {
-  quotedMarginBps: number;
-  referenceBenchmark: 'SOFR' | 'EURIBOR' | 'SONIA' | 'TONA';
-  pricePar: number;
-  discountMarginBps: number;
-  tenorYears: number;
-  seniority: 'Senior Secured First Lien';
-  recoveryRate: number;
-  // Rolling weekly history of real cleared discountMarginBps — the momentum signal a loan buyer
-  // weighs beside static fair value. See 07d-leveraged-loan-clearing.ts.
-  discountMarginBpsHistory?: number[];
-}
+/**
+ * §3.13 row 3 — `LeveragedLoanInfo` IS DELETED, for the reason `oasSpreadBps` was.
+ *
+ * Everything it carried was one of three things and none of them was a fact about the borrower:
+ * a PRICE or a SPREAD (`pricePar`, `discountMarginBps` and its history), which belong to the piece
+ * of paper and are read off what its own book cleared; a DUPLICATE of what the ladder already
+ * states (`quotedMarginBps` is the row's `floatingMarginBps`, `tenorYears` its dates); or a
+ * CONSTANT (`seniority`, `referenceBenchmark`, and `recoveryRate`, which the loan book derives from
+ * the region's realised experience every week anyway).
+ *
+ * What replaced it: `engine/credit-price.ts:issuerSpreadAtOnCurve` with `IS_LOAN_ROW`, which is the
+ * borrower's own LOAN CURVE — a term structure read off its own loans' cleared prices, kept apart
+ * from its bond curve because a first lien and an unsecured claim are two risks on one name.
+ */
 
 export interface Company {
   concentrationRiskFlags?: string[];
@@ -425,7 +427,6 @@ export interface Company {
    * without a loan has no loan quote. 07d-leveraged-loan-clearing.ts owns this field's lifecycle:
    * it opens a quote when floating debt appears and retires it when the debt is repaid.
    */
-  leveragedLoan?: LeveragedLoanInfo;
   historicalFundamentals: FundamentalSnapshot[];
 
   // Credit & Status
@@ -814,8 +815,18 @@ type TrancheSchedule = {
  * period: the seed's sovereign side counted `since % 26` itself, which is the same arithmetic
  * written twice and reads a period the tranche did not state.
  */
+/**
+ * THE COUPON PERIOD A TRANCHE OF THIS SHAPE CARRIES when it states none — semi-annual for a fixed
+ * bond, quarterly for a floater, once at maturity for CP. `engine2/tranches.ts:trancheScheduleOf`
+ * applies exactly this to a stored ROW; this is the same answer for a deal whose row does not
+ * exist yet, so a book that strikes new paper and the stage that issues it cannot disagree.
+ */
+export function defaultPeriodWeeks(t: TrancheSchedule): number {
+  return Math.max(1, Math.round(52 / trancheePaymentsPerYear(t as DebtTranche)));
+}
+
 export function weeksAccrued(t: TrancheSchedule, week: number): number {
-  const periodWeeks = Math.max(1, Math.round(52 / trancheePaymentsPerYear(t as DebtTranche)));
+  const periodWeeks = defaultPeriodWeeks(t);
   const since = week - tranchePaymentAnchorWeek(t);
   // Commercial paper has no periods: it accrues from ISSUE to maturity and pays once, there.
   return t.isCommercialPaper ? Math.max(0, since) : (since <= 0 ? 0 : since % periodWeeks);

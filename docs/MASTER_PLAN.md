@@ -368,13 +368,12 @@ written from here):
     **13-CREDIT, the credit class, one book at a time** (user, 2026-09-04: *"there shouldn't be any
     spread per issuer. The spread is per asset, assets with different maturities should have
     different risk levels and so different spreads. There is no spread quantity associated with an
-    issuer aside from the CDS."*). Rows 1 and 2 are in §9. What is left, in order:
-    · **row 3 — `07d`, the loan book**: instruments become tranches, the price clears and
-      `leveragedLoan.discountMarginBps` / `pricePar` are deleted the way `oasSpreadBps` was — the
-      DM is read off the price, per loan, at its own life.
-    · **row 4 — `07f`, bills and commercial paper**: the same, and it closes atlas
-      short-term-debt A2/E2 (the short end clears a YIELD, so a bill's return is re-set weekly).
-      `register-split.ts` and the desks' issuer-keyed split die with this row.
+    issuer aside from the CDS."*). Rows 1, 2 and 3 are in §9. What is left, in order:
+    · **row 4 — `07f`, commercial paper**: the last credit book clearing a YIELD per issuer, and
+      the last holder of the forbidden direction (`bond.md` N7.b). It closes atlas short-term-debt
+      A2/E2 — the short end clears a yield, so a bill's return is re-set weekly — and
+      `register-split.ts` and the desks' issuer-keyed split die with it. (The BILL half of 07f
+      already clears a price, §9.13-SOV row 4; what is left is the corporate CP book.)
     · **row 5 — the mark**: the register carries FACE and `P5`/`P8` measure the gap to the cleared
       price on both classes. It cannot land one book at a time (§9.13 part 3) — it lands when
       every credit book prints a price and every reader takes `faceLocal`.
@@ -531,12 +530,12 @@ written from here):
     (hysteresis), `:323-328` (the whole invented consumer-confidence index, four invented
     coefficients, an equity return clamped ±0.5 and the index clamped [30,170]), `:830-855` (the
     Taylor rule's four bounds), `:1416,1424,1427` (commodity yield loss, drift and a 0.5 spot floor),
-    `:1443`; `07d:86-88` (credit duration clamped after a magic 0.7 factor — derive Macaulay
-    duration from the ladder's own cash flows; `07b`'s twin is GONE, §9.13-CREDIT row 1: it blended
-    an issuer's whole ladder into one duration and there is no longer anything for it to be the
-    duration OF — every schedule is struck on the tranche's own remaining life. That life is its
-    MATURITY, and Macaulay duration off the same cash flows is what this step replaces it with);
-    `stage08-back.ts:970` (a payout ratio
+    `:1443`; *(the two credit-duration clamps are GONE, §9.13-CREDIT rows 1 and 3: `07b:110-119`
+    blended an issuer's whole ladder into one duration × 0.75 clamped [1,8] and `07d:86-88` took a
+    stated 5-year tenor × 0.7 clamped [1,4], and there is nothing left for either to be the duration
+    OF — every schedule is struck on the paper's own remaining life. That life is its MATURITY, and
+    deriving Macaulay duration off the same cash flows is what this step still owes; both books now
+    hold those cash flows.)* `stage08-back.ts:970` (a payout ratio
     whose clamp makes a whole patience cohort pay out exactly 100%), `:1961` (a ten-employee floor),
     `:2029` (an invented book value with a 0.5 floor), `:1774` (a reservation floored at the print);
     `institution-profiles.ts:66,76` (hurdle [0.02,0.30]); `prime-brokerage.ts:52` (haircut floored at
@@ -1376,6 +1375,35 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-CREDIT row 3 — THE LOAN BOOK CLEARS A PRICE TOO, AND `leveragedLoan` IS DELETED WHOLE.** The
+same three-part correction row 1 made to the bond book: a discount margin is not a price (the engine
+valued a `YIELD_LIKE` fill at 1, so a unit of loan par changed hands at a dollar), an issuer is not a
+piece of paper (`register-split.ts` invented the register's rows from an issuer-level fill), and one
+margin per borrower is no term structure. `07d` prices each of an issuer's live syndicated floating
+tranches, `statKind: 'PRICE_LIKE'`, with each holder's reservation margin restated as the price it
+implies on that loan's own schedule, and deposits what it printed.
+
+**`Company.leveragedLoan` is gone**, for the reason that deleted `oasSpreadBps`: every field it
+carried was a PRICE or SPREAD that belongs to the paper (`pricePar`, `discountMarginBps` and its
+history), a DUPLICATE of what the ladder states (`quotedMarginBps` is the row's own margin,
+`tenorYears` its dates), or a CONSTANT (`seniority`, `referenceBenchmark`, and a `recoveryRate` the
+book re-derives weekly anyway). What replaced it is the borrower's own LOAN CURVE, read off its own
+loans and kept apart from its bond curve because a first lien and an unsecured claim are two risks on
+one name — `credit-price.ts` takes a `RegionRates` and a row filter now, so `IS_BOND_ROW` and
+`IS_LOAN_ROW` make every caller say which market it is asking about.
+
+`07d:pricePar = 100 − ΔDM × duration × 100` — a price linearised out of a cleared margin, `bond.md`
+N7.b's forbidden direction, reaching the loan index and the player's book — is deleted with
+`pricing.ts:priceLeveragedLoan`, which it was the only caller of. The index's two credit halves
+collapse into one read of the price store (closing atlas indices A2/D2), `12-portfolio` marks a loan
+at what it cleared at, and row 2's accrued leg lands on this book at the same time, because it needed
+exactly the per-tranche face delta this row created. Step 18's `07d:86-88` duration clamp goes the
+way `07b`'s did — with the issuer instrument, not by being fixed. The seed deposits an opening price
+for floaters too, at the rating table's spread discounted for the first lien.
+
+Gates green; no run (rule 11). `07f`'s commercial paper is the last book clearing a yield per issuer
+and the last holder of N7.b's forbidden direction — row 4, which `register-split.ts` dies with.
 
 **13-CREDIT row 2 — THE BUYER PAYS THE SELLER WHAT THE BOND HAS ALREADY ACCRUED, AND THE DESKS
 TURN OUT NEVER TO HAVE BEEN HOLDERS OF RECORD AT ALL.** 13b built the leg for the sovereign and

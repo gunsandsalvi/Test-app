@@ -12,7 +12,7 @@ import { marketCapOf } from '../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { ensureV2 } from '../../engine2/world';
 import { isTrancheKind } from '../../domain/assets';
-import { trancheClearedPricePerFace, issuerSpreadAtOnCurve } from '../credit-price';
+import { trancheClearedPricePerFace, issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../credit-price';
 import { materializeGovLadder, TR_SUBORDINATED } from '../../engine2/tranches';
 import { priceFromYield, zeroRateAt, COUPON_PERIOD_WEEKS } from '../../domain/pricing';
 import { STANDARD_CORP_TENOR_YEARS } from '../../domain/primary-market';
@@ -43,11 +43,14 @@ function p1(state: GameState, week: number): AuditFinding[] {
     const reg = state.regions[c.region];
     if (!reg) return;
     const policy = reg.policyRate ?? 0;
-    const at = (rank: number) => issuerSpreadAtOnCurve(v2, reg.zeroRates, c.id, week, P1_COMPARISON_TENOR_YEARS,
+    const at = (rank: number) => issuerSpreadAtOnCurve(v2, reg, c.id, week, P1_COMPARISON_TENOR_YEARS,
       (flags) => ((flags & TR_SUBORDINATED) !== 0) === (rank === 1))?.spreadBps;
     const bond = at(0);
     if (bond === undefined || !(bond > 0)) return;
-    const loan = c.leveragedLoan?.discountMarginBps;
+    // §3.13 row 3: the loan leg is that borrower's own five-year LOAN point, off its own loans'
+    // cleared prices — the same maturity as the bond leg above, which is what makes the two
+    // comparable at all.
+    const loan = issuerSpreadAtOnCurve(v2, reg, c.id, week, P1_COMPARISON_TENOR_YEARS, IS_LOAN_ROW)?.spreadBps;
     const cp = (c.debtTranches ?? []).find((t) => t.isCommercialPaper);
     const cpSpread = cp ? ((cp.couponRate ?? 0) - policy) * 1e4 : undefined;
     const facility = (c.debtTranches ?? []).find((t) => t.isBankFacility);
@@ -78,7 +81,7 @@ function p2(state: GameState, week: number): AuditFinding[] {
     if (!isActiveCompany(c) || !reg || !(c.cdsSpreadBps > 0) || c.cdsClearedWeek !== state.currentWeek) return;
     // §3.13: the cash leg of a five-year basis is that issuer's own five-year bond, read off the
     // price it cleared at. A name with no printed bond has no basis to test.
-    const cash = issuerSpreadAtOnCurve(v2, reg.zeroRates, c.id, week, CDS_TENOR_WEEKS / 52)?.spreadBps;
+    const cash = issuerSpreadAtOnCurve(v2, reg, c.id, week, CDS_TENOR_WEEKS / 52)?.spreadBps;
     if (cash === undefined || !(cash > 0)) return;
     n++;
     if (Math.abs(c.cdsSpreadBps - cash) > Math.max(150, cash * 0.75)) wide++;
@@ -104,7 +107,7 @@ function p3(state: GameState, week: number): AuditFinding[] {
     // the same maturity for every name, so the ranking is a ranking of credit and not of tenor.
     const cs = state.companies
       .filter((c) => c.region === r && isActiveCompany(c) && !c.isBankEntity)
-      .map((c) => ({ c, oas: issuerSpreadAtOnCurve(ensureV2(state), reg.zeroRates, c.id, week, P1_COMPARISON_TENOR_YEARS)?.spreadBps ?? 0 }))
+      .map((c) => ({ c, oas: issuerSpreadAtOnCurve(ensureV2(state), reg, c.id, week, P1_COMPARISON_TENOR_YEARS)?.spreadBps ?? 0 }))
       .filter((x) => x.oas > 0);
     if (cs.length < 20) return;
     const rho = spearman(cs.map((x) => x.oas), cs.map((x) => RATING_RANK[x.c.creditRating] ?? 4));

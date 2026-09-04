@@ -120,7 +120,7 @@ checked by `scripts/check-atlas.sh`.
 | E4 a split, buyback or new issue moves both sides at once | `src/engine/ledger/holdings-ledger.ts:scaleHoldings` | ✅ |
 | E5 VERIFY every register event moves money or says why not | `src/engine/ledger/holdings-ledger.ts:markHolding` | ✅ |
 | F1 an instrument has a stable identity for its whole life | `src/engine/ledger/tranche-ledger.ts:issueTranche` | ⚠️ |
-| **F1.a two instruments with the same terms are still two** | `src/engine/simulation/stages/register-split.ts:splitAcrossTranches` | ⚠️ |
+| F1.a two instruments with the same terms are still two | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:runLeveragedLoanClearingStage` | ⚠️ |
 | F2 a dead party leaves its holdings to a named successor | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | F3 VERIFY the register survives a week boundary unchanged | `src/engine2/holdings.ts:assertBooksInSync` | ✅ |
 
@@ -202,14 +202,20 @@ row. Recorded here because it is what makes D3's node read `⚠️` rather than 
 stored on the holding, but only because the *value* is, which is the same defect wearing the
 node's clothes.
 
-### ⚠️ D2.a / F1.a — THE AUCTION CLEARS BY ISSUER AND THE REGISTER IS RECONSTRUCTED PER TRANCHE
+### ⚠️ D2.a / F1.a — ONE BOOK STILL CLEARS BY ISSUER AND HAS ITS REGISTER RECONSTRUCTED
 
 `register-split.ts:splitAcrossTranches` takes a holder's fill in an issuer and spreads it across
 that issuer's live tranches of the kind, pro rata to face. Which specific bond a buyer bought is
 therefore not a fact of the trade — it is an allocation applied afterwards, and it changes every
-week as the ladder changes. D2.a's warning ("a reconstruction drifts") is literal here: the
-fallback at `register-split.ts:63` books the position under the ISSUER's id when no tranche of the
-kind is live, which §3 step 12's tail already measures at 0.42B on 219 positions.
+week as the ladder changes. D2.a's warning ("a reconstruction drifts") is literal: the fallback at
+`register-split.ts:63` books the position under the ISSUER's id when no tranche of the kind is live.
+
+**§9.13-CREDIT rows 1 and 3 closed it for BONDS and LOANS**: both books clear per tranche, so a fill
+names the paper it bought and there is nothing for
+`src/engine/simulation/stages/register-split.ts:splitAcrossTranches` to reconstruct — and a claim on paper that has
+retired is repaid by its borrower rather than migrated onto its other tranches. What is left is
+07f's commercial paper (§3.13 row 4), which still clears per issuer and still splits; the file, and
+this node, close with it.
 
 Sovereigns were worse in the same direction — the holding was a tenor BUCKET, so every gilt of the
 same tenor was one instrument and F1.a was false by construction. §3.13-SOV row 3 closed it: a

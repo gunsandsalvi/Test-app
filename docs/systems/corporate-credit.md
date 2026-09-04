@@ -177,6 +177,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | C7.b VERIFY the fee and the risk are related | `src/domain/primary-market.ts:oneWeekPriceRiskBps` | ✅ |
 | D1 holders and buyers post schedules; who trades is the outcome | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:runCorporateBondClearingStage` | ✅ |
 | **D2 a PRICE clears (bond N7)** | `src/engine2/prices.ts:setClearedPrice` | ⚠️ |
+| D2 · bonds and loans — both books clear and deposit one | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:runLeveragedLoanClearingStage` | ✅ |
 | D3 a dealer intermediates, a real party | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
 | D3.a it quotes both sides out of its own inventory | `src/engine/simulation/stages/dealer-desks.ts:applyDealerDeskFills` | ✅ |
 | D3.b bounded by its balance sheet and capital | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
@@ -185,8 +186,8 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | D5 VERIFY an unsold seller keeps its paper | `src/engine/simulation/stages/financial-clearing-engine.ts:unsoldStaysWithHolder` | ✅ |
 | D6 two legs in the same pass (N9.a) | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
 | D7 accrued interest transfers with the paper (N9.b) | `src/engine/simulation/stages/shared-helpers.ts:moveCorporateAccrued` | ⚠️ |
-| **D8 FORBID no derived measure may set the price (N7.b)** | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:pricePar` | ❌ |
-| D8 · bonds — the price is the primitive, the spread is read off it | `src/engine/credit-price.ts:trancheClearedSpreadBps` | ✅ |
+| **D8 FORBID no derived measure may set the price (N7.b)** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ❌ |
+| D8 · bonds and loans — the price is the primitive, the spread is read off it | `src/engine/credit-price.ts:rowSpreadBps` | ✅ |
 | E1 a register of holders (N8) | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
 | E2 VERIFY Σ held = issued (N8.a) | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | **E3 the holder marks at the cleared price** | `src/engine/simulation/stages/credit-marking.ts:markCreditToMarket` | ❌ |
@@ -228,9 +229,11 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-**77 nodes: 43 ✅, 24 ⚠️, 10 ❌** (re-marked at §9.13-CREDIT row 1, which moved D2 ❌→⚠️, C3 and
-H1 ⚠️→✅ and added D8's bond half ✅). Ordered by how much each changes, not by branch. The depth-2
-diff's findings all appear below under their new ids; nothing has been dropped in the renumbering.
+**78 rows: 44 ✅, 24 ⚠️, 10 ❌** — COUNTED, not adjusted (§5's lesson from §9.13-CREDIT row 2:
+a tally nobody recounts drifts as silently as a mark nobody re-marks). Re-marked at rows 1 and 3,
+which moved D2 ❌→⚠️, C3 and H1 ⚠️→✅ and added the two cleared-price rows. Ordered by how much each
+changes, not by branch. The depth-2 diff's findings all appear below under their new ids; nothing
+has been dropped in the renumbering.
 
 ### ⚠️ D2 / D8 / E3 — THE BOND BOOK CLEARS A PRICE NOW; THE LOAN AND PAPER BOOKS DO NOT
 
@@ -241,24 +244,29 @@ remaining life (`engine/credit-price.ts`). `Company.oasSpreadBps` is deleted: a 
 CREDIT CURVE (`domain/credit-curve.ts`) and not a spread, which is what makes two tranches of one
 name able to disagree.
 
+**Row 3 did the same to the LOAN book** (§9.13-CREDIT row 3): `07d` prices one instrument per
+tranche, `Company.leveragedLoan` is deleted whole — a price, a spread, two duplicates of the ladder
+and three constants — and a borrower's loan market is its own LOAN CURVE, kept apart from its bond
+curve because a first lien and an unsecured claim are two risks on one name. `07d:pricePar`, the
+price linearised out of a cleared margin, is gone with `pricing.ts:priceLeveragedLoan`.
+
 What is still open under these three nodes, and why D2 is ⚠️ rather than ✅:
 
-- **`07d` (leveraged loans) and `07f` (bills and CP) still clear a spread per ISSUER**, so D8's
-  FORBID is still actively violated by `07d:pricePar` and the register still carries their paper
-  at par. That is §3.13's next credit row.
+- **`07f` (bills and commercial paper) still clears a yield per ISSUER**, so D8's FORBID is still
+  violated by the one remaining book. That is §3.13's row 4, and `register-split.ts` dies with it.
 - **E3 is unchanged**: `credit-marking` is still not wired in, and cannot be one book at a time
-  (§9.13 part 3). The bond book writes its fills in PAR space exactly as the sovereign does, and
-  `P5` measures the gap between the face carried and the price cleared — which is the finding, not
-  a defect of this row.
+  (§9.13 part 3). Both credit books write their fills in PAR space exactly as the sovereign does,
+  and `P5` measures the gap between the face carried and the price cleared — which is the finding,
+  not a defect of these rows.
 
 What the original re-walk added, still standing:
 
-1. **D8's FORBID is actively violated on the LOAN book, not merely unmet.** `07d:472` writes
-   `pricePar: Number((100 - (marginDeltaBps / 10000) * creditDuration * 100).toFixed(2))` — a price
-   linearised out of the cleared discount margin. `index-calculation.ts:64` divides it by 100 and
-   uses it as the loan index's price, and `12-portfolio:178` shows it to the player as
-   `currentPrice`. That is N7.b's "arithmetic wearing a market's clothes", already in the model and
-   already on the surface.
+1. **D8's FORBID was actively violated on the LOAN book, not merely unmet** — `07d:472` wrote
+   `pricePar: Number((100 - (marginDeltaBps / 10000) * creditDuration * 100).toFixed(2))`, a price
+   linearised out of the cleared discount margin, which `index-calculation` used as the loan index's
+   price and `12-portfolio` showed the player as `currentPrice`. N7.b's "arithmetic wearing a
+   market's clothes", in the model and on the surface. **CLOSED by §9.13-CREDIT row 3**, with the
+   function itself deleted; what is left of the FORBID is 07f's.
 2. **E3's mechanism is BUILT AND SWITCHED OFF.** `credit-marking.ts:markCreditToMarket` exists,
    is correct, and derives its price from the paper's own cash flows through
    `domain/pricing/tranche.ts:pricePerFace`. `core.ts:293` does not run it: *"`credit-marking` is

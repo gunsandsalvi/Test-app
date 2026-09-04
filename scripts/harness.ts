@@ -2183,7 +2183,7 @@ const spiralModule: HarnessModule = {
               + ` | biz ${(businessLoanBookOf(bs, facilityBookLocal) / 1e9).toFixed(2)}B hh ${(consumerLoanBookOf(bs) / 1e9).toFixed(2)}B`
               + ` cash ${(bankReservesOf(ensureV2(state), c.ticker) / 1e9).toFixed(2)}B cbloan ${((bs.centralBankLoanLocal ?? 0) / 1e9).toFixed(2)}B`
               + ` desk ${(deskLocal / 1e9).toFixed(2)}B`
-              + ` oas5y ${(issuerSpreadAtOnCurve(ensureV2(state), state.regions[c.region].zeroRates, c.id, state.currentWeek, 5)?.spreadBps ?? 0).toFixed(0)}bps rating ${c.creditRating}`);
+              + ` oas5y ${(issuerSpreadAtOnCurve(ensureV2(state), state.regions[c.region], c.id, state.currentWeek, 5)?.spreadBps ?? 0).toFixed(0)}bps rating ${c.creditRating}`);
           });
       });
     }

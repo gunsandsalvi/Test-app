@@ -36,6 +36,10 @@ import { sovereignCouponByBond } from '../../domain/government';
 import { setClearedPrice } from '../../engine2/prices';
 import { priceFromSpreadBps } from '../../domain/pricing';
 import { RATING_OAS_SPREADS } from '../pricing';
+/** §3.13 row 3: what a first lien is worth on the same borrower's credit — the loan book's own
+ *  `SENIOR_LIEN_DISCOUNT`, stated here for week zero alone because at week zero no holder has
+ *  priced it. From week 1 it is an outcome of what a first-lien holder's economics ask for. */
+const SENIOR_LIEN_SEED_DISCOUNT = 0.85;
 
 const sumByTenor = (byTenor: Record<string, number> | undefined): number =>
   Object.values(byTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0);
@@ -161,10 +165,15 @@ export function closeSeedMoney(
  * from a real price per piece of paper rather than from one number per borrower.
  *
  * The SPREAD it opens at is the seed's own rating table — the same primitive `generateDebtTranches`
- * struck every coupon from, so the opening world is internally consistent (§7.4: the seed must open
- * in the shape the engine produces). That table is 37-SEED's E1 and it is the last stated number in
- * this chain: from week 1 the auction prices each tranche on its own and the table is never read
- * again, so an issuer's flat opening curve becomes a real term structure in one session.
+ * struck every coupon and every loan margin from, so the opening world is internally consistent
+ * (§7.4: the seed must open in the shape the engine produces). That table is 37-SEED's E1 and it is
+ * the last stated number in this chain: from week 1 the auctions price each tranche on its own and
+ * the table is never read again, so an issuer's flat opening curve becomes a real term structure in
+ * one session.
+ *
+ * Both credit books: a BOND opens at the rating's spread over the curve, a LOAN at that spread
+ * discounted for its first lien — the same structural relationship the loan book's holders price,
+ * stated once here because at week zero there are no holders to have priced it yet.
  */
 export function seedOpeningCreditPrices(
   regions: Record<RegionId, Region>,
@@ -179,16 +188,20 @@ export function seedOpeningCreditPrices(
     const spreadBps = RATING_OAS_SPREADS[c.creditRating]?.baseBps;
     if (spreadBps === undefined) return;
     for (const tr of ladderRowsOf(v2, c.id)) {
-      // The corporate BOND book's paper only: a facility sits on its lender's own book, CP is
-      // 07f's, and a floater is 07d's, which still clears a margin.
-      if (TS.flags[tr] & (TR_FACILITY | TR_CP | TR_FLOATING)) continue;
+      // The two cleared credit books' paper only: a facility sits on its lender's own book, and
+      // commercial paper is 07f's, which still clears a yield.
+      if (TS.flags[tr] & (TR_FACILITY | TR_CP)) continue;
       const weeksToMaturity = TS.maturityWeek[tr] - currentWeek;
       if (!(weeksToMaturity > 0) || !(TS.principalLocal[tr] > 0)) continue;
+      const floating = (TS.flags[tr] & TR_FLOATING) !== 0;
+      const marginBps = Number.isNaN(TS.floatingMarginBps[tr]) ? 0 : TS.floatingMarginBps[tr];
       const price = priceFromSpreadBps({
-        annualCouponRate: Number.isNaN(TS.couponRate[tr]) ? 0 : TS.couponRate[tr],
+        annualCouponRate: floating
+          ? (reg.policyRate ?? 0) + marginBps / 10000
+          : (Number.isNaN(TS.couponRate[tr]) ? 0 : TS.couponRate[tr]),
         periodWeeks: trancheScheduleOf(TS, tr).periodWeeks,
         weeksToMaturity,
-      }, reg.zeroRates, spreadBps);
+      }, reg.zeroRates, floating ? spreadBps * SENIOR_LIEN_SEED_DISCOUNT : spreadBps);
       if (price > 0 && isFinite(price)) setClearedPrice(v2, v2.internedStrings[TS.idRef[tr]], price);
     }
   });

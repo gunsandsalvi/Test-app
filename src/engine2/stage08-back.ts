@@ -948,7 +948,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       // §3.13: what this borrower's own bonds say a five-year claim on it costs. A borrower with
       // none printed pays what its committed line charges — which is what a bridge IS.
       bridgeMarginBps: issuerSpreadAtOnCurve(
-        v2, updatedRegions[L8.region[row]].zeroRates, L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS
+        v2, updatedRegions[L8.region[row]], L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS
       )?.spreadBps ?? L8.facilityMarginBps[row],
     });
     if (comp) applyCapCompWrites(comp, cap, L8, row);
@@ -1375,7 +1375,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // which makes the saving zero and leaves the call to the premium alone.
       const fairRateToday = isFixed
         ? riskFree + (paperSpreadBps(r) ?? (annualRate - riskFree) * 10000) / 10000
-        : reg.policyRate + (loanQuoteBps() ?? (Number.isNaN(TS.floatingMarginBps[r]) ? 0 : TS.floatingMarginBps[r])) / 10000;
+        : reg.policyRate + (loanQuoteBps(r) ?? (Number.isNaN(TS.floatingMarginBps[r]) ? 0 : TS.floatingMarginBps[r])) / 10000;
       const premiumPerDollar = callPremiumRowLocal(r, 1);
       const savingPvPerDollar = (annualRate - fairRateToday) * annuityFactor(fairRateToday, remainingYears);
       return {
@@ -1395,10 +1395,10 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
      * cleared price implies over the curve at its own remaining life; `undefined` means no market
      * has printed it, which is a fact and not a zero.
      */
-    const paperSpreadBps = (r: number): number | undefined => rowSpreadBps(v2, reg.zeroRates, r, nextWeek);
-    /** The borrower's floating quote, which 07d still clears per issuer (§3.13's next credit row
-     *  moves it onto the paper, as this one now is). */
-    const loanQuoteBps = (): number | undefined => comp?.leveragedLoan?.discountMarginBps;
+    const paperSpreadBps = (r: number): number | undefined => rowSpreadBps(v2, reg, r, nextWeek);
+    /** §3.13 row 3: a floater's own cleared discount margin, off its own price — the same read as
+     *  a bond's OAS, which is what `rowSpreadBps` now answers for either kind of paper. */
+    const loanQuoteBps = (r: number): number | undefined => paperSpreadBps(r);
 
     /** Premiums owed to holders this week, by the book that owns the paper. */
     let bondCallPremiumLocal = 0;
@@ -1718,7 +1718,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // fund at rather than off a single number attached to the firm. A borrower whose bonds have
     // never printed pays what its committed bank line charges, which is the only price anyone has
     // actually quoted it.
-    const fiveYearSpreadBps = issuerSpreadAtOnCurve(v2, reg.zeroRates, L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
+    const fiveYearSpreadBps = issuerSpreadAtOnCurve(v2, reg, L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
       ?? L8.facilityMarginBps[row];
     const costOfNewDebtAnnual = fiveYearSovRate + fiveYearSpreadBps / 10000;
     // S5 leak #3 fixed for real: surplus-cash prepayment retires ACTUAL tranches (nearest
@@ -2096,7 +2096,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // §3.13 — WHAT THIS FILING RECORDS is the borrower's cost of five-year money at the date it
     // files, read off its OWN bonds. It is a statement of what the market charged this issuer, not
     // a field the issuer carries: a name with nothing printed reports what its bank line costs.
-    const filedFiveYearSpreadBps = issuerSpreadAtOnCurve(v2, reg.zeroRates, L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
+    const filedFiveYearSpreadBps = issuerSpreadAtOnCurve(v2, reg, L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
       ?? L8.facilityMarginBps[row];
     const newSeniorBondYield = reg.zeroRates.tenor5Y + filedFiveYearSpreadBps / 10000;
 

@@ -93,7 +93,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 an underlying futures/options/swaps settle against | `src/domain/derivatives/registry.ts:DERIVATIVE_CLASSES` | ❌ |
 | C4 a signal participants read | `src/engine/macro/indices.ts:regionIndexOf` | ✅ |
 | D1 an equity index per region | `src/domain/indexes.ts:INDEX_DEFINITIONS` | ⚠️ |
-| D2 a credit index over a defined bond set | `src/engine/simulation/stages/index-calculation.ts:fixedMarketValueLocal` | ⚠️ |
+| D2 a credit index over a defined bond set | `src/engine/simulation/stages/index-calculation.ts:creditMarketValueLocal` | ✅ |
 | **D3 a rate benchmark floating instruments fix on** | `src/domain/company.ts:referenceBenchmark` | ❌ |
 | D3.a a read of actual transactions | `src/domain/pricing/tranche.ts:policyRate` | ❌ |
 | **D3.b FORBID no benchmark that is posted rather than transacted** | `src/engine/macro/evolution.ts:taylorTarget` | ❌ |
@@ -207,17 +207,18 @@ struck against `generate52WeekHistory`'s random walk, so A3's circularity is not
 real index — it is closed on an invented one. **It closes when D1/E1 does**, and needs no step of
 its own.
 
-### ⚠️ A2 / D2 — THE CREDIT INDEX DISCOUNTS ON A FIT
+### ✅ A2 / D2 — THE CREDIT INDEX READS CLEARED PRICES NOW
 
-`index-calculation.ts:fixedMarketValueUSD` prices each fixed tranche at
-`calculateNelsonSiegelZeroRate(years, curve) + comp.oasSpreadBps / 10000`. The OAS is cleared; the
-curve is `reg.yieldCurveParams`, the **fitted** representation, while `zeroRates.tenor2Y…30Y`
-holds the cleared points. Equity (`marketCapOf`, off 07e's cleared `stockPrice`) and loans
-(`leveragedLoan.pricePar`, off 07d) read cleared prices; only the bond leg does not.
+**CLOSED, §9.13-CREDIT rows 1 and 3.** It used to price each fixed tranche at
+`calculateNelsonSiegelZeroRate(years, curve) + comp.oasSpreadBps / 10000` — a third opinion about a
+price the auction had already struck, on the **fitted** curve rather than the cleared one — while
+the loan leg read `leveragedLoan.pricePar`, itself linearised out of a cleared margin. Both credit
+books deposit a price per tranche now and `creditMarketValueLocal` is one read of it for either
+kind; a tranche no session has printed contributes nothing rather than a guess, which is what an
+index of what traded means.
 
-**Already §3 step 25** — §9 names this file: *"`index-calculation` and `12-portfolio` still
-discount with the fit, so the model is not yet consistent — that is step 25."* This tree is a
-second witness, no more.
+`12-portfolio` was the other half named beside this one and it reads the cleared price too. What is
+left of step 25's fit-versus-cleared split is `11-fiscal` and `call-protection`.
 
 ### ❌ C1 / C3 — AN INDEX IS A MANDATE HERE AND NOTHING ELSE
 

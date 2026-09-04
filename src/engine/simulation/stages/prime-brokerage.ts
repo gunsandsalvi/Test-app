@@ -163,7 +163,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       // the exposure consumes. The uncollateralised sliver IS the haircut, so that is the weight.
       // §3.13: the front of the broker's OWN credit curve — a margin line is financed on the
       // shortest money the broker itself can raise.
-      const brokerSpreadBps = issuerSpreadAtOnCurve(ctx.v2, reg.zeroRates, broker.id, ctx.nextWeek, 1 / 52)?.spreadBps
+      const brokerSpreadBps = issuerSpreadAtOnCurve(ctx.v2, reg, broker.id, ctx.nextWeek, 1 / 52)?.spreadBps
         ?? WHOLESALE_FUNDING_SPREAD_BPS;
       const rateAnnual = reg.policyRate + brokerSpreadBps / 10000
         + quoteLoanMarginBps({
