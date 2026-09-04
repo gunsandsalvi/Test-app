@@ -432,7 +432,6 @@ written from here):
     **B. THE DEAD CODE — DONE, in §9. −188 lines.**
 
     **C. THE SECOND ANSWERS — rule 19 conversions, each naming its read.**
-    C3. `aggregateRegionalHoldings` inlines `materializeBook` field for field.
     C4. `audit/prices.ts:p8` re-derives a sovereign price where a print now exists — its own
         docstring says it goes green when the register carries the mark. Run the audit and decide.
     C5. The audit's object walks (`ownership.ts:29,48,88,129,240`) — correct today because the audit
@@ -1662,6 +1661,15 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ C3 — AND IT FOUND THE COPY A6 MISSED.** `aggregateRegionalHoldings` inlined
+`materializeBook` field for field, and had drifted from it on the one field where the two can
+disagree: the store falls back from a NaN `units` through the SHARE COUNT and only then to the
+money; this copy went straight to the money. So an equity row that never had its units written
+reported a dollar figure in the regional view and a share count everywhere else. A6 collapsed
+seventeen copies of that fallback and did not catch this one, because it aliases the store as
+`Ha` rather than `H` — a pattern match found seventeen and a READ found the eighteenth, which is
+§1.19's own point turned on the sweep that enforces it. It calls `materializeBook` now.
 
 **13-READ C2 — THE STALENESS OUTLASTS THE HANDLE, AND THAT IS WHAT THE NOTE GOT WRONG.**
 `context.ts` said entity `itemizedHoldings` arrays are stale week-start snapshots *"while

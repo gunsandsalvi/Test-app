@@ -23,7 +23,7 @@
 
 import { ensureV2, regionOf, typeOf } from '../../../engine2/world';
 import { ladderRowsOf, ensureLaddersSynced, facilityRowsOf, materializeGovLadder } from '../../../engine2/tranches';
-import { bookHeadOf, ensureBooksSynced, instrumentIdAt } from '../../../engine2/holdings';
+import { bookHeadOf, ensureBooksSynced, materializeBook } from '../../../engine2/holdings';
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../domain/assets';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
@@ -64,7 +64,6 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
   // this outside the weekly step).
   const v2a = ensureV2(state);
   ensureBooksSynced(v2a, state.institutionalEntities);
-  const Ha = v2a.holdings;
   state.institutionalEntities.forEach((e) => {
     if (e.region !== regionId || e.isDefaulted) return;
     // CASH IS CASH. What the entity lent overnight — to a bank in repo, or to the central bank
@@ -74,19 +73,16 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
     cash += entityCashOf(ensureV2(state), e);
     lent += (e.repoLentLocal ?? 0) + (e.rrpLentLocal ?? 0);
     liabilities += (e.beneficiaryLiabilityLocal ?? 0) + (e.mmfSharesOutstandingLocal ?? 0);
-    for (let r = bookHeadOf(v2a, e.id); r >= 0; r = Ha.next[r]) {
-      const type = typeOf(v2a, Ha.typeRef[r]) as ItemizedHolding['instrumentType'];
-      const sh = Ha.shares[r];
-      const h: ItemizedHolding = {
-        instrumentId: instrumentIdAt(v2a, r),
-        instrumentType: type,
-        issuerRegion: regionOf(v2a, Ha.regionRef[r]) as ItemizedHolding['issuerRegion'],
-        quantityOrNotionalLocal: Ha.qtyLocal[r],
-        units: Number.isNaN(Ha.units[r]) ? Ha.qtyLocal[r] : Ha.units[r],
-      };
-      if (!Number.isNaN(sh)) h.quantityShares = sh;
+    // §3.13-READ C3: THE STORE'S OWN MATERIALIZER. This inlined `materializeBook` field for
+    // field — and drifted from it on the one field where the two can disagree: it fell back from
+    // a NaN `units` straight to the row's MONEY, where the store falls back through the SHARE
+    // COUNT first. So an equity row that never had its units written reported a dollar figure
+    // here and a share count there. (§3.13-READ A6 collapsed seventeen copies of that fallback
+    // and missed this one, because it aliases the store as `Ha`.)
+    for (const h of materializeBook(v2a, e.id)) {
+      const type = h.instrumentType;
       institutionalHoldings.push(h);
-      const v = Ha.qtyLocal[r];
+      const v = h.quantityOrNotionalLocal ?? 0;
       // CP: an issuer's short paper is corporate credit like its bonds — one view of the
       // institutional sector's claim on companies, whatever book prices it.
       // step 4 — the class comes from the registry (domain/assets), which is also where
