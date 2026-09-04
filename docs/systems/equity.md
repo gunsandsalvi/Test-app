@@ -242,7 +242,7 @@ economics. Recorded so it is not re-found.
 
 ### ⚠️ G1 / G3 — INDEX WEIGHTS ARE FULL MARKET CAP, AND THE COMPARABLE MULTIPLE PRICES PRIVATE FIRMS
 
-`index-calculation.ts:121` weights by `indexValueLocal`, which for an equity index is `marketCapOf`
+`index-calculation.ts` weights by `equityValueLocal`, which for an equity index is `marketCapAt`
 — the WHOLE share count, not the free float 07e already computes for the same names
 (`heldByInstitutionsShares + deskHeldShares`). So an index fund buys weight in a name the register
 says is mostly unsellable, and the index level moves with holdings nobody could trade. The float

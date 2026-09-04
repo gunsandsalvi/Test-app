@@ -79,7 +79,7 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a stated rule over stated constituents at stated weights | `src/domain/indexes.ts:IndexConstituent` · `src/engine/simulation/stages/index-calculation.ts:creditConstituents` | ✅ |
 | A1.a all three public and reproducible | `src/ui/objects/index-object.tsx:indexesOf` | ⚠️ |
-| A2 reads cleared prices and nothing else | `src/engine/simulation/stages/index-calculation.ts:indexValueLocal` | ✅ |
+| A2 reads cleared prices and nothing else | `src/engine/simulation/stages/index-calculation.ts:constituentValueLocal` | ✅ |
 | **A3 FORBID never an input to its own constituents** | `src/engine/macro/indices.ts:measureBeta` | ⚠️ |
 | A4 a unit and a base | `src/domain/indexes.ts:INDEX_BASE_LEVEL` | ✅ |
 | B1 weights come from something real | `src/engine/simulation/stages/index-calculation.ts:rebalance` | ✅ |
@@ -93,7 +93,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 an underlying futures/options/swaps settle against | `src/domain/derivatives/registry.ts:DERIVATIVE_CLASSES` | ❌ |
 | C4 a signal participants read | `src/engine/macro/indices.ts:regionIndexOf` | ✅ |
 | D1 an equity index per region | `src/domain/indexes.ts:INDEX_DEFINITIONS` | ⚠️ |
-| D2 a credit index over a defined bond set | `src/engine/simulation/stages/index-calculation.ts:creditMarketValueLocal` | ✅ |
+| D2 a credit index over a defined bond set | `src/engine/simulation/stages/index-calculation.ts:creditConstituents` | ✅ |
 | **D3 a rate benchmark floating instruments fix on** | `src/domain/company.ts:referenceBenchmark` | ❌ |
 | D3.a a read of actual transactions | `src/domain/pricing/tranche.ts:policyRate` | ❌ |
 | **D3.b FORBID no benchmark that is posted rather than transacted** | `src/engine/macro/evolution.ts:taylorTarget` | ❌ |
@@ -229,7 +229,7 @@ its own.
 `calculateNelsonSiegelZeroRate(years, curve) + comp.oasSpreadBps / 10000` — a third opinion about a
 price the auction had already struck, on the **fitted** curve rather than the cleared one — while
 the loan leg read `leveragedLoan.pricePar`, itself linearised out of a cleared margin. Both credit
-books deposit a price per tranche now and `creditMarketValueLocal` is one read of it for either
+books deposit a price per tranche now and `creditRowValueLocal` is one read of it for either
 kind; a tranche no session has printed contributes nothing rather than a guess, which is what an
 index of what traded means.
 
