@@ -38,7 +38,7 @@ import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryLocal, full
 import { WeeklyStepContext, CompanyWeekUpdate } from './context';
 import { revHistLen, revHistAt, rowOf, V2World, ensureV2, partyKeyOf } from '../../../engine2/world';
 import { deliverGoods, receiveInputLot, settleOutputInventory, setOutputStock, consumeGoods } from '../../ledger/goods-ledger';
-import { contractRows, relinkChain, formContractRow, endOfWeekCompact } from '../../../engine2/contracts';
+import { contractRows, relinkChain, formContractRow, endOfWeekCompact, mutableContracts, type ContractTable } from '../../../engine2/contracts';
 import { random, beginEntityScope, endEntityScope } from '../../rng';
 import { capacityMixShares } from '../../../domain/sme-pool';
 import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
@@ -567,7 +567,10 @@ const CS_ALIVE = 0, CS_DEAD_MISSING = 1, CS_DEAD_SUPPLIER = 2, CS_DEAD_CUSTOMER 
 /** The portable core: per-row settlement arithmetic in chain order, draining each supplier's
  *  one balance sequentially (the coupling that makes this loop serial by construction). */
 function settleContractsCore(
-  T: V2World['contracts'], rows: number[], contractLeadWeeks: number,
+  // §3.13-BOOK: this core WRITES the contract book (the escalation re-strike, the backlog and the
+  // progress deposit), so it takes the book's own mutable handle rather than the world's read
+  // view. `settleContracts` above is the only caller and holds the handle.
+  T: ContractTable, rows: number[], contractLeadWeeks: number,
   preStatus: Uint8Array, supSlot: Int32Array, needLocal: Float64Array,
   marketPrice: Float64Array, avail: Float64Array,
   status: Uint8Array, buyerLoss: Float64Array, sellerLoss: Float64Array,
@@ -647,7 +650,11 @@ function settleContracts(
   contractSalesUnitsBySupplier: Map<Company, number>,
   availableBySupplier: Map<Company, number>
 ): number[] {
-  const T = v2.contracts;
+  // §3.13-BOOK — THE ONE STAGE THAT WRITES A STORE IT DOES NOT OWN. Five columns are written
+  // here directly (the escalation re-strike, the backlog, and the progress deposit), so the
+  // contract book's wall has a door this stage walks through. Named rather than hidden: the
+  // I/O-layer step turns these into operations on `contracts.ts` and this handle goes away.
+  const T = mutableContracts(v2);
   const { resolveRef, pidOf } = wk;
   const R_NONPERF = internReason('non-performance damages');
   const R_CANCEL = internReason('order cancellation damages');

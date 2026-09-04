@@ -447,6 +447,14 @@ written from here):
     have, made total. `structuredClone` on the host state must keep working, so these are plain
     data with private accessors, never classes.
 
+    **THE WALL IS UP ON ALL SIX STORES — in §9.** `accounts`, `prices` and `contracts` had no read
+    view at all, so any file could write a balance, invent a print, or re-strike a contract price.
+    What is LEFT is that the handles are exported: the wall has named doors, and eleven files hold
+    one. Three of those should not — `05-unit-bidding` writes five contract-book columns,
+    `holdings-store` writes six register columns, and the seed writes balances directly. Making the
+    handles module-private is the rest of this paragraph, and it can only be done by moving those
+    writes into the owning module as named operations.
+
     **THE CROSS-TABLE CHECK.** Referential integrity as a GATE, not an audit: every position names
     an instrument that exists, every instrument names an issuer that exists, every position names a
     holder that exists, every price names an instrument. It is a scan of four tables — cheap enough
@@ -1551,6 +1559,29 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK — THE READ VIEW REACHES THE OTHER THREE STORES, AND MONEY WAS THE ONE MISSING IT.**
+Inserted here (rule 10) rather than left to the end, because it is the user's own test of the step
+— *"make it impossible for something to change an object or an entity outside of some clear
+input/output layer... similar to how money already works"* — and an audit found money was the store
+it was NOT true of. `v2.holdings`, `v2.tranches` and `v2.lots` had a `Readonly` view; `v2.accounts`,
+`v2.prices` and `v2.contracts` were the raw mutable types, so any file in the model could write
+`v2.accounts.balance[r] = x`, `v2.prices.byIdRef.set(...)` or a contract's price, and nothing would
+notice. The exemplar was the exception.
+
+`Readonly<Float64Array>` does refuse element assignment (TS2542) — checked, not assumed, because the
+whole wall rests on it — so the three missing views were the fix, with `mutableAccounts`,
+`mutablePrices` and `mutableContracts` beside their ledgers. A probe writing a balance, a currency
+id, a register quantity, a ladder principal, the print table and a contract price is now rejected on
+all six.
+
+**What is left is written down rather than claimed closed.** The handles are exported, so the wall
+has named doors and eleven files hold one. Eight are the stores' own modules and their ledgers.
+Three are not: `05-unit-bidding` writes five contract-book columns (the escalation re-strike, the
+backlog, the progress deposit), `holdings-store` writes six register columns, and the seed writes
+balances directly. Each is now a NAMED handle at a commented site instead of an ordinary field
+write, which is what makes the remaining three countable — and making the handles module-private is
+exactly the work of moving those writes into the owning module. Gates green (145 tests); no run.
 
 **13-BOOK slice (b) step three — SEVEN SPACES, SEVEN NUMBERINGS.** With every site already behind
 a door, the split itself was fifteen functions: `internedStrings`/`internedIdByString` become

@@ -15,10 +15,10 @@
  */
 
 import { newLotStore, ReadonlyLotStore } from './lots';
-import { ContractTable, newContractTable } from './contracts';
+import { ReadonlyContractTable, newContractTable } from './contracts';
 import { newTrancheStore, ReadonlyTrancheStore } from './tranches';
 import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
-import { newPriceStore, PriceStore } from './prices';
+import { newPriceStore, ReadonlyPriceStore } from './prices';
 import { CurrencyCode, CURRENCY_CODES } from '../domain/geography';
 import { FxTable, PARITY_FX } from '../domain/currency';
 import { asInstrumentId, type InstrumentId } from '../domain/ids';
@@ -44,7 +44,7 @@ export interface V2World {
   /** IND1/1$-is-1$ — every firm's real input lots, FIFO by acquisition week. */
   lots: ReadonlyLotStore;
   /** IND11 — the bilateral supply-contract book (§7.304's measured scaling monster). */
-  contracts: ContractTable;
+  contracts: ReadonlyContractTable;
   /** §7.307/§7.310 — the debt ladder as rows (rows are the authority since §7.313). */
   tranches: ReadonlyTrancheStore;
   /** §7.307 — the institutional register as rows (stage 1: a synced mirror of itemizedHoldings). */
@@ -52,7 +52,7 @@ export interface V2World {
   /** §3.13 — WHAT ONE UNIT OF AN INSTRUMENT LAST CLEARED AT (engine2/prices.ts). A position is
    *  (asset, units) and its value is units × this; a market writes only what it cleared, and an
    *  instrument no market printed has no entry rather than a par. */
-  prices: PriceStore;
+  prices: ReadonlyPriceStore;
   /** §4.C II.5 — revenue history as a 13-slot ring per firm row (the object field is DELETED:
    *  the weekly `[...slice(-12), x]` allocated a fresh array per firm per week, and the §7.320
    *  mid-loop-append trap lived in the aliasing; a ring has neither). Plain arrays, not SAB —
@@ -66,7 +66,7 @@ export interface V2World {
    *  write): one balance per party key interned in this world's string table, living week to
    *  week. Companies first (§7.384); the other kinds join per A3's list. Plain typed arrays and
    *  a Map, clone-safe like every table here. */
-  accounts: PersistentAccounts;
+  accounts: ReadonlyAccounts;
   /** §3.13c — THE RATE IN FORCE THIS WEEK: what a unit of each currency is worth in the
    *  numéraire. It lives on the world rather than on the week's context because a balance cannot
    *  be read, converted or settled without it and reads happen everywhere — the audits, the UI
@@ -107,6 +107,27 @@ export interface PersistentAccounts {
   /** A3.3 — a sector party's rows, one per (bank, currency): party key id → `TICKER|CUR` → row. */
   bankRowsByParty: Map<PartyKeyRef, Map<string, number>>;
 }
+
+/**
+ * §3.13-BOOK — THE MONEY STORE'S READ VIEW.
+ *
+ * `v2.holdings`, `v2.tranches` and `v2.lots` have had one of these; the ACCOUNT store did not, so
+ * any file in the model could write `v2.accounts.balance[r] = x` and no gate would notice. That is
+ * the exact inversion of what money is supposed to be here — a balance moves only through `pay()`,
+ * and money is the example the rest of the model is being made to look like. It was the one store
+ * whose wall was a naming convention.
+ *
+ * `Readonly<Float64Array>` genuinely refuses element assignment (TS2542), which is what makes this
+ * a wall rather than a label; the mutable handle is `accounts.ts:mutableAccounts`.
+ */
+export type ReadonlyAccounts = {
+  readonly [K in keyof PersistentAccounts]:
+    PersistentAccounts[K] extends RefColumn<infer B> ? RefColumn<B>
+    : PersistentAccounts[K] extends Float64Array ? Readonly<Float64Array>
+    : PersistentAccounts[K] extends Int8Array ? Readonly<Int8Array>
+    : PersistentAccounts[K] extends Map<infer MK, infer MV> ? ReadonlyMap<MK, MV>
+    : PersistentAccounts[K];
+};
 
 export function newPersistentAccounts(): PersistentAccounts {
   const cap = 1 << 12;

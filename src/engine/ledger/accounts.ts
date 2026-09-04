@@ -44,8 +44,12 @@ import { Company } from '../../domain/company';
 import { GovDebtTranche } from '../../domain/region-macro';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { DepositLines } from '../../domain/banking';
-import { V2World, ensureV2, CURRENCY_ID, currencyOfId, internAccount, accountRefOf, internPartyKey, partyKeyRefOf, partyKeyOf } from '../../engine2/world';
+import { V2World, ensureV2, CURRENCY_ID, currencyOfId, internAccount, accountRefOf, internPartyKey, partyKeyRefOf, partyKeyOf, type PersistentAccounts } from '../../engine2/world';
 import { newRefColumn, type AccountRef } from '../../engine2/refs';
+
+/** The ledger's own handle on the money store. Nothing else may hold one — see `ReadonlyAccounts`
+ *  in `world.ts` for what it is protecting and why this store is the one that must be protected. */
+export const mutableAccounts = (v2: V2World): PersistentAccounts => v2.accounts as PersistentAccounts;
 
 // ---------------------------------------------------------------------------------------------
 // THIRD SLICE — THE PERSISTENT ACCOUNTS, COMPANIES FIRST (A3.1, ). A company's balance
@@ -56,7 +60,7 @@ import { newRefColumn, type AccountRef } from '../../engine2/refs';
 // balance arrives by payment — W6); the seed opens each firm's account where it wrote `cash`.
 // ---------------------------------------------------------------------------------------------
 
-function growPersistent(a: V2World['accounts']): void {
+function growPersistent(a: PersistentAccounts): void {
   const cap = a.keyRef.length * 2;
   const k = newRefColumn<AccountRef>(cap); k.set(a.keyRef); a.keyRef = k;
   const b = new Float64Array(cap); b.set(a.balance); a.balance = b;
@@ -74,7 +78,7 @@ export function accountRowOf(v2: V2World, party: PartyRef, currency: CurrencyCod
 
 /** Open the party's account in one currency. Opening one that exists is a defect: a balance has one row. */
 export function openAccount(v2: V2World, party: PartyRef, currency: CurrencyCode, balance: number): number {
-  const a = v2.accounts;
+  const a = mutableAccounts(v2);
   const ref = internAccount(v2, accountKey(party, currency));
   if (a.rowByKeyRef.has(ref)) throw new Error(`ENGINE DEFECT: account ${accountKey(party, currency)} opened twice`);
   if (a.n >= a.keyRef.length) growPersistent(a);
@@ -103,7 +107,7 @@ export function homeCurrencyOf(v2: V2World, party: PartyRef): CurrencyCode | und
 
 /** Declare the money a party keeps its books in, before it has been paid anything (the seed). */
 export function setHomeCurrency(v2: V2World, party: PartyRef, currency: CurrencyCode): void {
-  v2.accounts.homeByPartyRef.set(internPartyKey(v2, partyKey(party)), CURRENCY_ID[currency]);
+  mutableAccounts(v2).homeByPartyRef.set(internPartyKey(v2, partyKey(party)), CURRENCY_ID[currency]);
 }
 
 /** The party's row in one currency, opened at zero on first sight. */
@@ -174,7 +178,7 @@ export function ownMoneyBalanceOf(v2: V2World, party: PartyRef): number {
 
 /** A balance SET by fiat — the harness's shocks only; no stage writes a balance. */
 export function resetAccount(v2: V2World, party: PartyRef, currency: CurrencyCode, balance: number): void {
-  v2.accounts.balance[ensureAccount(v2, party, currency)] = balance;
+  mutableAccounts(v2).balance[ensureAccount(v2, party, currency)] = balance;
 }
 
 /**
@@ -218,7 +222,7 @@ const bankSlot = (bankTicker: string, currency: CurrencyCode): string => `${bank
 
 /** The sector party's row at a bank in one currency, opened at zero on first sight. */
 export function sectorRowAt(v2: V2World, party: PartyRef, bankTicker: string, currency: CurrencyCode): number {
-  const a = v2.accounts;
+  const a = mutableAccounts(v2);
   const ref = internPartyKey(v2, partyKey(party));
   let byBank = a.bankRowsByParty.get(ref);
   if (!byBank) { byBank = new Map(); a.bankRowsByParty.set(ref, byBank); }
@@ -333,7 +337,7 @@ export const stateDepositLines = (state: { companies: readonly Company[]; instit
  */
 export function adjustSectorRow(v2: V2World, party: PartyRef, bankTicker: string, currency: CurrencyCode, delta: number): void {
   if (delta === 0) return;
-  v2.accounts.balance[sectorRowAt(v2, party, bankTicker, currency)] += delta;
+  mutableAccounts(v2).balance[sectorRowAt(v2, party, bankTicker, currency)] += delta;
 }
 
 /** A bank leaves (resolved, merged): every sector party's row at it joins its row at the assuming bank. */
@@ -346,8 +350,8 @@ export function moveSectorRowsToBank(v2: V2World, fromTicker: string, toTicker: 
     [...byBank.keys()].filter((k) => k.startsWith(fromTicker + '|')).forEach((slot) => {
       const r = byBank.get(slot)!;
       const to = sectorRowAt(v2, party, toTicker, currencyOfId(v2.accounts.currencyId[r]));
-      v2.accounts.balance[to] += v2.accounts.balance[r];
-      v2.accounts.balance[r] = 0;
+      mutableAccounts(v2).balance[to] += v2.accounts.balance[r];
+      mutableAccounts(v2).balance[r] = 0;
       byBank.delete(slot);
     });
   });
@@ -385,7 +389,7 @@ export function adjustBankReserves(v2: V2World, bankTicker: string, delta: numbe
   const home = homeCurrencyOf(v2, party);
   if (home === undefined) return;
   const r = accountRowOf(v2, party, home);
-  if (r >= 0) v2.accounts.balance[r] += delta;
+  if (r >= 0) mutableAccounts(v2).balance[r] += delta;
 }
 
 /** A bank leaves whole (a merger): its reserves join the acquirer's rows, money by money. */
@@ -397,8 +401,8 @@ export function moveBankReserves(v2: V2World, fromTicker: string, toTicker: stri
   rows.forEach((r) => {
     const cur = currencyOfId(v2.accounts.currencyId[r]);
     const to = reserveRowOf(v2, toTicker, cur, 0);
-    v2.accounts.balance[to] += v2.accounts.balance[r];
-    v2.accounts.balance[r] = 0;
+    mutableAccounts(v2).balance[to] += v2.accounts.balance[r];
+    mutableAccounts(v2).balance[r] = 0;
   });
 }
 
@@ -839,7 +843,7 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
   const landSectorRows = (party: PartyRef) => {
     (s.rowsOfParty.get(partyId(party)) ?? []).forEach((r) => {
       const bi = s.bankIdx[r];
-      if (bi >= 0) ctx.v2.accounts.balance[sectorRowAt(ctx.v2, party, s.banks[bi], currencyOfId(s.currencyId[r]))] = s.balance[r];
+      if (bi >= 0) mutableAccounts(ctx.v2).balance[sectorRowAt(ctx.v2, party, s.banks[bi], currencyOfId(s.currencyId[r]))] = s.balance[r];
     });
   };
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
@@ -873,7 +877,7 @@ function landEveryMoney(ctx: WeeklyStepContext, s: AccountStore, party: PartyRef
   if (!byCur) return;
   byCur.forEach((rows, cur) => {
     let total = 0; for (const r of rows) total += s.balance[r];
-    ctx.v2.accounts.balance[ensureAccount(ctx.v2, party, currencyOfId(cur))] = total;
+    mutableAccounts(ctx.v2).balance[ensureAccount(ctx.v2, party, currencyOfId(cur))] = total;
   });
 }
 // A3.5: `compareToBooks` — the first slice's gate — is gone with the last field it

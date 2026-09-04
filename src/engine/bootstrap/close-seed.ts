@@ -1,4 +1,4 @@
-import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf, stashSeedGovLadder, seedGovLadderOf } from '../ledger/accounts';
+import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf, stashSeedGovLadder, seedGovLadderOf, mutableAccounts } from '../ledger/accounts';
 import { accruedPerFace, weeksAccrued } from '../../domain/company';
 import { currencyOf } from '../../domain/geography';
 import { V2World } from '../../engine2/world';
@@ -79,7 +79,7 @@ export function closeSeedMoney(
       householdDepositsLocal += lineLocal;
       // A3.4/A3.6c-iii: the household sector's row at this bank opens at the line struck — the
       // only place the line exists (the seed's provisional sizing was a stash, retired here).
-      v2.accounts.balance[sectorRowAt(v2, { kind: 'HOUSEHOLD', region: regionId }, b.ticker, currencyOf(regionId))] = lineLocal;
+      mutableAccounts(v2).balance[sectorRowAt(v2, { kind: 'HOUSEHOLD', region: regionId }, b.ticker, currencyOf(regionId))] = lineLocal;
       // A3.6a: the bank's own account opens at the reserves the close strikes.
       openAccount(v2, { kind: 'BANK', ticker: b.ticker }, currencyOf(regionId), openingCashOf(s));
     });

@@ -21,30 +21,44 @@
 
 import { V2World, internInstrument, instrumentRefOf } from './world';
 import { InstrumentId } from '../domain/ids';
+import type { InstrRef } from './refs';
 
 export interface PriceStore {
   /** Interned instrument id → what ONE UNIT of it last cleared at, in the instrument's own money.
    *  The unit is the asset registry's `countedIn`: a dollar of face for credit, a share for
    *  equity. Absent = no market has ever printed this instrument. */
-  byIdRef: Map<number, number>;
+  byIdRef: Map<InstrRef, number>;
   /** The print BEFORE that one. A market writes each instrument once a session, so this is last
    *  session's price by construction — which is what a realised weekly move is measured off
    *  (`prime-brokerage`'s haircuts, an underwriter's price risk). Kept beside the price rather
    *  than as a ring because one week back is all any consumer asks for. */
-  prevByIdRef: Map<number, number>;
+  prevByIdRef: Map<InstrRef, number>;
 }
 
+/**
+ * §3.13-BOOK — a READ view of the print table, and the ledger's own handle beside it. A price is
+ * written by one clearing adapter for what it cleared and by nothing else; before this, any file
+ * could `v2.prices.byIdRef.set(...)` and invent a print no market made.
+ */
+export type ReadonlyPriceStore = {
+  readonly [K in keyof PriceStore]: PriceStore[K] extends Map<infer MK, infer MV> ? ReadonlyMap<MK, MV> : PriceStore[K];
+};
+
+/** The price ledger's own handle. Nothing else may hold one. */
+export const mutablePrices = (v2: V2World): PriceStore => v2.prices as PriceStore;
+
 export function newPriceStore(): PriceStore {
-  return { byIdRef: new Map(), prevByIdRef: new Map() };
+  return { byIdRef: new Map<InstrRef, number>(), prevByIdRef: new Map<InstrRef, number>() };
 }
 
 /** The market's print. Only a clearing adapter calls this, and only for what it cleared. */
 export function setClearedPrice(v2: V2World, instrumentId: InstrumentId, pricePerUnit: number): void {
   if (!Number.isFinite(pricePerUnit)) return;
   const ref = internInstrument(v2, instrumentId);
-  const prior = v2.prices.byIdRef.get(ref);
-  if (prior !== undefined) v2.prices.prevByIdRef.set(ref, prior);
-  v2.prices.byIdRef.set(ref, pricePerUnit);
+  const P = mutablePrices(v2);
+  const prior = P.byIdRef.get(ref);
+  if (prior !== undefined) P.prevByIdRef.set(ref, prior);
+  P.byIdRef.set(ref, pricePerUnit);
 }
 
 /** What it printed at the session before — undefined until it has printed twice. */
@@ -75,7 +89,8 @@ export function clearedPriceOf(v2: V2World, instrumentId: InstrumentId): number 
 
 /** The instrument ceased to exist, so its price is no longer a fact about anything. Called by the
  *  store that frees the row, so a price outlives its paper by exactly nothing. */
-export function forgetClearedPrice(v2: V2World, idRef: number): void {
-  v2.prices.byIdRef.delete(idRef);
-  v2.prices.prevByIdRef.delete(idRef);
+export function forgetClearedPrice(v2: V2World, idRef: InstrRef): void {
+  const P = mutablePrices(v2);
+  P.byIdRef.delete(idRef);
+  P.prevByIdRef.delete(idRef);
 }

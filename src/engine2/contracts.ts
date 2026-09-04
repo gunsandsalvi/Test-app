@@ -26,6 +26,22 @@ import { V2World, internPartyKey, partyKeyOf } from './world';
 import { SUBUNIT_INDEX, SUBUNITS, NSUB } from './state';
 import { newRefColumn, type RefColumn, type PartyKeyRef } from './refs';
 
+/**
+ * §3.13-BOOK — a READ view of the supply-contract book, and its module's own handle. Same wall the
+ * register and the ladder already had; this table simply never got one.
+ */
+export type ReadonlyContractTable = {
+  readonly [K in keyof ContractTable]:
+    ContractTable[K] extends RefColumn<infer B> ? RefColumn<B>
+    : ContractTable[K] extends Float64Array ? Readonly<Float64Array>
+    : ContractTable[K] extends Int32Array ? Readonly<Int32Array>
+    : ContractTable[K] extends Uint8Array ? Readonly<Uint8Array>
+    : ContractTable[K];
+};
+
+/** The contract book's own handle. Nothing else may hold one. */
+export const mutableContracts = (v2: V2World): ContractTable => v2.contracts as ContractTable;
+
 export interface ContractTable {
   cap: number;
   used: number;
@@ -107,7 +123,7 @@ export function formContractRow(
   supplierKey: string, customerKey: string,
   priceLocal: number, qtyPerWeek: number, weeksRemaining: number, escalationBaseLocal: number
 ): void {
-  const T = v2.contracts;
+  const T = mutableContracts(v2);
   const subIdx = SUBUNIT_INDEX.get(subUnitId);
   if (subIdx === undefined) throw new Error(`ENGINE DEFECT: unknown sub-unit ${subUnitId} on a contract`);
   let r: number;
@@ -167,7 +183,7 @@ export function contractRows(v2: V2World, region: string, subUnitId: string): nu
  * rows, in order) and recycle `dead`. The settle kernel decides who lives; this just relinks.
  */
 export function relinkChain(v2: V2World, region: string, subUnitId: string, survivors: number[], dead: number[]): void {
-  const T = v2.contracts;
+  const T = mutableContracts(v2);
   const subIdx = SUBUNIT_INDEX.get(subUnitId)!;
   const { head, tail } = regionTables(T, region);
   if (survivors.length === 0) {
