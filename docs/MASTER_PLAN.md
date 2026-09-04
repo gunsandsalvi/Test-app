@@ -360,8 +360,8 @@ written from here):
     assets category? Start with refactoring that then move in order of higher to lower
     difficulty."* So: **sovereign** (13-SOV, the hardest and the one with five parallel
     structures) → **credit** (price clears instead of a spread) → **equity** (the stored value
-    goes) → **inventory at cost versus price** (the new holding-gain mechanism) → **goods**
-    (the price already exists and is discarded) → **plant and housing** (units must be defined
+    goes, and households become holders) → **inventory at cost versus price** (the new
+    holding-gain mechanism) → **goods** (the price already exists and is discarded) → **plant and housing** (units must be defined
     before anything else is possible — step 26 owns that decision). Each class is its own commit
     and each is expected to move the numbers.
 
@@ -377,6 +377,30 @@ written from here):
     · **row 5 — the mark**: the register carries FACE and `P5`/`P8` measure the gap to the cleared
       price on both classes. It cannot land one book at a time (§9.13 part 3) — it lands when
       every credit book prints a price and every reader takes `faceLocal`.
+
+    **13-EQUITY, the equity class** — the stored value goes (WHAT THIS FORCES, point 4), **and
+    HOUSEHOLDS BECOME HOLDERS IN THE SAME COMMIT** (user, 2026-09-04, reading a company's
+    shareholders: *"first I want to see households as actual holders and second what does the
+    float comment mean?"*). One commit because both rewrite every equity register row, and doing
+    them apart touches each row twice.
+    · **THERE IS NO HOUSEHOLD HOLDER.** `ui/world.ts:189` `holdersOf` walks
+      `state.institutionalEntities` and nothing else — because that is where the register is. The
+      household sector's equity is `household-portfolio.ts:householdDirectEquityLocal`, a macro
+      aggregate with no row naming a company, so the largest holder class in the model owns
+      nothing that can be pointed at, cannot be anyone's counterparty, and has no buy schedule at
+      all (atlas `equity.md` C2.a ⚠️, `households.md` D1.a ⚠️). Rule 2: a residual with no
+      holder is a defect, not a boundary.
+    · **AND "THE FLOAT" IS THAT SAME RESIDUAL UNDER A SECOND NAME** (rule 4 — this answers the
+      user's second question). The dividend walk computes
+      `floatLocal = denomLocal − registerLocal − deskLocal` (`shared-helpers.ts:618`) and pays
+      `owedLocal × floatLocal/denomLocal` to `{ kind: 'HOUSEHOLD' }` with the reason *"dividend to
+      the public float"*. The float IS the household sector: a subtraction, not a holder. So
+      `holders.tsx:56` printing *"households and the float hold the rest"* names one thing twice
+      and reads as two. The wording is not the fix — once households hold rows there is nothing
+      left to subtract, and both names go with the residual.
+    · **THE DESKS ARE MISSING FROM THE SAME VIEW.** `holdersOf` skips them too, though 13e and
+      §9.13-CREDIT row 2 settled that they are holders of record and `deskLocal` is already a term
+      in the dividend's denominator — the view contradicts the payment it is a view of.
 
     **THE CONTINUOUS-VERSUS-DISCRETE CONVENTION** (step 12b, §9.12b): `engine/nelsonSiegel.ts`
     discounts CONTINUOUSLY (`exp(-z·t)`) where `domain/pricing/` compounds discretely — two answers
@@ -420,6 +444,27 @@ written from here):
     receivable standing against it until the coupon date, and the same is true of every week it
     accrues. One line on the institutional sheet, read from the same ledger the bank's is.
 
+14-SHELL. **THE SHELL, BEFORE THE VIEWS THAT SIT IN IT** (user, 2026-09-04: *"the UI lags when
+    showing the holders section given it's so long, put instead the top 50 and a button to click
+    to expand at the bottom (same applies for every long list); when I click on the search bar at
+    the bottom the whole page shifts up as the keyboard opens, I want the page to be sticky and
+    only the search bar to move up."*) **Inserted here, ahead of 14 and 15**, because those two
+    re-label every row and put PRICE and DM/OAS side by side in every fixed-income view: they
+    land ON these lists, and a list that already stalls at its full length does not improve with
+    two more columns.
+    · **A LONG LIST IS RENDERED WHOLE — AND WHERE IT IS NOT, THE REST IS UNREACHABLE.**
+      `ui.tsx:115` `Table` maps `rows` entire, and ten of its twelve callers hand it everything
+      they hold (`holders.tsx:58`, the one the user hit, is a register with no cap on it). The two
+      that do cap each invented their own: `screener.tsx:50` slices at 400 and says so underneath,
+      `book.tsx:90` at 60 and `index-object.tsx:47` at 40 and neither says anything. Three
+      constants answer one question (rule 4) and two of them drop rows silently, which is a
+      truncation the reader can neither see nor undo. ONE cap, in `Table`, with the count and the
+      expand control beneath it; the three call-site slices and the screener's hint go.
+    · **THE KEYBOARD MOVES THE PAGE INSTEAD OF THE BAR.** The shell is `position: fixed; inset: 0`
+      over a `flexDirection: 'column'` (`Aurora.tsx:217`) with the command bar as its last child,
+      so when the on-screen keyboard opens the visual viewport shrinks and the whole column —
+      header, function strip and panel — is pushed up with it. The bar tracks the keyboard; what
+      is above it holds still.
 14. **Nomenclature** (rule 9). A tranche's display name is issuer + coupon + maturity
     (`KRLN 4.75% 2031`), a loan issuer + margin + maturity (`KRLN L+350 2029`), a bill issuer +
     tenor, a sovereign the same. `ui/objects/tranche.tsx:50` currently labels with the internal id.
