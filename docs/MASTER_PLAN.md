@@ -394,16 +394,16 @@ written from here):
     time — a position in paper that does not exist, keyed as though it were the issuer. It cannot
     be deleted before the clear moves: drop the row and the holder's cash leg has no security
     (rule 5); key it anywhere else and it is the same invention under a new name.
-    *(The BOND book is done — §9.13-CREDIT row 1. It clears per tranche, so no split is invented
-    and a claim on paper that has retired is REPAID by its borrower at its own face instead of
-    migrating onto that borrower's other bonds. `register-split.ts` survives for `07d`, `07f` and
-    the desks' issuer-keyed books until those two rows land, and it goes with the last of them.)*
+    *(The BOND and LOAN books are done — §9.13-CREDIT rows 1 and 3. Both clear per tranche, so no
+    split is invented and a claim on paper that has retired is REPAID by its borrower at its own
+    face instead of migrating onto that borrower's other paper. `register-split.ts` survives for
+    `07f` and the desks' issuer-keyed books alone, and it goes with row 4.)*
     Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
     DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
     **AND THE CORPORATE ACCRUED LEG** (13b's other half, `bond.md` N9.b): a buyer pays the seller
-    what has accrued on the face it takes. *(Done for the BOND book — §9.13-CREDIT row 2. `07d`
-    and `07f` follow when they clear per tranche, because the leg needs a per-tranche face delta
-    to ride and an issuer-keyed clear has none.)*
+    what has accrued on the face it takes. *(Done for BONDS — §9.13-CREDIT row 2 — and for LOANS
+    with row 3, which gave the leg the per-tranche face delta it rides on. `07f` follows in row 4,
+    for the same reason and in the same shape.)*
 13e. **A HOLDER OF RECORD IS EVERY HOLDER.** `sovereign-calendar.ts:accrueSovereignHolders` walks
     the institutional register and the banks' investment books — so a bank's govvie DESK inventory
     and the CENTRAL BANK's own book accrue nothing, and their share of every sovereign coupon is
