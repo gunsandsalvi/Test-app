@@ -116,7 +116,7 @@ checked by `scripts/check-atlas.sh`.
 | D1.a price is the primitive; yield and spread are derived | `src/engine/simulation/stages/financial-clearing-engine.ts:ClearingInstrument` | ❌ |
 | D2 a set of trades with two named sides and a quantity | `src/engine/ledger/holdings-ledger.ts:clearedBookDelta` | ✅ |
 | D3 the trades hit the register and the accounts in the same pass | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ⚠️ |
-| D4 the price becomes the mark for every holder | `src/engine/ledger/holdings-ledger.ts:markCreditBook` | ✅ |
+| D4 the price becomes the mark for every holder | `src/engine/ledger/holdings-ledger.ts:markBookToMarket` | ✅ |
 | D5 VERIFY Σ bought = Σ sold, Σ cash paid = Σ cash received | `src/engine/simulation/stages/settlement.ts:clearingHouseResidualLocal` | ✅ |
 | E1 the price is public | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:runCorporateBondClearingStage` | ✅ |
 | E2 one market's print is another's input | `src/engine/simulation/stages/index-calculation.ts:runIndexCalculationStage` | ✅ |

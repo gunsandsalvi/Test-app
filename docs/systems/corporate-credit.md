@@ -188,7 +188,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | **D8 FORBID no derived measure may set the price (N7.b)** | `src/engine/credit-price.ts:trancheClearedPricePerFace` | ✅ |
 | E1 a register of holders (N8) | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
 | E2 VERIFY Σ held = issued (N8.a) | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
-| **E3 the holder marks at the cleared price** | `src/engine/simulation/stages/credit-marking.ts:markCreditToMarket` | ✅ |
+| **E3 the holder marks at the cleared price** | `src/engine/simulation/stages/register-marking.ts:markRegisterToMarket` | ✅ |
 | E4 the change in the mark is P&L reaching income | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` | ⚠️ |
 | E4.a realised and unrealised are distinguishable | `src/engine/simulation/stages/12-portfolio-and-positions.ts:unrealizedPnL` | ⚠️ |
 | E5 an economic reservation | `src/engine/simulation/stages/asset-allocation.ts:computeReservationSpreadBps` | ✅ |
@@ -260,7 +260,7 @@ price is derived from a spread somebody else cleared.
 
 **Row 5 wired the MARK**, which could not land one book at a time (§9.13 part 3) and now lands
 because all three print a price. Every credit book still writes its fills in PAR space, as the
-sovereign does; `credit-marking` runs at the CLOSE — after every stage that can write a register
+sovereign does; `register-marking` runs at the CLOSE — after every stage that can write a register
 row — and re-marks each row to `units × the price its own auction printed`. The books go on
 claiming `units`, so a mark never looks like a trade. `P5` stops sizing the defect and starts
 measuring the RESIDUAL: what the mark could not reach, which is paper no session has printed.
@@ -273,12 +273,12 @@ What the original re-walk added, still standing:
    price and `12-portfolio` showed the player as `currentPrice`. N7.b's "arithmetic wearing a
    market's clothes", in the model and on the surface. **CLOSED by §9.13-CREDIT row 3**, with the
    function itself deleted; what is left of the FORBID is 07f's.
-2. **E3's mechanism is BUILT AND SWITCHED OFF.** `credit-marking.ts:markCreditToMarket` exists,
-   is correct, and derives its price from the paper's own cash flows through
-   `domain/pricing/tranche.ts:pricePerFace`. `core.ts:293` does not run it: *"`credit-marking` is
-   BUILT AND NOT YET WIRED IN"*, because half a mark does not converge while later stages write
-   rows back in par space. So the register is at par today by a decision, and the ONE remaining
-   blocker is named in that comment — the list of readers that must read `faceUSD` first.
+2. **E3's mechanism was BUILT AND SWITCHED OFF, and §9.13-CREDIT row 5 turned it on.** The stage
+   (`register-marking.ts`) had existed and been correct for weeks while `core.ts` declined to run
+   it, because half a mark does not converge while later stages write rows back in par space. What
+   it needed was the two things row 5 supplied: every writer maintaining the quantity, and a
+   position at the CLOSE where nothing after it can put the book back into par space. It no longer
+   derives a price at all — it reads what the paper's own auction printed.
 3. **The asset registry cannot enforce any of it.** `grep -rn quotedAs src` returns the registry's
    own three lines and **nothing else**; `countedIn`'s exported reader is called from nowhere
    (two comments mention it). The two fields step 13 leans on are declarations no code consumes,

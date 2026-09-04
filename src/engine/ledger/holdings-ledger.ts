@@ -20,7 +20,6 @@ import {
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows,
 } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
-import { isTrancheKind } from '../../domain/assets';
 import { PartyRef } from './party';
 import { wire, AssetKind, ASSET_KINDS } from './wire';
 import { internReason } from '../simulation/stages/settlement';
@@ -337,32 +336,41 @@ export function clearedBookDelta(
 }
 
 /**
- * THE CREDIT BOOK, RE-MARKED. A price move is not a trade: the holder owns the same face before
- * and after, so nothing moves and nothing is wired — the same rule `markHolding` states for one
- * row, applied to every credit row a holder has.
+ * THE BOOK, RE-MARKED — every row of it whose market printed a price this week.
  *
- * It also FIXES THE FACE on a row that has none yet: a book writes its fills in par space, so the
+ * A price move is not a trade: the holder owns the same QUANTITY before and after, so nothing
+ * moves and nothing is wired — the same rule `markHolding` states for one row, applied to a whole
+ * book. What changes is only what that quantity is worth.
+ *
+ * §9.13-EQUITY: this was `markCreditBook` and walked the tranche kinds alone, so an EQUITY row
+ * kept whatever value the last session that touched it wrote — a holder that did not trade this
+ * week carried its shares at a stale print, and its NAV, its capital ratio and every allocation
+ * sized off them were struck on last week's market. Equity has stored its own quantity (shares)
+ * since WS4; what it had no owner for was the re-mark. `priceOfRow` is asked per KIND, because a
+ * bond's price comes from the price store and a share's from its issuer.
+ *
+ * It also FIXES THE QUANTITY on a row that has none: a book writes its fills in par space, so the
  * value it was written with IS the face. After that the two are separate numbers and only the
  * value moves, which is what lets a book keep trading face while the register carries a price.
  *
- * `priceOfInstrument` returns undefined for paper it cannot price; that row is left alone rather
- * than marked to a guess.
+ * `priceOfRow` returns undefined for anything it cannot price; that row is left alone rather than
+ * marked to a guess.
  */
-export function markCreditBook(
+export function markBookToMarket(
   v2: V2World, holderId: string,
-  priceOfInstrument: (instrumentId: string) => number | undefined
+  priceOfRow: (instrumentType: string, instrumentId: string) => number | undefined
 ): { rows: number; deltaLocal: number } {
   const H = mutableHoldings(v2);
   let rows = 0, deltaLocal = 0;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
-    if (!isTrancheKind(v2.internedStrings[H.typeRef[r]])) continue;
+    const instrumentType = v2.internedStrings[H.typeRef[r]];
     if (Number.isNaN(H.units[r])) H.units[r] = H.qtyLocal[r];
-    const faceLocal = H.units[r];
-    if (!(Math.abs(faceLocal) > 0)) continue;
-    const price = priceOfInstrument(v2.internedStrings[H.instrRef[r]]);
+    const unitsHeld = H.units[r];
+    if (!(Math.abs(unitsHeld) > 0)) continue;
+    const price = priceOfRow(instrumentType, v2.internedStrings[H.instrRef[r]]);
     if (price === undefined) continue;
     const before = H.qtyLocal[r];
-    H.qtyLocal[r] = faceLocal * price;
+    H.qtyLocal[r] = unitsHeld * price;
     deltaLocal += H.qtyLocal[r] - before;
     rows++;
   }

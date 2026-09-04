@@ -33,7 +33,7 @@ import { runFxAndTradeStage } from './stages/06-fx-and-trade';
 import { runCommoditiesStage } from './stages/07-commodities';
 import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clearing';
 import { buildHoldingsStore, finalizeHoldingsStore, consolidateRegister } from './stages/holdings-store';
-import { markCreditToMarket } from './stages/credit-marking';
+import { markRegisterToMarket } from './stages/register-marking';
 import { runSettlementStage } from './stages/settlement';
 import { runBankResolutionStage } from './stages/bank-resolution';
 import { runBankFundingCloseStage } from './stages/bank-funding-close';
@@ -295,9 +295,10 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // called and the loan it secured shrinks with it.
   run('repo-collateral-reconcile', () => reconcileRepoPledges(ctx));
   run('holdings-writeback', () => finalizeHoldingsStore(ctx));
-  // §9.13-CREDIT row 5: CREDIT IS WORTH PRICE × FACE, and `credit-marking` runs at the CLOSE
-  // rather than here. Marking at this point does not converge — every stage after it writes rows
-  // back in par space, so the register would end the week part marked and part not.
+  // §9.13-CREDIT row 5: A POSITION IS WORTH ITS QUANTITY AT THIS WEEK'S PRICE, and
+  // `register-marking` runs at the CLOSE rather than here. Marking at this point does not
+  // converge — every stage after it writes rows back in par space, so the register would end the
+  // week part marked and part not.
   run('08-company-fundamentals', () => runCompanyFundamentalsStage(state, ctx));
   // §7.250 — stage 08 has consumed the bank-sheet channel; any later write to it throws.
   ctx.bankSheetChannelClosed = true;
@@ -438,11 +439,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // SCALE: one row per position before the week closes, so next week's sweeps of the register
   // walk positions rather than the fills that built them (stages/holdings-store.ts).
   run('register-consolidation', () => consolidateRegister(ctx));
-  // §9.13-CREDIT row 5 — THE MARK, AND IT IS THE LAST WORD. Every stage that writes a register
-  // row has run and the week's fills are one row per position, so nothing after this puts the
-  // book back into par space. The books trade FACE (`units`); this moves only what the face is
-  // WORTH, at the price that paper's own auction printed.
-  run('credit-marking', () => markCreditToMarket(state, ctx));
+  // §9.13-CREDIT row 5 / §9.13-EQUITY — THE MARK, AND IT IS THE LAST WORD. Every stage that
+  // writes a register row has run and the week's fills are one row per position, so nothing after
+  // this puts the book back into par space. The books trade QUANTITY (`units`); this moves only
+  // what that quantity is WORTH, at the price its own market printed.
+  run('register-marking', () => markRegisterToMarket(state, ctx));
   // §5-NEWS — the derived stories over what this week recorded, before the feed is assembled.
   run('news-derivation', () => runNewsDerivationStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));

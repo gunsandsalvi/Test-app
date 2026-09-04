@@ -486,8 +486,16 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // segment every short-rate consumer reads comes from a market, not an extrapolation.
       // §3.13-SOV row 4: the bills cleared a PRICE, so the curve is fitted through the yields
       // those prices imply — on the bill's own simple-interest convention.
+      // §9.13-EQUITY: and the print is DEPOSITED, as 07c's now is — a bill that cleared is worth
+      // what it cleared at, and `register-marking` reads this store. Without it a holder's bills
+      // sat at par for ever while its corporate paper marked, which is the same defect in the one
+      // class that had already priced its way out of it.
+      const billInstrumentById = new Map(instruments.map((i) => [i.id, i]));
       const billPoints = activeBills.map((b) => {
         const px = result.newStatById.get(b.key);
+        const inst = billInstrumentById.get(b.key);
+        const traded = (inst?.tradableFloatLocal ?? 0) > 0 || (inst?.primaryOfferingLocal ?? 0) > 0;
+        if (px !== undefined && traded && px > 0 && isFinite(px)) setClearedPrice(ctx.v2, b.key, px);
         return {
           tenorYears: b.years,
           yield: px === undefined ? reg.zeroRates.tenor3M : billYieldFromPrice(px, b.years),

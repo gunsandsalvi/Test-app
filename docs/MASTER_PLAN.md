@@ -381,10 +381,17 @@ written from here):
     residual: paper no session has printed.
 
     **13-EQUITY, the equity class** — the stored value goes (WHAT THIS FORCES, point 4), **and
-    HOUSEHOLDS BECOME HOLDERS IN THE SAME COMMIT** (user, 2026-09-04, reading a company's
-    shareholders: *"first I want to see households as actual holders and second what does the
-    float comment mean?"*). One commit because both rewrite every equity register row, and doing
-    them apart touches each row twice.
+    HOUSEHOLDS BECOME HOLDERS** (user, 2026-09-04, reading a company's shareholders: *"first I
+    want to see households as actual holders and second what does the float comment mean?"*).
+    *(**The stored value is done** — commit "13-EQUITY a". Reading the code corrected this step's
+    own claim that the two halves must be one commit "because both rewrite every equity register
+    row": the mark rewrites a row's VALUE and the household work ADDS rows, and they do not touch
+    each other. The mark is the small half and it went first, so the household rows join a
+    register that is already marked. `markCreditBook` is now `markBookToMarket` and the stage is
+    `register-marking`: it walks EVERY row it can price, so an equity holder that did not trade
+    this week no longer carries its shares at a stale print. Equity's node `equity.md` C3 read ✅
+    against `markHolding`, a one-row setter — the node asks whether a HOLDER is marked and the
+    honest answer was no.)*
     · **THERE IS NO HOUSEHOLD HOLDER.** `ui/world.ts:189` `holdersOf` walks
       `state.institutionalEntities` and nothing else — because that is where the register is. The
       household sector's equity is `household-portfolio.ts:householdDirectEquityLocal`, a macro
@@ -403,6 +410,25 @@ written from here):
     · **THE DESKS ARE MISSING FROM THE SAME VIEW.** `holdersOf` skips them too, though 13e and
       §9.13-CREDIT row 2 settled that they are holders of record and `deskLocal` is already a term
       in the dividend's denominator — the view contradicts the payment it is a view of.
+
+    **13-BILL — A BILL'S RETURN IS THE MARK, AND TODAY TWO THINGS OWN IT** (found while wiring the
+    mark, §9.13-EQUITY; it is `short-term-debt.md` E2 from the other side, and row 4's line
+    claiming to close E2 was wrong). `bill-accretion.ts` accretes a held bill toward face week by
+    week and books the accretion as INCOME, at
+    `calculateNelsonSiegelZeroRate(yearsRemaining, yieldCurveParams)` — *this week's fitted curve*,
+    not the yield the holder bought at, which is E2's "a discount computed from a curve nobody
+    traded" in one line. It also breaks the conservation `bill-accretion`'s own header claims: the
+    treasury receives `face/(1+y₀·t)` at issue and repays `face`, while holders accumulate at
+    `yₜ`, and the two agree only if `y₀ = yₜ`.
+    **The mark makes it a rule-4 problem as well**, which is why it is here rather than parked:
+    `register-marking` would set a bill's value from the price its own auction printed while
+    `bill-accretion` sets the same value from a fit — two writers of one number, with the income
+    booked against whichever wrote last. Bills are therefore EXCLUDED from the mark today, which
+    is the honest holding position and not the answer. The answer is one owner: the MARK sets the
+    value (07f already deposits the bill prints, so the price is waiting) and the income IS the
+    mark's own delta — the accretion stops being computed and starts being observed, and the
+    conservation holds because both legs are the same number. `weeklyAccretionRate` and the last
+    `calculateNelsonSiegelZeroRate` call outside step 25's list go with it.
 
     **THE CONTINUOUS-VERSUS-DISCRETE CONVENTION** (step 12b, §9.12b): `engine/nelsonSiegel.ts`
     discounts CONTINUOUSLY (`exp(-z·t)`) where `domain/pricing/` compounds discretely — two answers

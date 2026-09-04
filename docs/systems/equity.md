@@ -128,7 +128,7 @@ checked by `scripts/check-atlas.sh`.
 | C2.c index funds, which do not price | `src/engine/simulation/stages/etf-demand.ts:indexFundDemand` | ✅ |
 | **C2.d the issuer itself, via treasury shares** | — | ❌ |
 | C2.e insiders and founders, not for sale | `src/domain/company.ts:ownership` | ✅ |
-| C3 marked at the cleared price | `src/engine/ledger/holdings-ledger.ts:markHolding` | ✅ |
+| C3 marked at the cleared price | `src/engine/ledger/holdings-ledger.ts:markBookToMarket` | ✅ |
 | **C4 the change in the mark is P&L reaching the holder's income** | `src/engine/simulation/stages/institutional-balance-sheet.ts:accrueInstitutionalIncome` | ⚠️ |
 | C5 a leveraged holder funds and can be forced to sell | `src/domain/prime-brokerage.ts:maxDrawnLocal` | ⚠️ |
 | C5.a margin, and a call on it | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageStage` | ⚠️ |
@@ -164,16 +164,28 @@ Counts: 41 `✅` · 11 `⚠️` · 4 `❌`.
 
 ## 3. THE DIFF
 
-### ⚠️ THE STORED VALUE ON THE REGISTER ROW — KNOWN, §3 step 13 item 4
+### ⚠️ THE STORED VALUE ON THE REGISTER ROW — narrowed to a CACHE, §9.13-EQUITY
 
 Equity is the only asset in this model that stores a price, and the register row stores the VALUE
-as well: `07e:535` writes `quantityShares`, `quantityOrNotionalUSD: shares * comp.stockPrice` and
-`units: shares` on one row, and `comp.stockPrice` is the print. Step 13's survey table names this
-exact row and its item 4 is *"the equity row's stored value has to go"*. Not re-derived here.
-**Already §3 step 13.** What this mapping adds is one consequence the step does not list: the
-stored value is what `securities-lending.ts:79` and `07e:248` fall back to when
-`quantityShares` is absent (`quantityOrNotionalUSD / stockPrice`), so the two representations
-are load-bearing for each other in two stages, not one.
+as well: `07e` writes `quantityShares`, `quantityOrNotionalLocal: shares × comp.stockPrice` and
+`units: shares` on one row. Step 13's survey table names this exact row and its item 4 is *"the
+equity row's stored value has to go"*.
+
+**What C3 was actually ✅ on, and what it hid.** The mapping cited `markHolding` — a one-row setter
+— for a node that asks whether a HOLDER is marked at the cleared price, and the honest answer was
+no: only a session that TOUCHED a row rewrote its value, so a holder that did not trade this week
+carried its shares at a stale print, and its NAV, its capital ratio and every allocation sized off
+them were struck on last week's market. **§9.13-EQUITY closed it**: `register-marking` runs at the
+close over every row of every book, and an equity row is `shares × its issuer's own cleared print`
+whether or not that holder traded. C3 now cites the walk that does it.
+
+What is left under this heading is the FIELD, not the number in it: the value is a cache re-derived
+every week rather than a function computed at every read, which is where step 13's structure ends
+up (*"value is a FUNCTION, `units × price(asset)`, never a field"*) and where credit stands too. One
+consequence to keep in view while it survives: the stored value is what `securities-lending.ts:79`
+and `07e:248` fall back to when `quantityShares` is absent
+(`quantityOrNotionalLocal / stockPrice`), so the two representations are load-bearing for each
+other in two stages, not one.
 
 ### ❌ A5 / F3 — THERE IS NO VOTE, SO CONTROL IS A PERCENTAGE AND NOT A CLAIM
 

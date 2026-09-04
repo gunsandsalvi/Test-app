@@ -112,7 +112,7 @@ checked by `scripts/check-atlas.sh`.
 | D1 what does this party hold? | `src/engine2/holdings.ts:bookRowsOf` | ✅ |
 | D2 who holds this instrument? | `src/engine/columns/holdings-table.ts:HoldingsTable` | ✅ |
 | D2.a both directions answerable without reconstruction | `src/engine/simulation/stages/register-index.ts:buildRegisterIndex` | ✅ |
-| D3 what is it worth? — quantity × a market price | `src/engine/ledger/holdings-ledger.ts:markCreditBook` | ✅ |
+| D3 what is it worth? — quantity × a market price | `src/engine/ledger/holdings-ledger.ts:markBookToMarket` | ✅ |
 | **D4 what did it cost? — the basis** | — | ❌ |
 | E1 a coupon or dividend pays the holders of record | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
 | E2 an amortisation or maturity pays its face | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ✅ |
@@ -165,7 +165,7 @@ is missing is one settlement point that writes both or neither.
 `units` and `faceUSD`. There is no basis field, and `grep -rn 'costBasis\|basisUSD\|realizedGain'`
 over `src/` returns nothing. The doc comment on `quantityOrNotionalUSD` even says *"market value
 at cost"* — two different quantities named as one, which is how the field came to be re-marked
-every week by `markCreditBook` without anybody noticing the cost was gone.
+every week by `markBookToMarket` without anybody noticing the cost was gone.
 
 **Consequence.** A realised gain cannot be computed, so it cannot be taxed and cannot be reported.
 `the-treasury.md` C1 wants taxes on real bases; a capital-gains base does not exist here. It also
@@ -202,7 +202,7 @@ the instrument's own unit (A1.c) — shares for equity, FACE for credit and sove
 maintains it: `newBookRow` (the clearing write-back's own row builder, which never copied it),
 `debitRow` (which never subtracted it), the duplicate-row merge, `addShares`, `scaleHoldings`, the
 estate and the merger paths. `clearedBookDelta` takes a UNIT delta and prices it, so a wire carries
-what moved and what it fetched (C2.a). And `credit-marking` is WIRED IN, at the close, after every
+what moved and what it fetched (C2.a). And `register-marking` is WIRED IN, at the close, after every
 stage that can write a row: a credit row's value is `units × the price that paper's own auction
 printed` (D3), and the books go on claiming `units`, so a mark never looks like a trade.
 

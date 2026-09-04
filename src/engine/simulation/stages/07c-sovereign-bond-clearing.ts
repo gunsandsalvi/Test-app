@@ -47,6 +47,7 @@ import { bankReservesOf, bankDepositLines, householdDepositsAt } from '../../led
 import { GameState, RegionId, ItemizedHolding } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { priceFromYield, yieldFromPrice, zeroRateAt, PaperTerms, COUPON_PERIOD_WEEKS } from '../../../domain/pricing';
+import { setClearedPrice } from '../../../engine2/prices';
 import { retireTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { materializeGovLadder, ladderRowsOf, trancheRowOf } from '../../../engine2/tranches';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
@@ -530,10 +531,22 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // Every bond that traded is a point on the curve, at ITS OWN remaining tenor and the yield
     // ITS OWN cleared price implies. The curve is a read of what the market paid for real bonds
     // (rule 3, and §3.25's one curve owner), not a refit of four synthetic points.
+    // §9.13-EQUITY — AND THE PRINT IS DEPOSITED, not only turned into a curve point. This book
+    // struck a price per BOND and kept nothing but the yield it implied, so the register carried
+    // every sovereign holding at PAR for ever while the two corporate books marked at what they
+    // printed: step 13's item 3 ("the auction already computes the price it needs and discards
+    // it"), one asset class over. `register-marking` reads the store this writes.
+    const instrumentByIdSov = new Map(instruments.map((i) => [i.id, i]));
     const observedPoints = bonds
       .map((b) => {
         const px = result.newStatById.get(b.id);
-        return px === undefined ? undefined : { tenorYears: b.years, yield: yieldFromPrice(termsOf(b), px) };
+        if (px === undefined) return undefined;
+        const inst = instrumentByIdSov.get(b.id);
+        const traded = (inst?.tradableFloatLocal ?? 0) > 0 || (inst?.primaryOfferingLocal ?? 0) > 0;
+        // §3.21: a book with nothing to trade has no clearing level, and what comes back is the
+        // numerical bracket. Such a bond KEEPS the price it had rather than taking that print.
+        if (traded && px > 0 && isFinite(px)) setClearedPrice(ctx.v2, b.id, px);
+        return { tenorYears: b.years, yield: yieldFromPrice(termsOf(b), px) };
       })
       .filter((p): p is { tenorYears: number; yield: number } => p !== undefined);
     if (process.env.SOV_TRACE === '1') {

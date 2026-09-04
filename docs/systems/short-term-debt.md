@@ -161,9 +161,14 @@ measures the gap. **Becomes a §3 step** (shared with `sovereign-credit.md` F2, 
 is recorded from the instrument's side) — small, and it folds into 13-SOV, which has to store the
 bill's issue price anyway.
 
-**Row 4 did not touch E2**, and the plan's row-4 line claiming it would is wrong: the accretion is
-a BILL mechanism on the sovereign side, not the CP book, and it is untouched. It stays ❌ until the
-bill's own issue price is what it pulls to par at.
+**Row 4 did not touch E2**, and the plan's row-4 line claiming it would was wrong: the accretion is
+a BILL mechanism on the sovereign side, not the CP book. §9.13-EQUITY got it half way — `07f` now
+DEPOSITS each cleared bill price in the price store, so the number E2 wants exists — and then found
+the other half is a rule-4 problem rather than only a rule-3 one: `register-marking` would set a
+bill's value from that print while `bill-accretion` sets the same value from a fit, two writers of
+one number with the income booked against whichever wrote last. Bills are excluded from the mark
+until one owner is decided, which is §3's **13-BILL**: the mark sets the value and the income IS
+its delta, so the accretion stops being computed and starts being observed.
 
 A2.a has no code at all: nothing in `07f`, `government.ts` or `commercial-paper.ts` names a
 day-count or a quoting convention. `discountBillProceedsUSD` is `face/(1 + y·t)` — simple money-market
