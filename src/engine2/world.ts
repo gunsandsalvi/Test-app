@@ -28,9 +28,19 @@ export interface V2World {
   /** Company id -> table row. Rows are addressing only — order carries no economics. */
   rowById: Map<string, number>;
   nRows: number;
-  /** Interned string table for lot seller keys. */
-  internedStrings: string[];
-  internedIdByString: Map<string, number>;
+  /**
+   * §3.13-BOOK slice (b) — ONE INTERN TABLE PER ID SPACE.
+   *
+   * These were a single `internedStrings` array shared by every ref column, so an instrument ref,
+   * a region ref and a type ref were the same kind of integer and only the columns' names kept
+   * them apart. They are seven numberings now, and a ref from one names nothing in another.
+   *
+   * What that buys beyond the type check: `refs.instruments.strings` IS the list of every
+   * instrument the world has ever named. Under one table that question had no answer — ~15 type
+   * tags and 5 region codes sat mixed among thousands of ids — and it is the question slice (d)'s
+   * instrument index is built to ask.
+   */
+  refs: RefTables;
   /** IND1/1$-is-1$ — every firm's real input lots, FIFO by acquisition week. */
   lots: ReadonlyLotStore;
   /** IND11 — the bilateral supply-contract book (§7.304's measured scaling monster). */
@@ -132,8 +142,7 @@ export function ensureV2(state: V2Host): V2World {
   const v2: V2World = {
     rowById: new Map(),
     nRows: 0,
-    internedStrings: [],
-    internedIdByString: new Map(),
+    refs: newRefTables(),
     lots: newLotStore(),
     contracts: newContractTable(),
     tranches: newTrancheStore(),
@@ -162,79 +171,104 @@ export function rowOf(v2: V2World, companyId: string): number {
   return r;
 }
 
-/**
- * A READ of the intern table: the id this string already has, or -1. Distinct from `internString`
- * because interning MUTATES — a lookup that misses appends, which shifts every id assigned after
- * it, and ids are addressing for lots, holdings and accounts. A read path that interns is a read
- * path that changes the world (measured: `pendingSettlement` asking a party's currency moved the
- * central bank's identity by 0.43B in week 4, purely by renumbering).
- */
-export function stringRef(v2: V2World, s: string): number {
-  return v2.internedIdByString.get(s) ?? -1;
+/** One id space's strings, and the reverse index onto them. Append-only for a run's life. */
+export interface InternTable {
+  strings: string[];
+  idByString: Map<string, number>;
 }
 
-export function internString(v2: V2World, s: string): number {
-  let id = v2.internedIdByString.get(s);
+/** The seven spaces `engine2/refs.ts` names, one table each. */
+export interface RefTables {
+  instruments: InternTable;
+  entities: InternTable;
+  regions: InternTable;
+  types: InternTable;
+  tickers: InternTable;
+  accountKeys: InternTable;
+  partyKeys: InternTable;
+}
+
+const newInternTable = (): InternTable => ({ strings: [], idByString: new Map() });
+
+const newRefTables = (): RefTables => ({
+  instruments: newInternTable(),
+  entities: newInternTable(),
+  regions: newInternTable(),
+  types: newInternTable(),
+  tickers: newInternTable(),
+  accountKeys: newInternTable(),
+  partyKeys: newInternTable(),
+});
+
+/**
+ * INTERNING MUTATES, AND THAT IS WHY THE READ BELOW IS A SEPARATE FUNCTION.
+ *
+ * A lookup that missed and appended would shift every id assigned after it, and ids are ADDRESSING
+ * for lots, holdings and accounts — rows already hold the old numbers. A read path that interns is
+ * a read path that changes the world, measured once: `pendingSettlement` asking a party's currency
+ * moved the central bank's identity by 0.43B in week 4, purely by renumbering. Splitting the table
+ * does not soften that; it narrows the blast radius to one space.
+ */
+const intern = (t: InternTable, s: string): number => {
+  let id = t.idByString.get(s);
   if (id === undefined) {
-    id = v2.internedStrings.length;
-    v2.internedStrings.push(s);
-    v2.internedIdByString.set(s, id);
+    id = t.strings.length;
+    t.strings.push(s);
+    t.idByString.set(s, id);
   }
   return id;
-}
+};
+
+/** A READ. Never appends — see `intern` above for what an appending read costs. */
+const look = (t: InternTable, s: string): number => t.idByString.get(s) ?? NO_REF;
 
 /**
  * §3.13-BOOK slice (b) — THE PER-SPACE DOORS ONTO THE INTERN TABLE (`engine2/refs.ts`).
  *
- * Every one of these delegates to `internString` above, so **every ref keeps the exact integer it
- * has today** and nothing here can move a number. What they add is a NAME for the space, checked
- * by the compiler: a `TypeRef` can no longer be compared with an `InstrRef`, and a column can no
- * longer be written from the wrong door.
- *
- * They are the seam. Step two of slice (b) gives each space its own array and its own numbering,
- * and when it does, only these twelve functions change — not the 131 sites that touch a ref
- * column. That is why the types come first and the split second (§5: maintain the new thing while
- * it still equals the old one).
+ * Each reads and writes ITS OWN table (`RefTables` above), so a ref is meaningless outside the
+ * space that minted it — the "by construction" half of what the types already say. Nothing outside
+ * this file touches a table directly; that is what made the split a change to these fifteen
+ * functions rather than to the 78 sites that used to reach past them (§5: the sites were routed
+ * through the doors first, while the numbering was still shared and nothing could move).
  */
 
 /** Intern an instrument id. */
-export const internInstrument = (v2: V2World, id: InstrumentId): InstrRef => internString(v2, id) as InstrRef;
+export const internInstrument = (v2: V2World, id: InstrumentId): InstrRef => intern(v2.refs.instruments, id) as InstrRef;
 /** Intern an entity id — anything that can hold, issue or be paid. */
-export const internEntity = (v2: V2World, id: string): EntityRef => internString(v2, id) as EntityRef;
+export const internEntity = (v2: V2World, id: string): EntityRef => intern(v2.refs.entities, id) as EntityRef;
 /** Intern a region code. */
-export const internRegion = (v2: V2World, id: string): RegionRef => internString(v2, id) as RegionRef;
+export const internRegion = (v2: V2World, id: string): RegionRef => intern(v2.refs.regions, id) as RegionRef;
 /** Intern an instrument KIND tag. */
-export const internType = (v2: V2World, tag: string): TypeRef => internString(v2, tag) as TypeRef;
+export const internType = (v2: V2World, tag: string): TypeRef => intern(v2.refs.types, tag) as TypeRef;
 /** Intern a company ticker — its party address, not its id. */
-export const internTicker = (v2: V2World, ticker: string): TickerRef => internString(v2, ticker) as TickerRef;
+export const internTicker = (v2: V2World, ticker: string): TickerRef => intern(v2.refs.tickers, ticker) as TickerRef;
 /** Intern an account key (`accounts.ts:accountKey` — a party and a currency). */
-export const internAccount = (v2: V2World, key: string): AccountRef => internString(v2, key) as AccountRef;
+export const internAccount = (v2: V2World, key: string): AccountRef => intern(v2.refs.accountKeys, key) as AccountRef;
 /** Intern a party key (`party.ts:partyKey` — the ledger's address, not the entity id). */
-export const internPartyKey = (v2: V2World, key: string): PartyKeyRef => internString(v2, key) as PartyKeyRef;
+export const internPartyKey = (v2: V2World, key: string): PartyKeyRef => intern(v2.refs.partyKeys, key) as PartyKeyRef;
 
 /**
- * A READ, per space: the ref this string already has, or -1. Interning on a read path MUTATES —
- * see `stringRef` above for the 0.43B that cost — so these exist separately and every one of them
- * can miss.
+ * A READ, per space: the ref this string already has, or `NO_REF`. Interning on a read path
+ * MUTATES — see `intern` above for the 0.43B that cost — so the reads are separate functions and
+ * every one of them can miss.
  */
-const lookup = (v2: V2World, s: string): number => v2.internedIdByString.get(s) ?? NO_REF;
-export const instrumentRefOf = (v2: V2World, id: InstrumentId): InstrRef => lookup(v2, id) as InstrRef;
-export const entityRefOf = (v2: V2World, id: string): EntityRef => lookup(v2, id) as EntityRef;
-export const regionRefOf = (v2: V2World, id: string): RegionRef => lookup(v2, id) as RegionRef;
-export const typeRefOf = (v2: V2World, tag: string): TypeRef => lookup(v2, tag) as TypeRef;
-export const tickerRefOf = (v2: V2World, ticker: string): TickerRef => lookup(v2, ticker) as TickerRef;
-export const accountRefOf = (v2: V2World, key: string): AccountRef => lookup(v2, key) as AccountRef;
-export const partyKeyRefOf = (v2: V2World, key: string): PartyKeyRef => lookup(v2, key) as PartyKeyRef;
+export const instrumentRefOf = (v2: V2World, id: InstrumentId): InstrRef => look(v2.refs.instruments, id) as InstrRef;
+export const entityRefOf = (v2: V2World, id: string): EntityRef => look(v2.refs.entities, id) as EntityRef;
+export const regionRefOf = (v2: V2World, id: string): RegionRef => look(v2.refs.regions, id) as RegionRef;
+export const typeRefOf = (v2: V2World, tag: string): TypeRef => look(v2.refs.types, tag) as TypeRef;
+export const tickerRefOf = (v2: V2World, ticker: string): TickerRef => look(v2.refs.tickers, ticker) as TickerRef;
+export const accountRefOf = (v2: V2World, key: string): AccountRef => look(v2.refs.accountKeys, key) as AccountRef;
+export const partyKeyRefOf = (v2: V2World, key: string): PartyKeyRef => look(v2.refs.partyKeys, key) as PartyKeyRef;
 
 /** Decode, per space. Each is where a ref becomes a string again, and the only place that claim
  *  is made — `instrumentOf` is the one that also crosses into the branded id space. */
-export const instrumentOf = (v2: V2World, ref: InstrRef): InstrumentId => asInstrumentId(v2.internedStrings[ref]);
-export const entityOf = (v2: V2World, ref: EntityRef): string => v2.internedStrings[ref];
-export const regionOf = (v2: V2World, ref: RegionRef): string => v2.internedStrings[ref];
-export const typeOf = (v2: V2World, ref: TypeRef): string => v2.internedStrings[ref];
-export const tickerOf = (v2: V2World, ref: TickerRef): string => v2.internedStrings[ref];
-export const partyKeyOf = (v2: V2World, ref: PartyKeyRef): string => v2.internedStrings[ref];
-export const accountKeyOf = (v2: V2World, ref: AccountRef): string => v2.internedStrings[ref];
+export const instrumentOf = (v2: V2World, ref: InstrRef): InstrumentId => asInstrumentId(v2.refs.instruments.strings[ref]);
+export const entityOf = (v2: V2World, ref: EntityRef): string => v2.refs.entities.strings[ref];
+export const regionOf = (v2: V2World, ref: RegionRef): string => v2.refs.regions.strings[ref];
+export const typeOf = (v2: V2World, ref: TypeRef): string => v2.refs.types.strings[ref];
+export const tickerOf = (v2: V2World, ref: TickerRef): string => v2.refs.tickers.strings[ref];
+export const partyKeyOf = (v2: V2World, ref: PartyKeyRef): string => v2.refs.partyKeys.strings[ref];
+export const accountKeyOf = (v2: V2World, ref: AccountRef): string => v2.refs.accountKeys.strings[ref];
 
 const REV_CAP = 13;
 

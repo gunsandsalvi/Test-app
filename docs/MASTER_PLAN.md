@@ -465,15 +465,9 @@ written from here):
        class, and 07b and 07d both read it back as an issuer key, so IG/HY/LL indexes state
        borrowers rather than paper. Slice (d) decides which way that resolves — the field splits
        by asset class, or a credit index states tranches.
-    b. **SPLIT THE INTERN TABLE** — one ref space per id kind, so an instrument ref cannot be a
-       region ref by construction. **Steps one and two are done, in §9**: the spaces are TYPES,
-       and all 78 sites that reached past the doors into `internedStrings`/`internedIdByString`
-       now go through them, so the whole table is behind 15 functions in `world.ts` and the
-       numbering is still shared and unmoved. **Step three is the split itself:** give each space
-       its own array, which renumbers — and is now a change to those 15 functions rather than to
-       78 sites. Until it lands, the one table holds ~15 type tags and 5 region codes mixed among
-       thousands of instrument ids, so *"enumerate every instrument"* has no answer, which is
-       exactly what (d) needs.
+    b. **SPLIT THE INTERN TABLE — DONE, in §9.** Seven spaces, seven numberings, the whole table
+       behind fifteen functions in `world.ts`, and `refs.instruments.strings` is now the list of
+       every instrument the world has named — which is what (d) is built on.
     c. **THE ENTITY REGISTRY** — one store; `PartyRef` becomes a VIEW of it rather than a parallel
        union; the ByTicker maps collapse; `O8`'s party arm widens from the derivatives book to
        every party-keyed store.
@@ -1557,6 +1551,29 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (b) step three — SEVEN SPACES, SEVEN NUMBERINGS.** With every site already behind
+a door, the split itself was fifteen functions: `internedStrings`/`internedIdByString` become
+`refs.{instruments,entities,regions,types,tickers,accountKeys,partyKeys}`, each its own append-only
+table, and `internString`/`stringRef` are deleted because nothing outside `world.ts` could still
+reach them. A ref is now meaningless outside the space that minted it at RUNTIME as well as at
+compile time.
+
+Checked before doing it, because this renumbers and this repo has a measured case of renumbering
+moving a value by 0.43B: that case was interning ON A READ PATH, which shifts ids mid-run while
+rows already hold the old ones — not the absolute numbering. Nothing sorts by a ref (both
+`sortIndexByKey` callers sort prices), Maps iterate by insertion order rather than key, no ref is
+persisted anywhere (only UI workspace state reaches `localStorage`), and the one place a ref value
+is arithmetic — `pairOf(t, i) = t·2²² + i` — stays valid because the split makes instrument refs
+smaller, not larger. So no number should move, and the reasoning is written down rather than
+assumed.
+
+`test/ref-spaces.test.ts` (6 tests) holds what a type check cannot: the tables are independent, the
+same string in two spaces is two refs with two meanings, interning in one space does not shift refs
+already handed out in another, a read never appends, and `NO_REF` ≠ `ABSENT_REF`. Atlas:
+`the-register` F1's keying half is closed — `refs.instruments.strings` IS the enumeration of every
+instrument, which one table could not give and which slice (d) needs. Gates green (145 tests); no
+run.
 
 **13-BOOK slice (b) step two — THE INTERN TABLE GETS A DOOR, AND EVERYTHING USES IT.** Step one
 typed the ref columns; 78 sites still reached straight past them into `internedStrings[ref]` and

@@ -159,30 +159,36 @@ because there is nothing for it to describe. It is the ownership-side twin of
 **Becomes a §3 step.** Medium: the two legs already exist and already name the same parties; what
 is missing is one settlement point that writes both or neither.
 
-### ⚠️ F1 — THE REF COLUMNS NAME THEIR SPACE NOW; THEY STILL SHARE A NUMBERING
+### ✅ F1 — CLOSED ON THE KEYING SIDE: NINE REF COLUMNS, SEVEN SPACES, SEVEN NUMBERINGS
 
-A columnar store cannot hold a string, so every string a row names is an integer into the intern
+A columnar store cannot hold a string, so every string a row names is an integer into an intern
 table: `H.instrRef`, `H.typeRef`, `H.regionRef`, `TS.idRef`, `TS.issuerRef`, `TS.bankRef`,
-`A.keyRef`, `T.supplierRef`, `T.customerRef`. All nine index ONE array (`world.ts:internString`),
-so they are drawn from one numbering and the only thing keeping an instrument ref out of a region
-column is that the columns have different names.
+`A.keyRef`, `T.supplierRef`, `T.customerRef`, `L.sellerId`. All ten indexed ONE array, so they were
+one numbering and the only thing keeping an instrument ref out of a region column was that the
+columns had different names — a cross-space comparison compiled, ran, and answered wrongly without
+a symptom, because a ref of the wrong space still decoded to a real string.
 
-§3.13-BOOK slice (b) step one gives each column its space as a TYPE (`engine2/refs.ts`:
-`InstrRef`, `EntityRef`, `RegionRef`, `TypeRef`, `TickerRef`, `AccountRef`, `PartyKeyRef`), riding
-through the subscript via `RefColumn<B>` — so `H.typeRef[r] === someInstrRef` no longer compiles,
-nor does writing a bare number into a ref column, nor decoding a `TypeRef` as an instrument. Every
-write now goes through a per-space door (`internInstrument`, `internType`, …) and the raw
-`internString` has disappeared from nine call sites that used to reach past it.
+§3.13-BOOK slice (b) closed it in three steps, in that order:
 
-**The numbering is deliberately unchanged.** Each door delegates to the same table, so every ref
-keeps the integer it has today and nothing can have moved — the §5 sequencing rule, which is the
-whole reason this is two steps and not one. Step two gives each space its own array, which
-renumbers, and can be done knowing the compiler has already proved every site is in the right
-space.
+1. **The spaces became types** (`engine2/refs.ts`), riding through the subscript via `RefColumn<B>`
+   — a brand on the intern function alone dies at the first read, so the COLUMN type is what
+   carries it. Numbering untouched: nothing could move.
+2. **The 78 sites that reached past the doors were routed through them**, still on the shared
+   table, so the whole intern table ended up behind fifteen functions in `world.ts`.
+3. **Each space got its own table.** Seven numberings; a ref is meaningless outside the space that
+   minted it, at runtime as well as at compile time.
 
-**Until it is, one thing stays false.** The single table holds ~15 type tags and 5 region codes
-mixed among thousands of instrument ids, so *"enumerate every instrument"* has no answer — which is
-what slice (d)'s instrument index needs, and why step two is not optional polish.
+`test/ref-spaces.test.ts` holds the runtime half, which a type check cannot: that the tables are
+independent, that the same string in two spaces is two refs, that a read never appends, and that
+`NO_REF` ("never interned") is a different integer from `ABSENT_REF` ("this row names nothing") —
+they were the same, and the collision was unreachable only because freed rows are unlinked from
+their chains.
+
+**What this unlocks.** `refs.instruments.strings` IS the list of every instrument the world has
+named. Under one table that question had no answer — ~15 type tags and 5 region codes sat mixed
+among thousands of ids — and it is the question slice (d)'s instrument index is built on.
+
+F1 stays `⚠️` overall for the reason below, which is about a key, not about the spaces.
 
 ### ⚠️ F1 / F1.a — ONE INSTRUMENT, TWO KEYS: THE ETF SHARE
 
