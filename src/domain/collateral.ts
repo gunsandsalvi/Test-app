@@ -1,3 +1,5 @@
+import type { InstrumentId } from './ids';
+
 /**
  * §5-STRUCT step 3 — PLEDGED COLLATERAL, AS AN OBJECT.
  *
@@ -14,23 +16,24 @@
 
 /** A pledge of one bond's paper against a secured borrowing. */
 export interface Pledge {
-  bondId: string;
+  /** §3.13-BOOK slice (a): the paper pledged, in the INSTRUMENT id space. */
+  bondId: InstrumentId;
   faceLocal: number;
 }
 
 export interface CollateralPosition {
   /** What this holder has pledged, by bond. */
-  pledgedByBond: Map<string, number>;
+  pledgedByBond: Map<InstrumentId, number>;
   /** What it actually holds, by bond. */
-  heldByBond: Map<string, number>;
+  heldByBond: Map<InstrumentId, number>;
 }
 
 /** Total face pledged in one bond across every contract this borrower has open. */
 export function pledgedFaceByBond(
   contracts: { borrowerTicker: string; collateral: Pledge[] }[],
   ticker: string
-): Map<string, number> {
-  const out = new Map<string, number>();
+): Map<InstrumentId, number> {
+  const out = new Map<InstrumentId, number>();
   for (const c of contracts) {
     if (c.borrowerTicker !== ticker) continue;
     for (const p of c.collateral) out.set(p.bondId, (out.get(p.bondId) ?? 0) + p.faceLocal);
@@ -49,8 +52,8 @@ export function pledgedFaceByBond(
  */
 export const PLEDGE_ROUNDING_TOLERANCE_LOCAL = 1;
 
-export function overPledgedByBond(position: CollateralPosition): Map<string, number> {
-  const out = new Map<string, number>();
+export function overPledgedByBond(position: CollateralPosition): Map<InstrumentId, number> {
+  const out = new Map<InstrumentId, number>();
   position.pledgedByBond.forEach((faceLocal, bondId) => {
     const heldLocal = position.heldByBond.get(bondId) ?? 0;
     const excessLocal = faceLocal - heldLocal;

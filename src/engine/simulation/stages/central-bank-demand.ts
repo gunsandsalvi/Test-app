@@ -15,6 +15,7 @@ import { CentralBank } from '../../../domain/central-bank';
 import { RegionId } from '../../../domain/geography';
 import { ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { clearedBookDelta } from '../../ledger/holdings-ledger';
+import type { InstrumentId } from '../../../domain/ids';
 
 export const CENTRAL_BANK_PARTICIPANT_ID = 'CENTRAL-BANK';
 
@@ -38,11 +39,11 @@ const NO_RESERVATION_STAT = 1e9;
  */
 export function centralBankParticipant(
   cb: CentralBank,
-  bondIds: string[],
+  bondIds: InstrumentId[],
   statKind: 'YIELD_LIKE' | 'PRICE_LIKE' = 'YIELD_LIKE'
 ): { participant: ClearingParticipant; orderedLocal: number } | null {
-  const holdings = new Map<string, number>();
-  const demand = new Map<string, ParticipantDemand>();
+  const holdings = new Map<InstrumentId, number>();
+  const demand = new Map<InstrumentId, ParticipantDemand>();
   let orderedLocal = 0;
   bondIds.forEach((key) => {
     const heldLocal = Number(cb.sovereignHoldingsByBond?.[key]) || 0;
@@ -70,10 +71,10 @@ export function centralBankParticipant(
 /** §5-FINALIZATION step 13 (W2): the CB's fills as wires from the clearing house — the paper it
  *  bought with the reserves it created; the bonds this auction priced, before against after. */
 export function wireCentralBankFills(
-  regionId: RegionId, cb: CentralBank, bondIds: string[],
-  newHoldings: Map<string, number>, reason: string
+  regionId: RegionId, cb: CentralBank, bondIds: InstrumentId[],
+  newHoldings: Map<InstrumentId, number>, reason: string
 ): void {
-  const before = new Map<string, { valueLocal: number }>(), after = new Map<string, { valueLocal: number }>();
+  const before = new Map<InstrumentId, { valueLocal: number }>(), after = new Map<InstrumentId, { valueLocal: number }>();
   bondIds.forEach((key) => {
     const id = key;
     const filledLocal = newHoldings.get(id);
@@ -90,8 +91,8 @@ export function wireCentralBankFills(
  */
 export function applyCentralBankFills(
   cb: CentralBank,
-  bondIds: string[],
-  newHoldings: Map<string, number>
+  bondIds: InstrumentId[],
+  newHoldings: Map<InstrumentId, number>
 ): number {
   let purchasedLocal = 0;
   const book = { ...cb.sovereignHoldingsByBond };

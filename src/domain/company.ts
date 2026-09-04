@@ -4,6 +4,7 @@
  *  output inventories it holds. No parallel firm type anywhere (§7.33). */
 
 import { riskAversionOf } from './preferences';
+import { InstrumentId } from './ids';
 import { RegionId } from './geography';
 import { defect } from './defect';
 import { Industry } from './industry';
@@ -73,7 +74,9 @@ export interface SegmentFinancial {
 }
 
 export interface DebtTranche {
-  id: string; // format: "{ticker}-T{n}"
+  /** §3.13-BOOK slice (a): the paper's own id, in the INSTRUMENT space — format `{ticker}-T{n}`,
+   *  which is a ticker with a suffix and exactly why the compiler has to be told they differ. */
+  id: InstrumentId;
   principalLocal: number;
   rateType: 'FIXED' | 'FLOATING';
   couponRate?: number; // FIXED only — locked annual rate, paid on principalLocal, never changes until maturity

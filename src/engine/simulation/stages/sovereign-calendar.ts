@@ -45,9 +45,10 @@ import { PartyRef, pay, partyKey, partyFromKey } from './settlement';
 import { sovereignCouponByBond, sovereignCouponDueShare } from '../../../domain/government';
 import { isActiveCompany } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { materializeGovLadder } from '../../../engine2/tranches';
+import { asInstrumentId } from '../../../domain/ids';
 
 /** `<region>|<bondId>|<partyKey>` — the receivable one holder has against one bond. */
 
@@ -96,7 +97,7 @@ export function accrueSovereignHolders(
     for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
       if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
       // §3.13-SOV row 3: the coupon accrues to the BOND the row names.
-      accrue(ctx.v2.internedStrings[H.instrRef[r]], { kind: 'INSTITUTION', id: entity.id }, H.qtyLocal[r]);
+      accrue(instrumentIdAt(ctx.v2, r), { kind: 'INSTITUTION', id: entity.id }, H.qtyLocal[r]);
     }
   });
   ctx.updatedCompanies.forEach((c) => {
@@ -171,7 +172,9 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
         const firstBar = k.indexOf('|');
         if (k.slice(0, firstBar) !== regionId) return;
         const secondBar = k.indexOf('|', firstBar + 1);
-        if (!dueBonds.has(k.slice(firstBar + 1, secondBar)) || !(amountLocal > 0)) return;
+        // The accrual ledger keys `region|instrument|party` in one string; the middle field is
+        // an instrument id and this is where it is read back as one (§3.13-BOOK slice (a)).
+        if (!dueBonds.has(asInstrumentId(k.slice(firstBar + 1, secondBar))) || !(amountLocal > 0)) return;
         const payee = partyFromKey(k.slice(secondBar + 1));
         if (!payee) return;
         // A BANK is paid as BANK_SECURITIES rather than BANK: the coupon is not income arriving

@@ -32,9 +32,10 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
+import { InstrumentId } from '../../../domain/ids';
 
 import { ensureV2 } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf, trancheRowOf, trancheScheduleOf } from '../../../engine2/tranches';
+import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf, trancheRowOf, trancheScheduleOf, trancheIdOf } from '../../../engine2/tranches';
 import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
 import { issuerSpreadAtOnCurve, IS_CP_ROW, RegionRates } from '../../credit-price';
 import { reconcileHolderPrincipal } from './holder-paydown';
@@ -70,6 +71,7 @@ import {
 } from '../../../domain/commercial-paper';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
+import { commercialPaperTrancheId } from '../../../domain/instrument-keys';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
@@ -199,8 +201,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // §3.13-SOV row 3: per bond, off the bills this auction is pricing.
       const repoHaircuts = computeSovereignRepoHaircuts(reg, (id) => activeBills.find((b) => b.key === id)?.years);
       regionBanks.forEach((bank) => {
-        const holdings = new Map<string, number>();
-        const demand = new Map<string, ParticipantDemand>();
+        const holdings = new Map<InstrumentId, number>();
+        const demand = new Map<InstrumentId, ParticipantDemand>();
         // The working sheet, not the week-start one: 02b's repo session and 07c's purchases have
         // already happened and both wrote here. A bank's bill bid must be sized against the book
         // it actually has at this point in the week.
@@ -247,8 +249,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // Institutions: the cash sleeve. Half the sleeve wants to be in paper, wanting a small
       // term premium over policy for giving up the overnight option.
       regionEntities.forEach((entity) => {
-        const holdings = new Map<string, number>();
-        const demand = new Map<string, ParticipantDemand>();
+        const holdings = new Map<InstrumentId, number>();
+        const demand = new Map<InstrumentId, ParticipantDemand>();
         const sleeveLocal = institutionTotalAssetsLocal(ctx, entity) * entity.assetAllocationTarget.cashPct * CASH_SLEEVE_BILL_SHARE;
         // SCALE C1: read-only scan of the store's GOV_BOND rows — nothing is claimed here.
         // Which rows this auction actually rewrites is decided at apply time, where the
@@ -307,8 +309,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         if (!(targetLocal > 1) && !(heldLocal > 1)) return;
         const budgetLocal = Math.max(0, cashLocal
           + pendingSettlementLocal(ctx, { kind: 'COMPANY', ticker: comp.ticker }));
-        const holdings = new Map<string, number>();
-        const demand = new Map<string, ParticipantDemand>();
+        const holdings = new Map<InstrumentId, number>();
+        const demand = new Map<InstrumentId, ParticipantDemand>();
         activeBills.forEach((b) => {
           const bondShare = (outstandingByBond.get(b.key) ?? 0) / totalBillStockLocal;
           holdings.set(b.key, heldByBond.get(b.key) ?? 0);
@@ -411,7 +413,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const clearedPrice = result.newStatById.get(id) ?? instruments.find((i) => i.id === id)?.currentStat ?? 1;
         priceFractionById.set(id, clearedPrice);
       });
-      const rebateByParticipant = new Map<string, Map<string, number>>();
+      const rebateByParticipant = new Map<string, Map<InstrumentId, number>>();
       // Step 13 (W2): what the register buyers' rows carry below face, per instrument — the
       // treasury's paper leg is valued at what its holders booked, so the house nets to zero.
       const rebateByInstrument = new Map<string, number>();
@@ -449,7 +451,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
                 (deskPrimaryFaceByInstrument.get(instrumentId) ?? 0) + discountLocal);
               return;
             }
-            const m = rebateByParticipant.get(pid) ?? new Map<string, number>();
+            const m = rebateByParticipant.get(pid) ?? new Map<InstrumentId, number>();
             m.set(instrumentId, (m.get(instrumentId) ?? 0) + discountLocal);
             rebateByParticipant.set(pid, m);
             rebateByInstrument.set(instrumentId, (rebateByInstrument.get(instrumentId) ?? 0) + discountLocal);
@@ -462,15 +464,15 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           });
         });
       }
-      const rebateOf = (pid: string, instrumentId: string): number =>
+      const rebateOf = (pid: string, instrumentId: InstrumentId): number =>
         rebateByParticipant.get(pid)?.get(instrumentId) ?? 0;
 
       if (cbOrder && reg.centralBankSheet) {
         // Asset side only — the reserves that paid for it were created. See central-bank-demand.
         // Item 13: the CB's primary slice books at cost like every other holder's (its fills are
         // adjusted by its rebate; it has no cash leg to adjust).
-        const cbRawFills = result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>();
-        const cbFills = new Map<string, number>();
+        const cbRawFills = result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<InstrumentId, number>();
+        const cbFills = new Map<InstrumentId, number>();
         cbRawFills.forEach((usd, id) => cbFills.set(id, usd - rebateOf(CENTRAL_BANK_PARTICIPANT_ID, id)));
         // Step 13 (W2): the central bank's fills are wires from the house — the paper it bought
         // with the reserves it created.
@@ -533,7 +535,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const byTenor: Record<string, number> = { ...(existingSheet.sovereignBondHoldingsByBond || {}) };
         let faceDeltaLocal = 0;
         // Step 13 (W2): the bank's bill book moves by wire against the house, bill by bill.
-        const billsBefore = new Map<string, { valueLocal: number }>(), billsAfter = new Map<string, { valueLocal: number }>();
+        const billsBefore = new Map<InstrumentId, { valueLocal: number }>(), billsAfter = new Map<InstrumentId, { valueLocal: number }>();
         activeBills.forEach((b) => {
           // Item 13: the primary slice books at cost — the rebate is the same instruction's
           // booking half (the cash half was adjusted on the participant's net above).
@@ -593,7 +595,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         });
         // Step 13 (W2): the treasury's bill rows move by wire against the house (its rows are
         // keyed by bill id, as every other holder's are).
-        const tBefore = new Map<string, { valueLocal: number }>(), tAfter = new Map<string, { valueLocal: number }>();
+        const tBefore = new Map<InstrumentId, { valueLocal: number }>(), tAfter = new Map<InstrumentId, { valueLocal: number }>();
         (comp.treasuryHoldings || []).forEach((h) => {
           if (!billIds.has(h.instrumentId)) return;
           tBefore.set(h.instrumentId, { valueLocal: (tBefore.get(h.instrumentId)?.valueLocal ?? 0) + (h.quantityOrNotionalLocal ?? 0) });
@@ -769,20 +771,20 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // which is what pricing the ISSUER forced and what migrated a claim on retired paper onto
       // whatever else the borrower had outstanding (§3.13's `O7`).
       const TSd = v2Mirror.tranches;
-      const maturedFaceById = new Map<string, number>();
+      const maturedFaceById = new Map<InstrumentId, number>();
       cpIssuers.forEach((iss) => {
         for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
           if (!(TSd.flags[r] & TR_CP) || TSd.maturityWeek[r] > ctx.nextWeek) continue;
-          maturedFaceById.set(v2Mirror.internedStrings[TSd.idRef[r]], TSd.principalLocal[r]);
+          maturedFaceById.set(trancheIdOf(v2Mirror, r), TSd.principalLocal[r]);
         }
       });
 
       // What each institution holds, by the paper it names. A row written before this book cleared
       // per tranche may still name its ISSUER; it resolves through `issuerIdOf` like any other and
       // is repaid below as a claim on paper this session does not price.
-      const heldByTrancheByEntity = new Map<string, Map<string, number>>();
+      const heldByTrancheByEntity = new Map<string, Map<InstrumentId, number>>();
       cpEntities.forEach((entity) => {
-        const byTranche = new Map<string, number>();
+        const byTranche = new Map<InstrumentId, number>();
         store.scan(entity.id, 'COMMERCIAL_PAPER', (h) => {
           if (!cpIssuerIds.has(issuerIdOf(v2Mirror, h.instrumentId))) return false;
           // A book trades FACE, and `units` IS the face (`domain/banking.ts`).
@@ -796,13 +798,13 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // A DESK IS A HOLDER, and its paper matures like anyone else's. Scaling only the
       // institutions left the desks carrying a claim on CP that had already been repaid, and the
       // ledger check caught it immediately: holders at 117% of the EUR stock by week ten.
-      const deskCpRows = new Map<string, { instrumentId: string; inventoryLocal: number; units?: number }[]>();
+      const deskCpRows = new Map<string, { instrumentId: InstrumentId; inventoryLocal: number; units?: number }[]>();
       cpBanks.forEach((bank) => {
         const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
         if (sheet?.dealerDeskInventory?.[CP_BOOK]) deskCpRows.set(bank.ticker, sheet.dealerDeskInventory[CP_BOOK]);
       });
 
-      const issuerPartyOfInstrument = (instrumentId: string): PartyRef | undefined => {
+      const issuerPartyOfInstrument = (instrumentId: InstrumentId): PartyRef | undefined => {
         const iss = issuerById.get(issuerIdOf(v2Mirror, instrumentId));
         return iss ? { kind: 'COMPANY', ticker: iss.comp.ticker } : undefined;
       };
@@ -865,7 +867,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             // issue and was never once paid. Marking the payout here settles it in the same
             // week: `applyHolderInterestAccruals` (stage 08) pays every holder of record
             // exactly what it accrued, from the issuer, and clears the balance.
-            payHoldersAccruedInterest(ctx, v2Mirror.internedStrings[TSr.idRef[r]], 'COMMERCIAL_PAPER');
+            payHoldersAccruedInterest(ctx, trancheIdOf(v2Mirror, r), 'COMMERCIAL_PAPER');
             if (TSr.principalLocal[r] > 0.01) retireTranche(v2Mirror, cpIssuer, r, TSr.principalLocal[r], 'commercial paper matured');
             retiredAny = true;
           } else kept.push(r);
@@ -886,7 +888,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         });
       });
 
-      const cpHoldingRow = (instrumentId: string, faceLocal: number): ItemizedHolding =>
+      const cpHoldingRow = (instrumentId: InstrumentId, faceLocal: number): ItemizedHolding =>
         // Written in PAR space, as every other credit book's fills are: the row carries the FACE
         // it holds and the cash leg paid the cleared price for it. What the register is WORTH is
         // `face × price` — §3.13's item 4, which cannot land one book at a time (§9.13 part 3).
@@ -895,7 +897,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // ---- 2. THE BOOK. Every live piece of this region's commercial paper, plus the deals
       // brought this week — each with its own remaining life and its own price.
       type CpPaper = {
-        id: string;
+        id: InstrumentId;
         issuerId: string;
         /** Face outstanding — 0 for a deal that has not priced yet. */
         faceLocal: number;
@@ -908,7 +910,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         isPrimary: boolean;
       };
       const papers: CpPaper[] = [];
-      const accruedPerFaceById = new Map<string, number>();
+      const accruedPerFaceById = new Map<InstrumentId, number>();
       const TSb = v2Mirror.tranches;
       cpIssuers.forEach((iss) => {
         for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
@@ -916,7 +918,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const weeksToMaturity = TSb.maturityWeek[r] - ctx.nextWeek;
           // Paper that is due redeems at its face; it does not trade for a price.
           if (!(weeksToMaturity > 0)) continue;
-          const id = v2Mirror.internedStrings[TSb.idRef[r]];
+          const id = trancheIdOf(v2Mirror, r);
           const couponRate = Number.isNaN(TSb.couponRate[r]) ? 0 : TSb.couponRate[r];
           // §3.13b / `bond.md` N9.b — WHAT ONE UNIT OF FACE HAS ACCRUED. This auction clears a
           // CLEAN price, so the interest that has run since the programme was struck is paid by
@@ -945,11 +947,11 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // the issuer receives price × face instead of par whatever it cleared.
       const cpRates: RegionRates = { zeroRates: reg.zeroRates, policyRate: reg.policyRate };
       const cpTenorYears = CP_TENOR_WEEKS / 52;
-      const primaryIdByIssuerId = new Map<string, string>();
+      const primaryIdByIssuerId = new Map<string, InstrumentId>();
       const primaryTermsById = new Map<string, { couponRate: number }>();
       cpIssuers.forEach((iss) => {
         if (!(iss.wantedLocal > 0)) return;
-        const id = `${iss.comp.ticker}-CP-${ctx.nextWeek}`;
+        const id = commercialPaperTrancheId(iss.comp.ticker, ctx.nextWeek);
         // A borrower with printed paper launches on its own curve; one with none launches on the
         // loss its buyers price, which is exactly what their reservation is made of.
         const talkBps = issuerSpreadAtOnCurve(v2Mirror, cpRates, iss.comp.id, ctx.nextWeek, cpTenorYears, IS_CP_ROW)?.spreadBps
@@ -1048,7 +1050,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         return;
       }
 
-      const heldByInstitutionsLocal = new Map<string, number>();
+      const heldByInstitutionsLocal = new Map<InstrumentId, number>();
       heldByTrancheByEntity.forEach((byTranche) => byTranche.forEach((faceLocal, id) => {
         if (faceLocal > 0 && cpFaceById.has(id)) heldByInstitutionsLocal.set(id, (heldByInstitutionsLocal.get(id) ?? 0) + faceLocal);
       }));
@@ -1076,10 +1078,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const cpParticipants: ClearingParticipant[] = [];
       cpEntities.forEach((entity) => {
         const sleeveLocal = institutionTotalAssetsLocal(ctx, entity) * entity.assetAllocationTarget.cashPct * CP_SHARE_OF_TERM_SLEEVE;
-        const holdings = heldByTrancheByEntity.get(entity.id) ?? new Map<string, number>();
+        const holdings = heldByTrancheByEntity.get(entity.id) ?? new Map<InstrumentId, number>();
         if (!(sleeveLocal > 0) && holdings.size === 0) return;
         const cashLocal = institutionSpendableLocal(ctx, entity) * CP_SHARE_OF_TERM_SLEEVE;
-        const demand = new Map<string, ParticipantDemand>();
+        const demand = new Map<InstrumentId, ParticipantDemand>();
         // §7.340 — ONE sleeve, many bids: the per-issuer limit is a CONCENTRATION rule, not a
         // budget, and with fifty names in the book fifty bids at 5% each offered the same
         // dollar two and a half times over. The engine has no cross-instrument budget (each

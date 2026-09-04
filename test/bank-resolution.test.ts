@@ -13,6 +13,7 @@ import {
   bankAssumedLiabilitiesLocal, bankSheetAssetsLocal, chooseAssumingBank, isBankUnderPca,
   mergeHouseholdPool, planBankResolution, PCA_CAPITAL_RATIO,
 } from '../src/domain/bank-resolution';
+import { asInstrumentId } from '../src/domain/ids';
 
 // Step 10: a bank's facility book is its rows on the borrowers' ladders, read by the caller and
 // stated beside the sheet here — 100 unless said.
@@ -84,7 +85,7 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
   const F = sheet({
     householdLoans: [{ kind: 'MORTGAGE', principalLocal: 40, vintages: [{ principalLocal: 40, originationCollateralLocal: 60, originationHomePriceLocal: 300000, rateAnnual: 0.05, wamWeeks: 900, fixedForWeeks: 100, originatedWeek: 0 }], wacAnnual: 0.05 }],
     sovereignAccruedCouponLocal: 1,
-    dealerDeskInventory: { 'corporate bond': [{ instrumentId: 'x', inventoryLocal: 4 }] },
+    dealerDeskInventory: { 'corporate bond': [{ instrumentId: asInstrumentId('x'), inventoryLocal: 4 }] },
     primeBrokerageLoansLocal: 2, repoBorrowedLocal: 6, bankEquityLocal: 1,
   });
   // assets 100+40+20+10+1+4+2 = 177; assumed 120+15+5+6 = 146; wholesale 30; equity 1 → identity
@@ -92,7 +93,7 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
   assert.equal(identityResidual(F, CASH, fLines), 0);
   const A = sheet({
     householdLoans: [{ kind: 'MORTGAGE', principalLocal: 10, vintages: [{ principalLocal: 10, originationCollateralLocal: 15, originationHomePriceLocal: 250000, rateAnnual: 0.04, wamWeeks: 800, fixedForWeeks: 50, originatedWeek: 0 }], wacAnnual: 0.04 }],
-    bankEquityLocal: 6, dealerDeskInventory: { 'corporate bond': [{ instrumentId: 'x', inventoryLocal: 1 }] },
+    bankEquityLocal: 6, dealerDeskInventory: { 'corporate bond': [{ instrumentId: asInstrumentId('x'), inventoryLocal: 1 }] },
   });
   assert.equal(identityResidual(A, CASH, linesOf({ householdLocal: 90 })), 0);
   let fCash = CASH, aCash = CASH; // the two accounts, moved here as the pass would

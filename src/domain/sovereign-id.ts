@@ -15,13 +15,14 @@
  */
 
 import { RegionId } from './geography';
+import { asInstrumentId, type InstrumentId } from './ids';
 
 export const GOV_ID_INFIX = '-GOV-';
 
 /** The id of one issued bill tranche. */
-export const govBillTrancheId = (region: RegionId, weeks: number, issueWeek: number): string =>
-  `${region}${GOV_ID_INFIX}B${weeks}-${issueWeek}`;
+export const govBillTrancheId = (region: RegionId, weeks: number, issueWeek: number): InstrumentId =>
+  asInstrumentId(`${region}${GOV_ID_INFIX}B${weeks}-${issueWeek}`);
 
 /** The id of one issued bond tranche; the seed uses 'INIT' as its issue tag. */
-export const govBondTrancheId = (region: RegionId, tenorYears: number, issueTag: number | 'INIT'): string =>
-  `${region}${GOV_ID_INFIX}${tenorYears}Y-${issueTag}`;
+export const govBondTrancheId = (region: RegionId, tenorYears: number, issueTag: number | 'INIT'): InstrumentId =>
+  asInstrumentId(`${region}${GOV_ID_INFIX}${tenorYears}Y-${issueTag}`);

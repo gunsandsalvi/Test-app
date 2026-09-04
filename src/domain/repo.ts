@@ -19,6 +19,7 @@
  */
 
 import { RegionId } from './geography';
+import type { InstrumentId } from './ids';
 
 export type RepoParty =
   | { kind: 'BANK'; ticker: string }
@@ -28,7 +29,9 @@ export type RepoParty =
 
 /** The specific paper pledged: which bond, and how much face of it. */
 export interface RepoPledge {
-  bondId: string;
+  /** §3.13-BOOK slice (a): the paper pledged, in the INSTRUMENT id space — the same key the
+   *  register and the sovereign ladder use. */
+  bondId: InstrumentId;
   faceLocal: number;
 }
 
@@ -83,8 +86,8 @@ export function srfBorrowedLocal(book: RepoContract[], ticker: string): number {
  * bank has pledged, bond by bond, at face: 07c and 07f read it as a floor on the bonds they
  * actually touch, so pledging thirty-year paper stops constraining the two-year book.
  */
-export function encumberedFaceByBond(book: RepoContract[], ticker: string): Map<string, number> {
-  const byBond = new Map<string, number>();
+export function encumberedFaceByBond(book: RepoContract[], ticker: string): Map<InstrumentId, number> {
+  const byBond = new Map<InstrumentId, number>();
   book.forEach((c) => {
     if (c.borrowerTicker !== ticker) return;
     c.collateral.forEach((p) => byBond.set(p.bondId, (byBond.get(p.bondId) ?? 0) + p.faceLocal));

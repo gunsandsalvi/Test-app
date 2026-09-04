@@ -18,6 +18,7 @@ import { DebtTranche } from '../domain/company';
 import { GovDebtTrancheView } from '../domain/region-macro';
 import { govTrancheView } from '../domain/government';
 import { V2World, rowOf, internString } from './world';
+import { InstrumentId, asInstrumentId } from '../domain/ids';
 import { forgetClearedPrice } from './prices';
 import { defect } from '../domain/defect';
 
@@ -323,7 +324,7 @@ export function materializeTranche(v2: V2World, r: number): DebtTranche {
   const S = mutableTranches(v2);
   const f = S.flags[r];
   const t: DebtTranche = {
-    id: v2.internedStrings[S.idRef[r]],
+    id: trancheIdOf(v2, r),
     principalLocal: S.principalLocal[r],
     rateType: f & TR_FLOATING ? 'FLOATING' : 'FIXED',
     originationWeek: S.originationWeek[r],
@@ -424,6 +425,20 @@ export function trancheRowOf(v2: V2World, instrumentId: string): number | undefi
   const ref = v2.internedIdByString.get(instrumentId);
   return ref === undefined ? undefined : v2.tranches.rowByIdRef.get(ref);
 }
+/**
+ * §3.13-BOOK slice (a) — THE ONE PLACE A STORE REF BECOMES AN INSTRUMENT ID.
+ *
+ * `v2.internedStrings[S.idRef[r]]` was written out at every call site that wanted a tranche's id —
+ * an array read whose result was a bare `string`, so nothing could tell it apart from a ticker, a
+ * region or a company id. It is one accessor now, and it is the ADMISSION point: this is where the
+ * model takes the intern table's word for it that ref `idRef[r]` names an instrument. Slice (b)
+ * splits the table so the claim becomes true by construction; until then it is asserted here, once
+ * and countably, instead of in eleven places invisibly.
+ */
+export function trancheIdOf(v2: V2World, r: number): InstrumentId {
+  return asInstrumentId(v2.internedStrings[v2.tranches.idRef[r]]);
+}
+
 export function issuerIdOf(v2: V2World, instrumentId: string): string {
   const ref = v2.internedIdByString.get(instrumentId);
   if (ref === undefined) return instrumentId;

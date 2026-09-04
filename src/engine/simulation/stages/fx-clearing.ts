@@ -54,6 +54,8 @@ import { heldCurrenciesOf } from '../../ledger/accounts';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 
+import { fxSpotInstrumentId } from '../../../domain/instrument-keys';
+import type { InstrumentId } from '../../../domain/ids';
 const REGIONS = REGION_IDS;
 
 const pairKey = (base: RegionId, quote: RegionId) => `${base}/${quote}`;
@@ -214,7 +216,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const sigma = fxWeeklySigma(fx.historicalRates);
 
     const instrument: ClearingInstrument = {
-      id: `FX-${key}`,
+      id: fxSpotInstrumentId(key),
       outstandingLocal: Math.abs(netBaseDemandLocal),
       tradableFloatLocal: Math.abs(netBaseDemandLocal),
       currentStat: bookRate,
@@ -233,7 +235,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       // required-move constant, no range constant. A quiet pair is tight and a volatile one wide.
       const capLocal = speculatorMaxPositionLocal(Math.max(0, institutionTotalAssetsLocal(ctx, e)), sigma);
       if (capLocal <= 0) return;
-      const demand = new Map<string, ParticipantDemand>();
+      const demand = new Map<InstrumentId, ParticipantDemand>();
       demand.set(instrument.id, {
         reservationStat: bookRate * (1 - speculatorReservationMoveFrac(sigma)),
         maxHoldingLocal: capLocal,
@@ -271,7 +273,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       : Math.min(reserveBudgetRemaining.get(fx.quote) ?? 0,
                  Math.max(0, Number(ctx.updatedRegions[fx.quote]?.centralBankSheet?.fxReservesByRegion?.[fx.base]) || 0));
     if (cbDefend && defenceBudgetLocal > 0) {
-      const demand = new Map<string, ParticipantDemand>();
+      const demand = new Map<InstrumentId, ParticipantDemand>();
       demand.set(instrument.id, {
         reservationStat: bookRate * (1 - centralBankReservationMoveFrac(sigma)),
         maxHoldingLocal: defenceBudgetLocal,
@@ -290,7 +292,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       rateOf(fx.base, r) !== undefined && rateOf(r, fx.quote) !== undefined);
     const impliedRate = bridge !== undefined ? rateOf(fx.base, bridge)! * rateOf(bridge, fx.quote)! : undefined;
     if (impliedRate !== undefined && impliedRate > 0 && arbitrageCapacityLocal > 0) {
-      const demand = new Map<string, ParticipantDemand>();
+      const demand = new Map<InstrumentId, ParticipantDemand>();
       demand.set(instrument.id, {
         reservationStat: toBook(impliedRate),
         maxHoldingLocal: arbitrageCapacityLocal,
@@ -319,7 +321,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       const book = bank?.bankBalanceSheet?.fxDealerBook;
       const grossLocal = Math.max(0, Number(book?.grossNotionalLocal) || 0);
       const utilization = Math.min(1, grossLocal / Math.max(1, grossLocal + capLocal));
-      const demand = new Map<string, ParticipantDemand>();
+      const demand = new Map<InstrumentId, ParticipantDemand>();
       demand.set(instrument.id, {
         reservationStat: bookRate * (1 - basisFrac * utilization),
         maxHoldingLocal: capLocal,

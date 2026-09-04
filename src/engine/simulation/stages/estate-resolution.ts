@@ -16,7 +16,7 @@
 
 import { assertNever } from '../../../domain/defect';
 import { currencyOf } from '../../../domain/geography';
-import { bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
 import { moveOutputUnits, scrapOutputUnitsTo, moveInputUnits, scrapInputUnits, scrapGoods } from '../../ledger/goods-ledger';
 import { totalInputValueLocal, inputUnitsHeld, materializeInputInventory } from '../../../engine2/lots';
@@ -39,6 +39,7 @@ import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { cashOf } from '../../ledger/accounts';
 import { facilitiesOfBorrower, issuerIdOf } from '../../../engine2/tranches';
+import type { InstrumentId } from '../../../domain/ids';
 
 /** How many resolutions the realised recovery rate averages over before it displaces the prior. */
 export const RECOVERY_HISTORY_LENGTH = 24;
@@ -116,7 +117,7 @@ function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
     const byInstrument = new Map<string, number[]>();
     for (let r = bookHeadOf(index.v2, id); r >= 0; r = H.next[r]) {
       // Keyed by the ISSUER — a row names a tranche or its issuer; a claim is on the issuer.
-      const issuerId = issuerIdOf(index.v2, index.v2.internedStrings[H.instrRef[r]]);
+      const issuerId = issuerIdOf(index.v2, instrumentIdAt(index.v2, r));
       const rows = byInstrument.get(issuerId);
       if (rows) rows.push(r); else byInstrument.set(issuerId, [r]);
     }
@@ -425,7 +426,7 @@ function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Es
       if (!(leftLocal > 0)) return;
       const type = index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
       const region = index.v2.internedStrings[H.regionRef[r]] as RegionId;
-      const id = index.v2.internedStrings[H.instrRef[r]];
+      const id = instrumentIdAt(index.v2, r);
       transferHolding(index.v2, { kind: 'INSTITUTION', id: holderId }, { kind: 'CLEARING_HOUSE', region },
         { instrumentType: type, instrumentId: id, issuerRegion: region, valueLocal: leftLocal,
           units: Number.isNaN(H.units[r]) ? leftLocal : H.units[r] },
@@ -463,7 +464,7 @@ function reduceHolding(
       // The paper goes back to the estate by wire — recovered (cash arrived) or
       // written off (nothing did); the ledger debits the rows.
       const H = index.v2.holdings;
-      const takes: { type: ItemizedHolding['instrumentType']; region: RegionId; usd: number; units: number; id: string }[] = [];
+      const takes: { type: ItemizedHolding['instrumentType']; region: RegionId; usd: number; units: number; id: InstrumentId }[] = [];
       for (let i = 0; i < rows.length && leftLocal > 0; i++) {
         const r = rows[i];
         const takeLocal = Math.min(leftLocal, H.qtyLocal[r]);
@@ -474,7 +475,7 @@ function reduceHolding(
         // is a fraction of a row, so the paper in it is that same fraction of the row's own units.
         const rowUnits = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
         const takeUnits = H.qtyLocal[r] > 0 ? rowUnits * (takeLocal / H.qtyLocal[r]) : 0;
-        if (takeLocal > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeLocal, units: takeUnits, id: index.v2.internedStrings[H.instrRef[r]] });
+        if (takeLocal > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeLocal, units: takeUnits, id: instrumentIdAt(index.v2, r) });
       }
       // The holder's paper goes to the region's clearing house (the register side);
       // the dead issuer's ladder retires the same face against the house (the ladder side), so the
@@ -541,7 +542,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   ctx.updatedInstitutionalEntities.forEach((e) => {
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
       // A row names a tranche or its issuer; the claim is on the issuer either way.
-      if (issuerIdOf(ctx.v2, ctx.v2.internedStrings[H.instrRef[r]]) !== comp.id) continue;
+      if (issuerIdOf(ctx.v2, instrumentIdAt(ctx.v2, r)) !== comp.id) continue;
       const instrumentType = ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
       // A CREDIT claim is on FACE and an EQUITY claim is the residual on what the shares are
       // worth, so the two take different lanes of the same row on purpose.
@@ -549,7 +550,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
         ? H.qtyLocal[r]
         : (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]);
       if (instrumentType !== 'EQUITY') {
-        const id = ctx.v2.internedStrings[H.instrRef[r]];
+        const id = instrumentIdAt(ctx.v2, r);
         claimedFaceByInstrument.set(id, (claimedFaceByInstrument.get(id) ?? 0) + usd);
       }
       // Exhaustive on purpose. The old else-if chain gave a NEW instrument type NO estate

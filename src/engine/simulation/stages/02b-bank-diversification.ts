@@ -46,6 +46,7 @@ import { SRF_SPREAD_BPS, bankCashBufferRatioOf } from '../../macro/banking';
 import { cashOf, entityCashOf, adjustSectorRow, adjustBankReserves, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { sovereignTenorResolver } from '../../../domain/government';
+import { overdraftFacilityTrancheId } from '../../../domain/instrument-keys';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBook: Record<string, number> = {};
@@ -150,7 +151,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // P1: priced off the borrower's own PD at its bank's hurdle, like every facility.
       const marginBps = facilityMarginBpsFor(ensureV2(state), c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker));
       const tranche = {
-        id: `${c.id}-REVOLVER-OD-${ctx.nextWeek}`,
+        id: overdraftFacilityTrancheId(c.id, ctx.nextWeek),
         principalLocal: drawLocal,
         rateType: 'FLOATING' as const,
         floatingMarginBps: marginBps,

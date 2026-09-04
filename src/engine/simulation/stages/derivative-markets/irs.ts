@@ -37,8 +37,9 @@ import { strikeDerivatives } from '../derivative-lifecycle';
 import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
+import { swapInstrumentId } from '../../../../domain/instrument-keys';
+import type { InstrumentId } from '../../../../domain/ids';
 /** Swaps are struck for their tenor and run to it — there is no secondary market here yet. */
-const swapInstrumentId = (regionId: RegionId, key: SwapTenorKey) => `${regionId}-IRS-${key}`;
 
 /**
  * The two-sigma one-week move in this region's own yields, in bps — the repricing every hedger
@@ -166,7 +167,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
     if (instruments.length === 0) return;
 
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       // How much duration it is short: a liability-matched book's assets are shorter than its
       // claims, and the gap is what it will take synthetically when the cash market cannot
       // supply it. Sized by the book itself, never by a share anyone chose.

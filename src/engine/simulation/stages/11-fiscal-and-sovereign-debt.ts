@@ -9,7 +9,7 @@
 
 import { treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
 import { retireTranche, issueTranche, commitLadder } from '../../ledger/tranche-ledger';
-import { materializeGovLadder, ladderRowsOf } from '../../../engine2/tranches';
+import { materializeGovLadder, ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
 import { govBillTrancheId, govBondTrancheId } from '../../../domain/sovereign-id';
 import { GameState, RegionId, GovDebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
@@ -25,11 +25,12 @@ import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay, dueToPayee, partyId, internReason, CORPORATE_TAX_REASON, settlementWeek } from './settlement';
 import { retireHolding } from '../../ledger/holdings-ledger';
-import { bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { encumberedFaceByBond, repoBorrowedLocal, srfBorrowedLocal } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
+import { instrumentEntries, type InstrumentId } from '../../../domain/ids';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds = REGION_IDS;
@@ -213,7 +214,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // holder's position in that bucket, so a holder of a bond that had NOT matured had part of
       // it redeemed because a different bond of similar tenor had. Now the id says which paper
       // came due, and the fraction is 1 for that bond and 0 for every other.
-      const redeemedFractionByBond = new Map<string, number>(
+      const redeemedFractionByBond = new Map<InstrumentId, number>(
         maturedTranches.filter((t) => t.principalLocal > 0).map((t) => [t.id, 1] as const)
       );
 
@@ -265,7 +266,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         const byTenor = c.bankBalanceSheet.sovereignBondHoldingsByBond || {};
         let redeemedLocal = 0;
         const newByTenor: Record<string, number> = {};
-        Object.entries(byTenor).forEach(([key, heldLocal]) => {
+        instrumentEntries(byTenor).forEach(([key, heldLocal]) => {
           const fraction = redeemedFractionByBond.get(key) ?? 0;
           redeemedLocal += heldLocal * fraction;
           newByTenor[key] = heldLocal * (1 - fraction);
@@ -378,7 +379,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       if (cbSheet) {
         const remaining: Record<string, number> = {};
         let cbRedeemedLocal = 0;
-        Object.entries(cbSheet.sovereignHoldingsByBond || {}).forEach(([key, held]) => {
+        instrumentEntries(cbSheet.sovereignHoldingsByBond).forEach(([key, held]) => {
           const heldLocal = Number(held) || 0;
           const redeemedLocal = heldLocal * (redeemedFractionByBond.get(key) ?? 0);
           if (redeemedLocal > 0) { cbRedeemedByBond.set(key, redeemedLocal); cbRedeemedLocal += redeemedLocal; }
@@ -408,10 +409,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       ctx.updatedInstitutionalEntities.forEach(entity => {
         // §5-WIRES W2: each matured slice is RETIRED to the treasury by wire; the ledger debits
         // the row and unlinks it when empty.
-        const redeem: { id: string; usd: number }[] = [];
+        const redeem: { id: InstrumentId; usd: number }[] = [];
         for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = Hsov.next[r]) {
           if (Hsov.typeRef[r] !== govBondRefS || Hsov.regionRef[r] !== regionRefS) continue;
-          const id = ctx.v2.internedStrings[Hsov.instrRef[r]];
+          const id = instrumentIdAt(ctx.v2, r);
           const fraction = redeemedFractionByBond.get(id) ?? 0;
           if (fraction <= 0) continue;
           redeem.push({ id, usd: Hsov.qtyLocal[r] * fraction });
@@ -734,7 +735,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       const matured = new Set(maturedTranches.map((m) => m.id));
       const keep: number[] = [];
       for (const r of ladderRowsOf(ctx.v2, govIssuer.id)) {
-        if (matured.has(ctx.v2.internedStrings[S.idRef[r]])) {
+        if (matured.has(trancheIdOf(ctx.v2, r))) {
           if (S.principalLocal[r] > 0) retireTranche(ctx.v2, govIssuer, r, S.principalLocal[r], 'sovereign redemption');
         } else keep.push(r);
       }

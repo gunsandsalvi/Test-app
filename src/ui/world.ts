@@ -11,7 +11,7 @@ import { loanBooksOf } from '../domain/banking';
 import { entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../engine/ledger/accounts';
 import { spendableDepositsOf } from '../domain/banking';
 import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/world';
-import { bookHeadOf } from '../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
 import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
 import { facilityBookOf, facilitiesOfBorrower, issuerIdOf, trancheRowOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../engine2/tranches';
@@ -176,7 +176,7 @@ export function bookOf(world: World, entityId: string): RegisterRow[] {
   for (let r = bookHeadOf(world.v2, entityId); r >= 0; r = H.next[r]) {
     out.push({
       holderId: entityId,
-      instrumentId: world.v2.internedStrings[H.instrRef[r]],
+      instrumentId: instrumentIdAt(world.v2, r),
       instrumentType: world.v2.internedStrings[H.typeRef[r]],
       region: world.v2.internedStrings[H.regionRef[r]],
       usd: H.qtyLocal[r],
@@ -204,10 +204,10 @@ export function holdersOf(world: World, instrumentId: string): RegisterRow[] {
   const H = world.v2.holdings;
   registerBooks(world.state.institutionalEntities.map((e) => e.id)).forEach((b) => {
     for (let r = bookHeadOf(world.v2, b.id); r >= 0; r = H.next[r]) {
-      if (H.instrRef[r] !== ref && issuerIdOf(world.v2, world.v2.internedStrings[H.instrRef[r]]) !== instrumentId) continue;
+      if (H.instrRef[r] !== ref && issuerIdOf(world.v2, instrumentIdAt(world.v2, r)) !== instrumentId) continue;
       out.push({
         holderId: b.id,
-        instrumentId: world.v2.internedStrings[H.instrRef[r]],
+        instrumentId: instrumentIdAt(world.v2, r),
         instrumentType: world.v2.internedStrings[H.typeRef[r]],
         region: world.v2.internedStrings[H.regionRef[r]],
         usd: H.qtyLocal[r],

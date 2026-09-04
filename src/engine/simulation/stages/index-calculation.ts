@@ -17,7 +17,7 @@
 
 import { GameState, Company } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY } from '../../../engine2/tranches';
+import { trancheIdOf, ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY } from '../../../engine2/tranches';
 import { clearedPriceOf } from '../../../engine2/prices';
 import { WeeklyStepContext } from './context';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
@@ -27,6 +27,7 @@ import {
   INDEX_DEFINITIONS, IndexDefinition, IndexConstituent, MarketIndex,
   LARGE_CAP_CUMULATIVE_SHARE, INDEX_REBALANCE_WEEKS, INDEX_BASE_LEVEL,
 } from '../../../domain/indexes';
+import { equityInstrumentId } from '../../../domain/instrument-keys';
 
 // §7.311 — ladder reads on rows; "indexable" = capital-markets paper (no bank debt, no CP).
 const INDEXABLE_EXCLUDED = TR_FACILITY | TR_CP;
@@ -50,7 +51,7 @@ function creditMarketValueLocal(v2: V2World, comp: Company, floating: boolean): 
   for (const r of ladderRowsOf(v2, comp.id)) {
     if (S.flags[r] & INDEXABLE_EXCLUDED) continue;
     if (((S.flags[r] & TR_FLOATING) !== 0) !== floating) continue;
-    const price = clearedPriceOf(v2, v2.internedStrings[S.idRef[r]]);
+    const price = clearedPriceOf(v2, trancheIdOf(v2, r));
     if (price === undefined || !(price > 0)) continue;
     sum += S.principalLocal[r] * price;
   }
@@ -86,7 +87,7 @@ function indexValueLocal(v2: V2World, def: IndexDefinition, comp: Company, week:
  */
 function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], week: number): IndexConstituent[] {
   const eligible = companies
-    .map((c) => ({ instrumentId: c.id, valueLocal: indexValueLocal(v2, def, c, week) }))
+    .map((c) => ({ instrumentId: equityInstrumentId(c.id), valueLocal: indexValueLocal(v2, def, c, week) }))
     .filter((x) => x.valueLocal > 0)
     .sort((a, b) => b.valueLocal - a.valueLocal);
   if (eligible.length === 0) return [];

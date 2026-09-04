@@ -7,7 +7,7 @@
 import { journalPayment, partyId, PendingNetCtx } from './settlement';
 import { currencyOf } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
-import { bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { transferHolding, registerBooks } from '../../ledger/holdings-ledger';
 import { bookPnL } from '../../ledger/bank-book';
 import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
@@ -161,6 +161,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { cashOf, entityCashOf, obligationCurrencyOf } from '../../ledger/accounts';
+import type { InstrumentId } from '../../../domain/ids';
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
 export const RECOVERY_PRIOR_WEIGHT = 8;
@@ -285,7 +286,7 @@ export function distributeRealTargetByWeight(
 
 export function attributeItemizedHoldings(
   sectorShareLocal: number,
-  candidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[]
+  candidates: { id: InstrumentId; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[]
 ): ItemizedHolding[] {
   const sorted = [...candidates].sort((a, b) => b.outstandingLocal - a.outstandingLocal);
   let remaining = sectorShareLocal;
@@ -447,7 +448,7 @@ export function applyPendingCorporateActionSettlements(
     pendingHolderSettlements: Map<string, number>;
     pendingHolderCashLocal?: Map<string, number>;
     /** `kind:oldTrancheId` → the replacement tranche (an accretive call). */
-    pendingHolderReplacements?: Map<string, string>;
+    pendingHolderReplacements?: Map<string, InstrumentId>;
     /** The issuers, so an equity payment can check its holders against the issue and name the
      *  payer. (It used to be here to find the shares the register did NOT hold — the "public
      *  float" — which §9.13-EQUITY removed by giving that holder rows.) */
@@ -501,7 +502,7 @@ export function applyPendingCorporateActionSettlements(
   const owedByPair = toPairs(pendingCashByType);
   const equityRef = refOf('EQUITY') ?? -2;
   // A replaced tranche: its retired rows become rows of the replacement, with no cash.
-  const replacedNewIdByPair = new Map<number, string>();
+  const replacedNewIdByPair = new Map<number, InstrumentId>();
   ctx.pendingHolderReplacements?.forEach((newId, key) => {
     const at = key.indexOf(':'); const t = refOf(key.slice(0, at)); const i = refOf(key.slice(at + 1));
     if (t !== undefined && i !== undefined) replacedNewIdByPair.set(t * 0x400000 + i, newId);
@@ -681,7 +682,7 @@ export function applyPendingCorporateActionSettlements(
     // The action per instrument — what every row of it sheds (or gains) at its own funded
     // ratio, summed — becomes ONE retirement or placement wire against the issuer. Per row it
     // would mint a placement N-fold, because the ledger scales every row of the instrument.
-    const actions = new Map<string, { type: ItemizedHolding['instrumentType']; id: string; region: RegionId; retiredLocal: number; retiredSh: number; placedLocal: number; placedSh: number; anyShares: boolean }>();
+    const actions = new Map<string, { type: ItemizedHolding['instrumentType']; id: InstrumentId; region: RegionId; retiredLocal: number; retiredSh: number; placedLocal: number; placedSh: number; anyShares: boolean }>();
     for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
       const k = pairKeyOf(r);
       if (hasCash) {
@@ -692,11 +693,11 @@ export function applyPendingCorporateActionSettlements(
           // the money has a payer and a payee instead of appearing on the holder's book while
           // the issuer's ledger says it left.
           const shareLocal = owedLocal * (rowUnits(H, r) / (denomByPair.get(k) ?? totalLocal));
-          const issuerTicker = issuerTickerOf(v2.internedStrings[H.instrRef[r]]);
+          const issuerTicker = issuerTickerOf(instrumentIdAt(v2, r));
           // A holder paid by an issuer nobody can name is money from nobody: a defect at the
           // site that recorded the action, never a credit.
           if (!ctx.paymentJournal || !issuerTicker) {
-            defect(`security payment of ${(shareLocal / 1e6).toFixed(3)}M to ${entity.id} from an issuer with no ticker (${v2.internedStrings[H.instrRef[r]]})`);
+            defect(`security payment of ${(shareLocal / 1e6).toFixed(3)}M to ${entity.id} from an issuer with no ticker (${instrumentIdAt(v2, r)})`);
           }
           journalPayment(ctx, {
             payer: { kind: 'COMPANY', ticker: issuerTicker },
@@ -742,7 +743,7 @@ export function applyPendingCorporateActionSettlements(
       }
       // CASH: and it comes FROM THE ISSUER, by name — a float INCREASE runs the same
       // instruction backwards, because a placement is paid for.
-      const principalIssuerTicker = issuerTickerOf(v2.internedStrings[H.instrRef[r]]);
+      const principalIssuerTicker = issuerTickerOf(instrumentIdAt(v2, r));
       if (ctx.paymentJournal && principalIssuerTicker && Math.abs(principalCashLocal) > 0) {
         journalPayment(ctx, principalCashLocal > 0
           ? {
@@ -767,7 +768,7 @@ export function applyPendingCorporateActionSettlements(
       // — applied by the ledger after this read of the rows (it scales shares with notional,
       // and unlinks what empties).
       {
-        const id = v2.internedStrings[H.instrRef[r]];
+        const id = instrumentIdAt(v2, r);
         const type = v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
         const key = `${type}|${id}`;
         let a = actions.get(key);

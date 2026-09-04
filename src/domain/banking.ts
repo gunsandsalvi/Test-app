@@ -1,4 +1,5 @@
 import { levelPaymentFactor } from './pricing';
+import { InstrumentId } from './ids';
 /**
  * Commercial & Central Banking Domain Model
  *
@@ -26,7 +27,20 @@ import { DealerDeskInventory } from './dealer-desk';
  * (step 13). When the last one has, the field goes and this type is `(instrument, units)`.
  */
 export interface ItemizedHolding {
-  instrumentId: string; // for equity: company.id; for CORP_BOND/LEVERAGED_LOAN/COMMERCIAL_PAPER: the issuer's company.id; for GOV_BOND: the tenor-bucket id; for ETF_SHARE: the fund entity's id
+  /**
+   * WHAT THIS ROW IS A POSITION IN. §3.13-BOOK slice (a): an `InstrumentId`, so the compiler can
+   * tell it from a ticker, a region or an entity id — the confusion `O8` counts and that
+   * `register-split.ts` and `clearingKeyOf` were both built on.
+   *
+   * The comment this replaces was itself the finding: *"for equity: company.id; for
+   * CORP_BOND/LEVERAGED_LOAN/COMMERCIAL_PAPER: the issuer's company.id; for GOV_BOND: the
+   * tenor-bucket id; for ETF_SHARE: the fund entity's id"* — four id spaces in one field, two of
+   * them ENTITY ids doing an instrument's job. Three of the four are closed (§9.13-SOV row 3 gave
+   * sovereigns their bond id; §9.13-CREDIT rows 1/3/4 gave credit its tranche id); what is left is
+   * EQUITY, whose instrument IS its issuer because equity has no instrument record at all, and
+   * ETF_SHARE, which reuses the fund's entity id. Slice (d) is what ends that.
+   */
+  instrumentId: InstrumentId;
   /** Named and derived from the one superset (domain/assets — step 4); members unchanged. */
   instrumentType: ItemizedHoldingType;
   issuerRegion: RegionId;
@@ -117,21 +131,24 @@ export interface BankingSector {
   // long/short against a flat book — the same key the register and the auction use, since 07b
   // clears per tranche. A genuine balance-sheet line updated only by real trade fills, not a
   // formula. See stages/07b-corporate-bond-clearing.ts.
-  corpBondDealerInventory: { instrumentId: string; inventoryLocal: number }[];
+  corpBondDealerInventory: { instrumentId: InstrumentId; inventoryLocal: number }[];
   // Wall Street: the banking sector's real sovereign-bond holdings, broken out by tenor bucket
   // (t2/t5/t10/t30) — banks hold government bonds substantially for real regulatory-liquidity
   // (HQLA) purposes; this per-bucket breakdown is what lets the real sovereign-bond clearing
   // engine (07c-sovereign-bond-clearing.ts) treat "the banking sector" as a real participant in
   // the tenor-point auction rather than one scalar total with no maturity composition.
   // sovereignBondHoldingsLocal stays the derived sum of these buckets.
+  /** §3.13-BOOK slice (a): keyed by INSTRUMENT id. TypeScript types an object's keys as `string`
+   *  whatever its index signature says, so the brand cannot live here — it lives on
+   *  `instrumentEntries`, which is how this is read. Slice (e) replaces it with a Map. */
   sovereignBondHoldingsByBond: Record<string, number>;
   // Real dealer inventory for the sovereign-bond clearing auction, by tenor bucket — the same
   // shared-regional-dealer-desk role banks play for corporate bonds (corpBondDealerInventory),
   // distinct from banks' own real investment-portfolio holdings above (sovereignBondHoldingsByBond).
-  sovBondDealerInventory: { bondId: string; inventoryLocal: number }[];
+  sovBondDealerInventory: { bondId: InstrumentId; inventoryLocal: number }[];
   // Same shared-regional-dealer-desk role for leveraged loans, keyed by the PIECE OF PAPER for
   // the same reason the bond book is (§3.13 row 3). See 07d-leveraged-loan-clearing.ts.
-  loanDealerInventory: { instrumentId: string; inventoryLocal: number }[];
+  loanDealerInventory: { instrumentId: InstrumentId; inventoryLocal: number }[];
   /**
    * WS6 — this bank's overnight general-collateral repo book, struck fresh each week by
    * stages/repo-clearing.ts and matured (principal AND interest, as explicit flows) at the

@@ -27,7 +27,7 @@ import { centralBankFxReservesLocal, centralBankAssetsLocal } from '../../domain
 
 import { holdingClassOf } from '../../domain/assets';
 import { weeklyInterestExpenseLocal, govTrancheView } from '../../domain/government';
-import { facilityBookOf, ladderRowsOf, trancheScheduleOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../../engine2/tranches';
+import { trancheIdOf, facilityBookOf, ladderRowsOf, trancheScheduleOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../../engine2/tranches';
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../../domain/stated';
 import { accrueHoldersInterest, applyHolderInterestAccruals } from '../simulation/stages/shared-helpers';
 import { accrueSovereignHolders } from '../simulation/stages/sovereign-calendar';
@@ -209,7 +209,7 @@ export function seedOpeningCreditPrices(
         periodWeeks: trancheScheduleOf(TS, tr).periodWeeks,
         weeksToMaturity,
       }, reg.zeroRates, floating ? spreadBps * SENIOR_LIEN_SEED_DISCOUNT : spreadBps);
-      if (price > 0 && isFinite(price)) setClearedPrice(v2, v2.internedStrings[TS.idRef[tr]], price);
+      if (price > 0 && isFinite(price)) setClearedPrice(v2, trancheIdOf(v2, tr), price);
     }
   });
 }
@@ -245,7 +245,7 @@ export function seedOpeningAccruals(
         floating ? policyRate + annualRate : annualRate, currentWeek);
       if (!(accruedLocal > 0)) continue;
       accrueHoldersInterest({ pendingHolderAccrualLocal },
-        v2.internedStrings[TS.idRef[tr]], floating ? 'LEVERAGED_LOAN' : 'CORP_BOND', accruedLocal);
+        trancheIdOf(v2, tr), floating ? 'LEVERAGED_LOAN' : 'CORP_BOND', accruedLocal);
     }
   });
   // The SOVEREIGN side, through the calendar's own holder walk: a seeded bond opens with the

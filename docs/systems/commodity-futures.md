@@ -95,7 +95,7 @@ checked by `scripts/check-atlas.sh`.
 | B4 an arbitrageur who can actually store and finance | `src/domain/derivatives/classes/commodity-future.ts:costOfCarryPrice` | ⚠️ |
 | B5 a dealer | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ⚠️ |
 | C1 the futures/spot relation is a consequence of storage, financing, scarcity | `src/domain/derivatives/classes/commodity-future.ts:PHYSICAL_STORAGE_COST_ANNUAL` | ✅ |
-| C1.a contango bounded above by cost of carry, because B4 arbitrages it | `src/engine/simulation/stages/derivative-markets/commodity-future.ts:contractId` | ⚠️ |
+| C1.a contango bounded above by cost of carry, because B4 arbitrages it | `src/domain/instrument-keys.ts:commodityFutureInstrumentId` | ⚠️ |
 | C1.b backwardation unbounded below — the asymmetry is real | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | **C2 the curve carries physical tightness; inventory is the state variable** | `src/engine/macro/evolution.ts:evolveCommodity` | ❌ |
 | C3 VERIFY inventories low ⇒ backwardation | — | ❌ |
@@ -134,8 +134,9 @@ and C4.a is its symptom.
 
 **The convergence is also not gradual, because the contract does not age.** A future struck at the
 3-month bucket marks against `commodityPrint(commodityId, '3M')` — the **constant-maturity** 3M
-print — for its whole life, and then jumps to spot in one week. `contractId` is
-`FUT-${commodityId}-${tenor}M`, so all three tenors are perpetual constant-maturity instruments
+print — for its whole life, and then jumps to spot in one week. `commodityFutureInstrumentId`
+(§3.13-BOOK slice (a) moved it into the one key grammar) is `FUT-${commodityId}-${tenor}M`, so all
+three tenors are perpetual constant-maturity instruments
 that clear afresh every week (A3 `⚠️`: there is a curve, but no series of dated expiries). So the
 basis of a 3-month contract does not narrow at all over 13 weeks; it is 100% of the move in the
 final week.

@@ -19,8 +19,9 @@
  * issuer's region's cleared curve. The arithmetic is the domain's and reads nothing.
  */
 import { V2World } from '../engine2/world';
+import { InstrumentId } from '../domain/ids';
 import { clearedPriceOf } from '../engine2/prices';
-import {
+import { trancheIdOf,
   trancheRowOf, issuerIdOf, ladderRowsOf, trancheScheduleOf,
   TR_FLOATING, TR_CP, TR_FACILITY,
 } from '../engine2/tranches';
@@ -83,7 +84,7 @@ export function trancheTerms(v2: V2World, row: number, week: number, policyRate:
  * Returns undefined for paper no session has printed rather than guessing — a caller leaves such
  * a row alone, and the audit counts it.
  */
-export function trancheClearedPricePerFace(v2: V2World, instrumentId: string): number | undefined {
+export function trancheClearedPricePerFace(v2: V2World, instrumentId: InstrumentId): number | undefined {
   const row = trancheRowOf(v2, instrumentId);
   if (row === undefined) return undefined;
   if (!isPricedRow(v2.tranches.flags[row])) return undefined;
@@ -115,7 +116,7 @@ export function rowSpreadBps(
 ): number | undefined {
   const S = v2.tranches;
   if (!isPricedRow(S.flags[row])) return undefined;
-  const price = clearedPriceOf(v2, v2.internedStrings[S.idRef[row]]);
+  const price = clearedPriceOf(v2, trancheIdOf(v2, row));
   if (price === undefined || !(price > 0)) return undefined;
   const terms = trancheTerms(v2, row, week, rates.policyRate);
   if (!(terms.weeksToMaturity > 0)) return undefined;

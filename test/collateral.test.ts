@@ -7,20 +7,27 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { overPledgedByBond, isFullyBacked, pledgedFaceByBond, PLEDGE_ROUNDING_TOLERANCE_LOCAL }
   from '../src/domain/collateral';
+import { asInstrumentId } from '../src/domain/ids';
+
+/** §3.13-BOOK slice (a): a fixture is where a literal legitimately BECOMES an instrument id. */
+const id = asInstrumentId;
 
 const position = (pledged: [string, number][], held: [string, number][]) =>
-  ({ pledgedByBond: new Map(pledged), heldByBond: new Map(held) });
+  ({
+    pledgedByBond: new Map(pledged.map(([k, v]) => [id(k), v] as const)),
+    heldByBond: new Map(held.map(([k, v]) => [id(k), v] as const)),
+  });
 
 test('the gap the two tolerances used to disagree about is caught', () => {
   // 500k over-pledged: under the old harness tolerance of 1e6 this was invisible.
   const p = position([['USA-GOV-B13-4', 1_500_000]], [['USA-GOV-B13-4', 1_000_000]]);
-  assert.equal(overPledgedByBond(p).get('USA-GOV-B13-4'), 500_000);
+  assert.equal(overPledgedByBond(p).get(id('USA-GOV-B13-4')), 500_000);
   assert.equal(isFullyBacked(p), false);
 });
 
 test('a bond pledged against nothing held is over-pledged by the whole face', () => {
   const p = position([['USA-GOV-B26-9', 250e6]], []);
-  assert.equal(overPledgedByBond(p).get('USA-GOV-B26-9'), 250e6);
+  assert.equal(overPledgedByBond(p).get(id('USA-GOV-B26-9')), 250e6);
 });
 
 test('the tolerance is a rounding allowance and nothing more', () => {
@@ -35,9 +42,9 @@ test('holding more than is pledged is never a violation', () => {
 
 test('pledges sum across every contract a borrower has open', () => {
   const book = [
-    { borrowerTicker: 'XIVF', collateral: [{ bondId: 'USA-GOV-B13-4', faceLocal: 100 }] },
-    { borrowerTicker: 'XIVF', collateral: [{ bondId: 'USA-GOV-B13-4', faceLocal: 250 }] },
-    { borrowerTicker: 'OTHR', collateral: [{ bondId: 'USA-GOV-B13-4', faceLocal: 999 }] },
+    { borrowerTicker: 'XIVF', collateral: [{ bondId: id('USA-GOV-B13-4'), faceLocal: 100 }] },
+    { borrowerTicker: 'XIVF', collateral: [{ bondId: id('USA-GOV-B13-4'), faceLocal: 250 }] },
+    { borrowerTicker: 'OTHR', collateral: [{ bondId: id('USA-GOV-B13-4'), faceLocal: 999 }] },
   ];
-  assert.equal(pledgedFaceByBond(book, 'XIVF').get('USA-GOV-B13-4'), 350);
+  assert.equal(pledgedFaceByBond(book, 'XIVF').get(id('USA-GOV-B13-4')), 350);
 });

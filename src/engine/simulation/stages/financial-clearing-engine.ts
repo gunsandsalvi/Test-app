@@ -38,8 +38,14 @@
  * reservation level and size are, and whether the quoted statistic rises or falls with price.
  */
 
+// §3.13-BOOK slice (a). A TYPE-only import: `isolatedModules` erases it outright, so the
+// "imports nothing at runtime" contract below (the worker thread loads this module alone) holds
+// exactly as before — there is no emitted require, and the worker resolver never sees it.
+import type { InstrumentId } from '../../../domain/ids';
+
 export interface ClearingInstrument {
-  id: string;
+  /** §3.13-BOOK slice (a): what this book is pricing, in the INSTRUMENT id space. */
+  id: InstrumentId;
   /** Face value outstanding — the real denominator for liquidity and index weighting. */
   outstandingLocal: number;
   /**
@@ -126,9 +132,11 @@ export interface ParticipantDemand {
 }
 
 export interface ClearingParticipant {
+  /** §3.13-BOOK slice (a) leaves this a plain string: it is a PARTICIPANT key, not an instrument,
+   *  and the entity id space is slice (b)'s to unify. The two maps below are instrument-keyed. */
   id: string;
-  currentHoldingsByInstrumentId: Map<string, number>;
-  demandByInstrumentId: Map<string, ParticipantDemand>;
+  currentHoldingsByInstrumentId: Map<InstrumentId, number>;
+  demandByInstrumentId: Map<InstrumentId, ParticipantDemand>;
   /** Dense alternative to the Map, aligned with the INSTRUMENTS array: adapters whose books
    *  cover every name (the credit and equity adapters post a schedule for each of ~350 names per
    *  entity) hand demand over by index and skip ~120k string-keyed Map inserts a week. When
@@ -240,9 +248,9 @@ export interface ClearingResult {
   /** pi * nInstruments + i; only fills > $1 are written, so 0 means absent. */
   holdingsMatrix: Float64Array;
   nInstruments: number;
-  newStatById: Map<string, number>;
-  newParticipantHoldings: Map<string, Map<string, number>>;
-  newDealerInventoryById: Map<string, number>;
+  newStatById: Map<InstrumentId, number>;
+  newParticipantHoldings: Map<string, Map<InstrumentId, number>>;
+  newDealerInventoryById: Map<InstrumentId, number>;
   totalDealerRevenueLocal: number;
   netCashDeltaByParticipantId: Map<string, number>;
   /**
@@ -267,7 +275,7 @@ export interface ClearingResult {
    * took (the rest is the lead underwriter's residual — the adapter settles that against the
    * lead bank's real cash).
    */
-  primaryOutcomeById: Map<string, { withdrawn: boolean; marketTakeLocal: number; clearedStat: number }>;
+  primaryOutcomeById: Map<InstrumentId, { withdrawn: boolean; marketTakeLocal: number; clearedStat: number }>;
   /**
    * GUARD — did ANY participant's ceiling leave room above what it already holds?
    *
@@ -943,7 +951,7 @@ function accumulateShard(
 }
 
 /** The damper diagnostic ids (small; every book reads them) — eager, from the dense flags. */
-function fillDamperIds(result: ClearingResult, instIds: string[]): void {
+function fillDamperIds(result: ClearingResult, instIds: InstrumentId[]): void {
   for (let i = 0; i < result.nInstruments; i++) {
     if (result.damperBoundByIndex[i]) result.damperBoundInstrumentIds.push(instIds[i] + (result.damperBoundByIndex[i] === 2 ? '-' : '+'));
   }
@@ -1042,10 +1050,10 @@ export function clearFinancialAsset(
   // the exact insertion order the per-fill writes had, so a book whose adapter reads only the
   // dense views never pays for them. The holdings scratch is REUSED across books, so touching a
   // stale result after the next book cleared is a defect and fails loudly here.
-  let statMap: Map<string, number> | null = null;
-  let holdMaps: Map<string, Map<string, number>> | null = null;
-  let dealerMap: Map<string, number> | null = null;
-  let primaryMap: Map<string, { withdrawn: boolean; marketTakeLocal: number; clearedStat: number }> | null = null;
+  let statMap: Map<InstrumentId, number> | null = null;
+  let holdMaps: Map<string, Map<InstrumentId, number>> | null = null;
+  let dealerMap: Map<InstrumentId, number> | null = null;
+  let primaryMap: Map<InstrumentId, { withdrawn: boolean; marketTakeLocal: number; clearedStat: number }> | null = null;
   const assertFresh = (): void => {
     if (myEpoch !== denseEpoch) throw new Error('ClearingResult read after the next book cleared — the dense scratch is reused; consume each result before the next clearFinancialAsset call');
   };
@@ -1068,7 +1076,7 @@ export function clearFinancialAsset(
         assertFresh();
         holdMaps = new Map();
         for (let pi = 0; pi < participants.length; pi++) {
-          const m = new Map<string, number>();
+          const m = new Map<InstrumentId, number>();
           const base = pi * nDense;
           for (let i = 0; i < nDense; i++) {
             const v = this.holdingsMatrix[base + i];

@@ -29,7 +29,7 @@
 
 import { GameState, RegionId } from '../types';
 import { V2World } from '../engine2/world';
-import { bookHeadOf } from '../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../engine2/holdings';
 import { isActiveCompany } from '../domain/company';
 import { holdingClassOf } from '../domain/assets';
 import { registerBooks } from './ledger/holdings-ledger';
@@ -71,7 +71,7 @@ export function forEachSovereignPosition(
         for (let r = bookHeadOf(v2, b.id); r >= 0; r = H.next[r]) {
           if (H.typeRef[r] !== govRef || H.regionRef[r] !== regRef) continue;
           const faceLocal = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
-          if (faceLocal !== 0) visit({ bondId: v2.internedStrings[H.instrRef[r]], holderKey: b.id, holderClass: 'REGISTER', faceLocal });
+          if (faceLocal !== 0) visit({ bondId: instrumentIdAt(v2, r), holderKey: b.id, holderClass: 'REGISTER', faceLocal });
         }
       });
   }

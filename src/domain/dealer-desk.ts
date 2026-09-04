@@ -45,6 +45,8 @@
  * week's take shrinking the base for the next, converging on the entire balance sheet — a
  * commitment has to be measured against the whole sheet or it is not a commitment.
  */
+import type { InstrumentId } from './ids';
+
 export const DEALER_DESK_SHARE_OF_BALANCE_SHEET = 0.25;
 
 /**
@@ -69,7 +71,14 @@ export const DESK_SPREAD_BPS_BY_BOOK: Record<string, number> = {
 
 /** One name a desk is long (or short, when negative) in one book. */
 export interface DealerDeskPosition {
-  instrumentId: string;
+  /**
+   * §3.13-BOOK slice (a): the paper the desk holds, in the INSTRUMENT id space — the same key the
+   * register and the price table use. It is a brand because `clearingKeyOf` used to roll these up
+   * to the ISSUER and hand the result back as if it were still an instrument key, which made every
+   * desk read flat at the start of every session (§9.13-CREDIT row 4). The compiler now refuses
+   * that substitution.
+   */
+  instrumentId: InstrumentId;
   /** Marked to this week's cleared level. A trading book is carried at market, not at cost. */
   inventoryLocal: number;
   /**
@@ -148,8 +157,8 @@ export function dealerDeskCapacityLocal(args: {
 export function regionalDeskView(
   inventories: (DealerDeskInventory | undefined)[],
   book: string
-): Map<string, number> {
-  const byInstrument = new Map<string, number>();
+): Map<InstrumentId, number> {
+  const byInstrument = new Map<InstrumentId, number>();
   inventories.forEach((inv) => {
     (inv?.[book] ?? []).forEach((p) => {
       byInstrument.set(p.instrumentId, (byInstrument.get(p.instrumentId) ?? 0) + p.inventoryLocal);

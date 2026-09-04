@@ -20,6 +20,7 @@
  */
 
 import { V2World, stringRef, internString } from './world';
+import { InstrumentId } from '../domain/ids';
 
 export interface PriceStore {
   /** Interned instrument id → what ONE UNIT of it last cleared at, in the instrument's own money.
@@ -38,7 +39,7 @@ export function newPriceStore(): PriceStore {
 }
 
 /** The market's print. Only a clearing adapter calls this, and only for what it cleared. */
-export function setClearedPrice(v2: V2World, instrumentId: string, pricePerUnit: number): void {
+export function setClearedPrice(v2: V2World, instrumentId: InstrumentId, pricePerUnit: number): void {
   if (!Number.isFinite(pricePerUnit)) return;
   const ref = internString(v2, instrumentId);
   const prior = v2.prices.byIdRef.get(ref);
@@ -47,7 +48,7 @@ export function setClearedPrice(v2: V2World, instrumentId: string, pricePerUnit:
 }
 
 /** What it printed at the session before — undefined until it has printed twice. */
-export function priorClearedPriceOf(v2: V2World, instrumentId: string): number | undefined {
+export function priorClearedPriceOf(v2: V2World, instrumentId: InstrumentId): number | undefined {
   const ref = stringRef(v2, instrumentId);
   return ref < 0 ? undefined : v2.prices.prevByIdRef.get(ref);
 }
@@ -55,7 +56,7 @@ export function priorClearedPriceOf(v2: V2World, instrumentId: string): number |
 /** The move this instrument's own price made in the last session, as a fraction of where it
  *  stood — what a haircut and an underwriter's price risk are both measured off. Undefined
  *  where there is no history yet, which is a fact about week one and not a zero. */
-export function weeklyPriceMoveOf(v2: V2World, instrumentId: string): number | undefined {
+export function weeklyPriceMoveOf(v2: V2World, instrumentId: InstrumentId): number | undefined {
   const now = clearedPriceOf(v2, instrumentId);
   const before = priorClearedPriceOf(v2, instrumentId);
   if (now === undefined || before === undefined || !(before > 0)) return undefined;
@@ -67,7 +68,7 @@ export function weeklyPriceMoveOf(v2: V2World, instrumentId: string): number | u
  * A READ, so it never interns: interning mutates the id table, and ids are addressing for the
  * lot, holding and account stores (see `stringRef`).
  */
-export function clearedPriceOf(v2: V2World, instrumentId: string): number | undefined {
+export function clearedPriceOf(v2: V2World, instrumentId: InstrumentId): number | undefined {
   const ref = stringRef(v2, instrumentId);
   return ref < 0 ? undefined : v2.prices.byIdRef.get(ref);
 }

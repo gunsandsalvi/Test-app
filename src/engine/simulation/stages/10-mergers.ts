@@ -12,7 +12,7 @@ import { currencyOf } from '../../../domain/geography';
 import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
 import { reassignConsignments } from './goods-arrival';
-import { bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { ensureV2, internString, revHistSeed, rowOf, ringCopyRow } from '../../../engine2/world';
 import { materializeLadder, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
 import { rebuildLadder } from '../../ledger/tranche-ledger';
@@ -32,6 +32,8 @@ import { materializeInputInventory, inputUnitsHeld } from '../../../engine2/lots
 import { novateContracts } from '../../../engine2/contracts';
 import { derivativesBookOf } from './derivative-lifecycle';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
+import { assumedDebtTrancheId, acquiredTrancheId, equityInstrumentId } from '../../../domain/instrument-keys';
+import type { InstrumentId } from '../../../domain/ids';
 
 /**
  * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
@@ -42,7 +44,7 @@ import { DerivativeParty } from '../../../domain/derivatives/contract';
  * count compounds indefinitely across repeated M&A (observed: a single merger turning two
  * ordinary 3-tranche companies into one 6-tranche one).
  */
-function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix: string, newIdByOldId?: Map<string, string>): DebtTranche[] {
+function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix: string, newIdByOldId?: Map<InstrumentId, InstrumentId>): DebtTranche[] {
   // GUARD: the bucket key is everything that makes a tranche a DIFFERENT INSTRUMENT, not just
   // its rate type and tenor. Keying on those two alone consolidated a bank facility and a
   // syndicated loan into one tranche and dropped both flags along with the call protection —
@@ -64,12 +66,12 @@ function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix
     const totalPrincipal = group.reduce((s, t) => s + t.principalLocal, 0);
     if (totalPrincipal <= 0) return;
     // Every member's holders re-key to the bucket's one id (the exchange reads this map).
-    group.forEach((t) => newIdByOldId?.set(t.id, `${idPrefix}-ASSUMED-${nextWeek}-${bucketIndex}`));
+    group.forEach((t) => newIdByOldId?.set(t.id, assumedDebtTrancheId(idPrefix, nextWeek, bucketIndex)));
     const weightedCoupon = group.reduce((s, t) => s + (t.couponRate ?? 0) * t.principalLocal, 0) / totalPrincipal;
     const weightedMarginBps = group.reduce((s, t) => s + (t.floatingMarginBps ?? 0) * t.principalLocal, 0) / totalPrincipal;
     const weightedMaturityWeek = Math.round(group.reduce((s, t) => s + t.maturityWeek * t.principalLocal, 0) / totalPrincipal);
     result.push({
-      id: `${idPrefix}-ASSUMED-${nextWeek}-${bucketIndex++}`,
+      id: assumedDebtTrancheId(idPrefix, nextWeek, bucketIndex++),
       principalLocal: totalPrincipal,
       rateType: group[0].rateType,
       couponRate: group[0].rateType === 'FIXED' ? weightedCoupon : undefined,
@@ -173,7 +175,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
       if (!(heldShares > 0)) return;
       const fraction = Math.min(1, heldShares / parent.sharesOutstanding);
       issueHolding(ctx.v2, { kind: 'COMPANY', ticker: spin.ticker }, { kind: 'INSTITUTION', id: e.id },
-        { instrumentType: 'EQUITY', instrumentId: spin.id, issuerRegion: spin.region, valueLocal: fraction * spinMcapLocal, shares: fraction * spinShares }, 'spin-off: shares distributed');
+        { instrumentType: 'EQUITY', instrumentId: equityInstrumentId(spin.id), issuerRegion: spin.region, valueLocal: fraction * spinMcapLocal, shares: fraction * spinShares }, 'spin-off: shares distributed');
     });
     bumpRegister(ctx);
 
@@ -315,7 +317,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // writer flip — the ladders are sourced from the ROWS (the authority) and written
   // back to the rows; the object arrays are a week-end materialized view now.
   const v2m = ensureV2(state);
-  const newIdByOldTrancheId = new Map<string, string>();
+  const newIdByOldTrancheId = new Map<InstrumentId, InstrumentId>();
   const targetLadder = materializeLadder(v2m, target.id);
   const acquirerLadder = materializeLadder(v2m, acquirer.id);
   if (targetLadder.length > 0) {
@@ -334,7 +336,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       // N2: the tranche is the ACQUIRER'S now and its id says so (the position that
       // protected it is re-pointed below, so nothing is orphaned); the old id stays inside for
       // the lineage.
-      const transferredTranche = { ...t, id: `${acquirer.ticker}-ACQ${ctx.nextWeek}-${t.id}` };
+      const transferredTranche = { ...t, id: acquiredTrancheId(acquirer.ticker, ctx.nextWeek, t.id) };
       protectedAcquirerTranches.push(transferredTranche);
       ctx.workingPositions = ctx.workingPositions.map(p => {
         if (p.symbol === target.ticker && p.trancheId === t.id) {
@@ -349,8 +351,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     // The map from every tranche id the holders' rows name today to the id they will name —
     // a target tranche's renamed id, then the bucket it consolidates into (an acquirer tranche
     // that consolidates re-keys too).
-    const renamedByOld = new Map(mergeableTargetTranches.map((t) => [t.id, `${acquirer.ticker}-ACQ${ctx.nextWeek}-${t.id}`] as const));
-    protectedTargetTranches.forEach((t) => { newIdByOldTrancheId.set(t.id, `${acquirer.ticker}-ACQ${ctx.nextWeek}-${t.id}`); });
+    const renamedByOld = new Map(mergeableTargetTranches.map((t) => [t.id, acquiredTrancheId(acquirer.ticker, ctx.nextWeek, t.id)] as const));
+    protectedTargetTranches.forEach((t) => { newIdByOldTrancheId.set(t.id, acquiredTrancheId(acquirer.ticker, ctx.nextWeek, t.id)); });
     const consolidatedTranches = consolidateTranches(
       [...mergeableAcquirerTranches, ...mergeableTargetTranches.map((t) => ({ ...t, id: renamedByOld.get(t.id)! }))],
       ctx.nextWeek,
@@ -420,10 +422,10 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       // rows exchange like the bonds' (it was the one company-keyed kind the exchange skipped).
       const cpRef = internString(ctx.v2, 'COMMERCIAL_PAPER');
       ctx.updatedInstitutionalEntities.forEach((e) => {
-        const swaps: { type: ItemizedHolding['instrumentType']; valueLocal: number; units: number; shares: number | undefined; id: string }[] = [];
+        const swaps: { type: ItemizedHolding['instrumentType']; valueLocal: number; units: number; shares: number | undefined; id: InstrumentId }[] = [];
         for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
           // A row names a tranche or its issuer; the target's paper is what resolves to it.
-          const rowId = ctx.v2.internedStrings[H.instrRef[r]];
+          const rowId = instrumentIdAt(ctx.v2, r);
           if (H.instrRef[r] !== targetIdRef && issuerIdOf(ctx.v2, rowId) !== target.id) continue;
           const t = H.typeRef[r];
           if (t !== equityRefR && t !== corpBondRef && t !== levLoanRef && t !== cpRef) continue;
@@ -438,7 +440,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           const isEquity = heldInShares(sw.type);
           // A credit row re-keys to the tranche it becomes on the acquirer's ladder (the
           // consolidation's map); a row that still names the issuer re-keys to the acquirer.
-          const newInstrumentId = isEquity ? acquirer.id : (newIdByOldTrancheId.get(sw.id) ?? acquirer.id);
+          const newInstrumentId = isEquity ? equityInstrumentId(acquirer.id) : (newIdByOldTrancheId.get(sw.id) ?? equityInstrumentId(acquirer.id));
           const oldSpec = { instrumentType: sw.type, instrumentId: sw.id, issuerRegion: target.region, valueLocal: sw.valueLocal, units: sw.units, shares: sw.shares };
           transferHolding(ctx.v2, holder, { kind: 'CLEARING_HOUSE', region: target.region }, oldSpec, 'merger: target paper exchanged');
           // The equity issuers' sides — the target's shares are cancelled (house →
@@ -460,9 +462,9 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       // The ACQUIRER's own tranches that consolidated into a bucket re-key their holders'
       // rows too — the same paper under the bucket's id, through the house (old out, new in).
       ctx.updatedInstitutionalEntities.forEach((e) => {
-        const rekeys: { type: ItemizedHolding['instrumentType']; valueLocal: number; units: number; id: string; newId: string }[] = [];
+        const rekeys: { type: ItemizedHolding['instrumentType']; valueLocal: number; units: number; id: InstrumentId; newId: InstrumentId }[] = [];
         for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
-          const rowId = ctx.v2.internedStrings[H.instrRef[r]];
+          const rowId = instrumentIdAt(ctx.v2, r);
           const newId = newIdByOldTrancheId.get(rowId);
           if (newId === undefined || newId === rowId || H.instrRef[r] === targetIdRef) continue;
           if (issuerIdOf(ctx.v2, rowId) === target.id) continue; // exchanged above

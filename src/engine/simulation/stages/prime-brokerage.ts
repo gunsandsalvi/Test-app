@@ -25,7 +25,7 @@ import { leverageHeadroomLocal } from '../../macro/banking';
 import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
-import { facilityBookOf, ladderRowsOf } from '../../../engine2/tranches';
+import { trancheIdOf, facilityBookOf, ladderRowsOf } from '../../../engine2/tranches';
 import { weeklyPriceMoveOf } from '../../../engine2/prices';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { sovereignTenorResolver } from '../../../domain/government';
@@ -62,7 +62,7 @@ function measuredHaircutsFor(ctx: WeeklyStepContext, regionId: RegionId, reg: Re
   names.forEach((c) => {
     for (const r of ladderRowsOf(v2, c.id)) {
       if (!(v2.tranches.principalLocal[r] > 0)) continue;
-      const move = weeklyPriceMoveOf(v2, v2.internedStrings[v2.tranches.idRef[r]]);
+      const move = weeklyPriceMoveOf(v2, trancheIdOf(v2, r));
       if (move !== undefined) creditPriceMoves.push(move);
     }
   });

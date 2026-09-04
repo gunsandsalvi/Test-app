@@ -454,11 +454,12 @@ written from here):
     than waiting for step 38. `O3`, `O8` and `O11` become its consumers rather than its substitutes.
 
     **THE SLICES, each its own commit, in this order.**
-    a. **BRAND THE STORE KEYS** — `EntityId`, `InstrumentId`, `Ticker` as branded strings, applied
-       to the KEYS (`rowById`, the intern maps, every `Map<…>` that keys by identity) and NOT to
-       the fields: branding `Company.ticker` lights up 744 mostly-legitimate sites, branding the
-       keys lights up exactly the conflations. Types erase, so this cannot move a number — which
-       is what makes it first and what makes it the measurement.
+    a. **BRAND THE STORE KEYS — DONE, in §9.** What it left for the slices below: the ENTITY
+       space is untouched (`ClearingParticipant.id` is still a plain string, and the equity
+       crossing — a company's listed equity keyed by the company's own id — is now a named
+       function rather than an implicit truth, `instrument-keys.ts:equityInstrumentId`), and it
+       found one live split: **the ETF share has two keys**, `ETFSHARE-<fund>` in the clearing
+       book and the fund's own entity id in the register. Slice (d) deletes one of them.
     b. **SPLIT THE INTERN TABLE** — one ref space per id kind, so an instrument ref cannot be a
        region ref by construction.
     c. **THE ENTITY REGISTRY** — one store; `PartyRef` becomes a VIEW of it rather than a parallel
@@ -1519,6 +1520,36 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK slice (a) — THE ID SPACES BECOME TYPES, AND THE KEY GRAMMAR BECOMES ONE FILE.**
+`domain/ids.ts` states the three spaces a string can name — `EntityId`, `InstrumentId`, `Ticker` —
+as BRANDED strings: the same string at runtime (so `structuredClone` on the host state is
+untouched and no number can move), a different type at compile time, so `Map<InstrumentId, X>.get(
+someTicker)` stops compiling. Brands went on the KEYS and never on the fields, for the reason §3
+gave: branding `Company.ticker` would light up 744 mostly-legitimate sites and say nothing.
+
+Two facilities made the sweep converge instead of spreading. **One mint per source of ids**:
+`instrumentIdAt(v2, r)` replaced 27 hand-written reads of a register row's instrument out of the
+shared intern table, and `trancheIdOf(v2, r)` the 25 equivalent reads of a ladder row — one place
+each for slice (b) to make true rather than 52 to find. And **one key grammar**:
+`domain/instrument-keys.ts` holds a named constructor per instrument family (swap, CDS, FX spot and
+basis, futures, ETF share, repo, and eight corporate-tranche shapes stage 08 and 10-mergers used to
+build with backticks in place), each reproducing its old template byte for byte, because these keys
+are PERSISTED and a changed key is a silent migration rather than a rename. `asInstrumentId` — the
+unproven admission whose count is what is left — now appears once per FAMILY, not once per site.
+
+The break-and-let-the-compiler-enumerate ran 17 → 170 errors at its widest and back to 0. Three
+things it found that a reading would not have: **the ETF share has two keys** (the clearing book
+prices `ETFSHARE-<fund>`, the register keys the fund's own entity id, and `banking.ts` has carried
+that in a comment for the life of the field — recorded, deliberately not migrated, both
+constructors now sit next to each other); a **plain object cannot carry a key brand** in
+TypeScript, so `sovereignBondHoldingsByBond` and its two siblings keep `Record<string, …>` and the
+brand lives on `instrumentEntries`, the one typed reader — which is itself the argument for slice
+(f) replacing them with Maps; and `primaryTakes`'s two callbacks were named `issuerId` while being
+handed the INSTRUMENT the deal listed under, true only for equity and never for a credit book.
+Atlas: `the-register` F1 moves off `issueTranche` onto `ids.ts:InstrumentId`, F1.a to `⚠️` with the
+ETF split written up in §3 of that tree; `commodity-futures` C1.a follows `contractId` into the key
+grammar. Gates green; no run.
 
 **13-OUTSIDE a — ONE OWNER FOR "WHO HOLDS THIS BOND", BEFORE ANY STORE MOVES.** The step is to
 put the banks' and the central bank's sovereign books in the register, and the first thing looking

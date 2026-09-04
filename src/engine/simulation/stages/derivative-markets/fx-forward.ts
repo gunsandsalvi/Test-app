@@ -45,6 +45,8 @@ import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { cashOf, entityCashOf, bankReservesOf } from '../../../ledger/accounts';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
+import { fxBasisInstrumentId } from '../../../../domain/instrument-keys';
+import type { InstrumentId } from '../../../../domain/ids';
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
 
 /** What this entity holds in each foreign region, split by how much of it its mandate hedges. */
@@ -252,7 +254,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     });
     issuers.forEach((issuer) => {
       const key = bookKey(holderRegion, issuer);
-      const instrumentId = `XCS-${key}`;
+      const instrumentId = fxBasisInstrumentId(key);
       const participants: ClearingParticipant[] = [];
       ctx.updatedInstitutionalEntities.forEach((e) => {
         if (e.region !== holderRegion) return;
@@ -260,7 +262,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         if (!(gapLocal > 0)) return;
         const toleranceBps = entityHedgeToleranceBps(e, annualSigmaFor(issuer));
         if (!(toleranceBps > 0)) return;
-        const demand = new Map<string, ParticipantDemand>();
+        const demand = new Map<InstrumentId, ParticipantDemand>();
         // Full size when the hedge is free, nothing at all at its own tolerance.
         demand.set(instrumentId, {
           reservationStat: toleranceBps,
@@ -278,7 +280,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         participants.push({
           id: `CORP-${c.ticker}`,
           currentHoldingsByInstrumentId: new Map(),
-          demandByInstrumentId: new Map<string, ParticipantDemand>([[instrumentId, {
+          demandByInstrumentId: new Map<InstrumentId, ParticipantDemand>([[instrumentId, {
             reservationStat: toleranceBps,
             maxHoldingLocal: gapLocal,
             fullSizeStatRange: toleranceBps,

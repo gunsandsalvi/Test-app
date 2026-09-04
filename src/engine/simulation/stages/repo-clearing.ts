@@ -58,6 +58,8 @@ import {
 } from './financial-clearing-engine';
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 
+import { repoOvernightInstrumentId, repoTermInstrumentId } from '../../../domain/instrument-keys';
+import { instrumentEntries, type InstrumentId } from '../../../domain/ids';
 /** The zero curve's own points, at the tenors they are quoted for — a curve HAS points, and this
  *  is the one place that says where they sit. Not a grouping of holdings: nothing is keyed by it. */
 const CURVE_POINT_YEARS: [('tenor3M' | 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y'), number][] = [
@@ -150,10 +152,10 @@ export function collateralCapacityLocal(
  */
 export function unencumberedByBond(
   sheet: BankingSector,
-  encumberedFace: Map<string, number>
-): Map<string, number> {
-  const free = new Map<string, number>();
-  Object.entries(sheet.sovereignBondHoldingsByBond || {}).forEach(([key, v]) => {
+  encumberedFace: Map<InstrumentId, number>
+): Map<InstrumentId, number> {
+  const free = new Map<InstrumentId, number>();
+  instrumentEntries(sheet.sovereignBondHoldingsByBond).forEach(([key, v]) => {
     const freeLocal = Math.max(0, (Number(v) || 0) - (encumberedFace.get(key) ?? 0));
     if (freeLocal > 0) free.set(key, freeLocal);
   });
@@ -171,7 +173,7 @@ export function unencumberedBorrowingCapacityLocal(
   haircutOf: (bondId: string) => number | undefined,
   /** What this bank has already pledged, by bond. Omitted falls back to the sheet's
    *  derived scalar, for the callers that have no book to hand. */
-  encumberedFace?: Map<string, number>
+  encumberedFace?: Map<InstrumentId, number>
 ): number {
   if (encumberedFace) {
     let capacityLocal = 0;
@@ -201,8 +203,8 @@ export function unencumberedBorrowingCapacityLocal(
  * pledging 6.1B of 13-week bills against 1.0B they still held by the end of the week.
  */
 export function selectCollateral(
-  free: Map<string, number>,
-  haircutOf: (bondId: string) => number | undefined,
+  free: Map<InstrumentId, number>,
+  haircutOf: (bondId: InstrumentId) => number | undefined,
   targetCashLocal: number
 ): { pledges: RepoPledge[]; raisedLocal: number } {
   // Longest paper first: a bank pledges what it least wants to sell and keeps its short, liquid
@@ -239,8 +241,6 @@ const repoLenderParty = (lender: RepoParty, regionId: RegionId): PartyRef =>
     : lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: lender.id }
       : { kind: 'CENTRAL_BANK', region: regionId };
 
-const repoInstrumentId = (regionId: RegionId) => `${regionId}-REPO-ON`;
-const repoTermInstrumentId = (regionId: RegionId) => `${regionId}-REPO-TERM`;
 const CB_SRF_SEAT_ID = 'CB-SRF';
 /** The term book's maturity — one quarter, the tenor the curve's own front point prices,
  *  so a lender's outside option over it is something the model already publishes. */
@@ -283,7 +283,7 @@ export function runRegionalRepoSession(
   const rrpBps = Math.max(0, policyBps - ON_RRP_SPREAD_BPS);
   const srfBps = policyBps + SRF_SPREAD_BPS;
   const corridorWidthBps = Math.max(1, srfBps - rrpBps);
-  const onInstrumentId = repoInstrumentId(regionId);
+  const onInstrumentId = repoOvernightInstrumentId(regionId);
   const termInstrumentId = repoTermInstrumentId(regionId);
   // §3.13-SOV row 3: haircuts are per BOND, off this region's ladder.
   const haircuts = computeSovereignRepoHaircuts(reg, sovereignTenorResolver(materializeGovLadder(ctx.v2, regionId), ctx.nextWeek));
@@ -319,7 +319,7 @@ export function runRegionalRepoSession(
   });
 
   // What each bank still has pledged against contracts that did NOT mature.
-  const encumberedByTicker = new Map<string, Map<string, number>>();
+  const encumberedByTicker = new Map<string, Map<InstrumentId, number>>();
   banks.forEach((b) => encumberedByTicker.set(b.ticker, encumberedFaceByBond(carriedBook, b.ticker)));
 
   // ---- Borrowers: real shortfall to the buffer, bounded by unencumbered collateral. ----
@@ -433,7 +433,7 @@ export function runRegionalRepoSession(
    * term — the whole reason the corridor holds without a clamp, now asked at two maturities.
    */
   const runBook = (args: {
-    instrumentId: string;
+    instrumentId: InstrumentId;
     needLocal: number;
     currentBps: number;
     bankReservationBps: number;
@@ -548,7 +548,7 @@ export function runRegionalRepoSession(
   // lender's cash is fungible, so each borrower draws from each lender in proportion to what
   // that lender put into the book — which is what "general collateral" means. ----
   const newContracts: RepoContract[] = [];
-  const encumberedWorking = new Map<string, Map<string, number>>();
+  const encumberedWorking = new Map<string, Map<InstrumentId, number>>();
   banks.forEach((b) => encumberedWorking.set(b.ticker, new Map(encumberedByTicker.get(b.ticker) ?? new Map())));
   let contractSeq = 0;
 
@@ -758,8 +758,8 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       const pledged = encumberedFaceByBond(book, ticker);
       const shortfallByBond = overPledgedByBond({
         pledgedByBond: pledged,
-        heldByBond: new Map(Object.entries(sheet.sovereignBondHoldingsByBond ?? {})
-          .map(([k, v]) => [k, Number(v) || 0])),
+        heldByBond: new Map(instrumentEntries(sheet.sovereignBondHoldingsByBond)
+          .map(([k, v]) => [k, Number(v) || 0] as const)),
       });
       if (shortfallByBond.size === 0) return;
 

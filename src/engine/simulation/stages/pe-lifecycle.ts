@@ -42,6 +42,7 @@ import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, openingCashOf, entityCashOf, poolCashOf, obligationCurrencyOf } from '../../ledger/accounts';
 import { issueHolding } from '../../ledger/holdings-ledger';
 import { bumpRegister } from './register-index';
+import { equityInstrumentId, birthFacilityTrancheId } from '../../../domain/instrument-keys';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -725,7 +726,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
         { kind: 'COMPANY', ticker: comp.ticker },
         { kind: 'INSTITUTION', id: deal.sponsorId },
         {
-          instrumentType: 'EQUITY', instrumentId: comp.id, issuerRegion: comp.region as RegionId,
+          instrumentType: 'EQUITY', instrumentId: equityInstrumentId(comp.id), issuerRegion: comp.region as RegionId,
           valueLocal: retainedShares * comp.stockPrice, shares: retainedShares,
         },
         'ipo: the sponsor retains its unsold stake');
@@ -763,7 +764,7 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
   const bank = ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker);
   const marginBps = facilityMarginBpsFor(ctx.v2, c, reg, bank);
   const tranche: DebtTranche = {
-    id: `${c.id}-FACILITY-BIRTH-${nextWeek}`,
+    id: birthFacilityTrancheId(c.id, nextWeek),
     principalLocal: Math.round(debtLocal),
     rateType: 'FLOATING',
     floatingMarginBps: marginBps,

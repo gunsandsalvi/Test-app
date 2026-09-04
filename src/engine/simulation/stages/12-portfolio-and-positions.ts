@@ -9,7 +9,7 @@
 
 import { GameState, Position } from '../../../types';
 import { ringFill, rowOf, ensureV2 } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
+import { trancheIdOf, ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { isActiveCompany } from '../../../domain/company';
 import { assertNever } from '../../../domain/defect';
 import { calculateBlackScholesGreeks } from '../../blackScholes';
@@ -99,7 +99,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           // The ladder find on rows (the id is interned; a short walk per position).
           let trRow = -1;
           for (const r of ladderRowsOf(v2, comp.id)) {
-            if (v2.internedStrings[TS.idRef[r]] === pos.trancheId) { trRow = r; break; }
+            if (trancheIdOf(v2, r) === pos.trancheId) { trRow = r; break; }
           }
           if (trRow < 0) {
             currentPrice = comp.isDefaulted ? (comp.recoveryRate * 100) : 100;
@@ -174,7 +174,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             // linearised out of a cleared margin — `bond.md` N7.b's forbidden direction, which is
             // what `priceLeveragedLoan` was and why it is deleted with this read. Paper the book
             // has not printed keeps par, which is what a loan struck at its own margin is worth.
-            currentPrice = (clearedPriceOf(v2, v2.internedStrings[TS.idRef[trRow]]) ?? 1) * 100;
+            currentPrice = (clearedPriceOf(v2, trancheIdOf(v2, trRow)) ?? 1) * 100;
             const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
             const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
             unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;

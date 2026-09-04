@@ -53,13 +53,15 @@ import { dividendDecision } from '../domain/company-week/distributions';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../engine/equity-valuation';
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
-import { ladderRowsOf, materializeTranche, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
+import { ladderRowsOf, materializeTranche, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY, trancheIdOf } from './tranches';
 import { issueTranche, retireTranche, commitLadder } from '../engine/ledger/tranche-ledger';
 import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World } from './world';
 import { totalInputValueLocal } from './lots';
 import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../domain/primary-market';
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/stated';
 import { trancheWeekAccrual } from './front-core';
+import { maintenanceBridgeTrancheId, liquidityRevolverTrancheId, maturityRevolverTrancheId, calledRefinanceTrancheId } from '../domain/instrument-keys';
+import type { InstrumentId } from '../domain/ids';
 
 /**
  * SCALE / DECLARED RELABEL (the user's drift acceptance, 2026-09-01): decimal rounding by
@@ -297,7 +299,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   let maintenanceFundingTranches: DebtTranche[] = [];
   if (weeklyDebtFundedPortion > 1000) {
     maintenanceFundingTranches = [{
-      id: `${L.ticker[row]}-MAINT-${nextWeek}`,
+      id: maintenanceBridgeTrancheId(L.ticker[row], nextWeek),
       principalLocal: weeklyDebtFundedPortion,
       rateType: 'FLOATING',
       floatingMarginBps: Math.round(bridgeMarginBps * 1.1), // priced wide — bridge, not term
@@ -1140,7 +1142,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       const acc = trancheWeekAccrual(TS.principalLocal[tr], floating, annualRate, reg.policyRate, (fl & TR_CP) !== 0, TS.maturityWeek[tr],
         sched.periodWeeks, sched.anchorWeek, nextWeek);
       const kind = (fl & TR_CP) ? 'COMMERCIAL_PAPER' : floating ? 'LEVERAGED_LOAN' : 'CORP_BOND';
-      const trancheId = v2.internedStrings[TS.idRef[tr]];
+      const trancheId = trancheIdOf(v2, tr);
       accrueHoldersInterest(ctx, trancheId, kind, acc.weeklyLocal);
       if (acc.due) payHoldersAccruedInterest(ctx, trancheId, kind);
     }
@@ -1170,7 +1172,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       });
       if (drawLocal > 1) {
         const revolver: DebtTranche = {
-          id: `${L8.companyId[row]}-REVOLVER-LIQ-${nextWeek}`,
+          id: liquidityRevolverTrancheId(L8.companyId[row], nextWeek),
           principalLocal: drawLocal,
           rateType: 'FLOATING',
           floatingMarginBps: L8.facilityMarginBps[row],
@@ -1408,7 +1410,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       if (!(TS.flags[r] & TR_FLOATING)) bondCallPremiumLocal += premiumLocal;
       else loanCallPremiumLocal += premiumLocal;
       // 13b: the premium belongs to the holders of record of THIS tranche.
-      payHoldersCash(ctx, v2.internedStrings[TS.idRef[r]], (TS.flags[r] & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND', premiumLocal);
+      payHoldersCash(ctx, trancheIdOf(v2, r), (TS.flags[r] & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND', premiumLocal);
       // SETL4: reported here, PAID by the register below (`payHoldersCash`) — settling it here as
       // well debited the issuer twice, once to the holders and once to nobody.
       post('call premium paid to holders', -premiumLocal, undefined, false);
@@ -1416,7 +1418,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
 
     // Corporate debt lifecycle: call and refinance when genuinely accretive
     const calledRefinanceTranches: DebtTranche[] = [];
-    const replacedTrancheIds: { oldId: string; newId: string }[] = [];
+    const replacedTrancheIds: { oldId: InstrumentId; newId: InstrumentId }[] = [];
     rowList.forEach(rTr => {
       if ((TS.flags[rTr] & (TR_FLOATING | TR_CP))) return;
       const remainingYears = Math.max(0.5, (TS.maturityWeek[rTr] - state.currentWeek) / 52);
@@ -1468,9 +1470,9 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         // flow moved its spread hundreds of basis points a week.
         if (calledAmountLocal > 0.01) {
           // 13b: the holders of record of the called tranche receive the replacement's rows.
-          replacedTrancheIds.push({ oldId: v2.internedStrings[TS.idRef[rTr]], newId: `${L8.companyId[row]}-CALL-${state.currentWeek}-${v2.internedStrings[TS.idRef[rTr]]}` });
+          replacedTrancheIds.push({ oldId: trancheIdOf(v2, rTr), newId: calledRefinanceTrancheId(L8.companyId[row], state.currentWeek, trancheIdOf(v2, rTr)) });
           calledRefinanceTranches.push({
-            id: `${L8.companyId[row]}-CALL-${state.currentWeek}-${v2.internedStrings[TS.idRef[rTr]]}`,
+            id: calledRefinanceTrancheId(L8.companyId[row], state.currentWeek, trancheIdOf(v2, rTr)),
             principalLocal: calledAmountLocal,
             rateType: 'FIXED',
             couponRate: currentFairRate,
@@ -1599,11 +1601,11 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         const retire = new Set(o.refinancesTrancheIds);
         let retiredLocal = 0;
         for (const r of rowList) {
-          if (!retire.has(v2.internedStrings[TS.idRef[r]])) continue;
+          if (!retire.has(trancheIdOf(v2, r))) continue;
           retiredLocal += TS.principalLocal[r];
           retireTranche(v2, issuer, r, TS.principalLocal[r], 'term-out: maintenance bridges retired');
         }
-        rowList = rowList.filter(r => !retire.has(v2.internedStrings[TS.idRef[r]]));
+        rowList = rowList.filter(r => !retire.has(trancheIdOf(v2, r)));
         debtRepaymentThisWeek += retiredLocal;
         post('term-out: maintenance bridges retired', -retiredLocal, bankCredit);
       }
@@ -1628,7 +1630,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // access closing when spreads gap, with a real penalty cost. Step 11: a firm with no house
       // bank (a bank) has no revolver; its maturity is repaid from its own book below.
       const revolverTranche: DebtTranche = {
-        id: `${L8.companyId[row]}-REVOLVER-${nextWeek}`,
+        id: maturityRevolverTrancheId(L8.companyId[row], nextWeek),
         principalLocal: maturingPrincipalLocal,
         rateType: 'FLOATING',
         floatingMarginBps: L8.facilityMarginBps[row],
@@ -1676,7 +1678,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // through a real offering — bridge-then-term-out, the actual corporate funding pattern.
     // IG issuers term out in the bond market, sub-IG in the loan market.
     if (!pendingOfferingIssuerIds.has(L8.companyId[row]) && !primarySettlementByIssuerId.has(L8.companyId[row])) {
-      const bridges = rowList.filter(r => v2.internedStrings[TS.idRef[r]].includes('-MAINT-'));
+      const bridges = rowList.filter(r => trancheIdOf(v2, r).includes('-MAINT-'));
       let bridgeLocal = 0;
       for (const r of bridges) bridgeLocal += TS.principalLocal[r];
       let totalDebtForGate = 0;
@@ -1697,7 +1699,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
             ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
             : L8.facilityMarginBps[row],
           rateType: asFixed ? 'FIXED' : 'FLOATING',
-          refinancesTrancheIds: bridges.map(r => v2.internedStrings[TS.idRef[r]]),
+          refinancesTrancheIds: bridges.map(r => trancheIdOf(v2, r)),
           leadBankTicker: leadBankFor(comp, bridgeLocal),
           announcedWeek: nextWeek,
         });
@@ -2124,7 +2126,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // issuer, so the paying agent's desk pass reads the issuer-level ratio recorded beside them.
     preFaceByRow.forEach((preLocal, r) => {
       const fl = TS.flags[r];
-      settleCorporateActionOnHolders(ctx, v2.internedStrings[TS.idRef[r]], (fl & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND', preLocal, TS.principalLocal[r]);
+      settleCorporateActionOnHolders(ctx, trancheIdOf(v2, r), (fl & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND', preLocal, TS.principalLocal[r]);
     });
     settleCorporateActionOnHolders(ctx, L8.companyId[row], 'CORP_BOND', preActionFixedLocal, postActionFixedLocal);
     settleCorporateActionOnHolders(ctx, L8.companyId[row], 'LEVERAGED_LOAN', preActionFloatingLocal, postActionFloatingLocal);

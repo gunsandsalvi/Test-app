@@ -27,6 +27,8 @@ import { pay } from './settlement';
 import { transferHolding, issueHolding, HoldingSpec } from '../../ledger/holdings-ledger';
 import { PartyRef } from '../../ledger/party';
 import { heldInShares } from '../../../domain/assets';
+import { equityInstrumentId } from '../../../domain/instrument-keys';
+import type { InstrumentId } from '../../../domain/ids';
 
 /**
  * §3.13 — WHAT THE BOOK PRICED, AND WHAT IT CALLED IT. A book that clears per ISSUER names its
@@ -37,7 +39,7 @@ import { heldInShares } from '../../../domain/assets';
  */
 export interface PricedOfferingOptions {
   /** The instrument the auction listed this offering as. Default: the issuer's own id. */
-  instrumentIdOf?: (offering: PrimaryOffering) => string;
+  instrumentIdOf?: (offering: PrimaryOffering) => InstrumentId;
   /** What one UNIT of the cleared statistic buys — the price, where the book clears one. Default
    *  1, which is what a par book's units and money have always been. */
   unitPriceOfStat?: (clearedStat: number) => number;
@@ -67,7 +69,9 @@ export function settlePricedOfferings(
 ): void {
   if (offeringsByIssuerId.size === 0) return;
   const settledOfferingIds = new Set<string>();
-  const instrumentIdOf = options.instrumentIdOf ?? ((o: PrimaryOffering) => o.issuerId);
+  // §3.13-BOOK slice (a): with no override, the offering lists under its ISSUER's id — the
+  // equity crossing named in `instrument-keys.ts`, which is what an equity deal really is.
+  const instrumentIdOf = options.instrumentIdOf ?? ((o: PrimaryOffering) => equityInstrumentId(o.issuerId));
 
   offeringsByIssuerId.forEach((offering, issuerId) => {
     const instrumentId = instrumentIdOf(offering);

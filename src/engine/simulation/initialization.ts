@@ -95,7 +95,7 @@ import { getFxToUsd, publishFxRatesNow } from './stages/06-fx-and-trade';
 import { convertLocal, localToUsd } from '../../domain/currency';
 import { laneTransitWeeks } from '../../domain/carrier';
 import { laneDistanceNm, currencyOf, REGION_IDS } from '../../domain/geography';
-import { bookHeadOf } from '../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../../engine2/holdings';
 import { InTransitShipment } from './stages/goods-arrival';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { burnInMode, burnIn } from './burn-in';
@@ -115,6 +115,8 @@ import {
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
 import { seedInstitutionTotalAssetsLocal } from '../../domain/institutions';
+import { equityInstrumentId, peFundInterestId } from '../../domain/instrument-keys';
+import type { InstrumentId } from '../../domain/ids';
 
 /**
  * Build a world. The same seed always builds the same world and, stepped the same number of
@@ -420,7 +422,7 @@ function openSeededMirrors(state: GameState): void {
         for (const e of state.institutionalEntities ?? []) {
           for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
             if (H.typeRef[r] !== equityRef) continue;
-            const id = v2.internedStrings[H.instrRef[r]];
+            const id = instrumentIdAt(v2, r);
             heldShares.set(id, (heldShares.get(id) ?? 0) + (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]));
           }
         }
@@ -431,7 +433,7 @@ function openSeededMirrors(state: GameState): void {
         const shares = c.sharesOutstanding - (heldShares.get(c.id) ?? 0);
         if (!(shares > 0) || !(c.stockPrice > 0)) return;
         book.push({
-          instrumentId: c.id, instrumentType: 'EQUITY', issuerRegion: regionId,
+          instrumentId: equityInstrumentId(c.id), instrumentType: 'EQUITY', issuerRegion: regionId,
           quantityShares: shares, quantityOrNotionalLocal: shares * c.stockPrice, units: shares,
         });
       });
@@ -606,8 +608,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // `totalCorpDebt` — see INSTITUTIONAL_OPENING_BOOK_SHARE's doc for what that share minted.
 
     // Compile holding candidates for individual institutional entities and macro sectors
-    const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies.filter(c => c.listingStatus !== 'PRIVATE').map(c => ({
-      id: c.id,
+    const equityCandidates: { id: InstrumentId; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies.filter(c => c.listingStatus !== 'PRIVATE').map(c => ({
+      id: equityInstrumentId(c.id),
       type: 'EQUITY',
       region: regionId,
       outstandingLocal: marketCapOf(c)
@@ -623,7 +625,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // shape (the HC2 block below).
     // §5-FINALIZATION 13b: the candidates are the TRANCHES — a register row names the paper the
     // ladder's wires name; the per-issuer weight the books clear by is the sum of its tranches.
-    const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies
+    const corpCandidates: { id: InstrumentId; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
       .flatMap(c => (c.debtTranches || []).filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper && !t.isBankFacility)
         .map(t => ({ id: t.id, type: 'CORP_BOND' as const, region: regionId, outstandingLocal: t.principalLocal })))
@@ -634,7 +636,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // entities' own books every week after, so the seed must open in the same shape.
     reg.institutionalSector.corpBondHoldingsLocal = Math.round(totalCorpCandidatesLocal);
 
-    const loanCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies
+    const loanCandidates: { id: InstrumentId; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
       .flatMap(c => (c.debtTranches || []).filter(t => t.rateType === 'FLOATING' && !t.isBankFacility && !t.isCommercialPaper)
         .map(t => ({ id: t.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingLocal: t.principalLocal })))
@@ -700,7 +702,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         });
 
     const govDebtTranches = seedGovLadderOf(reg);
-    const sovCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = govDebtTranches.map(gt => ({
+    const sovCandidates: { id: InstrumentId; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = govDebtTranches.map(gt => ({
       id: gt.id,
       type: 'GOV_BOND',
       region: regionId,
@@ -711,7 +713,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // to open them in tenor buckets — `${regionId}-GOV-${bucketKey}` — an id naming a group, so no
     // seeded holder could be asked which bond it held and the seed and the auctions spoke two id
     // spaces for one instrument. A holder's share of each bond is that bond's share of the stock.
-    const sovOutstandingByBond = new Map<string, number>(
+    const sovOutstandingByBond = new Map<InstrumentId, number>(
       govDebtTranches.filter((t) => t.principalLocal > 0).map((t) => [t.id, t.principalLocal])
     );
     const totalSovOutstandingLocal = Array.from(sovOutstandingByBond.values()).reduce((s, v) => s + v, 0) || 1;
@@ -1561,7 +1563,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     for (let fundIdx = 0; fundIdx < 2; fundIdx++) {
       const portfolio = sponsorable.filter((_, i) => i % 2 === fundIdx);
       if (portfolio.length === 0) continue;
-      const fundId = `${regionId}_PEFUND_${fundIdx + 1}`;
+      const fundId = peFundInterestId(regionId, fundIdx + 1);
       const investedLocal = Math.round(portfolio.reduce((a, f) => a + stakeValue(f), 0));
       // Real funds keep ~a third of commitments undrawn — the dry powder HC6 calls.
       const committedLocal = Math.round(investedLocal / 0.65);

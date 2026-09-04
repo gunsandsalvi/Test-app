@@ -36,8 +36,9 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
+import type { InstrumentId } from '../../../domain/ids';
+import { sblInstrumentId, equityInstrumentId } from '../../../domain/instrument-keys';
 
-const sblInstrumentId = (regionId: RegionId, companyId: string) => `${regionId}-SBL-${companyId}`;
 export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
 
 
@@ -93,11 +94,11 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       // them a second time.
       wireHoldingMove(
         { kind: 'INSTITUTION', id: fromId }, { kind: 'INSTITUTION', id: toId },
-        { instrumentType: 'EQUITY', instrumentId: companyId, issuerRegion: regionId, valueLocal: shares * price, shares },
+        { instrumentType: 'EQUITY', instrumentId: equityInstrumentId(companyId), issuerRegion: regionId, valueLocal: shares * price, shares },
         'stock loan: shares delivered'
       );
-      store.addShares(fromId, 'EQUITY', companyId, regionId, -shares, price);
-      store.addShares(toId, 'EQUITY', companyId, regionId, shares, price);
+      store.addShares(fromId, 'EQUITY', equityInstrumentId(companyId), regionId, -shares, price);
+      store.addShares(toId, 'EQUITY', equityInstrumentId(companyId), regionId, shares, price);
       const from = sharesByEntity.get(fromId);
       if (from) from.set(companyId, (from.get(companyId) ?? 0) - shares);
       const to = sharesByEntity.get(toId);
@@ -378,8 +379,8 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       if (entity.isDefaulted) return;
       const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
       const alreadyLent = lentAlreadyByEntity.get(entity.id) ?? new Map<string, number>();
-      const current = new Map<string, number>();
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      const current = new Map<InstrumentId, number>();
+      const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       borrowNames.forEach((c) => {
         const held = deliverable(entity.id, c.id);
         const lent = alreadyLent.get(c.id) ?? 0;

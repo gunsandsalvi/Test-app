@@ -16,6 +16,7 @@
  */
 
 import { RegionId, REGION_IDS } from './geography';
+import type { InstrumentId } from './ids';
 
 export type IndexAssetClass = 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN';
 
@@ -79,8 +80,9 @@ export const INDEX_DEFINITIONS: IndexDefinition[] = [
 
 /** One constituent's standing in an index: what the fund must hold, and in what proportion. */
 export interface IndexConstituent {
-  /** Company id — the instrument id in every clearing book. */
-  instrumentId: string;
+  /** The instrument this index weights — a company's equity, or a tranche of its paper. §3.13-BOOK
+   *  slice (a): the id space is stated, so an index cannot be built out of issuer ids. */
+  instrumentId: InstrumentId;
   /** Share of the index, 0..1, fixed at the last rebalance. */
   weight: number;
 }

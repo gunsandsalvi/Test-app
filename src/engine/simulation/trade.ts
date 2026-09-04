@@ -7,6 +7,8 @@ import { adjustBankReserves } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { DERIVATIVE_CLASSES } from '../../domain/derivatives/registry';
 import { DerivativeClassId } from '../../domain/derivatives/contract';
+import { equityInstrumentId } from '../../domain/instrument-keys';
+import { asInstrumentId, type InstrumentId } from '../../domain/ids';
 
 /** The player's legacy position types onto the registry's classes; anything the registry does
  *  not know is charged at the FX forward's add-on, which is what every derivative paid before. */
@@ -59,7 +61,11 @@ export function executeTrade(
       const bank = state.companies[bankIndex];
       const sheet = bank.bankBalanceSheet!;
       const book = DESK_BOOK_BY_ASSET_TYPE[posData.assetType] ?? 'derivatives';
-      const instrumentId = posData.trancheId || posData.symbol;
+      // §3.13-BOOK slice (a): a ticket names a TRANCHE where it has one and the equity of its
+      // symbol's issuer where it does not — the same crossing `instrument-keys.ts` records.
+      const instrumentId: InstrumentId = posData.trancheId
+        ? asInstrumentId(posData.trancheId)
+        : equityInstrumentId(posData.symbol);
       const balanceSheetUseLocal = book === 'derivatives'
         ? posData.notional * playerPfeAddOnRate(posData.assetType)
         : posData.notional;

@@ -18,6 +18,7 @@ import { PrimeBrokerageLine } from '../../../domain/prime-brokerage';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { cashOf, poolCashOf } from '../../ledger/accounts';
 import { entityCashOf } from '../../ledger/accounts';
+import { overdraftFacilityTrancheId } from '../../../domain/instrument-keys';
 
 /** What a broker charges over its standing line for a balance it did not agree to fund. */
 export const OVERDRAFT_PENALTY_BPS = 200;
@@ -40,7 +41,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     const reg = ctx.updatedRegions[c.region];
     const marginBps = reg ? facilityMarginBpsFor(v2, c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker)) : 350;
     const tranche = {
-      id: `${c.id}-REVOLVER-OD-${ctx.nextWeek}-C`,
+      id: overdraftFacilityTrancheId(c.id, ctx.nextWeek, '-C'),
       principalLocal: drawLocal,
       rateType: 'FLOATING' as const,
       floatingMarginBps: marginBps,

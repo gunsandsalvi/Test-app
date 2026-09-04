@@ -38,8 +38,9 @@ import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf, facilityRowsOf } from '../../../../engine2/tranches';
 import { issuerSpreadAtOnCurve } from '../../../credit-price';
 
-const cdsInstrumentId = (regionId: RegionId, issuerId: string) => `${regionId}-CDS-${issuerId}`;
 
+import { cdsInstrumentId } from '../../../../domain/instrument-keys';
+import type { InstrumentId } from '../../../../domain/ids';
 function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
   const v2cds = ensureV2(state);
   const companyById = new Map<string, Company>(
@@ -131,7 +132,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       const capacityLocal = deskNotionalCapacityLocal(
         leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeLocal(`BANK:${bank.ticker}`), 'CDS');
       if (!(capacityLocal > 0)) return;
@@ -169,7 +170,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
     );
     creditFunds.forEach((entity) => {
       const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       const capacityLocal = Math.max(0, entity.equityCapitalLocal);
       if (!(capacityLocal > 0)) return;
       referenceIssuers.forEach((c) => {

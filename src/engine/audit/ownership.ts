@@ -8,7 +8,7 @@ import { marketCapOf } from '../../domain/company';
 import { ensureV2 } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
 import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf } from '../../engine2/tranches';
-import { materializeBook } from '../../engine2/holdings';
+import { materializeBook, instrumentIdAt } from '../../engine2/holdings';
 import { householdBookId } from '../ledger/holdings-ledger';
 import { sovereignHeldByClass, forEachSovereignPosition } from '../sovereign-register';
 import { holdingClassOf } from '../../domain/assets';
@@ -99,7 +99,7 @@ function o2(state: GameState, week: number): AuditFinding[] {
       REGION_IDS.forEach((region) => {
         for (let r = bookHeadOf(v2o2, householdBookId(region)); r >= 0; r = H.next[r]) {
           if (H.typeRef[r] !== equityRef || Number.isNaN(H.shares[r])) continue;
-          const id = v2o2.internedStrings[H.instrRef[r]];
+          const id = instrumentIdAt(v2o2, r);
           heldShares.set(id, (heldShares.get(id) ?? 0) + H.shares[r]);
         }
       });

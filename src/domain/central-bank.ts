@@ -24,6 +24,8 @@ export interface CentralBank {
   fxReservesByRegion?: Record<string, number>;
   region: RegionId;
   /** Assets: the real sovereign book, by tenor bucket. Clears in 07c like any other holder. */
+  /** §3.13-BOOK slice (a): keyed by INSTRUMENT id; read with `instrumentEntries`, which is where
+   *  the brand lives — an object's keys type as `string` whatever its index signature says. */
   sovereignHoldingsByBond: Record<string, number>;
   /** Asset: the unsecured loans to banks drawn at the funding close (the lender of
    *  last resort). Equals the sum of the banks' `centralBankLoanLocal`. */

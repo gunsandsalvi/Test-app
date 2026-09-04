@@ -38,8 +38,9 @@ import { strikeDerivatives } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
-const contractId = (commodityId: string, tenor: number) => `FUT-${commodityId}-${tenor}M`;
 
+import { commodityFutureInstrumentId } from '../../../../domain/instrument-keys';
+import type { InstrumentId } from '../../../../domain/ids';
 /** A firm's annual interest bill, from the coverage ratio its own statements already carry. */
 function annualInterestOf(c: Company): number {
   const coverage = c.interestCoverage;
@@ -85,7 +86,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       const tenorYears = tenorMonths / 12;
       const oneSigma = Math.max(0, comm.volatility) * Math.sqrt(tenorYears);
       if (!(oneSigma > 0)) return;
-      const id = contractId(comm.id, tenorMonths);
+      const id = commodityFutureInstrumentId(comm.id, tenorMonths);
       const termKey = futuresTermKey(tenorMonths);
 
       // How much the producers between them need to lay off, in UNITS: the revenue exposure their
@@ -162,7 +163,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         const reservation = spot + hedgeConcessionPerUnit({
           spotPrice: spot, annualVol: comm.volatility, costOfCapital, tenorYears,
         });
-        const demandByInstrumentId = new Map<string, ParticipantDemand>([[id, {
+        const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>([[id, {
           reservationStat: reservation,
           maxHoldingLocal: hedgeLocal / spot,
           // Full size once the price is a whole concession below what it would pay — the same

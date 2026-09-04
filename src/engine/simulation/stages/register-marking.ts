@@ -45,6 +45,7 @@ import { markBookToMarket, registerBooks } from '../../ledger/holdings-ledger';
 import { trancheClearedPricePerFace } from '../../credit-price';
 import { isTrancheKind, holdingClassOf } from '../../../domain/assets';
 import { isActiveCompany } from '../../../domain/company';
+import type { InstrumentId } from '../../../domain/ids';
 
 export function markRegisterToMarket(state: GameState, ctx: WeeklyStepContext): void {
   const week = ctx.nextWeek;
@@ -52,7 +53,7 @@ export function markRegisterToMarket(state: GameState, ctx: WeeklyStepContext): 
   // A share's price is its issuer's own cleared print. It is read off THIS week's companies —
   // `updatedCompanies` is what 07e wrote and stage 08 rebuilt — never off the week-start array.
   const companyById = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
-  const priceOfRow = (instrumentType: string, instrumentId: string): number | undefined => {
+  const priceOfRow = (instrumentType: string, instrumentId: InstrumentId): number | undefined => {
     const key = `${instrumentType}|${instrumentId}`;
     if (priceById.has(key)) return priceById.get(key);
     let p: number | undefined;

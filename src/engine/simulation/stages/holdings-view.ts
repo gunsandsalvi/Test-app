@@ -23,7 +23,7 @@
 
 import { ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, ensureLaddersSynced, facilityRowsOf, materializeGovLadder } from '../../../engine2/tranches';
-import { bookHeadOf, ensureBooksSynced } from '../../../engine2/holdings';
+import { bookHeadOf, ensureBooksSynced, instrumentIdAt } from '../../../engine2/holdings';
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../domain/assets';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
@@ -31,6 +31,7 @@ import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { entityCashOf } from '../../ledger/accounts';
 import { sovereignHeldByClass } from '../../sovereign-register';
+import { instrumentEntries } from '../../../domain/ids';
 
 export interface RegionalHoldingsView {
   /** Every real institutional entity's holdings in this region, flattened. */
@@ -77,7 +78,7 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
       const type = v2a.internedStrings[Ha.typeRef[r]] as ItemizedHolding['instrumentType'];
       const sh = Ha.shares[r];
       const h: ItemizedHolding = {
-        instrumentId: v2a.internedStrings[Ha.instrRef[r]],
+        instrumentId: instrumentIdAt(v2a, r),
         instrumentType: type,
         issuerRegion: v2a.internedStrings[Ha.regionRef[r]] as ItemizedHolding['issuerRegion'],
         quantityOrNotionalLocal: Ha.qtyLocal[r],
@@ -106,7 +107,7 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
   let bankSov = 0;
   state.companies.forEach((c: Company) => {
     if (c.region !== regionId || !c.bankBalanceSheet || !isActiveCompany(c)) return;
-    Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, usd]) => {
+    instrumentEntries(c.bankBalanceSheet.sovereignBondHoldingsByBond).forEach(([bondId, usd]) => {
       const v = Number(usd) || 0;
       if (v <= 0) return;
       bankSov += v;

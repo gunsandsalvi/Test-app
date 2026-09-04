@@ -19,6 +19,7 @@ import {
 } from '../../../types';
 import { isActiveCompany, isPubliclyListed, CreditRating } from '../../../domain/company';
 import { DiagnosticsLog, EarningsReport } from '../../../domain/events';
+import type { InstrumentId } from '../../../domain/ids';
 export type { EarningsReport };
 
 /**
@@ -219,7 +220,9 @@ export interface WeeklyStepContext {
    *  `kind:oldTrancheId` → the new tranche id. The paying agent re-keys the retired rows onto the
    *  new paper through the house, with no principal cash (the issuer's call and its replacement
    *  proceeds net on its own walk, as the issuer-level ratio of one always implied). */
-  pendingHolderReplacements: Map<string, string>;
+  /** §3.13-BOOK slice (a): keyed `TYPE:oldInstrumentId` (a composite, so a plain string); the
+   *  VALUE is the replacement's instrument id, and is branded. */
+  pendingHolderReplacements: Map<string, InstrumentId>;
   /**
    * Cash an issuer owes its holders this week for a corporate action, keyed the same way as
    * `pendingHolderSettlements` — today the CALL PREMIUM paid to retire paper early. Settled pro
@@ -420,7 +423,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     updatedCompanies: [...state.companies],
     updatedInstitutionalEntities: [...state.institutionalEntities],
     pendingHolderSettlements: new Map<string, number>(),
-    pendingHolderReplacements: new Map<string, string>(),
+    pendingHolderReplacements: new Map<string, InstrumentId>(),
     pendingHolderCashLocal: new Map<string, number>(),
     householdEtfPurchasesLocal: new Map<string, { spentLocal: number; navPerShare: number }>(),
     updatedMarketIndexes: [...(state.marketIndexes ?? [])],

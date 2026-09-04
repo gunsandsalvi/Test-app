@@ -69,9 +69,10 @@
  */
 
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
+import { InstrumentId } from '../../../domain/ids';
 import { GameState, RegionId, ItemizedHolding, Company, PrimaryOffering } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY, issuerIdOf, trancheScheduleOf } from '../../../engine2/tranches';
+import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY, issuerIdOf, trancheScheduleOf, trancheIdOf } from '../../../engine2/tranches';
 import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
 import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { isActiveCompany, accruedPerFace, defaultPeriodWeeks } from '../../../domain/company';
@@ -99,7 +100,7 @@ import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary
 import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
-const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
+const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
@@ -231,7 +232,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
      * left to do on this book: a fill already names the paper it bought.
      */
     type BondInstrument = {
-      id: string; ci: number;
+      id: InstrumentId; ci: number;
       /** Face outstanding — 0 for a deal that has not priced yet. */
       faceLocal: number;
       /** This week's offering ON THIS PAPER — non-zero only for the primary. */
@@ -246,7 +247,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     };
     const S = v2.tranches;
     const bonds: BondInstrument[] = [];
-    const bondOf = (ci: number, id: string, faceLocal: number, offeringLocal: number, terms: PaperTerms, isPrimary: boolean): BondInstrument => {
+    const bondOf = (ci: number, id: InstrumentId, faceLocal: number, offeringLocal: number, terms: PaperTerms, isPrimary: boolean): BondInstrument => {
       const tenorYears = terms.weeksToMaturity / 52;
       return {
         id, ci, faceLocal, offeringLocal, terms, tenorYears, isPrimary,
@@ -263,14 +264,14 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // buyer to the seller on top of it, and re-keys on the accrual ledger with the paper. It is
     // read at the CURRENT week, not next: `applyHolderInterestAccruals` runs in stage 08, after
     // this book, so the ledger these balances move on stands at what it accrued through last week.
-    const accruedPerFaceById = new Map<string, number>();
+    const accruedPerFaceById = new Map<InstrumentId, number>();
     companyTerms.forEach((t, ci) => {
       for (const r of ladderRowsOf(v2, t.id)) {
         if (!isBondRow(S.flags[r]) || !(S.principalLocal[r] > 0.01)) continue;
         const weeksToMaturity = S.maturityWeek[r] - week;
         // Paper that is due redeems at its face; it does not trade for a price.
         if (!(weeksToMaturity > 0)) continue;
-        const id = v2.internedStrings[S.idRef[r]];
+        const id = trancheIdOf(v2, r);
         const couponRate = Number.isNaN(S.couponRate[r]) ? 0 : S.couponRate[r];
         accruedPerFaceById.set(id, accruedPerFace({
           originationWeek: S.originationWeek[r],
@@ -378,9 +379,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // what `O7` counts.
     const store = ctx.holdingsStore!;
     const bondFaceById = new Map(bonds.map((b) => [b.id, b.faceLocal]));
-    const claimedByEntity = new Map<string, Map<string, number>>();
+    const claimedByEntity = new Map<string, Map<InstrumentId, number>>();
     bookEntities.forEach((entity) => {
-      const claimed = new Map<string, number>();
+      const claimed = new Map<InstrumentId, number>();
       store.scan(entity.id, 'CORP_BOND', (h) => {
         if (!regionIssuerIds.has(issuerIdOf(v2, h.instrumentId))) return false;
         // A book trades FACE, and `units` IS the face (`domain/banking.ts`) — one lane, carried
@@ -399,7 +400,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // per tranche, are finally on the same key the outstanding is measured on.
     const regionBanksEarly = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     const outstandingByInstrumentId = new Map(bonds.filter((b) => !b.isPrimary).map((b) => [b.id, b.faceLocal]));
-    const issuerOfInstrument = new Map<string, Company>();
+    const issuerOfInstrument = new Map<InstrumentId, Company>();
     bonds.forEach((b) => issuerOfInstrument.set(b.id, companyTerms[b.ci].comp));
     claimedByEntity.forEach((claimed) => claimed.forEach((_face, instrumentId) => {
       if (outstandingByInstrumentId.has(instrumentId)) return;
@@ -423,7 +424,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // sized against the LIVE float — leaving `tradableFloatLocal` at the whole outstanding until
     // after the desk build gave every desk capacity against an issue that is not for sale, and a
     // float of zero makes `buildDealerDeskParticipants` hand back no desk at all.
-    const heldByInstitutionsLocal = new Map<string, number>();
+    const heldByInstitutionsLocal = new Map<InstrumentId, number>();
     claimedByEntity.forEach((claimed) => claimed.forEach((faceLocal, id) => {
       if (faceLocal > 0 && bondFaceById.has(id)) heldByInstitutionsLocal.set(id, (heldByInstitutionsLocal.get(id) ?? 0) + faceLocal);
     }));
@@ -538,7 +539,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       return { id: entity.id, currentHoldingsByInstrumentId: claimed, demandByInstrumentId: EMPTY_DEMAND_MAP, demandRow };
     });
 
-    const priorDealerInventoryById = new Map<string, number>();
+    const priorDealerInventoryById = new Map<InstrumentId, number>();
     (reg.bankingSector.corpBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.instrumentId, p.inventoryLocal));
 
     // ETF: the index funds tracking this book's benchmarks. A fund posts a SIZE with no
@@ -559,7 +560,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       ctx.v2,
       regionIndexFunds, ctx.updatedMarketIndexes, bookIndexIds, (e) => store.currentHoldingsLocal(e.id)
     ).map(({ fund, index, investableLocal }) => {
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       // A CREDIT index fund is a real buyer in the primary, unlike its equity counterpart. A bond
       // index admits a new issue at the next rebalance, and a fund that waits has to chase it in
       // the aftermarket — so it takes its proportional share at issue. (Equity index funds do the
@@ -592,7 +593,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       });
       return {
         id: fund.id,
-        currentHoldingsByInstrumentId: claimedByEntity.get(fund.id) ?? new Map<string, number>(),
+        currentHoldingsByInstrumentId: claimedByEntity.get(fund.id) ?? new Map<InstrumentId, number>(),
         demandByInstrumentId,
       };
     });
@@ -610,7 +611,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // OWN7, second half: the desks' own books join the float now that they exist. A holder
     // outside this book keeps its position, so its paper was never for sale — and the residual no
     // named book holds at all was never for sale either, because there is no seller to decrement.
-    const deskHeldLocal = new Map<string, number>();
+    const deskHeldLocal = new Map<InstrumentId, number>();
     deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((faceLocal, id) => {
       if (faceLocal > 0) deskHeldLocal.set(id, (deskHeldLocal.get(id) ?? 0) + faceLocal);
     }));
@@ -640,7 +641,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
      * KEEPS the price it had, which is the honest answer and the one §3.21 asks every adapter to
      * be able to give.
      */
-    const clearedPriceById = new Map<string, number>();
+    const clearedPriceById = new Map<InstrumentId, number>();
     for (let bi = 0; bi < nB; bi++) {
       const b = bonds[bi];
       const outcome = result.primaryOutcomeById.get(b.id);
@@ -666,7 +667,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // SCALE C1: the entities here ARE the store's working copies, and the fill rows are appended
     // to the store for the single write-back after 07e. SETL6: the cash leg is settled below as
     // payment instructions, not mutated here.
-    const holdingRow = (instrumentId: string, faceLocal: number): ItemizedHolding =>
+    const holdingRow = (instrumentId: InstrumentId, faceLocal: number): ItemizedHolding =>
       // Written in PAR space, as the sovereign's fills are (§9.13-SOV row 4): the row carries the
       // FACE it holds and the cash leg above paid the cleared price for it. What the register is
       // WORTH is `face × price`, and `P5` measures the gap until the mark lands — §3.13's item 4,
@@ -729,7 +730,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         // rather than re-striking a coupon off a curve this book has already moved past.
         termsOf: (o) => primaryTermsById.get(primaryTrancheId(o.issuerId, o.purpose, week)),
       });
-    const newDealerInventory: { instrumentId: string; inventoryLocal: number }[] = [];
+    const newDealerInventory: { instrumentId: InstrumentId; inventoryLocal: number }[] = [];
     deskViewByInstrument.forEach((inventoryLocal, instrumentId) => {
       if (Math.abs(inventoryLocal) > 1) newDealerInventory.push({ instrumentId, inventoryLocal });
     });
@@ -739,7 +740,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const entityIds = new Set(bookEntities.map((e) => e.id));
     /** The borrower behind a piece of this book's paper — the party its primary proceeds and its
      *  accrued are owed to. */
-    const issuerPartyOf = (instrumentId: string): PartyRef | undefined => {
+    const issuerPartyOf = (instrumentId: InstrumentId): PartyRef | undefined => {
       const issuer = companyById.get(issuerIdOfInstrument.get(instrumentId) ?? '');
       return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
     };

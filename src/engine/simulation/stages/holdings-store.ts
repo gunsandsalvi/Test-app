@@ -29,7 +29,7 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
-import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, markBookDirty } from '../../../engine2/holdings';
+import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, markBookDirty, instrumentIdAt } from '../../../engine2/holdings';
 import { V2World } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
@@ -37,6 +37,7 @@ import { clearedBookDelta, registerBooks, BookEntry } from '../../ledger/holding
 import { mutableHoldings } from '../../../engine2/holdings';
 import { RegionId } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
+import type { InstrumentId } from '../../../domain/ids';
 
 /** The instrument types the clearing books price — the only groups the store indexes. */
 const BOOK_TYPES: ItemizedHolding['instrumentType'][] = [
@@ -87,7 +88,7 @@ export class HoldingsStore {
         const iRef = v2.internedIdByString.get(rows[i].instrumentId);
         if (iRef !== undefined && H.instrRef[rowIds[i]] !== iRef) {
           defect(`${entity.id}[${i}] pairs ${rows[i].instrumentId} with register row`
-            + ` ${v2.internedStrings[H.instrRef[rowIds[i]]]} — the book and the chain have diverged`);
+            + ` ${instrumentIdAt(v2, rowIds[i])} — the book and the chain have diverged`);
         }
       }
       const byType = new Map<string, number[]>();
@@ -164,7 +165,7 @@ export class HoldingsStore {
   addShares(
     entityId: string,
     type: ItemizedHolding['instrumentType'],
-    instrumentId: string,
+    instrumentId: InstrumentId,
     issuerRegion: ItemizedHolding['issuerRegion'],
     shares: number,
     pricePerShare: number

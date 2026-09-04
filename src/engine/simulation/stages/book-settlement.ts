@@ -40,6 +40,7 @@ import { defect } from '../../../domain/defect';
 import { ClearingResult } from './financial-clearing-engine';
 import { transferHolding, HoldingSpec, HoldingKind } from '../../ledger/holdings-ledger';
 import { heldInShares } from '../../../domain/assets';
+import type { InstrumentId } from '../../../domain/ids';
 
 /** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
 export interface FeeDesk { ticker: string; share: number }
@@ -82,8 +83,8 @@ export interface PrimaryTake {
  */
 export interface AccruedLeg {
   byParticipantId: Map<string, number>;
-  netByInstrumentId: Map<string, number>;
-  issuerOf: (instrumentId: string) => PartyRef | undefined;
+  netByInstrumentId: Map<InstrumentId, number>;
+  issuerOf: (instrumentId: InstrumentId) => PartyRef | undefined;
 }
 
 /**
@@ -93,13 +94,13 @@ export interface AccruedLeg {
  * other half of the same trade (rule 5).
  */
 export function accruedOnFills(
-  participants: readonly { id: string; currentHoldingsByInstrumentId: ReadonlyMap<string, number> }[],
-  newHoldingsByParticipantId: ReadonlyMap<string, ReadonlyMap<string, number>>,
-  accruedPerFaceOf: (instrumentId: string) => number,
-  onMove: (instrumentId: string, participantId: string, deltaLocal: number) => void
-): { byParticipantId: Map<string, number>; netByInstrumentId: Map<string, number> } {
+  participants: readonly { id: string; currentHoldingsByInstrumentId: ReadonlyMap<InstrumentId, number> }[],
+  newHoldingsByParticipantId: ReadonlyMap<string, ReadonlyMap<InstrumentId, number>>,
+  accruedPerFaceOf: (instrumentId: InstrumentId) => number,
+  onMove: (instrumentId: InstrumentId, participantId: string, deltaLocal: number) => void
+): { byParticipantId: Map<string, number>; netByInstrumentId: Map<InstrumentId, number> } {
   const byParticipantId = new Map<string, number>();
-  const netByInstrumentId = new Map<string, number>();
+  const netByInstrumentId = new Map<InstrumentId, number>();
   participants.forEach((p) => {
     const after = newHoldingsByParticipantId.get(p.id);
     let owedLocal = 0;
@@ -227,17 +228,21 @@ export function feeDesksForRegion(ctx: WeeklyStepContext, regionId: RegionId): F
  */
 export function primaryTakes(
   result: ClearingResult,
-  partyOfIssuerId: (issuerId: string) => PartyRef | undefined,
+  /** §3.13-BOOK slice (a): the outcome map is keyed by the INSTRUMENT the deal listed under, and
+   *  these two callbacks were named `issuerId` because for equity the two are the same string
+   *  (`equityInstrumentId`). For a credit book they never were — the deal lists as its own
+   *  tranche — and the names now say which space the caller is handed. */
+  partyOfInstrumentId: (instrumentId: InstrumentId) => PartyRef | undefined,
   valueOf: (marketTakeLocal: number, clearedStat: number) => number = (take) => take,
   /** §5-WIRES W2: the paper behind the take — see `primaryAssetOf`. */
-  assetOf?: (issuerId: string, marketTake: number, clearedStat: number) => HoldingSpec | undefined
+  assetOf?: (instrumentId: InstrumentId, marketTake: number, clearedStat: number) => HoldingSpec | undefined
 ): PrimaryTake[] {
   const takes: PrimaryTake[] = [];
-  result.primaryOutcomeById.forEach((o, issuerId) => {
+  result.primaryOutcomeById.forEach((o, instrumentId) => {
     if (o.withdrawn) return;
     const amountLocal = valueOf(o.marketTakeLocal, o.clearedStat);
-    const party = partyOfIssuerId(issuerId);
-    if (party && amountLocal > 0) takes.push({ party, amountLocal, asset: assetOf?.(issuerId, o.marketTakeLocal, o.clearedStat) });
+    const party = partyOfInstrumentId(instrumentId);
+    if (party && amountLocal > 0) takes.push({ party, amountLocal, asset: assetOf?.(instrumentId, o.marketTakeLocal, o.clearedStat) });
   });
   return takes;
 }
@@ -248,10 +253,10 @@ export function primaryTakes(
  * shares). The instrument id is the issuer's — what the register keys the paper by.
  */
 export function primaryAssetOf(instrumentType: HoldingKind, region: RegionId) {
-  return (issuerId: string, marketTake: number, clearedStat: number): HoldingSpec | undefined => {
+  return (instrumentId: InstrumentId, marketTake: number, clearedStat: number): HoldingSpec | undefined => {
     if (!(marketTake > 0)) return undefined;
     return heldInShares(instrumentType)
-      ? { instrumentType, instrumentId: issuerId, issuerRegion: region, valueLocal: marketTake * clearedStat, shares: marketTake }
-      : { instrumentType, instrumentId: issuerId, issuerRegion: region, valueLocal: marketTake };
+      ? { instrumentType, instrumentId, issuerRegion: region, valueLocal: marketTake * clearedStat, shares: marketTake }
+      : { instrumentType, instrumentId, issuerRegion: region, valueLocal: marketTake };
   };
 }

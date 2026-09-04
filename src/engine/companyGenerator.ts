@@ -15,6 +15,8 @@ import { UNIVERSE_SCALE, PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
 import { random } from './rng';
 import { seedLoanBookLocal } from './macro/initialization';
+import { corporateTrancheId } from '../domain/instrument-keys';
+import { asInstrumentId } from '../domain/ids';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
@@ -358,7 +360,7 @@ export function generateDebtTranches(ticker: string, debtBase: number, initialRa
     const principalLocal = debtBase * trancheWeights[i];
     // §3.37-SEED: the rung is part-way through its life. Remaining life lands uniformly in
     // [1, tenorWeeks], so a run of any length meets maturities in proportion to its length.
-    const trancheId = `${ticker}-T${i + 1}`;
+    const trancheId = corporateTrancheId(ticker, i + 1);
     // The seed opens with `currentWeek = 1`, so the first weekly step looks at week 2: a rung left
     // with one week of life would be due before the engine's first look. Two is the floor.
     const agedWeeks = Math.min(tenorWeeks - 2, Math.round(tenorWeeks * seedAgeFraction(trancheId)));
@@ -788,11 +790,15 @@ export function generateInitialCompanies(
         // ladder sum overwrote the clone's scaled debt at week 1).
         debtTranches: (parent.debtTranches ?? []).map((t) => ({
           ...t,
-          id: t.id.startsWith(parent.ticker + '-')
-            ? newTicker + t.id.slice(parent.ticker.length)
-            : t.id.startsWith(parent.id + '-') || t.id.startsWith(parent.id + '_')
-              ? `${region}_${newTicker}` + t.id.slice(parent.id.length)
-              : `${newTicker}-${t.id}`,
+          // §3.13-BOOK slice (a): a clone's rung keeps the PARENT's id SHAPE with the clone's
+          // own name substituted in — a re-key, not a new grammar, which is why it is an
+          // admission here rather than a constructor in `instrument-keys.ts`.
+          id: asInstrumentId(
+            t.id.startsWith(parent.ticker + '-')
+              ? newTicker + t.id.slice(parent.ticker.length)
+              : t.id.startsWith(parent.id + '-') || t.id.startsWith(parent.id + '_')
+                ? `${region}_${newTicker}` + t.id.slice(parent.id.length)
+                : `${newTicker}-${t.id}`),
         })),
         id: `${region}_${newTicker}`,
         ticker: newTicker,

@@ -25,6 +25,7 @@ import { PartyRef } from './settlement';
 import { clearedBookDelta, HoldingKind } from '../../ledger/holdings-ledger';
 import { defect } from '../../../domain/defect';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
+import type { InstrumentId } from '../../../domain/ids';
 
 /** W2: the register kind each desk book carries — the wire's asset kind. */
 const DESK_BOOK_KIND: Record<string, HoldingKind> = {
@@ -53,8 +54,8 @@ function sheetOf(ctx: WeeklyStepContext, bank: Company) {
  * `applyDealerDeskFills` then saw the same key as uncleared and marked none of it. Rows 1 and 3
  * left it standing; it goes with the last book that needed it.
  */
-function priorPositions(inv: DealerDeskInventory | undefined, book: string): Map<string, DealerDeskPosition> {
-  const byId = new Map<string, DealerDeskPosition>();
+function priorPositions(inv: DealerDeskInventory | undefined, book: string): Map<InstrumentId, DealerDeskPosition> {
+  const byId = new Map<InstrumentId, DealerDeskPosition>();
   (inv?.[book] ?? []).forEach((p) => byId.set(p.instrumentId, p));
   return byId;
 }
@@ -106,7 +107,7 @@ export function buildDealerDeskParticipants(args: {
       + pendingSettlementLocal(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
     const fundableLocal = Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * bankCashBufferRatioOf(bank));
 
-    const currentHoldingsByInstrumentId = new Map<string, number>();
+    const currentHoldingsByInstrumentId = new Map<InstrumentId, number>();
     const demandByIndex: (ParticipantDemand | undefined)[] = new Array(instruments.length);
     instruments.forEach((inst, i) => {
       const priorPos = prior.get(inst.id);
@@ -178,15 +179,15 @@ export function applyDealerDeskFills(args: {
   instruments: ClearingInstrument[];
   result: ClearingResult;
   /** The unit price, for a book that clears in units — the inventory a bank carries is money. */
-  unitPriceOf?: (instrumentId: string) => number;
+  unitPriceOf?: (instrumentId: InstrumentId) => number;
   /** The desk's money leg, for a book whose engine cash legs are unit-denominated (07e). */
   cashDeltaOf?: (deskParticipantId: string) => number;
   /** int flip — participant index by id; when present the desk fills read the dense
    *  holdings matrix and the lazy map is never materialized for this book. */
   piById?: Map<string, number>;
-}): Map<string, number> {
+}): Map<InstrumentId, number> {
   const { ctx, banks, book, result } = args;
-  const unitPrice = (id: string) => Math.max(1e-9, args.unitPriceOf ? args.unitPriceOf(id) : 1);
+  const unitPrice = (id: InstrumentId) => Math.max(1e-9, args.unitPriceOf ? args.unitPriceOf(id) : 1);
   const inventories: (DealerDeskInventory | undefined)[] = [];
   banks.forEach((bank) => {
     const sheet = sheetOf(ctx, bank);
@@ -220,7 +221,7 @@ export function applyDealerDeskFills(args: {
     // the desk's are one string (`priorPositions`). The split that used to stand here, spreading
     // an ISSUER-level fill across that borrower's tranches by face, went with the last book that
     // cleared per issuer (§9.13-CREDIT row 4, and the split file with it).
-    const applyFill = (units: number, instrumentId: string): void => {
+    const applyFill = (units: number, instrumentId: InstrumentId): void => {
       if (!clearedIds.has(instrumentId)) return;
       const inventoryLocal = units * unitPrice(instrumentId);
       if (Math.abs(inventoryLocal) <= 1) return;
@@ -253,13 +254,13 @@ export function applyDealerDeskFills(args: {
     {
       const kind = DESK_BOOK_KIND[book] ?? defect(`desk book '${book}' names no register kind — its fills cannot be wired`);
       const inUnits = args.unitPriceOf !== undefined;
-      const toEntry = (units: number, instrumentId: string) =>
+      const toEntry = (units: number, instrumentId: InstrumentId) =>
         inUnits ? { valueLocal: units * unitPrice(instrumentId), shares: units } : { valueLocal: units };
-      const before = new Map<string, { valueLocal: number; shares?: number }>();
+      const before = new Map<InstrumentId, { valueLocal: number; shares?: number }>();
       prior.forEach((p, instrumentId) => {
         if (clearedIds.has(instrumentId)) before.set(instrumentId, toEntry(p.units ?? p.inventoryLocal, instrumentId));
       });
-      const after = new Map<string, { valueLocal: number; shares?: number }>();
+      const after = new Map<InstrumentId, { valueLocal: number; shares?: number }>();
       positions.forEach((p) => {
         if (clearedIds.has(p.instrumentId)) after.set(p.instrumentId, toEntry(p.units ?? p.inventoryLocal, p.instrumentId));
       });
@@ -274,7 +275,7 @@ export function applyDealerDeskFills(args: {
     // charges equity with any cash that left without inventory arriving, so a books-vs-cash
     // disagreement in the clearing engine lands HERE as a phantom fee. Print it where it books.
     if (process.env.DESK_TRACE === '1' && (Math.abs(residualLocal) > 50e6 || Math.abs(markToMarketLocal) > 50e6)) {
-      const dbgFills = fills ?? result.newParticipantHoldings.get(deskId) ?? new Map<string, number>();
+      const dbgFills = fills ?? result.newParticipantHoldings.get(deskId) ?? new Map<InstrumentId, number>();
       const fillsStr = Array.from(dbgFills.entries())
         .filter(([id, units]) => Math.abs(units * unitPrice(id)) > 10e6)
         .map(([id, units]) => `${id.slice(0, 12)} u${(units / 1e6).toFixed(1)}M@${unitPrice(id).toFixed(3)}`)

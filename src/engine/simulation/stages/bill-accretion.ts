@@ -35,6 +35,7 @@
 
 
 import { RegionId } from '../../../types';
+import { InstrumentId } from '../../../domain/ids';
 import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { isActiveCompany } from '../../../domain/company';
@@ -51,7 +52,7 @@ import { clearedPriceOf, priorClearedPriceOf } from '../../../engine2/prices';
  * moved from. `weeklyPriceMoveOf` is not this — it is the ABSOLUTE move, for a haircut, and a
  * return has a sign.
  */
-function printedWeeklyReturn(ctx: WeeklyStepContext, billId: string): number | undefined {
+function printedWeeklyReturn(ctx: WeeklyStepContext, billId: InstrumentId): number | undefined {
   const now = clearedPriceOf(ctx.v2, billId);
   const before = priorClearedPriceOf(ctx.v2, billId);
   if (now === undefined || before === undefined || !(before > 0)) return undefined;

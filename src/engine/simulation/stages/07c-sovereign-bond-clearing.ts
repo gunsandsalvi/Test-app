@@ -76,6 +76,7 @@ import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLoca
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
+import { instrumentEntries, type InstrumentId } from '../../../domain/ids';
 
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
@@ -228,13 +229,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // under a TRANCHE id — two id spaces for one instrument" — and reading the wrong one silently
     // counted a whole book as passive. There is only one to read now.
     const heldById = new Set(bondIds);
-    const nonParticipantById = new Map<string, number>();
-    const reserveBond = (id: string | undefined, usd: number) => {
+    const nonParticipantById = new Map<InstrumentId, number>();
+    const reserveBond = (id: InstrumentId | undefined, usd: number) => {
       if (!id || !heldById.has(id) || !(usd > 0)) return;
       nonParticipantById.set(id, (nonParticipantById.get(id) ?? 0) + usd);
     };
     if (!cbOrder && reg.centralBankSheet) {
-      Object.entries(reg.centralBankSheet.sovereignHoldingsByBond || {})
+      instrumentEntries(reg.centralBankSheet.sovereignHoldingsByBond)
         .forEach(([id, usd]) => reserveBond(id, Number(usd) || 0));
     }
     ctx.prevActiveFirms.forEach((c) => {
@@ -266,14 +267,14 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     //     for by whoever takes it, and offered again next week if nobody does. An undersubscribed
     //     auction is then a real event with a real consequence for the treasury's account,
     //     instead of a silent placement.
-    const realHoldingsById = new Map<string, number>();
-    const addReal = (id: string | undefined, usd: number) => {
+    const realHoldingsById = new Map<InstrumentId, number>();
+    const addReal = (id: InstrumentId | undefined, usd: number) => {
       if (!id || !heldById.has(id) || !(usd > 0)) return;
       realHoldingsById.set(id, (realHoldingsById.get(id) ?? 0) + usd);
     };
     ctx.prevActiveFirms.forEach((c) => {
       if (c.region === regionId && c.bankBalanceSheet) {
-        Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond || {})
+        instrumentEntries(c.bankBalanceSheet.sovereignBondHoldingsByBond)
           .forEach(([id, usd]) => addReal(id, Number(usd) || 0));
       }
       (c.treasuryHoldings || []).forEach((h) =>
@@ -287,14 +288,14 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       });
     });
     if (reg.centralBankSheet) {
-      Object.entries(reg.centralBankSheet.sovereignHoldingsByBond || {})
+      instrumentEntries(reg.centralBankSheet.sovereignHoldingsByBond)
         .forEach(([id, usd]) => addReal(id, Number(usd) || 0));
     }
     // The desks' own book is held paper like any other: it comes out of what is reservable.
     // (This read named a field that does not exist on the row — `bondId` for `bondId` —
     // so the dealer's position had never once been subtracted. G3a.)
     (reg.bankingSector.sovBondDealerInventory || []).forEach((pos) => addReal(pos.bondId, pos.inventoryLocal));  // bondId now carries the bond id
-    const unheldById = new Map<string, number>();
+    const unheldById = new Map<InstrumentId, number>();
     bonds.forEach((b) => unheldById.set(b.id, Math.max(0, b.outstandingLocal - (realHoldingsById.get(b.id) ?? 0))));
 
     const totalOutstandingLocal = totalBondOutstandingLocal;
@@ -391,7 +392,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // instruments it cleared — unclaimed rows pass through the write-back untouched.
     const store = ctx.holdingsStore!;
     const entityParticipants: ClearingParticipant[] = biddingEntities.map((entity) => {
-      const currentByBond = new Map<string, number>();
+      const currentByBond = new Map<InstrumentId, number>();
       store.scan(entity.id, 'GOV_BOND', (h) => {
         if (!ownInstrumentIds.has(h.instrumentId)) return false;
         currentByBond.set(h.instrumentId, (currentByBond.get(h.instrumentId) ?? 0) + h.quantityOrNotionalLocal);
@@ -402,7 +403,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // return its liabilities cost plus compensation for the duration it is committing. That is
       // the reservation yield; below it the money is better left at the central bank, which is
       // the same choice the banks below face and the reason the front end tracks policy.
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       const entityTarget = rawEntityTargets.get(entity.id) ?? 0;
       // The entity's real money for this auction (S11), apportioned across the bonds by
       // their share of the market. Banks below carry no such cap: their real constraint is the
@@ -438,8 +439,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const bankParticipants: ClearingParticipant[] = regionBanks.map((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.ticker);
-      const currentByBond = new Map<string, number>();
-      Object.entries(sheet.sovereignBondHoldingsByBond || {}).forEach(([id, v]) => {
+      const currentByBond = new Map<InstrumentId, number>();
+      instrumentEntries(sheet.sovereignBondHoldingsByBond).forEach(([id, v]) => {
         if (!ownInstrumentIds.has(id)) return;
         currentByBond.set(id, Number(v) || 0);
       });
@@ -475,7 +476,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // what it needs for the duration risk a bond carries and cash does not. This is the same
       // bonds-versus-reserves choice that anchors the front end, now expressed as a price rather
       // than as a scaling factor on a quantity target.
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal);
       const liquidityFloorLocal = liquidityDrivenSovereignFloorLocal(sheet, reservesLocal, bankDepositLines(ctx, bank.ticker));
       bonds.forEach((b) => {
@@ -572,7 +573,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // SCALE C1: fills are appended to the store for the single write-back after 07e. SETL6: the
     // cash leg is settled below as payment instructions.
     biddingEntities.forEach((entity) => {
-      const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
+      const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<InstrumentId, number>();
       const newGovHoldings: ItemizedHolding[] = [];
       newHoldings.forEach((usd, instrumentId) => {
         if (usd > 1) newGovHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalLocal: usd, units: usd });
@@ -583,7 +584,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // Apply: each bank's real new holdings, keyed back to plain tenor keys, plus the derived
     // scalar total (sovereignBondHoldingsLocal stays the sum of the book).
     regionBanks.forEach((bank) => {
-      const newHoldings = result.newParticipantHoldings.get(bank.ticker) ?? new Map<string, number>();
+      const newHoldings = result.newParticipantHoldings.get(bank.ticker) ?? new Map<InstrumentId, number>();
       // §7.235: a bank with no sheet has no securities book to move, and the `?.` reads below
       // already assumed that — they just could not say it while `companyUpdates` was `any`. Now
       // the spread at the write site would silently produce a PARTIAL sheet, which is how a
@@ -596,10 +597,10 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // deleted every bank's bill position with no cash leg — the exact WS5 bug, fixed on the
       // institutional path at the time and sitting unnoticed here until the per-bank identity
       // invariant existed to catch it (measured: 26.6B of USA bank bills vanished in week 1).
-      const newBook: Record<string, number> = {};
+      const newBook: Record<InstrumentId, number> = {};
       // Step 13 (W2): the bank's bond book moves by wire against the house, bond by bond.
-      const bondsBefore = new Map<string, { valueLocal: number }>(), bondsAfter = new Map<string, { valueLocal: number }>();
-      Object.entries(existingSheet?.sovereignBondHoldingsByBond || {}).forEach(([id, v]) => {
+      const bondsBefore = new Map<InstrumentId, { valueLocal: number }>(), bondsAfter = new Map<InstrumentId, { valueLocal: number }>();
+      instrumentEntries(existingSheet?.sovereignBondHoldingsByBond).forEach(([id, v]) => {
         if (!ownInstrumentIds.has(id)) newBook[id] = Number(v) || 0;
         else bondsBefore.set(id, { valueLocal: Number(v) || 0 });
       });
@@ -635,7 +636,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       reg.centralBankSheet.lastOrderPlacedLocal = cbOrder?.orderedLocal ?? 0;
     }
     if (cbOrder && reg.centralBankSheet) {
-      const cbFills = result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>();
+      const cbFills = result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<InstrumentId, number>();
       // Step 13 (W2): the central bank's fills are wires from the house.
       wireCentralBankFills(regionId, reg.centralBankSheet, bondIds, cbFills, 'sovereign bond clearing fill');
       const filled = applyCentralBankFills(
@@ -650,7 +651,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
     // Rows this auction did not price pass through: the bills, which are 07f's book.
     const billDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !ownInstrumentIds.has(p.bondId));
-    const newDealerInventory: { bondId: string; inventoryLocal: number }[] = [];
+    const newDealerInventory: { bondId: InstrumentId; inventoryLocal: number }[] = [];
     deskViewById.forEach((inventoryLocal, instrumentId) => {
       // The desk's row names the BOND (the field is still called bondId; it is the id now).
       if (Math.abs(inventoryLocal) > 1) newDealerInventory.push({ bondId: instrumentId, inventoryLocal });

@@ -119,8 +119,8 @@ checked by `scripts/check-atlas.sh`.
 | E3 a default converts the holding into a recovery claim | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | E4 a split, buyback or new issue moves both sides at once | `src/engine/ledger/holdings-ledger.ts:scaleHoldings` | ✅ |
 | E5 VERIFY every register event moves money or says why not | `src/engine/ledger/holdings-ledger.ts:markHolding` | ✅ |
-| F1 an instrument has a stable identity for its whole life | `src/engine/ledger/tranche-ledger.ts:issueTranche` | ⚠️ |
-| F1.a two instruments with the same terms are still two | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ✅ |
+| F1 an instrument has a stable identity for its whole life | `src/domain/ids.ts:InstrumentId` | ⚠️ |
+| F1.a two instruments with the same terms are still two | `src/domain/instrument-keys.ts:corporateTrancheId` | ⚠️ |
 | F2 a dead party leaves its holdings to a named successor | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | F3 VERIFY the register survives a week boundary unchanged | `src/engine2/holdings.ts:assertBooksInSync` | ✅ |
 
@@ -158,6 +158,29 @@ because there is nothing for it to describe. It is the ownership-side twin of
 
 **Becomes a §3 step.** Medium: the two legs already exist and already name the same parties; what
 is missing is one settlement point that writes both or neither.
+
+### ⚠️ F1 / F1.a — ONE INSTRUMENT, TWO KEYS: THE ETF SHARE
+
+§3.13-BOOK slice (a) gave the register three nominal id spaces (`domain/ids.ts`: `EntityId`,
+`InstrumentId`, `Ticker`) and put the whole instrument-key grammar in one file
+(`domain/instrument-keys.ts`), so a key can no longer be invented at a call site and the compiler
+refuses one space where another belongs. That is what re-marks F1 off `issueTranche`: identity is
+now a property of the id, not of the stage that happened to mint it.
+
+It also found what a comment could not. **`etf-flows.ts` clears a fund's shares under
+`ETFSHARE-<fund>` and writes the resulting positions under the fund's own ENTITY id.** The
+register's index, its weekly re-mark, and every holder's row use the second; the clearing book and
+its price use the first. One instrument, two keys — and nothing has broken only because no code has
+yet tried to join them. `banking.ts` has carried the sentence *"for ETF_SHARE: the fund entity's
+id"* in a field comment for the life of that field, and a comment cannot fail a build.
+
+Slice (a) deliberately did NOT unify them: these keys are persisted in the register, so changing
+one is a data migration, not a rename. Both are now named constructors — `etfShareInstrumentId`
+and `etfShareRegisterId` — sitting next to each other in one file, so the split is countable and
+slice (d) deletes one of them.
+
+F1.a drops to `⚠️` for the same reason: the grammar makes two same-terms instruments distinct
+wherever it is used, and the ETF pair is where it is not.
 
 ### ❌ D4 — NOTHING RECORDS WHAT A POSITION COST
 

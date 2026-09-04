@@ -151,6 +151,7 @@ import { isCarrier } from '../src/engine/simulation/stages/freight-clearing';
 import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
 import { DERIVATIVE_CLASSES } from '../src/domain/derivatives/registry';
 import { auditWeek, auditSeed, auditSummary, AuditFinding } from '../src/engine/audit';
+import { instrumentEntries, type InstrumentId } from '../src/domain/ids';
 
 interface Violation {
   week: number;
@@ -2596,10 +2597,10 @@ function runHarness() {
         // (domain/collateral.ts). This check used a 1e6 tolerance against the reconcile's 1, so it
         // could fail a bank the engine had just declared clean.
         overPledgedByBond({
-          pledgedByBond: (pledgedBy.get(c.ticker) ?? new Map()) as Map<string, number>,
-          heldByBond: new Map(Object.entries(bs.sovereignBondHoldingsByBond ?? {})
-            .map(([k, v]) => [k, Number(v) || 0])),
-        }).forEach((excessLocal: number, bondId: string) => {
+          pledgedByBond: (pledgedBy.get(c.ticker) ?? new Map()) as Map<InstrumentId, number>,
+          heldByBond: new Map(instrumentEntries(bs.sovereignBondHoldingsByBond)
+            .map(([k, v]) => [k, Number(v) || 0] as const)),
+        }).forEach((excessLocal: number, bondId: InstrumentId) => {
           const faceLocal = (pledgedBy.get(c.ticker) as Map<string, number>).get(bondId) ?? 0;
           const heldLocal = Number(bs.sovereignBondHoldingsByBond?.[bondId] ?? 0);
           if (excessLocal > 0) {

@@ -34,12 +34,12 @@ import { entityRequiredReturn, maxOverweightMultipleOf } from './asset-allocatio
 import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
-const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
+const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { institutionSpendableLocal } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { householdBookId, transferHolding } from '../../ledger/holdings-ledger';
-import { bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
@@ -51,6 +51,8 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
+import { equityInstrumentId } from '../../../domain/instrument-keys';
+import type { InstrumentId } from '../../../domain/ids';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
@@ -138,7 +140,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const priorPriceById = new Map(regionCompanies.map((c) => [c.id, refPriceOf(c)]));
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
-      id: c.id,
+      id: equityInstrumentId(c.id),
       outstandingLocal: c.sharesOutstanding,
       tradableFloatLocal: c.sharesOutstanding,
       currentStat: refPriceOf(c),
@@ -149,8 +151,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     }));
 
     // Per-company values memoized once per region-week, never inside the participants loop.
-    const companyById = new Map(regionCompanies.map((c) => [c.id, c]));
-    const refPriceById = new Map(regionCompanies.map((c) => [c.id, refPriceOf(c)]));
+    const companyById = new Map(regionCompanies.map((c) => [equityInstrumentId(c.id), c]));
+    const refPriceById = new Map(regionCompanies.map((c) => [equityInstrumentId(c.id), refPriceOf(c)]));
     const floatValueById = new Map(
       regionCompanies.map((c) => [c.id, liveTradableSharesOf(c) * refPriceOf(c)])
     );
@@ -185,8 +187,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const defaultedArr = new Uint8Array(nC);
     const netIncomeArr = new Float64Array(nC);
     regionCompanies.forEach((c, ci) => {
-      ciById.set(c.id, ci);
-      refPriceArr[ci] = refPriceById.get(c.id) ?? 0;
+      ciById.set(equityInstrumentId(c.id), ci);
+      refPriceArr[ci] = refPriceById.get(equityInstrumentId(c.id)) ?? 0;
       floatValueArr[ci] = floatValueById.get(c.id) ?? 0;
       offeredValueArr[ci] = offeredValueById.get(c.id) ?? 0;
       bookEquityArr[ci] = bookEquityById.get(c.id) ?? 0;
@@ -235,12 +237,12 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const bookEntities = [...regionEntities, ...regionIndexFunds];
     // §4.C direct-to-pack — demand written straight into the engine's staging.
     const DS = openDemandStaging(regionCompanies.length);
-    const currentSharesByEntity = new Map<string, Map<string, number>>();
+    const currentSharesByEntity = new Map<string, Map<InstrumentId, number>>();
     // SCALE C1: positions come off the shared store's EQUITY rows; only THIS region's names are
     // claimed, everything else passes through the write-back untouched.
     const store = ctx.holdingsStore!;
     bookEntities.forEach((entity) => {
-      const bySharesForCompany = new Map<string, number>();
+      const bySharesForCompany = new Map<InstrumentId, number>();
       store.scan(entity.id, 'EQUITY', (h) => {
         const comp = companyById.get(h.instrumentId);
         if (!comp) return false;
@@ -303,16 +305,16 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     }
     const householdParticipantId = `HOUSEHOLD-${regionId}`;
     let householdParticipant: ClearingParticipant | undefined;
-    const householdPriorShares = new Map<string, number>();
+    const householdPriorShares = new Map<InstrumentId, number>();
     if (hhSaleNeedLocal > 1) {
-      const hhSharesByCompany = new Map<string, number>();
+      const hhSharesByCompany = new Map<InstrumentId, number>();
       let hhTotalValueLocal = 0;
       {
         const H = ctx.v2.holdings;
         const equityRef = ctx.v2.internedIdByString.get('EQUITY');
         for (let r = equityRef === undefined ? -1 : bookHeadOf(ctx.v2, householdBookId(regionId)); r >= 0; r = H.next[r]) {
           if (H.typeRef[r] !== equityRef) continue;
-          const companyId = ctx.v2.internedStrings[H.instrRef[r]];
+          const companyId = instrumentIdAt(ctx.v2, r);
           const hhShares = Number.isNaN(H.shares[r]) ? 0 : H.shares[r];
           if (!(hhShares > 0) || !ciById.has(companyId)) continue;
           hhSharesByCompany.set(companyId, (hhSharesByCompany.get(companyId) ?? 0) + hhShares);
@@ -321,7 +323,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       }
       if (hhTotalValueLocal > 1) {
         const sellFraction = Math.min(1, hhSaleNeedLocal / hhTotalValueLocal);
-        const demandByInstrumentId = new Map<string, ParticipantDemand>();
+        const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
         hhSharesByCompany.forEach((shares, companyId) => {
           const sellShares = shares * sellFraction;
           householdPriorShares.set(companyId, sellShares);
@@ -351,8 +353,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       .map((d) => d.id);
     const indexFunds = indexFundsForBook(ctx.v2, regionIndexFunds, ctx.updatedMarketIndexes, equityIndexIds, (e) => store.currentHoldingsLocal(e.id));
     const indexFundParticipants: ClearingParticipant[] = indexFunds.map(({ fund, index, investableLocal }) => {
-      const currentShares = currentSharesByEntity.get(fund.id) ?? new Map<string, number>();
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      const currentShares = currentSharesByEntity.get(fund.id) ?? new Map<InstrumentId, number>();
+      const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       index.constituents.forEach((c) => {
         if (!companyById.has(c.instrumentId)) return;
         const refPrice = refPriceById.get(c.instrumentId) ?? 0;
@@ -470,9 +472,9 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // is a participant whose shares moved with no cash leg, valued at the cleared price.
     if (process.env.EQ_CONS_TRACE === '1') {
       const allParts = allParticipants;
-      const deltaByInstrument = new Map<string, number>();
+      const deltaByInstrument = new Map<InstrumentId, number>();
       allParts.forEach((p) => {
-        const news = result.newParticipantHoldings.get(p.id) ?? new Map<string, number>();
+        const news = result.newParticipantHoldings.get(p.id) ?? new Map<InstrumentId, number>();
         news.forEach((shares, instId) => {
           deltaByInstrument.set(instId, (deltaByInstrument.get(instId) ?? 0) + shares - (p.currentHoldingsByInstrumentId.get(instId) ?? 0));
         });
@@ -528,7 +530,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           const comp = companyById.get(companyId);
           if (!comp || shares <= 0.0001) return;
           equityHoldings.push({
-            instrumentId: comp.id, instrumentType: 'EQUITY', issuerRegion: regionId,
+            instrumentId: equityInstrumentId(comp.id), instrumentType: 'EQUITY', issuerRegion: regionId,
             quantityShares: shares, quantityOrNotionalLocal: shares * comp.stockPrice, units: shares,
           });
         });
@@ -541,7 +543,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const comp = regionCompanies[ii];
         if (shares <= 0.0001) continue;
         equityHoldings.push({
-          instrumentId: comp.id,
+          instrumentId: equityInstrumentId(comp.id),
           instrumentType: 'EQUITY',
           issuerRegion: regionId,
           quantityShares: shares,
@@ -563,7 +565,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       for (let ii = 0; ii < nI; ii++) {
         const shares = holdAt(epi, ii);
         if (shares === 0) continue;
-        const prev = currentSharesByEntity.get(entity.id)?.get(regionCompanies[ii].id) ?? 0;
+        const prev = currentSharesByEntity.get(entity.id)?.get(equityInstrumentId(regionCompanies[ii].id)) ?? 0;
         chargeLocal(shares - prev, regionCompanies[ii]);
       }
       currentSharesByEntity.get(entity.id)!.forEach((prevShares, companyId) => {
@@ -593,7 +595,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       for (let ii = 0; ii < nI; ii++) {
         const shares = holdAt(dpi, ii);
         if (shares === 0) continue;
-        charge(shares - (desk.currentHoldingsByInstrumentId.get(regionCompanies[ii].id) ?? 0), regionCompanies[ii]);
+        charge(shares - (desk.currentHoldingsByInstrumentId.get(equityInstrumentId(regionCompanies[ii].id)) ?? 0), regionCompanies[ii]);
       }
       desk.currentHoldingsByInstrumentId.forEach((prevShares, companyId) => {
         const ti = ciById.get(companyId);

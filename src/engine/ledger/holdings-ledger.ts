@@ -17,11 +17,11 @@
  */
 import { V2World, internString } from '../../engine2/world';
 import {
-  HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows,
-} from '../../engine2/holdings';
+  HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows, instrumentIdAt } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
 import { PartyRef } from './party';
 import { REGION_IDS } from '../../domain/geography';
+import { InstrumentId } from '../../domain/ids';
 import { wire, AssetKind, ASSET_KINDS } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { RegionId } from '../../domain/geography';
@@ -34,7 +34,7 @@ const kindOfType = (t: string): AssetKind => ((ASSET_KINDS as readonly string[])
 
 export interface HoldingSpec {
   instrumentType: HoldingKind;
-  instrumentId: string;
+  instrumentId: InstrumentId;
   issuerRegion: RegionId;
   /** Notional / market value moved, USD. */
   valueLocal: number;
@@ -304,7 +304,7 @@ export function retireHolding(v2: V2World, holder: PartyRef, issuer: PartyRef, s
  * the issuer: below one a retirement (redemption, buyback, write-off), above one a placement.
  */
 export function scaleHoldings(
-  v2: V2World, holder: PartyRef, issuer: PartyRef, instrumentType: HoldingKind, instrumentId: string,
+  v2: V2World, holder: PartyRef, issuer: PartyRef, instrumentType: HoldingKind, instrumentId: InstrumentId,
   ratio: number, reason: string
 ): number {
   const holderId = holderIdOf(holder);
@@ -352,13 +352,13 @@ export interface BookEntry { valueLocal: number; shares?: number; units?: number
 
 export function clearedBookDelta(
   holder: PartyRef, region: RegionId, instrumentType: HoldingKind,
-  before: Map<string, BookEntry>,
-  after: Map<string, BookEntry>,
-  priceOf: (instrumentId: string) => number | undefined,
+  before: Map<InstrumentId, BookEntry>,
+  after: Map<InstrumentId, BookEntry>,
+  priceOf: (instrumentId: InstrumentId) => number | undefined,
   reason: string,
 ): void {
   const house: PartyRef = { kind: 'CLEARING_HOUSE', region };
-  const ids = new Set<string>([...before.keys(), ...after.keys()]);
+  const ids = new Set<InstrumentId>([...before.keys(), ...after.keys()]);
   ids.forEach((id) => {
     const b = before.get(id), a = after.get(id);
     const px = priceOf(id);
@@ -402,7 +402,7 @@ export function clearedBookDelta(
  */
 export function markBookToMarket(
   v2: V2World, holderId: string,
-  priceOfRow: (instrumentType: string, instrumentId: string) => number | undefined
+  priceOfRow: (instrumentType: string, instrumentId: InstrumentId) => number | undefined
 ): { rows: number; deltaLocal: number } {
   const H = mutableHoldings(v2);
   let rows = 0, deltaLocal = 0;
@@ -411,7 +411,7 @@ export function markBookToMarket(
     if (Number.isNaN(H.units[r])) H.units[r] = H.qtyLocal[r];
     const unitsHeld = H.units[r];
     if (!(Math.abs(unitsHeld) > 0)) continue;
-    const price = priceOfRow(instrumentType, v2.internedStrings[H.instrRef[r]]);
+    const price = priceOfRow(instrumentType, instrumentIdAt(v2, r));
     if (price === undefined) continue;
     const before = H.qtyLocal[r];
     H.qtyLocal[r] = unitsHeld * price;

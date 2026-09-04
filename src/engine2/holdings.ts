@@ -14,6 +14,7 @@
  */
 
 import { ItemizedHolding } from '../domain/banking';
+import { asInstrumentId, type InstrumentId } from '../domain/ids';
 import { V2World, rowOf, internString } from './world';
 
 export interface HoldingStore {
@@ -285,6 +286,20 @@ export function markBookDirty(v2: V2World, entityId: string): void {
   mutableHoldings(v2).dirty.add(entityId);
 }
 
+/**
+ * §3.13-BOOK slice (a) — THE ONE PLACE A REGISTER ROW BECOMES AN INSTRUMENT ID.
+ *
+ * `instrRef` is an index into the shared intern table, which holds entity names, instrument keys,
+ * region codes and type tags in the same array. Twenty-seven sites read a row's instrument out of
+ * it by hand, each one an unstated claim that this particular ref names an instrument. This is
+ * that claim, made once: every one of those sites now calls this, so the claim has a single
+ * location, and slice (b) — which splits the intern table into per-space tables — has exactly one
+ * function to make TRUE rather than twenty-seven to find.
+ */
+export function instrumentIdAt(v2: V2World, r: number): InstrumentId {
+  return asInstrumentId(v2.internedStrings[mutableHoldings(v2).instrRef[r]]);
+}
+
 /** The entity's book as objects — the WEEK-END VIEW once rows are the authority: one linear
  *  pass at the close replaces every per-writer sync. */
 export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[] {
@@ -293,7 +308,9 @@ export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[
   for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) {
     const sh = H.shares[r];
     const h: ItemizedHolding = {
-      instrumentId: v2.internedStrings[H.instrRef[r]],
+      // §3.13-BOOK slice (a): the row's ref becomes an INSTRUMENT id here — the admission that
+      // `instrRef` names an instrument, which slice (b) makes true by splitting the intern table.
+      instrumentId: instrumentIdAt(v2, r),
       instrumentType: v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'],
       issuerRegion: v2.internedStrings[H.regionRef[r]] as ItemizedHolding['issuerRegion'],
       quantityOrNotionalLocal: H.qtyLocal[r],

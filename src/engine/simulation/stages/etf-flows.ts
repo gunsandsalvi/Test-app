@@ -27,7 +27,7 @@ import { entityCashOf, householdDepositsOf, obligationCurrencyOf } from '../../l
 
 import { transferHolding, issueHolding, retireHolding, markHolding } from '../../ledger/holdings-ledger';
 import { institutionProfile } from '../../../domain/institution-profiles';
-import { bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { pay, institutionSpendableLocal } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
@@ -49,6 +49,8 @@ import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 
 
+import { etfShareInstrumentId, etfShareRegisterId } from '../../../domain/instrument-keys';
+import type { InstrumentId } from '../../../domain/ids';
 /** An entity's money for one asset class, from its own mandate weights. */
 function classAppetiteLocal(ctx: WeeklyStepContext, entity: InstitutionalEntity, def: IndexDefinition): number {
   return Math.max(0, institutionTotalAssetsLocal(ctx, entity)) * mandatePctOf(entity.assetAllocationTarget, def.assetClass);
@@ -301,7 +303,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       let rows: Map<string, number> | undefined;
       for (let r = bookHeadOf(ctx.v2, inv.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== etfShareRef0) continue;
-        const fundId = ctx.v2.internedStrings[H.instrRef[r]];
+        const fundId = instrumentIdAt(ctx.v2, r);
         if (!rows) { rows = new Map(); etfShareRowByInvestor.set(inv.id, rows); }
         if (!rows.has(fundId)) {
           const sh = H.shares[r];
@@ -580,7 +582,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
             const qty = H.qtyLocal[r] * share;
             if (!(Math.abs(qty) > 0.0001)) continue;
             const sh = H.shares[r];
-            const instrumentId = ctx.v2.internedStrings[H.instrRef[r]];
+            const instrumentId = instrumentIdAt(ctx.v2, r);
             const instrumentType = ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
             const key = `${instrumentType}|${instrumentId}`;
             const seen = byInstrument.get(key);
@@ -662,7 +664,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     ctx.updatedInstitutionalEntities.forEach((e) => {
       for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== etfShareRef) continue;
-        const fundId = ctx.v2.internedStrings[H.instrRef[r]];
+        const fundId = instrumentIdAt(ctx.v2, r);
         let byInvestor = etfSharesByFundByInvestor.get(fundId);
         if (!byInvestor) { byInvestor = new Map(); etfSharesByFundByInvestor.set(fundId, byInvestor); }
         const sh = H.shares[r];
@@ -676,7 +678,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     if (!plan) return;
     const navPerShare = plan.navPerShare;
     if (!(navPerShare > 0)) return;
-    const instrumentId = `ETFSHARE-${fund.id}`;
+    const instrumentId = etfShareInstrumentId(fund.id);
 
     // What the investors hold between them, and what each of them wants to hold.
     const heldSharesByInvestor = new Map<string, number>();
@@ -716,7 +718,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       participants.push({
         id: investorId,
         currentHoldingsByInstrumentId: new Map([[instrumentId, shares]]),
-        demandByInstrumentId: new Map<string, ParticipantDemand>([[instrumentId, {
+        demandByInstrumentId: new Map<InstrumentId, ParticipantDemand>([[instrumentId, {
           // Indifferent between owning the fund here and assembling the index itself.
           reservationStat: navPerShare * (1 + assemblyCostRate),
           maxHoldingLocal: targetShares,
@@ -770,7 +772,10 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         // the holder to the fund — the ledger writes the rows.
         const fundParty = { kind: 'INSTITUTION' as const, id: fundId };
         const holderParty = { kind: 'INSTITUTION' as const, id: entity.id };
-        const spec = { instrumentType: 'ETF_SHARE' as const, instrumentId: fundId, issuerRegion: fund.region, valueLocal: Math.abs(shares) * navPerShare, shares: Math.abs(shares) };
+        // The REGISTER's key, not the book's — see `etfShareRegisterId`. Writing the clearing
+        // key here would put this fund's rows in a second key space that the index above and
+        // the re-mark below cannot see.
+        const spec = { instrumentType: 'ETF_SHARE' as const, instrumentId: etfShareRegisterId(fundId), issuerRegion: fund.region, valueLocal: Math.abs(shares) * navPerShare, shares: Math.abs(shares) };
         if (shares > 1e-6) issueHolding(ctx.v2, fundParty, holderParty, spec, 'etf creation: shares issued');
         else if (shares < -1e-6) retireHolding(ctx.v2, holderParty, fundParty, spec, 'etf redemption: shares retired');
       });
@@ -798,7 +803,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     ctx.updatedInstitutionalEntities.forEach((entity) => {
       for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== etfShareRefM) continue;
-        const navPerShare = finalNavPerShareByFund.get(ctx.v2.internedStrings[H.instrRef[r]]);
+        const navPerShare = finalNavPerShareByFund.get(instrumentIdAt(ctx.v2, r));
         if (navPerShare === undefined) continue;
         const sh = H.shares[r];
         markHolding(ctx.v2, entity.id, r, (Number.isNaN(sh) ? 0 : sh) * navPerShare);

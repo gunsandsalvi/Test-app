@@ -3,6 +3,7 @@ import { zeroRateAt } from '../../domain/pricing';
 import { loanBooksOf, DepositLines } from '../../domain/banking';
 import { BankingSector, householdBookRwaLocal, CONSUMER_CREDIT_RISK_WEIGHT, WHOLESALE_FUNDING_SPREAD_BPS } from '../../types';
 import { dealerDeskGrossLocal } from '../../domain/dealer-desk';
+import { instrumentEntries, type InstrumentId } from '../../domain/ids';
 
 /**
  * The banking sector's weekly evolution — a FLOW LEDGER, not a formula sheet.
@@ -188,13 +189,13 @@ export function sovereignBookCapacityLocal(sheet: BankingSector, cashLocal: numb
 export function computeSovereignBookAnnualYield(
   byBond: Record<string, number> | undefined,
   zeroRates: { tenor3M: number; tenor2Y: number; tenor5Y: number; tenor10Y: number; tenor30Y: number },
-  tenorYearsOf: (bondId: string) => number | undefined
+  tenorYearsOf: (bondId: InstrumentId) => number | undefined
 ): number {
   // §3.13-SOV row 5: the yield at a tenor is `pricing/bond.ts:zeroRateAt`, the same read every
   // other consumer of the curve takes. This carried its own copy of that interpolation — a second
   // answer to one question (rule 4), and the second place the curve was effectively re-expressed.
   let bookLocal = 0; let incomeLocal = 0;
-  Object.entries(byBond || {}).forEach(([bondId, usd]) => {
+  instrumentEntries(byBond).forEach(([bondId, usd]) => {
     const v = Number(usd) || 0;
     if (v <= 0) return;
     const years = tenorYearsOf(bondId);
