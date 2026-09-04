@@ -6,16 +6,22 @@
  * "credit always trades at par" defect in one line. `P5` sizes what that costs: ~1,000B of face
  * carried at par is worth ~140B less at the spreads the books themselves cleared.
  *
- * This is the mark. It runs after the credit books have written their fills back and before
- * anything reads a value, and it does two things to each credit row:
+ * This is the mark, and §9.13-CREDIT row 5 WIRED IT IN. It runs at the CLOSE — after every stage
+ * that can write a register row, and after `register-consolidation` folds a week of fills into one
+ * row per position — because a mark that is not the last word leaves the book part marked and part
+ * not, and every held-versus-issued identity then compares a mark to a face. That is the second of
+ * the two blockers the first attempt hit (§9.13 part 3); the first was the face leaks, closed in
+ * row 5a.
  *
- *   1. FIXES THE FACE. A book writes its fills in par space — the amount IS the face — so a row
- *      arriving without one has its face taken from the value it was written with. From then on
- *      the two are separate numbers and only the value moves.
- *   2. MARKS THE VALUE to `face x price`, where the price comes from the paper's own cash flows
- *      discounted at the region's cleared curve plus the spread that paper's own book cleared.
+ * It does two things to each credit row:
  *
- * The books keep trading FACE — they read `faceLocal`, not the marked value — so a mark never looks
+ *   1. FIXES THE FACE, for a row that somehow arrived without one: a book writes its fills in par
+ *      space, so the value it was written with IS the face. From then on the two are separate
+ *      numbers and only the value moves.
+ *   2. MARKS THE VALUE to `units × price`, where the price is what that piece of paper's own book
+ *      last printed (`engine2/prices.ts`) — not a re-derivation of one (`bond.md` N7.b).
+ *
+ * The books keep trading FACE — they claim `units`, never the marked value — so a mark never looks
  * like a trade and a trade never looks like a mark. That separation is the whole reason face is
  * stored rather than inferred, and it is the same one that makes equity store shares.
  */

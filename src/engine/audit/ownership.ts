@@ -34,26 +34,34 @@ function o1(state: GameState, week: number): AuditFinding[] {
   // yet owed to nobody either. Everything older must have a holder.
   // §3.13-SOV row 2: the sovereign outstanding comes from the ONE store now.
   REGION_IDS.forEach((r) => { outstanding[r].sov = sum(materializeGovLadder(ensureV2(state), r).filter((t) => t.originationWeek < state.currentWeek), (t) => t.principalLocal); });
-  // The VALUE, which is still the face: nothing marks credit yet (§9.13 part 3). When the mark
-  // lands this must read `faceLocal` — a ladder carries face, and comparing a mark to it would
-  // report every basis point of spread as paper that does not exist.
-  const add = (h: { instrumentType: string; issuerRegion: string; quantityOrNotionalLocal?: number }) => {
-    const b = held[h.issuerRegion]; if (!b) return; const v = h.quantityOrNotionalLocal ?? 0;
+  // §9.13-CREDIT row 5 — THE FACE, BECAUSE A LADDER CARRIES FACE. This read the row's money,
+  // which was the same number only while nothing marked credit; comparing a mark to a ladder
+  // reports every basis point of spread as paper that does not exist. `units` is the face.
+  const add = (h: { instrumentType: string; issuerRegion: string; units?: number; quantityOrNotionalLocal?: number }) => {
+    const b = held[h.issuerRegion]; if (!b) return; const v = h.units ?? h.quantityOrNotionalLocal ?? 0;
     if (h.instrumentType === 'CORP_BOND') b.corp += v; else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v; else if (h.instrumentType === 'GOV_BOND') b.sov += v; else if (h.instrumentType === 'COMMERCIAL_PAPER') b.cp += v;
   };
   state.institutionalEntities.forEach((e) => { if (!e.isDefaulted) e.itemizedHoldings.forEach(add); });
   state.companies.forEach((c) => {
     if (c.mergerAcquired) return;
-    ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; quantityOrNotionalLocal?: number }[] }).treasuryHoldings ?? []).forEach(add);
+    ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; units?: number; quantityOrNotionalLocal?: number }[] }).treasuryHoldings ?? []).forEach(add);
     const bs = c.bankBalanceSheet; if (!bs || c.isDefaulted) return;
     held[c.region].sov += sum(Object.values(bs.sovereignBondHoldingsByBond ?? {}), (v) => Number(v) || 0);
-    (bs.dealerDeskInventory?.['commercial paper'] ?? []).forEach((p) => { held[c.region].cp += p.inventoryLocal; });
+    // §9.13-CREDIT row 5 — THE DESKS, READ OFF THE BANKS THAT CARRY THEM. This used to take the
+    // three REGIONAL arrays, which are a derived roll-up (`regionalDeskView`) that keeps only the
+    // money — so the check read one representation for the corporate books and another for CP,
+    // and neither could report a face. A desk carries its book AT MARKET, so its face is `units`,
+    // and O6 has always read the per-bank books; now both sides of the O family agree.
+    const desk = bs.dealerDeskInventory;
+    const deskFace = (book: string): number =>
+      (desk?.[book] ?? []).reduce((a, p) => a + (p.units ?? p.inventoryLocal), 0);
+    held[c.region].cp += deskFace('commercial paper');
+    held[c.region].corp += deskFace('corporate bond');
+    held[c.region].loan += deskFace('leveraged loan');
+    held[c.region].sov += deskFace('sovereign bond') + deskFace('bill');
   });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r]; if (!reg) return;
-    (reg.bankingSector.corpBondDealerInventory ?? []).forEach((p) => { held[r].corp += p.inventoryLocal; });
-    (reg.bankingSector.loanDealerInventory ?? []).forEach((p) => { held[r].loan += p.inventoryLocal; });
-    (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => { held[r].sov += p.inventoryLocal; });
     held[r].sov += sum(Object.values(reg.centralBankSheet?.sovereignHoldingsByBond ?? {}), (v) => Number(v) || 0);
     void regionById;
     (['corp', 'loan', 'sov', 'cp'] as const).forEach((k) => {
@@ -158,13 +166,14 @@ function o6(state: GameState, week: number): AuditFinding[] {
     if (e.isDefaulted) return;
     for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
       const k = kindRefs.get(H.typeRef[r]); if (!k) continue;
-      add(held, `${v2.internedStrings[H.regionRef[r]]}|${k}`, H.qtyLocal[r]);
+      // The ladders below carry FACE; `units` is the register's own.
+      add(held, `${v2.internedStrings[H.regionRef[r]]}|${k}`, Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]);
     }
   });
   const DESK_BOOKS: Record<string, typeof KINDS[number]> = { 'corporate bond': 'CORP_BOND', 'leveraged loan': 'LEVERAGED_LOAN', 'commercial paper': 'COMMERCIAL_PAPER' };
   state.companies.forEach((b) => {
     const inv = b.bankBalanceSheet?.dealerDeskInventory; if (!inv || !isActiveCompany(b)) return;
-    Object.entries(DESK_BOOKS).forEach(([book, k]) => (inv[book] ?? []).forEach((p) => add(held, `${b.region}|${k}`, p.inventoryLocal)));
+    Object.entries(DESK_BOOKS).forEach(([book, k]) => (inv[book] ?? []).forEach((p) => add(held, `${b.region}|${k}`, p.units ?? p.inventoryLocal)));
   });
   const gaps: string[] = []; let gapLocal = 0;
   new Set([...issued.keys(), ...held.keys()]).forEach((key) => {
@@ -194,8 +203,8 @@ function o7(state: GameState, week: number): AuditFinding[] {
   state.institutionalEntities.forEach((e) => {
     materializeBook(v2, e.id).forEach((h) => {
       if (!isTrancheKind(h.instrumentType)) return;
-      // The claim is FACE; when the mark lands this reads `faceLocal` (§9.13 part 3).
-      const usd = h.quantityOrNotionalLocal ?? 0;
+      // The claim is FACE, and `units` is where the register keeps it (§9.13-CREDIT row 5).
+      const usd = h.units;
       if (!(usd > 0)) return;
       claimedByTranche.set(h.instrumentId, (claimedByTranche.get(h.instrumentId) ?? 0) + usd);
       rowsByTranche.set(h.instrumentId, (rowsByTranche.get(h.instrumentId) ?? 0) + 1);
@@ -234,11 +243,12 @@ function o7(state: GameState, week: number): AuditFinding[] {
  *   · a GOOD is its sub-unit id, a CONTRACT its own id, and what a contract is ON is keyed the
  *     way that thing is keyed above.
  *
- * Every arm below is a place the policy is broken, counted rather than argued about. The desks
- * are the large one: the register keys credit by tranche and the desks key the same paper by the
- * issuer, because a credit book's clearing INSTRUMENT is the company (`dealer-desks.ts:104` keys
- * the book by `inst.id`, and 07b's instruments are `regionCompanies`). That is step 13's to
- * close; the rest are here to prove they are not also broken.
+ * Every arm below is a place the policy could be broken, counted rather than argued about. The
+ * desks used to be the large one — the register keyed credit by tranche and the desks keyed the
+ * same paper by the issuer, because a credit book's clearing INSTRUMENT was the company — and
+ * §9.13-CREDIT rows 1, 3 and 4 closed it by making every credit book price the PAPER. The arm
+ * stays, because a check that only exists while it fires proves nothing about the week it does
+ * not.
  */
 function o8(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];

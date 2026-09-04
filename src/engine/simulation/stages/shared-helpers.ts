@@ -160,7 +160,6 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 // The workout prior lives in domain/bank-pricing.ts (one owner); re-exported for its readers.
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
-import { marketCapOf } from '../../../domain/company';
 import { cashOf, entityCashOf, obligationCurrencyOf } from '../../ledger/accounts';
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
@@ -372,7 +371,20 @@ const DESK_BOOK_BY_TYPE: Record<string, string> = {
  *
  * Both sides name the same paper now, which is what the register was keyed by all along, so the
  * split below is per INSTRUMENT and the issuer never enters it.
+ *
+ * §9.13-CREDIT row 5 — AND WHAT IT RETURNS IS FACE. A desk's `inventoryLocal` is its position at
+ * this week's MARK (`applyDealerDeskFills` writes `units × cleared price`), and the register side
+ * of this split is a face. Splitting a coupon between them on those two numbers pays a desk a
+ * share of the money it has at risk instead of a share of the paper it holds — and the credit
+ * books have printed prices other than par since §9.13-CREDIT row 1, so it has been paying the
+ * wrong split ever since. `units` is the paper.
  */
+/** HOW MUCH OF THE INSTRUMENT A ROW HOLDS, in the instrument's own unit — the register's side of
+ *  any split that must agree with a ladder's face or an issue's share count. A row written before
+ *  the units lane was maintained has only its value to report, which par pricing made the same. */
+const rowUnits = (H: { units: Float64Array; qtyLocal: Float64Array }, r: number): number =>
+  (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]);
+
 function deskHoldingsByInstrument(
   companies: Company[] | undefined,
   book: string | undefined
@@ -385,9 +397,11 @@ function deskHoldingsByInstrument(
     const deskId = dealerDeskParticipantId(bank.ticker);
     rows.forEach((p) => {
       if (!(p.inventoryLocal > 0)) return;
+      const faceLocal = p.units ?? p.inventoryLocal;
+      if (!(faceLocal > 0)) return;
       let byDesk = out.get(p.instrumentId);
       if (!byDesk) { byDesk = new Map(); out.set(p.instrumentId, byDesk); }
-      byDesk.set(deskId, (byDesk.get(deskId) ?? 0) + p.inventoryLocal);
+      byDesk.set(deskId, (byDesk.get(deskId) ?? 0) + faceLocal);
     });
   });
   return out;
@@ -558,7 +572,7 @@ export function applyPendingCorporateActionSettlements(
       for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
         const k = pairKeyOf(r);
         const owed = owedByPair.has(k);
-        if (owed) totalByPair.set(k, (totalByPair.get(k) ?? 0) + H.qtyLocal[r]);
+        if (owed) totalByPair.set(k, (totalByPair.get(k) ?? 0) + rowUnits(H, r));
         if (!anyHit && (owed || ratioByPair.has(k))) anyHit = true;
       }
     } else {
@@ -594,7 +608,13 @@ export function applyPendingCorporateActionSettlements(
         const byDesk = deskByInstrument?.get(instrumentId);
         let deskLocal = 0;
         byDesk?.forEach((usd) => { deskLocal += usd; });
-        const issuedLocal = t === equityRef && issuer ? Math.max(0, marketCapOf(issuer)) : 0;
+        // §9.13-CREDIT row 5 — THE WHOLE SPLIT IS IN THE INSTRUMENT'S OWN UNIT: face for credit,
+        // SHARES for equity. It used to be in money on the register's side, the desks' MARKED
+        // money on theirs, and market cap for the issue — three numbers that agree only while
+        // every one of them is struck at the same price, which stopped being true the week the
+        // credit books started printing one. The ratios are the same arithmetic in shares as in
+        // dollars; what changes is that they cannot come apart.
+        const issuedLocal = t === equityRef && issuer ? Math.max(0, issuer.sharesOutstanding) : 0;
         const denomLocal = Math.max(registerLocal + deskLocal, issuedLocal);
         if (!(denomLocal > 0)) return;
         denomByPair.set(k, denomLocal);
@@ -650,7 +670,7 @@ export function applyPendingCorporateActionSettlements(
           // The holder's share of what the issuer owes, paid AS A PAYMENT from the issuer, so
           // the money has a payer and a payee instead of appearing on the holder's book while
           // the issuer's ledger says it left.
-          const shareLocal = owedLocal * (H.qtyLocal[r] / (denomByPair.get(k) ?? totalLocal));
+          const shareLocal = owedLocal * (rowUnits(H, r) / (denomByPair.get(k) ?? totalLocal));
           const issuerTicker = issuerTickerOf(v2.internedStrings[H.instrRef[r]]);
           // A holder paid by an issuer nobody can name is money from nobody: a defect at the
           // site that recorded the action, never a credit.
@@ -678,7 +698,7 @@ export function applyPendingCorporateActionSettlements(
       // it stays exact when two actions hit one instrument in a week; debt redeems at PAR, so
       // the notional change IS the cash — the call premium rides `pendingHolderCashLocal` above,
       // and equity is excluded, because a share is bought at a negotiated price.
-      let principalCashLocal = H.typeRef[r] === equityRef ? 0 : H.qtyLocal[r] * (1 - ratio);
+      let principalCashLocal = H.typeRef[r] === equityRef ? 0 : rowUnits(H, r) * (1 - ratio);
       // A replaced tranche's retired slice is re-keyed onto the replacement below, not redeemed.
       if (replacedNewIdByPair.has(k)) principalCashLocal = 0;
       // A PLACEMENT IS TAKEN UP ONLY AS FAR AS THE CASH REACHES. A holder
@@ -933,7 +953,12 @@ export function applyHolderInterestAccruals(
     // entity object per row.
     const entityIdByRow: string[] = entities.map((e) => e.id);
     const byTypeRows = holdings.byType;
-    const qtyCol = holdings.qtyLocal;
+    // §9.13-CREDIT row 5 — A COUPON FOLLOWS FACE. This walked `qtyLocal`, the row's MONEY, to
+    // decide each holder's share of an issuer's week. At par the two are the same number; once a
+    // book prints anything else, a holder of a discounted bond would accrue less of the same
+    // coupon than a holder of the identical face bought at par, which is not a thing an issuer
+    // can pay. The face is `units`, in the same column order.
+    const faceCol = holdings.units;
     const instCol = holdings.instrumentId;
     const entCol = holdings.entityRow;
     accrualsByType.forEach((byId, type) => {
@@ -954,7 +979,7 @@ export function applyHolderInterestAccruals(
         const row = byTypeRows[i];
         const iid = instCol[row];
         if (accruingRow[iid] === undefined) continue;
-        totalByInst[iid] = (totalByInst[iid] ?? 0) + qtyCol[row];
+        totalByInst[iid] = (totalByInst[iid] ?? 0) + faceCol[row];
       }
       // THE DESKS ARE HOLDERS OF RECORD TOO. Interest was split over the register alone, so the
       // paper a desk holds accrued nothing and its share of every coupon was paid to the other
@@ -988,7 +1013,7 @@ export function applyHolderInterestAccruals(
         const weeklyLocal = accruingWeekly[iid];
         const totalLocal = totalByInst[iid] ?? 0;
         if (weeklyLocal === undefined || !(totalLocal > 0)) continue;
-        const shareLocal = weeklyLocal * (qtyCol[row] / totalLocal) * (registerShare[iid] ?? 1);
+        const shareLocal = weeklyLocal * (faceCol[row] / totalLocal) * (registerShare[iid] ?? 1);
         if (!(shareLocal > 0)) continue;
         let byHolder = byHolderByInst[iid];
         if (byHolder === undefined) {

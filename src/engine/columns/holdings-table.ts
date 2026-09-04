@@ -60,6 +60,7 @@ export class HoldingsTable {
       { name: 'issuerRegion', kind: 'u8' },
       { name: 'qtyLocal', kind: 'f64' },
       { name: 'shares', kind: 'f64' },
+      { name: 'units', kind: 'f64' },
     ], 1 << 17);
   }
 
@@ -71,6 +72,10 @@ export class HoldingsTable {
   get issuerRegion(): Uint8Array { return this.table.u8('issuerRegion'); }
   get qtyLocal(): Float64Array { return this.table.f64('qtyLocal'); }
   get shares(): Float64Array { return this.table.f64('shares'); }
+  /** §9.13-CREDIT row 5 — HOW MUCH PAPER, beside what it is worth. A coupon follows FACE and a
+   *  mark follows price, so a walk that apportions an issuer's week over its holders reads this
+   *  and not `qtyLocal`: at par they are the same number, and everywhere else they are not. */
+  get units(): Float64Array { return this.table.f64('units'); }
 
   /** §7.315: buildFromRows builds only what its consumers read; the transpose is one of the
    *  features with NO current consumer and is skipped there — a future caller fails loudly
@@ -110,6 +115,7 @@ export class HoldingsTable {
     const entityRow = this.entityRow, instrumentId = this.instrumentId;
     const rowInHolder = this.rowInHolder, instrumentType = this.instrumentType;
     const issuerRegion = this.issuerRegion, qtyLocal = this.qtyLocal, shares = this.shares;
+    const units = this.units;
 
     if (this.holderStart.length !== entities.length + 1) {
       this.holderStart = new Int32Array(entities.length + 1);
@@ -134,6 +140,7 @@ export class HoldingsTable {
         issuerRegion[at] = REGION_CODE.get(h.issuerRegion) ?? 0;
         qtyLocal[at] = h.quantityOrNotionalLocal ?? 0;
         shares[at] = h.quantityShares ?? 0;
+        units[at] = h.units;
         typeCounts[code]++;
         const list = this.byInstrument.get(iid);
         if (list) list.push(at); else this.byInstrument.set(iid, [at]);
@@ -182,6 +189,7 @@ export class HoldingsTable {
 
     const entityRow = this.entityRow, instrumentId = this.instrumentId;
     const instrumentType = this.instrumentType, qtyLocal = this.qtyLocal;
+    const unitsCol = this.units;
 
     const typeCounts = new Int32Array(HOLDING_TYPES.length);
     this.byInstrument.clear();
@@ -199,6 +207,7 @@ export class HoldingsTable {
         instrumentId[at] = iid;
         instrumentType[at] = code;
         qtyLocal[at] = H.qtyLocal[r];
+        unitsCol[at] = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
         typeCounts[code]++;
         at++;
       }

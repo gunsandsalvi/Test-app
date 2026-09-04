@@ -72,9 +72,17 @@ export interface DealerDeskPosition {
   instrumentId: string;
   /** Marked to this week's cleared level. A trading book is carried at market, not at cost. */
   inventoryLocal: number;
-  /** For a book that clears in UNITS (07e's shares), the position itself. `inventoryLocal` is
-   *  then this times the current price, and the difference week to week is real trading P&L —
-   *  without it, the mark showed up as a phantom fee and the per-bank identity drifted by it. */
+  /**
+   * THE POSITION ITSELF, in the instrument's own unit — shares for equity, FACE for credit and
+   * sovereigns. `inventoryLocal` is this times the current price, and the difference week to week
+   * is real trading P&L; without it the mark showed up as a phantom fee and the per-bank identity
+   * drifted by it.
+   *
+   * §9.13-CREDIT row 5: it is written for EVERY book now, not only the share books this comment
+   * used to name — the credit books have printed prices other than par since row 1, so a desk's
+   * money and its paper are two numbers there too, and everything that compares a desk position
+   * to a LADDER (`O1`, `O6`, the coupon split, the principal paydown) reads this one.
+   */
   units?: number;
 }
 

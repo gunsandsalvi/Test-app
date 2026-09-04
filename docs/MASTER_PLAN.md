@@ -333,7 +333,10 @@ written from here):
        model never books. That is a NEW MECHANISM, not a refactor.
     3. **The goods auction already computes the price it needs and discards it.** It has to be
        stored per `region|subUnit|week` — the cheapest half of the whole step.
-    4. **The equity row's stored value has to go**, or it drifts exactly as face did.
+    4. **The equity row's stored value has to go**, or it drifts exactly as face did. *(Credit
+       showed exactly how — §9.13-CREDIT row 5. The row keeps `units` and NOTHING keeps the value:
+       it is written as `units × price` at the close and re-derived from the quantity every week.
+       Equity already stores its shares, so what is left there is the readers.)*
     5. *(Done — 13-SOV row 3: sovereign holdings are register rows naming a bond, so there is
        something to attach a price to.)*
     6. *(Done for CREDIT — §9.13-CREDIT rows 1, 3 and 4. The clearing engine's
@@ -364,33 +367,18 @@ written from here):
     difficulty."* So: **sovereign** (13-SOV, the hardest and the one with five parallel
     structures) → **credit** (price clears instead of a spread) → **equity** (the stored value
     goes, and households become holders) → **inventory at cost versus price** (the new
-    holding-gain mechanism) → **goods** (the price already exists and is discarded) → **plant and housing** (units must be defined
-    before anything else is possible — step 26 owns that decision). Each class is its own commit
-    and each is expected to move the numbers.
+    holding-gain mechanism) → **goods** (the price already exists and is discarded) → **plant and
+    housing** (units must be defined before anything else is possible — step 26 owns that
+    decision). Each class is its own commit and each is expected to move the numbers. *(Sovereign
+    and credit are DONE — 13-SOV and 13-CREDIT in §9. Equity is next.)*
 
-    **13-CREDIT, the credit class, one book at a time** (user, 2026-09-04: *"there shouldn't be any
-    spread per issuer. The spread is per asset, assets with different maturities should have
+    **13-CREDIT, the credit class — DONE, rows 1 to 5 in §9** (user, 2026-09-04: *"there shouldn't
+    be any spread per issuer. The spread is per asset, assets with different maturities should have
     different risk levels and so different spreads. There is no spread quantity associated with an
-    issuer aside from the CDS."*). Rows 1, 2, 3 and 4 are in §9 — every credit book now prices the
-    PAPER. What is left is one row:
-    · **row 5 — the mark**: the register carries FACE and `P5`/`P8` measure the gap to the cleared
-      price on all three classes. It cannot land one book at a time (§9.13 part 3), and the archive
-      names its two blockers: FACE LEAKS, and the mark not being the last word.
-      *(**The leaks are closed** — commit "row 5a". They were bigger than the archive's reading and
-      the cause was one thing: `faceLocal` and `units` were two representations of one number
-      (rule 4) and only `units` had a lane in the store, so the books wrote a face that was dropped
-      at the week's materialisation. `faceLocal` is DELETED; `units` is the face. And every writer
-      maintains it now: `newBookRow` — the CLEARING WRITE-BACK's own row builder — never copied it
-      at all, `debitRow` never subtracted it, the duplicate-row merge never folded it,
-      `scaleHoldings` scaled the money and not the paper, and the estate read `qtyLocal` into a
-      variable it called `claimedFaceByInstrument` and handed it to `retireLadderFace`. All
-      value-preserving while the price is one, which is exactly why they land before the mark.)*
-      **What is left is the second blocker**: with the mark on, stages after `holdings-writeback`
-      and next week's books write rows back in par space, so the register ends the week part marked
-      and part not. Every reader that means FACE has to take `units` — `audit/ownership.ts`'s whole
-      O family compares `quantityOrNotionalLocal` against issued face, which is what fired O1 at
-      −92B and O6 at −461B on the first attempt — and `clearedBookDelta`'s wire has to carry the
-      units moved rather than the money.
+    issuer aside from the CDS."*). Every credit book prices the PAPER, every register row carries
+    the FACE it holds, and the mark runs at the close so what a row is WORTH is `units × the price
+    that paper's own auction printed`. `P5` stops sizing the defect and starts measuring the
+    residual: paper no session has printed.
 
     **13-EQUITY, the equity class** — the stored value goes (WHAT THIS FORCES, point 4), **and
     HOUSEHOLDS BECOME HOLDERS IN THE SAME COMMIT** (user, 2026-09-04, reading a company's
@@ -1361,6 +1349,14 @@ mark is still TRUE** — so a node closed by a commit that did not re-mark it st
 nothing fails. It had happened four times before anyone noticed, twice with the DIFF prose updated
 and the row above it left behind. Re-mark in the commit that closes the node, and RECOUNT the
 tally rather than adjusting it: both had drifted.
+§9.13-CREDIT row 5: **a second representation with nowhere to be stored is not a second opinion, it
+is silence.** `ItemizedHolding.faceLocal` was written by three books, had no lane in the columnar
+store, and was dropped at every week's materialisation — so every reader fell back to the value and
+the model looked consistent because the disagreeing number could not survive long enough to
+disagree. A field the store cannot carry is worse than no field: it makes writers believe they said
+something. Before introducing a quantity beside a value, check the store has a lane for it, and
+check every writer maintains it WHILE THE TWO ARE STILL EQUAL — that is the only window in which
+getting it wrong cannot break anything.
 
 **Money and ownership.** §7.230/§7.242/§7.275 `post()` is the one write path; a movement with no
 counterparty is a defect. §7.250 four post-08 stages wrote bank sheets to a DEAD channel — the banks'
@@ -1433,6 +1429,46 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-CREDIT row 5 — THE MARK, WIRED IN: A CREDIT ROW IS WORTH `units × price` AND THE BOOKS GO ON
+TRADING FACE.** The attempt recorded in `LOG_ARCHIVE` as "13 (part 3)" built this and did not wire
+it, and named two blockers. Both are closed, and the first was bigger than that record read.
+
+**Blocker 1, the face leaks — one cause.** `faceLocal` and `units` were two representations of one
+number (rule 4), and only `units` has a lane in the columnar store. So the books wrote a face,
+`materializeBook` dropped it at the week's close, and every reader fell back to the value: a face
+that cannot survive a week is not a face. `faceLocal` is DELETED. Then the writers, none of which
+maintained the lane that did survive: **`newBookRow` never copied it at all** — and it is the row
+builder THE CLEARING WRITE-BACK uses, so every fill every book has ever written lost its face
+there, reporting the VALUE if the row was recycled (`freeRow`'s NaN) and ZERO if it was fresh (the
+lane's own default), decided by the free list. `debitRow` never subtracted it, so a holder that
+sold half a position still reported the whole face; it now takes the row's own units in proportion,
+so no caller has to know. The duplicate-row merge folded money and not paper; `addShares` wrote
+value and not units; `scaleHoldings` scaled the money on a corporate action; `estate-resolution`
+read `qtyLocal` into a variable it had named `claimedFaceByInstrument` and handed the same number
+to `retireLadderFace`, which takes a FACE. All value-preserving while credit marks at par, which is
+the archive's own lesson and why they land first.
+
+**Blocker 2, the mark not being the last word.** It runs after `register-consolidation`, at the
+close, when every stage that can write a register row has run — not after `holdings-writeback`,
+where the first attempt put it and where everything downstream writes the book back into par space.
+And every reader that means FACE now takes `units`: `audit/ownership.ts`'s O1, O6 and O7 (O1 also
+stops reading the derived REGIONAL desk arrays, which keep only money, and reads the per-bank books
+O6 has always read); `holder-paydown`; and — found on the way, and live damage since row 1 rather
+than a consequence of this one — **the coupon split**. `applyHolderInterestAccruals` apportioned an
+issuer's week by `qtyLocal`, the register's money, against desk positions carried AT MARKET, so a
+holder of a discounted bond accrued less of the same coupon than a holder of identical face bought
+at par. A coupon follows face. The corporate-action walk went the same way: its denominator is now
+in the instrument's own unit throughout — face for credit, SHARES for equity, against shares
+outstanding rather than market cap — and a redemption pays face.
+
+`clearedBookDelta` takes a UNIT delta and prices it, because the rows claimed off a book carry last
+week's mark while the rows appended are written in par space, and a delta on the money is the
+revaluation plus the trade. `bookPositions` is deleted: no caller, and what it returned was a book
+in money at the one moment the only honest before/after is in units.
+
+Gates green; no run (rule 11). **This is the step that must not be byte-identical** (§3.13): every
+credit balance sheet in the model moves the week it lands.
 
 **13-CREDIT row 4 — THE PAPER BOOK CLEARS A PRICE, AND THE ISSUER-LEVEL SPLIT IS DELETED FROM THE
 WHOLE MODEL.** The same three-part correction, on the last book still making it. `07f` prices one

@@ -67,8 +67,10 @@ export function reconcileHolderPrincipal(args: {
   });
   deskSheets.forEach(({ sheet }) => {
     (sheet?.dealerDeskInventory?.[deskBook] ?? []).forEach((p) => {
+      // §9.13-CREDIT row 5: the outstanding this is compared against is a LADDER's face, so the
+      // desk's side of it is the paper it holds (`units`), not what that paper is marked at.
       if (p.inventoryLocal > 0 && outstandingByInstrumentId.has(p.instrumentId)) {
-        heldByInstrument.set(p.instrumentId, (heldByInstrument.get(p.instrumentId) ?? 0) + p.inventoryLocal);
+        heldByInstrument.set(p.instrumentId, (heldByInstrument.get(p.instrumentId) ?? 0) + (p.units ?? p.inventoryLocal));
       }
     });
   });
@@ -129,7 +131,8 @@ export function reconcileHolderPrincipal(args: {
     const newRows = rows.map((p) => {
       const factor = factorByInstrument.get(p.instrumentId);
       if (factor === undefined || !(p.inventoryLocal > 0)) return p;
-      const paidLocal = p.inventoryLocal * (1 - factor);
+      // A repayment of principal pays FACE, so what the desk is paid is the face it loses.
+      const paidLocal = (p.units ?? p.inventoryLocal) * (1 - factor);
       if (paidLocal > 1) {
         const payer = payerOf(p.instrumentId);
         if (payer) {

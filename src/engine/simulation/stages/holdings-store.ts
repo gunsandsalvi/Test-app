@@ -33,7 +33,7 @@ import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, markBook
 import { V2World } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
-import { clearedBookDelta } from '../../ledger/holdings-ledger';
+import { clearedBookDelta, BookEntry } from '../../ledger/holdings-ledger';
 import { mutableHoldings } from '../../../engine2/holdings';
 import { RegionId } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
@@ -273,14 +273,18 @@ export class HoldingsStore {
       // house of the instrument's region — bought or sold, one number each.
       {
         const group = (rows: ItemizedHolding[], pick: (i: number) => boolean) => {
-          const byBook = new Map<string, Map<string, { valueLocal: number; shares?: number }>>();
+          const byBook = new Map<string, Map<string, BookEntry>>();
           rows.forEach((h, i) => {
             if (!pick(i)) return;
             const key = `${h.instrumentType}|${h.issuerRegion}`;
             let m = byBook.get(key); if (!m) { m = new Map(); byBook.set(key, m); }
-            const cur = m.get(h.instrumentId) ?? { valueLocal: 0, shares: undefined };
+            const cur = m.get(h.instrumentId) ?? { valueLocal: 0, shares: undefined, units: 0 };
             cur.valueLocal += h.quantityOrNotionalLocal ?? 0;
             if (h.quantityShares !== undefined) cur.shares = (cur.shares ?? 0) + h.quantityShares;
+            // §9.13-CREDIT row 5 — the QUANTITY, which is what the two sides have in common. The
+            // rows claimed off the book carry last week's mark and the rows appended are written
+            // in par space, so a delta taken on the money is the revaluation plus the trade.
+            cur.units = (cur.units ?? 0) + h.units;
             m.set(h.instrumentId, cur);
           });
           return byBook;

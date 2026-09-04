@@ -188,7 +188,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | **D8 FORBID no derived measure may set the price (N7.b)** | `src/engine/credit-price.ts:trancheClearedPricePerFace` | ✅ |
 | E1 a register of holders (N8) | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
 | E2 VERIFY Σ held = issued (N8.a) | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
-| **E3 the holder marks at the cleared price** | `src/engine/simulation/stages/credit-marking.ts:markCreditToMarket` | ❌ |
+| **E3 the holder marks at the cleared price** | `src/engine/simulation/stages/credit-marking.ts:markCreditToMarket` | ✅ |
 | E4 the change in the mark is P&L reaching income | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` | ⚠️ |
 | E4.a realised and unrealised are distinguishable | `src/engine/simulation/stages/12-portfolio-and-positions.ts:unrealizedPnL` | ⚠️ |
 | E5 an economic reservation | `src/engine/simulation/stages/asset-allocation.ts:computeReservationSpreadBps` | ✅ |
@@ -227,14 +227,15 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-**76 rows: 44 ✅, 23 ⚠️, 9 ❌** — COUNTED, not adjusted (§5's lesson from §9.13-CREDIT row 2:
-a tally nobody recounts drifts as silently as a mark nobody re-marks). Re-marked at rows 1, 3 and
-4; row 4 moved D2 ⚠️→✅ and D8 ❌→✅ and DELETED the two "bonds and loans" sub-rows it added at
-row 1, which had nothing left to say once every book cleared. Ordered by how much each changes,
+**76 rows: 45 ✅, 23 ⚠️, 8 ❌** — COUNTED, not adjusted (§5's lesson from §9.13-CREDIT row 2:
+a tally nobody recounts drifts as silently as a mark nobody re-marks). Re-marked at rows 1, 3, 4
+and 5; row 4 moved D2 ⚠️→✅ and D8 ❌→✅ and DELETED the two "bonds and loans" sub-rows it added at
+row 1, which had nothing left to say once every book cleared, and row 5 moved E3 ❌→✅ by wiring the
+mark. Ordered by how much each changes,
 not by branch. The depth-2 diff's findings all appear below under their new ids; nothing has been
 dropped in the renumbering.
 
-### ✅ D2 / D8 — CLOSED: EVERY CREDIT BOOK CLEARS A PRICE, PER PIECE OF PAPER (❌ E3 remains)
+### ✅ D2 / D8 / E3 — CLOSED: EVERY CREDIT BOOK CLEARS A PRICE, AND THE HOLDER MARKS AT IT
 
 **§9.13-CREDIT row 1** made `07b` price one instrument per TRANCHE, `statKind: 'PRICE_LIKE'`, and
 deposit what it printed in `engine2/prices.ts` — so a corporate bond changes hands at its price and
@@ -257,10 +258,12 @@ life. `credit-price.ts:trancheClearedPricePerFace` is now a lookup with no arith
 which is the sharpest way to say D8 holds: there is no longer a class of corporate paper whose
 price is derived from a spread somebody else cleared.
 
-- **E3 is unchanged**: `credit-marking` is still not wired in, and cannot be one book at a time
-  (§9.13 part 3). Every credit book writes its fills in PAR space exactly as the sovereign does,
-  and `P5` measures the gap between the face carried and the price cleared — which is the finding,
-  not a defect of these rows.
+**Row 5 wired the MARK**, which could not land one book at a time (§9.13 part 3) and now lands
+because all three print a price. Every credit book still writes its fills in PAR space, as the
+sovereign does; `credit-marking` runs at the CLOSE — after every stage that can write a register
+row — and re-marks each row to `units × the price its own auction printed`. The books go on
+claiming `units`, so a mark never looks like a trade. `P5` stops sizing the defect and starts
+measuring the RESIDUAL: what the mark could not reach, which is paper no session has printed.
 
 What the original re-walk added, still standing:
 

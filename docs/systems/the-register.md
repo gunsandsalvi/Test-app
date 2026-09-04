@@ -90,7 +90,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 a holding is holder + instrument + quantity | `src/domain/banking.ts:ItemizedHolding` | ✅ |
 | A1.a the holder exists and can be paid | `src/engine/ledger/holdings-ledger.ts:holderIdOf` | ⚠️ |
 | A1.b the instrument is one the issuer issued | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
-| A1.c the quantity is in the instrument's own unit | `src/engine2/holdings.ts:HoldingStore` | ⚠️ |
+| A1.c the quantity is in the instrument's own unit | `src/engine2/holdings.ts:HoldingStore` | ✅ |
 | A2 a holding is a claim on a named issuer | `src/engine2/holdings.ts:pushBookRow` | ✅ |
 | A2.a it pays to whoever the register says holds it, then | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
 | **A3 FORBID no holding without a holder** | `src/engine2/holdings.ts:bookHeadOf` | ✅ |
@@ -103,7 +103,7 @@ checked by `scripts/check-atlas.sh`.
 | B4 an instrument ceases and every holding resolves | `src/engine/ledger/holdings-ledger.ts:retireHolding` | ✅ |
 | C1 ownership changes only by a transfer with two named sides | `src/engine/ledger/holdings-ledger.ts:transferHolding` | ✅ |
 | C2 a transfer has a cause | `src/engine/ledger/wire.ts:WireInstruction` | ✅ |
-| C2.a …and a price, if it is a trade | `src/engine/ledger/holdings-ledger.ts:priceOf` | ⚠️ |
+| C2.a …and a price, if it is a trade | `src/engine/ledger/holdings-ledger.ts:priceOf` | ✅ |
 | **C3 the securities leg and the cash leg are the same event** | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ⚠️ |
 | **C3.a delivery versus payment: neither leg without the other** | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ❌ |
 | **C3.b a fail is a real state, not a silent half-settlement** | — | ❌ |
@@ -112,7 +112,7 @@ checked by `scripts/check-atlas.sh`.
 | D1 what does this party hold? | `src/engine2/holdings.ts:bookRowsOf` | ✅ |
 | D2 who holds this instrument? | `src/engine/columns/holdings-table.ts:HoldingsTable` | ✅ |
 | D2.a both directions answerable without reconstruction | `src/engine/simulation/stages/register-index.ts:buildRegisterIndex` | ✅ |
-| D3 what is it worth? — quantity × a market price | `src/engine/ledger/holdings-ledger.ts:markCreditBook` | ⚠️ |
+| D3 what is it worth? — quantity × a market price | `src/engine/ledger/holdings-ledger.ts:markCreditBook` | ✅ |
 | **D4 what did it cost? — the basis** | — | ❌ |
 | E1 a coupon or dividend pays the holders of record | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
 | E2 an amortisation or maturity pays its face | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ✅ |
@@ -189,18 +189,22 @@ concedes the point: nothing measures that invariance.
 **Already §3 step 27** (the audit's percentage bands). Second witness, and the sharpest one: this
 is the band on the register's own defining identity.
 
-### ⚠️ C2.a / D3 / A1.c — THE REGISTER STORES A VALUE AND HAS TO GUESS THE PRICE BACK
+### ✅ C2.a / D3 / A1.c — CLOSED: THE REGISTER STORES THE QUANTITY AND THE VALUE IS A READ
 
-`holdings-ledger.ts:priceOf` returns `{quantity: valueUSD, priceUSD: 1}` for any row that carries
-neither shares nor a face — which is every credit row until `markCreditBook` fixes its face on
-first mark. So a corporate bond transfer wires at par by construction, and `clearedBookDelta`'s
-credit branch computes only `dUSD` with no price at all. Equity is right (`quantityShares` is the
-quantity, the value is derived); credit and sovereigns are not.
+`holdings-ledger.ts:priceOf` returned `{quantity: value, price: 1}` for any row that carried
+neither shares nor a face — which was EVERY credit row, because the field meant to carry the face
+(`faceLocal`) had no lane in the columnar store and was dropped at the week's materialisation. So a
+corporate bond transfer wired at par by construction and `clearedBookDelta`'s credit branch
+computed a money delta with no price at all.
 
-**Already §3 step 13** ("every asset trades on price"), whose own survey table names this row for
-row. Recorded here because it is what makes D3's node read `⚠️` rather than `✅`: the price is not
-stored on the holding, but only because the *value* is, which is the same defect wearing the
-node's clothes.
+**§9.13-CREDIT row 5 closed all three.** `faceLocal` is deleted and `units` is the one quantity, in
+the instrument's own unit (A1.c) — shares for equity, FACE for credit and sovereigns. Every writer
+maintains it: `newBookRow` (the clearing write-back's own row builder, which never copied it),
+`debitRow` (which never subtracted it), the duplicate-row merge, `addShares`, `scaleHoldings`, the
+estate and the merger paths. `clearedBookDelta` takes a UNIT delta and prices it, so a wire carries
+what moved and what it fetched (C2.a). And `credit-marking` is WIRED IN, at the close, after every
+stage that can write a row: a credit row's value is `units × the price that paper's own auction
+printed` (D3), and the books go on claiming `units`, so a mark never looks like a trade.
 
 ### ✅ D2.a / F1.a — CLOSED: NO BOOK CLEARS BY ISSUER, AND NOTHING RECONSTRUCTS THE REGISTER
 

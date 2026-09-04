@@ -296,10 +296,21 @@ export function scaleHoldings(
  * the holders whose books it happens to rewrite, so an accrued leg computed here would cover part
  * of a session and net to nothing anyone could pay.
  */
+/**
+ * One side of a book, per instrument: what it is worth and HOW MUCH OF IT there is.
+ *
+ * §9.13-CREDIT row 5 — `units` is why the credit branch below can subtract two weeks that are not
+ * struck at the same price. A holder's book at the start of the week carries last week's MARK and
+ * the fills appended this week are written in par space, so a delta taken on the money is the
+ * revaluation plus the trade, and only one of those is a wire. Absent means the value IS the
+ * quantity, which is what par pricing made it — every caller that does not mark is unaffected.
+ */
+export interface BookEntry { valueLocal: number; shares?: number; units?: number }
+
 export function clearedBookDelta(
   holder: PartyRef, region: RegionId, instrumentType: HoldingKind,
-  before: Map<string, { valueLocal: number; shares?: number }>,
-  after: Map<string, { valueLocal: number; shares?: number }>,
+  before: Map<string, BookEntry>,
+  after: Map<string, BookEntry>,
   priceOf: (instrumentId: string) => number | undefined,
   reason: string,
 ): void {
@@ -312,12 +323,15 @@ export function clearedBookDelta(
     const inShares = bShares !== undefined || aShares !== undefined;
     const dSh = (aShares ?? 0) - (bShares ?? 0);
     const dLocal = (a?.valueLocal ?? 0) - (b?.valueLocal ?? 0);
-    const moved = inShares ? Math.abs(dSh) > 1e-9 : Math.abs(dLocal) > 1;
+    // The QUANTITY that changed hands. Where a side states its units they are the two weeks'
+    // common measure; where it does not, the value is the quantity at a price of one.
+    const dUnits = (a?.units ?? a?.valueLocal ?? 0) - (b?.units ?? b?.valueLocal ?? 0);
+    const moved = inShares ? Math.abs(dSh) > 1e-9 : Math.abs(dUnits) > 1;
     if (!moved) return;
     const spec: HoldingSpec = inShares
       ? { instrumentType, instrumentId: id, issuerRegion: region, shares: Math.abs(dSh), valueLocal: Math.abs(dSh) * (px ?? (Math.abs(dLocal) / Math.max(1e-12, Math.abs(dSh)))) }
-      : { instrumentType, instrumentId: id, issuerRegion: region, valueLocal: Math.abs(dLocal) };
-    const sign = inShares ? dSh : dLocal;
+      : { instrumentType, instrumentId: id, issuerRegion: region, units: Math.abs(dUnits), valueLocal: Math.abs(dUnits) * (px ?? 1) };
+    const sign = inShares ? dSh : dUnits;
     if (sign > 0) wireHolding(house, holder, spec, reason); else wireHolding(holder, house, spec, reason);
   });
 }
@@ -366,18 +380,5 @@ export function markHolding(v2: V2World, holderId: string, row: number, valueLoc
 /** The rows a written-down book has left holding nothing are closed — no wire: nothing moved. */
 export function closeEmptyPositions(v2: V2World, holderId: string): void { pruneEmptyRows(v2, holderId); }
 
-/** The book's rows, keyed by instrument, for a delta read (before/after a clearing). */
-export function bookPositions(v2: V2World, holderId: string, instrumentType: HoldingKind): Map<string, { valueLocal: number; shares?: number }> {
-  const H = v2.holdings; const tRef = v2.internedIdByString.get(instrumentType);
-  const out = new Map<string, { valueLocal: number; shares?: number }>();
-  if (tRef === undefined) return out;
-  for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
-    if (H.typeRef[r] !== tRef) continue;
-    const id = v2.internedStrings[H.instrRef[r]];
-    const cur = out.get(id) ?? { valueLocal: 0, shares: undefined };
-    cur.valueLocal += H.qtyLocal[r];
-    if (!Number.isNaN(H.shares[r])) cur.shares = (cur.shares ?? 0) + H.shares[r];
-    out.set(id, cur);
-  }
-  return out;
-}
+// `bookPositions` is deleted (§9.13-CREDIT row 5): it had no caller, and what it returned was
+// a book in MONEY at a moment when the only honest before/after of a credit book is in units.
