@@ -89,7 +89,7 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a unit of account | `src/domain/geography.ts:CurrencyCode` | ✅ |
 | A2 issued by a named issuer | `src/domain/central-bank.ts:CentralBank` | ✅ |
-| A3 a property of every amount | `src/domain/assets/index.ts:countedIn` | ⚠️ |
+| A3 a property of every amount | `src/engine2/instruments.ts:instrumentCurrencyOf` · `src/domain/assets/index.ts:countedIn` | ✅ |
 | A3.a a function takes the currency with the amount | `src/engine/simulation/stages/settlement.ts:PaymentInstruction` | ✅ |
 | **A4 FORBID no implicit currency** | `src/engine/ledger/accounts.ts:homeCurrencyOf` | ⚠️ |
 | A5 a closed, named set | `src/domain/geography.ts:CURRENCY_CODES` | ✅ |
@@ -163,13 +163,17 @@ interest differential times a constant plus a random walk: rule 2's defect, one 
 where it was found last time. It belongs to `fx-forwards-and-xcs.md`'s diff and is recorded there
 as the same finding.
 
-### ⚠️ A3 / A4 — THE SUFFIX NO LONGER LIES, AND THE INSTRUMENT STILL HAS NO CURRENCY
+### ✅ A3 / ⚠️ A4 — THE INSTRUMENT HAS A CURRENCY; THE READS ARE STILL MOSTLY IMPLICIT
 
 §9.13c-RENAME turned 11,821 `…USD` suffixes into `…Local`, so a figure's name no longer claims a
-money it does not hold; eight `…USD` names remain and mean it. What A3/A4 still lack is the half
-that matters: an account's currency is a column, and an INSTRUMENT's is still read off its owner's
-region (`obligationCurrencyOf`, `currencyOf(region)`), so a cross-border issue is inexpressible.
-That is **§3 step 13-BOOK (d)** — currency lands on the instrument index.
+money it does not hold; eight `…USD` names remain and mean it. §9.13-BOOK dI put the other half in
+place: an account's currency is a column, and so is an INSTRUMENT's — the instrument index
+(`instrumentCurrencyOf`) states the money every tranche, equity and fund share is denominated in,
+the unit of measure carries no currency any more (`PAR`, not `PAR_USD`), and a coupon or corporate
+action pays in the money the paper states. A cross-border issue is expressible; nothing issues one
+yet (`cross-border.md`). A4 stays open: the index is written from the issuer's region today, and
+most reads of a currency in the model are still `currencyOf(region)` at the site — an inference
+from where the amount was found, which A4 forbids.
 
 ### ❌ D4 — THE REVALUATION IS NEVER SUMMED
 

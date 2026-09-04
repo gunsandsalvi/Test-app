@@ -1,4 +1,5 @@
 import { V2World } from '../../../engine2/world';
+import { registerCompanyEquity } from '../../ledger/instrument-ledger';
 import { bankCreditParty, companyParty } from '../../../domain/party';
 import { defect } from '../../../domain/defect';
 /**
@@ -903,8 +904,10 @@ export function runFirmBirthsForRegion(
     // (this stage runs after the week's cutoff, so it lands next cycle — the firm is born with
     // its opening balance in transit, and the economy's total cash never moved).
     newborn.forEach((c) => {
-      // §3.13-BOOK d2: a birth is admitted to the wire world before its first wire.
+      // §3.13-BOOK d2/dI: a birth is admitted to the wire world, and its equity declared on the
+      // instrument index, before its first wire.
       admitParty(companyParty(c));
+      registerCompanyEquity(ctx.v2, c);
       // W6: the home bank's facility (fundNewbornDebt, below) funds the opening balance
       // first; the pool carves out the founders' remainder.
       const loanLocal = ladderTotalLocal(ctx.v2, c.id);

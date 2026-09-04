@@ -44,20 +44,26 @@ export interface AssetModule {
 }
 
 /**
- * The units a position can be counted in. Money is the degenerate one — a dollar is a dollar, so
- * its price is 1 BY DEFINITION and it is the only place in the tree a hard-coded 1 belongs.
+ * The units a position can be counted in. Money is the degenerate one — a unit of money is a unit
+ * of money, so its price is 1 BY DEFINITION and it is the only place in the tree a hard-coded 1
+ * belongs.
+ *
+ * §3.13-BOOK (dI): a unit carries NO CURRENCY. `PAR_USD` said a bond's face was in dollars and
+ * `USD` said money was; which money an instrument is denominated in is a column of the instrument
+ * index (`engine2/instruments.ts:instrumentCurrencyOf`), read beside the unit, never folded into
+ * it — a euro bond's face is a par unit like any other's.
  */
 export type UnitOfMeasure =
-  /** Face value in dollars: what a bond or a loan is a claim on. Its PRICE is per dollar of face. */
-  | 'PAR_USD'
+  /** One unit of face: what a bond or a loan is a claim on, in the instrument's own money. Its PRICE is per unit of face. */
+  | 'PAR'
   /** A share of a company or a fund. */
   | 'SHARES'
   /** A physical unit of a good — the sub-unit registry's own unit. */
   | 'GOODS_UNITS'
   /** One contract of a derivative class. */
   | 'CONTRACTS'
-  /** Dollars, whose price is one by definition. */
-  | 'USD';
+  /** A unit of money, whose price is one by definition; the money is the instrument's. */
+  | 'MONEY';
 
 /**
  * ONE LINE PER KIND. A new asset type is a row here; every reader below keeps working, and any
@@ -66,16 +72,16 @@ export type UnitOfMeasure =
  */
 export const ASSET_REGISTRY: Record<AssetType, AssetModule> = {
   EQUITY:         { assetClass: 'EQUITY',     carriesCoupon: false, lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'SHARES' },
-  CORP_BOND:      { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: true,  hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR_USD' },
-  LEVERAGED_LOAN: { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR_USD' },
-  SOV_BOND:       { assetClass: 'SOVEREIGN',  carriesCoupon: true,  lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'PAR_USD' },
+  CORP_BOND:      { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: true,  hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR' },
+  LEVERAGED_LOAN: { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR' },
+  SOV_BOND:       { assetClass: 'SOVEREIGN',  carriesCoupon: true,  lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'PAR' },
   CDS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS' },
   IRS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS' },
   TRS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS' },
   XCS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS' },
   COMMODITY:      { assetClass: 'COMMODITY',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'GOODS_UNITS' },
   OPTION:         { assetClass: 'DERIVATIVE', carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'CONTRACTS' },
-  FX_SPOT:        { assetClass: 'CASH_LIKE',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'USD' },
+  FX_SPOT:        { assetClass: 'CASH_LIKE',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'MONEY' },
 };
 
 /** The one lookup. A caller that cannot find its question here should add a field, not a switch. */

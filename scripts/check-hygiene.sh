@@ -100,13 +100,23 @@ if [ -n "$LOT_STRAY$OUT_STRAY" ]; then
   echo "$LOT_STRAY$OUT_STRAY"
   exit 1
 fi
+# §3.13-BOOK (dI) — the same boundary for the instrument index: `writeInstrumentRow` is the
+# instrument ledger's implementation (engine/ledger/instrument-ledger.ts); a declaration anywhere
+# else is a second writer.
+IX_STRAY=$(grep -rnE "import \{[^}]*\bwriteInstrumentRow\b[^}]*\} from '[^']*engine2/instruments(\.ts)?'" src --include=*.ts --include=*.tsx 2>/dev/null \
+  | grep -vE '^src/engine/ledger/|^src/engine2/' || true)
+if [ -n "$IX_STRAY" ]; then
+  echo "ERROR: a file writes the instrument index directly — declare through engine/ledger/instrument-ledger.ts:"
+  echo "$IX_STRAY"
+  exit 1
+fi
 # §3.13-BOOK d0 — ONE DOOR. The five mutable store handles are the stores' own: nothing outside
 # engine/ledger/ and engine2/ may name one. A stage or the seed that needs a write asks the owning
 # module for a named operation (`openSectorRow`, `setRowShares`, `restrikeContract`, …), so every
 # write has a name and a home, and the type-level seal (`Readonly*` views) has no function-level
 # way round it. This is the guard the three list-shaped ones above could not be, because a new
 # handle would have needed a new list.
-HANDLE_STRAY=$(grep -rnE "\bmutable(Holdings|Tranches|Lots|Contracts|Prices|Accounts)\b" src scripts/harness.ts test --include=*.ts --include=*.tsx 2>/dev/null \
+HANDLE_STRAY=$(grep -rnE "\bmutable(Holdings|Tranches|Lots|Contracts|Prices|Accounts|InstrumentIndex)\b" src scripts/harness.ts test --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE '^src/engine/ledger/|^src/engine2/' || true)
 if [ -n "$HANDLE_STRAY" ]; then
   echo "ERROR: a mutable store handle is named outside engine/ledger/ and engine2/ — ask the store for a named operation:"

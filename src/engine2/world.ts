@@ -19,6 +19,7 @@ import { ReadonlyContractTable, newContractTable } from './contracts';
 import { newTrancheStore, ReadonlyTrancheStore } from './tranches';
 import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
 import { newPriceStore, ReadonlyPriceStore } from './prices';
+import { newInstrumentIndex, type ReadonlyInstrumentIndex } from './instruments';
 import { CurrencyCode, CURRENCY_CODES } from '../domain/geography';
 import { FxTable, PARITY_FX } from '../domain/currency';
 import { asInstrumentId, type InstrumentId, asEntityId, type EntityId, asTicker } from '../domain/ids';
@@ -54,6 +55,9 @@ export interface V2World {
    *  (asset, units) and its value is units × this; a market writes only what it cleared, and an
    *  instrument no market printed has no entry rather than a par. */
   prices: ReadonlyPriceStore;
+  /** §3.13-BOOK (dI) — THE INSTRUMENT INDEX (engine2/instruments.ts): which interned ids are
+   *  instruments somebody issued, of what kind, by whom, in which money. Rows by `InstrRef`. */
+  instruments: ReadonlyInstrumentIndex;
   /** §4.C II.5 — revenue history as a 13-slot ring per firm row (the object field is DELETED:
    *  the weekly `[...slice(-12), x]` allocated a fresh array per firm per week, and the §7.320
    *  mid-loop-append trap lived in the aliasing; a ring has neither). Plain arrays, not SAB —
@@ -170,6 +174,7 @@ export function ensureV2(state: V2Host): V2World {
     tranches: newTrancheStore(),
     holdings: newHoldingStore(),
     prices: newPriceStore(),
+    instruments: newInstrumentIndex(),
     revRing: { slots: new Float64Array(13 << 12), len: new Uint8Array(1 << 12), start: new Uint8Array(1 << 12), cap: 1 << 12 },
     priceRing: makeF64Ring(52, 1 << 12),
     ratingRing: makeF64Ring(16, 1 << 12),

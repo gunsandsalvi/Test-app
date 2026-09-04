@@ -7,6 +7,7 @@
 import { journalPayment, partyId, PendingNetCtx } from './settlement';
 import { DESK_BOOK_KIND } from '../../../domain/dealer-desk';
 import { deskRowsOf } from '../../desk-register';
+import { instrumentCurrencyOf } from '../../../engine2/instruments';
 import type { EntityId } from '../../../domain/ids';
 import { bankSecuritiesParty, companyPartyOf } from '../../../domain/party';
 import { buildEntityIndex } from '../../ledger/entity-index';
@@ -163,7 +164,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 // The workout prior lives in domain/bank-pricing.ts (one owner); re-exported for its readers.
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
-import { cashOf, entityCashOf, obligationCurrencyOf } from '../../ledger/accounts';
+import { cashOf, entityCashOf } from '../../ledger/accounts';
 import { asInstrumentId, type InstrumentId } from '../../../domain/ids';
 import type { TypeRef, InstrRef } from '../../../engine2/refs';
 import { equityIssuerId } from '../../../domain/instrument-keys';
@@ -667,10 +668,9 @@ export function applyPendingCorporateActionSettlements(
             if (!(amountLocal > 0)) return;
             journalPayment(ctx, {
               payer, payee: holderPayee(deskId, payeeByBook), amount: amountLocal,
-              // The paper's own money, off the ISSUER — which is the payer here. Read from the
-              // party rather than from `issuer`, which is `undefined` for every non-equity
-              // instrument at this site and would have thrown the moment a credit desk was paid.
-              currency: obligationCurrencyOf(ctx.v2, payer), reason: paymentReason,
+              // §3.13-BOOK (dI): the paper's own money, off the INSTRUMENT INDEX — the paper says
+              // what it is denominated in; nothing infers it from where the issuer lives.
+              currency: instrumentCurrencyOf(v2, asInstrumentId(instrumentId)) ?? defect(`corporate action on ${instrumentId}, which the instrument index does not hold`), reason: paymentReason,
             });
             const deskBankId = deskBankIdOf(deskId);
             if (deskBankId !== undefined) deskIncomeByBankId.set(deskBankId, (deskIncomeByBankId.get(deskBankId) ?? 0) + amountLocal);
@@ -1110,8 +1110,8 @@ export function applyHolderInterestAccruals(
   payouts.forEach((instrumentKey) => {
     const byHolder = ctx.holderAccruedInterestLocal.get(instrumentKey);
     if (!byHolder) return;
-    const issuerId = instrumentKey.slice(instrumentKey.indexOf(':') + 1);
-    const ticker = issuersById.get(issuerIdOf(ctx.v2, issuerId))?.id; // §3.13-BOOK (c-then-3b): the issuer's entity id
+    const paperId = asInstrumentId(instrumentKey.slice(instrumentKey.indexOf(':') + 1));
+    const ticker = issuersById.get(issuerIdOf(ctx.v2, paperId))?.id; // §3.13-BOOK (c-then-3b): the issuer's entity id
     if (!ticker || !ctx.paymentJournal) {
       // A coupon due from an issuer nobody can name is a defect at the site that accrued it,
       // not a receivable that quietly survives.
@@ -1119,8 +1119,8 @@ export function applyHolderInterestAccruals(
       return defect(`coupon of ${(owedLocal / 1e6).toFixed(3)}M due on ${instrumentKey} from an issuer with no ticker`);
     }
     const payer = companyPartyOf(ticker) as import('./settlement').PartyRef;
-    // A coupon is paid in the paper's own money, which is the issuer's.
-    const couponCurrency = obligationCurrencyOf(ctx.v2, payer);
+    // §3.13-BOOK (dI): a coupon is paid in the paper's own money, which the instrument index states.
+    const couponCurrency = instrumentCurrencyOf(ctx.v2, paperId) ?? defect(`coupon due on ${paperId}, which the instrument index does not hold`);
     byHolder.forEach((accruedLocal, holderId) => {
       if (!(accruedLocal > 0)) return;
       const deskBankId = deskBankIdOf(holderId);

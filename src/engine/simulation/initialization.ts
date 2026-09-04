@@ -79,6 +79,7 @@ import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAnd
 import { openAccount, openingCashOf, stashOpeningCash, stashSeedHouseholdLine, seedGovLadderOf, seedCentralBankBookOf, stashSeedBankBook, seedBankBookOf, seedBankBookLocalOf, openSectorRow } from '../ledger/accounts';
 import { newWireJournal, setActiveWireJournal, setActiveWireWorld, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { wireWorldOf } from '../ledger/wire-world';
+import { registerCompanyEquity, registerFundShares } from '../ledger/instrument-ledger';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
 import { buildEntityIndex } from '../ledger/entity-index';
@@ -359,6 +360,12 @@ function openSeededBooks(state: GameState): void {
   // wire resolves its issuer, its holder and its instrument, or the seed throws where it is wrong.
   setActiveWireWorld(wireWorldOf(v2, state.companies, state.institutionalEntities ?? []));
   try {
+    // §3.13-BOOK (dI): every company's equity and every fund's shares are DECLARED on the
+    // instrument index before any wire names them — a wire resolves its instrument against the
+    // index, so an undeclared equity would be refused at the site. The ladders declare their
+    // own rungs as they are issued below.
+    for (const c of state.companies) registerCompanyEquity(v2, c);
+    for (const e of state.institutionalEntities ?? []) registerFundShares(v2, e);
     for (const c of state.companies) {
       if (!v2.tranches.synced.has(c.id)) seedLadder(v2, { id: c.id, ticker: c.ticker, region: c.region }, c.debtTranches);
     }

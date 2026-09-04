@@ -79,9 +79,9 @@ test('every asset kind declares what its quantity is counted in', () => {
   // no honest way to be valued, and every such kind in this model ended up storing the product of
   // units and price and losing the price that made it.
   for (const [type, m] of Object.entries(ASSET_REGISTRY)) {
-    assert.ok(['PAR_USD', 'SHARES', 'GOODS_UNITS', 'CONTRACTS', 'USD'].includes(m.countedIn), `${type} has no unit of measure`);
+    assert.ok(['PAR', 'SHARES', 'GOODS_UNITS', 'CONTRACTS', 'MONEY'].includes(m.countedIn), `${type} has no unit of measure`);
     // Money is the only kind whose price is one by definition; everything else must be priced.
-    if (m.countedIn === 'USD') assert.equal(m.assetClass, 'CASH_LIKE', `${type} is counted in dollars but is not cash`);
+    if (m.countedIn === 'MONEY') assert.equal(m.assetClass, 'CASH_LIKE', `${type} is counted in money but is not cash`);
   }
 });
 

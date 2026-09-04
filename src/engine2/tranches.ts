@@ -20,6 +20,7 @@ import { trancheKindOf } from '../domain/assets';
 import { GovDebtTrancheView } from '../domain/region-macro';
 import { govTrancheView } from '../domain/government';
 import { V2World, rowOf, internInstrument, internEntity, entityOf, entityRefOf, instrumentOf, instrumentRefOf } from './world';
+import { instrumentRefRegistered } from './instruments';
 import { InstrumentId, asInstrumentId } from '../domain/ids';
 import { equityIssuerId } from '../domain/instrument-keys';
 import type { EntityId } from '../domain/ids';
@@ -375,15 +376,19 @@ export function trancheIdOf(v2: V2World, r: number): InstrumentId {
 /**
  * §3.13-BOOK slice (c2a) — WHO ISSUED THIS PAPER, in the entity id space.
  *
- * The fallback is the interesting half and branding it made it visible: an id the tranche store
- * has never seen is handed back AS its own issuer. For a listed EQUITY that is correct and is the
- * crossing `equityInstrumentId` names — a company's equity is keyed by the company. For anything
- * else it is a lie the caller cannot detect, and it is what slice (d)'s instrument registry ends:
- * with an index of instances, "an id nothing issued" has an answer other than "itself".
+ * §3.13-BOOK (dI): the INSTRUMENT INDEX answers first — every tranche, every company's equity and
+ * every fund's shares are declared there with their issuer. What is left below it is the fallback
+ * branding made visible: an id the index has never seen is handed back AS its own issuer, which
+ * is correct for a listed equity nobody declared and a lie for anything else. Slice (dII) declares
+ * the minted contract and book ids, and the fallback goes with it.
  */
 export function issuerIdOf(v2: V2World, instrumentId: string): EntityId {
   const ref = instrumentRefOf(v2, asInstrumentId(instrumentId));
   if (ref < 0) return equityIssuerId(asInstrumentId(instrumentId));
+  if (instrumentRefRegistered(v2, ref)) {
+    const iss = v2.instruments.issuerRef[ref];
+    return iss === ABSENT_REF ? equityIssuerId(asInstrumentId(instrumentId)) : entityOf(v2, iss);
+  }
   const iss = v2.tranches.issuerRefByIdRef.get(ref);
   return iss !== undefined && iss >= 0 ? entityOf(v2, iss) : equityIssuerId(asInstrumentId(instrumentId));
 }

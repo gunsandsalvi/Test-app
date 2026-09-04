@@ -89,14 +89,14 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a holding is holder + instrument + quantity | `src/engine2/holdings.ts:HoldingStore` · `src/domain/banking.ts:ItemizedHolding` | ✅ |
 | A1.a the holder exists and can be paid | `src/engine/ledger/holdings-ledger.ts:holderIdOf` | ✅ |
-| A1.b the instrument is one the issuer issued | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
+| A1.b the instrument is one the issuer issued | `src/engine/ledger/instrument-ledger.ts:registerInstrument` · `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | A1.c the quantity is in the instrument's own unit | `src/engine2/holdings.ts:HoldingStore` | ✅ |
-| A2 a holding is a claim on a named issuer | `src/engine2/holdings.ts:pushBookRow` | ✅ |
+| A2 a holding is a claim on a named issuer | `src/engine2/instruments.ts:instrumentIssuerOf` · `src/engine2/holdings.ts:pushBookRow` | ✅ |
 | A2.a it pays to whoever the register says holds it, then | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
 | A4 · the seed's half: every opening row names its issuer | `src/engine/ledger/holdings-ledger.ts:issuerOfHoldingRow` · `src/domain/entity-keys.ts:governmentEntityId` | ✅ |
 | **A3 FORBID no holding without a holder** | `src/engine2/holdings.ts:bookHeadOf` | ✅ |
 | **A4 FORBID no holding without an issuer** | `src/engine/ledger/wire.ts:wire` · `src/engine/ledger/wire-world.ts:wireWorldOf` · `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
-| B1 an instrument has an issued amount | `src/engine/ledger/tranche-ledger.ts:issueTranche` | ✅ |
+| B1 an instrument has an issued amount | `src/engine2/instruments.ts:InstrumentIndex` · `src/engine/ledger/tranche-ledger.ts:issueTranche` | ✅ |
 | B2 VERIFY Σ holdings = issued amount, per instrument | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | B2.a shortfall = a claim vanished; surplus = one invented | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | **B2.b the tolerance is float dust, never a fraction of the issue** | `src/domain/stated.ts:AUDIT_BOOKS_TOLERANCE` | ❌ |
@@ -239,6 +239,19 @@ instrument against a world before it writes (`wire.ts:wire`, `wire-world.ts:wire
 holding issued from `{ INSTITUTION, id: 'ACME-T1' }` is a `defect()` at the seed's own wire, not a
 party in a table for O8 to find at the close. O8 stays as the audit's second look; the FORBID is
 now enforced where the holding is written, which is what a FORBID node asks for.
+
+### ✅ A2 / B1 — THE INSTRUMENT INDEX EXISTS (§9.13-BOOK dI)
+
+`v2.instruments` is one row per instrument the world has ISSUED, addressed by the intern table's
+own ref: its kind, its issuer and its money, and nothing else — the terms stay in the class store,
+so the index copies no quantity. `registerInstrument` is the one writer and a declaration is
+idempotent; a second that disagrees throws at the site. A ladder rung is declared as it is issued
+(a sovereign's as `GOV_BOND`, which its wire now also says), a company's equity where the company
+comes into being (the seed and the three birth passes), a fund's shares at the seed. `issuerIdOf`
+reads the index first, the wire resolves every instrument kind against it (the company and fund
+sets `wire-world.ts` kept for equity and shares are gone), and a coupon or corporate action pays
+in the money the INSTRUMENT states. What the index does not yet hold: the minted contract and
+book ids (dII), the ETF share's second key (dIII), the issued share count (dIV).
 
 ### ⚠️ F1 / F1.a — ONE INSTRUMENT, TWO KEYS: THE ETF SHARE
 

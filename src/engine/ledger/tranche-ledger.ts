@@ -20,6 +20,8 @@
  *   seedLadder     — a seeded or born firm's ladder installed without wires (principle B's gap)
  */
 import { V2World, internEntity, entityOf, entityRefOf } from '../../engine2/world';
+import { registerInstrument } from './instrument-ledger';
+import { currencyOf } from '../../domain/geography';
 import { bankPartyOf, companyParty } from '../../domain/party';
 import { mutableTranches, pushLadderRow, relinkLadder, clearLadder, ladderRowsOf, TR_FACILITY, trancheIdOf, trancheKindOfRow } from '../../engine2/tranches';
 import { DebtTranche } from '../../domain/company';
@@ -73,9 +75,16 @@ function holderOfTranche(t: DebtTranche, region: RegionId): PartyRef {
 /** The issuer places a tranche with its holder. Returns the new row. */
 export function issueTranche(v2: V2World, issuer: TrancheIssuer, t: DebtTranche, reason: string): number {
   if (!(t.principalLocal > 0)) return defect(`tranche ${t.id} issued with principal ${t.principalLocal}`);
+  // §3.13-BOOK (dI): a sovereign rung is GOV_BOND paper — the register's kind for it — not the
+  // corporate kind its flags alone would read as; the wire and the index both say so.
+  const kind = issuer.kind === 'GOVERNMENT' ? 'GOV_BOND' : trancheKindOf(t);
   // §3.13-BOOK d2: the one wire that CREATES its instrument — the row is pushed with the wire's number.
-  const n = wire({ from: issuerParty(issuer), to: holderOfTranche(t, issuer.region), kind: trancheKindOf(t), asset: t.id, quantity: t.principalLocal, priceLocal: 1, reason, creates: true }, internReason);
-  return pushLadderRow(v2, issuer.id, t, n);
+  const n = wire({ from: issuerParty(issuer), to: holderOfTranche(t, issuer.region), kind, asset: t.id, quantity: t.principalLocal, priceLocal: 1, reason, creates: true }, internReason);
+  const r = pushLadderRow(v2, issuer.id, t, n);
+  // §3.13-BOOK (dI): the paper is DECLARED on the instrument index as it is issued — its kind, its
+  // issuer, its money (the issuer's, until an issuer issues in another).
+  registerInstrument(v2, { id: t.id, kind, issuer: issuer.id, currency: currencyOf(issuer.region) });
+  return r;
 }
 
 /** Face comes off a row: the holder's paper returns to the issuer. Returns the wire number. */
@@ -84,7 +93,7 @@ export function retireTranche(v2: V2World, issuer: TrancheIssuer, r: number, fac
   if (!(faceLocal > 0)) return -1;
   const take = Math.min(faceLocal, S.principalLocal[r]);
   if (faceLocal > S.principalLocal[r] + LADDER_FACE_DUST_LOCAL) defect(`tranche ${trancheIdOf(v2, r)} retired ${(faceLocal / 1e6).toFixed(3)}M against ${(S.principalLocal[r] / 1e6).toFixed(3)}M of principal`);
-  const n = wire({ from: holderOfRow(v2, r, issuer.region), to: issuerParty(issuer), kind: trancheKindOfRow(v2, r), asset: trancheIdOf(v2, r), quantity: take, priceLocal: 1, reason }, internReason);
+  const n = wire({ from: holderOfRow(v2, r, issuer.region), to: issuerParty(issuer), kind: issuer.kind === 'GOVERNMENT' ? 'GOV_BOND' : trancheKindOfRow(v2, r), asset: trancheIdOf(v2, r), quantity: take, priceLocal: 1, reason }, internReason);
   S.principalLocal[r] -= take;
   return n;
 }

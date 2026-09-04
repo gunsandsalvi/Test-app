@@ -8,6 +8,7 @@
  */
 
 import { restateBankSheetStatistics } from '../../../domain/bank-resolution';
+import { registerCompanyEquity } from '../../ledger/instrument-ledger';
 import { companyParty } from '../../../domain/party';
 import { admitParty } from '../../ledger/wire';
 import { currencyOf } from '../../../domain/geography';
@@ -206,8 +207,10 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     // Opening cash is CARVED from the parent through settlement, like a firm birth's — the
     // economy's total cash never moves.
     const openingCashLocal = Math.max(0, cashOf(ctx.v2, parent)) * share;
-    // §3.13-BOOK d2: the spin-off is admitted to the wire world before its first wire.
+    // §3.13-BOOK d2/dI: the spin-off is admitted to the wire world, and its equity declared on
+    // the instrument index, before its first wire.
     admitParty(companyParty(spin));
+    registerCompanyEquity(ctx.v2, spin);
     if (openingCashLocal > 0) {
       pay(ctx, {
         payer: companyParty(parent),

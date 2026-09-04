@@ -509,14 +509,27 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
-       share and contract gets a row: kind, issuer, **currency**, issued units, and nothing else.
-       Terms stay in the class store, so the index copies no quantity and cannot drift.
-       `UnitOfMeasure` loses its money: `PAR` and `USD` become a unit and a currency, separately.
-       `sharesOutstanding` moves here, which gives `O2` a real issued side. **Closes step 13's
-       item 5** — the registry becomes what the adapter reads. Resolves what (c) handed forward:
-       the ETF share's two keys, `IndexConstituent.instrumentId` holding issuers, and
-       `DerivativeContract.referenceId` holding four id spaces.
+    d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
+       was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
+       `UnitOfMeasure` without money) is in §9. What is left, in order:
+    dII. **THE MINTED IDS ARE DECLARED.** Every id `instrument-keys.ts` mints for a book or a
+        contract — the swap tenors, the CDS names, the FX pairs and basis books, the futures, the
+        repo books — is declared on the index where its adapter builds it (kind, no issuer, the
+        book's money), so `issuerIdOf`'s "an undeclared id is its own issuer" fallback and
+        `wire-world.ts`'s `undefined` for CONTRACT go: an id the index does not hold is an id
+        nothing issued, at the site. `DerivativeContract.referenceId`'s four id spaces resolve
+        here — the index says what a reference names (`the-derivative-layer.md`).
+    dIII. **THE ETF SHARE HAS ONE KEY.** `etfShareInstrumentId` (the clearing book's
+        `ETFSHARE-<fund>`) or `etfShareRegisterId` (the fund's own id) is deleted — the register
+        and the index keep one, the clearing book and its price move to it, and `etfShareFundId`
+        becomes a read of the index's issuer (`the-register.md` F1).
+    dIV. **THE ISSUED AMOUNT LIVES ON THE INDEX.** `Company.sharesOutstanding` moves to the index
+        as issued units, one owner, which gives `O2` a real issued side (`the-register.md` B2);
+        a tranche's is a read of its row. **Closes step 13's item 5** — the registry is what the
+        adapter reads.
+    dV. **AN INDEX CONSTITUENT IS AN INSTRUMENT.** `IndexConstituent.instrumentId` holds issuers
+        on the credit side and is read as one on the equity side; the index decides what it
+        names, and `indices.md` B4 becomes measurable.
     d4. **ONE CONTRACT STORE FOR EVERY BILATERAL OBLIGATION** (added 2026-09-04). Derivatives are
         in `v2.contracts` with one writer; repo contracts (`reg.repoBook`), securities loans, prime-
         brokerage lines, trade invoices and PE capital commitments are the same thing — two named
@@ -1717,6 +1730,26 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK dI — THE INSTRUMENT INDEX EXISTS, AND CURRENCY LANDS ON IT.** `v2.instruments`
+(`engine2/instruments.ts`) is one row per instrument the world has ISSUED, addressed by the intern
+table's own `InstrRef`: its kind, its issuer (absent for an instrument nobody owes) and its money,
+and nothing else — the terms stay in the class store, so the index copies no quantity and cannot
+drift. `engine/ledger/instrument-ledger.ts:registerInstrument` is the one writer (hygiene guards
+the import), idempotent, and a second declaration that disagrees defects at the site. Declared:
+every ladder rung as `issueTranche` issues it — a sovereign's as `GOV_BOND`, which its wire now
+also says instead of the `CORP_BOND` its flags read as (found here; the W audits key on no kind);
+every company's equity at the seed and at the three births (spin-off, firm birth, FDI subsidiary),
+beside `admitParty`; an ETF's and a money-market fund's shares at the seed. Read: `issuerIdOf`
+asks the index first (its "an undeclared id is its own issuer" fallback stays until dII declares
+the minted ids); `wire-world.ts` resolves EVERY instrument kind against the index, so the company
+and fund sets it kept for equity and shares are gone and an undeclared equity is refused at the
+wire; a coupon and a corporate action pay in the money the INSTRUMENT states
+(`instrumentCurrencyOf`), not the issuer's home. `UnitOfMeasure` loses its money: `PAR_USD` →
+`PAR`, `USD` → `MONEY`; which money is the index's column. Byte-identical in every number by
+construction; the type intern table's numbering may differ (`EQUITY` is interned at the seed's
+first declaration now), which no sum depends on. `test/instrument-index.test.ts` pins the
+idempotence, the tranche declaration and the wire's refusal. Gates green; no run.
 
 **13-BOOK d3f — THE ACCRUAL LEDGER'S DESK KEY IS THE BOOK.** `holderAccruedInterestLocal` keyed a
 desk by its clearing SEAT (`<ticker>::DESK`) and everyone else by entity id — two id spaces in one
