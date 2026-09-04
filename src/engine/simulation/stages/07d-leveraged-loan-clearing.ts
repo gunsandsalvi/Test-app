@@ -39,7 +39,6 @@
  * stage 8, which reads this book's cleared prices as already-real values.
  */
 
-import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { InstrumentId } from '../../../domain/ids';
 import { GameState, RegionId, Company, PrimaryOffering } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
@@ -50,36 +49,27 @@ import { issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../../credit-price';
 import { isActiveCompany, accruedPerFace, defaultPeriodWeeks, banksOf } from '../../../domain/company';
 import { priceFromSpreadBps } from '../../../domain/pricing';
 import type { PaperTerms } from '../../../domain/pricing';
-import {
-  computeReservationSpreadBps,
-  fullSizeSpreadRangeBpsOf,
-  maxOverweightMultipleOf,
-  computeDistressedReservationSpreadBps,
-  spreadRiskCapitalChargeRate,
-  entityRequiredReturn,
-  isInvestmentGrade,
-  subInvestmentGradeSizeFactor,
-} from './asset-allocation';
+import { computeDistressedReservationSpreadBps, spreadRiskCapitalChargeRate, isInvestmentGrade } from './asset-allocation';
 import { computeAnnualDefaultProbability, creditRecoveryRate, moveCorporateAccrued } from './shared-helpers';
 import { WeeklyStepContext } from './context';
-import { stagePurchaseBudgetLocal } from './institutional-balance-sheet';
-import { institutionUnsettledLessCollateralLocal, institutionSpendableLocal, PartyRef } from './settlement';
+
+import { institutionSpendableLocal, PartyRef } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, participantPartyOf, parHoldingRow, writeBackClearedFills } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
-import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
+import { openDemandStaging, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
-const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 
 import { indexFundDemand, indexFundsForBook, bookIndexIdsOf, indexFundsSeatedIn } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
-import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
+
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
+import { buildCreditDemandParticipants } from './credit-demand';
 
 /**
  * Senior-secured first-lien loans trade at a real, structural discount to the same issuer's
@@ -383,89 +373,13 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
 
     // §4.C direct-to-pack — demand written straight into the engine's staging.
     const DS = openDemandStaging(nL);
-    const liById = new Map(loans.map((l, li) => [l.id, li]));
-    const heldArr = new Float64Array(nL);
-    const heldTouched: number[] = [];
-
-    const participants: ClearingParticipant[] = regionEntities.map((entity) => {
-      const claimed = claimedByEntity.get(entity.id)!;
-      heldTouched.length = 0;
-      claimed.forEach((faceLocal, id) => {
-        const li = liById.get(id);
-        if (li !== undefined) { heldArr[li] = faceLocal; heldTouched.push(li); }
-      });
-      const entityShare = (rawEntityTargets.get(entity.id) ?? 0) / sectorTotal;
-      const entitySubIGFactor = subInvestmentGradeSizeFactor(entity.entityType);
-      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
-      // HF1: the distressed bid is a DISTRESSED fund's, not every hedge fund's. Pricing off
-      // discounted expected recovery instead of expected loss, and running the conviction size
-      // that goes with it, is one strategy — the credit long-short book beside it is an ordinary
-      // relative-value buyer and prices like one.
-      const strategy = hedgeFundStrategyProfile(entity);
-      const overweightMultiple = strategy?.convictionMultiple ?? maxOverweightMultipleOf(entity);
-      // XB2: a cross-border loan is hedged like a bond — the CIP cost is in the requirement.
-      const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
-        ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate);
-      const fullSizeRangeBps = fullSizeSpreadRangeBpsOf(entity);
-      // The entity's real money for this auction (S11), directed at the paper that is actually
-      // changing hands: a live offering, or the gap between what this holder targets and what it
-      // already owns. A name it is already at target in, with nothing on offer, needs none of this
-      // week's cash — and splitting the class budget across the entire STOCK instead starved the
-      // primary market by construction, because a new issue's slice was its issuer's index weight
-      // rather than its own size. Measured on an LBO financing: the book could HOLD it (53.7M of
-      // capacity against a 40.1M post-issue float) but could only FUND 14.0M, so the solve ran past
-      // the sponsor's walk-away and every deal was pulled.
-      const classBudgetLocal = stagePurchaseBudgetLocal(ctx, entity, institutionTotalAssetsLocal(ctx, entity), 'LEVERAGED_LOAN', institutionUnsettledLessCollateralLocal(ctx, entity.id));
-      const cashDemandWeightByIndex = new Float64Array(nL);
-      let totalCashDemandWeightLocal = 0;
-      for (let li = 0; li < nL; li++) {
-        const l = loans[li];
-        const f = companyTerms[l.ci].subIG ? entitySubIGFactor : 1;
-        const structuralLocal = (l.faceLocal + l.offeringLocal) * entityShare * f;
-        const gapToTargetLocal = Math.max(0, structuralLocal - heldArr[li]);
-        const weightLocal = l.offeringLocal + gapToTargetLocal;
-        cashDemandWeightByIndex[li] = weightLocal;
-        totalCashDemandWeightLocal += weightLocal;
-      }
-
-      // Same terms as the bond book, at the loan's own economics: a first-lien loan's collateral
-      // means less is expected to be lost on it and less capital is tied up holding it, so it
-      // clears its cost at a tighter margin than the same issuer's unsecured paper. That is the
-      // structural relationship between the two markets, expressed where it belongs — in what each
-      // set of holders will pay — rather than as a fixed multiple between two statistics. And it
-      // is asked PER LOAN, because the capital a position consumes is its own duration's.
-      const demandRow = claimDemandRow(DS);
-      for (let li = 0; li < nL; li++) {
-        const l = loans[li];
-        const t = companyTerms[l.ci];
-        const reservationBps = (strategy?.pricesOffRecovery
-          ? l.distressedReservationBps
-          : computeReservationSpreadBps({
-              entityType: entity.entityType,
-              requiredReturn,
-              expectedLossBps: t.expectedLossBps,
-              capitalChargeRate: l.capitalChargeRate,
-              creditConditionsIndex,
-            })) + hedgeAdjBps;
-        const reservationPrice = priceAtSpread(l, reservationBps);
-        const rangePrice = Math.max(1e-9, Math.abs(reservationPrice - priceAtSpread(l, reservationBps + fullSizeRangeBps)));
-        const sizeFactor = t.subIG ? entitySubIGFactor : 1;
-        const structuralSizeLocal = (l.faceLocal + l.offeringLocal) * entityShare * sizeFactor;
-        // The bound is posted in FACE, and the money it stands for buys that face at the price this
-        // book opened at — the same commitment 07b's and 07e's bidders make.
-        setDemand(DS, demandRow, li,
-          reservationPrice,
-          rangePrice,
-          structuralSizeLocal * overweightMultiple,
-          (classBudgetLocal *
-            (totalCashDemandWeightLocal > 0
-              ? cashDemandWeightByIndex[li] / totalCashDemandWeightLocal
-              : 0)) / Math.max(1e-9, openingPrice[li]),
-          0);
-      }
-      for (const li of heldTouched) heldArr[li] = 0;
-
-      return { id: entity.id, currentHoldingsByInstrumentId: claimed, demandByInstrumentId: EMPTY_DEMAND_MAP, demandRow };
+    // §3.13-READ D5: the same build as 07b's, stated once (see `credit-demand.ts`).
+    const participants: ClearingParticipant[] = buildCreditDemandParticipants({
+      ctx, regionId, policyRate: reg.policyRate,
+      entities: regionEntities, instruments: loans, issuerTerms: companyTerms,
+      claimedByEntity, rawEntityTargets, sectorTotal,
+      assetClass: 'LEVERAGED_LOAN', creditConditionsIndex, openingPrice,
+      priceAtSpread, demandStaging: DS,
     });
 
     const priorDealerInventoryById = new Map<string, number>();

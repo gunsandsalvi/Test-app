@@ -434,9 +434,6 @@ written from here):
     **C. THE SECOND ANSWERS — DONE, all five, in §9.**
 
     **D. THE RULES WRITTEN MORE THAN ONCE — collapse, and the branding then becomes small.**
-    D5. The credit demand build: 2 copies × ~80 lines. **The divergence is fixed (§9); the
-        COLLAPSE is what is left**, and the two are now word-for-word equal, which is the state
-        §5 says to collapse from.
     D9. Lookup maps rebuilt from the same source: **38 construction sites**, including three alive
         in one scope in `wires.ts` and two rebuilt inside a `forEach`. Home: memoised on `ctx`.
     D13. The seed's house-bank assignment, 3 passes. **NOT the mechanical collapse the survey
@@ -1645,6 +1642,23 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ D5 (the collapse) — −129 CODE LINES, AND THE ATLAS GATE CAUGHT ME DOING IT.** With the
+sub-IG factor restored the two credit demand builds were word-for-word equal, which is the state
+§5 says to merge from, and `credit-demand.ts:buildCreditDemandParticipants` is now the one build
+for the bond book and the loan book. The two differ only in the instrument they hold and only in
+ways the build does not care about — it needs a face, an offering, a capital charge, a distressed
+level and a way to turn a spread into a price, which `CreditDemandInstrument` states and a bond
+and a loan both already satisfy.
+
+**And `check-atlas.sh` refused the commit until the tree was right**, which is the counterpoint to
+the hole part B found in it: `ratings-and-assessment.md` D1 cited
+`07b-corporate-bond-clearing.ts:entitySubIGFactor`, the symbol moved, and the gate said so by name.
+The node is re-cited at `credit-demand.ts:buildCreditDemandParticipants`, and its diff entry now
+records that the loan book had lost the sleeve factor entirely — which is what that entry was
+describing the effect of, one book short.
+
+25 code lines in, 154 out.
 
 **13-READ D12 — THE SEED'S DEMAND IDENTITY, WHICH ITS OWN COMMENT CALLED THE DEFECT.** C + I + G
 split across the sub-units, then the Leontief solve on top: written three times, and the file said

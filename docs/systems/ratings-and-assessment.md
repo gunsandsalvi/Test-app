@@ -93,7 +93,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | **C3 collateral haircuts depend on it** | `src/engine/simulation/stages/prime-brokerage.ts:measuredHaircutsFor` | ❌ |
 | C4 **contract terms** refer to it: covenants, triggers, collateral calls | `src/engine/simulation/stages/corporate-financing.ts:COVENANT_LEVERAGE_CEILING` | ⚠️ |
 | C5 participants use it as information when they have no better | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:companyTerms` | ✅ |
-| D1 a downgrade causes selling, capital pressure and funding loss | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:entitySubIGFactor` | ⚠️ |
+| D1 a downgrade causes selling, capital pressure and funding loss | `src/engine/simulation/stages/credit-demand.ts:buildCreditDemandParticipants` | ⚠️ |
 | D2 those raise the issuer's cost of funds | `src/engine/simulation/stages/asset-allocation.ts:computeReservationSpreadBps` | ✅ |
 | D3 which worsens the state in A2, and can downgrade it again | `src/domain/company-week/credit-standing.ts:creditMetrics` | ⚠️ |
 | **D4 VERIFY the loop is emergent and traceable step by step** | — | ❌ |
@@ -203,8 +203,10 @@ now a punitive capital charge plus a modest sleeve limit, which keeps regulated 
 yield at normal spreads and leaves a real bid at distressed ones.
 
 So C1 and C1.a are ⚠️, not ❌, and the divergence is narrow: the sleeve factor IS applied at the
-IG/HY boundary (`07b:369` `const f = t.subIG ? entitySubIGFactor : 1`), so a crossing does step
-every bound holder's target down in the same week — a synchronised flow, executed through the
+IG/HY boundary (`credit-demand.ts:buildCreditDemandParticipants`, `t.subIG ? entitySubIGFactor : 1`
+— and §3.13-READ D5 found the LOAN book had lost that line entirely, sizing sub-IG paper as if it
+were investment grade, before the two builds were merged into one), so a crossing does step every
+bound holder's target down in the same week — a synchronised flow, executed through the
 auction rather than as a dated forced sale. What C1.a asks for beyond that is the **timing**: a real
 mandate breach forces a sale within a stated window regardless of price, and here the holder simply
 wants less and bids accordingly. Whether that difference matters is a modelling question and the
