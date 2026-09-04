@@ -439,10 +439,14 @@ written from here):
         §5 says to collapse from.
     D9. Lookup maps rebuilt from the same source: **38 construction sites**, including three alive
         in one scope in `wires.ts` and two rebuilt inside a `forEach`. Home: memoised on `ctx`.
-    D12. The C+I+G → Leontief seed, 3 copies, **divergent by accident** — the file's own comment
-        says "the reason the same fix has to be made three times is itself the defect".
-    D13. The seed's bank-assignment pass, written 3× because two ran too early — its own comment
-        says so. One pass at the end.
+    D13. The seed's house-bank assignment, 3 passes. **NOT the mechanical collapse the survey
+        assumed** (read for D12): each pass feeds `applyBankFundingSplit` in its own scope, and the
+        seed steps between them — the SME and household debt migrations, the pools' opening cash —
+        run against banks that must already carry the deposits the pass before them placed. "One
+        pass at the end" therefore means MOVING the funding-split application to the end, not
+        deleting two loops. The safe part is the inner rule (pick a bank, accumulate its deposits),
+        which is genuinely written 3×. Do that first; the reordering is its own step and wants the
+        seed's step order read whole.
 
     **THE TEST THIS STEP MUST PASS.** Net lines must FALL. 13-BOOK slices (a)+(b) added ~680 lines
     of vocabulary; this step is where that is repaid, and if it is not, the vocabulary was not worth
@@ -1641,6 +1645,26 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ D12 — THE SEED'S DEMAND IDENTITY, WHICH ITS OWN COMMENT CALLED THE DEFECT.** C + I + G
+split across the sub-units, then the Leontief solve on top: written three times, and the file said
+so — *"the reason the same fix has to be made three times is itself the defect"*. It had already
+cost: the intermediate-demand solve was added to two of the three and MISSED on the middle one,
+which is the copy that overwrites the others, so the model ran on final demand only regardless and
+sized every USA firm against a 1,481B market it then replaced with 567B.
+
+`seedDemandFromCIG` is the two seed copies now, and it states the two terms that are easy to lose:
+investment goes where capex is ACTUALLY spent (the capital-goods basket) rather than spread over
+every corporate-bought good, and a corporate purchase of a non-capital good is INTERMEDIATE demand
+which the solve produces from the recipes — put in final demand as well it is counted twice from
+the other side. The weekly rebuild in `03-category-demand.ts` stays its own code: it reads each
+firm's REAL capex rather than a share of GDP, which is a different input and not a copy.
+
+**And D13 is NOT what the survey assumed** — found by reading it while here, and re-scoped in §3
+rather than attempted. The seed's three house-bank passes are not equivalent copies: each feeds
+`applyBankFundingSplit` in its own scope, and the seed steps between them run against banks that
+must already carry what the pass before them placed. "One pass at the end" means moving the
+funding-split application, not deleting two loops.
 
 **13-READ D10+D11 — A KEY WHOSE FAILURE MODE IS A PLAUSIBLE NUMBER.** Ten sites built a
 derivative party key with a template literal — `` `BANK:${ticker}` ``, `` `COMPANY:${ticker}` ``,

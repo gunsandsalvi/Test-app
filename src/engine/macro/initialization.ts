@@ -10,7 +10,7 @@ import { weeklyInterestExpenseLocal, govTrancheView } from '../../domain/governm
 import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
 import { governmentPayrollWeeklyLocal, governmentObligationsWeeklyLocal } from '../../domain/government';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
-import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, totalOutputFromFinalDemand, smePoolEmployment } from '../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, smePoolEmployment, seedDemandFromCIG } from '../../domain/industry-registry';
 import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT, seedPoolLeverageStrata, SME_POOL_STRATA_COUNT } from '../bootstrap/firms';
 import { generate52WeekHistory } from './utils';
 import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS, CategoryDemandState } from '../../domain/market-microstructure';
@@ -150,36 +150,12 @@ export function createInitialCategoryDemand(
   const G = estimatedNominalGdp * 0.35;
   const I = estimatedNominalGdp * 0.15;
 
-  let totalHhWeight = 0;
-  let totalGovWeight = 0;
-
-  Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
-    subUnits.forEach(su => {
-      totalHhWeight += su.buyerMix.HOUSEHOLD;
-      totalGovWeight += su.buyerMix.GOVERNMENT;
-    });
-  });
-
-  // CHAIN-E — C + I + G is FINAL demand, and a product's demand is final demand PLUS what other
-  // producers consume of it. Corporate demand above is investment only; without the second term
-  // gross output equals final demand by construction and no recipe can change it (§7.117). The
-  // registry's BOMs are a real matrix now, so the intermediate half is solved rather than stated.
-  const finalDemand: Record<string, number> = {};
-  const householdFinalDemand: Record<string, number> = {};
-  Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
-    subUnits.forEach(su => {
-      householdFinalDemand[su.unitId] = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
-      // SUPPLY/CHAIN — investment goes where capex is actually spent (the capital-goods basket),
-      // not spread across every corporate-bought good. A corporate purchase of a non-capital good
-      // is INTERMEDIATE demand, which the solve below produces from the recipes; putting it here
-      // too counted it twice and starved the capital-goods industries (§7.180).
-      finalDemand[su.unitId] =
-        (totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0)
-        + (totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0)
-        + (CAPEX_SUPPLIER_WEIGHTS[su.unitId] ?? 0) * I;
-    });
-  });
-  const totalOutput = totalOutputFromFinalDemand(finalDemand);
+  // CHAIN-E / §3.13-READ D12 — C + I + G is FINAL demand, and a product's demand is final demand
+  // PLUS what other producers consume of it. The identity, the capital-goods basket and the
+  // Leontief solve are stated once in `seedDemandFromCIG`; this is the PLACEHOLDER seed, which
+  // `simulation/initialization.ts` overwrites once the real firms and government exist.
+  const { householdBySubUnit: householdFinalDemand, finalBySubUnit: finalDemand, totalOutputBySubUnit: totalOutput } =
+    seedDemandFromCIG(C, I, G, CAPEX_SUPPLIER_WEIGHTS);
 
   const cd: Record<string, CategoryDemandState> = {};
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
@@ -296,9 +272,7 @@ const NIM_FLOOR = 0.008;
 const BANK_CAPITAL_RATIO = 0.13;
 const LOAN_LOSS_PROVISION_RATE = 0.008;
 
-
 const INSTITUTIONAL_SECTOR_RATIOS = { cashToGdp: 0.010, sectorEquityToGdp: 0.012, investmentIncomeMargin: 0.028 };
-
 
 // WS5: ~18% of the stock is bills (13/26/52-week paper) — the real treasury mix runs 15-25%
 // bills; the bond weights carry the rest in the same proportions as before.
@@ -520,7 +494,6 @@ function buildRegion(regionId: RegionId): Region {
     investmentIncomeMarginPct: INSTITUTIONAL_SECTOR_RATIOS.investmentIncomeMargin,
     itemizedHoldings: [],
   };
-
 
   const creditCardDebtLocal = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.creditCardToIncome));
   const otherConsumerLoanDebtLocal = Math.round((estimatedHouseholdIncomeLocal * HOUSEHOLD_DEBT_RATIOS.otherConsumerLoanToIncome));

@@ -1004,6 +1004,55 @@ export function smePoolEmployment(industry: Industry, annualRevenueLocal: number
  * all well below 1, so the series converges geometrically and a fixed point exists. It is
  * asserted rather than assumed.
  */
+/**
+ * §3.13-READ D12 — C + I + G, SPLIT ACROSS THE SUB-UNITS, and the Leontief solve on top of it.
+ * One statement of the seed's demand identity.
+ *
+ * It was written three times: a placeholder seed in `macro/initialization.ts`, the authoritative
+ * seed in `simulation/initialization.ts` that OVERWRITES it, and the weekly rebuild in
+ * `03-category-demand.ts`. The middle one is the one that survives, and it is the one the
+ * intermediate-demand solve was missed on when the other two got it (§7.120) — the model ran on
+ * FINAL demand only regardless, sizing every USA firm against a 1,481B market it then replaced
+ * with 567B. The file's own comment named the cause: *"the reason the same fix has to be made
+ * three times is itself the defect"*. Two of the three are this function now. The weekly rebuild
+ * stays its own code — it reads each firm's REAL capex rather than a share of GDP, which is a
+ * different input and not a copy of this.
+ *
+ * The two terms that are easy to get wrong, both stated once here: investment goes where capex is
+ * ACTUALLY spent (the capital-goods basket, `CAPEX_SUPPLIER_WEIGHTS`) rather than spread over
+ * every corporate-bought good; and a corporate purchase of a NON-capital good is INTERMEDIATE
+ * demand, which the Leontief solve produces from the recipes, so putting it in final demand as
+ * well counts it twice from the other side.
+ */
+export function seedDemandFromCIG(
+  C: number, I: number, G: number,
+  capexSupplierWeights: Record<string, number>
+): {
+  householdBySubUnit: Record<string, number>;
+  /** The government's own procurement, per sub-unit — its budget is this over 52. */
+  governmentBySubUnit: Record<string, number>;
+  finalBySubUnit: Record<string, number>;
+  totalOutputBySubUnit: Record<string, number>;
+} {
+  let totalHhWeight = 0, totalGovWeight = 0;
+  Object.values(VIEW_INDUSTRY_SUBUNITS).forEach((subUnits) => subUnits.forEach((su) => {
+    totalHhWeight += su.buyerMix.HOUSEHOLD;
+    totalGovWeight += su.buyerMix.GOVERNMENT;
+  }));
+  const householdBySubUnit: Record<string, number> = {};
+  const governmentBySubUnit: Record<string, number> = {};
+  const finalBySubUnit: Record<string, number> = {};
+  Object.values(VIEW_INDUSTRY_SUBUNITS).forEach((subUnits) => subUnits.forEach((su) => {
+    const hh = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
+    const gov = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
+    householdBySubUnit[su.unitId] = hh;
+    governmentBySubUnit[su.unitId] = gov;
+    finalBySubUnit[su.unitId] = hh + gov + (capexSupplierWeights[su.unitId] ?? 0) * I;
+  }));
+  return { householdBySubUnit, governmentBySubUnit, finalBySubUnit,
+    totalOutputBySubUnit: totalOutputFromFinalDemand(finalBySubUnit) };
+}
+
 export function totalOutputFromFinalDemand(finalDemandBySubUnit: Record<string, number>): Record<string, number> {
   const ids = allSubUnits.map(su => su.unitId);
   // A non-finite entry never converges either, and reporting that as a divergent matrix sends the

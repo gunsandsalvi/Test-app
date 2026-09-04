@@ -83,7 +83,7 @@ import type { PartyRef } from '../ledger/party';
 import { reasonText } from './stages/settlement';
 import { ensureV2 } from '../../engine2/world';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
-import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand, industryOfSubUnit } from '../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, smePoolEmployment, industryOfSubUnit, seedDemandFromCIG } from '../../domain/industry-registry';
 import { getRegionProductivityPerCapitaLocal, remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../bootstrap/population';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
@@ -186,16 +186,6 @@ export function seedRegionCategoryDemand(
     reg.laggedCorporateDemandBase = corpBase;
     const I = corpBase;
 
-    let totalHhWeight = 0;
-    let totalGovWeight = 0;
-
-    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
-      subUnits.forEach(su => {
-        totalHhWeight += su.buyerMix.HOUSEHOLD;
-        totalGovWeight += su.buyerMix.GOVERNMENT;
-      });
-    });
-
     const regionFirmCount = companies.filter(c => c.region === regionId).length;
     const govBudgetByCategory: Record<string, number> = {};
 
@@ -212,33 +202,12 @@ export function seedRegionCategoryDemand(
     // total output for the USA and this line replaced it with 567B, so every firm was sized
     // against a market 2.6x larger than the one it then had to sell into. Rule 3, and the reason
     // the same fix has to be made three times is itself the defect.
-    const finalDemandBySubUnit: Record<string, number> = {};
-    const householdFinalDemandBySubUnit: Record<string, number> = {};
-    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
-      subUnits.forEach(su => {
-        const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
-        govBudgetByCategory[su.unitId] = suGovDemand / 52;
-        // SUPPLY/CHAIN — INVESTMENT GOES WHERE CAPEX IS ACTUALLY SPENT.
-        //
-        // `I` used to be spread across EVERY corporate-bought good by its corporate buyer-mix
-        // weight, while stage 05's firms bid their capex only into the five CAPITAL-GOODS
-        // categories by `capexBasketWeight`. **Two different allocations of the same investment
-        // number**, and the capital-goods industries were therefore built for a fraction of what
-        // would be bid at them: measured 54.0B/yr sized against 83.6B/yr bid, 1.55x, with four of
-        // five categories in permanent shortage (§7.168).
-        //
-        // A corporate purchase of a NON-capital good is intermediate demand, not final demand,
-        // and the Leontief solve below already produces it from the recipes — so putting it here
-        // as well was counting it twice from the other side.
-        const capexWeight = CAPEX_SUPPLIER_WEIGHTS[su.unitId] ?? 0;
-        householdFinalDemandBySubUnit[su.unitId] = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
-        finalDemandBySubUnit[su.unitId] =
-          householdFinalDemandBySubUnit[su.unitId]
-          + suGovDemand
-          + capexWeight * I;
-      });
+    const { householdBySubUnit: householdFinalDemandBySubUnit, governmentBySubUnit,
+      finalBySubUnit: finalDemandBySubUnit, totalOutputBySubUnit } =
+      seedDemandFromCIG(C, I, G, CAPEX_SUPPLIER_WEIGHTS);
+    Object.entries(governmentBySubUnit).forEach(([unitId, annualLocal]) => {
+      govBudgetByCategory[unitId] = annualLocal / 52;
     });
-    const totalOutputBySubUnit = totalOutputFromFinalDemand(finalDemandBySubUnit);
 
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
