@@ -40,6 +40,7 @@ import { STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../../credit-price';
 import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche, seedLadder } from '../../ledger/tranche-ledger';
+import { admitParty } from '../../ledger/wire';
 import { marketCapOf } from '../../../domain/company';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, openingCashOf, entityCashOf, poolCashOf, obligationCurrencyOf } from '../../ledger/accounts';
@@ -902,6 +903,8 @@ export function runFirmBirthsForRegion(
     // (this stage runs after the week's cutoff, so it lands next cycle — the firm is born with
     // its opening balance in transit, and the economy's total cash never moved).
     newborn.forEach((c) => {
+      // §3.13-BOOK d2: a birth is admitted to the wire world before its first wire.
+      admitParty(companyParty(c));
       // W6: the home bank's facility (fundNewbornDebt, below) funds the opening balance
       // first; the pool carves out the founders' remainder.
       const loanLocal = ladderTotalLocal(ctx.v2, c.id);

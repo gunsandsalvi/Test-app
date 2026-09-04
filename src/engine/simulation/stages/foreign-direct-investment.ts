@@ -26,6 +26,7 @@
 
 import { riskAversionOf } from '../../../domain/preferences';
 import { companyParty } from '../../../domain/party';
+import { admitParty } from '../../ledger/wire';
 import { Company, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
@@ -153,6 +154,8 @@ export function runForeignDirectInvestment(
       // The stake is the PARENT's, not a founder household's: the private-business residual
       // (OWN4) excludes it by the same founderPct subtraction that defines it.
       sub.ownership = { ...(sub.ownership ?? {}), founderPct: 0 };
+      // §3.13-BOOK d2: the subsidiary is admitted to the wire world before its first wire.
+      admitParty(companyParty(sub));
       pay(ctx, {
         payer: companyParty(comp),
         payee: companyParty(sub),

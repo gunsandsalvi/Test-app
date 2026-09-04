@@ -13,6 +13,7 @@ import type { EntityId } from '../../domain/ids';
 import { CurrencyCode, CURRENCY_CODES, NUMERAIRE } from '../../domain/geography';
 import { FxTable, PARITY_FX, toNumeraire } from '../../domain/currency';
 import { isVehicleClaim } from '../../domain/assets';
+import { defect } from '../../domain/defect';
 
 export type AssetKind =
   | 'MONEY' | 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER'
@@ -29,6 +30,10 @@ export interface WireInstruction {
   from: PartyRef;
   to: PartyRef;
   kind: AssetKind;
+  /** §3.13-BOOK d2: this wire brings the instrument INTO existence (an issuer placing a new
+   *  tranche), so there is nothing yet for the world to resolve it against. Every other wire
+   *  names an instrument a store already holds, and is refused if none does. */
+  creates?: true;
   /** The asset's own id: 'USD' for money, the instrument or tranche id, the good, the house. */
   asset: string;
   /** In the asset's unit: USD for money, shares, face, units. Always positive. */
@@ -97,6 +102,58 @@ function grow(j: WireJournal): void {
   j.quantity = gf(j.quantity); j.priceLocal = gf(j.priceLocal); j.reasonId = gi(j.reasonId); j.settleWeek = gi(j.settleWeek);
 }
 
+/**
+ * §3.13-BOOK d2 — THE WRITE THROWS. A wire names two parties and one instrument, and the ledger
+ * RESOLVES all three before it writes: a party that the entity store does not hold, or an
+ * instrument no store holds, is a `defect()` at the site — not a row in the party table, not a
+ * residual for an audit to find four weeks later. The `WireWorld` is the resolver: the week's
+ * (or the seed's) entity arrays and the tranche store, installed beside the journal by `core.ts`
+ * and `openSeededBooks`, and told of every party BORN mid-week before that party's first wire
+ * (`admitParty`). O8 used to find the seeded-issuer defect (`the-register.md` A4) at the close;
+ * this finds it at the write.
+ *
+ * The party check sits on the int path (`wirePush`), so money wires — settlement's
+ * `journalPush`, 145,000 a week — pay one byte read per party after the party's first
+ * resolution; the instrument check sits on the `wire()` path, which is where an instrument is
+ * named. A worker thread's scratch journal has no world: its rows are replayed on the main thread
+ * through `journalPush`, where the world is live.
+ */
+export interface WireWorld {
+  /** Does the entity store hold this party (a region, for the region-keyed arms)? */
+  partyExists(ref: PartyRef): boolean;
+  /** Does a store hold this instrument? `undefined` for a kind this world does not index yet —
+   *  HOUSE and CONTRACT, until slice (d)'s instrument index — which is left unchecked, not passed. */
+  instrumentExists(kind: AssetKind, asset: string): boolean | undefined;
+  /** A party born this week joins the world before its first wire. */
+  admit(ref: PartyRef): void;
+}
+let world: WireWorld | undefined;
+/** Per party id: 1 once the active world has resolved it. Reset with the world. */
+let resolved = new Uint8Array(1 << 12);
+export function setActiveWireWorld(w: WireWorld | undefined): void { world = w; resolved.fill(0); }
+export const hasActiveWireWorld = (): boolean => world !== undefined;
+/** A birth: the newborn is admitted to the active world, so its first wire resolves. */
+export function admitParty(ref: PartyRef): void {
+  if (!world) return defect(`${partyDesc(ref)} was born with no world active to join`);
+  world.admit(ref);
+  const id = partyId(ref);
+  if (id >= resolved.length) growResolved(id);
+  resolved[id] = 1;
+}
+function growResolved(id: number): void {
+  const next = new Uint8Array(Math.max(id + 1, resolved.length * 2)); next.set(resolved); resolved = next;
+}
+const partyDesc = (p: PartyRef): string =>
+  'id' in p ? `${p.kind}:${p.id}` : 'industry' in p ? `${p.kind}:${p.region}:${p.industry}` : `${p.kind}:${p.region}`;
+function resolveParty(w: WireWorld, id: number): void {
+  if (id < resolved.length ? resolved[id] === 1 : (growResolved(id), false)) return;
+  const ref = partyOf(id);
+  if (!w.partyExists(ref)) {
+    defect(`wire names ${partyDesc(ref)}, which is no entity, region or bank in this world — a party the entity store does not hold`);
+  }
+  resolved[id] = 1;
+}
+
 /** The hot-loop write: ids already interned. Returns the wire number. */
 export function wirePush(
   j: WireJournal, fromId: number, toId: number, kindId: number, assetRef: number,
@@ -108,6 +165,7 @@ export function wirePush(
   if (fromId === toId) {
     throw new Error(`ENGINE DEFECT: wire ${ASSET_KINDS[kindId]} ${assetText(assetRef)} from a party to itself`);
   }
+  if (world) { resolveParty(world, fromId); resolveParty(world, toId); }
   if (j.n >= j.fromId.length) grow(j);
   const i = j.n;
   j.fromId[i] = fromId; j.toId[i] = toId; j.kindId[i] = kindId; j.assetRef[i] = assetRef;
@@ -132,6 +190,12 @@ export const hasActiveWireJournal = (): boolean => active !== undefined;
 /** The one write path for a stage that has a `PartyRef` in hand. Returns the wire number. */
 export function wire(instruction: WireInstruction, internReasonId: (reason: string) => number): number {
   const j = activeWireJournal();
+  // §3.13-BOOK d2: the instrument resolves against its store before anything is written — an
+  // issuance (`creates`) is the one wire that names an instrument nothing holds yet.
+  const w = world ?? defect(`wire ${instruction.kind} ${instruction.asset} with no world active — nothing can resolve its parties or its instrument`);
+  if (!instruction.creates && w.instrumentExists(instruction.kind, instruction.asset) === false) {
+    defect(`wire ${instruction.kind} ${instruction.asset} (${partyDesc(instruction.from)} -> ${partyDesc(instruction.to)}) names an instrument no store holds :: ${instruction.reason}`);
+  }
   // WIRE_TRACE=<asset substring>: print every non-money wire naming that asset (a probe's instrument).
   if (typeof process !== 'undefined' && process.env?.WIRE_TRACE && instruction.kind !== 'MONEY' && instruction.asset.includes(process.env.WIRE_TRACE)) {
     const who = (p: PartyRef) => { const q = p as { kind: string; ticker?: string; id?: string; region?: string }; return `${q.kind}:${q.ticker ?? q.id ?? q.region ?? ''}`; };

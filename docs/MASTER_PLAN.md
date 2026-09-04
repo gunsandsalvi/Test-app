@@ -466,9 +466,9 @@ written from here):
     and d1 in §9.** No file outside `engine/ledger/` and `engine2/` names a mutable handle, and
     `check-hygiene.sh` fails the first that does; the rows are the register, `entity.itemizedHoldings`
     is the week-end view `core.ts` materialises and nothing in a week reads, and the mirror's sync
-    machinery is deleted, on the register (d1) and the ladder (d1b) alike. What is LEFT on the
-    enforcement side is the write that does not resolve its parties (d2) and the books outside the
-    register (d3).
+    machinery is deleted, on the register (d1) and the ladder (d1b) alike, and every wire resolves
+    both parties and its instrument against the world before it is written (d2). What is LEFT on
+    the enforcement side is the books outside the register (d3).
 
     **THE CROSS-TABLE CHECK IS AT THE WRITE, NOT IN A GATE** (reviewed 2026-09-04: a scan of four
     tables needs a STATE, so "a gate in `check-hygiene.sh`" is either a run — rule 11 forbids it —
@@ -509,12 +509,6 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d2. **THE WRITE THROWS.** `wire()` and every ledger operation resolve `from`, `to`, the holder
-        and the issuer through `entity-index.ts` and the instrument through its store, and
-        `defect()` on a miss. Needs only an *instrument-exists* resolver over the tranche store,
-        the company table and the fund entities — the minimal half of (d) — not the full index. The
-        seed is the first thing it is run against (`auditWeek(state, 0)` already exists, 37-SEED),
-        and a pure test over the seeded state joins §4's `npm test`.
     d3. **THE OUTSIDE BOOKS COME IN — 13-OUTSIDE, moved up from (f).** The banks'
         `sovereignBondHoldingsByBond`, the central bank's `sovereignHoldingsByBond`,
         `Company.treasuryHoldings` and the desks' inventories become register rows, so
@@ -1730,6 +1724,28 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d2 — THE WRITE THROWS.** `wire.ts` holds a `WireWorld` beside the journal — the
+week's (or the seed's) entity arrays and the tranche store (`ledger/wire-world.ts`) — and refuses a
+wire at the site: `wirePush` resolves both party ids against it (one byte read per party after its
+first resolution, so the 145k money wires a week pay nothing measurable), and `wire()` resolves the
+instrument — a tranche kind against the store's permanent id→issuer map (a row retired this week
+is still moved to the paying agent after its ladder row is freed, so "ever issued" is the right
+question), equity against the company table, a fund's shares against the fund entities, a good
+against the sub-unit registry, money against the currency table. `issueTranche` is the one wire
+that CREATES its instrument and says so (`creates: true`). HOUSE and CONTRACT answer `undefined`
+and are left unchecked, stated, until slice (d)'s instrument index. A party born mid-week is
+admitted before its first wire (`admitParty`) at the three birth sites — the pool's newborn, the
+FDI subsidiary, the spin-off; `core.ts` installs the world beside the week's journal and
+`openSeededBooks` installs the seed's, so the seed is the first world the write is checked against,
+as planned. The plan's other clause — "a pure test over the seeded state joins §4's `npm test`" —
+is DROPPED: §4's hygiene rule 4 forbids `createInitialGameState` in `test/` and rule 11 forbids the
+run it would be; `test/seed-issuer.test.ts` now opens its ladder against a one-firm world instead,
+which is the pure form. Two fallbacks that build a party from a ticker when the id lookup misses
+(`07f:611`, `repo-clearing.ts:600`) are now the kind of thing that throws where it happens rather
+than reaching O8. Byte-identical in state where no wire is refused; a refused wire is a defect
+found, not a number moved. `tranches.ts:materializeGovLadder`'s note that `reg.govDebtTranches` is
+"still the authority" was stale since 13-SOV row 2 and is corrected. Gates green; no run.
 
 **13-BOOK d1b — THE LADDER MIRROR DIES TOO.** The same deletion on the tranche store, the week
 after d1 found it there: `syncLadderRows`, `ensureLaddersSynced`, `assertLaddersInSync` and

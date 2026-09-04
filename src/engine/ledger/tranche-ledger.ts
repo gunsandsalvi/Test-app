@@ -73,7 +73,8 @@ function holderOfTranche(t: DebtTranche, region: RegionId): PartyRef {
 /** The issuer places a tranche with its holder. Returns the new row. */
 export function issueTranche(v2: V2World, issuer: TrancheIssuer, t: DebtTranche, reason: string): number {
   if (!(t.principalLocal > 0)) return defect(`tranche ${t.id} issued with principal ${t.principalLocal}`);
-  const n = wire({ from: issuerParty(issuer), to: holderOfTranche(t, issuer.region), kind: trancheKindOf(t), asset: t.id, quantity: t.principalLocal, priceLocal: 1, reason }, internReason);
+  // §3.13-BOOK d2: the one wire that CREATES its instrument — the row is pushed with the wire's number.
+  const n = wire({ from: issuerParty(issuer), to: holderOfTranche(t, issuer.region), kind: trancheKindOf(t), asset: t.id, quantity: t.principalLocal, priceLocal: 1, reason, creates: true }, internReason);
   return pushLadderRow(v2, issuer.id, t, n);
 }
 

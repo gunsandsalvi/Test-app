@@ -116,7 +116,7 @@ checked by `scripts/check-atlas.sh`.
 | B3.b a bank overdrawn at the CB borrows, priced by the corridor | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ⚠️ |
 | **B3.c FORBID an overdraft is never a silent negative** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ✅ |
 | C1 a payment is an instruction | `src/engine/simulation/stages/settlement.ts:PaymentInstruction` | ✅ |
-| C1.a it names both sides | `src/engine/ledger/wire.ts:wirePush`, `src/engine/ledger/entity-index.ts:companyOfParty`, `src/domain/party.ts:companyParty` | ✅ |
+| C1.a it names both sides | `src/engine/ledger/wire.ts:wirePush`, `src/engine/ledger/wire-world.ts:wireWorldOf`, `src/engine/ledger/entity-index.ts:companyOfParty`, `src/domain/party.ts:companyParty` | ✅ |
 | C1.b it carries the reason | `src/engine/ledger/payment-category.ts:categoryOfReason` | ✅ |
 | C1.c it may be dated | `src/engine/simulation/stages/settlement.ts:rowDue` | ✅ |
 | C2 settlement applies each instruction by one rule | `src/engine/ledger/accounts.ts:applySettledRow` | ✅ |
@@ -226,6 +226,11 @@ What is true now, and where the record is:
 
 - **One register** (§9.13-BOOK d1): the holdings rows are the register, not a mirror of
   `entity.itemizedHoldings`; the array is the week-end view and nothing in a week reads it.
+
+- **The write throws** (§9.13-BOOK d2): `wirePush` resolves both party ids and `wire()` the
+  instrument against a `WireWorld` — the entity arrays, the region table and the tranche store —
+  and `defect()`s at the site on a miss; a party born mid-week is admitted before its first wire.
+  "A payment to nobody is not a payment" is enforced where the payment is written.
 
 What the collapse handed to slice (d): `DerivativeContract.referenceId` holds four id spaces
 (`the-derivative-layer.md` A1), and `O3` passes a fund share whose fund is gone (`the-register.md`

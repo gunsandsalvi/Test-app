@@ -280,9 +280,9 @@ export function materializeTranche(v2: V2World, r: number): DebtTranche {
 /**
  * §3.13-SOV row 2 — THE SOVEREIGN LADDER, READ FROM THE ONE STORE.
  *
- * The reader side of the migration. `reg.govDebtTranches` is still written and still the
- * authority; every consumer that moves to this function is one fewer thing standing between the
- * array and its deletion.
+ * The reader side of the migration. The store is the sovereign ladder's authority — the seed
+ * opens it by wire (`seedLadder`) and every issuance, withdrawal and maturity since is a wire on
+ * it; `reg.govDebtTranches` is the seed's stated input and nothing in a week writes it.
  *
  * The tenor is DERIVED from the rung's own dates rather than carried as a column, because it is
  * what those dates already say: a rung issued at `originationWeek` and due at `maturityWeek` has

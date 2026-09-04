@@ -77,7 +77,8 @@ import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
 import { openAccount, openingCashOf, stashOpeningCash, stashSeedHouseholdLine, seedGovLadderOf, openSectorRow } from '../ledger/accounts';
-import { newWireJournal, setActiveWireJournal, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
+import { newWireJournal, setActiveWireJournal, setActiveWireWorld, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
+import { wireWorldOf } from '../ledger/wire-world';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
 import { buildEntityIndex } from '../ledger/entity-index';
@@ -354,6 +355,9 @@ function openSeededBooks(state: GameState): void {
   if (hasActiveWireJournal()) return;
   const j = newWireJournal((state as { nextWireId?: number }).nextWireId ?? 1, 0);
   setActiveWireJournal(j);
+  // §3.13-BOOK d2: the seed is the first world the write is checked against — every opening
+  // wire resolves its issuer, its holder and its instrument, or the seed throws where it is wrong.
+  setActiveWireWorld(wireWorldOf(v2, state.companies, state.institutionalEntities ?? []));
   try {
     for (const c of state.companies) {
       if (!v2.tranches.synced.has(c.id)) seedLadder(v2, { id: c.id, ticker: c.ticker, region: c.region }, c.debtTranches);
@@ -413,6 +417,7 @@ function openSeededBooks(state: GameState): void {
     (state as { nextWireId?: number }).nextWireId = j.base + j.n;
   } finally {
     setActiveWireJournal(undefined);
+    setActiveWireWorld(undefined);
   }
 }
 

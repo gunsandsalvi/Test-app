@@ -19,7 +19,7 @@ import { createInitialContext } from './stages/context';
 import { StageDependencyTrace, stageTraceEnabled } from './stage-deps';
 import { BankIdentityTrace, bankIdentityTraceEnabled } from './bank-identity-trace';
 import { CentralBankIdentityTrace, centralBankIdentityTraceEnabled } from './central-bank-identity-trace';
-import { setActiveWireJournal, summarizeWires } from '../ledger/wire';
+import { setActiveWireJournal, setActiveWireWorld, summarizeWires } from '../ledger/wire';
 import { reasonText } from './stages/settlement';
 import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
@@ -69,6 +69,7 @@ import { runTradeSettlementStage } from './stages/trade-settlement';
 // Side effect only: registers the (Node-only, env-gated) clearing worker pool with the engine.
 import './stages/clearing-worker-pool';
 import { ensureV2, typeRefOf } from '../../engine2/world';
+import { wireWorldOf } from '../ledger/wire-world';
 import { materializeLadder, facilityBookOf } from '../../engine2/tranches';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
@@ -144,8 +145,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   const trace = stageTraceEnabled() ? new StageDependencyTrace() : undefined;
   const idTrace = bankIdentityTraceEnabled() ? new BankIdentityTrace() : undefined;
   idTrace?.begin(state, baseCtx);
-  // The week's wire journal is active from the first stage to the last write-back.
+  // The week's wire journal is active from the first stage to the last write-back — and beside it
+  // the world every wire resolves its parties and its instrument against (§3.13-BOOK d2): the
+  // week's entity arrays, grown by each birth, and the tranche store.
   setActiveWireJournal(baseCtx.wireJournal);
+  setActiveWireWorld(wireWorldOf(ensureV2(state), baseCtx.updatedCompanies, baseCtx.updatedInstitutionalEntities));
   {
     // THE LADDERS' CATCH-UP, INSIDE THE JOURNAL. Any firm whose ladder is not yet open — every
     // birth path — opens its ladder here, by wire, which is why this cannot run before the

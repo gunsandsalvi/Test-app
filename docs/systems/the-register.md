@@ -95,7 +95,7 @@ checked by `scripts/check-atlas.sh`.
 | A2.a it pays to whoever the register says holds it, then | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
 | A4 · the seed's half: every opening row names its issuer | `src/engine/ledger/holdings-ledger.ts:issuerOfHoldingRow` · `src/domain/entity-keys.ts:governmentEntityId` | ✅ |
 | **A3 FORBID no holding without a holder** | `src/engine2/holdings.ts:bookHeadOf` | ✅ |
-| **A4 FORBID no holding without an issuer** | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
+| **A4 FORBID no holding without an issuer** | `src/engine/ledger/wire.ts:wire` · `src/engine/ledger/wire-world.ts:wireWorldOf` · `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | B1 an instrument has an issued amount | `src/engine/ledger/tranche-ledger.ts:issueTranche` | ✅ |
 | B2 VERIFY Σ holdings = issued amount, per instrument | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | B2.a shortfall = a claim vanished; surplus = one invented | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
@@ -210,7 +210,7 @@ among thousands of ids — and it is the question slice (d)'s instrument index i
 
 F1 stays `⚠️` overall for the reason below, which is about a key, not about the spaces.
 
-### ⚠️ A4 — THE SEED'S HALF IS CLOSED: EVERY OPENING CREDIT ROW NAMED AN ISSUER THAT DOES NOT EXIST
+### ✅ A4 — CLOSED AT THE WRITE: EVERY OPENING CREDIT ROW NAMED AN ISSUER THAT DOES NOT EXIST, AND NOW IT COULD NOT
 
 A4 forbids a holding without an issuer. The seed opens every institution's book by wiring each
 holding FROM its issuer, and it found that issuer by looking the row's `instrumentId` up in a map
@@ -233,6 +233,12 @@ fix.
 prime-brokerage lines, estate claims, invoices, consignments, both accrual ledgers, and the
 account store's own party table — through one `partyExists` over the entity index, a line per
 store. This is the check that would have caught the seeded-issuer defect above on week 1.)*
+
+**§9.13-BOOK d2 closed the node as a construction.** The wire ledger resolves both parties and the
+instrument against a world before it writes (`wire.ts:wire`, `wire-world.ts:wireWorldOf`): a
+holding issued from `{ INSTITUTION, id: 'ACME-T1' }` is a `defect()` at the seed's own wire, not a
+party in a table for O8 to find at the close. O8 stays as the audit's second look; the FORBID is
+now enforced where the holding is written, which is what a FORBID node asks for.
 
 ### ⚠️ F1 / F1.a — ONE INSTRUMENT, TWO KEYS: THE ETF SHARE
 
@@ -368,7 +374,7 @@ that writes rows directly. The clearing kernel cannot produce a negative fill ei
 (`financial-clearing-engine.ts:812`). A deliberate short exists only as a borrowed position in
 `securities-lending`, which is what the node asks for.
 
-### ⚠️ A1.a / A4 — TWO NODES THAT ARE CHECKS RATHER THAN CONSTRUCTIONS
+### ⚠️ A1.a — A NODE THAT IS A BOUNDARY RATHER THAN A CONSTRUCTION
 
 `holderIdOf` returns a holder id only for `INSTITUTION`, so a company's treasury book, a bank's
 sovereign book and a household's equity are held OUTSIDE this register in fields on their own

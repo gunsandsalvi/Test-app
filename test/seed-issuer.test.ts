@@ -22,7 +22,8 @@ import type { Company } from '../src/domain/company';
 
 import { issuerIdOf } from '../src/engine2/tranches';
 import { seedLadder } from '../src/engine/ledger/tranche-ledger';
-import { newWireJournal, setActiveWireJournal } from '../src/engine/ledger/wire';
+import { newWireJournal, setActiveWireJournal, setActiveWireWorld } from '../src/engine/ledger/wire';
+import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { issuerOfHoldingRow } from '../src/engine/ledger/holdings-ledger';
 import type { ItemizedHolding } from '../src/domain/banking';
 import { asEntityId, asInstrumentId, asTicker } from '../src/domain/ids';
@@ -30,6 +31,9 @@ import { asEntityId, asInstrumentId, asTicker } from '../src/domain/ids';
 /** One firm's one-rung ladder, opened by wire inside a throwaway week-0 journal. */
 function openLadder(v2: ReturnType<typeof ensureV2>, id: ReturnType<typeof corporateTrancheId>): void {
   setActiveWireJournal(newWireJournal(1, 0));
+  // §3.13-BOOK d2: a wire resolves its parties and its instrument against a world — this one
+  // holds the one firm, so the issue resolves; a misnamed issuer would throw here, as at the seed.
+  setActiveWireWorld(wireWorldOf(v2, [{ id: asEntityId('USA_ACME') }], []));
   try {
     seedLadder(v2, { id: asEntityId('USA_ACME'), ticker: asTicker('ACME'), region: 'USA' }, [{
       id, principalLocal: 1_000_000, rateType: 'FIXED', couponRate: 0.05,
@@ -37,6 +41,7 @@ function openLadder(v2: ReturnType<typeof ensureV2>, id: ReturnType<typeof corpo
     }]);
   } finally {
     setActiveWireJournal(undefined);
+    setActiveWireWorld(undefined);
   }
 }
 
