@@ -15,6 +15,7 @@
  */
 
 import { DebtTranche } from '../domain/company';
+import { trancheKindOf } from '../domain/assets';
 import { GovDebtTrancheView } from '../domain/region-macro';
 import { govTrancheView } from '../domain/government';
 import { V2World, rowOf, internInstrument, internTicker, internEntity, entityOf, instrumentOf, tickerOf, tickerRefOf, instrumentRefOf } from './world';
@@ -482,6 +483,25 @@ export const isTrancheId = (v2: V2World, instrumentId: string): boolean => {
 };
 
 /** §5-WIRES D: the ladder's face on the live rows — total debt as a read. */
+/**
+ * §3.13-READ A11/C5 — WHAT KIND OF PAPER A ROW IS, off the store's own flags.
+ *
+ * The rule (facility, then CP, then floating-means-loan, else bond) was written eleven times and
+ * four of the copies had drifted — the harness's two had no facility guard at all, so drawn bank
+ * facilities landed in the corporate and loan buckets that O4 already tests on the lender's book.
+ * `trancheKindOf` collapsed the OBJECT copies; this is the same fact read off a ROW, which is
+ * where the store's readers need it. `tranche-ledger.ts` had it as a private helper; it lives
+ * with the flags it reads now.
+ */
+export function trancheKindOfRow(v2: V2World, r: number): 'BANK_FACILITY' | 'COMMERCIAL_PAPER' | 'LEVERAGED_LOAN' | 'CORP_BOND' {
+  const f = v2.tranches.flags[r];
+  return trancheKindOf({
+    isBankFacility: !!(f & TR_FACILITY),
+    isCommercialPaper: !!(f & TR_CP),
+    rateType: f & TR_FLOATING ? 'FLOATING' : 'FIXED',
+  });
+}
+
 export function ladderTotalLocal(v2: V2World, companyId: string): number {
   const S = v2.tranches;
   let total = 0;

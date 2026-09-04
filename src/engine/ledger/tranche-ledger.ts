@@ -20,8 +20,7 @@
  *   seedLadder     — a seeded or born firm's ladder installed without wires (principle B's gap)
  */
 import { V2World, internTicker, tickerOf, tickerRefOf } from '../../engine2/world';
-import {
-  mutableTranches, pushLadderRow, relinkLadder, syncLadderRows, ladderRowsOf, TR_FACILITY, TR_CP, TR_FLOATING, trancheIdOf } from '../../engine2/tranches';
+import { mutableTranches, pushLadderRow, relinkLadder, syncLadderRows, ladderRowsOf, TR_FACILITY, trancheIdOf, trancheKindOfRow } from '../../engine2/tranches';
 import { DebtTranche } from '../../domain/company';
 import { RegionId } from '../../domain/geography';
 import { trancheKindOf } from '../../domain/assets';
@@ -48,12 +47,6 @@ export interface TrancheIssuer { id: string; ticker: string; region: RegionId; k
 
 const issuerParty = (i: TrancheIssuer): PartyRef =>
   i.kind === 'GOVERNMENT' ? { kind: 'GOVERNMENT', region: i.region } : { kind: 'COMPANY', ticker: i.ticker };
-
-/** The kind a row's paper carries, from its flags — the same fact `trancheKindOf` reads off the object. */
-function kindOfRow(v2: V2World, r: number): AssetKind {
-  const f = v2.tranches.flags[r];
-  return trancheKindOf({ isBankFacility: !!(f & TR_FACILITY), isCommercialPaper: !!(f & TR_CP), rateType: f & TR_FLOATING ? 'FLOATING' : 'FIXED' });
-}
 
 /** Who holds a row's paper: the lending bank for a facility, the region's clearing house otherwise. */
 function holderOfRow(v2: V2World, r: number, region: RegionId): PartyRef {
@@ -86,7 +79,7 @@ export function retireTranche(v2: V2World, issuer: TrancheIssuer, r: number, fac
   if (!(faceLocal > 0)) return -1;
   const take = Math.min(faceLocal, S.principalLocal[r]);
   if (faceLocal > S.principalLocal[r] + LADDER_FACE_DUST_LOCAL) defect(`tranche ${trancheIdOf(v2, r)} retired ${(faceLocal / 1e6).toFixed(3)}M against ${(S.principalLocal[r] / 1e6).toFixed(3)}M of principal`);
-  const n = wire({ from: holderOfRow(v2, r, issuer.region), to: issuerParty(issuer), kind: kindOfRow(v2, r), asset: trancheIdOf(v2, r), quantity: take, priceLocal: 1, reason }, internReason);
+  const n = wire({ from: holderOfRow(v2, r, issuer.region), to: issuerParty(issuer), kind: trancheKindOfRow(v2, r), asset: trancheIdOf(v2, r), quantity: take, priceLocal: 1, reason }, internReason);
   S.principalLocal[r] -= take;
   return n;
 }
@@ -99,7 +92,7 @@ export function retireTranche(v2: V2World, issuer: TrancheIssuer, r: number, fac
 export function retireLadderFace(v2: V2World, issuer: TrancheIssuer, kind: AssetKind, faceLocal: number, reason: string): number {
   if (!(faceLocal > 0)) return 0;
   const S = v2.tranches;
-  const rows = ladderRowsOf(v2, issuer.id).filter((r) => kindOfRow(v2, r) === kind && S.principalLocal[r] > 0.01);
+  const rows = ladderRowsOf(v2, issuer.id).filter((r) => trancheKindOfRow(v2, r) === kind && S.principalLocal[r] > 0.01);
   const totalLocal = rows.reduce((a, r) => a + S.principalLocal[r], 0);
   if (!(totalLocal > 0)) return 0;
   const take = Math.min(faceLocal, totalLocal);
@@ -144,7 +137,7 @@ export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromTicke
   for (const r of ladderRowsOf(v2, issuer.id)) {
     if (S.bankRef[r] !== fromRef) continue;
     if (S.principalLocal[r] > 0.01) {
-      wire({ from: { kind: 'BANK', ticker: fromTicker }, to: { kind: 'BANK', ticker: toTicker }, kind: kindOfRow(v2, r), asset: trancheIdOf(v2, r), quantity: S.principalLocal[r], priceLocal: 1, reason }, internReason);
+      wire({ from: { kind: 'BANK', ticker: fromTicker }, to: { kind: 'BANK', ticker: toTicker }, kind: trancheKindOfRow(v2, r), asset: trancheIdOf(v2, r), quantity: S.principalLocal[r], priceLocal: 1, reason }, internReason);
     }
     S.bankRef[r] = toRef;
     moved++;

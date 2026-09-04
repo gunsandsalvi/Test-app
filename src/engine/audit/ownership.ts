@@ -7,7 +7,7 @@ import { AuditFinding, B, pct, sum } from './types';
 import { marketCapOf } from '../../domain/company';
 import { ensureV2, entityOf, regionOf, tickerOf, typeRefOf } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
-import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf } from '../../engine2/tranches';
+import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf, trancheKindOfRow, trancheIdOf } from '../../engine2/tranches';
 import { materializeBook, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { householdBookId } from '../ledger/holdings-ledger';
 import { sovereignHeldByClass, forEachSovereignPosition } from '../sovereign-register';
@@ -15,6 +15,12 @@ import { holdingClassOf } from '../../domain/assets';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { isTrancheKind } from '../../domain/assets';
 import { bookHeadOf } from '../../engine2/holdings';
+
+/** Which of O1's four buckets a ladder row falls in. `BANK_FACILITY` is absent, not zero: it is
+ *  on the lending bank's loan book and O4 is the check that tests it there. */
+const O1_BUCKET_BY_TRANCHE_KIND: Partial<Record<
+  ReturnType<typeof trancheKindOfRow>, 'corp' | 'loan' | 'cp'
+>> = { CORP_BOND: 'corp', LEVERAGED_LOAN: 'loan', COMMERCIAL_PAPER: 'cp' };
 
 /** One region's debt books, by class, in FACE. */
 export type OwnershipBook = { corp: number; loan: number; sov: number; cp: number };
@@ -43,13 +49,21 @@ export function ownershipCoverage(
   const held: Record<string, Book> = {}; const outstanding: Record<string, Book> = {};
   REGION_IDS.forEach((r) => { held[r] = { corp: 0, loan: 0, sov: 0, cp: 0 }; outstanding[r] = { corp: 0, loan: 0, sov: 0, cp: 0 }; });
   const regionById = new Map(state.companies.map((c) => [c.id, c.region]));
+  const v2o1 = ensureV2(state);
   state.companies.forEach((c) => {
     if (c.mergerAcquired) return;
     const o = outstanding[c.region]; if (!o) return;
-    (c.debtTranches ?? []).forEach((t) => {
-      if (t.isBankFacility) return; // on a bank's loan book, tested in O4
-      if (t.isCommercialPaper) o.cp += t.principalLocal; else if (t.rateType === 'FIXED') o.corp += t.principalLocal; else o.loan += t.principalLocal;
-    });
+    // §3.13-READ C5: THE LADDER STORE, and the kind rule read from `trancheKindOfRow` rather
+    // than open-coded a twelfth time. `debtTranches` is only refreshed at `core.ts:450`, so the
+    // object read was correct here (the audit runs at the close) but was a rule-4 duplicate of
+    // the rows the check's other side already walks.
+    for (const r of ladderRowsOf(v2o1, c.id)) {
+      // A facility has no bucket here on purpose: it sits on a bank's loan book and O4 tests it
+      // there. Keyed rather than switched, so this stays one statement of the mapping and adds
+      // no literal comparison against an instrument type (`check-hygiene.sh`'s ratchet).
+      const bucket = O1_BUCKET_BY_TRANCHE_KIND[trancheKindOfRow(v2o1, r)];
+      if (bucket) o[bucket] += v2o1.tranches.principalLocal[r];
+    }
   });
   // Paper issued THIS week is in the auction (07c/07f place it next week, and what
   // they cannot place is withdrawn from the ladder); it is offered, not yet anyone's, and not
@@ -65,7 +79,7 @@ export function ownershipCoverage(
     // (§9.13-OUTSIDE), and adding the register's rows here as well would count them twice.
     if (h.instrumentType === 'CORP_BOND') b.corp += v; else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v; else if (h.instrumentType === 'COMMERCIAL_PAPER') b.cp += v;
   };
-  state.institutionalEntities.forEach((e) => { if (!e.isDefaulted) e.itemizedHoldings.forEach(add); });
+  state.institutionalEntities.forEach((e) => { if (!e.isDefaulted) materializeBook(v2o1, e.id).forEach(add); });
   state.companies.forEach((c) => {
     if (c.mergerAcquired) return;
     ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; units?: number; quantityOrNotionalLocal?: number }[] }).treasuryHoldings ?? []).forEach(add);
@@ -114,7 +128,8 @@ function o1(state: GameState, week: number): AuditFinding[] {
 function o2(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const heldShares = new Map<string, number>();
-  state.institutionalEntities.forEach((e) => { if (e.isDefaulted) return; e.itemizedHoldings.forEach((h) => { if (h.instrumentType === 'EQUITY' && h.quantityShares) heldShares.set(h.instrumentId, (heldShares.get(h.instrumentId) ?? 0) + h.quantityShares); }); });
+  const v2o2r = ensureV2(state); // §3.13-READ C5: the rows, not the week-end mirror of them
+  state.institutionalEntities.forEach((e) => { if (e.isDefaulted) return; materializeBook(v2o2r, e.id).forEach((h) => { if (h.instrumentType === 'EQUITY' && h.quantityShares) heldShares.set(h.instrumentId, (heldShares.get(h.instrumentId) ?? 0) + h.quantityShares); }); });
   // §9.13-EQUITY — AND THE HOUSEHOLD SECTOR'S BOOK, which holds most of the register's shares and
   // has no object array to walk (the rows are its only representation). Counting the institutions
   // alone made this check a comparison of a fraction of the register against the whole issue, so
@@ -154,8 +169,9 @@ function o3(state: GameState, week: number): AuditFinding[] {
   const v2o3 = ensureV2(state); // 13b: a row names a tranche or its issuer
   let orphan = 0, orphanLocal = 0, merged = 0, mergedLocal = 0, deadHolders = 0;
   state.institutionalEntities.forEach((e) => {
-    if (e.isDefaulted) { if (e.itemizedHoldings.length) deadHolders++; return; }
-    e.itemizedHoldings.forEach((h) => {
+    const book = materializeBook(v2o3, e.id); // §3.13-READ C5: the rows
+    if (e.isDefaulted) { if (book.length) deadHolders++; return; }
+    book.forEach((h) => {
       const v = h.quantityOrNotionalLocal ?? 0;
       // §3.13-SOV row 3: a sovereign row names a bond on a GOVERNMENT's ladder, and this check
       // resolves an issuer against `state.companies`, where no government sits. O11 owns those
@@ -266,9 +282,14 @@ function o7(state: GameState, week: number): AuditFinding[] {
       rowsByTranche.set(h.instrumentId, (rowsByTranche.get(h.instrumentId) ?? 0) + 1);
     });
   });
+  // §3.13-READ C5: the ladder store — the same rows this check's held side is measured against.
+  const v2f = ensureV2(state);
   const faceById = new Map<string, number>();
   state.companies.forEach((c) => {
-    (c.debtTranches ?? []).forEach((t) => faceById.set(t.id, (faceById.get(t.id) ?? 0) + t.principalLocal));
+    for (const r of ladderRowsOf(v2f, c.id)) {
+      const id = trancheIdOf(v2f, r);
+      faceById.set(id, (faceById.get(id) ?? 0) + v2f.tranches.principalLocal[r]);
+    }
   });
   const over: [string, number][] = [];
   let overLocal = 0;

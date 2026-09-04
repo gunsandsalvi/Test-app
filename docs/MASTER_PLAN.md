@@ -431,12 +431,7 @@ written from here):
 
     **B. THE DEAD CODE — DONE, in §9. −188 lines.**
 
-    **C. THE SECOND ANSWERS — rule 19 conversions, each naming its read.**
-    C4. `audit/prices.ts:p8` re-derives a sovereign price where a print now exists — its own
-        docstring says it goes green when the register carries the mark. Run the audit and decide.
-    C5. The audit's object walks (`ownership.ts:29,48,88,129,240`) — correct today because the audit
-        runs after materialisation, so rule-4 duplicates rather than bugs. Convert, but read
-        `wires.ts:71` first: the W3 replay may want the view deliberately.
+    **C. THE SECOND ANSWERS — DONE, all five, in §9.**
 
     **D. THE RULES WRITTEN MORE THAN ONCE — collapse, and the branding then becomes small.**
     D1. The participant→party lambda: **6 copies, 3 incompatible conventions** for how a bank's own
@@ -1661,6 +1656,37 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ C4+C5 — THE CHECKS THEMSELVES WERE RE-DERIVING WHAT THE BOOKS PRINTED.**
+
+**C4 — P8 measured the carrying gap against a price it made up.** It discounted every sovereign
+rung at the zero curve and compared face to that. Right when a sovereign had no price: the curve
+was the only opinion there was. §9.13-SOV row 4 changed that — `07c:546` and `07f:512` write a
+cleared price per bond — so the check that exists to catch rule 19's fourth failure mode was
+committing it. And the two are not the same number: an auction clears where supply meets demand,
+a fitted curve is a smooth through them, so the gap it reported for row 4 mixed the carrying
+defect with the fit error and was wrong by that. It reads the print now, a rung with no print
+contributes nothing (§3.21 — paper nobody traded has no market value to be carried away from),
+and the message carries the COVERAGE so a shrinking gap can never be read as progress when it is
+really a quiet book. Decided by reading; no run, which rule 11 forbids here.
+
+**C5 — and the audit's own walks, with one exception that is the point.** `o1`, `o2` and `o3` read
+`debtTranches` and `itemizedHoldings`; the audit runs at the close, after `core.ts:450` rebuilds
+both, so they were correct — rule-4 duplicates rather than bugs, and each read the object mirror
+of rows the same check's other side already walked. They read the stores now. `trancheKindOfRow`
+moves out of `tranche-ledger.ts`'s private scope into `engine2/tranches.ts`, beside the flags it
+reads, which is A11's collapse finished on the row side.
+
+**`snapshot.ts:ladderUSDByKey` STAYS ON THE OBJECT ARRAY, and its docstring now says why.** W3
+asks whether the ladder MIRROR's change between two weeks is exactly the issuers' wires. Read from
+the store, it would compare the store against the store's own wires and pass by construction. A
+check that cannot fail is not a check, and the mirror is the thing under test. This is the case
+the plan flagged to read `wires.ts:71` for first, and reading it is what settled it.
+
+**And the hygiene gate caught ME.** The first version of C5's ladder walk was a `switch` over
+`trancheKindOfRow`, which took the literal-instrument-type ratchet from 49 to 51: one rule
+collapsed, two literals added. It is a keyed lookup now, which states the mapping once and
+compares nothing. Rule 1.12 — the cause was the switch, not the budget.
 
 **13-READ C3 — AND IT FOUND THE COPY A6 MISSED.** `aggregateRegionalHoldings` inlined
 `materializeBook` field for field, and had drifted from it on the one field where the two can

@@ -14,9 +14,11 @@ import { ensureV2 } from '../../engine2/world';
 import { isTrancheKind } from '../../domain/assets';
 import { trancheClearedPricePerFace, issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../credit-price';
 import { materializeGovLadder, TR_SUBORDINATED } from '../../engine2/tranches';
-import { priceFromYield, zeroRateAt, COUPON_PERIOD_WEEKS } from '../../domain/pricing';
+
 import { STANDARD_CORP_TENOR_YEARS } from '../../domain/primary-market';
 import { CDS_TENOR_WEEKS } from '../../domain/derivatives/classes/cds';
+import { clearedPriceOf } from '../../engine2/prices';
+import { asInstrumentId } from '../../domain/ids';
 
 const RATING_RANK: Record<string, number> = { AAA: 0, AA: 1, A: 2, BBB: 3, BB: 4, B: 5, CCC: 6, D: 7 };
 
@@ -271,10 +273,20 @@ export function auditPrices(state: GameState, week: number): AuditFinding[] {
  * bond bought at 97 sits on the books at 100 and the difference is a gain nobody recorded.
  *
  * This is P5's twin, and the same defect one asset class over: it measures the ladder's face
- * against what those same rungs are worth discounted at the curve the auction itself just
- * cleared. Nothing here is a second opinion about the price — the yield IS the book's own
- * output. If the two disagree, the model is holding one instrument at two values (rule 4), and
- * the gap is the size of what row 4 has to close.
+ * against what those same rungs ARE WORTH. If the two disagree, the model is holding one
+ * instrument at two values (rule 4), and the gap is the size of what row 4 has to close.
+ *
+ * §3.13-READ C4 — AND IT READS THE PRINT NOW. It used to discount each rung at the zero curve
+ * and compare face to that, which was right when a sovereign had no price: the curve was the
+ * only opinion there was. §9.13-SOV row 4 changed that — `07c:546` and `07f:512` write a cleared
+ * price per bond, so re-deriving one from the curve is rule 19's fourth failure mode inside the
+ * check that exists to catch it. The two are not the same number: an auction clears where supply
+ * meets demand and a fitted curve is a smooth through them, so the old gap mixed the carrying
+ * defect it is measuring with the fit error, and the size it reported for row 4 was wrong by
+ * that. A rung with NO print contributes nothing — §3.21: a book with nothing to trade prints
+ * nothing, and paper nobody traded has no market value to be carried away from. The message
+ * carries the coverage so a shrinking gap can never be read as progress when it is really a
+ * quiet book.
  *
  * It cannot go green by tuning. It went from "there is no price" to "there is a price and nobody
  * marks to it" when row 4 landed, and it goes green when the register carries the mark — which is
@@ -283,30 +295,31 @@ export function auditPrices(state: GameState, week: number): AuditFinding[] {
 function p8(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
-  let faceLocal = 0, impliedLocal = 0, rungs = 0;
+  let faceLocal = 0, impliedLocal = 0, rungs = 0, livePaper = 0;
   const byRegion: string[] = [];
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     if (!reg) return;
-    let face = 0, implied = 0;
+    let face = 0, marked = 0;
     materializeGovLadder(v2, r).forEach((t) => {
       const weeks = t.maturityWeek - state.currentWeek;
       if (!(weeks > 0) || !(t.principalLocal > 0)) return;
-      const y = zeroRateAt(reg.zeroRates, weeks / 52);
-      const price = priceFromYield({ annualCouponRate: t.couponRate, periodWeeks: COUPON_PERIOD_WEEKS, weeksToMaturity: weeks }, y);
+      livePaper++;
+      const price = clearedPriceOf(v2, asInstrumentId(t.id));
+      if (price === undefined || !(price > 0)) return;
       face += t.principalLocal;
-      implied += t.principalLocal * price;
+      marked += t.principalLocal * price;
       rungs++;
     });
     if (face > 0) {
-      faceLocal += face; impliedLocal += implied;
-      byRegion.push(`${r} ${pct(implied / face - 1)}`);
+      faceLocal += face; impliedLocal += marked;
+      byRegion.push(`${r} ${pct(marked / face - 1)}`);
     }
   });
   const gapLocal = faceLocal - impliedLocal;
   if (rungs > 0 && Math.abs(gapLocal) > 1e6) {
     out.push({ family: 'P', check: 'P8 the sovereign book is carried at par', week, usd: gapLocal,
-      message: `${rungs} sovereign rungs on ${B(faceLocal)} of face are carried at face against ${B(impliedLocal)} implied by the curve this book itself cleared — a ${B(gapLocal)} gap (${byRegion.join(' | ')}); the auction prices it now, and the register still carries it at par` });
+      message: `${rungs} of ${livePaper} live sovereign rungs have printed a price; on their ${B(faceLocal)} of face the register carries face against ${B(impliedLocal)} the auction itself printed — a ${B(gapLocal)} gap (${byRegion.join(' | ')}); the auction prices it now, and the register still carries it at par` });
   }
   return out;
 }

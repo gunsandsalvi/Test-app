@@ -60,6 +60,15 @@ export function snapshotOf(state: GameState): AuditSnapshot {
 }
 
 /** §5-WIRES W3: every firm's ladder, summed per region and kind of paper — what the wires must reproduce. */
+/**
+ * §3.13-READ C5 — THE OBJECT ARRAY, DELIBERATELY, AND THE ONE PLACE THAT IS TRUE.
+ *
+ * Every other audit walk moved to the tranche store; this one must not. W3 asks whether the
+ * LADDER MIRROR's change between two weeks is exactly the issuers' wires. Reading the store here
+ * would compare the store against the store's own wires and pass by construction — a check that
+ * cannot fail is not a check. `Company.debtTranches` is the thing under test, and the audit runs
+ * at the close, after `core.ts:450` has rebuilt it, which is precisely when it is comparable.
+ */
 export function ladderUSDByKey(state: GameState): Record<string, number> {
   const out: Record<string, number> = {};
   for (const c of state.companies) {
