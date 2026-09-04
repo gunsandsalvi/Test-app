@@ -415,7 +415,7 @@ export interface Company {
   lastOpportunisticOfferingWeek?: number;
   /** G2: the bank where this company's operating cash IS a deposit — one representation: the
    * company's S5 cash and the bank's corporate-deposit line are two views of the same money. */
-  homeBankTicker?: Ticker;
+  homeBankId?: EntityId;
   // ---- HC Wave 2 lifecycle state. Each `pending*` field marks a deal whose FINANCING is in
   // the WS8 queue this week; settlement (or withdrawal) clears it — a deal whose market says
   // no simply does not happen. ----

@@ -398,7 +398,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     // a dead desk. A contract survives a merger by NOVATION to the acquirer, so the books re-key.
     // One re-key for every link that names a bank — the customers' house-bank field, the
     // facility rows, the repo and prime-brokerage books, the offering pipeline, the derivatives.
-    rekeyBankLinks(state, ctx, target.region as RegionId, target.ticker, acquirer.ticker);
+    rekeyBankLinks(state, ctx, target.region as RegionId, target, acquirer);
     // Steps 10/11: the re-key moved the target's facility rows to the acquirer as lender and its
     // customers' house-bank links with them; the statistics are read once every link has moved.
     restateBankSheetStatistics(ab, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker), facilityBookOf(ctx.v2, acquirer.ticker));

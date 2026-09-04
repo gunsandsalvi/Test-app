@@ -8,6 +8,7 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import type { EntityId } from '../../../domain/ids';
 import { bankSecuritiesParty, bankSecuritiesPartyOfTicker } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { bankCashBufferRatioOf } from '../../macro/banking';
@@ -350,16 +351,20 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
     });
     lentByBankByBorrower.set(bank.ticker, byBorrower);
   });
+  const tickerOfBankId = new Map(banks.map((b) => [b.id, b.ticker]));
   return {
+    // §3.13-BOOK (c-then-3b): a candidate names the bank by its ENTITY id — `leadBankId` is what
+    // the offering stores, and the ranking never reads a name at all.
     candidatesFor: (issuerId: string): LeadBankCandidate[] => banks.map((bank) => ({
-      ticker: bank.ticker,
+      id: bank.id,
       bankMarketShare: bank.bankMarketShare,
       relationshipLocal: lentByBankByBorrower.get(bank.ticker)?.get(issuerId) ?? 0,
       freeCapacityLocal: freeLocal.get(bank.ticker) ?? 0,
     })),
     /** The winner's desk is that much less able to win the next one. */
-    award: (ticker: Ticker, sizeLocal: number) => {
-      freeLocal.set(ticker, Math.max(0, (freeLocal.get(ticker) ?? 0) - Math.max(0, sizeLocal)));
+    award: (bankId: EntityId, sizeLocal: number) => {
+      const ticker = tickerOfBankId.get(bankId);
+      if (ticker) freeLocal.set(ticker, Math.max(0, (freeLocal.get(ticker) ?? 0) - Math.max(0, sizeLocal)));
     },
   };
 }

@@ -95,10 +95,10 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   // §3.13-BOOK (c-then-2): TWO indexes here on purpose — this stage's whole job is to compare
   // what a firm is now against what it was, so the week-start array is a second population and
   // not a stale mirror of the first.
-  const { companyByTicker: byTicker } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
+  const { companyByTicker: byTicker, companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   const { companyByTicker: prevByTicker } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
   const bankRef = (c: Company): Ref | undefined => {
-    const b = c.homeBankTicker ? byTicker.get(c.homeBankTicker) : undefined;
+    const b = c.homeBankId ? companyById.get(c.homeBankId) : undefined;
     return b ? company(b) : undefined;
   };
   const push = (item: Omit<NewsItem, 'week' | 'urgent' | 'impactBadge'> & { urgent?: boolean }) => {
@@ -118,7 +118,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: 'default',
       category: 'CREDIT',
       title: `${c.name} defaults`,
-      description: `${ticker} (${c.sector}, ${c.region}) ran out of cash: ${M(cashOf(ctx.v2, c))} on hand against coverage of ${c.interestCoverage.toFixed(2)}×, ${M(c.annualRevenue)} of revenue and ${M(ladderTotalLocal(ctx.v2, c.id))} of debt; ${N(c.employeeCount)} people worked there${c.homeBankTicker ? `, banked at ${c.homeBankTicker}` : ''}.`,
+      description: `${ticker} (${c.sector}, ${c.region}) ran out of cash: ${M(cashOf(ctx.v2, c))} on hand against coverage of ${c.interestCoverage.toFixed(2)}×, ${M(c.annualRevenue)} of revenue and ${M(ladderTotalLocal(ctx.v2, c.id))} of debt; ${N(c.employeeCount)} people worked there${c.homeBankId ? `, banked at ${c.homeBankId}` : ''}.`,
       cause: why.text ? `This week it paid ${why.text}.` : undefined,
       refs: [...refs, ...why.refs],
       materialityLocal: Math.max(ladderTotalLocal(ctx.v2, c.id), c.annualRevenue),

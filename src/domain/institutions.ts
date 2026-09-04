@@ -97,7 +97,7 @@ export interface InstitutionalEntity {
   /** The bank this entity's cash sits at. An institution's balance is a bank's liability
    * like anyone else's; without this its money lived outside the banking system, which is the
    * blind spot that hid a 64B double-count. */
-  homeBankTicker?: Ticker;
+  homeBankId?: EntityId;
   entityType: InstitutionalEntityType;
   /** HF1 — set on HEDGE_FUND entities only; decides which markets this fund is actually in. */
   hedgeFundStrategy?: HedgeFundStrategy;

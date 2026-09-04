@@ -1,5 +1,6 @@
 import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
-import { bankPartyOfTicker, bankSecuritiesPartyOfTicker } from '../../../domain/party';
+import { buildEntityIndex } from '../../ledger/entity-index';
+import { bankPartyOfTicker, bankSecuritiesParty, bankSecuritiesPartyOfTicker } from '../../../domain/party';
 /**
  * HF1 — the prime brokerage session: a fund's leverage becomes a named bank's loan.
  *
@@ -86,6 +87,8 @@ function measuredHaircutsFor(ctx: WeeklyStepContext, regionId: RegionId, reg: Re
 }
 
 export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext): void {
+  // §3.13-BOOK (c-then-3b): `homeBankId` names the broker in the ENTITY space, so it is a lookup.
+  const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   void state;
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
@@ -119,10 +122,12 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       (e) => e.region === regionId && !e.isDefaulted && (e.entityType === 'HEDGE_FUND' || withLine.has(e.id))
     );
     funds.forEach((fund) => {
-      const brokerTicker = fund.homeBankTicker;
-      const broker = brokerTicker
-        ? ctx.updatedCompanies.find((c) => c.ticker === brokerTicker && c.bankBalanceSheet)
-        : undefined;
+      // §3.13-BOOK (c-then-3b): the broker is a LOOKUP on `homeBankId`, not a full scan of every
+      // company per fund. The `bankBalanceSheet` test stays at the site: an index is a lookup and
+      // a filter is a claim, and here the claim is that a broker must have a book to lend from.
+      const brokerCandidate = fund.homeBankId ? companyById.get(fund.homeBankId) : undefined;
+      const broker = brokerCandidate?.bankBalanceSheet ? brokerCandidate : undefined;
+      const brokerTicker = broker?.ticker;
       const drawnLocal = drawnByFund(priorBook, fund.id);
       if (!broker || !brokerTicker) {
         // No broker, no leverage. The fund has to repay what it has drawn.
@@ -158,7 +163,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
 
       // What the fund's OWN capital supports at that haircut, and what the broker can carry.
       const fundEquityLocal = Math.max(0, institutionTotalAssetsLocal(ctx, fund) - drawnLocal);
-      const brokerRoomLocal = Math.max(0, leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, brokerTicker), facilityBookOf(ctx.v2, brokerTicker))) + lentByBroker(priorBook, brokerTicker);
+      const brokerRoomLocal = Math.max(0, leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, broker.ticker), facilityBookOf(ctx.v2, broker.ticker))) + lentByBroker(priorBook, broker.ticker);
       const lineLocal = Math.min(maxDrawnLocal(fundEquityLocal, haircutRate), brokerRoomLocal);
 
       // The price: what the broker's own money costs it, plus the return it needs on the capital
@@ -186,7 +191,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       if (Math.abs(deltaLocal) > 1) {
         if (deltaLocal > 0) {
           pay(ctx, {
-            payer: bankSecuritiesPartyOfTicker(brokerTicker),
+            payer: bankSecuritiesParty(broker),
             payee: { kind: 'INSTITUTION', id: fund.id },
             amount: deltaLocal,
             currency: currencyOf(fund.region),
@@ -195,7 +200,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
         } else {
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: fund.id },
-            payee: bankSecuritiesPartyOfTicker(brokerTicker),
+            payee: bankSecuritiesParty(broker),
             amount: -deltaLocal,
             currency: currencyOf(fund.region),
             reason: 'prime brokerage repayment',
@@ -212,7 +217,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
         nextBook.push({
           id: `${regionId}-PB-${fund.id}`,
           regionId,
-          brokerTicker,
+          brokerTicker: broker.ticker, // `PrimeBrokerageLine.brokerTicker` is its own (c-then-3b) commit
           fundId: fund.id,
           drawnLocal: Math.round(targetDrawnLocal),
           haircutRate: Number(haircutRate.toFixed(4)),
@@ -251,6 +256,8 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
  * re-prices the whole balance), and the broker's asset line moves on the live sheet.
  */
 export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
+  // §3.13-BOOK (c-then-3b): `homeBankId` names the broker in the ENTITY space, so it is a lookup.
+  const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
@@ -258,8 +265,9 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
     const drawnByBroker = new Map<Ticker, number>();
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
       if (fund.region !== regionId || fund.entityType !== 'HEDGE_FUND' || fund.isDefaulted) return fund;
-      const brokerTicker = fund.homeBankTicker;
-      if (!brokerTicker) return fund;
+      const broker = fund.homeBankId ? companyById.get(fund.homeBankId) : undefined;
+      if (!broker) return fund;
+      const brokerTicker = broker.ticker; // `PrimeBrokerageLine.brokerTicker` is its own commit
       // §1.19: the SIGNED figure, because this is an overdraft test and the clamped
       // `institutionSpendableLocal` would report every fund as solvent. The collateral it is only
       // holding is netted here for the first time: a fund sitting on stock-loan collateral looked
@@ -270,7 +278,7 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
       const drawLocal = Math.min(fund.primeBrokerageAvailableLocal ?? 0, -cashPlusPendingLocal);
       if (drawLocal <= 1) return fund;
       pay(ctx, {
-        payer: bankSecuritiesPartyOfTicker(brokerTicker),
+        payer: bankSecuritiesParty(broker),
         payee: { kind: 'INSTITUTION', id: fund.id },
         amount: drawLocal,
         currency: currencyOf(fund.region),
@@ -283,7 +291,7 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
         book.push({
           id: `${regionId}-PB-${fund.id}`,
           regionId,
-          brokerTicker,
+          brokerTicker: broker.ticker, // `PrimeBrokerageLine.brokerTicker` is its own (c-then-3b) commit
           fundId: fund.id,
           drawnLocal: Math.round(drawLocal),
           // An emergency draw on a line the morning struck at zero balance carries the standing

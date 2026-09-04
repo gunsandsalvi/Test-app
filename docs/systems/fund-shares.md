@@ -236,7 +236,7 @@ worth adding to that step's walk rather than becoming a step of its own.
 `institution-profiles.ts` says `leverage: 'NONE'` for ETF and MONEY_MARKET_FUND, and
 `availablePurchaseCapacityUSD` honours it — no allowance enters the budget. But
 `overdraft-sweep.ts:73` lends to **a fund of any kind** whose close balance is negative:
-`if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankTicker) return fund;` — no
+`if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankId) return fund;` — no
 kind test — and the draw goes on the region's prime-brokerage book past the struck line at a
 penalty. The node is satisfied in letter (the lender is named and the loan is priced) and broken
 in spirit: the registry states a fact about the kind that a different file contradicts every week

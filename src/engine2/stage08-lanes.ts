@@ -108,7 +108,7 @@ export interface BackLanes {
   name: string[];
   /** §3.13-BOOK slice (c2c): the lanes hold entity ids and tickers, and say which. */
   companyId: EntityId[];
-  homeBankTicker: (Ticker | undefined)[];
+  homeBankId: (Ticker | undefined)[];
   // --- strings for diagnostics and the bridge tranche (main-side only) ---
   /** §3.13-BOOK slice (c2c): the lane holds tickers, so it says so. */
   ticker: Ticker[];
@@ -126,7 +126,8 @@ export function buildBackLanes(
   S: CompanyStore,
   v2: V2World,
 ): BackLanes {
-  const bankByTicker = new Map(companies.filter((c) => c.isBankEntity).map((c) => [c.ticker, c]));
+  // §3.13-BOOK (c-then-3b): keyed by ENTITY id, because `homeBankId` is what asks.
+  const bankById = new Map(companies.filter((c) => c.isBankEntity).map((c) => [c.id, c]));
   const n = companies.length;
   const f = () => new Float64Array(n);
   // §4.C Stage II.1 — the 1:1 scalar lanes ALIAS the company row store (refreshed by the stage
@@ -165,7 +166,7 @@ export function buildBackLanes(
     carrierFreightRevenueLocal: f(), channelMarginRevenueLocal: f(),
     wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
     creditRating: T.creditRating as string[], name: T.name as string[],
-    companyId: T.id as EntityId[], homeBankTicker: T.homeBankTicker as (Ticker | undefined)[],
+    companyId: T.id as EntityId[], homeBankId: T.homeBankId as (Ticker | undefined)[],
     ticker: T.ticker as Ticker[], region: T.region as Company['region'][], sector: T.sector as Company['sector'][],
   };
   const NaN_ = Number.NaN;
@@ -211,7 +212,7 @@ export function buildBackLanes(
     L.isBanksSector[i] = profileKeyOf(c) === 'BANK' ? 1 : 0;
     L.rndShareOfGrowthCapex[i] = lines.reduce((a, l) => Math.max(a, financingProfileOf(l.industry).rndShareOfGrowthCapex ?? 0), 0);
     L.investmentGrade[i] = isInvestmentGrade(c.creditRating) ? 1 : 0;
-    L.facilityMarginBps[i] = c.isBankEntity ? NaN_ : facilityMarginBpsFor(v2, c, updatedRegions[c.region], c.homeBankTicker ? bankByTicker.get(c.homeBankTicker) : undefined);
+    L.facilityMarginBps[i] = c.isBankEntity ? NaN_ : facilityMarginBpsFor(v2, c, updatedRegions[c.region], c.homeBankId ? bankById.get(c.homeBankId) : undefined);
     L.employeeCountUpdate[i] = wu?.employeeCount ?? NaN_;
     L.bankCapitalRatio[i] = c.bankBalanceSheet?.bankCapitalRatio ?? NaN_;
     L.bankEquityLocal[i] = c.bankBalanceSheet?.bankEquityLocal ?? NaN_;

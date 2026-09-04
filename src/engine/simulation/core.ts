@@ -423,7 +423,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // final), before the central bank counts the reserves it just moved.
   run('bank-funding-close', () => runBankFundingCloseStage(state, ctx));
   run('bank-resolution', () => runBankResolutionStage(state, ctx));
-  for (const f of ['cash', 'isDefaulted', 'defaultedWeek', 'bankResolvedWeek', 'employeeCount', 'grossPPELocal', 'accumulatedDepreciationLocal', 'annualRevenue', 'ebitda', 'ebit', 'bankMarketShare', 'homeBankTicker', 'creditRating', 'stockPrice', 'marketCap'] as const) syncCompanyField(state, f);
+  for (const f of ['cash', 'isDefaulted', 'defaultedWeek', 'bankResolvedWeek', 'employeeCount', 'grossPPELocal', 'accumulatedDepreciationLocal', 'annualRevenue', 'ebitda', 'ebit', 'bankMarketShare', 'homeBankId', 'creditRating', 'stockPrice', 'marketCap'] as const) syncCompanyField(state, f);
   // PUB2: the central bank's week — remittances, the TGA, and the reserves its flows move.
   // After stage 11 AND after the close, so every flow of the week has posted before it counts
   // its own liabilities: settling reserves after it reconciled left its sheet not closing.

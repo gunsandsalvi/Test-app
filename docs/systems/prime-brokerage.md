@@ -174,7 +174,8 @@ in that arithmetic:
   and a cash collateral balance, neither of which is a row in `itemizedHoldings`. So the one
   strategy in the model that is defined by hedging gets no credit for it and its true exposure is
   invisible to the broker at the same time.
-- **No second broker (A3, E3).** The broker is `fund.homeBankTicker`, a single field. The node's
+- **No second broker (A3, E3).** The broker is `fund.homeBankId` (an entity id since §3.13-BOOK
+  c-then-3b; it was a ticker), a single field. The node's
   point — that with two brokers neither sees the whole position, so both underestimate — cannot
   arise. This is a real absence rather than a defect, and it is the harder half of E3: it needs
   a fund-to-broker relation, not a field.

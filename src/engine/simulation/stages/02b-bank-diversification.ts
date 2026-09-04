@@ -21,7 +21,9 @@
  */
 
 import { currencyOf } from '../../../domain/geography';
-import { bankCreditParty, bankCreditPartyOfTicker, bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
+import { buildEntityIndex } from '../../ledger/entity-index';
+import { defect } from '../../../domain/defect';
+import { bankCreditParty, bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
 
 import { ensureV2 } from '../../../engine2/world';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
@@ -81,6 +83,8 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
 }
 
 export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepContext): void {
+  // §3.13-BOOK (c-then-3b): `homeBankId` names the house bank in the ENTITY space.
+  const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     const banks = banksOf(ctx.prevActiveFirms, regionId);
@@ -129,7 +133,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // way the corporate one is — settlement maintains it week to week, and this catches cash
     // moved by stages not yet on instructions, carrying the matching reserve leg.
     ctx.updatedInstitutionalEntities.forEach((e) => {
-      if (e.region !== regionId || !e.homeBankTicker) return;
+      if (e.region !== regionId || !e.homeBankId) return;
       // CASH: an entity whose balance is NEGATIVE is overdrawn, and the clamp above hides it —
       // the reconcile then re-plugs the same gap every week and the bypass meter reads it as
       // unrouted flow. It is neither: it is a fund spending money it does not have, and it needs
@@ -149,10 +153,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
       if (c.region !== regionId || c.isDefaulted || c.isBankEntity || c.mergerAcquired) return;
       const cashLocal = cashOf(ctx.v2, c);
-      if (!c.homeBankTicker || !(cashLocal < -1)) return;
+      if (!c.homeBankId || !(cashLocal < -1)) return;
       const drawLocal = -cashLocal;
       // P1: priced off the borrower's own PD at its bank's hurdle, like every facility.
-      const marginBps = facilityMarginBpsFor(ensureV2(state), c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker));
+      // §3.13-BOOK (c-then-3b): a lookup on the entity index, not a full scan per overdrawn firm.
+      const homeBank = companyById.get(c.homeBankId);
+      const marginBps = facilityMarginBpsFor(ensureV2(state), c, reg, homeBank);
       const tranche = {
         id: overdraftFacilityTrancheId(c.id, ctx.nextWeek),
         principalLocal: drawLocal,
@@ -162,18 +168,18 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         maturityWeek: ctx.nextWeek + 52,
         seniority: 'SENIOR' as const,
         isBankFacility: true,
-        facilityBankTicker: c.homeBankTicker,
+        facilityBankTicker: homeBank?.ticker, // still the TICKER space — its own (c-then-3b) commit
       };
       issueTranche(ensureV2(state), { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
       pay(ctx, {
-        payer: bankCreditPartyOfTicker(c.homeBankTicker),
+        payer: homeBank ? bankCreditParty(homeBank) : defect(`firm ${c.id} banks at ${c.homeBankId}, which is not an entity`),
         payee: companyParty(c),
         amount: drawLocal,
         currency: currencyOf(c.region),
         reason: 'overdraft converted to facility draw',
       });
       if (process.env.OD_TRACE === '1' && drawLocal > 50e6) {
-        console.log(`  [od] w${ctx.nextWeek} ${regionId}:${c.ticker} overdraft ${(drawLocal / 1e6).toFixed(0)}M -> facility draw (bank ${c.homeBankTicker})`);
+        console.log(`  [od] w${ctx.nextWeek} ${regionId}:${c.ticker} overdraft ${(drawLocal / 1e6).toFixed(0)}M -> facility draw (bank ${c.homeBankId})`);
       }
     });
 
@@ -184,7 +190,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       ctx.updatedCompanies.forEach((c) => {
         if (c.region !== regionId || c.isBankEntity || c.mergerAcquired) return;
         const cashLocal = cashOf(ctx.v2, c);
-        if (!c.homeBankTicker) { unbankedLocal += cashLocal; unbankedN++; return; }
+        if (!c.homeBankId) { unbankedLocal += cashLocal; unbankedN++; return; }
         if (cashLocal < 0) { negLocal += cashLocal; negN++; }
       });
       console.log(`  [recon-base] w${ctx.nextWeek} ${regionId} negatives ${(negLocal / 1e6).toFixed(0)}M x${negN} | unbanked ${(unbankedLocal / 1e6).toFixed(0)}M x${unbankedN}`);
@@ -456,7 +462,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const corpInterestLocal = sheet.corporateDepositInterestWeeklyLocal ?? 0;
       if (corpInterestLocal > 0) {
         const depositors = ctx.updatedCompanies.filter(
-          (c) => c.region === regionId && !c.isBankEntity && !c.mergerAcquired && c.homeBankTicker === bank.ticker && cashOf(ctx.v2, c) > 0
+          (c) => c.region === regionId && !c.isBankEntity && !c.mergerAcquired && c.homeBankId === bank.id && cashOf(ctx.v2, c) > 0
         );
         const positiveLocal = depositors.reduce((a, c) => a + cashOf(ctx.v2, c), 0);
         if (positiveLocal > 0) {

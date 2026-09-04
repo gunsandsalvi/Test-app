@@ -127,7 +127,7 @@ export const company = defineObject<Company>({
         <ObjectHeader
           name={c.name}
           sub={<>{companyKind(c)} · {c.sector} · <RegionLink id={c.region} nav={nav} /> · {c.creditRating}
-            {c.homeBankTicker ? <> · banks at <TickerLink ticker={c.homeBankTicker} /></> : null}
+            {c.homeBankId ? <> · banks at <TickerLink ticker={c.homeBankId} /></> : null}
             {c.parentTicker ? <> · subsidiary of <TickerLink ticker={c.parentTicker} /></> : null}
             {mgmt ? <> · {mgmt}</> : null}</>}
           flag={flag}

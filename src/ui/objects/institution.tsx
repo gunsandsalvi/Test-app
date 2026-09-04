@@ -52,7 +52,7 @@ export const institution = defineObject<InstitutionalEntity>({
     const holdingsLocal = book.reduce((a, r) => a + r.usd, 0);
     const assets = tapeSeries(world, `institution:${e.id}:assets`).values;
     const manager = world.state.companies.find((c) => c.id === e.id || (c.managesEntityIds ?? []).includes(e.id));
-    const bank = e.homeBankTicker ? world.state.companies.find((b) => b.ticker === e.homeBankTicker) : undefined;
+    const bank = e.homeBankId ? world.state.companies.find((b) => b.id === e.homeBankId) : undefined;
     const byType = new Map<string, number>();
     book.forEach((r) => byType.set(r.instrumentType, (byType.get(r.instrumentType) ?? 0) + r.usd));
     const contracts = contractsOf(world, { kind: 'INSTITUTION', key: e.id });

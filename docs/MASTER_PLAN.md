@@ -494,13 +494,33 @@ written from here):
       forward, `''` from the swap. Same shape, same resolution.
 
     **WHAT IS LEFT OF (c), and it is two commits:**
-    c-then-3b. **`PartyRef`'S FOUR TICKER ARMS KEY BY `EntityId`**, which is what makes it a VIEW
-       of the entity store rather than a parallel union. **The job is 81 sites and it is
-       countable**: `grep -c PartyOfTicker` — the constructors that take a bare ticker rather than
-       the entity, so a ticker-only site must be given a way to name the firm. The other 123
-       already pass the entity and survive the change untouched. `partyKey`'s string changes with
-       it, so `holderAccruedInterestLocal` and `sovereignAccruedInterestLocal` move too, and
-       `repoPartyKey`'s `INST:` reconciles with `partyKey`'s `INSTITUTION:` here.
+    c-then-3b. **THE STORED TICKER CROSS-REFERENCES BECOME ENTITY IDS**, and the party arms fall
+       out at the end. Reading the 81 `PartyOfTicker` sites (c-then-3a's measurement) showed the
+       job is not at those sites at all: they hold a ticker because a RECORD handed them one.
+       **Eleven fields store a reference to an entity as a ticker** — ~~`homeBankTicker` (69)~~ and
+       ~~`leadBankTicker` (11)~~ **DONE, in §9**; still open: `brokerTicker` (26), `borrowerTicker`
+       (20), `buyerTicker` (18), `issuerTicker` (18), `facilityBankTicker` (16), `carrierTicker`
+       (15), `parentTicker` (14), `sellerTicker` (7), `acquiredByTicker` (4) — 138 sites left, plus
+       **`accounts.ts`'s dense bank lane and the settlement report's per-bank maps**, which the
+       first commit left in the ticker space on purpose: `bankIdxOf` is the ONE site where the two
+       spaces meet, and moving it is its own commit. Resolving ticker→id AT the
+       81 party sites instead would add 81 lookups and leave the references in the other space,
+       which is a mirror wearing a fix's clothes. So each field is its own commit, and the arms
+       take an `EntityId` last, when every site that must supply one already holds one.
+
+       **WHY, given PART I's KEY POLICY explicitly allows a ticker as "a party address":** the
+       CROSS-TABLE CHECK above cannot be written while it does. A position's holder is a
+       `bookId` (an entity id) and a payment's payer is a `partyKey` (`COMPANY:<ticker>`), so
+       "every position names a holder that exists" has no join without a translation table — and a
+       translation table between two names for one thing is the defect this whole step exists to
+       remove. It is also why `entity-index.ts` carries `companyById` AND `companyByTicker`: two
+       indexes over one store, because the ledger asks one way and everything else the other.
+
+       `partyKey`'s string changes at the end, so `holderAccruedInterestLocal` and
+       `sovereignAccruedInterestLocal` move with it, and `repoPartyKey`'s `INST:` reconciles with
+       `partyKey`'s `INSTITUTION:` there. *(The synthetic party tickers c-then-3a's measurement
+       turned up — `'DESK'`, `'ME'`, `'HEDGER'` — are all in `test/`, checked: no live `PartyRef`
+       names a company that does not exist.)*
     c-then-4. **`O8`'S PARTY ARM WIDENS** from the derivatives book to every party-keyed store,
        which one index can now answer.
 
@@ -1585,6 +1605,39 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c-then-3b, `homeBankId`) — BRANDING IS WHAT MADE A 218-SITE RENAME SAFE, AND
+THIS IS THE PROOF.** The first of the eleven stored ticker cross-references: a party named its
+HOUSE BANK by ticker while naming itself by entity id, so the two sides of one deposit row lived in
+two id spaces. `leadBankTicker` came with it — the same allocator mints both.
+
+**The proof.** `rekeyBankLinks` repoints every link naming a failed bank at the bank assuming it,
+and it took two TICKERS. Rename the field to an id while both are `string` and
+`if (c.homeBankTicker === from)` compiles, is always false, and **every client of a failed bank
+silently keeps pointing at a dead bank** — the resolution stage would still run, still report, and
+still do nothing. The compiler refused it. The function takes the two BANKS now, because the links
+genuinely are not all in one space any more: `homeBankId` and `leadBankId` name a bank by entity id
+while `brokerTicker` and the party keys still name it by ticker, and handing it the firms lets each
+link be rekeyed in the space it is actually in. This is the argument for slices (a) and (c2) paying
+for themselves, made concrete: the brand did not find a bug, it made a refactor that would have
+introduced one impossible.
+
+**Six full-array scans became lookups**, every one of the shape `updatedCompanies.find(b => b.ticker
+=== c.homeBankTicker)`: once per overdrawn firm in `overdraft-sweep` and `02b`, once per newborn in
+`pe-lifecycle`, once per fund in both prime-brokerage passes, once per offering in
+`primary-settlement`. The last also carried a fourth instance of c-then-2's dead fold — a
+`prevActiveFirms` rescan that could never find a firm the first scan had not.
+
+**And the allocator's re-key is provably outcome-preserving**, not hopefully so: `chooseLeadBank`
+ranks on three numbers and a tie-break hashed off the ISSUER's id, and reads no name at all — so
+swapping `ticker` for `id` on a candidate cannot change which bank wins.
+
+**What stayed in the ticker space on purpose**, marked at each site: `accounts.ts`'s dense bank lane
+and the settlement report's per-bank maps. `bankIdxOf` is now the ONE place the two spaces meet,
+which is the next commit rather than a translation scattered over every caller.
+
+26 files, +214 −148; the ticker-only party sites fall 81 → 75. Atlas: `money-and-settlement` B1,
+`prime-brokerage` and `fund-shares` re-cited. Gates green (150 tests); no run.
 
 **13-BOOK slice (c-then-3a) — THERE WERE FOUR PARTY UNIONS, AND THE PLAN KNEW ABOUT TWO.** The
 step's own text named `DerivativeParty` as the second. Reading found two more, and the pair of them

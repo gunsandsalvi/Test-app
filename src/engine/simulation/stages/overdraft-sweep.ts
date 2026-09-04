@@ -9,7 +9,9 @@
  * balance is zero at settlement and the money that was spent has a lender.
  */
 import { WeeklyStepContext } from './context';
-import { bankCreditParty, bankCreditPartyOfTicker, bankSecuritiesPartyOfTicker, companyParty } from '../../../domain/party';
+import { buildEntityIndex } from '../../ledger/entity-index';
+import { defect } from '../../../domain/defect';
+import { bankCreditParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { RegionId } from '../../../types';
 import { pay, PartyRef, pendingSettlementLocal } from './settlement';
@@ -34,15 +36,21 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
   // agent journalled its payments without touching the net and a quarterly dividend or coupon
   // paid that way left the biggest names negative after the first sweep.
   const pendingLocal = (ref: PartyRef): number => pendingSettlementLocal(ctx, ref);
+  // §3.13-BOOK (c-then-3b): `homeBankId` names the house bank in the ENTITY space now, so the
+  // house bank is a LOOKUP rather than `updatedCompanies.find(b => b.ticker === …)` — which was a
+  // full scan of every company per overdrawn firm, and is where the O(firms x overdrafts) went.
+  const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
 
   // ---- 1. Firms: a revolver draw at the house bank (the 02b conversion, at the close). ----
   ctx.updatedCompanies.forEach((c) => {
-    if (c.isDefaulted || c.isBankEntity || c.mergerAcquired || !c.homeBankTicker) return;
+    if (c.isDefaulted || c.isBankEntity || c.mergerAcquired || !c.homeBankId) return;
     const balanceLocal = cashOf(ctx.v2, c) + pendingLocal(companyParty(c));
     if (!(balanceLocal < -1)) return;
     const drawLocal = -balanceLocal;
     const reg = ctx.updatedRegions[c.region];
-    const marginBps = reg ? facilityMarginBpsFor(v2, c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker)) : 350;
+    const homeBank = companyById.get(c.homeBankId);
+    if (!homeBank) return defect(`firm ${c.id} banks at ${c.homeBankId}, which is not an entity`);
+    const marginBps = reg ? facilityMarginBpsFor(v2, c, reg, homeBank) : 350;
     const tranche = {
       id: overdraftFacilityTrancheId(c.id, ctx.nextWeek, '-C'),
       principalLocal: drawLocal,
@@ -52,11 +60,11 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       maturityWeek: ctx.nextWeek + 52,
       seniority: 'SENIOR' as const,
       isBankFacility: true,
-      facilityBankTicker: c.homeBankTicker,
+      facilityBankTicker: homeBank.ticker, // still the TICKER space — its own (c-then-3b) commit
     };
     issueTranche(v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
     pay(ctx, {
-      payer: bankCreditPartyOfTicker(c.homeBankTicker),
+      payer: bankCreditParty(homeBank),
       payee: companyParty(c),
       amount: drawLocal,
       currency: currencyOf(c.region),
@@ -74,14 +82,16 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     const book: PrimeBrokerageLine[] = reg.primeBrokerageBook ?? [];
     const drawnByBroker = new Map<Ticker, number>();
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
-      if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankTicker) return fund;
-      const brokerTicker = fund.homeBankTicker;
+      if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankId) return fund;
+      const broker = companyById.get(fund.homeBankId);
+      if (!broker) return defect(`fund ${fund.id} banks at ${fund.homeBankId}, which is not an entity`);
+      const brokerTicker = broker.ticker; // `PrimeBrokerageLine.brokerTicker` is its own commit
       const balanceLocal = entityCashOf(ctx.v2, fund) + pendingLocal({ kind: 'INSTITUTION', id: fund.id });
       if (balanceLocal >= -1) return fund;
       const drawLocal = -balanceLocal;
       const withinLineLocal = Math.min(fund.primeBrokerageAvailableLocal ?? 0, drawLocal);
       pay(ctx, {
-        payer: bankSecuritiesPartyOfTicker(brokerTicker),
+        payer: bankSecuritiesParty(broker),
         payee: { kind: 'INSTITUTION', id: fund.id },
         amount: drawLocal,
         currency: currencyOf(fund.region),

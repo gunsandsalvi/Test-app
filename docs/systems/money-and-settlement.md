@@ -280,6 +280,37 @@ those survive a change of key untouched; **81 hold only a bare ticker** (`compan
 and are exactly the sites that will need an entity found for them. `grep -c PartyOfTicker` is the
 size of what is left.
 
+### B1 — A PARTY NAMES ITS BANK BY ENTITY ID (§3.13-BOOK c-then-3b, first field)
+
+B1 says an account is (holder, issuer, currency). The ISSUER of a firm's deposit is its house bank,
+and the firm named it by TICKER — `homeBankTicker`, 69 sites — while the holder was named by entity
+id, so the two sides of one account row were in two id spaces. `homeBankId` closes the first of
+eleven such fields (`leadBankTicker` went with it: the same allocator mints both).
+
+**Branding is what made the rename safe, and that is the finding.** `rekeyBankLinks` — the function
+that repoints every link naming a failed bank at the bank assuming it — took two TICKERS. Rename
+the field to an id while both are `string`, and `if (c.homeBankTicker === from)` compiles, is
+always false, and **every client of a failed bank silently keeps pointing at a dead bank**. The
+compiler refused it. The function takes the two BANKS now, because the links are genuinely no
+longer in one space: `homeBankId` and `leadBankId` name a bank by entity id while `brokerTicker`
+and the party keys still name it by ticker, and handing it the firms lets each link be rekeyed in
+the space it is actually in.
+
+**Six full-array scans became lookups**, all of the form `updatedCompanies.find(b => b.ticker ===
+c.homeBankTicker)` — once per overdrawn firm in `overdraft-sweep` and `02b`, once per newborn in
+`pe-lifecycle`, once per fund in both prime-brokerage passes, once per offering in
+`primary-settlement`. The last of those also carried c-then-2's dead fold: a `prevActiveFirms`
+second scan that could never find a firm the first had not.
+
+**`chooseLeadBank` never reads a name at all** — its ranking is three numbers and a tie-break
+hashed off the ISSUER's id — so re-keying the allocator is provably outcome-preserving rather than
+hopefully so.
+
+**What is left in the ticker space, deliberately:** `accounts.ts`'s dense bank lane
+(`bankIdxOfTicker`) and the settlement report's per-bank maps. `bankIdxOf` is the ONE site where
+the two spaces now meet, and it is the next commit in this slice rather than a translation
+scattered across every caller.
+
 ### ⚠️ E3 — "TWO INSTRUCTIONS THAT BOTH DRAW ON ONE BALANCE CANNOT BOTH SUCCEED BY LUCK"
 
 They both succeed by construction. `runSettlementStage` walks the journal in emission order and

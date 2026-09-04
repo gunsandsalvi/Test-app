@@ -18,6 +18,7 @@
  */
 
 import { Company, RegionId } from '../../../types';
+import { buildEntityIndex } from '../../ledger/entity-index';
 import { bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { PrimaryOffering, UNDERWRITING_FEE_BPS } from '../../../domain/primary-market';
@@ -68,6 +69,8 @@ export function settlePricedOfferings(
   deskBook?: string,
   options: PricedOfferingOptions = {}
 ): void {
+  // §3.13-BOOK (c-then-3b): the lead bank is a lookup on `leadBankId`, built once per call.
+  const { companyById: leadById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   if (offeringsByIssuerId.size === 0) return;
   const settledOfferingIds = new Set<string>();
   // §3.13-BOOK slice (a): with no override, the offering lists under its ISSUER's id — the
@@ -93,8 +96,11 @@ export function settlePricedOfferings(
     // market take alone would be best-efforts placement wearing a firm commitment's name.
     const takeShare = Math.min(1, outcome.marketTakeLocal / Math.max(1, offering.sizeLocal));
     const fullGrossLocal = statToGrossProceedsLocal(offering, outcome.clearedStat);
-    const lead = ctx.updatedCompanies.find((c: Company) => c.ticker === offering.leadBankTicker && c.bankBalanceSheet)
-      ?? ctx.prevActiveFirms.find((c: Company) => c.ticker === offering.leadBankTicker && c.bankBalanceSheet);
+    // §3.13-BOOK (c-then-3b): the lead bank is a LOOKUP on `leadBankId`. The `prevActiveFirms`
+    // fallback went with it: `updatedCompanies` IS `[...state.companies]` (`context.ts:432`), so
+    // the second scan could never find a firm the first had not (c-then-2's read).
+    const leadCandidate = leadById.get(offering.leadBankId);
+    const lead = leadCandidate?.bankBalanceSheet ? leadCandidate : undefined;
     const firmCommitment = !!(lead && deskBook);
     const grossLocal = firmCommitment ? fullGrossLocal : fullGrossLocal * takeShare;
     const residualLocal = firmCommitment ? Math.max(0, fullGrossLocal - fullGrossLocal * takeShare) : 0;

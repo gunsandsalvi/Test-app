@@ -36,6 +36,7 @@
  * gate it against what it will replace, then flip the readers (A2) and delete the fields.
  */
 import { WeeklyStepContext } from '../simulation/stages/context';
+import type { EntityId } from '../../domain/ids';
 import { bankCreditParty, bankParty, bankPartyOfTicker, bankSecuritiesParty, companyParty, companyPartyOfTicker } from '../../domain/party';
 import { PartyRef } from './party';
 import { partyId, partyOf, partyKey, partyFromKey } from './party';
@@ -286,7 +287,7 @@ export const householdDepositsAt = (v2: V2World, bankTicker: Ticker, currency: C
 // institutions' — summed in the holders' order, the order the pass rows sum in, so the read
 // is the number the projection used to write. No field carries either. ----
 
-type Depositor = { homeBankTicker?: string };
+type Depositor = { homeBankId?: string };
 /** The money a bank keeps its book in, off the bank itself. */
 const bankMoneyOf = (companies: readonly { ticker: Ticker; region?: RegionId }[], bankTicker: Ticker): CurrencyCode => {
   for (const c of companies) if (c.ticker === bankTicker && c.region) return currencyOf(c.region);
@@ -296,7 +297,7 @@ const bankMoneyOf = (companies: readonly { ticker: Ticker; region?: RegionId }[]
 export function corporateDepositsAt(v2: V2World, companies: readonly (Depositor & Pick<Company, 'ticker' | 'isBankEntity' | 'bankBalanceSheet'>)[], bankTicker: Ticker): number {
   let usd = 0;
   for (const c of companies) {
-    if (c.homeBankTicker !== bankTicker || (c.isBankEntity && c.bankBalanceSheet)) continue;
+    if (c.homeBankId !== bankTicker || (c.isBankEntity && c.bankBalanceSheet)) continue;
     usd += cashOf(v2, c);
   }
   return usd;
@@ -304,7 +305,7 @@ export function corporateDepositsAt(v2: V2World, companies: readonly (Depositor 
 /** A bank's institutional deposit line: every institution banking there, its account. */
 export function institutionalDepositsAt(v2: V2World, entities: readonly (Depositor & Pick<InstitutionalEntity, 'id'>)[], bankTicker: Ticker): number {
   let usd = 0;
-  for (const e of entities) if (e.homeBankTicker === bankTicker) usd += entityCashOf(v2, e);
+  for (const e of entities) if (e.homeBankId === bankTicker) usd += entityCashOf(v2, e);
   return usd;
 }
 /** A bank's four deposit lines, read off the ledger. */
@@ -622,16 +623,23 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     openRow(s, partyId(bankCreditParty(b)), bi, 'CREATED', money, 0);
     openRow(s, partyId(bankSecuritiesParty(b)), bi, 'SECURITIES', money, 0);
   });
-  const bankIdxOf = (ticker: Ticker | undefined): number =>
-    ticker !== undefined && s.bankIdxOfTicker.has(ticker) ? s.bankIdxOfTicker.get(ticker)! : AT_NOWHERE;
+  // §3.13-BOOK (c-then-3b): a party names its house bank by ENTITY id; the pass's dense bank
+  // lane is still keyed by ticker, so this is where the two spaces meet. The lane's key is the
+  // next commit in this slice — until then the translation is HERE, at one site, rather than at
+  // every caller.
+  const bankTickerOfId = new Map(banks.map((b) => [b.id, b.ticker]));
+  const bankIdxOf = (bankId: EntityId | undefined): number => {
+    const ticker = bankId !== undefined ? bankTickerOfId.get(bankId) : undefined;
+    return ticker !== undefined && s.bankIdxOfTicker.has(ticker) ? s.bankIdxOfTicker.get(ticker)! : AT_NOWHERE;
+  };
   ctx.updatedCompanies.forEach((c) => {
     if (c.isBankEntity && c.bankBalanceSheet) return;
     // A3.1: the pass row opens at the persistent balance; a firm with no account yet opens at zero.
-    openCarried(companyParty(c), bankIdxOf(c.homeBankTicker), 'CORPORATE', currencyOf(c.region));
+    openCarried(companyParty(c), bankIdxOf(c.homeBankId), 'CORPORATE', currencyOf(c.region));
   });
   ctx.updatedInstitutionalEntities.forEach((e) => {
     // A3.2: the pass row opens at the persistent balance; an entity with no account opens at zero.
-    openCarried({ kind: 'INSTITUTION', id: e.id }, bankIdxOf(e.homeBankTicker), 'INSTITUTIONAL', currencyOf(e.region));
+    openCarried({ kind: 'INSTITUTION', id: e.id }, bankIdxOf(e.homeBankId), 'INSTITUTIONAL', currencyOf(e.region));
   });
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region];

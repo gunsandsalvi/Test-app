@@ -38,15 +38,15 @@ export const links: FunctionModule = {
     if (ref.type === 'company') {
       const c = companyOf(world, ref.id);
       if (!c) return null;
-      const bank = byTicker(c.homeBankTicker); const parent = byTicker(c.parentTicker);
+      const bank = byTicker(c.homeBankId); const parent = byTicker(c.parentTicker);
       const subs = world.state.companies.filter((x) => x.parentTicker === c.ticker && isActiveCompany(x)).map((x) => ({ ref: { type: 'company' as const, id: x.id } }));
       const managed = (c.managesEntityIds ?? []).filter((id) => institutionOf(world, id)).map((id) => ({ ref: { type: 'institution' as const, id } }));
       const lines = bankLinesTo(world, c.id);
       const contracts = contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker });
       const estate = (world.state.estates ?? []).find((e) => e.companyId === c.id);
-      const offerings = (world.state.primaryOfferings ?? []).filter((o) => o.issuerId === c.id || o.leadBankTicker === c.ticker);
-      const clients = c.isBankEntity ? world.state.companies.filter((x) => x.homeBankTicker === c.ticker && isActiveCompany(x)) : [];
-      const fundClients = c.isBankEntity ? world.state.institutionalEntities.filter((e) => e.homeBankTicker === c.ticker && !e.isDefaulted) : [];
+      const offerings = (world.state.primaryOfferings ?? []).filter((o) => o.issuerId === c.id || o.leadBankId === c.id);
+      const clients = c.isBankEntity ? world.state.companies.filter((x) => x.homeBankId === c.id && isActiveCompany(x)) : [];
+      const fundClients = c.isBankEntity ? world.state.institutionalEntities.filter((e) => e.homeBankId === c.id && !e.isDefaulted) : [];
       return (<>
         <Refs title="where it stands" world={world} nav={nav} refs={[
           { ref: { type: 'region', id: c.region }, hint: 'home region' },
@@ -83,7 +83,7 @@ export const links: FunctionModule = {
       const e = institutionOf(world, ref.id);
       if (!e) return null;
       const manager = world.state.companies.find((x) => x.id === e.id || (x.managesEntityIds ?? []).includes(e.id));
-      const bank = byTicker(e.homeBankTicker);
+      const bank = byTicker(e.homeBankId);
       const portfolio = (e.peFund?.portfolioCompanyIds ?? []).filter((id) => companyOf(world, id)).map((id) => ({ ref: { type: 'company' as const, id } }));
       const contracts = contractsOf(world, { kind: 'INSTITUTION', key: e.id });
       return (<>

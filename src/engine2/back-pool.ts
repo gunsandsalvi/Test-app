@@ -111,7 +111,7 @@ function preInternBackA(L: BackLanes): void {
     partyId(companyPartyOfTicker(L.ticker[i]));
     partyId({ kind: 'HOUSEHOLD', region: L.region[i] });
     partyId({ kind: 'GOVERNMENT', region: L.region[i] });
-    const bank = L.homeBankTicker[i];
+    const bank = L.homeBankId[i];
     if (bank) {
       partyId(bankPartyOfTicker(bank));
       partyId(bankCreditPartyOfTicker(bank));

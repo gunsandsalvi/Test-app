@@ -33,7 +33,7 @@ import { backWorkerCount, dispatchBackA, collectBackA } from '../../../engine2/b
 import type { BackAShardOut } from '../../../engine2/back-worker';
 import type { EntityId } from '../../../domain/ids';
 import type { Ticker } from '../../../domain/ids';
-import { asTicker } from '../../../domain/ids';
+import { asEntityId } from '../../../domain/ids';
 
 /** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
  *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
@@ -180,12 +180,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     ));
   });
   /** Who leads this issuer's deal — re-asked every time, so the mandate can be lost. */
-  const leadBankFor = (comp: Company, sizeLocal: number): Ticker => {
+  const leadBankFor = (comp: Company, sizeLocal: number): EntityId => {
     const alloc = leadAllocatorByRegion.get(comp.region);
-    if (!alloc) return comp.homeBankTicker ?? asTicker('');
-    const ticker = chooseLeadBank(comp.id, alloc.candidatesFor(comp.id));
-    if (ticker) alloc.award(ticker, sizeLocal);
-    return ticker || (comp.homeBankTicker ?? asTicker(''));
+    if (!alloc) return comp.homeBankId ?? asEntityId('');
+    const bankId = chooseLeadBank(comp.id, alloc.candidatesFor(comp.id));
+    if (bankId) alloc.award(bankId, sizeLocal);
+    return bankId || (comp.homeBankId ?? asEntityId(''));
   };
   const enqueueOffering = (o: PrimaryOffering) => {
     ctx.primaryOfferingsWorking.push(o);

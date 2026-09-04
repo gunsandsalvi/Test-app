@@ -27,19 +27,19 @@ export const offering = defineObject<PrimaryOffering>({
       { key: 'type', label: 'paper', render: (r) => words(r.obj.instrumentType), value: (r) => r.obj.instrumentType },
       { key: 'size', label: 'size', render: (r) => money(r.obj.sizeLocal), value: (r) => r.obj.sizeLocal },
       { key: 'walk', label: 'walk-away', render: (r) => bps(r.obj.walkAwayStat), value: (r) => r.obj.walkAwayStat },
-      { key: 'lead', label: 'lead', render: (r, world, nav) => { const b = world.state.companies.find((x) => x.ticker === r.obj.leadBankTicker); return b ? <Link to={{ type: 'company', id: b.id }} nav={nav}>{r.obj.leadBankTicker}</Link> : r.obj.leadBankTicker ?? '—'; }, value: (r) => r.obj.leadBankTicker ?? '' },
+      { key: 'lead', label: 'lead', render: (r, world, nav) => { const b = world.state.companies.find((x) => x.id === r.obj.leadBankId); return b ? <Link to={{ type: 'company', id: b.id }} nav={nav}>{b.ticker}</Link> : r.obj.leadBankId ?? '—'; }, value: (r) => r.obj.leadBankId ?? '' },
     ],
   },
   overview({ world, obj: o, nav }) {
     const issuer = world.state.companies.find((c) => c.id === o.issuerId);
-    const lead = world.state.companies.find((c) => c.ticker === o.leadBankTicker);
+    const lead = world.state.companies.find((c) => c.id === o.leadBankId);
     return (
       <>
         <ObjectHeader name={`${o.issuerTicker} ${words(o.instrumentType)}`} sub={<>primary offering · {words(o.purpose)} · <RegionLink id={o.region} nav={nav} /> · announced {formatDate(displayWeek(world.state, o.announcedWeek))}</>} />
         <StatGrid>
           <Stat label="size" value={money(o.sizeLocal)} sub={words(o.rateType ?? '')} />
           <Stat label="walk-away" value={`${bps(o.walkAwayStat)}bp`} sub="the issuer's own arithmetic" />
-          <Stat label="lead bank" value={lead ? lead.ticker : o.leadBankTicker ?? '—'} sub="underwrites" />
+          <Stat label="lead bank" value={lead ? lead.ticker : o.leadBankId ?? '—'} sub="underwrites" />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="issuer" v={issuer ? <Link to={{ type: 'company', id: issuer.id }} nav={nav}>{issuer.name}</Link> : o.issuerTicker} />

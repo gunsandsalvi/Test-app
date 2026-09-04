@@ -70,7 +70,7 @@ const BOOL_FIELDS = [
 /** String-valued scalars kept as raw string lanes (undefined stays undefined); interned int
  *  refs join when a consumer needs them. `lastManagementCommentary` is UI prose — not laned. */
 const STR_FIELDS = [
-  'id', 'ticker', 'name', 'region', 'sector', 'creditRating', 'homeBankTicker', 'parentTicker',
+  'id', 'ticker', 'name', 'region', 'sector', 'creditRating', 'homeBankId', 'parentTicker',
   'primarySubUnitId', 'listingStatus', 'institutionalRole', 'institutionalEntityType',
   'hedgeFundStrategy', 'producedCommodityId', 'acquiredByTicker', 'pendingLboSponsorId',
   'pendingRecapSponsorId', 'pendingIpoSponsorId',

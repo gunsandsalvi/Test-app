@@ -1,5 +1,6 @@
 import { V2World } from '../../../engine2/world';
-import { bankCreditPartyOfTicker, companyParty } from '../../../domain/party';
+import { bankCreditParty, companyParty } from '../../../domain/party';
+import { defect } from '../../../domain/defect';
 /**
  * HC Wave 2 — the corporate lifecycle: LBOs, dividend recaps, exits, real IPOs, births, and
  * sponsor equity wiped on default.
@@ -301,7 +302,7 @@ export function runPeLifecycleForRegion(
   // consumes the winner's balance sheet.
   const leadBanks = mandateAllocator(banksOf(ctx.prevActiveFirms, regionId)
     .map((c) => ({
-      ticker: c.ticker, bankMarketShare: c.bankMarketShare,
+      id: c.id, bankMarketShare: c.bankMarketShare,
       capacityLocal: (ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet)?.bankEquityLocal ?? 0,
     })));
   // §3.13-BOOK (c-then-2): the ONE builder, for both identities this pass resolves.
@@ -373,7 +374,7 @@ export function runPeLifecycleForRegion(
             // A recap is discretionary: the sponsor walks if the market prices it wide.
             walkAwayStat: RECAP_DM_THRESHOLD_BPS,
             rateType: 'FLOATING',
-            leadBankTicker: leadBanks.pick(recapTarget.id, recapLocal),
+            leadBankId: leadBanks.pick(recapTarget.id, recapLocal),
             announcedWeek: nextWeek,
             peDeal: { kind: 'RECAP', sponsorId: sponsor.id },
           } as PrimaryOffering);
@@ -425,7 +426,7 @@ export function runPeLifecycleForRegion(
           walkAwayStat: talkPerShare / IPO_PREMIUM_OVER_ENTRY,
           indicativeStat: talkPerShare,
           postIssueSharesOutstanding: postIssueShares,
-          leadBankTicker: leadBanks.pick(listCandidate.id, sharesOffered * talkPerShare),
+          leadBankId: leadBanks.pick(listCandidate.id, sharesOffered * talkPerShare),
           announcedWeek: nextWeek,
           peDeal: { kind: 'IPO', sponsorId: sponsor.id },
         } as PrimaryOffering);
@@ -528,7 +529,7 @@ export function runPeLifecycleForRegion(
             sizeLocal: debtLocal,
             walkAwayStat: RECAP_DM_THRESHOLD_BPS * 2,
             rateType: 'FLOATING',
-            leadBankTicker: leadBanks.pick(target.id, debtLocal),
+            leadBankId: leadBanks.pick(target.id, debtLocal),
             announcedWeek: nextWeek,
             peDeal: { kind: 'LBO', sponsorId: sponsor.id, equityLocal },
           } as PrimaryOffering);
@@ -601,7 +602,7 @@ export function runPeLifecycleForRegion(
             sizeLocal: debtLocal,
             walkAwayStat: RECAP_DM_THRESHOLD_BPS * 2,
             rateType: 'FLOATING',
-            leadBankTicker: leadBanks.pick(listedTarget.id, debtLocal),
+            leadBankId: leadBanks.pick(listedTarget.id, debtLocal),
             announcedWeek: nextWeek,
             peDeal: { kind: 'TAKE_PRIVATE', sponsorId: sponsor.id, equityLocal, takeoutPricePerShare },
           } as PrimaryOffering);
@@ -791,8 +792,9 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
   const seeded = c.debtTranches ?? [];
   const debtLocal = seeded.reduce((a, t) => a + t.principalLocal, 0);
   c.debtTranches = [];
-  if (!(debtLocal > 1) || !c.homeBankTicker) return;
-  const bank = ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker);
+  if (!(debtLocal > 1) || !c.homeBankId) return;
+  // §3.13-BOOK (c-then-3b): a lookup on the entity index, not a scan of every company per birth.
+  const bank = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities).companyById.get(c.homeBankId);
   const marginBps = facilityMarginBpsFor(ctx.v2, c, reg, bank);
   const tranche: DebtTranche = {
     id: birthFacilityTrancheId(c.id, nextWeek),
@@ -803,11 +805,11 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
     maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
     seniority: 'SENIOR',
     isBankFacility: true,
-    facilityBankTicker: c.homeBankTicker,
+    facilityBankTicker: bank?.ticker, // still the TICKER space — its own (c-then-3b) commit
   };
   issueTranche(ctx.v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'firm birth: facility lent by the home bank');
   pay(ctx, {
-    payer: bankCreditPartyOfTicker(c.homeBankTicker),
+    payer: bank ? bankCreditParty(bank) : defect(`newborn ${c.id} banks at ${c.homeBankId}, which is not an entity`),
     payee: companyParty(c),
     amount: tranche.principalLocal,
     currency: currencyOf(c.region),
@@ -921,7 +923,7 @@ export function runFirmBirthsForRegion(
   // it, so a born firm enters the world banked like every other.
   const banksForRelationship = mandateAllocator(banksOf(ctx.updatedCompanies, regionId)
     .map((b) => ({
-      ticker: b.ticker, bankMarketShare: b.bankMarketShare,
+      id: b.id, bankMarketShare: b.bankMarketShare,
       capacityLocal: (ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet)?.bankEquityLocal ?? 0,
     })));
   // Its real share of each market it entered, measured against what the region's firms already
@@ -944,8 +946,8 @@ export function runFirmBirthsForRegion(
 
   born.forEach((c) => {
     c.bornWeek = nextWeek;
-    if (!c.homeBankTicker) {
-      c.homeBankTicker = banksForRelationship.pick(c.id, Math.max(0, openingCashOf(c)));
+    if (!c.homeBankId) {
+      c.homeBankId = banksForRelationship.pick(c.id, Math.max(0, openingCashOf(c)));
     }
     // §3.13-BOOK (c-then-2): the `ctx.issuerTickerById?.set(c.id, c.ticker)` that stood here is
     // GONE with the mirror it maintained. It existed because that map was built once at context

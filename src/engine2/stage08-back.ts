@@ -118,7 +118,7 @@ export interface BackKernelDeps {
   mmfSweepBooks: ReturnType<typeof openCorporateSweepBooks>;
   primarySettlementByIssuerId: Map<string, { offering: PrimaryOffering; clearedStat: number; struckTerms?: { couponRate: number; maturityWeek: number }; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>;
   pendingOfferingIssuerIds: Set<string>;
-  leadBankFor: (comp: Company, sizeLocal: number) => Ticker;
+  leadBankFor: (comp: Company, sizeLocal: number) => EntityId;
   enqueueOffering: (o: PrimaryOffering) => void;
   /** Appends to the stage's refinance-news accumulator (swapped by the shard machinery). */
   pushNews: (n: NewsItem) => void;
@@ -172,14 +172,14 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   capexCommissionedThisWeekLocal: number;
   nextWeek: number;
   priorOccupationMixDrift: Company['occupationMixDrift'];
-  homeBankTicker: Ticker | undefined;
+  homeBankId: Ticker | undefined;
   /** §3.13: what a bridge on this borrower costs, in bps over the curve. It arrives as an
    *  argument because it is a read of the borrower's OWN printed paper and this core is
    *  lane-only by design (§7.317: no world reads, so it stays worker-safe). */
   bridgeMarginBps: number;
 }): CapitalBlockOut {
   const { newEbitda, newRevenue, weeklyInterest, effectiveDebtRate, newExecutionQuality,
-    capexCommissionedThisWeekLocal, nextWeek, priorOccupationMixDrift, homeBankTicker,
+    capexCommissionedThisWeekLocal, nextWeek, priorOccupationMixDrift, homeBankId,
     bridgeMarginBps } = args;
   // §7.317 step 1.3 — THE CAPITAL CORE READS LANES, NOT THE OBJECT. Every `x ?? d` the object
   // read had becomes `Number.isNaN(lane) ? d : lane` on the same value; the scrap/learning
@@ -271,7 +271,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
       ? ((Number.isNaN(L.growthCapexLocal[row]) ? (L.capexLocal[row] * 0.4) : L.growthCapexLocal[row]) / Math.max(1, L.annualRevenueLocal[row]))
       : L.baselineGrowthCapexToRevenueRatio[row],
     isInvestmentGrade: L.investmentGrade[row] === 1,
-    hasHouseBank: homeBankTicker !== undefined,
+    hasHouseBank: homeBankId !== undefined,
     addressableGrowthAnnual,
     categoryShortfall,
     capacityCatchupShareAnnual: CAPACITY_CATCHUP_SHARE_ANNUAL,
@@ -310,7 +310,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
       seniority: 'SENIOR',
       // G2: a bridge is BANK debt — it lives on the house bank's itemized book.
       isBankFacility: true,
-      facilityBankTicker: homeBankTicker,
+      facilityBankTicker: homeBankId,
     }];
   }
 
@@ -442,7 +442,7 @@ function runCashWalk(args: {
   ticker: Ticker;
   region: string;
   isBanksSector: boolean;
-  homeBankTicker: Ticker | undefined;
+  homeBankId: Ticker | undefined;
   carrierFreightRevenueLocal: number;
   channelMarginRevenueLocal: number;
   declaredDividendYield: number;
@@ -479,7 +479,7 @@ function runCashWalk(args: {
   row: number;
   taxCapture?: { accrueLocal: Float64Array };
 }): void {
-  const { ctx, companyId, ticker, region, isBanksSector, homeBankTicker,
+  const { ctx, companyId, ticker, region, isBanksSector, homeBankId,
     carrierFreightRevenueLocal, channelMarginRevenueLocal, declaredDividendYield, marketCapLocal,
     maxPayoutRatio, hasVehicle, boundaryTraceKey,
     wuSalesLocal, wuPurchasesLocal, wuTradeReceivableBookedLocal, wuTradeReceivableCollectedLocal,
@@ -650,10 +650,10 @@ function runCashWalk(args: {
       // SETL4: reported here, paid itemised below — the house bank for its facilities, the
       // register for market paper. One aggregate line on the cash walk, three real payees.
       post('interest paid', -weeklyInterest, undefined, false);
-      if (facilityInterestWeeklyLocal > 0 && homeBankTicker) {
+      if (facilityInterestWeeklyLocal > 0 && homeBankId) {
         pay(ctx, {
           payer: companyPartyOfTicker(ticker),
-          payee: bankPartyOfTicker(homeBankTicker),
+          payee: bankPartyOfTicker(homeBankId),
           amount: facilityInterestWeeklyLocal,
           currency: currencyOf(region as RegionId),
           reason: 'facility interest to the lending bank',
@@ -810,8 +810,8 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // SETL2b: drawing a bank facility is not a payment FROM anyone — the bank writes the loan and
     // the borrower's balance appears against it, in the same statement (settlement.ts). Naming
     // the house bank's CREDIT is what tells settlement no reserve should move.
-    const bankCredit: PartyRef | undefined = L8.homeBankTicker[row]
-      ? bankCreditPartyOfTicker(L8.homeBankTicker[row])
+    const bankCredit: PartyRef | undefined = L8.homeBankId[row]
+      ? bankCreditPartyOfTicker(L8.homeBankId[row])
       : undefined;
 
     // SCALE §7.303 — ONE PASS OVER THE LADDER, now made in the front pass (same walk, same
@@ -948,7 +948,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       newEbitda, newRevenue, weeklyInterest,
       effectiveDebtRate, newExecutionQuality, capexCommissionedThisWeekLocal, nextWeek,
       priorOccupationMixDrift: L8.occupationMixDrift[row],
-      homeBankTicker: L8.homeBankTicker[row],
+      homeBankId: L8.homeBankId[row],
       // §3.13: what this borrower's own bonds say a five-year claim on it costs. A borrower with
       // none printed pays what its committed line charges — which is what a bridge IS.
       bridgeMarginBps: issuerSpreadAtOnCurve(
@@ -978,7 +978,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       ticker: d.backLanes.ticker[row],
       region: d.backLanes.region[row],
       isBanksSector: d.backLanes.isBanksSector[row] === 1,
-      homeBankTicker: L8.homeBankTicker[row],
+      homeBankId: L8.homeBankId[row],
       carrierFreightRevenueLocal: L8.carrierFreightRevenueLocal[row],
       channelMarginRevenueLocal: L8.channelMarginRevenueLocal[row],
       declaredDividendYield: L8.dividendYield[row] ?? 0,
@@ -1160,7 +1160,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // §5-FINALIZATION step 11: a committed line is a HOUSE BANK's credit. A firm with no house
     // bank — a bank, by construction — has none to draw: its shortfall is its own book (its
     // reserves, and the central bank's window), never a facility with no lender (§7.372).
-    if (L8.wasDefaulted[row] !== 1 && L8.wasMergerAcquired[row] !== 1 && cash.usd < 0 && L8.homeBankTicker[row]) {
+    if (L8.wasDefaulted[row] !== 1 && L8.wasMergerAcquired[row] !== 1 && cash.usd < 0 && L8.homeBankId[row]) {
       const revolverRateAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
       let alreadyDrawnLocal = 0;
       for (const r of rowList) if (TS.flags[r] & TR_FACILITY) alreadyDrawnLocal += TS.principalLocal[r];
@@ -1183,12 +1183,12 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           seniority: 'SENIOR',
           // G2: a committed line is BANK debt on the house bank's own itemized book.
           isBankFacility: true,
-          facilityBankTicker: L8.homeBankTicker[row],
+          facilityBankTicker: L8.homeBankId[row],
         };
         drawnRevolverRow = issueTranche(v2, issuer, revolver, 'revolver drawn: liquidity shortfall');
         newTotalDebt += drawLocal;
         post('revolver drawn: liquidity shortfall', drawLocal,
-          L8.homeBankTicker[row] ? bankCreditPartyOfTicker(L8.homeBankTicker[row]) : undefined);
+          L8.homeBankId[row] ? bankCreditPartyOfTicker(L8.homeBankId[row]) : undefined);
       }
     }
 
@@ -1527,7 +1527,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
           : L8.facilityMarginBps[row],
         rateType: refinanceAsFixed ? 'FIXED' : 'FLOATING',
-        leadBankTicker: leadBankFor(comp, TS.principalLocal[rTr]),
+        leadBankId: leadBankFor(comp, TS.principalLocal[rTr]),
         announcedWeek: nextWeek,
       });
     });
@@ -1627,7 +1627,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // (book-settlement.ts, primary-settlement.ts). This line settled the whole of it against
       // the boundary while the CCP paid the boundary for the same paper.
       post(`primary ${o.purpose.toLowerCase()} proceeds (net of underwriting fee)`, settlement.proceedsLocal, undefined, false);
-    } else if (settlement && settlement.withdrawn && settlement.offering.purpose === 'REFINANCE' && maturingRow !== undefined && L8.homeBankTicker[row]) {
+    } else if (settlement && settlement.withdrawn && settlement.offering.purpose === 'REFINANCE' && maturingRow !== undefined && L8.homeBankId[row]) {
       // The market said no and the paper still matures: the revolver catches it — real market
       // access closing when spreads gap, with a real penalty cost. Step 11: a firm with no house
       // bank (a bank) has no revolver; its maturity is repaid from its own book below.
@@ -1641,7 +1641,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         seniority: 'SENIOR',
         // G2: the revolver is a committed BANK line — the house bank funds it and books it.
         isBankFacility: true,
-        facilityBankTicker: L8.homeBankTicker[row],
+        facilityBankTicker: L8.homeBankId[row],
       };
       rowList.push(issueTranche(v2, issuer, revolverTranche, 'revolver draw: withdrawn refinancing'));
       debtIssuanceThisWeek += revolverTranche.principalLocal;
@@ -1702,7 +1702,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
             : L8.facilityMarginBps[row],
           rateType: asFixed ? 'FIXED' : 'FLOATING',
           refinancesTrancheIds: bridges.map(r => trancheIdOf(v2, r)),
-          leadBankTicker: leadBankFor(comp, bridgeLocal),
+          leadBankId: leadBankFor(comp, bridgeLocal),
           announcedWeek: nextWeek,
         });
       }
@@ -1831,7 +1831,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         sizeLocal: dealSizeLocal,
         walkAwayStat: walkAwayOasBps,
         rateType: 'FIXED',
-        leadBankTicker: leadBankFor(comp, dealSizeLocal),
+        leadBankId: leadBankFor(comp, dealSizeLocal),
         announcedWeek: nextWeek,
       });
       newLastOpportunisticOfferingWeek = nextWeek;

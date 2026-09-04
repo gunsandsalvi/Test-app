@@ -38,7 +38,7 @@ import { ladderRowsOf, facilityBookOf } from '../../../engine2/tranches';
 import { moveFacilityLender } from '../../ledger/tranche-ledger';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../../domain/banking';
 import { moveSectorRowsToBank, bankReservesOf, bankDepositLines, heldCurrenciesOf } from '../../ledger/accounts';
-import type { Ticker } from '../../../domain/ids';
+import type { Ticker, EntityId } from '../../../domain/ids';
 
 const sheetLinesLocal = (s: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number): number =>
   Math.abs(lines.householdLocal) + Math.abs(lines.corporateLocal) + Math.abs(lines.institutionalLocal)
@@ -48,12 +48,25 @@ const sheetLinesLocal = (s: BankingSector, cashLocal: number, lines: DepositLine
   + Math.abs(cashLocal) + Math.abs(s.repoLentLocal ?? 0) + Math.abs(s.onRrpLendingLocal ?? 0)
   + Math.abs(s.sovereignAccruedCouponLocal ?? 0) + Math.abs(s.primeBrokerageLoansLocal ?? 0);
 
-/** Every link in the world that names the failed bank now names the assuming one. */
-export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionId: RegionId, from: Ticker, to: Ticker): void {
+/**
+ * Every link in the world that names the failed bank now names the assuming one.
+ *
+ * §3.13-BOOK (c-then-3b): it takes the two BANKS rather than two tickers, because the links are
+ * no longer all in one id space — `homeBankId` and `leadBankId` name the bank by its ENTITY id
+ * while `brokerTicker` and the party keys still name it by ticker. Handing it the firms rather
+ * than one of their names is what lets each link be rekeyed in the space it is actually in, and
+ * it is why this function did not silently miss half of them.
+ */
+export function rekeyBankLinks(
+  state: GameState, ctx: WeeklyStepContext, regionId: RegionId,
+  fromBank: { id: EntityId; ticker: Ticker }, toBank: { id: EntityId; ticker: Ticker },
+): void {
+  const from = fromBank.ticker, to = toBank.ticker;
   const rekey = (t: Ticker | undefined) => (t === from ? to : t);
-  ctx.updatedCompanies.forEach((c) => { if (c.homeBankTicker === from) c.homeBankTicker = to; });
-  ctx.prevActivePrivateFirms.forEach((c) => { if (c.homeBankTicker === from) c.homeBankTicker = to; });
-  ctx.updatedInstitutionalEntities.forEach((e) => { if (e.homeBankTicker === from) e.homeBankTicker = to; });
+  const rekeyId = (i: EntityId | undefined) => (i === fromBank.id ? toBank.id : i);
+  ctx.updatedCompanies.forEach((c) => { c.homeBankId = rekeyId(c.homeBankId); });
+  ctx.prevActivePrivateFirms.forEach((c) => { c.homeBankId = rekeyId(c.homeBankId); });
+  ctx.updatedInstitutionalEntities.forEach((e) => { e.homeBankId = rekeyId(e.homeBankId); });
   // Facility tranches carry their lender as an interned ref on the row.
   // A facility moving to the assuming bank is a wire, lender to lender.
   const v2 = ctx.v2;
@@ -71,7 +84,7 @@ export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionI
   if (reg?.primeBrokerageBook) {
     reg.primeBrokerageBook = reg.primeBrokerageBook.map((l) => ({ ...l, brokerTicker: rekey(l.brokerTicker) ?? l.brokerTicker }));
   }
-  ctx.primaryOfferingsWorking = ctx.primaryOfferingsWorking.map((o) => ({ ...o, leadBankTicker: rekey(o.leadBankTicker) ?? o.leadBankTicker }));
+  ctx.primaryOfferingsWorking = ctx.primaryOfferingsWorking.map((o) => ({ ...o, leadBankId: rekeyId(o.leadBankId) ?? o.leadBankId }));
   // The treasury's accrued-coupon ledger is keyed by holder; the failed bank's accruals are the
   // assuming bank's receivable now (its sheet already carries them).
   const fromKey = `|${partyKey(bankSecuritiesPartyOfTicker(from))}`;
@@ -194,7 +207,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: bankParty(acquirer),
         amount: plan.guaranteeLocal, currency: currencyOf(regionId), reason: 'resolution: deposit guarantee on the hole' });
     }
-    rekeyBankLinks(state, ctx, regionId, bank.ticker, acquirer.ticker);
+    rekeyBankLinks(state, ctx, regionId, bank, acquirer);
     // Premises and people go with the books: the branches open on Monday under the new name.
     acquirer.grossPPELocal = (acquirer.grossPPELocal ?? 0) + (bank.grossPPELocal ?? 0);
     acquirer.accumulatedDepreciationLocal = (acquirer.accumulatedDepreciationLocal ?? 0) + (bank.accumulatedDepreciationLocal ?? 0);
@@ -221,7 +234,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // own ladder, its equity) go through the one estate machinery next week, paid from whatever
     // the assuming bank owed it for the net. ----
     bank.bankBalanceSheet = undefined;
-    bank.homeBankTicker = acquirer.ticker;
+    bank.homeBankId = acquirer.id;
     // The shell has no company account yet; the first pass opens one at zero at its acquirer.
     bank.isDefaulted = true;
     bank.defaultedWeek = week;

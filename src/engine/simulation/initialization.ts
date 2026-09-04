@@ -807,12 +807,12 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // one actually has — the hash of the firm's id this replaces spread them too, but on
       // nothing any bank did.
       const houseBanks = mandateAllocator(regionBanksForLending.map(b => ({
-        ticker: b.ticker, bankMarketShare: b.bankMarketShare,
+        id: b.id, bankMarketShare: b.bankMarketShare,
         capacityLocal: b.bankBalanceSheet?.bankEquityLocal ?? 0,
       })));
       // §3.13-READ D13: assigned and totalled in ONE pass — `pick` consumes the winner's
       // capacity, so the allocation depends on the order and the total has to come from the same
-      // walk that made it. This was two loops, the second re-testing a `homeBankTicker` the first
+      // walk that made it. This was two loops, the second re-testing a `homeBankId` the first
       // had just set on every row.
       const corpDepositsByBank = assignHouseBanks(
         regionCompanies.filter(c => !c.isBankEntity), houseBanks, openingCashOf);
@@ -1360,7 +1360,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const regionBanks = banksOf(companies, regionId);
     if (regionBanks.length === 0) return;
     const houseBanks = mandateAllocator(regionBanks.map(b => ({
-      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityLocal: b.bankBalanceSheet!.bankEquityLocal,
+      id: b.id, bankMarketShare: b.bankMarketShare, capacityLocal: b.bankBalanceSheet!.bankEquityLocal,
     })));
     const byBank = assignHouseBanks(
       institutionalEntities.filter(e => e.region === regionId), houseBanks, openingCashOf);
@@ -1639,7 +1639,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const regionBanks = banksOf(companies, regionId);
     if (regionBanks.length === 0) return;
     const lateHouseBanks = mandateAllocator(regionBanks.map(b => ({
-      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityLocal: b.bankBalanceSheet!.bankEquityLocal,
+      id: b.id, bankMarketShare: b.bankMarketShare, capacityLocal: b.bankBalanceSheet!.bankEquityLocal,
     })));
     const lateCorporateByBank = assignHouseBanks(
       companies.filter(c => c.region === regionId && !c.isBankEntity), lateHouseBanks, openingCashOf, true);

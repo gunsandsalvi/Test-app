@@ -32,6 +32,7 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
+import { buildEntityIndex } from '../../ledger/entity-index';
 import { bankCreditPartyOfTicker, bankSecuritiesParty, bankSecuritiesPartyOfTicker, companyParty, companyPartyOfTicker } from '../../../domain/party';
 import { asInstrumentId, InstrumentId, asTicker } from '../../../domain/ids';
 
@@ -115,6 +116,9 @@ const CP_MIN_GAP_SHARE_OF_REVENUE = 0.01;
 // translator that produced it is gone with the id shape.
 
 export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+  // §3.13-BOOK (c-then-3b): `homeBankId` names the house bank in the ENTITY space.
+  const entities07f = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
+  const homeBankOf = (c: { homeBankId?: EntityId }) => (c.homeBankId ? entities07f.companyById.get(c.homeBankId) : undefined);
   const v2Mirror = ensureV2(state);
   const regionIds = REGION_IDS;
 
@@ -1194,10 +1198,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             // syndicated loan market's float on one path and on the house bank's itemized book
             // on the other — one real thing represented two ways (rule 4).
             isBankFacility: true,
-            facilityBankTicker: iss.comp.homeBankTicker,
+            facilityBankTicker: homeBankOf(iss.comp)?.ticker, // still the TICKER space — its own commit
           } as DebtTranche, 'revolver draw: commercial paper roll failed');
           pay(ctx, {
-            payer: bankCreditPartyOfTicker(iss.comp.homeBankTicker ?? asTicker('')),
+            payer: bankCreditPartyOfTicker(homeBankOf(iss.comp)?.ticker ?? asTicker('')),
             payee: companyParty(iss.comp),
             amount: revolverLocal,
             currency: currencyOf(iss.comp.region),
