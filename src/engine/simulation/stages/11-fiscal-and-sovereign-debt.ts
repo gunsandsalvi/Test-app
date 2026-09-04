@@ -19,12 +19,13 @@ import { generateWeeklyNews } from '../../newsGenerator';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { weeklyInterestExpenseLocal, decomposeGovernmentSpending, governmentOutlaysLocal, weeklyBillDiscountAccrualLocal, isDiscountBill } from '../../../domain/government';
-import { centralBankSovereignBookLocal, openMarketPolicy, cashPositionBillIssuanceLocal } from '../../../domain/central-bank';
+import { openMarketPolicy, cashPositionBillIssuanceLocal } from '../../../domain/central-bank';
+import { centralBankPositions, centralBankBookLocal } from '../../sovereign-register';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay, dueToPayee, partyId, internReason, CORPORATE_TAX_REASON, settlementWeek } from './settlement';
 import { retireHolding } from '../../ledger/holdings-ledger';
-import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { internType, internRegion } from '../../../engine2/world';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { encumberedFaceByBond, repoBorrowedLocal, srfBorrowedLocal } from '../../../domain/repo';
@@ -377,15 +378,20 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // the creator M1 measured once the treasury's statement stopped masking it (§7.354).
       const cbSheet = reg.centralBankSheet;
       if (cbSheet) {
-        const remaining: Record<string, number> = {};
+        // §3.13-BOOK d3a: the central bank's book is register rows, so a matured slice is RETIRED
+        // to the treasury by wire like every other holder's — the ledger debits the row and
+        // unlinks it when empty. The treasury repays FACE; the row gives up its value pro rata.
         let cbRedeemedLocal = 0;
-        instrumentEntries(cbSheet.sovereignHoldingsByBond).forEach(([key, held]) => {
-          const heldLocal = Number(held) || 0;
-          const redeemedLocal = heldLocal * (redeemedFractionByBond.get(key) ?? 0);
-          if (redeemedLocal > 0) { cbRedeemedByBond.set(key, redeemedLocal); cbRedeemedLocal += redeemedLocal; }
-          remaining[key] = heldLocal - redeemedLocal;
+        centralBankPositions(ctx.v2, regionId).forEach((p) => {
+          const fraction = redeemedFractionByBond.get(p.bondId) ?? 0;
+          if (!(fraction > 0)) return;
+          const redeemedFaceLocal = p.faceLocal * fraction;
+          if (!(redeemedFaceLocal > 0)) return;
+          retireHolding(ctx.v2, { kind: 'CENTRAL_BANK', region: regionId }, { kind: 'GOVERNMENT', region: regionId },
+            { instrumentType: 'GOV_BOND', instrumentId: p.bondId, issuerRegion: regionId, valueLocal: p.valueLocal * fraction, units: redeemedFaceLocal }, 'sovereign redemption');
+          cbRedeemedByBond.set(p.bondId, (cbRedeemedByBond.get(p.bondId) ?? 0) + redeemedFaceLocal);
+          cbRedeemedLocal += redeemedFaceLocal;
         });
-        cbSheet.sovereignHoldingsByBond = remaining;
         if (cbRedeemedLocal > 0) {
           pay(ctx, {
             payer: { kind: 'GOVERNMENT', region: regionId },
@@ -409,20 +415,23 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       ctx.updatedInstitutionalEntities.forEach(entity => {
         // §5-WIRES W2: each matured slice is RETIRED to the treasury by wire; the ledger debits
         // the row and unlinks it when empty.
-        const redeem: { id: InstrumentId; usd: number }[] = [];
+        const redeem: { id: InstrumentId; usd: number; faceLocal: number }[] = [];
         for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = Hsov.next[r]) {
           if (Hsov.typeRef[r] !== govBondRefS || Hsov.regionRef[r] !== regionRefS) continue;
           const id = instrumentIdAt(ctx.v2, r);
           const fraction = redeemedFractionByBond.get(id) ?? 0;
           if (fraction <= 0) continue;
-          redeem.push({ id, usd: Hsov.qtyLocal[r] * fraction });
+          // §3.13-BOOK d3a: a maturity pays FACE (`the-register.md` E2). This paid the row's
+          // marked VALUE times the fraction, which is face only while the mark is par — a bill
+          // bought at a discount was repaid at the discount, and a bond marked above par above it.
+          redeem.push({ id, usd: Hsov.qtyLocal[r] * fraction, faceLocal: rowUnits(Hsov, r) * fraction });
         }
         if (redeem.length === 0) return;
         let redeemedCashLocal = 0;
         redeem.forEach((x) => {
           retireHolding(ctx.v2, { kind: 'INSTITUTION', id: entity.id }, { kind: 'GOVERNMENT', region: regionId },
-            { instrumentType: 'GOV_BOND', instrumentId: x.id, issuerRegion: regionId, valueLocal: x.usd }, 'sovereign redemption');
-          redeemedCashLocal += x.usd;
+            { instrumentType: 'GOV_BOND', instrumentId: x.id, issuerRegion: regionId, valueLocal: x.usd, units: x.faceLocal }, 'sovereign redemption');
+          redeemedCashLocal += x.faceLocal;
         });
         if (redeemedCashLocal > 0) {
           redemptionPaidLocal += redeemedCashLocal;
@@ -753,7 +762,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       const cb = reg.centralBankSheet;
       // XB5: the open-market operation is about the SOVEREIGN book. FX reserves are also assets
       // but they are not what a bond purchase adds to.
-      const bookLocal = centralBankSovereignBookLocal(cb);
+      // §3.13-BOOK d3a: off the register — the book's marked value sizes the operation, and the
+      // reinvestment below is spread by the FACE each bond holds.
+      const bookLocal = centralBankBookLocal(ctx.v2, regionId);
       const { reinvestmentShare, netPurchaseLocal } = openMarketPolicy({
         policyRate: reg.policyRate,
         taylorTargetRate: reg.taylorTargetRate,
@@ -768,8 +779,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         orders[key] = redeemedLocal * reinvestmentShare;
       });
       if (netPurchaseLocal > 0 && bookLocal > 0) {
-        Object.entries(cb.sovereignHoldingsByBond).forEach(([key, held]) => {
-          orders[key] = (orders[key] ?? 0) + netPurchaseLocal * ((Number(held) || 0) / bookLocal);
+        const positions = centralBankPositions(ctx.v2, regionId);
+        const faceTotalLocal = positions.reduce((a, p) => a + p.faceLocal, 0);
+        if (faceTotalLocal > 0) positions.forEach((p) => {
+          orders[p.bondId] = (orders[p.bondId] ?? 0) + netPurchaseLocal * (p.faceLocal / faceTotalLocal);
         });
       }
       cb.plannedPurchasesByBond = orders;

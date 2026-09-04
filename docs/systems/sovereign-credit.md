@@ -213,7 +213,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | G4 restructuring by exchange offer, with holdouts | — | ❌ |
 | G5 the consequence is exclusion, not liquidation | — | ❌ |
 | H1 the central bank buys as policy, in a size it chooses | `src/engine/simulation/stages/central-bank-demand.ts:plannedPurchasesByBond` | ✅ |
-| H2 the purchase CREATES reserves; the base grows | `src/engine/simulation/stages/central-bank-demand.ts:wireCentralBankFills` | ✅ |
+| H2 the purchase CREATES reserves; the base grows | `src/engine/simulation/stages/central-bank-demand.ts:bookCentralBankFills` | ✅ |
 | H3 the coupon on its holding returns as remittance | `src/engine/simulation/stages/central-bank.ts:runCentralBankStage` | ✅ |
 | **H4 monetary financing vs OMO is a POLICY constraint** | `src/engine/ledger/accounts.ts:waysAndMeansOf` | ❌ |
 | H5 VERIFY consolidated economically, not accounting-wise | — | ❌ |
@@ -236,10 +236,11 @@ of the second.
 
 E1 asks who holds how much of WHICH LINE, and §3.13-SOV row 3 answered it: every store keys by the
 bond's own tranche id. What row 3 did not give them is one SHAPE. A government holding sits in the
-register (institutions and, since §9.13-EQUITY, households), in each bank's
-`sovereignBondHoldingsByBond`, in each bank's desk inventory, in the central bank's
-`sovereignHoldingsByBond`, and in a company's `treasuryHoldings` — because only one holder class is
-in the register at all (`the-register.md` A1.a, the tree's own statement of its boundary).
+register (institutions, since §9.13-EQUITY households, and since §9.13-BOOK d3a the CENTRAL
+BANK), in each bank's `sovereignBondHoldingsByBond`, in each bank's desk inventory, and in a
+company's `treasuryHoldings` — because the other holder classes are not in the register yet
+(`the-register.md` A1.a, the tree's own statement of its boundary; §3.13-BOOK d3b–d3d bring
+them in).
 
 **Five places open-coded the walk over those stores**: the seed's stock reconciliation,
 `holdings-view`'s ownership shares, `O1`'s sovereign arm, `O11`'s stray-id check and the UI's
@@ -289,7 +290,7 @@ closes: the walk is one, and both callers use it.
 |---|---|---|
 | 1 type | `GovDebtTranche` is a strict subset of `DebtTranche` | `region-macro.ts:312` — `{id, principalLocal, couponRate, originationWeek, maturityWeek, tenorAtIssuanceYears}`, six fields, every one of them also on `company.ts:75`. No `seniority`, no `rateType`, no `callProtection`, no `paymentsPerYear`, no currency |
 | 2 store | ✅ DONE — the ONE tranche store | `reg.govDebtTranches` — 20 read sites across `src`, all of them `(reg.govDebtTranches ?? []).filter/reduce`; the withdrawal rebuilt the array with `.map(t => ({...t}))` |
-| 3 holdings | ✅ DONE — every store keys by BOND | `banking.ts:129` `sovereignBondHoldingsByBond` for banks, `centralBankSheet.sovereignHoldingsByBond` for the CB, `sovBondDealerInventory[].bondId` for the desks, `GOV_BOND` register rows on the tranche id for institutions. Four stores, one id space; `audit/ownership.ts:o11` is the invariant and `o3` no longer exempts sovereigns |
+| 3 holdings | ✅ DONE — every store keys by BOND | `banking.ts:129` `sovereignBondHoldingsByBond` for banks, `sovBondDealerInventory[].bondId` for the desks, `GOV_BOND` register rows on the tranche id for institutions and (§9.13-BOOK d3a) the central bank. One id space; `audit/ownership.ts:o11` is the invariant and `o3` no longer exempts sovereigns |
 | 4 clearing | ✅ DONE — `07c` clears a **PRICE** | §9.13-SOV row 4: `statKind: 'PRICE_LIKE'`, each holder's reservation YIELD stated as the price it implies on that bond's own schedule and the yield read back with `yieldFromPrice`. It used to be `YIELD_LIKE`, so the engine valued every sovereign fill at `1` |
 | 5 curve | ✅ DONE — ONE owner | `sovereign-curve.ts` fits once through every point the week's sessions cleared and publishes every field as a read of that fit; the auctions clear against the standing curve and deposit what they observed |
 
@@ -356,12 +357,12 @@ And a bill that CHANGES HANDS is right — under the locked-rate reading the buy
 the ISSUER's original yield rather than at the price it actually paid.
 
 **⚠️ E3 is what is left of this, and it is a storage finding.** The register marks a bill at
-`units × price` like every other row. A bank's `sovereignBondHoldingsByBond` and the central bank's
-`sovereignHoldingsByBond` store a VALUE per bill and no quantity — and their own auctions (`07c`,
-`07f`) write a FACE into that same field every week — so the return can only be applied to them as
-the price's RATIO, and the book ends each week at neither face nor `face × price`. `O1` then
-compares that value against a ladder's face. It cannot be fixed inside the accretion: it needs
-those two books in the register, which is A1.a's boundary in `the-register.md` and §3's.
+`units × price` like every other row — the central bank's bills included, since §9.13-BOOK d3a put
+its book on the register. A bank's `sovereignBondHoldingsByBond` still stores a VALUE per bill and
+no quantity — and its own auctions (`07c`, `07f`) write a FACE into that same field every week —
+so the return can only be applied to it as the price's RATIO, and the book ends each week at
+neither face nor `face × price`. `O1` then compares that value against a ladder's face. It cannot
+be fixed inside the accretion: it needs that book in the register, which is §3.13-BOOK d3b.
 
 **§3 step 13-BOOK (d3)** — small, and it folds naturally into 13-SOV, which has
 to give the bill a stored issue price anyway to become a `DebtTranche`.
@@ -449,7 +450,7 @@ cover ratio (C4). All three are reads, not mechanisms. **A measurement, for §3 
 
 Branch H is the surprise of this mapping: **H1, H2 and H3 are all ✅** and properly wired — the
 central bank chooses its own size per tenor (`plannedPurchasesByBond`), its fills create reserves
-through a real wire (`wireCentralBankFills`), and its coupon income nets through to a treasury
+through a real wire onto its register book (`bookCentralBankFills`, §9.13-BOOK d3a), and its coupon income nets through to a treasury
 remittance that goes NEGATIVE after a hiking cycle (`central-bank.ts:32`), which is the real
 phenomenon reproduced rather than modelled separately. A1–A1.c are ✅ throughout: taxes are levied on
 real bases and remitted by named payers, outlays decompose to named payees, and the deficit is the

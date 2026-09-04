@@ -76,7 +76,7 @@ import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGOR
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
-import { openAccount, openingCashOf, stashOpeningCash, stashSeedHouseholdLine, seedGovLadderOf, openSectorRow } from '../ledger/accounts';
+import { openAccount, openingCashOf, stashOpeningCash, stashSeedHouseholdLine, seedGovLadderOf, seedCentralBankBookOf, openSectorRow } from '../ledger/accounts';
 import { newWireJournal, setActiveWireJournal, setActiveWireWorld, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { wireWorldOf } from '../ledger/wire-world';
 import { seedLadder } from '../ledger/tranche-ledger';
@@ -118,7 +118,7 @@ import { equityInstrumentId, peFundInterestId, equityIssuerId } from '../../doma
 import type { InstrumentId } from '../../domain/ids';
 import { governmentIssuer, indexFundEntityId, moneyFundEntityId, peFundEntityId } from '../../domain/entity-keys';
 import type { Ticker } from '../../domain/ids';
-import { asTicker } from '../../domain/ids';
+import { asTicker, asInstrumentId } from '../../domain/ids';
 
 /**
  * Build a world. The same seed always builds the same world and, stepped the same number of
@@ -377,6 +377,17 @@ function openSeededBooks(state: GameState): void {
     for (const e of state.institutionalEntities ?? []) {
       if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
     }
+    // §3.13-BOOK d3a — THE CENTRAL BANKS' BOOKS, opened by wire like every other holder's: each
+    // bond the seed's close sized (`seedCentralBankBookOf`) is issued by the treasury to the
+    // central bank at its face. The stash dies here; the rows are the book from now on.
+    (Object.keys(state.regions) as RegionId[]).forEach((regionId) => {
+      const cb = state.regions[regionId]?.centralBankSheet;
+      if (!cb) return;
+      const book: ItemizedHolding[] = Object.entries(seedCentralBankBookOf(cb))
+        .filter(([, v]) => (Number(v) || 0) > 0)
+        .map(([id, v]) => ({ instrumentId: asInstrumentId(id), instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalLocal: Number(v), units: Number(v) }));
+      seedBook(v2, { kind: 'CENTRAL_BANK', region: regionId }, book, issuerOfHolding);
+    });
     // §9.13-EQUITY — AND THE HOUSEHOLD SECTOR'S BOOK, opened by wire like every other holder's.
     // Every share of every listed company is either on a named book or held directly by
     // households; the institutions' books have just been opened, so what is left of each issue is
@@ -833,7 +844,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // cash is its reserve liability exist. Currency is the residual; the weekly stage
       // re-derives it by the same arithmetic.
       const cbSheet = reg.centralBankSheet;
-      if (cbSheet) reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(cbSheet, 0)); // no advance at birth
+      if (cbSheet) reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(Object.values(seedCentralBankBookOf(cbSheet)).reduce((a, v) => a + (Number(v) || 0), 0), cbSheet, 0)); // no advance at birth; the book is the seed's stash until `openSeededBooks`
 
       // Every company banks somewhere: its cash IS a deposit at its house bank (the same
       // relationship lead WS8 mandates for its offerings, so one firm has one bank).

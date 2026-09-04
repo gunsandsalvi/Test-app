@@ -12,6 +12,7 @@
  */
 
 import { waysAndMeansOf } from '../../ledger/accounts';
+import { centralBankPositions, centralBankBookLocal } from '../../sovereign-register';
 import { currencyOf } from '../../../domain/geography';
 import { GameState, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
@@ -33,8 +34,9 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // remitting nothing after a hiking cycle, reproduced rather than modelled separately. ----
     // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
     const couponByBond = sovereignCouponByBond(materializeGovLadder(ctx.v2, regionId));
-    const couponIncomeLocal = Object.entries(cb.sovereignHoldingsByBond || {})
-      .reduce((a, [k, v]) => a + ((Number(v) || 0) * (couponByBond[k] ?? 0)) / 52, 0);
+    // §3.13-BOOK d3a: on the FACE its register rows hold.
+    const couponIncomeLocal = centralBankPositions(ctx.v2, regionId)
+      .reduce((a, p) => a + (p.faceLocal * (couponByBond[p.bondId] ?? 0)) / 52, 0);
     // What 02b actually PAID, recorded by 02b at the moment it paid it. Re-summing the banks'
     // own fields here read a set resolution had already changed, so a bank that was paid its
     // interest and then resolved dropped out of the expense the remittance is meant to net.
@@ -92,6 +94,6 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // the audit's M1 prints the residual until it does. ----
 
     // Statistic, not a driver: the old `centralBankBalanceSheet` scalar's replacement.
-    reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(cb, waysAndMeansOf(ctx.v2, regionId), currencyOf(regionId), ctx.fx));
+    reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(centralBankBookLocal(ctx.v2, regionId), cb, waysAndMeansOf(ctx.v2, regionId), currencyOf(regionId), ctx.fx));
   });
 }

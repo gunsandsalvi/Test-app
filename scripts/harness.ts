@@ -140,6 +140,7 @@ import { mortgageSeverityAtLtv, vintageCurrentLtv, householdBookRwaLocal } from 
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS } from '../src/engine/macro/banking';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../src/domain/market-microstructure';
 import { centralBankAssetsLocal, centralBankFxReservesLocal } from '../src/domain/central-bank';
+import { centralBankBookLocal, centralBankPositions } from '../src/engine/sovereign-register';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
 import { unclassifiedReasons } from '../src/engine/simulation/stages/settlement';
 import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
@@ -474,7 +475,7 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     // XB5: the asset side is the sovereign book PLUS the FX reserves. Leaving the reserves out
     // here while the engine counts them made the identity fail by exactly their size — 231 of
     // 273 violations at the XB close, and a harness bug rather than an engine one.
-    const sovereignBook = Object.values(cb.sovereignHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+    const sovereignBook = centralBankBookLocal(ensureV2(state), region);
     const fxBook: Record<string, number> = cb.fxReservesByRegion ?? {};
     const fxReserves = Object.keys(fxBook).reduce((a, k) => a + (Number(fxBook[k]) || 0), 0);
     const assets = sovereignBook + fxReserves;
@@ -495,7 +496,7 @@ function checkCentralBankIdentity(state: GameState, week: number) {
         message: `${region} central bank filled ${(filledLocal / 1e9).toFixed(2)}B against an order of ${(orderedLocal / 1e9).toFixed(2)}B`,
       });
     }
-    if (Object.values(cb.sovereignHoldingsByBond || {}).some((v) => (Number(v) || 0) < -1)) {
+    if (centralBankPositions(ensureV2(state), region).some((p) => p.faceLocal < -1)) {
       violations.push({ week, message: `${region} central bank holds a negative position` });
     }
     // PUB1e: the government cannot buy more than it appropriated, and what left the account is
@@ -1105,7 +1106,6 @@ const hhModule: HarnessModule = (() => {
 
 /** PUB close-out battery (§7.68), as a module on the shared run. */
 function couponReceipts(s: GameState, region: RegionId) {
-  const reg = s.regions[region];
   const cb = sovereignCouponByBond(materializeGovLadder(ensureV2(s), region));
   const rate = (id: string) => cb[id] ?? 0;
   const banks = banksOf(s.companies, region)
@@ -1116,8 +1116,8 @@ function couponReceipts(s: GameState, region: RegionId) {
     .reduce((a: number, e: InstitutionalEntity) => a + (e.itemizedHoldings || [])
       .filter((h: ItemizedHolding) => h.instrumentType === 'GOV_BOND' && h.issuerRegion === region)
       .reduce((x: number, h: ItemizedHolding) => x + ((h.quantityOrNotionalLocal ?? 0) * rate(h.instrumentId)) / 52, 0), 0);
-  const central = Object.entries(reg.centralBankSheet?.sovereignHoldingsByBond || {})
-    .reduce((a: number, [k, v]: [string, unknown]) => a + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0);
+  const central = centralBankPositions(ensureV2(s), region)
+    .reduce((a: number, p) => a + (p.faceLocal * (cb[p.bondId] ?? 0)) / 52, 0);
   const paid = weeklyInterestExpenseLocal(materializeGovLadder(ensureV2(s), region));
   return { paid, banks, insts, central };
 }
@@ -1142,7 +1142,7 @@ const pubModule: HarnessModule = (() => {
       series.unspentProc.push(reg.unspentProcurementBudgetLocal ?? 0);
       series.stance.push(reg.fiscalStanceScore);
       series.tga.push(treasuryAccountOf(ensureV2(s), 'USA'));
-      series.cbBook.push((cb ? centralBankAssetsLocal(cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0));
+      series.cbBook.push((cb ? centralBankAssetsLocal(centralBankBookLocal(ensureV2(s), 'USA'), cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0));
       series.reinvest.push(cb?.reinvestmentShare ?? 1);
       series.remit.push(cb?.lastRemittanceLocal ?? 0);
       series.policy.push(reg.policyRate);
@@ -1151,7 +1151,8 @@ const pubModule: HarnessModule = (() => {
       series.cmb.push(reg.cashBridgeBillIssuanceLocal ?? 0);
       series.debtGdp.push(reg.debtToGdpPctBottomUp ?? 0);
       const cbCoupon = couponReceipts(s, 'USA').central * 52;
-      series.portYield.push((cb ? centralBankAssetsLocal(cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0) > 0 ? cbCoupon / (cb ? centralBankAssetsLocal(cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0) : 0);
+      const cbAssetsLocal = cb ? centralBankAssetsLocal(centralBankBookLocal(ensureV2(s), 'USA'), cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0;
+      series.portYield.push(cbAssetsLocal > 0 ? cbCoupon / cbAssetsLocal : 0);
       REGIONS.forEach(r => {
         const rr = s.regions[r];
         if (waysAndMeansOf(ensureV2(s), r) > 0) negativeTga++;
@@ -1203,7 +1204,7 @@ const pubModule: HarnessModule = (() => {
         const chk = (n: string, v: number | undefined) => { if (v === undefined || !isFinite(v)) bad.push(n); };
         chk('revenue', reg.governmentRevenueLocal); chk('outlays', reg.governmentOutlaysLocal);
         chk('interest', reg.governmentInterestWeeklyLocal); chk('tga', treasuryAccountOf(ensureV2(s), r));
-        chk('cbBook', (cb ? centralBankAssetsLocal(cb, waysAndMeansOf(ensureV2(s), r)) : 0)); chk('2Y', reg.zeroRates.tenor2Y); chk('10Y', reg.zeroRates.tenor10Y);
+        chk('cbBook', (cb ? centralBankAssetsLocal(centralBankBookLocal(ensureV2(s), r), cb, waysAndMeansOf(ensureV2(s), r)) : 0)); chk('2Y', reg.zeroRates.tenor2Y); chk('10Y', reg.zeroRates.tenor10Y);
         out.push(`  ${r}: rev ${B(reg.governmentRevenueLocal)} outlays ${B(reg.governmentOutlaysLocal ?? 0)} interest ${B(reg.governmentInterestWeeklyLocal ?? 0)} tga ${B(treasuryAccountOf(ensureV2(s), r))} 2Y ${pct(reg.zeroRates.tenor2Y)} 10Y ${pct(reg.zeroRates.tenor10Y)} ${bad.length ? 'NON-FINITE: ' + bad.join(',') : 'all finite'}`);
       });
       return out;

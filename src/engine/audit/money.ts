@@ -11,7 +11,8 @@ import { loanBooksOf, depositsOf, spendableDepositsOf } from '../../domain/banki
 import { AuditSnapshot } from './snapshot';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
 import { isActiveCompany, banksOf } from '../../domain/company';
-import { centralBankAssetsLocal, centralBankLiabilitiesLocal, centralBankSovereignBookLocal, centralBankFxReservesLocal } from '../../domain/central-bank';
+import { centralBankAssetsLocal, centralBankLiabilitiesLocal, centralBankFxReservesLocal } from '../../domain/central-bank';
+import { centralBankBookLocal } from '../sovereign-register';
 import { AuditFinding, B, M, sum } from './types';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { ensureV2, currencyOfId } from '../../engine2/world';
@@ -31,19 +32,20 @@ function m1(state: GameState, week: number): AuditFinding[] {
     const reserves = sum(banksOf(state.companies, r), (b) => bankReservesOf(v2, b.id));
     const tga = treasuryAccountOf(v2, r);
     const wam = waysAndMeansOf(v2, r);
-    const assets = centralBankAssetsLocal(cb, wam, currencyOf(r), fx);
+    const sovereignBookLocal = centralBankBookLocal(v2, r);
+    const assets = centralBankAssetsLocal(sovereignBookLocal, cb, wam, currencyOf(r), fx);
     const residual = centralBankLiabilitiesLocal(cb, reserves, tga) - assets;
     // CB_TRACE=1 prints the sheet every week for every region, breach or not. The residual is
     // CUMULATIVE, so the week a leak is MADE is invisible in the weeks it finally breaches —
     // only the week-on-week deltas of the parts can name it.
     if (process.env.CB_TRACE) {
-      console.log(`  [cb-trace] w${week} ${r} residual ${M(residual)} | reserves ${M(reserves)} tga ${M(tga)} currency ${M(cb.currencyInCirculationLocal)} rrp ${M(cb.reverseRepoBorrowedLocal ?? 0)} | sovereign ${M(centralBankSovereignBookLocal(cb))} fx ${M(centralBankFxReservesLocal(cb))} loans ${M(cb.loansToBanksLocal ?? 0)} foreign ${M(cb.foreignOfficialClaimsUSD ?? 0)} window ${M(cb.standingFacilityLentLocal ?? 0)} advance ${M(wam)} | coupon ${M(cb.lastCouponIncomeLocal ?? 0)} accretion ${M(cb.lastBillAccretionLocal ?? 0)} loanInt ${M(cb.lastLoanInterestLocal ?? 0)} sfInt ${M(cb.lastStandingFacilityInterestLocal ?? 0)} - ior ${M(cb.lastInterestOnReservesLocal ?? 0)} rrpInt ${M(cb.lastReverseRepoInterestLocal ?? 0)} = remit ${M(cb.lastRemittanceLocal ?? 0)}`);
+      console.log(`  [cb-trace] w${week} ${r} residual ${M(residual)} | reserves ${M(reserves)} tga ${M(tga)} currency ${M(cb.currencyInCirculationLocal)} rrp ${M(cb.reverseRepoBorrowedLocal ?? 0)} | sovereign ${M(sovereignBookLocal)} fx ${M(centralBankFxReservesLocal(cb))} loans ${M(cb.loansToBanksLocal ?? 0)} foreign ${M(cb.foreignOfficialClaimsUSD ?? 0)} window ${M(cb.standingFacilityLentLocal ?? 0)} advance ${M(wam)} | coupon ${M(cb.lastCouponIncomeLocal ?? 0)} accretion ${M(cb.lastBillAccretionLocal ?? 0)} loanInt ${M(cb.lastLoanInterestLocal ?? 0)} sfInt ${M(cb.lastStandingFacilityInterestLocal ?? 0)} - ior ${M(cb.lastInterestOnReservesLocal ?? 0)} rrpInt ${M(cb.lastReverseRepoInterestLocal ?? 0)} = remit ${M(cb.lastRemittanceLocal ?? 0)}`);
     }
     if (Math.abs(residual) > Math.max(1e6, assets * 1e-4)) {
       // Every component by name on both sides: the residual is cumulative, so the only way to
       // find the week it was made is to difference the parts across the weeks that print.
       const liab = `reserves ${M(reserves)} + TGA ${M(tga)} + currency ${M(cb.currencyInCirculationLocal)} + reverse repo ${M(cb.reverseRepoBorrowedLocal ?? 0)}`;
-      const asst = `sovereign ${M(centralBankSovereignBookLocal(cb))} + fx ${M(centralBankFxReservesLocal(cb))} + loans ${M(cb.loansToBanksLocal ?? 0)} + foreign claims ${M(cb.foreignOfficialClaimsUSD ?? 0)} + window ${M(cb.standingFacilityLentLocal ?? 0)} + advance ${M(wam)}`;
+      const asst = `sovereign ${M(sovereignBookLocal)} + fx ${M(centralBankFxReservesLocal(cb))} + loans ${M(cb.loansToBanksLocal ?? 0)} + foreign claims ${M(cb.foreignOfficialClaimsUSD ?? 0)} + window ${M(cb.standingFacilityLentLocal ?? 0)} + advance ${M(wam)}`;
       out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: ${liab} exceed ${asst} by ${B(residual)} — bank money nothing was bought against` });
     }
   });

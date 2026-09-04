@@ -20,7 +20,7 @@ import { companyParty } from '../../domain/party';
 import {
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
-import { PartyRef } from './party';
+import { PartyRef, partyKey } from './party';
 import { REGION_IDS } from '../../domain/geography';
 import { InstrumentId, EntityId, asEntityId } from '../../domain/ids';
 import { wire, AssetKind, ASSET_KINDS } from './wire';
@@ -64,6 +64,14 @@ export interface HoldingSpec {
 export const householdBookId = (region: string): string => `HOUSEHOLD-${region}`;
 
 /**
+ * §3.13-BOOK d3a — THE CENTRAL BANK'S BOOK. One per region; its id is the central bank party's
+ * own key (`partyKey`), so `partyFromKey` inverts it and no third id grammar is minted for a book
+ * whose holder already has a name. The household id above predates this and doubles as 07e's
+ * clearing-participant id, which is why it keeps its own shape.
+ */
+export const centralBankBookId = (region: RegionId): string => partyKey({ kind: 'CENTRAL_BANK', region });
+
+/**
  * The register's own read of a party as a holder.
  *
  * §9.13-EQUITY — THE HOUSEHOLD SECTOR IS A HOLDER. It used to return an id for institutions
@@ -80,7 +88,9 @@ export const householdBookId = (region: string): string => `HOUSEHOLD-${region}`
 const holderIdOf = (p: PartyRef): string | undefined => (
   p.kind === 'INSTITUTION' ? p.id
     : p.kind === 'HOUSEHOLD' ? householdBookId(p.region)
-      : undefined);
+      // §3.13-BOOK d3a: the central bank holds its sovereign book here, like any holder.
+      : p.kind === 'CENTRAL_BANK' ? centralBankBookId(p.region)
+        : undefined);
 
 /**
  * §3.13-BOOK slice (c) — WHO ISSUED THE PAPER ON THIS ROW.
@@ -125,6 +135,8 @@ export function registerBooks(entityIds: readonly EntityId[]): { id: string; pay
   return [
     ...entityIds.map((id) => ({ id, payee: { kind: 'INSTITUTION' as const, id } })),
     ...REGION_IDS.map((region) => ({ id: householdBookId(region), payee: { kind: 'HOUSEHOLD' as const, region } })),
+    // §3.13-BOOK d3a: and the central banks' books — consolidated and marked with everyone else's.
+    ...REGION_IDS.map((region) => ({ id: centralBankBookId(region), payee: { kind: 'CENTRAL_BANK' as const, region } })),
   ];
 }
 

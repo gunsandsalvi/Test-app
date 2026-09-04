@@ -10,6 +10,7 @@ import { GameState, RegionId } from '../../types';
 import { WeeklyStepContext } from './stages/context';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
 import { centralBankAssetsLocal } from '../../domain/central-bank';
+import { centralBankBookLocal } from '../sovereign-register';
 
 const FLOOR_LOCAL = 1e7;
 
@@ -36,7 +37,7 @@ export class CentralBankIdentityTrace {
         const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[c.ticker]?.bankBalanceSheet) || c.bankBalanceSheet;
         if (sheet) reserves += bankReservesOf(ctx.v2, c.id);
       });
-      const tga = treasuryAccountOf(ctx.v2, r), assets = centralBankAssetsLocal(cb, waysAndMeansOf(ctx.v2, r), currencyOf(r), ctx.fx);
+      const tga = treasuryAccountOf(ctx.v2, r), assets = centralBankAssetsLocal(centralBankBookLocal(ctx.v2, r), cb, waysAndMeansOf(ctx.v2, r), currencyOf(r), ctx.fx);
       out.set(r, reserves + tga + cb.currencyInCirculationLocal - assets);
       parts.set(r, { reserves, tga, assets });
     });

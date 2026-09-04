@@ -55,11 +55,10 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityLocal } from './repo-clearing';
 import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
-import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
+import { centralBankParticipant, bookCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementLocal, institutionSpendableLocal, PartyRef } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, PrimaryTake, participantPartyOf, bankIdOfTickerFor, parHoldingRow, writeBackClearedFills } from './book-settlement';
 import { clearedBookDelta, transferHolding } from '../../ledger/holdings-ledger';
-import { wireCentralBankFills } from './central-bank-demand';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
@@ -146,7 +145,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       /** The bills THIS region has live — a row is a bill if its id is one of them. */
       const billIds = new Set(billIdList);
       const cbOrder = reg.centralBankSheet
-        ? centralBankParticipant(reg.centralBankSheet, billIdList, 'PRICE_LIKE')
+        ? centralBankParticipant(ctx.v2, regionId, reg.centralBankSheet, billIdList, 'PRICE_LIKE')
         : null;
       // OWN7 — the shrink, stated the way 07c's third carve-out finally stated it: the float is
       // what the participants in THIS book hold BETWEEN THEM, computed off the participant list
@@ -478,12 +477,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const cbRawFills = result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<InstrumentId, number>();
         const cbFills = new Map<InstrumentId, number>();
         cbRawFills.forEach((usd, id) => cbFills.set(id, usd - rebateOf(CENTRAL_BANK_PARTICIPANT_ID, id)));
-        // Step 13 (W2): the central bank's fills are wires from the house — the paper it bought
-        // with the reserves it created.
-        wireCentralBankFills(regionId, reg.centralBankSheet, billIdList, cbFills, 'bill clearing fill');
-        const filled = applyCentralBankFills(
-          reg.centralBankSheet, billIdList, cbFills
-        );
+        // Step 13 (W2) / §3.13-BOOK d3a: the central bank's fills are transfers from the house
+        // onto its register book — the paper it bought with the reserves it created.
+        const filled = bookCentralBankFills(ctx.v2, regionId, billIdList, cbFills, 'bill clearing fill');
         reg.centralBankSheet.lastOpenMarketPurchasesLocal =
           Math.round(((reg.centralBankSheet.lastOpenMarketPurchasesLocal ?? 0) + filled));
       }

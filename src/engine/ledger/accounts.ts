@@ -207,6 +207,15 @@ const seedGovLadderStash = new WeakMap<object, GovDebtTranche[]>();
 export function stashSeedGovLadder(region: object, ladder: GovDebtTranche[]): void { seedGovLadderStash.set(region, ladder); }
 export function seedGovLadderOf(region: object): GovDebtTranche[] { return seedGovLadderStash.get(region) ?? []; }
 
+/** §3.13-BOOK d3a — THE SEED'S CENTRAL-BANK BOOK, and it is not a field. `CentralBank.
+ *  sovereignHoldingsByBond` was a value-per-bond Record beside the register; the central bank's
+ *  book is register rows now, opened by wire at `openSeededBooks`. What the seed sizes before the
+ *  store exists rides this stash, like the government ladder above, and dies when the rows are
+ *  issued. */
+const seedCentralBankBookStash = new WeakMap<object, Record<string, number>>();
+export function stashSeedCentralBankBook(sheet: object, byBond: Record<string, number>): void { seedCentralBankBookStash.set(sheet, byBond); }
+export function seedCentralBankBookOf(sheet: object): Record<string, number> { return seedCentralBankBookStash.get(sheet) ?? {}; }
+
 /** A3.6c-iii — THE SEED'S PROVISIONAL HOUSEHOLD LINE of a bank sheet: sized as the funding
  *  residual while the seed builds the books (the migrations split by it), replaced by close-seed,
  *  which opens the household sector's row at each bank at the line it strikes. Never a field. */

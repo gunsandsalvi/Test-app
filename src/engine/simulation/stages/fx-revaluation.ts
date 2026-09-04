@@ -25,6 +25,7 @@ import { GameState, RegionId } from '../../../types';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { openFxWeek } from '../../../engine2/world';
 import { centralBankAssetsLocal, centralBankLiabilitiesLocal } from '../../../domain/central-bank';
+import { centralBankBookLocal } from '../../sovereign-register';
 import { bankReservesOf, treasuryAccountOf, waysAndMeansOf, stateDepositLines } from '../../ledger/accounts';
 import { depositsOf } from '../../../domain/banking';
 import { banksOf } from '../../../domain/company';
@@ -52,7 +53,7 @@ const centralBankNetOf = (state: GameState, region: RegionId): number => {
   const reserves = state.companies
     .filter((c) => c.region === region && c.isBankEntity && c.bankBalanceSheet)
     .reduce((a, c) => a + bankReservesOf(v2, c.id), 0);
-  return centralBankAssetsLocal(cb, waysAndMeansOf(v2, region), currencyOf(region), v2.fx)
+  return centralBankAssetsLocal(centralBankBookLocal(v2, region), cb, waysAndMeansOf(v2, region), currencyOf(region), v2.fx)
     - centralBankLiabilitiesLocal(cb, reserves, treasuryAccountOf(v2, region));
 };
 

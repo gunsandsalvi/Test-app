@@ -376,12 +376,12 @@ that writes rows directly. The clearing kernel cannot produce a negative fill ei
 
 ### ⚠️ A1.a — A NODE THAT IS A BOUNDARY RATHER THAN A CONSTRUCTION
 
-`holderIdOf` returns a holder id only for `INSTITUTION`, so a company's treasury book, a bank's
-sovereign book and a household's equity are held OUTSIDE this register in fields on their own
-sheets — the register is the institutions'. The O-family checks then reconcile those other stores
-against the ladders (O1, O6, O7) rather than the register doing it by construction. Not a defect
-of this tree so much as a statement of its true boundary; recorded so the next reader does not
-assume `A1` covers every holder in the world.
+`holderIdOf` answers for `INSTITUTION`, `HOUSEHOLD` (§9.13-EQUITY) and, since §9.13-BOOK d3a, the
+`CENTRAL_BANK`; a company's treasury book, a bank's own sovereign book and the desks' inventories
+are still held OUTSIDE this register in fields on their own sheets. The O-family checks then
+reconcile those other stores against the ladders (O1, O6, O7) rather than the register doing it
+by construction. A statement of the tree's boundary, and §3.13-BOOK d3b–d3d is what moves it;
+recorded so the next reader does not assume `A1` covers every holder in the world.
 
 ### Also marked, briefly
 

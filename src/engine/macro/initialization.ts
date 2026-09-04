@@ -1,4 +1,4 @@
-import { stashOpeningCash, stashSeedHouseholdLine, stashSeedGovLadder } from '../ledger/accounts';
+import { stashOpeningCash, stashSeedHouseholdLine, stashSeedGovLadder, stashSeedCentralBankBook } from '../ledger/accounts';
 import { govBondTrancheId } from '../../domain/sovereign-id';
 import { SEED_BUSINESS_LOAN_BOOK_TO_GDP, SEED_CONSUMER_LOAN_BOOK_TO_GDP } from '../../domain/stated';
 import { calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
@@ -593,12 +593,9 @@ function buildRegion(regionId: RegionId): Region {
     // reserves are the banks' own cash and are not stored here — one representation.
     centralBankSheet: {
       region: regionId,
-      // §3.13-SOV row 3: the central bank's book names the BONDS it holds. It used to name
-      // groups, so its position could be summed and never asked "which bond".
-      sovereignHoldingsByBond: govDebtTranches.reduce((acc, t) => {
-        acc[t.id] = (acc[t.id] ?? 0) + t.principalLocal * CENTRAL_BANK_SOVEREIGN_SHARE;
-        return acc;
-      }, {} as Record<string, number>),
+      // §3.13-SOV row 3 / §3.13-BOOK d3a: the central bank's book names the BONDS it holds, and
+      // it is REGISTER ROWS — the seed's sizing is stashed below and issued by wire at
+      // `openSeededBooks`, not a field on this sheet.
       // §5-WIRES A3.5: the treasury's account opens at its operating balance — stashed here,
       // opened as the government's row before close-seed (initialization.ts). No field.
       // §5-CLOSE: a stored liability at zero — never a residual.
@@ -671,6 +668,11 @@ function buildRegion(regionId: RegionId): Region {
     lifeCycleDistribution: seedLifeCycle,
   };
   stashOpeningCash(region.centralBankSheet!, Math.round(governmentSpendingWeeklyLocal * TGA_TARGET_WEEKS_OF_SPENDING));
+  // PUB2 (§7.4): the CB opens holding its real share of the stock, bond by bond (§3.13-SOV row 3).
+  stashSeedCentralBankBook(region.centralBankSheet!, govDebtTranches.reduce((acc, t) => {
+    acc[t.id] = (acc[t.id] ?? 0) + t.principalLocal * CENTRAL_BANK_SOVEREIGN_SHARE;
+    return acc;
+  }, {} as Record<string, number>));
 
   region.categoryDemand = createInitialCategoryDemand(gdpGrowth, estimatedHouseholdIncomeLocal, lastWeekNominalGdpLocal, totalPopulation, TARGET_FIRMS_PER_REGION);
 

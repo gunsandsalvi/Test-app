@@ -1,4 +1,4 @@
-import { openingCashOf, openSectorRow, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf, stashSeedGovLadder, seedGovLadderOf } from '../ledger/accounts';
+import { openingCashOf, openSectorRow, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf, stashSeedGovLadder, seedGovLadderOf, stashSeedCentralBankBook, seedCentralBankBookOf } from '../ledger/accounts';
 import { bankParty } from '../../domain/party';
 import { accruedPerFace, weeksAccrued, banksOf } from '../../domain/company';
 import { currencyOf } from '../../domain/geography';
@@ -94,7 +94,9 @@ export function closeSeedMoney(
     const reservesLocal = banks.reduce((a, b) => a + openingCashOf(b.bankBalanceSheet!), 0);
     cb.currencyInCirculationLocal = 0;
     const targetBookLocal = Math.max(0, reservesLocal + treasuryAccountOf(v2, regionId) - centralBankFxReservesLocal(cb));
-    const currentBookLocal = sumByTenor(cb.sovereignHoldingsByBond);
+    // §3.13-BOOK d3a: the book is the seed's stash until `openSeededBooks` issues its rows.
+    const seededBook = seedCentralBankBookOf(cb);
+    const currentBookLocal = sumByTenor(seededBook);
     const weights = new Map<string, number>();
     // §3.13-SOV row 3: weighted by BOND, so the fallback book below names bonds like every
     // other holder's does.
@@ -102,11 +104,11 @@ export function closeSeedMoney(
     const weightTotal = [...weights.values()].reduce((a, v) => a + v, 0) || 1;
     const scaled: Record<string, number> = {};
     if (currentBookLocal > 0) {
-      Object.entries(cb.sovereignHoldingsByBond ?? {}).forEach(([k, v]) => { scaled[k] = Math.round((Number(v) || 0) * (targetBookLocal / currentBookLocal)); });
+      Object.entries(seededBook).forEach(([k, v]) => { scaled[k] = Math.round((Number(v) || 0) * (targetBookLocal / currentBookLocal)); });
     } else {
       weights.forEach((w, k) => { scaled[k] = Math.round(targetBookLocal * (w / weightTotal)); });
     }
-    cb.sovereignHoldingsByBond = scaled;
+    stashSeedCentralBankBook(cb, scaled);
 
     // ---- 3. The stock outstanding is what the named holders hold, BOND BY BOND. ----
     // §3.13-SOV row 3: every holder's key is the bond's id, so this reconciles per bond instead
@@ -120,7 +122,7 @@ export function closeSeedMoney(
     // same five.
     const heldByBond = new Map<string, number>();
     const add = (id: string | undefined, usd: number) => { if (id && usd > 0) heldByBond.set(id, (heldByBond.get(id) ?? 0) + usd); };
-    Object.entries(cb.sovereignHoldingsByBond).forEach(([id, v]) => add(id, Number(v) || 0));
+    Object.entries(seedCentralBankBookOf(cb)).forEach(([id, v]) => add(id, Number(v) || 0));
     banks.forEach((b) => Object.entries(b.bankBalanceSheet!.sovereignBondHoldingsByBond ?? {}).forEach(([id, v]) => add(id, Number(v) || 0)));
     institutionalEntities.forEach((e) => {
       if (e.isDefaulted) return;
@@ -140,7 +142,9 @@ export function closeSeedMoney(
     })));
     // The stash carries what the seed STATED; the tenor is derived, as it is on every read.
     reg.governmentInterestWeeklyLocal = Math.round(weeklyInterestExpenseLocal(seedGovLadderOf(reg).map(govTrancheView)));
-    reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(cb, waysAndMeansOf(v2, regionId), currencyOf(regionId), v2.fx));
+    // §3.13-BOOK d3a: the rows are issued at `openSeededBooks`, after this; the book here is the
+    // stash this close just sized.
+    reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(sumByTenor(seedCentralBankBookOf(cb)), cb, waysAndMeansOf(v2, regionId), currencyOf(regionId), v2.fx));
   });
 }
 

@@ -24,9 +24,6 @@ export interface CentralBank {
   fxReservesByRegion?: Record<string, number>;
   region: RegionId;
   /** Assets: the real sovereign book, by tenor bucket. Clears in 07c like any other holder. */
-  /** §3.13-BOOK slice (a): keyed by INSTRUMENT id; read with `instrumentEntries`, which is where
-   *  the brand lives — an object's keys type as `string` whatever its index signature says. */
-  sovereignHoldingsByBond: Record<string, number>;
   /** Asset: the unsecured loans to banks drawn at the funding close (the lender of
    *  last resort). Equals the sum of the banks' `centralBankLoanLocal`. */
   loansToBanksLocal: number;
@@ -113,11 +110,6 @@ export const CENTRAL_BANK_SOVEREIGN_SHARE = 0.15;
  */
 export const TGA_TARGET_WEEKS_OF_SPENDING = 10;
 
-/** Total CB assets: the sovereign book. */
-export function centralBankSovereignBookLocal(cb: CentralBank): number {
-  return Object.values(cb.sovereignHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-}
-
 /** Foreign currency this central bank actually holds, in USD. */
 export function centralBankFxReservesLocal(cb: CentralBank): number {
   return Object.values(cb.fxReservesByRegion || {}).reduce((a, v) => a + (Number(v) || 0), 0);
@@ -132,8 +124,10 @@ export function centralBankFxReservesLocal(cb: CentralBank): number {
  * is the mechanism a balance-sheet scalar cannot express, and it is the whole reason a currency
  * peg ever breaks.
  */
-export function centralBankAssetsLocal(cb: CentralBank, waysAndMeansLocal: number, money: CurrencyCode = NUMERAIRE, fx: FxTable = PARITY_FX): number {
-  return centralBankSovereignBookLocal(cb) + centralBankFxReservesLocal(cb) + (cb.loansToBanksLocal ?? 0)
+export function centralBankAssetsLocal(sovereignBookLocal: number, cb: CentralBank, waysAndMeansLocal: number, money: CurrencyCode = NUMERAIRE, fx: FxTable = PARITY_FX): number {
+  // §3.13-BOOK d3a: the sovereign book is REGISTER ROWS (`sovereign-register.ts:centralBankBookLocal`),
+  // handed in — this file is domain and does not read the store.
+  return sovereignBookLocal + centralBankFxReservesLocal(cb) + (cb.loansToBanksLocal ?? 0)
     // §3.13c: the one line on this sheet held in the numéraire, brought to the book's own money.
     + fromNumeraire(cb.foreignOfficialClaimsUSD ?? 0, money, fx) + (cb.standingFacilityLentLocal ?? 0) + waysAndMeansLocal;
 }
@@ -146,8 +140,8 @@ export function centralBankAssetsLocal(cb: CentralBank, waysAndMeansLocal: numbe
  * closes the book, because a residual is where money appears from nowhere. The residual is
  * what the audit prints (M1) until every reserve movement has a purchase behind it.
  */
-export function centralBankIdentityResidualLocal(cb: CentralBank, bankReservesLocal: number, treasuryAccountLocal: number, waysAndMeansLocal: number): number {
-  return centralBankLiabilitiesLocal(cb, bankReservesLocal, treasuryAccountLocal) - centralBankAssetsLocal(cb, waysAndMeansLocal);
+export function centralBankIdentityResidualLocal(sovereignBookLocal: number, cb: CentralBank, bankReservesLocal: number, treasuryAccountLocal: number, waysAndMeansLocal: number): number {
+  return centralBankLiabilitiesLocal(cb, bankReservesLocal, treasuryAccountLocal) - centralBankAssetsLocal(sovereignBookLocal, cb, waysAndMeansLocal);
 }
 
 /** Reserves, the treasury's account, the currency it has issued, and what the non-banks have

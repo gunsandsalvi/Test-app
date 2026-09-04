@@ -64,7 +64,7 @@ import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { maxOverweightMultipleOf } from './asset-allocation';
 
-import { centralBankParticipant, applyCentralBankFills, wireCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
+import { centralBankParticipant, bookCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { clearedBookDelta } from '../../ledger/holdings-ledger';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityLocal } from './repo-clearing';
 import { accruedPerFace, banksOf } from '../../../domain/company';
@@ -79,7 +79,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 import { instrumentEntries, asInstrumentId, type InstrumentId } from '../../../domain/ids';
 import { governmentIssuer } from '../../../domain/entity-keys';
-import { sovereignHeldByBond } from '../../sovereign-register';
+import { sovereignHeldByBond, centralBankPositions } from '../../sovereign-register';
 
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
@@ -208,7 +208,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // with no reservation level — policy is a quantity this auction prices, not a premium.
     // Read BEFORE the float below, because whether it bids decides whether its book is for sale.
     const cbOrder = reg.centralBankSheet
-      ? centralBankParticipant(reg.centralBankSheet, bondIds, 'PRICE_LIKE')
+      ? centralBankParticipant(ctx.v2, regionId, reg.centralBankSheet, bondIds, 'PRICE_LIKE')
       : null;
 
     // OWN7 — the missing shrink. The float is what the participants in THIS book can hold
@@ -238,8 +238,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       nonParticipantById.set(id, (nonParticipantById.get(id) ?? 0) + usd);
     };
     if (!cbOrder && reg.centralBankSheet) {
-      instrumentEntries(reg.centralBankSheet.sovereignHoldingsByBond)
-        .forEach(([id, usd]) => reserveBond(id, Number(usd) || 0));
+      // §3.13-BOOK d3a: the central bank's book is register rows; a passive book is reserved
+      // at its face.
+      centralBankPositions(ctx.v2, regionId).forEach((p) => reserveBond(p.bondId, p.faceLocal));
     }
     ctx.prevActiveFirms.forEach((c) => {
       if (c.region !== regionId) return;
@@ -637,11 +638,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     }
     if (cbOrder && reg.centralBankSheet) {
       const cbFills = result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<InstrumentId, number>();
-      // Step 13 (W2): the central bank's fills are wires from the house.
-      wireCentralBankFills(regionId, reg.centralBankSheet, bondIds, cbFills, 'sovereign bond clearing fill');
-      const filled = applyCentralBankFills(
-        reg.centralBankSheet, bondIds, cbFills
-      );
+      // Step 13 (W2) / §3.13-BOOK d3a: the central bank's fills are transfers from the house onto
+      // its register book — wire and row in one operation.
+      const filled = bookCentralBankFills(ctx.v2, regionId, bondIds, cbFills, 'sovereign bond clearing fill');
       reg.centralBankSheet.lastOpenMarketPurchasesLocal = Math.round(filled);
     }
 

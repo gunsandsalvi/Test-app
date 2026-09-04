@@ -16,7 +16,7 @@ import { REGION_IDS } from '../domain/geography';
 import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
 import { facilityBookOf, facilitiesOfBorrower, issuerIdOf, trancheRowOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../engine2/tranches';
 import { registerBooks } from '../engine/ledger/holdings-ledger';
-import { forEachSovereignPosition } from '../engine/sovereign-register';
+import { forEachSovereignPosition, centralBankBookLocal } from '../engine/sovereign-register';
 import { asInstrumentId } from '../domain/ids';
 import { isActiveCompany } from '../domain/company';
 
@@ -84,7 +84,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     const cb = reg.centralBankSheet;
     if (cb) {
       put(`centralbank:${r}:treasury account`, treasuryAccountOf(ensureV2(state), r));
-      put(`centralbank:${r}:sovereign book`, Object.values(cb.sovereignHoldingsByBond ?? {}).reduce((a, v) => a + (Number(v) || 0), 0));
+      put(`centralbank:${r}:sovereign book`, centralBankBookLocal(ensureV2(state), r));
       put(`centralbank:${r}:currency`, cb.currencyInCirculationLocal);
       put(`centralbank:${r}:foreign claims`, cb.foreignOfficialClaimsUSD);
       put(`centralbank:${r}:reserves`, reg.bankingSector?.centralBankReservesLocal);

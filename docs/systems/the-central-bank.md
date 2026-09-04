@@ -87,7 +87,7 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 the monopoly issuer of reserves | `src/engine/ledger/party.ts:CENTRAL_BANK` | ✅ |
-| A1.a it can always meet an obligation in its own money | `src/engine/simulation/stages/central-bank-demand.ts:applyCentralBankFills` | ✅ |
+| A1.a it can always meet an obligation in its own money | `src/engine/simulation/stages/central-bank-demand.ts:bookCentralBankFills` | ✅ |
 | A2 it has a balance sheet, and a real one | `src/domain/central-bank.ts:CentralBank` | ✅ |
 | A2.a liabilities: reserves, currency, the TGA, the RRP window | `src/domain/central-bank.ts:centralBankLiabilitiesLocal` | ✅ |
 | A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsLocal` | ✅ |
@@ -103,8 +103,8 @@ checked by `scripts/check-atlas.sh`.
 | C1 it buys and sells sovereign paper, in a size it chooses | `src/domain/central-bank.ts:openMarketPolicy` | ✅ |
 | C1.a the size is policy, never an auction's weakness | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:plannedPurchasesByBond` | ✅ |
 | C1.b FORBID not a buyer of last resort in the primary market | `src/engine/simulation/stages/central-bank-demand.ts:centralBankParticipant` | ✅ |
-| C2 a purchase creates reserves; a sale destroys them | `src/engine/simulation/stages/central-bank-demand.ts:applyCentralBankFills` | ⚠️ |
-| C2.a it pays with money it creates, so there is no debit | `src/engine/simulation/stages/central-bank-demand.ts:applyCentralBankFills` | ✅ |
+| C2 a purchase creates reserves; a sale destroys them | `src/engine/simulation/stages/central-bank-demand.ts:bookCentralBankFills` | ⚠️ |
+| C2.a it pays with money it creates, so there is no debit | `src/engine/simulation/stages/central-bank-demand.ts:bookCentralBankFills` | ✅ |
 | C3 a price-taker: it posts a quantity, not a level | `src/engine/simulation/stages/central-bank-demand.ts:NO_RESERVATION_STAT` | ✅ |
 | C4 reinvestment is a separate decision; the difference is QT | `src/domain/central-bank.ts:reinvestmentShare` | ✅ |
 | D1 the standing facility lends against collateral at a stated rate | `src/engine/macro/banking.ts:SRF_SPREAD_BPS` | ✅ |
@@ -117,7 +117,7 @@ checked by `scripts/check-atlas.sh`.
 | E3 remittance: its net income goes to the treasury | `src/domain/central-bank.ts:remittanceLocal` | ✅ |
 | E3.a income, not revaluation | `src/domain/central-bank.ts:fxRevaluationLocal` | ✅ |
 | E4 it can make a loss, which reduces its equity | `src/engine/simulation/stages/central-bank.ts:runCentralBankStage` | ⚠️ |
-| E5 VERIFY consolidated economically, not in the accounts | `src/domain/central-bank.ts:centralBankSovereignBookLocal` | ❌ |
+| E5 VERIFY consolidated economically, not in the accounts | `src/engine/sovereign-register.ts:centralBankBookLocal` | ❌ |
 | F1 it holds reserves in other currencies, as real assets | `src/domain/central-bank.ts:fxReservesByRegion` | ✅ |
 | F2 it can intervene, bounded by F1 | `src/engine/simulation/stages/fx-clearing.ts:defenceBudgetLocal` | ✅ |
 | F2.a which is why a peg breaks: the constraint is real | `src/engine/simulation/stages/fx-clearing.ts:cbBoughtLocal` | ✅ |
@@ -215,8 +215,9 @@ haircut being un-chosen is the live half. Small; is **§3 step 20-LLR** or joins
 
 ### ⚠️ C2 / E4 — TWO HALVES THAT NEVER HAPPEN
 
-C2: a purchase creates reserves and this is exactly right (`applyCentralBankFills` books the paper
-with no debit anywhere, and `central-bank-demand.ts:9` explains why). The *sale* half does not
+C2: a purchase creates reserves and this is exactly right (`bookCentralBankFills` transfers the
+paper from the house onto the central bank's REGISTER book — §9.13-BOOK d3a — with no debit
+anywhere, and `central-bank-demand.ts:9` explains why). The *sale* half does not
 exist: `centralBankParticipant` sets `minHoldingLocal: heldLocal`, so the central bank never sells, and
 QT is runoff only (`openMarketPolicy` returns a `reinvestmentShare` below 1 and nothing else). The
 comment states this as deliberate — "a central bank selling its book outright is a rarer operation
@@ -234,7 +235,7 @@ constraint and over-broad about the equity. Small; is **§3 step 37-SMALL** pair
 ### ❌ E5 / ⚠️ A3 — A VERIFY NOBODY TAKES, AND A MANDATE THAT IS A FIELD
 
 E5 (the consolidated and unconsolidated views of the central bank's sovereign holding) is never
-computed: `centralBankSovereignBookLocal` exists and the treasury's gross debt exists, and nothing
+computed: `centralBankBookLocal` (the register read, since §9.13-BOOK d3a) exists and the treasury's gross debt exists, and nothing
 differences them. **A measurement, for §3 step 38.**
 
 A3: the mandate is `region.targetInflation` plus the Taylor rule's implicit output-gap term. It is a

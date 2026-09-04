@@ -510,12 +510,38 @@ written from here):
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
     d3. **THE OUTSIDE BOOKS COME IN — 13-OUTSIDE, moved up from (f).** The banks'
-        `sovereignBondHoldingsByBond`, the central bank's `sovereignHoldingsByBond`,
-        `Company.treasuryHoldings` and the desks' inventories become register rows, so
-        `sovereign-register.ts` collapses from a five-store walk to a filter and the two books that
-        store a VALUE with no quantity (`sovereign-credit.md` E3) stop existing. Six writers today
-        (`07c`, `07f`, `02b`, `bill-accretion`, `bank-transfer`, `macro/banking`), none of them a
-        wire. This one moves numbers (the marks meet the audit), and that is the finding.
+        `sovereignBondHoldingsByBond`, `Company.treasuryHoldings` and the desks' inventories become
+        register rows (the central bank's `sovereignHoldingsByBond` already has — d3a in §9), so
+        `sovereign-register.ts` collapses from a four-store walk to a filter and the last book that
+        stores a VALUE with no quantity (`sovereign-credit.md` E3) stops existing. This one moves
+        numbers (the marks meet the audit), and that is the finding. **Split 2026-09-04 into one
+        holder class per commit, because a holder arm in `holderIdOf` and its store's migration
+        must land together** — every existing `transferHolding` that names a company or a desk as
+        a party would otherwise debit an EMPTY register book and defect at the site (found
+        writing d3a: the issuer side of a merger's share exchange is a `companyParty` too):
+        d3b. **THE BANKS' OWN BOOK.** `sovereignBondHoldingsByBond` → rows on the bank's own book
+            (`BANK` party). Writers today, none a wire in itself: `07c` and `07f` (fills, which do
+            wire the delta under `bankSecuritiesParty` — the own book and the desk are ONE party in
+            the journal today, and this is where they become two), `02b`, `bill-accretion`,
+            `bank-transfer`, `11-fiscal` (maturities), `macro/banking` (the regional roll-up).
+            Readers: `repo-clearing` (collateral), `sovereign-calendar` (coupons, accrued to the
+            securities party today — they move to the bank's own), `holdings-view`, `irs`,
+            `bank-lending`, `profiles/bank`, `macro/banking`, `audit/money`, the identity trace, the
+            UI. `sovereignBondHoldingsLocal` beside it is a stored total of the same book and dies
+            with it.
+        d3c. **`Company.treasuryHoldings`.** A company holds OTHER issuers' paper on its own book
+            (`COMPANY` party as HOLDER — `holderIdOf` must answer the id only when the instrument's
+            issuer is not the company itself, since the same party stands on the ISSUER side of
+            its own equity in every corporate action and merger wire). Writers: `07f` (bills),
+            `stage08-back` (the treasury sleeve), `11-fiscal` (maturities). Readers: `07c`, `07f`,
+            `sovereign-register`, `audit/ownership`, `close-seed`.
+        d3d. **THE DESKS' INVENTORIES.** `dealerDeskInventory[book]` and the regional roll-ups
+            (`sovBondDealerInventory`, `corpBondDealerInventory`, …) → rows on the desk's book
+            (`BANK_SECURITIES` party). Writers: `applyDealerDeskFills` in every clearing book,
+            `dealer-desks.ts`, `trade.ts` (the player's fills), `regionalDeskView`. The desk's
+            participant id (`<ticker>::DESK`) stays the clearing seat; its BOOK is keyed by the
+            party. The accrual and corporate-action passes then read desks off the register instead
+            of `deskHoldingsByInstrument`, and `holderPayee`'s desk arm goes.
     d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
        share and contract gets a row: kind, issuer, **currency**, issued units, and nothing else.
        Terms stay in the class store, so the index copies no quantity and cannot drift.
@@ -1724,6 +1750,29 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d3a — THE CENTRAL BANK'S BOOK IS REGISTER ROWS.** `CentralBank.sovereignHoldingsByBond`
+is deleted. The central bank is a register holder (`holdings-ledger.ts:holderIdOf` answers its
+party; `registerBooks` lists one book per region, keyed by the party's own `partyKey`, so no third
+id grammar), its opening book is issued by the treasury by wire at `openSeededBooks` from the
+stash the seed's close sizes (`accounts.ts:stashSeedCentralBankBook`, the government ladder's
+pattern), and every writer is a ledger operation: the two auctions' fills are `transferHolding`
+from the house (`central-bank-demand.ts:bookCentralBankFills`, replacing a wire-only
+`wireCentralBankFills` beside a Record write), stage 11's maturities are `retireHolding` to the
+treasury, and `bill-accretion` marks the bills `units × price` (`markHolding`) so the remittance
+reads the accretion the same week and the close's re-mark finds the rows already there. Every
+reader asks `sovereign-register.ts:centralBankPositions` (face, per bond: the auction's
+participant, the reinvestment spread, maturities, coupon income) or `centralBankBookLocal` (the
+marked value: the balance sheet, `M1`, the trace, the harness, the UI); `centralBankAssetsLocal`
+takes the book as an argument because `domain/` does not read the store. The walk in
+`sovereign-register.ts` has four stores now. NUMBERS MOVE, as the step said they would: the
+central bank's bonds are marked to the cleared price at every close where the Record held them at
+the auction's face, and its bills at `units × price` rather than by the price's ratio — the
+"marks meet the audit" finding, deliberately (rule 13). Found and fixed on the way: stage 11
+repaid an INSTITUTION's matured sovereign at the row's marked VALUE times the fraction — face
+only while the mark was par, so a bill bought at a discount was repaid at the discount — and it
+pays face now (`the-register.md` E2). d3 is split into d3b–d3d above, one holder class per commit,
+for the reason recorded there. Gates green; no run.
 
 **13-BOOK d2 — THE WRITE THROWS.** `wire.ts` holds a `WireWorld` beside the journal — the
 week's (or the seed's) entity arrays and the tranche store (`ledger/wire-world.ts`) — and refuses a

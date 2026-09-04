@@ -14,7 +14,10 @@
 import { CentralBank } from '../../../domain/central-bank';
 import { RegionId } from '../../../domain/geography';
 import { ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
-import { clearedBookDelta } from '../../ledger/holdings-ledger';
+import { transferHolding } from '../../ledger/holdings-ledger';
+import type { PartyRef } from '../../ledger/party';
+import type { V2World } from '../../../engine2/world';
+import { centralBankPositions } from '../../sovereign-register';
 import type { InstrumentId } from '../../../domain/ids';
 
 export const CENTRAL_BANK_PARTICIPANT_ID = 'CENTRAL-BANK';
@@ -38,6 +41,7 @@ const NO_RESERVATION_STAT = 1e9;
  * is no key to translate — the `instrumentIdFor` mapper both callers passed was the identity.
  */
 export function centralBankParticipant(
+  v2: V2World, regionId: RegionId,
   cb: CentralBank,
   bondIds: InstrumentId[],
   statKind: 'YIELD_LIKE' | 'PRICE_LIKE' = 'YIELD_LIKE'
@@ -45,8 +49,11 @@ export function centralBankParticipant(
   const holdings = new Map<InstrumentId, number>();
   const demand = new Map<InstrumentId, ParticipantDemand>();
   let orderedLocal = 0;
+  // §3.13-BOOK d3a: what it holds is its register rows' FACE — the auction clears face.
+  const heldByBond = new Map<InstrumentId, number>();
+  centralBankPositions(v2, regionId).forEach((p) => heldByBond.set(p.bondId, (heldByBond.get(p.bondId) ?? 0) + p.faceLocal));
   bondIds.forEach((key) => {
-    const heldLocal = Number(cb.sovereignHoldingsByBond?.[key]) || 0;
+    const heldLocal = heldByBond.get(key) ?? 0;
     const orderLocal = Math.max(0, Number(cb.plannedPurchasesByBond?.[key]) || 0);
     orderedLocal += orderLocal;
     holdings.set(key, heldLocal);
@@ -68,40 +75,35 @@ export function centralBankParticipant(
   };
 }
 
-/** §5-FINALIZATION step 13 (W2): the CB's fills as wires from the clearing house — the paper it
- *  bought with the reserves it created; the bonds this auction priced, before against after. */
-export function wireCentralBankFills(
-  regionId: RegionId, cb: CentralBank, bondIds: InstrumentId[],
+/**
+ * §5-FINALIZATION step 13 (W2) / §3.13-BOOK d3a: THE CB'S FILLS, BOOKED. Each is a transfer from
+ * the clearing house onto the central bank's register book — the wire and the row in one ledger
+ * operation, the same `transferHolding` every other holder's paper moves by. No cash is debited:
+ * it paid with reserves it created, which is what makes a central-bank purchase grow the
+ * monetary base instead of moving money between holders; the sellers' cash legs are the calling
+ * stage's. `newHoldings` is the auction's face per bond, before against after. Returns what it
+ * bought, in face.
+ */
+export function bookCentralBankFills(
+  v2: V2World, regionId: RegionId, bondIds: InstrumentId[],
   newHoldings: Map<InstrumentId, number>, reason: string
-): void {
-  const before = new Map<InstrumentId, { valueLocal: number }>(), after = new Map<InstrumentId, { valueLocal: number }>();
-  bondIds.forEach((key) => {
-    const id = key;
+): number {
+  const heldByBond = new Map<InstrumentId, number>();
+  centralBankPositions(v2, regionId).forEach((p) => heldByBond.set(p.bondId, (heldByBond.get(p.bondId) ?? 0) + p.faceLocal));
+  const house: PartyRef = { kind: 'CLEARING_HOUSE', region: regionId };
+  const cbParty: PartyRef = { kind: 'CENTRAL_BANK', region: regionId };
+  let purchasedLocal = 0;
+  bondIds.forEach((id) => {
     const filledLocal = newHoldings.get(id);
     if (filledLocal === undefined) return;
-    before.set(id, { valueLocal: Number(cb.sovereignHoldingsByBond?.[key]) || 0 });
-    after.set(id, { valueLocal: filledLocal });
+    const deltaLocal = filledLocal - (heldByBond.get(id) ?? 0);
+    purchasedLocal += deltaLocal;
+    if (!(Math.abs(deltaLocal) > 1)) return;
+    // The primary slice books at cost, and the auction's face IS the cost at par here — the
+    // row is marked to the session's print at the close like every other row.
+    const spec = { instrumentType: 'GOV_BOND' as const, instrumentId: id, issuerRegion: regionId, valueLocal: Math.abs(deltaLocal), units: Math.abs(deltaLocal) };
+    if (deltaLocal > 0) transferHolding(v2, house, cbParty, spec, reason);
+    else transferHolding(v2, cbParty, house, spec, reason);
   });
-  clearedBookDelta({ kind: 'CENTRAL_BANK', region: regionId }, regionId, 'GOV_BOND', before, after, () => undefined, reason);
-}
-
-/**
- * Apply the CB's fills. The bond it bought lands on the asset side; the cash it paid was created,
- * so nothing is debited. The seller's own cash leg is already credited by the calling stage.
- */
-export function applyCentralBankFills(
-  cb: CentralBank,
-  bondIds: InstrumentId[],
-  newHoldings: Map<InstrumentId, number>
-): number {
-  let purchasedLocal = 0;
-  const book = { ...cb.sovereignHoldingsByBond };
-  bondIds.forEach((key) => {
-    const filledLocal = newHoldings.get(key);
-    if (filledLocal === undefined) return;
-    purchasedLocal += filledLocal - (Number(book[key]) || 0);
-    book[key] = filledLocal;
-  });
-  cb.sovereignHoldingsByBond = book;
   return purchasedLocal;
 }

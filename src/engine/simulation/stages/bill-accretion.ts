@@ -23,14 +23,15 @@
  * by construction, because the price the treasury sold at and the price the holder marks at are
  * the same print.
  *
- * **AND THE REGISTER IS NOT TOUCHED HERE.** An institution's bills are rows with a quantity, so
- * `register-marking` marks them `units × price` at the close like every other row — one owner.
- * What is left in this stage is the two books that are NOT in the register: a bank's
- * `sovereignBondHoldingsByBond` and the central bank's `sovereignHoldingsByBond`, which store a
- * VALUE per bill and no quantity, so the only thing that can be applied to them is the price's own
- * RATIO. That those two books hold a value where their own auctions write a face is the next
- * finding, and it is §3's — it cannot be fixed here, because it needs them in the register
- * (`the-register.md` A1.a is that boundary).
+ * **AND THE INSTITUTIONS' ROWS ARE NOT TOUCHED HERE.** An institution's bills are rows with a
+ * quantity, so `register-marking` marks them `units × price` at the close like every other row —
+ * one owner. The central bank's bills are rows too since §3.13-BOOK d3a; its accretion is the
+ * same `units × price` mark, taken here so the remittance can read it the same week, and the
+ * close's re-mark is then a no-op on those rows. What is left is the one book that is NOT in the
+ * register: a bank's `sovereignBondHoldingsByBond`, which stores a VALUE per bill and no
+ * quantity, so the only thing that can be applied to it is the price's own RATIO. That it holds a
+ * value where its own auctions write a face is §3.13-BOOK d3b's finding — it cannot be fixed
+ * here, because it needs the book in the register.
  */
 
 
@@ -42,6 +43,8 @@ import { isActiveCompany } from '../../../domain/company';
 import { isDiscountBill } from '../../../domain/government';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { clearedPriceOf, priorClearedPriceOf } from '../../../engine2/prices';
+import { markHolding, centralBankBookId } from '../../ledger/holdings-ledger';
+import { centralBankPositions } from '../../sovereign-register';
 
 /**
  * THE WEEK'S RETURN ON ONE UNIT OF THIS BILL'S FACE, as a fraction of what it was worth — what its
@@ -108,23 +111,22 @@ export function runBillAccretionStage(ctx: WeeklyStepContext): void {
     });
 
     // The central bank's bill book moves too — its income is remitted to the treasury, which is
-    // the loop PUB2a built.
+    // the loop PUB2a built. §3.13-BOOK d3a: its bills are REGISTER ROWS with a face, so the
+    // accretion is OBSERVED here the way `register-marking` observes it for every row —
+    // `units × price`, at the bill's own print — and the remittance reads the number the same
+    // week. The close's re-mark then finds the row already there (the same formula, no move).
     const cb = reg.centralBankSheet;
     if (cb) {
-      const book = { ...cb.sovereignHoldingsByBond };
       let gainLocal = 0;
-      returnByBill.forEach((weekReturn, billId) => {
-        const heldLocal = Number(book[billId]) || 0;
-        if (heldLocal <= 0) return;
-        book[billId] = heldLocal * (1 + weekReturn);
-        gainLocal += heldLocal * weekReturn;
+      centralBankPositions(ctx.v2, regionId).forEach((p) => {
+        if (!returnByBill.has(p.bondId)) return;
+        const price = clearedPriceOf(ctx.v2, p.bondId);
+        if (price === undefined || !(p.faceLocal > 0)) return;
+        const markedLocal = p.faceLocal * price;
+        gainLocal += markedLocal - p.valueLocal;
+        markHolding(ctx.v2, centralBankBookId(regionId), p.row, markedLocal);
       });
-      if (gainLocal !== 0) {
-        cb.sovereignHoldingsByBond = book;
-        cb.lastBillAccretionLocal = Math.round(gainLocal);
-      } else {
-        cb.lastBillAccretionLocal = 0;
-      }
+      cb.lastBillAccretionLocal = gainLocal !== 0 ? Math.round(gainLocal) : 0;
     }
   });
 }
