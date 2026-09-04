@@ -77,7 +77,7 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a stated rule over stated constituents at stated weights | `src/domain/indexes.ts:IndexDefinition` | ✅ |
+| A1 a stated rule over stated constituents at stated weights | `src/domain/indexes.ts:IndexConstituent` | ⚠️ |
 | A1.a all three public and reproducible | `src/ui/objects/index-object.tsx:indexesOf` | ⚠️ |
 | A2 reads cleared prices and nothing else | `src/engine/simulation/stages/index-calculation.ts:indexValueLocal` | ⚠️ |
 | **A3 FORBID never an input to its own constituents** | `src/engine/macro/indices.ts:measureBeta` | ⚠️ |
@@ -149,6 +149,39 @@ Not in §3. **Becomes a step**, and a large one: it is a delete, not a build —
 already exists and is better, so the work is to publish its level, point `measureBeta`, the UI's
 macro page and stage 12's marks at it, and remove `calculateCompositeIndices` and
 `generate52WeekHistory` with it.
+
+### ⚠️ A1 — A CREDIT INDEX'S CONSTITUENTS ARE ISSUERS, IN A FIELD CALLED `instrumentId`
+
+`IndexConstituent.instrumentId` is one field for all six index families, and it does not hold the
+same kind of thing in all six. `index-calculation.ts:rebalance` maps over COMPANIES and mints every
+constituent the same way whatever the definition's asset class, so:
+
+- an EQUITY index's constituent names the company's equity — and since a listed equity is keyed by
+  its issuer's own id, that string happens to be right;
+- an IG, HY or LEV_LOAN index's constituent names the **ISSUER**, valued at that issuer's whole
+  credit book (`indexValueLocal` → `creditMarketValueLocal(v2, comp, …)`), and both credit
+  adapters read it back as one: `07b:571` `bondsByIssuerId.get(c.instrumentId)`, `07d:489`
+  `loansByIssuerId.get(c.instrumentId)`.
+
+So a credit index has no constituent instruments at all. It has issuers, weighted by the market
+value of everything they owe, and the tracker's demand is spread across that issuer's tranches
+afterwards. A1 wants a *stated set of constituents*; what is stated is a set of borrowers, and the
+field's name says otherwise.
+
+**This is the one place §3.13-BOOK slice (a) made a conflation quieter rather than louder.**
+Branding `IndexConstituent.instrumentId` as `InstrumentId` should have failed here. It did not,
+because slice (a)'s own `equityInstrumentId(c.id)` launders a company id into the instrument space
+— correct for equity, and for credit it hands the borrower's id to a field that now claims to be an
+instrument. The type is satisfied and the model is not.
+
+**Consequence.** It is invisible today because both credit adapters expect issuers, so the two
+sides agree. It becomes wrong the moment anything joins an index to the register or the price
+table by that field — which is exactly what slice (d)'s instrument index invites, and what B4
+(❌, *index return = weighted constituent return*) would need in order to be measurable at all.
+
+**Becomes a §3 step**, in slice (d)'s neighbourhood: either the field splits by asset class, or a
+credit index states tranches and `rebalance` stops being one function over companies. Not slice
+(a)'s to decide — recorded here so the decision is made rather than inherited.
 
 ### ❌ D3 / D3.a / D3.b — THE BENCHMARK IS A POSTED POLICY RATE, AND A CLEARED ONE EXISTS BESIDE IT
 

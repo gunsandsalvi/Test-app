@@ -458,8 +458,13 @@ written from here):
        space is untouched (`ClearingParticipant.id` is still a plain string, and the equity
        crossing — a company's listed equity keyed by the company's own id — is now a named
        function rather than an implicit truth, `instrument-keys.ts:equityInstrumentId`), and it
-       found one live split: **the ETF share has two keys**, `ETFSHARE-<fund>` in the clearing
-       book and the fund's own entity id in the register. Slice (d) deletes one of them.
+       found two live conflations. **The ETF share has two keys** — `ETFSHARE-<fund>` in the
+       clearing book, the fund's own entity id in the register; slice (d) deletes one of them.
+       And **a credit index's constituents are ISSUERS** in a field named `instrumentId`
+       (`indices.md` A1): `rebalance` mints every constituent as an equity id whatever the asset
+       class, and 07b and 07d both read it back as an issuer key, so IG/HY/LL indexes state
+       borrowers rather than paper. Slice (d) decides which way that resolves — the field splits
+       by asset class, or a credit index states tranches.
     b. **SPLIT THE INTERN TABLE** — one ref space per id kind, so an instrument ref cannot be a
        region ref by construction.
     c. **THE ENTITY REGISTRY** — one store; `PartyRef` becomes a VIEW of it rather than a parallel
@@ -1547,9 +1552,16 @@ TypeScript, so `sovereignBondHoldingsByBond` and its two siblings keep `Record<s
 brand lives on `instrumentEntries`, the one typed reader — which is itself the argument for slice
 (f) replacing them with Maps; and `primaryTakes`'s two callbacks were named `issuerId` while being
 handed the INSTRUMENT the deal listed under, true only for equity and never for a credit book.
+And one thing slice (a) made QUIETER rather than louder, which is worth more than the three above:
+branding `IndexConstituent.instrumentId` should have failed on the credit indexes, whose
+constituents are ISSUERS. It did not, because slice (a)'s own `equityInstrumentId` launders a
+company id into the instrument space — right for equity, wrong for IG/HY/LL, and the type is
+satisfied either way. Written up at `indices.md` A1 rather than papered over; slice (d) decides it.
+
 Atlas: `the-register` F1 moves off `issueTranche` onto `ids.ts:InstrumentId`, F1.a to `⚠️` with the
 ETF split written up in §3 of that tree; `commodity-futures` C1.a follows `contractId` into the key
-grammar. Gates green; no run.
+grammar; `indices` A1 to `⚠️` on `IndexConstituent` for the issuer/instrument conflation. Gates
+green; no run.
 
 **13-OUTSIDE a — ONE OWNER FOR "WHO HOLDS THIS BOND", BEFORE ANY STORE MOVES.** The step is to
 put the banks' and the central bank's sovereign books in the register, and the first thing looking
