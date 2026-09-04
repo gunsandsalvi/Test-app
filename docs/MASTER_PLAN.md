@@ -391,32 +391,38 @@ written from here):
     `equity.md` C2.a is a mechanism and not a representation: households have no BUY schedule, so
     the largest holder class in the model can be forced to sell and can never bid.
 
-    **13-BILL — A BILL'S RETURN IS THE MARK, AND TODAY TWO THINGS OWN IT** (found while wiring the
-    mark, §9.13-EQUITY; it is `short-term-debt.md` E2 from the other side, and row 4's line
-    claiming to close E2 was wrong). `bill-accretion.ts` accretes a held bill toward face week by
-    week and books the accretion as INCOME, at
-    `calculateNelsonSiegelZeroRate(yearsRemaining, yieldCurveParams)` — *this week's fitted curve*,
-    not the yield the holder bought at, which is E2's "a discount computed from a curve nobody
-    traded" in one line. It also breaks the conservation `bill-accretion`'s own header claims: the
-    treasury receives `face/(1+y₀·t)` at issue and repays `face`, while holders accumulate at
-    `yₜ`, and the two agree only if `y₀ = yₜ`.
-    **The mark makes it a rule-4 problem as well**, which is why it is here rather than parked:
-    `register-marking` would set a bill's value from the price its own auction printed while
-    `bill-accretion` sets the same value from a fit — two writers of one number, with the income
-    booked against whichever wrote last. Bills are therefore EXCLUDED from the mark today, which
-    is the honest holding position and not the answer. The answer is one owner: the MARK sets the
-    value (07f already deposits the bill prints, so the price is waiting) and the income IS the
-    mark's own delta — the accretion stops being computed and starts being observed, and the
-    conservation holds because both legs are the same number. `weeklyAccretionRate` and the last
-    `calculateNelsonSiegelZeroRate` call outside step 25's list go with it.
+    **13-BILL — DONE, in §9.** A bill's return is the pull to par its own auction printed, for
+    every holder class. What it left behind is one finding, and it is the next thing here:
+
+    **13-OUTSIDE — TWO BOOKS HOLD A VALUE WHERE THEIR OWN AUCTIONS WRITE A FACE** (found closing
+    13-BILL). A bank's `sovereignBondHoldingsByBond` and the central bank's
+    `sovereignHoldingsByBond` are `Record<billId, dollars>`: a value per line with NO QUANTITY.
+    `07c` and `07f` rewrite that field every week from the auction's fills — which are FACE — and
+    then `bill-accretion` multiplies it by the week's price ratio, so the book ends each week at
+    neither face nor `face × price`, and `O1` compares it to a ladder's face. It is the exact
+    defect `faceLocal` was on the register (§9.13-CREDIT row 5a: a value with no quantity beside
+    it), one store over, and it cannot be fixed inside either writer.
+    **The fix is that those two books ARE register books**, which is `the-register.md` A1.a's own
+    statement of its boundary — *"a company's treasury book, a bank's sovereign book and a
+    household's equity are held OUTSIDE this register"*. The household third of that sentence went
+    in §9.13-EQUITY and cost less than it looked: `holderIdOf` resolves the party, `registerBooks`
+    says who the holders are, and every walk that must reach them takes it. A bank's securities
+    book is the same move with more readers — `07c`, `07f`, the repo collateral, the capital
+    ratio, `O1` and `O11` — and it deletes `sovereignBondHoldingsLocal`, the derived scalar beside
+    it, as well. Expect it to move the numbers: a marked book is not a par book.
 
     **THE CONTINUOUS-VERSUS-DISCRETE CONVENTION** (step 12b, §9.12b): `engine/nelsonSiegel.ts`
     discounts CONTINUOUSLY (`exp(-z·t)`) where `domain/pricing/` compounds discretely — two answers
     to one question (rule 4). *(`index-calculation.ts:52`, the other half, is done: §9.13-CREDIT
     row 1 made it READ the cleared price instead of discounting to one, and stage 08's call and
-    refinancing tests moved to `zeroRateAt` on the struck curve for the same reason. The remaining
-    NS sites are `11-fiscal`, `call-protection` and `12-portfolio`, which step 25 and step 26
-    own.)*
+    refinancing tests moved to `zeroRateAt` on the struck curve for the same reason. The remaining NS
+    sites, enumerated at §9.13-BILL rather than assumed: `11-fiscal` (two coupon strikes),
+    `pricing.ts` (which `call-protection` and `12-portfolio` reach through), `stage08-back:1348`
+    (a refinancing's risk-free), `macro/initialization:392` (the seed's coupons) and `07f:166` (a
+    bill bidder's reservation — PERMITTED, it is the bidder's side, `bond.md` N7.b). Plus
+    `sovereign-curve:43`, which is the fit's one owner PUBLISHING it, and `audit/prices:249`,
+    which is `P6` MEASURING the gap between the fit and the cleared points. Steps 25 and 26 own
+    the first four.)*
 
     **IT OWNED 11f AND STEP 12's TAIL, AND THEY ARE CLOSED** — one file, three findings, one
     cause: the register was keyed by TRANCHE and the auctions cleared by ISSUER, so
@@ -1435,6 +1441,34 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BILL — THE ACCRETION STOPS BEING COMPUTED AND STARTS BEING OBSERVED.** `bill-accretion`
+grew a held bill toward face at `calculateNelsonSiegelZeroRate(yearsRemaining, yieldCurveParams)`
+— THIS week's fitted curve, at a tenor nobody had traded — so a holder that bought a 52-week bill
+at 5% accreted at 2% if the curve fell and 8% if it rose. That is `short-term-debt.md` E2 in one
+line, and it broke the conservation the stage's own header is built on: the treasury pays
+`face/(1+y₀·t)` and repays `face` while holders accumulate at `yₜ`, and the two agree only if
+`y₀ = yₜ`. Nothing measured the gap.
+
+The return is now a READ of the bill's own printed price (`07f` deposits it since §9.13-EQUITY),
+and there is ONE OWNER per holder class: an institution's bills are rows with a quantity, so
+`register-marking` marks them `units × price` at the close like every other row and this stage no
+longer touches the register at all.
+
+**It marks rather than locking the rate at purchase, and that is a decision.** `sovereign-credit.md`
+F2 argued the opposite — *"a discount instrument's return is locked at purchase; that is the whole
+of what a discount is"* — which is the AMORTISED-COST convention, and this model has decided
+against it everywhere (step 13: carried at cost is a DECLARED property of an asset nobody trades,
+and a bill trades weekly). Marking is also the more exact of the two: the holders' total gain over
+a bill's life is `face × (1 − p₀)` whatever path the price took, because it ends at par, and that
+is precisely the treasury's cost — where the locked-rate reading would accrete a BUYER at the
+issuer's original yield instead of at the price it actually paid.
+
+Atlas: short-term-debt E2 closed (17/9/1) and sovereign-credit F2 closed, E1 caught up to its own
+DIFF prose, E3 ❌→⚠️ for what is left, and the five-structures table's row 4 corrected — it still
+said `07c` clears a YIELD, which §9.13-SOV row 4 made false. That file's tally read 25/15/27
+against a table holding 28/12/27: **the third file to drift by exactly the mechanism §5 names**, so
+it is COUNTED at 30/12/25. Gates green; no run (rule 11).
 
 **13-EQUITY — THE STORED VALUE IS RE-DERIVED, AND THE HOUSEHOLD SECTOR HOLDS A REGISTER BOOK.**
 Two commits, because reading the code corrected this step's own claim that they had to be one:

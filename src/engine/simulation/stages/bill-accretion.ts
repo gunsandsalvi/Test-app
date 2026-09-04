@@ -1,54 +1,75 @@
 /**
- * PUB3d — a discount bill's return, paid the way a discount bill actually pays it.
+ * PUB3d / §9.13-BILL — a discount bill's return, WHICH IS THE PULL TO PAR THE MARKET PRINTED.
  *
  * A bill has no coupon. Its holder buys below par and is made whole at redemption, so the return
- * arrives as the position ACCRETING toward face over the bill's life. That accretion is income:
- * the asset grows and equity grows with it, and no cash moves until the bill matures — which is
- * exactly why a bill's cash flow profile differs from a bond's.
+ * arrives as the position rising toward face over the bill's life. That rise is income: the asset
+ * grows and equity grows with it, and no cash moves until the bill matures — which is exactly why
+ * a bill's cash flow profile differs from a bond's.
  *
  * The conservation this preserves: the government receives discounted proceeds at issue and repays
- * FACE at redemption. The difference is its whole cost, and it equals the accretion its holders
- * accumulated over the same period. Remove one leg without the other and the model either mints
- * money or destroys it — which is why bills stopped paying coupons and started accreting in the
- * same change.
+ * FACE at redemption. The difference is its whole cost, and it equals what its holders accumulated
+ * over the same period. Remove one leg without the other and the model either mints money or
+ * destroys it — which is why bills stopped paying coupons and started accreting in the same change.
+ *
+ * **WHAT §9.13-BILL CHANGED, AND WHY IT IS THE SAME FINDING TWICE.** The rise was COMPUTED, at
+ * `calculateNelsonSiegelZeroRate(yearsRemaining, yieldCurveParams)` — this week's FITTED curve, at
+ * a tenor nobody had traded, and not the yield the holder bought at. That is
+ * `short-term-debt.md` E2 in one line ("a discount computed from a curve nobody traded"), and it
+ * broke the conservation above: the treasury pays `face/(1+y₀·t)` and repays `face` while the
+ * holders accumulate at `yₜ`, and the two agree only if `y₀ = yₜ`. Nothing measured the gap.
+ *
+ * It is now READ: a bill's own auction prints a price every week (`07f` deposits it since
+ * §9.13-EQUITY), and the week's return is what that price did. Both legs are then the same number
+ * by construction, because the price the treasury sold at and the price the holder marks at are
+ * the same print.
+ *
+ * **AND THE REGISTER IS NOT TOUCHED HERE.** An institution's bills are rows with a quantity, so
+ * `register-marking` marks them `units × price` at the close like every other row — one owner.
+ * What is left in this stage is the two books that are NOT in the register: a bank's
+ * `sovereignBondHoldingsByBond` and the central bank's `sovereignHoldingsByBond`, which store a
+ * VALUE per bill and no quantity, so the only thing that can be applied to them is the price's own
+ * RATIO. That those two books hold a value where their own auctions write a face is the next
+ * finding, and it is §3's — it cannot be fixed here, because it needs them in the register
+ * (`the-register.md` A1.a is that boundary).
  */
 
 
-import { RegionId, GameState } from '../../../types';
-import { Region } from '../../../domain/region-macro';
+import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { isActiveCompany } from '../../../domain/company';
 import { isDiscountBill } from '../../../domain/government';
 import { materializeGovLadder } from '../../../engine2/tranches';
-import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
-import { bookHeadOf } from '../../../engine2/holdings';
-import { markHolding } from '../../ledger/holdings-ledger';
-import { internString } from '../../../engine2/world';
+import { clearedPriceOf, priorClearedPriceOf } from '../../../engine2/prices';
 
 /**
- * §3.13-SOV row 3 — THE ACCRETION IS THE BILL'S, AT THE BILL'S OWN REMAINING LIFE.
-  *
- * A bill pulls to par at the yield the auction cleared for IT. That yield is read off the same
- * fitted curve 07f priced it on (`billCurrentYieldBps`), at the same remaining tenor, so the
- * paper accretes at the rate it was sold at. It used to be read off a table of three bucket
- * labels — and once the books were keyed by bill id, `byTenor['b13']` matched nothing and every
- * holder's accretion silently became zero.
+ * THE WEEK'S RETURN ON ONE UNIT OF THIS BILL'S FACE, as a fraction of what it was worth — what its
+ * own price did between the last two sessions that printed it.
+ *
+ * Undefined until a bill has printed twice, which is a fact about its first week and not a zero:
+ * a bill bought in the primary and marked in the same week's secondary has no prior print to have
+ * moved from. `weeklyPriceMoveOf` is not this — it is the ABSOLUTE move, for a haircut, and a
+ * return has a sign.
  */
-function weeklyAccretionRate(reg: Region, yearsRemaining: number): number {
-  return calculateNelsonSiegelZeroRate(yearsRemaining, reg.yieldCurveParams) / 52;
+function printedWeeklyReturn(ctx: WeeklyStepContext, billId: string): number | undefined {
+  const now = clearedPriceOf(ctx.v2, billId);
+  const before = priorClearedPriceOf(ctx.v2, billId);
+  if (now === undefined || before === undefined || !(before > 0)) return undefined;
+  return now / before - 1;
 }
 
-export function runBillAccretionStage(state: GameState, ctx: WeeklyStepContext): void {
+export function runBillAccretionStage(ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
-    const rateByBill = new Map<string, number>(
-      materializeGovLadder(ctx.v2, regionId)
-        .filter((t) => t.maturityWeek > ctx.nextWeek && isDiscountBill(t.tenorAtIssuanceYears))
-        .map((t) => [t.id, weeklyAccretionRate(reg, Math.max(1 / 52, (t.maturityWeek - state.currentWeek) / 52))])
-    );
-    if (rateByBill.size === 0) return;
+    const returnByBill = new Map<string, number>();
+    materializeGovLadder(ctx.v2, regionId)
+      .filter((t) => t.maturityWeek > ctx.nextWeek && isDiscountBill(t.tenorAtIssuanceYears))
+      .forEach((t) => {
+        const r = printedWeeklyReturn(ctx, t.id);
+        if (r !== undefined && r !== 0) returnByBill.set(t.id, r);
+      });
+    if (returnByBill.size === 0) return;
 
     // Banks: the position grows and the gain is earnings. Both sides move, so the per-bank
     // balance-sheet identity holds without a cash leg.
@@ -62,22 +83,22 @@ export function runBillAccretionStage(state: GameState, ctx: WeeklyStepContext):
     ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
       if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return c;
       const existing = c.bankBalanceSheet;
-      const byTenor = { ...(existing.sovereignBondHoldingsByBond || {}) };
+      const byBill = { ...(existing.sovereignBondHoldingsByBond || {}) };
       let gainLocal = 0;
-      rateByBill.forEach((rate, key) => {
-        const heldLocal = Number(byTenor[key]) || 0;
-        if (heldLocal <= 0 || rate === 0) return;
-        const accretedLocal = heldLocal * rate;
-        byTenor[key] = heldLocal + accretedLocal;
-        gainLocal += accretedLocal;
+      returnByBill.forEach((weekReturn, billId) => {
+        const heldLocal = Number(byBill[billId]) || 0;
+        if (heldLocal <= 0) return;
+        const gain = heldLocal * weekReturn;
+        byBill[billId] = heldLocal + gain;
+        gainLocal += gain;
       });
       if (gainLocal === 0 && !(existing.lastBillAccretionWeeklyLocal ?? 0)) return c;
       return {
         ...c,
         bankBalanceSheet: {
           ...bookPnL(existing, gainLocal, 'bill accretion', c.ticker),
-          sovereignBondHoldingsByBond: byTenor,
-          sovereignBondHoldingsLocal: Math.round(Object.values(byTenor).reduce((a: number, v) => a + (Number(v) || 0), 0)),
+          sovereignBondHoldingsByBond: byBill,
+          sovereignBondHoldingsLocal: Math.round(Object.values(byBill).reduce((a: number, v) => a + (Number(v) || 0), 0)),
           // §7.254: recorded so next week's NIM income measure counts the return this book
           // actually earned; the equity leg above is the booking, this line is the reading.
           lastBillAccretionWeeklyLocal: Math.round(gainLocal),
@@ -85,38 +106,19 @@ export function runBillAccretionStage(state: GameState, ctx: WeeklyStepContext):
       };
     });
 
-    // Institutions: the holding grows; the book's own marking treats it as the income it is.
-    // §7.313 flip — the accretion lands on the rows in place; the view refreshes at week end.
-    const H = ctx.v2.holdings;
-    const govBondRef = internString(ctx.v2, 'GOV_BOND');
-    const regionRef = internString(ctx.v2, regionId);
-    ctx.updatedInstitutionalEntities.forEach((e) => {
-      if (e.region !== regionId) return;
-      let touched = false;
-      for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
-        if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
-        // §3.13-SOV row 3: the accretion is the BILL's own.
-        const rate = rateByBill.get(ctx.v2.internedStrings[H.instrRef[r]]);
-        if (!rate) continue;
-        markHolding(ctx.v2, e.id, r, H.qtyLocal[r] * (1 + rate));
-        touched = true;
-      }
-      void touched;
-    });
-
-    // The central bank's bill book accretes too — its income is remitted to the treasury, which
-    // is the loop PUB2a built.
+    // The central bank's bill book moves too — its income is remitted to the treasury, which is
+    // the loop PUB2a built.
     const cb = reg.centralBankSheet;
     if (cb) {
       const book = { ...cb.sovereignHoldingsByBond };
       let gainLocal = 0;
-      rateByBill.forEach((rate, key) => {
-        const heldLocal = Number(book[key]) || 0;
-        if (heldLocal <= 0 || rate === 0) return;
-        book[key] = heldLocal * (1 + rate);
-        gainLocal += heldLocal * rate;
+      returnByBill.forEach((weekReturn, billId) => {
+        const heldLocal = Number(book[billId]) || 0;
+        if (heldLocal <= 0) return;
+        book[billId] = heldLocal * (1 + weekReturn);
+        gainLocal += heldLocal * weekReturn;
       });
-      if (gainLocal > 0) {
+      if (gainLocal !== 0) {
         cb.sovereignHoldingsByBond = book;
         cb.lastBillAccretionLocal = Math.round(gainLocal);
       } else {

@@ -395,7 +395,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('fx-clearing', () => { runFxClearingStage(state, ctx); recordForeignHoldingsSnapshot(ctx); });
   run('money-fund-income', () => distributeMoneyFundIncome(ctx));
   syncCompanyField(state, 'mmfSharesLocal');
-  run('bill-accretion', () => runBillAccretionStage(state, ctx));
+  run('bill-accretion', () => runBillAccretionStage(ctx));
   // CAL: the sovereign calendar. After every book that trades government paper has cleared and
   // the bills have accreted, so the holders it walks are the ones the week ended with; before the
   // fiscal stage, which strikes the treasury's own interest line against the same holdings. The

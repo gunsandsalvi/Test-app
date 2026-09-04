@@ -109,14 +109,14 @@ Two instruments answer this tree and they answer it differently, so a row that s
 | D3 it is **collateral**, with a haircut | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ⚠️ |
 | D4 VERIFY a spread over the equivalent-tenor bill is a derived read | `src/engine/credit-price.ts:rowSpreadBps` | ✅ |
 | E1 FORBID **no automatic roll** | `src/engine/simulation/stages/07f-short-debt-clearing.ts:cpIssuers` | ✅ |
-| **E2 FORBID no price without a market** | `src/engine/simulation/stages/bill-accretion.ts:weeklyAccretionRate` | ❌ |
+| **E2 FORBID no price without a market** | `src/engine/simulation/stages/bill-accretion.ts:printedWeeklyReturn` | ✅ |
 | E3 FORBID no negative outstanding, no maturity without cash | `src/engine/simulation/stages/07f-short-debt-clearing.ts:maturedLocal` | ✅ |
 
 ---
 
 ## 3. THE DIFF
 
-**27 nodes: 16 ✅, 9 ⚠️, 2 ❌.** The best-mapped of the four credit trees, and for a reason worth
+**27 nodes: 17 ✅, 9 ⚠️, 1 ❌.** The best-mapped of the four credit trees, and for a reason worth
 recording: **`07f` is the youngest book and the only one written after rule 3 was stated**, so its
 issuer side, its buyer side and its failure path are all real. What it inherited from the rest of
 the model was the one defect the credit rows have now removed — the thing that cleared was a yield.
@@ -141,34 +141,32 @@ the treasury receives the discount. The comment beside it records what it fixed 
 placement minted its own discount into the holders' books while the treasury was overpaid by the
 same amount"*).
 
-### ❌ A2.a / E2 — NO STATED CONVENTION, AND THE BILL'S RETURN IS STILL RE-SET WEEKLY
+### ✅ E2 — CLOSED: THE BILL'S RETURN IS THE PRICE ITS OWN AUCTION PRINTED (❌ A2.a remains)
 
-**E2's FORBID is the sharp finding and it is NEW.** `bill-accretion.ts:26-35` accretes a held bill
-at *this week's* curve, not at the yield it was bought at:
+**E2's FORBID was the sharp finding.** `bill-accretion.ts` accreted a held bill at *this week's*
+curve rather than at the yield it was bought at, off `reg.zeroRates.tenor3M` — an interpolated
+point on a FITTED curve. So the holder's return on a discount bill was "a discount computed from a
+curve nobody traded", which is E2's own words. It also broke the conservation `bill-accretion`'s
+own header claims: the treasury receives `face/(1+y₀·t)` at issue and repays `face` at redemption
+while the holders accumulate at `yₜ`, and the two agree only if `y₀ = yₜ`. Nothing measured the gap.
 
-```
-const annual = bucket.years <= 0.3 ? reg.zeroRates.tenor3M
-             : reg.zeroRates.tenor3M + (reg.zeroRates.tenor2Y - reg.zeroRates.tenor3M) * (bucket.years / 2);
-```
+**§9.13-BILL closed it, and it took two steps because the fix was a rule-4 problem as well as a
+rule-3 one.** §9.13-EQUITY made `07f` DEPOSIT each cleared bill price in the price store, so the
+number E2 wants exists; but marking a bill there while `bill-accretion` set the same value from a
+fit would have been two writers of one number, with the income booked against whichever wrote last.
+So one owner was decided: **the register's bills are marked by `register-marking` like every other
+row** (`units × the printed price`), and what is left in `bill-accretion` is the two books that are
+NOT in the register — a bank's and the central bank's — whose week's return is now
+`printedWeeklyReturn`, the move that bill's own price made between its last two prints. The
+accretion stopped being computed and started being observed, and both legs of the conservation are
+the same number by construction, because the price the treasury sold at and the price the holder
+marks at are the same print.
 
-and `reg.zeroRates.tenor3M` is written at `07c:523` by `calculateNelsonSiegelZeroRate(0.25,
-fittedParams)` — **an interpolated point on a fitted curve**, which 07f then refits again (step 25's
-two owners). So the holder's return on a discount bill is "a discount computed from a curve nobody
-traded", which is E2's own words. It also breaks the conservation `bill-accretion.ts`'s header
-claims for itself: the treasury receives `face/(1+y₀·t)` at issue and repays `face` at redemption,
-while the holders accumulate accretion at `yₜ`, and the two only agree if `y₀ = yₜ`. Nothing
-measures the gap. **Becomes a §3 step** (shared with `sovereign-credit.md` F2, where the same finding
-is recorded from the instrument's side) — small, and it folds into 13-SOV, which has to store the
-bill's issue price anyway.
-
-**Row 4 did not touch E2**, and the plan's row-4 line claiming it would was wrong: the accretion is
-a BILL mechanism on the sovereign side, not the CP book. §9.13-EQUITY got it half way — `07f` now
-DEPOSITS each cleared bill price in the price store, so the number E2 wants exists — and then found
-the other half is a rule-4 problem rather than only a rule-3 one: `register-marking` would set a
-bill's value from that print while `bill-accretion` sets the same value from a fit, two writers of
-one number with the income booked against whichever wrote last. Bills are excluded from the mark
-until one owner is decided, which is §3's **13-BILL**: the mark sets the value and the income IS
-its delta, so the accretion stops being computed and starts being observed.
+**What that leaves, and it is a new finding**: those two books store a VALUE per bill and no
+quantity, while their own auctions (`07c`, `07f`) write a FACE into the same field every week — so
+the return has to be applied as the price's RATIO, and `O1` compares that value to a ladder's face.
+It cannot be fixed inside this stage: it needs those books in the register (`the-register.md` A1.a
+is that boundary), and it is §3's.
 
 A2.a has no code at all: nothing in `07f`, `government.ts` or `commercial-paper.ts` names a
 day-count or a quoting convention. `discountBillProceedsUSD` is `face/(1 + y·t)` — simple money-market

@@ -189,7 +189,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | D4 it is the benchmark other credit is spread to | `src/domain/pricing/bond.ts:zeroRateAt` | ✅ |
 | D5 repo collateral, at the smallest haircut of any asset | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
 | D6 VERIFY the bid-offer is a consequence, not a prior | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
-| **E1 a register: who holds how much of WHICH LINE** | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ❌ |
+| **E1 a register: who holds how much of WHICH LINE** | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ✅ |
 | E2 holder classes hold for different reasons | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
 | E2.a banks — the regulatory liquidity buffer | `src/engine/macro/banking.ts:liquidityDrivenSovereignFloorLocal` | ✅ |
 | E2.b insurers and pensions — duration against liabilities | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:durationPremiumBps` | ⚠️ |
@@ -197,11 +197,11 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | E2.d foreign official — reserves | — | ❌ |
 | E2.e funds — relative value | — | ❌ |
 | E2.f households and corporates, holding it DIRECTLY | `src/engine/simulation/stages/07f-short-debt-clearing.ts:treasuryParticipantId` | ⚠️ |
-| **E3 marked at the cleared price** | — | ❌ |
+| **E3 marked at the cleared price** | `src/engine/simulation/stages/register-marking.ts:markRegisterToMarket` | ⚠️ |
 | E4 pledgeable, at a haircut | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
 | E5 a zero risk weight, which is *why* E2.a holds it | `src/engine/macro/banking.ts:riskWeightedAssetsLocal` | ✅ |
 | F1 the coupon accrues and is paid to the holder on the date | `src/engine/simulation/stages/sovereign-calendar.ts:runSovereignCalendarStage` | ✅ |
-| **F2 a bill ACCRETES; its return is the discount** | `src/engine/simulation/stages/bill-accretion.ts:weeklyAccretionRate` | ⚠️ |
+| **F2 a bill ACCRETES; its return is the discount** | `src/engine/simulation/stages/bill-accretion.ts:printedWeeklyReturn` | ✅ |
 | F3 principal repaid at maturity out of A3 | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ⚠️ |
 | F4 refinancing at whatever the market charges | `src/engine/nelsonSiegel.ts:calculateNelsonSiegelZeroRate` | ⚠️ |
 | **F5 buybacks and switches** | — | ❌ |
@@ -220,11 +220,17 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 
 ## 3. THE DIFF
 
-**67 nodes: 25 ✅, 15 ⚠️, 27 ❌.** This is the weakest mapping of the four credit trees and the
-reason is one thing said twice: **the sovereign is not an instrument here, and it cannot fail.**
-Branches D and E fall out of the first; the whole of G and half of A out of the second.
+**67 nodes: 30 ✅, 12 ⚠️, 25 ❌** — COUNTED at §9.13-BILL, not adjusted. It read 25/15/27 against a
+table that held 28/12/27, so it had drifted by three in each of two columns while every citation in
+it still resolved: `check-atlas.sh` proves a citation RESOLVES and can say nothing about whether a
+mark is TRUE, which is §5's lesson and the third file to demonstrate it.
 
-### ❌ D1 / D2 / E1 / E3 — THE FIVE PARALLEL STRUCTURES, EACH CONFIRMED AT ITS LINE
+The mapping is still the weakest of the four credit trees, and the reason is one thing said twice:
+**the sovereign is not an instrument here, and it cannot fail.** What has closed since is the first
+half — D1, D2, E1 and the five parallel structures — and the whole of G and half of A remain, out
+of the second.
+
+### ✅ D1 / D2 / E1 — THE FIVE PARALLEL STRUCTURES, FOUR OF THEM CLOSED
 
 **KNOWN(13-SOV).** All five rows of the step's table verified against the code as it stands today:
 
@@ -233,16 +239,15 @@ Branches D and E fall out of the first; the whole of G and half of A out of the 
 | 1 type | `GovDebtTranche` is a strict subset of `DebtTranche` | `region-macro.ts:312` — `{id, principalUSD, couponRate, originationWeek, maturityWeek, tenorAtIssuanceYears}`, six fields, every one of them also on `company.ts:75`. No `seniority`, no `rateType`, no `callProtection`, no `paymentsPerYear`, no currency |
 | 2 store | ✅ DONE — the ONE tranche store | `reg.govDebtTranches` — 20 read sites across `src`, all of them `(reg.govDebtTranches ?? []).filter/reduce`; the withdrawal rebuilt the array with `.map(t => ({...t}))` |
 | 3 holdings | ✅ DONE — every store keys by BOND | `banking.ts:129` `sovereignBondHoldingsByBond` for banks, `centralBankSheet.sovereignHoldingsByBond` for the CB, `sovBondDealerInventory[].bondId` for the desks, `GOV_BOND` register rows on the tranche id for institutions. Four stores, one id space; `audit/ownership.ts:o11` is the invariant and `o3` no longer exempts sovereigns |
-| 4 clearing | `07c` clears a **YIELD** | `07c:331` `statKind: 'YIELD_LIKE'`, `currentStat: currentYieldDecimal * 10000`; `financial-clearing-engine.ts:956` then values every fill at `1` because the stat is not `PRICE_LIKE` |
+| 4 clearing | ✅ DONE — `07c` clears a **PRICE** | §9.13-SOV row 4: `statKind: 'PRICE_LIKE'`, each holder's reservation YIELD stated as the price it implies on that bond's own schedule and the yield read back with `yieldFromPrice`. It used to be `YIELD_LIKE`, so the engine valued every sovereign fill at `1` |
 | 5 curve | ✅ DONE — ONE owner | `sovereign-curve.ts` fits once through every point the week's sessions cleared and publishes every field as a read of that fit; the auctions clear against the standing curve and deposit what they observed |
 
 Row 3 cost the most nodes and is DONE: E1 asks who holds how much of which LINE, and every store
 now answers by bond — F1's coupon is the bond's own (`government.ts:sovereignCouponByBond`), F3's
 redemption finds the holders of the bond that matured, and `audit/ownership.ts:o11` fails any
-position naming an id no ladder carries. What remains of the five is row 2's declared delete and
-row 5's parallel curve.
-Row 4 is D2 exactly inverted: the node says the yield is derived from the price and never sets it,
-and the yield is the only thing that clears.
+position naming an id no ladder carries. **E1 is re-marked ✅ here**: this prose said "DONE" while
+the row above it still read ❌, which is exactly the drift `check-atlas.sh` cannot see.
+Rows 4 and 5 are done too, so what remains of the five is row 2's declared delete.
 
 ### ❌ A4 / A4.b / B2 / B7 / G1–G5 — A SOVEREIGN THAT CANNOT DEFAULT, AND CANNOT BORROW IN ANOTHER MONEY
 
@@ -279,25 +284,33 @@ calendar week asks for more. A3.a is ⚠️ for the same reason: the account is 
 and "low" has no consequence. H4 is the same fact from the monetary side: the node says this model
 draws the monetary-financing line at A3.b, and it does not draw it.
 
-### ⚠️ F2 — A BILL ACCRETES AT THIS WEEK'S CURVE, NOT AT THE YIELD IT WAS BOUGHT AT — **NEW**
+### ✅ F2 — CLOSED: A BILL'S RETURN IS THE DISCOUNT ITS OWN AUCTION PRINTED (⚠️ E3 is what is left)
 
-`bill-accretion.ts:26-35`:
+**What this said, and what it got half right.** `bill-accretion` accreted a held bill at whatever
+`tenor3M` said THIS week — an interpolated point on a fitted curve — so a holder that bought a
+52-week bill at 5% accreted at 2% if the curve fell and 8% if it rose. The stage's own header
+states the conservation it is built on (*"the government receives discounted proceeds at issue and
+repays FACE at redemption … it equals the accretion its holders accumulated"*), and that identity
+could not hold against a rate the curve was re-drawing every week.
 
-```
-const annual = bucket.years <= 0.3 ? reg.zeroRates.tenor3M
-             : reg.zeroRates.tenor3M + (reg.zeroRates.tenor2Y - reg.zeroRates.tenor3M) * (bucket.years / 2);
-return Math.max(-0.5, annual) / 52;
-```
+**§9.13-BILL closed it by making the return a READ of the bill's own printed price**, not by
+locking the rate at purchase — and the difference matters, because this entry originally argued
+*"a discount instrument's return is locked at purchase; that is the whole of what a discount is."*
+That is the AMORTISED-COST convention, and it is the one this model has decided against everywhere
+(step 13: *"an asset genuinely not traded is carried at COST, and carried at cost is a DECLARED
+property"* — a bill trades weekly). Two things follow from marking instead. The conservation is
+exact rather than approximate: the holders' total gain over a bill's life is `face × (1 − p₀)`
+whatever path the price took, because it ends at par, and that is precisely the treasury's cost.
+And a bill that CHANGES HANDS is right — under the locked-rate reading the buyer would accrete at
+the ISSUER's original yield rather than at the price it actually paid.
 
-A holder that bought a 52-week bill at 5% accretes at whatever `tenor3M` says THIS week — 2% if the
-curve fell, 8% if it rose. **A discount instrument's return is locked at purchase; that is the whole
-of what a discount is.** The stage's own header states the conservation it is built on: *"the
-government receives discounted proceeds at issue and repays FACE at redemption. The difference is
-its whole cost, and it equals the accretion its holders accumulated over the same period."* That
-identity holds only if the accretion rate is the ISSUE yield. It is not, so the two legs differ by
-the curve's drift over the bill's life, in either direction, and nothing measures the gap — the
-issue price is struck at `07f:375` from the cleared yield and then thrown away, exactly the shape
-step 13 names for goods (`setOutputStock` keeps the product and loses the price).
+**⚠️ E3 is what is left of this, and it is a storage finding.** The register marks a bill at
+`units × price` like every other row. A bank's `sovereignBondHoldingsByBond` and the central bank's
+`sovereignHoldingsByBond` store a VALUE per bill and no quantity — and their own auctions (`07c`,
+`07f`) write a FACE into that same field every week — so the return can only be applied to them as
+the price's RATIO, and the book ends each week at neither face nor `face × price`. `O1` then
+compares that value against a ladder's face. It cannot be fixed inside the accretion: it needs
+those two books in the register, which is A1.a's boundary in `the-register.md` and §3's.
 
 Not named in the plan. **Becomes a §3 step** — small, and it folds naturally into 13-SOV, which has
 to give the bill a stored issue price anyway to become a `DebtTranche`.

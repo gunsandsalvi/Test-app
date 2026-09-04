@@ -31,8 +31,9 @@
  * had each struck a price per bond and kept nothing but the yield it implied, so a government
  * holding sat at PAR for ever while the corporate books marked at what they printed — step 13's
  * item 3 ("the auction already computes the price it needs and discards it"), in the one class
- * that had already priced its way out of the defect. Government BONDS mark here; discount BILLS
- * do not, because `bill-accretion` already owns their value — see the note below.
+ * that had already priced its way out of the defect. §9.13-BILL then brought the discount BILLS
+ * in: a bill's return is the pull to par it actually printed, which is this mark and not a
+ * separate accretion computed off a fitted curve.
  *
  * The books go on trading QUANTITY — they claim `units`, never the marked value — so a mark never
  * looks like a trade and a trade never looks like a mark. That separation is the whole reason the
@@ -44,20 +45,10 @@ import { markBookToMarket, registerBooks } from '../../ledger/holdings-ledger';
 import { trancheClearedPricePerFace } from '../../credit-price';
 import { isTrancheKind, holdingClassOf } from '../../../domain/assets';
 import { isActiveCompany } from '../../../domain/company';
-import { isDiscountBill } from '../../../domain/government';
-import { trancheRowOf } from '../../../engine2/tranches';
 
 export function markRegisterToMarket(state: GameState, ctx: WeeklyStepContext): void {
   const week = ctx.nextWeek;
   const priceById = new Map<string, number | undefined>();
-  /** A bill is a tranche whose whole life is under the discount-bill tenor — read off the row it
-   *  names, so the test is the government's own (`domain/government.ts`) and not a shape. */
-  const isDiscountBillRow = (instrumentId: string): boolean => {
-    const r = trancheRowOf(ctx.v2, instrumentId);
-    if (r === undefined) return false;
-    const S = ctx.v2.tranches;
-    return isDiscountBill((S.maturityWeek[r] - S.originationWeek[r]) / 52);
-  };
   // A share's price is its issuer's own cleared print. It is read off THIS week's companies —
   // `updatedCompanies` is what 07e wrote and stage 08 rebuilt — never off the week-start array.
   const companyById = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
@@ -66,19 +57,15 @@ export function markRegisterToMarket(state: GameState, ctx: WeeklyStepContext): 
     if (priceById.has(key)) return priceById.get(key);
     let p: number | undefined;
     // A tranche's price is in the price store, and a SOVEREIGN holding names a tranche too
-    // (§9.13-SOV row 3) — 07c deposits its print there since §9.13-EQUITY, so a government BOND
-    // marks like any other fixed-income holding.
+    // (§9.13-SOV row 3) — 07c and 07f's bill session deposit their prints there, so a government
+    // bond and a bill mark like any other fixed-income holding.
     //
-    // A DISCOUNT BILL IS EXCLUDED, AND THE REASON IS RULE 4. `bill-accretion` already owns a
-    // bill holding's value: it accretes the position toward face week by week and books the
-    // accretion as INCOME. Marking here as well would make two writers of one number and leave
-    // the income booked against a value somebody else set — the identity drifting by exactly the
-    // difference. The right end state is that the MARK owns the value and the income is the
-    // mark's own delta, which also closes `short-term-debt.md` E2 (a bill accretes at a curve
-    // nobody traded); that is a bill mechanism and it is §3's, inserted there rather than taken
-    // here. 07f deposits the bill prints regardless, so the day it lands the price is waiting.
-    if (isTrancheKind(instrumentType)
-      || (holdingClassOf(instrumentType) === 'SOVEREIGN' && !isDiscountBillRow(instrumentId))) {
+    // §9.13-BILL: DISCOUNT BILLS ARE IN. They were held out for one week because `bill-accretion`
+    // also wrote a bill row's value, and two writers of one number leave the income booked against
+    // whichever wrote last. That stage no longer touches the register: a bill's pull to par IS
+    // this mark, at the price its own auction printed, so there is one owner and the accretion is
+    // observed rather than computed.
+    if (isTrancheKind(instrumentType) || holdingClassOf(instrumentType) === 'SOVEREIGN') {
       p = trancheClearedPricePerFace(ctx.v2, instrumentId);
     } else if (instrumentType === 'EQUITY') {
       const c = companyById.get(instrumentId);
