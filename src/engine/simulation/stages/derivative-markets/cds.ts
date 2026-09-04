@@ -31,7 +31,7 @@ import { computeAnnualDefaultProbability, creditRecoveryRate } from '../shared-h
 import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequiredReturn, fullSizeSpreadRangeBpsOf } from '../asset-allocation';
 import { bankRequiredReturnAnnual } from '../bank-lending';
 import { leverageHeadroomUSD } from '../../../macro/banking';
-import { REGION_IDS } from '../../../../domain/geography';
+import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { strikeDerivatives } from '../derivative-lifecycle';
 import { institutionTotalAssetsUSD } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
@@ -231,6 +231,8 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
             strike: Number(clearedBps.toFixed(1)),
             referenceId: issuer.id,
             termKey: '',
+            // §3.13c: the market it clears in.
+            currency: currencyOf(regionId),
             struckWeek: week,
             maturityWeek: week + CDS_TENOR_WEEKS,
           });

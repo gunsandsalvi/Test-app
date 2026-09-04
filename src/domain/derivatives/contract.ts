@@ -13,7 +13,7 @@
  * class is one profile module and one registry line, never a new struct, book, or settle loop.
  */
 
-import { RegionId } from '../geography';
+import { RegionId, CurrencyCode } from '../geography';
 
 /**
  * The subset of the ledger's parties that can stand on a bilateral derivative. The arms are
@@ -37,6 +37,15 @@ export interface DerivativeContract {
   classId: DerivativeClassId;
   /** The region whose market this contract cleared in (the holder's home region for FX). */
   regionId: RegionId;
+  /**
+   * §3.13c — THE MONEY THIS CONTRACT SETTLES IN, stated at strike. Every payment it generates used
+   * to re-derive this as `currencyOf(c.regionId)`, and `regionId` is a proxy that means something
+   * different in each market: the clearing market for IRS and CDS, the HOLDER's region for an FX
+   * forward, and a hard-coded `'USA'` for a commodity future — where the region field was standing
+   * in for the fact that commodities are quoted in the numéraire. An obligation says what it is
+   * denominated in, the way `TradeInvoice` already does.
+   */
+  currency: CurrencyCode;
   /** Role A, named by the class profile: pay-fixed / protection buyer / long / hedger. */
   a: DerivativeParty;
   /** Role B, named by the class profile: receive-fixed / protection seller / short / dealer. */

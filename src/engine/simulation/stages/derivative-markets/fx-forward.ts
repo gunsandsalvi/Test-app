@@ -350,6 +350,8 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         referenceId: issuer,
         termKey: '',
         settledMarkUSD: 0,
+        // §3.13c: the holder settles in its own money.
+        currency: currencyOf(holderRegion),
         struckWeek: week,
         maturityWeek: week + FX_FORWARD_TENOR_WEEKS,
       };
@@ -359,7 +361,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       // Initial margin is the CLIENT'S money sitting with the desk: reserves move, equity does
       // not, and the desk carries it on its funding line as the liability it is.
       if (marginUSD > 0) {
-        pay(ctx, { payer: holder, payee: { kind: 'BANK_SECURITIES', ticker: dealer }, amount: marginUSD, currency: currencyOf(contract.regionId), reason: 'fx forward initial margin' });
+        pay(ctx, { payer: holder, payee: { kind: 'BANK_SECURITIES', ticker: dealer }, amount: marginUSD, currency: contract.currency, reason: 'fx forward initial margin' });
       }
       desk.chargedPfeUSD += writableUSD * FX.pfeAddOnRate;
       desk.book.grossNotionalUSD += writableUSD;

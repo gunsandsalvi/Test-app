@@ -35,7 +35,7 @@ import { medianOf } from '../../../domain/volatility';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
-import { cashOf, obligationCurrencyOf } from '../../ledger/accounts';
+import { cashOf } from '../../ledger/accounts';
 
 const sblInstrumentId = (regionId: RegionId, companyId: string) => `${regionId}-SBL-${companyId}`;
 export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
@@ -125,13 +125,10 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
             amount: loan.collateralUSD,
             // The collateral is denominated in the money the shares were quoted in. This branch
             // is the one where the issuer is GONE — de-listed, or a name the company table no
-            // longer carries — so there is nothing left to read that off; the lender is holding
-            // the cash and returns it in the money it holds. (A `!` assertion here read the
-            // issuer's region in the very branch whose condition is that there may be no issuer,
-            // and it threw in week 5 of the reference run. `SecurityLoan` carrying its own
-            // currency is what actually closes this — §3.13c's list of contracts with no
-            // denomination.)
-            currency: issuer ? currencyOf(issuer.region) : obligationCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: loan.lender.id }),
+            // longer carries. §3.13c: the loan says what it is denominated in, so there is
+            // nothing to re-derive here — this read the issuer's region in the very branch whose
+            // condition is that there may be no issuer, and that `!` threw in week 5.
+            currency: loan.currency,
             reason: 'stock loan closed on credit event',
           });
         }
@@ -488,6 +485,8 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
             borrower: { kind: 'INSTITUTION', id: d.fundId },
             shares,
             feeBps: Number(clearedBps.toFixed(1)),
+            // §3.13c: the money the shares trade in, stated once at strike.
+            currency: currencyOf(regionId),
             collateralUSD,
             lenderPositionAtStrike: positionAtStrike.get(lenderId) ?? shares,
             struckWeek: ctx.nextWeek,

@@ -148,6 +148,22 @@ export function dryPowderUSD(
  * has left to give, and the fund's drawn capital rises by the same amount. Returns what was
  * actually raised — a call that comes up short is a deal that does not close.
  */
+/**
+ * §3.13c — WHY A CAPITAL CALL READS THE SPONSOR'S MONEY, AND WHEN THAT STOPS BEING RIGHT.
+ *
+ * The other obligations in this model now carry their own denomination, because their payment
+ * sites were re-deriving it from a proxy (a `SecurityLoan` from the issuer's region with a
+ * fallback that threw; a `DerivativeContract` from a `regionId` that means something different in
+ * each market). An LP commitment is not that case: a commitment is to the FUND and is payable in
+ * the fund's money, so `obligationCurrencyOf(sponsor)` is the fact rather than a stand-in for it,
+ * and a `currency` field here would be a second representation of the fund's own currency
+ * (rule 4) with exactly one possible value.
+ *
+ * What makes it one value is a filter in the seed: `simulation/initialization.ts` matches LPs with
+ * `e.region === regionId`, so every commitment is same-region by construction. **The day a
+ * cross-border LP exists the commitment needs its own denomination** — the money is agreed at
+ * subscription and the LP has to buy it — and this is the condition to watch for.
+ */
 function callCapitalUSD(ctx: WeeklyStepContext, sponsorId: string, requestedUSD: number): number {
   const sponsor = ctx.updatedInstitutionalEntities.find((e) => e.id === sponsorId);
   if (!sponsor?.peFund || !(requestedUSD > 0)) return 0;

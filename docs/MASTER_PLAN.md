@@ -417,11 +417,10 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
     · **clearing** — an instrument's quote currency. Every book still clears in the money of the
       region that runs it, which is right for a domestic auction and unexamined for a
       cross-listed one; and `financial-clearing-engine`'s `unitValueUSD` has no currency at all;
-    · **the contracts with no denomination.** `SecurityLoan`, `DerivativeContract` and the PE
-      commitments carry no currency field, so every payment they generate reads its money off
-      the obligation's OWNER (`obligationCurrencyOf`) or off the market it trades in
-      (`c.regionId`). `TradeInvoice` is the one obligation in the model that already carries its
-      own denomination, and it is the shape the other three want;
+    · ~~**the contracts with no denomination**~~ (DONE, §9.13c-DENOM). Two of the three were reading
+      a proxy and now state their own money; the third was reading the fact, and the finding is
+      the CONDITION under which that stops being true — recorded at `pe-lifecycle.ts`, not as a
+      field with one possible value;
     · **13c-FX-3 — THE NET IMBALANCE STILL ACCUMULATES, AND THAT IS §6.1'S FX ROW.** §9.13c-FX-2
       stopped the runaway and did not stop the drift: the desks' book opens at −45.8B in week 1
       (was −390.6B) and reaches −181.3B net / 227.2B gross by week 16, about −8.5B a week off a
@@ -1385,6 +1384,22 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13c-DENOM — an obligation says what it is denominated in.** `TradeInvoice` was the only one that
+did; the rest re-derived it at each payment site from a proxy. `SecurityLoan` read
+`issuer ? currencyOf(issuer.region) : <the lender's own money>` — in the very branch whose condition
+is that there may be no issuer, and that `!` threw in week 5 of the reference run. A
+`DerivativeContract` read `currencyOf(c.regionId)`, where `regionId` means the clearing market for
+IRS and CDS, the HOLDER's region for an FX forward, and a hard-coded `'USA'` for a commodity future
+— the region field standing in for the fact that commodities are quoted in the numéraire. Both now
+carry `currency`, set once at strike, and every payment reads it.
+
+The PE commitments are NOT the same case and no field was added: a commitment is to the FUND and is
+payable in the fund's money, so reading the sponsor's is the fact rather than a stand-in, and a
+field would be a second representation with one possible value (rule 4). What makes it one value is
+a filter in the seed — LPs are matched `e.region === regionId` — so the finding is the condition:
+the day a cross-border LP exists, the commitment needs its own denomination. Recorded where that
+would be read.
 
 **13-SOV row 5 — the curve has ONE owner, and the sovereign conversion is complete.** A region's
 zero curve was carried twice and the two could not agree: 07c fitted `yieldCurveParams` through the

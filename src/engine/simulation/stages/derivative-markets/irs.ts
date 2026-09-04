@@ -18,6 +18,7 @@
  */
 
 import { RegionId } from '../../../../types';
+import { currencyOf } from '../../../../domain/geography';
 import { loanBooksOf } from '../../../../domain/banking';
 import { ensureV2 } from '../../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, facilityBookOf, materializeGovLadder } from '../../../../engine2/tranches';
@@ -235,6 +236,8 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
             strike: parByTenor[k],
             referenceId: '',
             termKey: k,
+            // §3.13c: the market it clears in.
+            currency: currencyOf(regionId),
             struckWeek: week,
             maturityWeek: week + Math.round(SWAP_TENOR_YEARS[k] * 52),
           });

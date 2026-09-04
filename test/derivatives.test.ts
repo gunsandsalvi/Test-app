@@ -30,7 +30,7 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
 });
 
 const base = (over: Partial<DerivativeContract>): DerivativeContract => ({
-  id: 'c', classId: 'IRS', regionId: 'USA',
+  id: 'c', classId: 'IRS', regionId: 'USA', currency: 'USD',
   a: { kind: 'BANK', ticker: 'AAA' }, b: { kind: 'INSTITUTION', id: 'INS1' },
   notionalUSD: 1_000_000, strike: 0.05, referenceId: '', termKey: 's5',
   struckWeek: 0, maturityWeek: 260, ...over,

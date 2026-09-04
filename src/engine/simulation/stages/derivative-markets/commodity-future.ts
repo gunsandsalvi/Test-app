@@ -16,6 +16,7 @@
  */
 
 import { bankReservesOf } from '../../../ledger/accounts';
+import { NUMERAIRE } from '../../../../domain/geography';
 import { hedgeFundStrategyProfile } from '../../../../domain/institution-profiles';
 import { riskAversionOf } from '../../../../domain/preferences';
 import { Company } from '../../../../types';
@@ -256,6 +257,8 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
             termKey,
             units: sizeUnits,
             settledMarkUSD: 0,
+            // §3.13c: commodities are quoted in the numeraire, which is what `regionId: 'USA'` was standing in for.
+            currency: NUMERAIRE,
             struckWeek: week,
             maturityWeek: week + Math.round(tenorMonths * (52 / 12)),
           });

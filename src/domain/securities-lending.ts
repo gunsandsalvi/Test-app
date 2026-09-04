@@ -36,6 +36,7 @@
  */
 
 import { RegionId } from './geography';
+import { CurrencyCode } from './geography';
 
 export type LendingParty = { kind: 'INSTITUTION'; id: string };
 
@@ -49,6 +50,14 @@ export interface SecurityLoan {
   shares: number;
   /** The fee the loan was struck at, in bps of market value per year (rule 8). */
   feeBps: number;
+  /**
+   * §3.13c — THE MONEY THIS LOAN IS IN, stated at strike. The fee and the collateral are both in
+   * the money the shares trade in, and every payment site used to re-derive that from a proxy:
+   * `issuer ? currencyOf(issuer.region) : <the lender's own money>`, in the very branch whose
+   * condition is that there may be no issuer. That `!` threw in week 5 of the reference run. An
+   * obligation says what it is denominated in, the way `TradeInvoice` already does.
+   */
+  currency: CurrencyCode;
   /** What the borrower posted, and what comes back when the shares do. */
   collateralUSD: number;
   /**

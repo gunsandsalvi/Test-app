@@ -19,7 +19,6 @@
  */
 
 import { GameState, RegionId } from '../../../types';
-import { currencyOf } from '../../../domain/geography';
 
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey } from '../../../domain/derivatives/contract';
@@ -140,7 +139,8 @@ function payToB(ctx: WeeklyStepContext, c: DerivativeContract, usdToB: number, r
   if (!(Math.abs(usdToB) > MIN_LEG_USD)) return;
   const payer = usdToB > 0 ? c.a : c.b;
   const payee = usdToB > 0 ? c.b : c.a;
-  pay(ctx, { payer, payee, amount: Math.abs(usdToB), currency: currencyOf(c.regionId), reason });
+  // §3.13c: the contract says what it settles in; `currencyOf(c.regionId)` was a proxy.
+  pay(ctx, { payer, payee, amount: Math.abs(usdToB), currency: c.currency, reason });
   const pk = derivativePartyKey(payer);
   const ek = derivativePartyKey(payee);
   net.set(pk, (net.get(pk) ?? 0) - Math.abs(usdToB));
@@ -195,7 +195,7 @@ function releaseInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract, vie
     payer: { kind: 'BANK_SECURITIES', ticker: c.b.ticker },
     payee: c.a,
     amount: marginUSD,
-    currency: currencyOf(c.regionId),
+    currency: c.currency,
     reason: 'initial margin returned',
   });
 }
