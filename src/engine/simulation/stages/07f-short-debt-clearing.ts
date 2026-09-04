@@ -55,11 +55,11 @@ import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementLocal, institutionSpendableLocal, PartyRef } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, PrimaryTake } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, PrimaryTake, participantPartyOf } from './book-settlement';
 import { clearedBookDelta, transferHolding } from '../../ledger/holdings-ledger';
 import { wireCentralBankFills } from './central-bank-demand';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
-import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
+import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
 import { discountBillProceedsLocal, billYieldFromPrice, isDiscountBill } from '../../../domain/government';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
@@ -74,6 +74,7 @@ import { cashOf, bankReservesOf, bankDepositLines, householdDepositsAt } from '.
 import { commercialPaperTrancheId } from '../../../domain/instrument-keys';
 import { governmentEntityId } from '../../../domain/entity-keys';
 import { forEachSovereignPosition } from '../../sovereign-register';
+import { bankParticipantId, treasuryParticipantId } from '../../../domain/participant-keys';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
@@ -245,7 +246,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             minHoldingLocal: Math.max(encumberedFace.get(b.key) ?? 0, liquidityFloorLocal * bondShareOfSovStock),
           });
         });
-        participants.push({ id: `BANK-${bank.ticker}`, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
+        participants.push({ id: bankParticipantId(bank.ticker), currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
       });
 
       // Institutions: the cash sleeve. Half the sleeve wants to be in paper, wanting a small
@@ -290,8 +291,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // cash because it has cash, not because the yield tempted it. So its reservation is the
       // policy rate itself — below the bank arbitrage floor there is no reason to lock the money
       // up at all — and its size is its own sleeve, bounded by the cash it actually holds.
-      const treasuryParticipantId = (ticker: string) => `TREASURY-${ticker}`;
-      const treasuryBidders = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
+            const treasuryBidders = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
         (c) => c.region === regionId && isActiveCompany(c) && !c.isBankEntity && !c.isInstitutionalEntity
       );
       const treasuryByTicker = new Map<string, typeof treasuryBidders[number]>();
@@ -538,7 +538,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // the positions never moved, and 07c's careful pass-through of the bills was
       // preserving a position nothing was updating.
       regionBanks.forEach((bank) => {
-        const fills = result.newParticipantHoldings.get(`BANK-${bank.ticker}`);
+        const fills = result.newParticipantHoldings.get(bankParticipantId(bank.ticker));
         if (!fills) return;
         const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
         if (!existingSheet) return;
@@ -552,7 +552,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           // Item 13: the primary slice books at cost — the rebate is the same instruction's
           // booking half (the cash half was adjusted on the participant's net above).
           const newLocal = (fills.get(b.key) ?? 0)
-            - rebateOf(`BANK-${bank.ticker}`, b.key);
+            - rebateOf(bankParticipantId(bank.ticker), b.key);
           faceDeltaLocal += newLocal - (byTenor[b.key] ?? 0);
           billsBefore.set(b.key, { valueLocal: byTenor[b.key] ?? 0 });
           billsAfter.set(b.key, { valueLocal: newLocal > 1 ? newLocal : 0 });
@@ -563,7 +563,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // identity invariant would otherwise report as a missing leg. SETL6: the reserves leg
         // settles through the clearing house below, so the buyer and the seller move against
         // each other rather than each moving alone.
-        const cashDeltaLocal = result.netCashDeltaByParticipantId.get(`BANK-${bank.ticker}`) ?? -faceDeltaLocal;
+        const cashDeltaLocal = result.netCashDeltaByParticipantId.get(bankParticipantId(bank.ticker)) ?? -faceDeltaLocal;
         const feeLocal = Math.max(0, -(cashDeltaLocal + faceDeltaLocal));
         updateBankSheet(ctx, bank.ticker, {
           ...bookPnL(existingSheet, -feeLocal, 'bill book fee', bank.ticker),
@@ -624,11 +624,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       settleClearedBook(
         ctx, regionId, currencyOf(regionId), BOOK,
         result.netCashDeltaByParticipantId,
-        (id) => (billEntityIds.has(id) ? { kind: 'INSTITUTION', id }
-          : id.startsWith('BANK-') ? { kind: 'BANK_SECURITIES', ticker: id.slice(5) }
-            : id.startsWith('TREASURY-') ? { kind: 'COMPANY', ticker: id.slice('TREASURY-'.length) }
-              : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
-                : dealerDeskPartyOf(id, deskTickers)),
+        participantPartyOf({ regionId, entityIds: billEntityIds, deskTickers }),
         // Item 13: the CCP receives less by exactly the rebates its buyers kept, and pays the
         // treasury less by the same total — flat by construction, as a clearing house is.
         { netCashLocal: result.dealerNetCashLocal - totalCashRebatesLocal, feeLocal: result.totalDealerRevenueLocal },
@@ -1269,8 +1265,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // SETL6: the whole cash side — buyers to the clearing house, the desks' fee, and the
       // clearing house to each ISSUER for the paper its own programme actually placed.
       const cpEntityIds = new Set(cpEntities.map((e) => e.id));
-      const cpPartyOfParticipant = (id: string): PartyRef | undefined =>
-        (cpEntityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, cpDeskTickers));
+      const cpPartyOfParticipant = participantPartyOf({ regionId, entityIds: cpEntityIds, deskTickers: cpDeskTickers });
       // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
       // through the same clearing house as the paper. CP could not do this while the auction named
       // a COMPANY and the ledger names a tranche; row 4 made every fill name its paper.

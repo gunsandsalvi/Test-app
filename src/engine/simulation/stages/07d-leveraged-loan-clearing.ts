@@ -62,8 +62,8 @@ import { computeAnnualDefaultProbability, creditRecoveryRate, moveCorporateAccru
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetLocal } from './institutional-balance-sheet';
 import { institutionUnsettledLessCollateralLocal, institutionSpendableLocal, PartyRef } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills } from './book-settlement';
-import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, participantPartyOf } from './book-settlement';
+import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
 import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -647,8 +647,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const issuer = companyById.get(issuerIdOf(ctx.v2, instrumentId));
       return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
     };
-    const partyOfParticipant = (id: string): PartyRef | undefined =>
-      (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers));
+    const partyOfParticipant = participantPartyOf({ regionId, entityIds, deskTickers });
     // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
     // through the same clearing house as the paper. A loan trades clean like a bond.
     const accruedLeg = accruedOnFills(

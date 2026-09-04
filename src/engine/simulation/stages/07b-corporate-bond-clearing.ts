@@ -93,8 +93,8 @@ import {
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetLocal } from './institutional-balance-sheet';
 import { institutionUnsettledLessCollateralLocal, institutionSpendableLocal, PartyRef } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills } from './book-settlement';
-import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, participantPartyOf } from './book-settlement';
+import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
 import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -753,8 +753,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // accrual ledger's key. The weekly accrual walk names its holders the same way
     // (`shared-helpers.ts:applyHolderInterestAccruals` — an institution's own id, a desk's
     // participant id), so a balance moved here is a balance that walk will find.
-    const partyOfParticipant = (id: string): PartyRef | undefined =>
-      (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers));
+    const partyOfParticipant = participantPartyOf({ regionId, entityIds, deskTickers });
     // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
     // through the same clearing house as the paper. 13b could not do this on the corporate side
     // because the auction named a COMPANY and the ledger names a tranche, so there was no

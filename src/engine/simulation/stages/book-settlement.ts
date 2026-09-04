@@ -42,6 +42,9 @@ import { transferHolding, HoldingSpec, HoldingKind } from '../../ledger/holdings
 import { heldInShares } from '../../../domain/assets';
 import type { InstrumentId } from '../../../domain/ids';
 import { banksOf } from '../../../domain/company';
+import { bankTickerOfParticipant, treasuryTickerOfParticipant, householdRegionOfParticipant } from '../../../domain/participant-keys';
+import { dealerDeskPartyOf } from './dealer-desks';
+import { CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 
 /** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
 export interface FeeDesk { ticker: string; share: number }
@@ -117,6 +120,44 @@ export function accruedOnFills(
     if (owedLocal !== 0) byParticipantId.set(p.id, owedLocal);
   });
   return { byParticipantId, netByInstrumentId };
+}
+
+/**
+ * §3.13-READ D1 — WHO A PARTICIPANT IS, for both halves of its settlement: the money and the
+ * accrual ledger's key. One reading, for every book.
+ *
+ * Six books wrote this themselves and drifted on the bank arm three ways (see
+ * `domain/participant-keys.ts`). Every arm is offered to every caller here, unconditionally,
+ * because the id grammars are DISJOINT: a book whose auction never admits a company treasury
+ * simply never sees a `TREASURY-` id, and the arm is inert rather than wrong. The two things a
+ * caller must still name are the ones that are not grammar — which entity ids it admitted, and
+ * which banks' desks it built — plus 07c's own convention, where a bank bids under its PLAIN
+ * ticker rather than a prefixed id.
+ *
+ * The accrual walks name their holders the same way (`shared-helpers:applyHolderInterestAccruals`,
+ * `sovereign-calendar:accrueSovereignHolders`), so a balance moved here is a balance they find.
+ */
+export function participantPartyOf(args: {
+  regionId: RegionId;
+  /** The institutions this book admitted, by their own entity ids. */
+  entityIds: ReadonlySet<string>;
+  /** The banks whose market-making desks this book built. */
+  deskTickers: Set<string>;
+  /** 07c only: banks that bid under their plain ticker rather than `bankParticipantId`. */
+  bankTickers?: ReadonlySet<string>;
+}): (participantId: string) => PartyRef | undefined {
+  const { regionId, entityIds, deskTickers, bankTickers } = args;
+  return (id: string): PartyRef | undefined => {
+    if (entityIds.has(id)) return { kind: 'INSTITUTION', id };
+    if (id === CENTRAL_BANK_PARTICIPANT_ID) return { kind: 'CENTRAL_BANK', region: regionId };
+    if (householdRegionOfParticipant(id) !== undefined) return { kind: 'HOUSEHOLD', region: regionId };
+    const bank = bankTickerOfParticipant(id);
+    if (bank !== undefined) return { kind: 'BANK_SECURITIES', ticker: bank };
+    const treasury = treasuryTickerOfParticipant(id);
+    if (treasury !== undefined) return { kind: 'COMPANY', ticker: treasury };
+    if (bankTickers?.has(id)) return { kind: 'BANK_SECURITIES', ticker: id };
+    return dealerDeskPartyOf(id, deskTickers);
+  };
 }
 
 export function settleClearedBook(

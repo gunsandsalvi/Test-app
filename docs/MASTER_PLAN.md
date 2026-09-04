@@ -434,9 +434,6 @@ written from here):
     **C. THE SECOND ANSWERS — DONE, all five, in §9.**
 
     **D. THE RULES WRITTEN MORE THAN ONCE — collapse, and the branding then becomes small.**
-    D1. The participant→party lambda: **6 copies, 3 incompatible conventions** for how a bank's own
-        book is named (a ticker Set, a `BANK-` prefix re-parsed with a hardcoded `slice(5)`, and no
-        bank arm at all). Home: a factory beside `settleClearedBook`, which owns the contract.
     D2. The "may only rewrite what it CLEARED" write-back loop: 3 copies × ~22 lines, the largest
         verbatim block in the set.
     D3. The `ItemizedHolding` row builder: 6 copies (3 named, 3 inline) + 2 in one file for shares.
@@ -1656,6 +1653,23 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ D1 — THE PARTICIPANT ID GRAMMAR GETS AN OWNER.** A clearing book names its bidders by
+string, and those strings encode WHO the bidder is. Six books each wrote the translation back to a
+`PartyRef` themselves, and the bank arm had drifted three ways: 07c matched a Set of PLAIN
+tickers; 07f's bill book matched a `BANK-` prefix and re-parsed it with a hardcoded `slice(5)`;
+07b, 07d, 07e and 07f's CP book had no bank arm at all. The prefix itself was minted in two files
+and parsed in three, with three spellings of "take off the prefix" — `slice(5)` once and
+`replace('BANK-','')` twice — and the repo book's `INST-` seat had the same shape.
+
+`domain/participant-keys.ts` owns the grammar now, the way `instrument-keys.ts` owns the
+instrument id space, with a named constructor AND a named reader per kind: bank seat, treasury
+seat, household seat, repo institution seat. `book-settlement.ts:participantPartyOf` composes them
+into the one translation, and it offers EVERY arm to every caller unconditionally, because the
+grammars are disjoint — a book whose auction never admits a company treasury simply never sees a
+`TREASURY-` id, so the arm is inert rather than wrong. What a caller still names is the part that
+is not grammar: which entity ids it admitted, which banks' desks it built, and 07c's own
+convention of seating a bank under its bare ticker.
 
 **13-READ C4+C5 — THE CHECKS THEMSELVES WERE RE-DERIVING WHAT THE BOOKS PRINTED.**
 

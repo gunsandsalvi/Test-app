@@ -99,7 +99,7 @@ checked by `scripts/check-atlas.sh`.
 | A2.a a single number cannot answer "and if it were cheaper?" | `src/engine/simulation/stages/financial-clearing-engine.ts:setDemand` | ✅ |
 | A3 the schedule comes from the participant's own state | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
 | **A4 FORBID no price-taker of a price not yet produced** | `src/engine/simulation/stages/etf-demand.ts:indexFundDemand` | ⚠️ |
-| B1 the participants are named parties with balance sheets | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
+| B1 the participants are named parties with balance sheets | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` · `src/engine/simulation/stages/book-settlement.ts:participantPartyOf` · `src/domain/participant-keys.ts:bankParticipantId` | ✅ |
 | B2 a party is present because it has a reason to be | `src/engine/simulation/stages/central-bank-demand.ts:centralBankParticipant` | ✅ |
 | B3 a dealer may be there; its reason is inventory and spread | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
 | B3.a a dealer has a limit: capital, risk, inventory | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |

@@ -37,10 +37,10 @@ import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, Clea
 const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { institutionSpendableLocal } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, participantPartyOf } from './book-settlement';
 import { householdBookId, transferHolding } from '../../ledger/holdings-ledger';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
-import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
+import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
@@ -55,6 +55,7 @@ import { equityInstrumentId } from '../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../domain/ids';
 import { typeRefOf } from '../../../engine2/world';
 import { ladderTotalLocal } from '../../../engine2/tranches';
+import { householdParticipantId } from '../../../domain/participant-keys';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
@@ -305,7 +306,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     if (process.env.HH_EQ_TRACE === '1' && hhSaleNeedLocal > 0) {
       console.log(`  [hh-eq] ${regionId} forced direct-equity sale announced: ${(hhSaleNeedLocal / 1e6).toFixed(1)}M`);
     }
-    const householdParticipantId = `HOUSEHOLD-${regionId}`;
+    const householdPid = householdParticipantId(regionId);
     let householdParticipant: ClearingParticipant | undefined;
     const householdPriorShares = new Map<InstrumentId, number>();
     if (hhSaleNeedLocal > 1) {
@@ -339,7 +340,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           if (inst) inst.tradableFloatLocal += sellShares;
         });
         householdParticipant = {
-          id: householdParticipantId,
+          id: householdPid,
           currentHoldingsByInstrumentId: householdPriorShares,
           demandByInstrumentId,
         };
@@ -613,7 +614,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // (it simply rejoins the residual the register measures). The proceeds land on the
     // HOUSEHOLD party at settlement below, which is the whole point of the channel.
     if (householdParticipant) {
-      const hpi = piById.get(householdParticipantId);
+      const hpi = piById.get(householdPid);
       let cashDeltaLocal = 0;
       // Step 13 (W2): the shares the households sold go to the house by wire, at the print.
       // §9.13-EQUITY: `transferHolding`, not `clearedBookDelta`. The household sector holds real
@@ -634,7 +635,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
             valueLocal: soldShares * comp.stockPrice, shares: soldShares, units: soldShares,
           }, 'equity clearing fill');
       });
-      if (cashDeltaLocal > 0) netCashByEntityId.set(householdParticipantId, cashDeltaLocal);
+      if (cashDeltaLocal > 0) netCashByEntityId.set(householdPid, cashDeltaLocal);
       reg.householdState.pendingDirectEquitySaleLocal = 0;
     }
 
@@ -690,9 +691,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     settleClearedBook(
       ctx, regionId, currencyOf(regionId), BOOK,
       netCashByEntityId,
-      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id }
-        : id === householdParticipantId ? { kind: 'HOUSEHOLD', region: regionId }
-        : dealerDeskPartyOf(id, deskTickers)),
+      participantPartyOf({ regionId, entityIds, deskTickers }),
       { netCashLocal: dealerNetLocal, feeLocal: bookFeeLocal },
       feeDesksForRegion(ctx, regionId),
       equityPrimaryTakes

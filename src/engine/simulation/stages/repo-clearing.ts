@@ -60,6 +60,7 @@ import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO } from '../../
 
 import { repoOvernightInstrumentId, repoTermInstrumentId } from '../../../domain/instrument-keys';
 import { instrumentEntries, type InstrumentId } from '../../../domain/ids';
+import { bankParticipantId, bankTickerOfParticipant, repoInstitutionSeatId, repoInstitutionIdOfSeat } from '../../../domain/participant-keys';
 /** The zero curve's own points, at the tenors they are quoted for — a curve HAS points, and this
  *  is the one place that says where they sit. Not a grouping of holdings: nothing is keyed by it. */
 const CURVE_POINT_YEARS: [('tenor3M' | 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y'), number][] = [
@@ -452,7 +453,7 @@ export function runRegionalRepoSession(
     bankSurplusLocal.forEach((surplusLocal, ticker) => {
       if (surplusLocal <= 0) return;
       participants.push({
-        id: `BANK-${ticker}`,
+        id: bankParticipantId(ticker),
         currentHoldingsByInstrumentId: new Map(),
         demandByInstrumentId: new Map([[args.instrumentId, lenderSchedule(args.bankReservationBps, surplusLocal)]]),
       });
@@ -460,7 +461,7 @@ export function runRegionalRepoSession(
     entitySleeveLocal.forEach((sleeveLocal, entityId) => {
       if (sleeveLocal <= 0) return;
       participants.push({
-        id: `INST-${entityId}`,
+        id: repoInstitutionSeatId(entityId),
         currentHoldingsByInstrumentId: new Map(),
         demandByInstrumentId: new Map([[args.instrumentId, lenderSchedule(args.instReservationBps, sleeveLocal)]]),
       });
@@ -503,11 +504,13 @@ export function runRegionalRepoSession(
       lentByParty.set(pid, lentLocal);
       totalLentLocal += lentLocal;
       // The cash is committed: it cannot fund the other book too.
-      if (pid.startsWith('BANK-')) {
-        const t = pid.replace('BANK-', '');
+      const seatBank = bankTickerOfParticipant(pid);
+      const seatInst = repoInstitutionIdOfSeat(pid);
+      if (seatBank !== undefined) {
+        const t = seatBank;
         bankSurplusLocal.set(t, Math.max(0, (bankSurplusLocal.get(t) ?? 0) - lentLocal));
-      } else if (pid.startsWith('INST-')) {
-        const id = pid.replace('INST-', '');
+      } else if (seatInst !== undefined) {
+        const id = seatInst;
         entitySleeveLocal.set(id, Math.max(0, (entitySleeveLocal.get(id) ?? 0) - lentLocal));
       }
     });
@@ -576,11 +579,12 @@ export function runRegionalRepoSession(
         if (raisedLocal <= 1) return;
         const principalLocal = Math.min(shareLocal, raisedLocal);
         pledges.forEach((pl) => worked.set(pl.bondId, (worked.get(pl.bondId) ?? 0) + pl.faceLocal));
+        const lenderBank = bankTickerOfParticipant(pid);
         const lender: RepoParty = pid === CB_SRF_SEAT_ID
           ? { kind: 'CENTRAL_BANK' }
-          : pid.startsWith('BANK-')
-            ? { kind: 'BANK', ticker: pid.replace('BANK-', '') }
-            : { kind: 'INSTITUTION', id: pid.replace('INST-', '') };
+          : lenderBank !== undefined
+            ? { kind: 'BANK', ticker: lenderBank }
+            : { kind: 'INSTITUTION', id: repoInstitutionIdOfSeat(pid) ?? pid };
         newContracts.push({
           id: `${regionId}-REPO-${week}-${contractSeq++}`,
           regionId,

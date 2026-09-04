@@ -57,8 +57,8 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { stagePurchaseBudgetLocal } from './institutional-balance-sheet';
 import { pendingSettlementLocal, institutionUnsettledLessCollateralLocal } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills } from './book-settlement';
-import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, participantPartyOf } from './book-settlement';
+import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { maxOverweightMultipleOf } from './asset-allocation';
@@ -70,7 +70,7 @@ import { accruedPerFace, banksOf } from '../../../domain/company';
 import { sovereignCouponByBond } from '../../../domain/government';
 import { moveSovereignAccrued } from './sovereign-calendar';
 import { defect } from '../../../domain/defect';
-import { PartyRef } from './settlement';
+
 import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
@@ -665,11 +665,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // accrual ledger's key. The accrual walk names its holders the same way
     // (`sovereign-calendar.ts:accrueSovereignHolders`), so a balance moved here is a balance that
     // walk will find.
-    const partyOfParticipant = (id: string): PartyRef | undefined => (
-      entityIds.has(id) ? { kind: 'INSTITUTION', id }
-        : bankTickers.has(id) ? { kind: 'BANK_SECURITIES', ticker: id }
-          : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
-            : dealerDeskPartyOf(id, deskTickers));
+    const partyOfParticipant = participantPartyOf({ regionId, entityIds, deskTickers, bankTickers });
     // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
     // through the same clearing house as the paper.
     const accruedLeg = accruedOnFills(
