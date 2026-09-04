@@ -12,7 +12,7 @@ import { AuditSnapshot } from './snapshot';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
 import { isActiveCompany, banksOf } from '../../domain/company';
 import { centralBankAssetsLocal, centralBankLiabilitiesLocal, centralBankFxReservesLocal } from '../../domain/central-bank';
-import { centralBankBookLocal } from '../sovereign-register';
+import { centralBankBookLocal, bankSovereignBookLocal } from '../sovereign-register';
 import { AuditFinding, B, M, sum } from './types';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { ensureV2, currencyOfId } from '../../engine2/world';
@@ -127,7 +127,7 @@ function m5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   banksOf(state.companies).forEach((b) => {
     const bs = b.bankBalanceSheet!;
-    const sov = sum(Object.values(bs.sovereignBondHoldingsByBond ?? {}), (v) => Number(v) || 0);
+    const sov = bankSovereignBookLocal(ensureV2(state), b.id); // §3.13-BOOK d3b: register rows
     const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryLocal));
     const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.id)) + sov + bankReservesOf(ensureV2(state), b.id) + (bs.repoLentLocal ?? 0) + (bs.sovereignAccruedCouponLocal ?? 0) + desks + (bs.primeBrokerageLoansLocal ?? 0);
     const liabilities = depositsOf(bs, stateDepositLines(state, b)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0);

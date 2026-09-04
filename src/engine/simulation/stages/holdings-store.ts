@@ -358,7 +358,7 @@ export function consolidateRegister(ctx: WeeklyStepContext): void {
   const seenByKey = seenEpoch.byKey;
   // §9.13-EQUITY: every book the register holds, not the institutions alone — the household
   // sector's rows merge like anyone else's.
-  registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id)).forEach((entity) => {
+  registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet !== undefined).map((c) => c.id)).forEach((entity) => {
     // First pass is a scan, not an allocation: the overwhelming majority of books have nothing
     // to merge in a given week and must not pay for a map they do not need.
     let hasDuplicate = false;

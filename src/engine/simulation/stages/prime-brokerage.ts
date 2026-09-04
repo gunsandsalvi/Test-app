@@ -1,4 +1,5 @@
 import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
+import { bankSovereignBookLocal } from '../../sovereign-register';
 import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { bankPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf } from '../../../domain/party';
@@ -168,7 +169,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
 
       // What the fund's OWN capital supports at that haircut, and what the broker can carry.
       const fundEquityLocal = Math.max(0, institutionTotalAssetsLocal(ctx, fund) - drawnLocal);
-      const brokerRoomLocal = Math.max(0, leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, broker.id), facilityBookOf(ctx.v2, broker.id))) + lentByBroker(priorBook, broker.id);
+      const brokerRoomLocal = Math.max(0, leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, broker.id), facilityBookOf(ctx.v2, broker.id), bankSovereignBookLocal(ctx.v2, broker.id))) + lentByBroker(priorBook, broker.id);
       const lineLocal = Math.min(maxDrawnLocal(fundEquityLocal, haircutRate), brokerRoomLocal);
 
       // The price: what the broker's own money costs it, plus the return it needs on the capital

@@ -18,6 +18,7 @@
  */
 
 import { RegionId } from '../../../../types';
+import { bankSovereignPositions } from '../../../sovereign-register';
 import { bankParty, companyParty } from '../../../../domain/party';
 import { currencyOf } from '../../../../domain/geography';
 import { loanBooksOf } from '../../../../domain/banking';
@@ -100,11 +101,12 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       const rwaLocal = loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.id));
       const absorbableLocal = Math.max(0, sheet.bankEquityLocal - rwaLocal * BANK_WORKING_CAPITAL_RATIO);
       const bookByTenor = new Map<SwapTenorKey, number>();
-      Object.entries(sheet.sovereignBondHoldingsByBond ?? {}).forEach(([bondId, usd]) => {
-        const years = tenorYearsOf(bondId);
+      // §3.13-BOOK d3b: the bank's own book is its register rows.
+      bankSovereignPositions(ctx.v2, bank.id).forEach((p) => {
+        const years = tenorYearsOf(p.bondId);
         if (years === undefined) return;
         const k = nearestSwapTenor(years);
-        bookByTenor.set(k, (bookByTenor.get(k) ?? 0) + (Number(usd) || 0));
+        bookByTenor.set(k, (bookByTenor.get(k) ?? 0) + p.valueLocal);
       });
       SWAP_TENORS.forEach((k) => {
         const bookLocal = bookByTenor.get(k) ?? 0;

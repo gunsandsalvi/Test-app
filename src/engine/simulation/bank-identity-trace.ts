@@ -19,6 +19,7 @@
  */
 
 import { WeeklyStepContext } from './stages/context';
+import { bankSovereignBookLocal } from '../sovereign-register';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../domain/banking';
 import { GameState } from '../../types';
 import { BankingSector } from '../../domain/banking';
@@ -57,7 +58,7 @@ const FIELD_SIGNS: Record<keyof ReturnType<typeof fieldsOf>, 1 | -1> = {
 /** §3.13c: the return type is INFERRED, so its keys are a literal union and `FIELD_SIGNS` below
  *  is checked against them. Annotated `Record<string, number>` it was not: `keyof string-record`
  *  is `string`, so every key matched and nothing was verified. */
-export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number) {
+export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number) {
   return {
     depositsLocal: lines.householdLocal, corporateDepositsLocal: lines.corporateLocal,
     institutionalDepositsLocal: lines.institutionalLocal,
@@ -65,8 +66,7 @@ export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLin
     centralBankLoanLocal: bs.centralBankLoanLocal ?? 0, bankEquityLocal: bs.bankEquityLocal,
     srfBorrowingLocal: bs.srfBorrowingLocal ?? 0, repoBorrowedLocal: bs.repoBorrowedLocal ?? 0,
     businessLoanBookLocal: businessLoanBookOf(bs, facilityBookLocal), consumerLoanBookLocal: consumerLoanBookOf(bs),
-    sovHoldingsLocal: Object.values(bs.sovereignBondHoldingsByBond || {})
-      .reduce((a: number, v) => a + (Number(v) || 0), 0),
+    sovHoldingsLocal: sovLocal,
     cashReservesLocal: cashLocal, repoLentLocal: bs.repoLentLocal ?? 0,
     onRrpLendingLocal: bs.onRrpLendingLocal ?? 0,
     sovereignAccruedCouponLocal: bs.sovereignAccruedCouponLocal ?? 0,
@@ -76,9 +76,7 @@ export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLin
   };
 }
 
-export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, signedDesk = false): number {
-  const sovLocal = Object.values(bs.sovereignBondHoldingsByBond || {})
-    .reduce((a: number, v) => a + (Number(v) || 0), 0);
+export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, signedDesk = false): number {
   return (
     lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
     + (bs.clientMarginLocal ?? 0) + lines.smeLocal + (bs.centralBankLoanLocal ?? 0)
@@ -131,8 +129,8 @@ export class BankIdentityTrace {
       if (!sheet) return;
       const lines = bankDepositLines(ctx, c);
       const facilityBookLocal = facilityBookOf(ctx.v2, c.id);
-      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal));
-      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, true));
+      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id)));
+      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), true));
     });
     return out;
   }
@@ -144,7 +142,7 @@ export class BankIdentityTrace {
     const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[this.focusTicker]?.bankBalanceSheet)
       || c?.bankBalanceSheet;
     if (!sheet || !c) return;
-    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id));
+    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id));
     if (this.focusFields) {
       const parts: string[] = [];
       let residualDelta = 0;

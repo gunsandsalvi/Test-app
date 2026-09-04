@@ -1,4 +1,5 @@
 import { RegionId } from '../../domain/geography';
+import { bankSovereignBookLocal } from '../../engine/sovereign-register';
 import { companyParty } from '../../domain/party';
 /**
  * AU · statements — a firm's P&L, balance sheet and cash flow (the latest filed quarter beside
@@ -59,7 +60,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
   const active = tabs.includes(tab) ? tab : tabs[0];
   let body: React.ReactNode;
   if (active === 'bank sheet' && bank) {
-    const sov = Object.values(bank.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+    const sov = bankSovereignBookLocal(ensureV2(world.state), c.id);
     const lines = stateDepositLines(world.state, c);
     const deposits = lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.smeLocal;
     const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0);
@@ -242,7 +243,7 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
       { label: 'Fiscal stance', text: r.fiscalStanceScore.toFixed(2) },
     ]} />;
   } else if (active === 'banks') {
-    const sov = bs?.sovereignBondHoldingsLocal ?? 0;
+    const sov = world.state.companies.reduce((a, b) => a + (b.region === r.id && b.isBankEntity && !b.isDefaulted && b.bankBalanceSheet ? bankSovereignBookLocal(ensureV2(world.state), b.id) : 0), 0);
     const books = regionLoanBooksLocal(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.id));
     const regionLines = world.state.companies.reduce((a, c) => (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? addDepositLines(a, stateDepositLines(world.state, c)) : a), ZERO_DEPOSIT_LINES);
     body = <Statement units="USD millions · the region's banks, summed" asOf={asOf} lines={[

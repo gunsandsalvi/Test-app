@@ -89,8 +89,9 @@ export function bankCashBufferRatioOf(bank: { management?: import('../../domain/
 export const BASEL_MIN_LEVERAGE_RATIO = 0.03;
 
 /** Unweighted total assets — the leverage ratio's denominator. */
-export function bankTotalAssetsLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
-  const sovLocal = Object.values(sheet.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+export function bankTotalAssetsLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, sovLocal: number): number {
+  // §3.13-BOOK d3b: the sovereign book is the bank's REGISTER ROWS (`bankSovereignBookLocal`),
+  // handed in like the facility book — this file reads no store.
   // G3a: the desks' inventory is an asset the bank OWNS and finances, and a cash security
   // consumes the leverage ratio one-for-one. Before the desks had owners it consumed nothing,
   // which is precisely what let a book with no capital behind it absorb any imbalance.
@@ -104,8 +105,8 @@ export function bankTotalAssetsLocal(sheet: BankingSector, cashLocal: number, fa
 }
 
 /** How much balance sheet the bank's equity still supports under the leverage floor. */
-export function leverageHeadroomLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
-  return Math.max(0, sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsLocal(sheet, cashLocal, facilityBookLocal));
+export function leverageHeadroomLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, sovLocal: number): number {
+  return Math.max(0, sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsLocal(sheet, cashLocal, facilityBookLocal, sovLocal));
 }
 
 /**
@@ -168,10 +169,8 @@ export function liquidityDrivenSovereignFloorLocal(sheet: BankingSector, cashLoc
  * securities book is bounded by what it can FINANCE, and a funding market is what makes that
  * bound real rather than notional.
  */
-export function sovereignBookCapacityLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
-  const sovLocal = Object.values(sheet.sovereignBondHoldingsByBond || {})
-    .reduce((a, v) => a + (Number(v) || 0), 0);
-  return Math.max(0, sovLocal) + leverageHeadroomLocal(sheet, cashLocal, facilityBookLocal);
+export function sovereignBookCapacityLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, sovLocal: number): number {
+  return Math.max(0, sovLocal) + leverageHeadroomLocal(sheet, cashLocal, facilityBookLocal, sovLocal);
 }
 
 /**
@@ -215,6 +214,9 @@ export function evolveBankingSector(
   /** §5-WIRES A3.6c: the bank's reserves, its account read by the caller (a region's: the sum
    *  of its named banks' accounts) — the sheet carries no line. */
   cashLocal: number,
+  /** §3.13-BOOK d3b: the bank's own sovereign book at its marked value — its register rows,
+   *  read by the caller (a region's: the sum of its named banks'). The sheet carries no line. */
+  sovereignLocal: number,
   /** §5-WIRES A3.6c-ii: the bank's deposit lines, read off the ledger by the caller. */
   deposits: DepositLines,
   estimatedHouseholdIncomeLocal: number,
@@ -287,9 +289,7 @@ export function evolveBankingSector(
   // them; §5-WIRES D: this aggregate reads them as the caller's sum over those rows.
   const businessLoanLocal = loanBooks.businessLoanLocal;
   const consumerLoanLocal = loanBooks.consumerLoanLocal;
-  // The securities book is owned by the clearing stages (07c/07f/11) and passes through here
-  // untouched — a stage may only rewrite the instruments it cleared.
-  const sovereignLocal = prevBanking.sovereignBondHoldingsLocal;
+  // The securities book is the banks' register rows (§3.13-BOOK d3b): nothing here carries it.
 
   // ---- 1. Secured funding that comes due this week (REPO1). Borrowed principal returns to the
   // lender with the interest its own contract promised; lent principal returns to this bank the
@@ -514,7 +514,6 @@ export function evolveBankingSector(
     reservesInterestWeeklyLocal: Math.round(reservesInterestLocal),
     corporateDepositInterestWeeklyLocal: Math.round(corporateDepositInterestLocal),
     dividendWeeklyLocal: Math.round(dividendWeeklyLocal),
-    sovereignBondHoldingsLocal: Math.round(sovereignLocal),
     bankEquityLocal: Math.round(equityLocal),
     bankCapitalRatio: Number(newBankCapitalRatio.toFixed(4)),
     netInterestMarginPct: Number(netInterestMarginPct.toFixed(4)),
@@ -558,7 +557,6 @@ export function evolveBankingSector(
     // guess at it (the money fund read `policyRate x 0.45` — a second copy of a retired number).
     depositRateAnnual: Number(depositRate.toFixed(6)),
     corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],
-    sovereignBondHoldingsByBond: prevBanking.sovereignBondHoldingsByBond || {},
     // CAL: carried, never written here — the calendar owns this balance on both books.
     sovereignAccruedCouponLocal: prevBanking.sovereignAccruedCouponLocal ?? 0,
     sovBondDealerInventory: prevBanking.sovBondDealerInventory || [],

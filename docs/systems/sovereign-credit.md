@@ -236,11 +236,10 @@ of the second.
 
 E1 asks who holds how much of WHICH LINE, and §3.13-SOV row 3 answered it: every store keys by the
 bond's own tranche id. What row 3 did not give them is one SHAPE. A government holding sits in the
-register (institutions, since §9.13-EQUITY households, and since §9.13-BOOK d3a the CENTRAL
-BANK), in each bank's `sovereignBondHoldingsByBond`, in each bank's desk inventory, and in a
-company's `treasuryHoldings` — because the other holder classes are not in the register yet
-(`the-register.md` A1.a, the tree's own statement of its boundary; §3.13-BOOK d3b–d3d bring
-them in).
+register (institutions, since §9.13-EQUITY households, since §9.13-BOOK d3a the CENTRAL BANK and
+since d3b the BANKS' OWN BOOKS), in each bank's desk inventory, and in a company's
+`treasuryHoldings` — because two holder classes are not in the register yet (`the-register.md`
+A1.a, the tree's own statement of its boundary; §3.13-BOOK d3c–d3d bring them in).
 
 **Five places open-coded the walk over those stores**: the seed's stock reconciliation,
 `holdings-view`'s ownership shares, `O1`'s sovereign arm, `O11`'s stray-id check and the UI's
@@ -290,7 +289,7 @@ closes: the walk is one, and both callers use it.
 |---|---|---|
 | 1 type | `GovDebtTranche` is a strict subset of `DebtTranche` | `region-macro.ts:312` — `{id, principalLocal, couponRate, originationWeek, maturityWeek, tenorAtIssuanceYears}`, six fields, every one of them also on `company.ts:75`. No `seniority`, no `rateType`, no `callProtection`, no `paymentsPerYear`, no currency |
 | 2 store | ✅ DONE — the ONE tranche store | `reg.govDebtTranches` — 20 read sites across `src`, all of them `(reg.govDebtTranches ?? []).filter/reduce`; the withdrawal rebuilt the array with `.map(t => ({...t}))` |
-| 3 holdings | ✅ DONE — every store keys by BOND | `banking.ts:129` `sovereignBondHoldingsByBond` for banks, `sovBondDealerInventory[].bondId` for the desks, `GOV_BOND` register rows on the tranche id for institutions and (§9.13-BOOK d3a) the central bank. One id space; `audit/ownership.ts:o11` is the invariant and `o3` no longer exempts sovereigns |
+| 3 holdings | ✅ DONE — every store keys by BOND | `sovBondDealerInventory[].bondId` for the desks, `GOV_BOND` register rows on the tranche id for institutions, the central bank (§9.13-BOOK d3a) and the banks' own books (d3b). One id space; `audit/ownership.ts:o11` is the invariant and `o3` no longer exempts sovereigns |
 | 4 clearing | ✅ DONE — `07c` clears a **PRICE** | §9.13-SOV row 4: `statKind: 'PRICE_LIKE'`, each holder's reservation YIELD stated as the price it implies on that bond's own schedule and the yield read back with `yieldFromPrice`. It used to be `YIELD_LIKE`, so the engine valued every sovereign fill at `1` |
 | 5 curve | ✅ DONE — ONE owner | `sovereign-curve.ts` fits once through every point the week's sessions cleared and publishes every field as a read of that fit; the auctions clear against the standing curve and deposit what they observed |
 
@@ -357,12 +356,10 @@ And a bill that CHANGES HANDS is right — under the locked-rate reading the buy
 the ISSUER's original yield rather than at the price it actually paid.
 
 **⚠️ E3 is what is left of this, and it is a storage finding.** The register marks a bill at
-`units × price` like every other row — the central bank's bills included, since §9.13-BOOK d3a put
-its book on the register. A bank's `sovereignBondHoldingsByBond` still stores a VALUE per bill and
-no quantity — and its own auctions (`07c`, `07f`) write a FACE into that same field every week —
-so the return can only be applied to it as the price's RATIO, and the book ends each week at
-neither face nor `face × price`. `O1` then compares that value against a ladder's face. It cannot
-be fixed inside the accretion: it needs that book in the register, which is §3.13-BOOK d3b.
+`units × price` like every other row — the central bank's bills and the banks' own since
+§9.13-BOOK d3a and d3b put their books on the register. What still stores a VALUE with no quantity
+of its own is a desk's `dealerDeskInventory` row (`units` where a session wrote it, `inventoryLocal`
+where none did), which is §3.13-BOOK d3d.
 
 **§3 step 13-BOOK (d3)** — small, and it folds naturally into 13-SOV, which has
 to give the bill a stored issue price anyway to become a `DebtTranche`.

@@ -38,7 +38,8 @@
  */
 
 import { RegionId } from '../../../types';
-import { bankSecuritiesParty } from '../../../domain/party';
+import { bankPartyOf } from '../../../domain/party';
+import { bankSovereignPositions } from '../../sovereign-register';
 import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { PartyRef, pay, partyKey, partyFromKey } from './settlement';
@@ -103,8 +104,10 @@ export function accrueSovereignHolders(
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || c.region !== regionId || !isActiveCompany(c)) return;
     let earnedLocal = 0;
-    Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, usd]) => {
-      earnedLocal += accrue(bondId, bankSecuritiesParty(c), Number(usd) || 0);
+    // §3.13-BOOK d3b: the bank's own book is its register rows, held by the BANK party (its
+    // reserves buy it and its coupons land there) — the accrual is on FACE.
+    bankSovereignPositions(ctx.v2, c.id).forEach((p) => {
+      earnedLocal += accrue(p.bondId, bankPartyOf(c.id), p.faceLocal);
     });
     if (earnedLocal > 0) bankEarnedLocal.set(c.ticker, earnedLocal);
   });
@@ -205,7 +208,7 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
     const earnedLocal = bankEarnedLocal.get(c.ticker) ?? 0;
-    const key = `|${partyKey(bankSecuritiesParty(c))}`;
+    const key = `|${partyKey(bankPartyOf(c.id))}`;
     let heldLocal = 0;
     accrued.forEach((usd, k) => { if (k.endsWith(key)) heldLocal += usd; });
     if (earnedLocal === 0 && heldLocal === (c.bankBalanceSheet.sovereignAccruedCouponLocal ?? 0)) return;

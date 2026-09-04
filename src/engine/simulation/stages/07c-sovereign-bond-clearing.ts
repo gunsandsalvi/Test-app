@@ -43,7 +43,7 @@
  */
 
 import { bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
-import { bankSecuritiesParty } from '../../../domain/party';
+import { bankSecuritiesParty, bankPartyOf } from '../../../domain/party';
 
 import { GameState, RegionId, ItemizedHolding } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
@@ -65,7 +65,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { maxOverweightMultipleOf } from './asset-allocation';
 
 import { centralBankParticipant, bookCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
-import { clearedBookDelta } from '../../ledger/holdings-ledger';
+import { transferHolding } from '../../ledger/holdings-ledger';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityLocal } from './repo-clearing';
 import { accruedPerFace, banksOf } from '../../../domain/company';
 import { sovereignCouponByBond } from '../../../domain/government';
@@ -77,9 +77,9 @@ import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLoca
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
-import { instrumentEntries, asInstrumentId, type InstrumentId } from '../../../domain/ids';
+import { asInstrumentId, type InstrumentId } from '../../../domain/ids';
 import { governmentIssuer } from '../../../domain/entity-keys';
-import { sovereignHeldByBond, centralBankPositions } from '../../sovereign-register';
+import { sovereignHeldByBond, centralBankPositions, bankSovereignFaceByBond, bankSovereignBookLocal } from '../../sovereign-register';
 
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
@@ -435,10 +435,10 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const bankParticipants: ClearingParticipant[] = regionBanks.map((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.id);
+      // §3.13-BOOK d3b: what it holds is its register rows' FACE — the auction clears face.
       const currentByBond = new Map<InstrumentId, number>();
-      instrumentEntries(sheet.sovereignBondHoldingsByBond).forEach(([id, v]) => {
-        if (!ownInstrumentIds.has(id)) return;
-        currentByBond.set(id, Number(v) || 0);
+      bankSovereignFaceByBond(ctx.v2, bank.id).forEach((faceLocal, id) => {
+        if (ownInstrumentIds.has(id)) currentByBond.set(id, faceLocal);
       });
 
       // WS6 closes the loop the old comment left open ("their real constraint is the reserve
@@ -457,12 +457,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // position until then and a bank cannot fund two books with the same reserves.
       const reservesLocal = bankReservesOf(ctx.v2, bank.id);
       const facilityBookLocal = facilityBookOf(ctx.v2, bank.id);
+      const sovLocal = bankSovereignBookLocal(ctx.v2, bank.id);
       const settledCashLocal = reservesLocal
         + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
       const fundableLocal = Math.min(
         Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
-          + unencumberedBorrowingCapacityLocal(sheet, repoHaircuts, encumberedFace),
-        leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal)
+          + unencumberedBorrowingCapacityLocal(sheet, bankSovereignFaceByBond(ctx.v2, bank.id), repoHaircuts, encumberedFace),
+        leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal, sovLocal)
       );
       // REPO2: collateral already pledged cannot simultaneously be sold, and the pledge names
       // the paper. The floor is now the face of THIS BOND that is actually encumbered — a
@@ -473,7 +474,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // bonds-versus-reserves choice that anchors the front end, now expressed as a price rather
       // than as a scaling factor on a quantity target.
       const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
-      const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal);
+      const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal, sovLocal);
       const liquidityFloorLocal = liquidityDrivenSovereignFloorLocal(sheet, reservesLocal, bankDepositLines(ctx, bank));
       bonds.forEach((b) => {
         const shareOfMarket = b.outstandingLocal / totalOutstandingLocal;
@@ -598,21 +599,22 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // deleted every bank's bill position with no cash leg — the exact WS5 bug, fixed on the
       // institutional path at the time and sitting unnoticed here until the per-bank identity
       // invariant existed to catch it (measured: 26.6B of USA bank bills vanished in week 1).
-      const newBook: Record<InstrumentId, number> = {};
-      // Step 13 (W2): the bank's bond book moves by wire against the house, bond by bond.
-      const bondsBefore = new Map<InstrumentId, { valueLocal: number }>(), bondsAfter = new Map<InstrumentId, { valueLocal: number }>();
-      instrumentEntries(existingSheet?.sovereignBondHoldingsByBond).forEach(([id, v]) => {
-        if (!ownInstrumentIds.has(id)) newBook[id] = Number(v) || 0;
-        else bondsBefore.set(id, { valueLocal: Number(v) || 0 });
-      });
+      // §3.13-BOOK d3b: the bank's own book is REGISTER ROWS — each bond this auction priced moves
+      // by `transferHolding` against the house (wire and row in one operation), in FACE, under
+      // the BANK party whose reserves pay for it. A bond the engine reports no holding for is
+      // left where it is (the Record rebuild used to drop it with no wire).
+      const heldFace = bankSovereignFaceByBond(ctx.v2, bank.id);
+      const house = { kind: 'CLEARING_HOUSE' as const, region: regionId };
+      let prevClearedLocal = 0, newClearedLocal = 0;
+      bonds.forEach((b) => { prevClearedLocal += heldFace.get(b.id) ?? 0; });
       newHoldings.forEach((usd, instrumentId) => {
-        newBook[instrumentId] = usd;
-        bondsAfter.set(instrumentId, { valueLocal: usd });
+        newClearedLocal += usd;
+        const deltaLocal = usd - (heldFace.get(instrumentId) ?? 0);
+        if (!(Math.abs(deltaLocal) > 1)) return;
+        const spec = { instrumentType: 'GOV_BOND' as const, instrumentId, issuerRegion: regionId, valueLocal: Math.abs(deltaLocal), units: Math.abs(deltaLocal) };
+        if (deltaLocal > 0) transferHolding(ctx.v2, house, bankPartyOf(bank.id), spec, 'sovereign bond clearing fill');
+        else transferHolding(ctx.v2, bankPartyOf(bank.id), house, spec, 'sovereign bond clearing fill');
       });
-      clearedBookDelta(bankSecuritiesParty(bank), regionId, 'GOV_BOND', bondsBefore, bondsAfter, () => undefined, 'sovereign bond clearing fill');
-      const prevClearedLocal = bonds.reduce((acc, b) => acc + (existingSheet?.sovereignBondHoldingsByBond?.[b.id] ?? 0), 0);
-      const newClearedLocal = bonds.reduce((acc, b) => acc + (newBook[b.id] ?? 0), 0);
-      const newTotalLocal = Object.values(newBook).reduce((acc, v) => acc + v, 0);
       const cashDeltaLocal = result.netCashDeltaByParticipantId.get(bank.ticker) ?? 0;
       // The dealer fee inside the cash leg is an expense: cash left the bank beyond what the
       // bonds cost, and P&L must say so or the balance-sheet identity drifts by the fee.
@@ -623,8 +625,6 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // alone.
       updateBankSheet(ctx, bank.ticker, {
         ...bookPnL(existingSheet, -feeLocal, 'sovereign book fee', bank.ticker),
-        sovereignBondHoldingsByBond: newBook,
-        sovereignBondHoldingsLocal: Math.round(newTotalLocal),
       });
     });
 

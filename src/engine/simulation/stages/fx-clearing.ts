@@ -1,4 +1,5 @@
 import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
+import { bankSovereignBookLocal } from '../../sovereign-register';
 import { bankParty } from '../../../domain/party';
 /**
  * WS9/XB2d/XB6 — the week's FX market: every participant's demand, one cleared rate per PAIR.
@@ -149,7 +150,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const sheet = c.bankBalanceSheet;
     if (!sheet) return;
     // DRV: the desk's remaining derivative budget is ONE number across every class it writes.
-    const capLocal = deskNotionalCapacityLocal(leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.id), facilityBookOf(ctx.v2, c.id)), deskStandingPfeChargeLocal(ctx, state, c.id), 'FX_FORWARD');
+    const capLocal = deskNotionalCapacityLocal(leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.id), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id)), deskStandingPfeChargeLocal(ctx, state, c.id), 'FX_FORWARD');
     if (capLocal > 0) deskCapacityByTicker.set(c.ticker, capLocal);
     arbitrageCapacityLocal += capLocal;
   });

@@ -8,6 +8,7 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import { bankSovereignBookLocal } from '../../sovereign-register';
 import type { EntityId } from '../../../domain/ids';
 import { bankSecuritiesParty, bankSecuritiesPartyOf } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
@@ -95,7 +96,7 @@ export function buildDealerDeskParticipants(args: {
     const prior = priorPositions(sheet.dealerDeskInventory, book);
     const capacityLocal = dealerDeskCapacityLocal({
       balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id)),
+      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
@@ -317,7 +318,7 @@ export function totalDeskCapacityLocal(ctx: WeeklyStepContext, banks: Company[],
     if (!sheet) return;
     capacityLocal += dealerDeskCapacityLocal({
       balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id)),
+      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
@@ -340,7 +341,7 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
     if (!sheet) return;
     freeLocal.set(bank.ticker, dealerDeskCapacityLocal({
       balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id)),
+      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id)),
       inventory: sheet.dealerDeskInventory,
       book,
     }));

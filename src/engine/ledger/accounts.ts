@@ -216,6 +216,19 @@ const seedCentralBankBookStash = new WeakMap<object, Record<string, number>>();
 export function stashSeedCentralBankBook(sheet: object, byBond: Record<string, number>): void { seedCentralBankBookStash.set(sheet, byBond); }
 export function seedCentralBankBookOf(sheet: object): Record<string, number> { return seedCentralBankBookStash.get(sheet) ?? {}; }
 
+/** §3.13-BOOK d3b — THE SEED'S BANK SOVEREIGN BOOK, and it is not a field: each bank's opening
+ *  book, bond by bond, sized by the seed (`initialization.ts` OWN6) and issued by wire at
+ *  `openSeededBooks` onto the bank's own register book. */
+const seedBankBookStash = new WeakMap<object, Record<string, number>>();
+export function stashSeedBankBook(sheet: object, byBond: Record<string, number>): void { seedBankBookStash.set(sheet, byBond); }
+export function seedBankBookOf(sheet: object): Record<string, number> { return seedBankBookStash.get(sheet) ?? {}; }
+export const seedBankBookLocalOf = (sheet: object): number => Object.values(seedBankBookOf(sheet)).reduce((a, v) => a + (Number(v) || 0), 0);
+/** The seed's PROVISIONAL regional sovereign-book scalar (a GDP ratio, `macro/initialization`),
+ *  which sizes a bank's opening revenue before the real books are allocated. Never a field. */
+const seedSovereignBookLocalStash = new WeakMap<object, number>();
+export function stashSeedSovereignBookLocal(sheet: object, usd: number): void { seedSovereignBookLocalStash.set(sheet, usd); }
+export function seedSovereignBookLocalOf(sheet: object): number { return seedSovereignBookLocalStash.get(sheet) ?? 0; }
+
 /** A3.6c-iii — THE SEED'S PROVISIONAL HOUSEHOLD LINE of a bank sheet: sized as the funding
  *  residual while the seed builds the books (the migrations split by it), replaced by close-seed,
  *  which opens the household sector's row at each bank at the line it strikes. Never a field. */

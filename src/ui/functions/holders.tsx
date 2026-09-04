@@ -10,7 +10,7 @@ import { FunctionModule } from '../fn';
 import { Card, Hint, Link, Table, Tabs, T } from '../ui';
 import { money, pctLevel, count } from '../format';
 import { World, companyOf, institutionOf, regionOf, holdersOf, bookOf, sovereignHoldersOf } from '../world';
-import { centralBankBookLocal } from '../../engine/sovereign-register';
+import { centralBankBookLocal, bankSovereignBookLocal } from '../../engine/sovereign-register';
 import { refOfIdentifier, labelOf } from '../objects';
 import { instrumentName } from '../objects/book';
 import { banksOf } from '../../domain/company';
@@ -122,7 +122,7 @@ function RegionHolders({ world, id, nav }: { world: World; id: string; nav: impo
   if (!r) return null;
   const inst = sovereignHoldersOf(world, id);
   const banks = banksOf(world.state.companies, asRegionId(id))
-    .map((c) => ({ holderId: c.id, usd: Object.values(c.bankBalanceSheet!.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0) }));
+    .map((c) => ({ holderId: c.id, usd: bankSovereignBookLocal(ensureV2(world.state), c.id) }));
   const cb = r.centralBankSheet ? centralBankBookLocal(ensureV2(world.state), asRegionId(id)) : 0;
   const rows = [...inst.map((h) => ({ ...h, kind: 'institution' })), ...banks.map((h) => ({ ...h, kind: 'bank' })), ...(cb > 0 ? [{ holderId: r.centralBank, usd: cb, kind: 'central bank' }] : [])].sort((a, b) => b.usd - a.usd);
   const total = rows.reduce((a, h) => a + h.usd, 0);

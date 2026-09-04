@@ -33,7 +33,7 @@
 
 import { riskAversionOf } from '../../../domain/preferences';
 import { asEntityId } from '../../../domain/ids';
-import { bankCreditPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf, companyParty, companyPartyOf } from '../../../domain/party';
+import { bankCreditPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf, bankPartyOf, companyParty, companyPartyOf } from '../../../domain/party';
 import { asInstrumentId, InstrumentId } from '../../../domain/ids';
 
 import { ensureV2 } from '../../../engine2/world';
@@ -71,7 +71,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { commercialPaperTrancheId } from '../../../domain/instrument-keys';
 import { governmentIssuer } from '../../../domain/entity-keys';
-import { forEachSovereignPosition } from '../../sovereign-register';
+import { forEachSovereignPosition, bankSovereignFaceByBond, bankSovereignBookLocal } from '../../sovereign-register';
 import { bankParticipantId, treasuryParticipantId } from '../../../domain/participant-keys';
 import type { EntityId } from '../../../domain/ids';
 import type { Ticker } from '../../../domain/ids';
@@ -224,19 +224,22 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // are commitments that have not settled yet, and the same reserves cannot fund both.
         const reservesLocal = bankReservesOf(ctx.v2, bank.id);
         const facilityBookLocal = facilityBookOf(ctx.v2, bank.id);
+        // §3.13-BOOK d3b: the bank's own book is its register rows, read in face by bond.
+        const heldFaceByBond = bankSovereignFaceByBond(ctx.v2, bank.id);
+        const sovLocal = bankSovereignBookLocal(ctx.v2, bank.id);
         const settledCashLocal = reservesLocal
           + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
         // REPO2: the floor is the face of THIS BILL actually pledged, not a blended share.
         const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.id);
         const fundableLocal = Math.min(
           Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
-            + unencumberedBorrowingCapacityLocal(sheet, repoHaircuts, encumberedFace),
-          leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal)
+            + unencumberedBorrowingCapacityLocal(sheet, heldFaceByBond, repoHaircuts, encumberedFace),
+          leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal, sovLocal)
         );
-        const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal);
+        const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal, sovLocal);
         const liquidityFloorLocal = liquidityDrivenSovereignFloorLocal(sheet, reservesLocal, bankDepositLines(ctx, bank));
         activeBills.forEach((b) => {
-          const heldLocal = sheet.sovereignBondHoldingsByBond?.[b.key] ?? 0;
+          const heldLocal = heldFaceByBond.get(b.key) ?? 0;
           holdings.set(b.key, heldLocal);
           const bondShare = (outstandingByBond.get(b.key) ?? 0) / totalBillStockLocal;
           const bondShareOfSovStock = (outstandingByBond.get(b.key) ?? 0) / wholeSovStockLocal;
@@ -535,21 +538,24 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         if (!existingSheet) return;
         // Only the bills this auction actually priced are rewritten; one maturing this week is
         // left standing for stage 11 to redeem for cash.
-        const byTenor: Record<string, number> = { ...(existingSheet.sovereignBondHoldingsByBond || {}) };
+        // §3.13-BOOK d3b: the bank's bill book is REGISTER ROWS — each bill this auction priced
+        // moves by `transferHolding` against the house, in face, under the BANK party. The primary
+        // slice books at cost: the rebate is the same instruction's booking half (the cash half
+        // was adjusted on the participant's net above).
+        const heldFace = bankSovereignFaceByBond(ctx.v2, bank.id);
+        const house = { kind: 'CLEARING_HOUSE' as const, region: regionId };
         let faceDeltaLocal = 0;
-        // Step 13 (W2): the bank's bill book moves by wire against the house, bill by bill.
-        const billsBefore = new Map<InstrumentId, { valueLocal: number }>(), billsAfter = new Map<InstrumentId, { valueLocal: number }>();
         activeBills.forEach((b) => {
-          // Item 13: the primary slice books at cost — the rebate is the same instruction's
-          // booking half (the cash half was adjusted on the participant's net above).
           const newLocal = (fills.get(b.key) ?? 0)
             - rebateOf(bankParticipantId(bank.ticker), b.key);
-          faceDeltaLocal += newLocal - (byTenor[b.key] ?? 0);
-          billsBefore.set(b.key, { valueLocal: byTenor[b.key] ?? 0 });
-          billsAfter.set(b.key, { valueLocal: newLocal > 1 ? newLocal : 0 });
-          if (newLocal > 1) byTenor[b.key] = newLocal; else delete byTenor[b.key];
+          const afterLocal = newLocal > 1 ? newLocal : 0;
+          const deltaLocal = afterLocal - (heldFace.get(b.key) ?? 0);
+          faceDeltaLocal += deltaLocal;
+          if (!(Math.abs(deltaLocal) > 1)) return;
+          const spec = { instrumentType: 'GOV_BOND' as const, instrumentId: b.key, issuerRegion: regionId, valueLocal: Math.abs(deltaLocal), units: Math.abs(deltaLocal) };
+          if (deltaLocal > 0) transferHolding(ctx.v2, house, bankPartyOf(bank.id), spec, 'bill clearing fill');
+          else transferHolding(ctx.v2, bankPartyOf(bank.id), house, spec, 'bill clearing fill');
         });
-        clearedBookDelta(bankSecuritiesParty(bank), regionId, 'GOV_BOND', billsBefore, billsAfter, () => undefined, 'bill clearing fill');
         // The engine's cash leg (face plus the dealer fee); the fee part is P&L — an expense the
         // identity invariant would otherwise report as a missing leg. SETL6: the reserves leg
         // settles through the clearing house below, so the buyer and the seller move against
@@ -558,8 +564,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const feeLocal = Math.max(0, -(cashDeltaLocal + faceDeltaLocal));
         updateBankSheet(ctx, bank.ticker, {
           ...bookPnL(existingSheet, -feeLocal, 'bill book fee', bank.ticker),
-          sovereignBondHoldingsByBond: byTenor,
-          sovereignBondHoldingsLocal: Math.round(Object.values(byTenor).reduce((s, v) => s + v, 0)),
         });
       });
 

@@ -8,7 +8,7 @@
  */
 
 import { treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
-import { bankSecuritiesParty, bankSecuritiesPartyOf, companyParty } from '../../../domain/party';
+import { bankSecuritiesParty, bankSecuritiesPartyOf, bankPartyOf, companyParty } from '../../../domain/party';
 import { retireTranche, issueTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { materializeGovLadder, ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
 import { govBillTrancheId, govBondTrancheId } from '../../../domain/sovereign-id';
@@ -20,7 +20,7 @@ import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-acco
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { weeklyInterestExpenseLocal, decomposeGovernmentSpending, governmentOutlaysLocal, weeklyBillDiscountAccrualLocal, isDiscountBill } from '../../../domain/government';
 import { openMarketPolicy, cashPositionBillIssuanceLocal } from '../../../domain/central-bank';
-import { centralBankPositions, centralBankBookLocal } from '../../sovereign-register';
+import { centralBankPositions, centralBankBookLocal, bankSovereignPositions } from '../../sovereign-register';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay, dueToPayee, partyId, internReason, CORPORATE_TAX_REASON, settlementWeek } from './settlement';
@@ -30,7 +30,7 @@ import { internType, internRegion } from '../../../engine2/world';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { encumberedFaceByBond, repoBorrowedLocal, srfBorrowedLocal } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
-import { instrumentEntries, type InstrumentId } from '../../../domain/ids';
+import type { InstrumentId } from '../../../domain/ids';
 import { governmentIssuer } from '../../../domain/entity-keys';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -264,13 +264,18 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
       ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
         if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
-        const byTenor = c.bankBalanceSheet.sovereignBondHoldingsByBond || {};
+        // §3.13-BOOK d3b: the bank's book is register rows — a matured slice is RETIRED to the
+        // treasury by wire, the ledger debits the row, and the treasury repays FACE to the BANK
+        // party whose reserves bought it (it used to be paid into the securities account).
         let redeemedLocal = 0;
-        const newByTenor: Record<string, number> = {};
-        instrumentEntries(byTenor).forEach(([key, heldLocal]) => {
-          const fraction = redeemedFractionByBond.get(key) ?? 0;
-          redeemedLocal += heldLocal * fraction;
-          newByTenor[key] = heldLocal * (1 - fraction);
+        bankSovereignPositions(ctx.v2, c.id).forEach((p) => {
+          const fraction = redeemedFractionByBond.get(p.bondId) ?? 0;
+          if (!(fraction > 0)) return;
+          const faceLocal = p.faceLocal * fraction;
+          if (!(faceLocal > 0)) return;
+          retireHolding(ctx.v2, bankPartyOf(c.id), { kind: 'GOVERNMENT', region: regionId },
+            { instrumentType: 'GOV_BOND', instrumentId: p.bondId, issuerRegion: regionId, valueLocal: p.valueLocal * fraction, units: faceLocal }, 'sovereign redemption');
+          redeemedLocal += faceLocal;
         });
         const calledLocal = collateralCalledByBorrower.get(c.ticker) ?? 0;
         if (redeemedLocal <= 0 && calledLocal <= 0) return c;
@@ -281,7 +286,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           redemptionPaidLocal += redeemedLocal;
           pay(ctx, {
             payer: { kind: 'GOVERNMENT', region: regionId },
-            payee: bankSecuritiesParty(c),
+            payee: bankPartyOf(c.id),
             amount: redeemedLocal,
             currency: currencyOf(regionId),
             reason: 'sovereign redemption',
@@ -295,8 +300,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           ...c,
           bankBalanceSheet: {
             ...c.bankBalanceSheet,
-            sovereignBondHoldingsByBond: newByTenor,
-            sovereignBondHoldingsLocal: Math.round(Object.values(newByTenor).reduce((sum, v) => sum + v, 0)),
             repoBorrowedLocal: Math.round(repoBorrowedLocal(book, c.id) - srfBorrowedLocal(book, c.id)),
             srfBorrowingLocal: Math.round(srfBorrowedLocal(book, c.id)),
             repoEncumberedCollateralLocal: Number(

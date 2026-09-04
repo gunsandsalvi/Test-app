@@ -1,4 +1,4 @@
-import { openingCashOf, openSectorRow, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf, stashSeedGovLadder, seedGovLadderOf, stashSeedCentralBankBook, seedCentralBankBookOf } from '../ledger/accounts';
+import { openingCashOf, openSectorRow, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf, stashSeedGovLadder, seedGovLadderOf, stashSeedCentralBankBook, seedCentralBankBookOf, seedBankBookOf, seedBankBookLocalOf } from '../ledger/accounts';
 import { bankParty } from '../../domain/party';
 import { accruedPerFace, weeksAccrued, banksOf } from '../../domain/company';
 import { currencyOf } from '../../domain/geography';
@@ -69,7 +69,7 @@ export function closeSeedMoney(
       const lines = depositLinesAt(v2, companies, institutionalEntities, b);
       const otherDepositsLocal = Math.round(Math.max(0, lines.corporateLocal)) + Math.round(Math.max(0, lines.institutionalLocal))
         + Math.max(0, lines.smeLocal) + Math.max(0, s.clientMarginLocal ?? 0) + Math.max(0, s.centralBankLoanLocal ?? 0);
-      const needLocal = bankTotalAssetsLocal(s, openingCashOf(s), facilityBookOf(v2, b.id)) - s.bankEquityLocal - (s.repoBorrowedLocal ?? 0) - (s.srfBorrowingLocal ?? 0) - otherDepositsLocal;
+      const needLocal = bankTotalAssetsLocal(s, openingCashOf(s), facilityBookOf(v2, b.id), seedBankBookLocalOf(s)) - s.bankEquityLocal - (s.repoBorrowedLocal ?? 0) - (s.srfBorrowingLocal ?? 0) - otherDepositsLocal;
       let lineLocal = 0;
       if (needLocal >= 0) {
         lineLocal = Math.round(needLocal);
@@ -123,7 +123,7 @@ export function closeSeedMoney(
     const heldByBond = new Map<string, number>();
     const add = (id: string | undefined, usd: number) => { if (id && usd > 0) heldByBond.set(id, (heldByBond.get(id) ?? 0) + usd); };
     Object.entries(seedCentralBankBookOf(cb)).forEach(([id, v]) => add(id, Number(v) || 0));
-    banks.forEach((b) => Object.entries(b.bankBalanceSheet!.sovereignBondHoldingsByBond ?? {}).forEach(([id, v]) => add(id, Number(v) || 0)));
+    banks.forEach((b) => Object.entries(seedBankBookOf(b.bankBalanceSheet!)).forEach(([id, v]) => add(id, Number(v) || 0)));
     institutionalEntities.forEach((e) => {
       if (e.isDefaulted) return;
       (e.itemizedHoldings ?? []).forEach((h) => { if (holdingClassOf(h.instrumentType) === 'SOVEREIGN' && h.issuerRegion === regionId) add(h.instrumentId, h.quantityOrNotionalLocal ?? 0); });

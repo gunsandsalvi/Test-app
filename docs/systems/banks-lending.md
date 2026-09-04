@@ -181,8 +181,8 @@ provision exists to show: that it saw the loss coming. Pairs with E1 above; the 
 
 ### ❌ D5 / B2.b — THE COLLATERAL AND LIQUIDITY WIRES ARE CUT AT THE LOAN BOOK
 
-D5: `collateralCapacityLocal` and `unencumberedByBucket` read `sheet.sovereignBondHoldingsByBond`
-and nothing else. `domain/repo.ts:16` states the scope decision explicitly — "Sovereign general
+D5: `collateralCapacityLocal` and `unencumberedByBond` read the bank's own sovereign rows on the
+register (§9.13-BOOK d3b) and nothing else. `domain/repo.ts:16` states the scope decision explicitly — "Sovereign general
 collateral only, deliberately" — so a loan cannot be pledged, and a bank whose assets are loans has
 zero borrowing capacity however good the loans are. **That half is OUT OF SCOPE and says so**, and
 the money-market tree's B3.a is satisfied by it.

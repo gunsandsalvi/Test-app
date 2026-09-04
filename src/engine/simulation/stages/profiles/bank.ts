@@ -10,6 +10,7 @@
  */
 
 import { ProfileInput, ProfilePnl } from './types';
+import { bankSovereignBookLocal } from '../../../sovereign-register';
 import { ensureV2, rowOf, revHistPush } from '../../../../engine2/world';
 import { loanBooksOf } from '../../../../domain/banking';
 import { facilityBookOf } from '../../../../engine2/tranches';
@@ -17,12 +18,10 @@ import { facilityBookOf } from '../../../../engine2/tranches';
 export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, reg } = input;
 
-  const share = comp.bankMarketShare ?? 0.25;
   const own = comp.bankBalanceSheet;
   const bs = own ?? reg.bankingSector;
-  const sovLocal = own
-    ? Object.values(own.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0)
-    : reg.bankingSector.sovereignBondHoldingsLocal * share;
+  // §3.13-BOOK d3b: the bank's own book is its register rows; a bank with no sheet holds none.
+  const sovLocal = own ? bankSovereignBookLocal(ensureV2(input.state), comp.id) : 0;
   // §5-WIRES D: the credit books are the sheet's rows; a bank with no sheet holds no rows.
   const creditBookLocal = own ? loanBooksOf(own, facilityBookOf(ensureV2(input.state), comp.id)) : 0;
   const totalAssets = creditBookLocal + sovLocal;

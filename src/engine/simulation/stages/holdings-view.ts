@@ -30,8 +30,7 @@ import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { entityCashOf } from '../../ledger/accounts';
-import { sovereignHeldByClass } from '../../sovereign-register';
-import { instrumentEntries } from '../../../domain/ids';
+import { sovereignHeldByClass, bankSovereignPositions } from '../../sovereign-register';
 
 export interface RegionalHoldingsView {
   /** Every real institutional entity's holdings in this region, flattened. */
@@ -101,17 +100,18 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
   let bankSov = 0;
   state.companies.forEach((c: Company) => {
     if (c.region !== regionId || !c.bankBalanceSheet || !isActiveCompany(c)) return;
-    instrumentEntries(c.bankBalanceSheet.sovereignBondHoldingsByBond).forEach(([bondId, usd]) => {
-      const v = Number(usd) || 0;
+    // §3.13-BOOK d3b: the bank's own book is its register rows.
+    bankSovereignPositions(v2a, c.id).forEach((p) => {
+      const v = p.valueLocal;
       if (v <= 0) return;
       bankSov += v;
       bankHoldings.push({
         // §3.13-SOV row 3: the key IS the bond's id. This view once minted a second id format
         // (`_GOV_`) and then a bucket id; the book's own key is the only one now.
-        instrumentId: bondId,
+        instrumentId: p.bondId,
         instrumentType: 'GOV_BOND',
         issuerRegion: regionId,
-        quantityOrNotionalLocal: v, units: v,
+        quantityOrNotionalLocal: v, units: p.faceLocal,
       });
     });
   });

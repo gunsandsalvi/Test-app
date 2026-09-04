@@ -39,6 +39,7 @@ import {
   evolveBankingSector, computeSovereignBookAnnualYield, savingsToDepositsShare,
 } from '../../macro/banking';
 import { runRegionalRepoSession } from './repo-clearing';
+import { bankSovereignValueRecord, bankSovereignPositions, bankSovereignBookLocal } from '../../sovereign-register';
 import { maturingAt, repoInterestToMaturityLocal } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
 import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, repayCentralBankLoanLocal, CENTRAL_BANK_LOAN_PENALTY_BPS, facilityMarginBpsFor } from './bank-lending';
@@ -55,10 +56,7 @@ import { banksOf } from '../../../domain/company';
 import type { Ticker } from '../../../domain/ids';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
-  const scaledBook: Record<string, number> = {};
-  Object.entries(bs.sovereignBondHoldingsByBond || {}).forEach(([k, v]) => { scaledBook[k] = v * share; });
   return {
-    sovereignBondHoldingsLocal: bs.sovereignBondHoldingsLocal * share,
     bankEquityLocal: bs.bankEquityLocal * share,
     bankCapitalRatio: bs.bankCapitalRatio,
     netInterestMarginPct: bs.netInterestMarginPct,
@@ -70,7 +68,6 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     srfBorrowingLocal: bs.srfBorrowingLocal * share,
     onRrpLendingLocal: bs.onRrpLendingLocal * share,
     corpBondDealerInventory: [],
-    sovereignBondHoldingsByBond: scaledBook,
     sovBondDealerInventory: [],
     loanDealerInventory: [],
     repoLentLocal: bs.repoLentLocal * share,
@@ -275,6 +272,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         prevSheet,
         { businessLoanLocal: businessLoanBookOf(prevSheet, facilityBookLocal), consumerLoanLocal: consumerLoanBookOf(prevSheet) },
         reservesLocal,
+        bankSovereignBookLocal(ctx.v2, bank.id),
         bankDepositLines(ctx, bank),
         reg.estimatedHouseholdIncomeLocal * share,
         reg.householdState.savingsRate,
@@ -285,7 +283,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         // one regional credit cycle diverge.
         reg.unemploymentRate * (0.6 + riskFactor * 0.4),
         // THIS bank's real tenor book at the real cleared curve — not the 10Y on a scalar.
-        computeSovereignBookAnnualYield(prevSheet.sovereignBondHoldingsByBond, reg.zeroRates,
+        computeSovereignBookAnnualYield(bankSovereignValueRecord(ctx.v2, bank.id), reg.zeroRates,
           sovereignTenorResolver(materializeGovLadder(ctx.v2, regionId), ctx.nextWeek)),
         reg.creditConditionsSpilloverAdjustment ?? 0,
         // The CONTRACTS due this week mature inside as explicit flows — each at the rate
@@ -297,8 +295,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         priorLoanInterestWeeklyLocal - priorSmeInterestWeeklyLocal,
         priorHouseholdInterestWeeklyLocal,
         // Real coupons on this bank's own sovereign book.
-        Object.entries(prevSheet.sovereignBondHoldingsByBond || {}).reduce(
-          (a, [k, v]) => a + ((Number(v) || 0) * (sovCouponByBond[k] ?? 0)) / 52, 0
+        bankSovereignPositions(ctx.v2, bank.id).reduce(
+          (a, p) => a + (p.faceLocal * (sovCouponByBond[p.bondId] ?? 0)) / 52, 0
         ),
         regionDivertedLocal * share,
         // Slice 5: the rate this bank's deposits must compete with.
@@ -502,7 +500,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const deskView = (book: string) =>
       Array.from(regionalDeskView(newSheets.map(({ sheet }) => sheet.dealerDeskInventory), book).entries())
         .filter(([, usd]) => Math.abs(usd) > 1);
-    const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.id)) + sheet.sovereignBondHoldingsLocal + bankReservesOf(ctx.v2, bank.id);
+    const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.id)) + bankSovereignBookLocal(ctx.v2, bank.id) + bankReservesOf(ctx.v2, bank.id);
     const totalAssets = newSheets.reduce((s, e) => s + assetsOf(e), 0);
     const weightedAvg = (f: (s: BankingSector) => number) =>
       totalAssets > 0
@@ -515,7 +513,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // BankingSector field fails to compile here until it is summed, averaged, or explicitly
     // declared per-bank-only.
     reg.bankingSector = {
-      sovereignBondHoldingsLocal: sumField((s) => s.sovereignBondHoldingsLocal),
       bankEquityLocal: sumField((s) => s.bankEquityLocal),
       bankCapitalRatio: Number(weightedAvg((s) => s.bankCapitalRatio).toFixed(4)),
       netInterestMarginPct: Number(weightedAvg((s) => s.netInterestMarginPct).toFixed(4)),
@@ -531,17 +528,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       itemizedHoldings: priorAggregate.itemizedHoldings || [],
       srfBorrowingLocal: sumField((s) => s.srfBorrowingLocal),
       onRrpLendingLocal: sumField((s) => s.onRrpLendingLocal),
-      // Real per-bank sovereign holdings, summed across named banks — each bank is its own real
-      // participant in the sovereign-bond clearing engine (07c-sovereign-bond-clearing.ts).
-      sovereignBondHoldingsByBond: (() => {
-        const buckets: Record<string, number> = {};
-        newSheets.forEach(({ sheet }) => {
-          Object.entries(sheet.sovereignBondHoldingsByBond || {}).forEach(([k, v]) => {
-            buckets[k] = (buckets[k] ?? 0) + v;
-          });
-        });
-        return buckets;
-      })(),
+      // §3.13-BOOK d3b: the aggregate carries no sovereign book — `regionBankSovereignValueRecord`
+      // is the regional read, off the banks' register rows.
       // Dealer inventory is now OWNED, one desk per named bank (domain/dealer-desk.ts).
       // These three arrays are the derived regional view of those desks and nothing decides off
       // them — the books that clear later this week overwrite them with their own session's

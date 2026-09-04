@@ -44,7 +44,7 @@ import { isDiscountBill } from '../../../domain/government';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { clearedPriceOf, priorClearedPriceOf } from '../../../engine2/prices';
 import { markHolding, centralBankBookId } from '../../ledger/holdings-ledger';
-import { centralBankPositions } from '../../sovereign-register';
+import { centralBankPositions, bankSovereignPositions } from '../../sovereign-register';
 
 /**
  * THE WEEK'S RETURN ON ONE UNIT OF THIS BILL'S FACE, as a fraction of what it was worth — what its
@@ -87,22 +87,22 @@ export function runBillAccretionStage(ctx: WeeklyStepContext): void {
     ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
       if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return c;
       const existing = c.bankBalanceSheet;
-      const byBill = { ...(existing.sovereignBondHoldingsByBond || {}) };
+      // §3.13-BOOK d3b: the bank's bills are register rows with a face — the accretion is
+      // OBSERVED as `units × price` at the bill's own print, the same mark the close applies.
       let gainLocal = 0;
-      returnByBill.forEach((weekReturn, billId) => {
-        const heldLocal = Number(byBill[billId]) || 0;
-        if (heldLocal <= 0) return;
-        const gain = heldLocal * weekReturn;
-        byBill[billId] = heldLocal + gain;
-        gainLocal += gain;
+      bankSovereignPositions(ctx.v2, c.id).forEach((p) => {
+        if (!returnByBill.has(p.bondId)) return;
+        const price = clearedPriceOf(ctx.v2, p.bondId);
+        if (price === undefined || !(p.faceLocal > 0)) return;
+        const markedLocal = p.faceLocal * price;
+        gainLocal += markedLocal - p.valueLocal;
+        markHolding(ctx.v2, c.id, p.row, markedLocal);
       });
       if (gainLocal === 0 && !(existing.lastBillAccretionWeeklyLocal ?? 0)) return c;
       return {
         ...c,
         bankBalanceSheet: {
           ...bookPnL(existing, gainLocal, 'bill accretion', c.ticker),
-          sovereignBondHoldingsByBond: byBill,
-          sovereignBondHoldingsLocal: Math.round(Object.values(byBill).reduce((a: number, v) => a + (Number(v) || 0), 0)),
           // §7.254: recorded so next week's NIM income measure counts the return this book
           // actually earned; the equity leg above is the booking, this line is the reading.
           lastBillAccretionWeeklyLocal: Math.round(gainLocal),

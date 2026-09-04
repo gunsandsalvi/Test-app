@@ -1,6 +1,6 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, ProductLine, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE, REGION_IDS_SEED_ORDER } from '../types';
 import { stashSeedRing, peekSeedRing } from '../engine2/world';
-import { stashOpeningCash, openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf } from './ledger/accounts';
+import { stashOpeningCash, openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf, seedSovereignBookLocalOf } from './ledger/accounts';
 import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf, industryOfSubUnit } from '../domain/industry-registry';
 import { defect } from '../domain/defect';
 import { callProtectionForIssue } from '../domain/call-protection';
@@ -472,7 +472,8 @@ export function generateInitialCompanies(
         if (initReg?.bankingSector) {
           const bs = initReg.bankingSector;
           // D: the seed's stated loan books size the opening revenue; nothing stores them.
-          const totalAssets = seedLoanBookLocal(initReg.lastWeekNominalGdpLocal, 'business') + seedLoanBookLocal(initReg.lastWeekNominalGdpLocal, 'consumer') + bs.sovereignBondHoldingsLocal;
+          // §3.13-BOOK d3b: the seed's provisional sovereign scalar rides a stash, not the sheet.
+          const totalAssets = seedLoanBookLocal(initReg.lastWeekNominalGdpLocal, 'business') + seedLoanBookLocal(initReg.lastWeekNominalGdpLocal, 'consumer') + seedSovereignBookLocalOf(bs);
           derivedRevBase = bs.netInterestMarginPct * totalAssets * bankShare * 2.2;
         }
       }
@@ -686,7 +687,6 @@ export function generateInitialCompanies(
           const share = tmpl.bankMarketShare ?? 0.25;
           if (!bs) return undefined;
           const sheet = {
-            sovereignBondHoldingsLocal: bs.sovereignBondHoldingsLocal * share,
             bankEquityLocal: bs.bankEquityLocal * share,
             bankCapitalRatio: bs.bankCapitalRatio,
             netInterestMarginPct: bs.netInterestMarginPct,
@@ -698,7 +698,6 @@ export function generateInitialCompanies(
             srfBorrowingLocal: 0,
             onRrpLendingLocal: 0,
             corpBondDealerInventory: [],
-            sovereignBondHoldingsByBond: {},
             sovBondDealerInventory: [],
             loanDealerInventory: [],
             repoLentLocal: 0,

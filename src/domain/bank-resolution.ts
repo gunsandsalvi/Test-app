@@ -39,9 +39,8 @@ export function isBankUnderPca(sheet: BankingSector, facilityBookLocal: number):
 }
 
 /** Every asset on the sheet, cash included — the one asset side the identity counts. */
-export function bankSheetAssetsLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
-  const sovLocal = Object.values(sheet.sovereignBondHoldingsByBond || {})
-    .reduce((a, v) => a + (Number(v) || 0), 0);
+export function bankSheetAssetsLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number, sovLocal: number): number {
+  // §3.13-BOOK d3b: the sovereign book is register rows, handed in like the facility book.
   return loanBooksOf(sheet, facilityBookLocal) + sovLocal + cashLocal
     + (sheet.repoLentLocal ?? 0) + (sheet.onRrpLendingLocal ?? 0)
     + (sheet.sovereignAccruedCouponLocal ?? 0)
@@ -91,10 +90,10 @@ export interface BankResolutionPlan {
  * its holders take their loss through the estate, like any other issuer's bondholders.
  */
 export function planBankResolution(
-  sheet: BankingSector, ownLadderPrincipalLocal: number, acquirerCapitalLocal: number, cashLocal: number, lines: DepositLines, facilityBookLocal: number,
+  sheet: BankingSector, ownLadderPrincipalLocal: number, acquirerCapitalLocal: number, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number,
 ): BankResolutionPlan {
   const centralBankLoanLocal = Math.max(0, sheet.centralBankLoanLocal ?? 0);
-  const netBookLocal = bankSheetAssetsLocal(sheet, cashLocal, facilityBookLocal) - bankAssumedLiabilitiesLocal(sheet, lines) - centralBankLoanLocal;
+  const netBookLocal = bankSheetAssetsLocal(sheet, cashLocal, facilityBookLocal, sovLocal) - bankAssumedLiabilitiesLocal(sheet, lines) - centralBankLoanLocal;
   const capitalLocal = Math.max(0, acquirerCapitalLocal);
   const estateLocal = Math.max(0, netBookLocal - capitalLocal);
   const shortfallLocal = Math.max(0, capitalLocal - netBookLocal);

@@ -49,6 +49,8 @@ export function dealersFromBanks(
   reservesOf: (bank: Company) => number,
   /** Step 10: the bank's facility book — its rows on the borrowers' ladders (`facilityBookOf`). */
   facilityBookOf: (bank: Company) => number,
+  /** §3.13-BOOK d3b: the bank's own sovereign book — its register rows (`bankSovereignBookLocal`). */
+  sovereignBookOf: (bank: Company) => number,
   banks: Company[]
 ): Dealer[] {
   return banksOf(banks)
@@ -57,7 +59,7 @@ export function dealersFromBanks(
       const grossLocal = dealerDeskGrossLocal(sheet.dealerDeskInventory);
       const capacityLocal = dealerDeskCapacityLocal({
         balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-        leverageHeadroomLocal: leverageHeadroomLocal(sheet, reservesOf(bank), facilityBookOf(bank)),
+        leverageHeadroomLocal: leverageHeadroomLocal(sheet, reservesOf(bank), facilityBookOf(bank), sovereignBookOf(bank)),
         inventory: sheet.dealerDeskInventory,
         book: '',
       });

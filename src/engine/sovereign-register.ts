@@ -6,9 +6,8 @@
  * a sovereign holding lives in FOUR places, because only one holder class is in the register
  * (`the-register.md` A1.a is that boundary, stated by the tree itself) —
  *
- *   · the institutions, the households and — since §3.13-BOOK d3a — the CENTRAL BANK, as
- *     `GOV_BOND` rows on the register (`registerBooks` lists every book it holds);
- *   · the banks, as `bankBalanceSheet.sovereignBondHoldingsByBond` — a `Record<bondId, dollars>`;
+ *   · the institutions, the households, the CENTRAL BANK (§3.13-BOOK d3a) and the BANKS' OWN
+ *     BOOKS (d3b), as `GOV_BOND` rows on the register (`registerBooks` lists every book it holds);
  *   · the banks' desks, as `dealerDeskInventory['sovereign bond' | 'bill']` on each bank's sheet;
  *   · a company's own treasury book, `comp.treasuryHoldings` — which only the seed's
  *     reconciliation and `O1`'s credit arms knew about and no sovereign walk did.
@@ -21,14 +20,12 @@
  * five files instead of one. It is one function now, and those callers are projections of it.
  *
  * WHAT IT REPORTS IS FACE, as far as each store can say. The register carries `units` and means
- * it. The banks' `Record` book carries a dollar figure its own auctions write as face and
- * `bill-accretion` then moves by the week's printed price — so for a bill it is neither face
- * nor `face × price`, which is exactly 13-OUTSIDE's finding and is recorded at every caller that
- * compares it to a ladder rather than hidden behind this read.
+ * it; a desk row reports its `units` where it has them and its money where it does not, which is
+ * d3d's finding.
  */
 
 import { GameState, RegionId } from '../types';
-import { V2World, typeRefOf, regionRefOf } from '../engine2/world';
+import { V2World, typeRefOf, regionRefOf, regionOf } from '../engine2/world';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../engine2/holdings';
 import { isActiveCompany } from '../domain/company';
 import { holdingClassOf } from '../domain/assets';
@@ -68,32 +65,30 @@ export function forEachSovereignPosition(
   //    books it holds today (`registerBooks` is the one statement of that, §9.13-EQUITY). A
   //    central bank's book is its own holder class here, because the ownership shares and the
   //    UI report it as one; the row is the same shape as anyone else's.
+  // A bank's book reports under its TICKER (the key every consumer of this walk has always seen
+  // for a bank), and a bank holds its OWN sovereign as its liquidity buffer (07c's domestic
+  // mandate), so the row's region test is the issuer's, as for every other book.
+  const activeBanks = state.companies.filter((c) => isActiveCompany(c) && c.bankBalanceSheet !== undefined);
+  const bankTickerById = new Map(activeBanks.map((c) => [c.id as string, c.ticker as string]));
   if (govRef >= 0 && regRef >= 0) {
-    registerBooks((state.institutionalEntities ?? []).filter((e) => !e.isDefaulted).map((e) => e.id))
+    registerBooks((state.institutionalEntities ?? []).filter((e) => !e.isDefaulted).map((e) => e.id), activeBanks.map((c) => c.id))
       .forEach((b) => {
-        const isCentralBank = b.payee.kind === 'CENTRAL_BANK';
+        const holderClass: SovereignHolderClass = b.payee.kind === 'CENTRAL_BANK' ? 'CENTRAL_BANK' : b.payee.kind === 'BANK' ? 'BANK' : 'REGISTER';
+        const holderKey = holderClass === 'CENTRAL_BANK' ? 'CB' : holderClass === 'BANK' ? (bankTickerById.get(b.id) ?? b.id) : b.id;
         for (let r = bookHeadOf(v2, b.id); r >= 0; r = H.next[r]) {
           if (H.typeRef[r] !== govRef || H.regionRef[r] !== regRef) continue;
           const faceLocal = rowUnits(H, r);
-          if (faceLocal === 0) continue;
-          if (isCentralBank) visit({ bondId: instrumentIdAt(v2, r), holderKey: 'CB', holderClass: 'CENTRAL_BANK', faceLocal });
-          else visit({ bondId: instrumentIdAt(v2, r), holderKey: b.id, holderClass: 'REGISTER', faceLocal });
+          if (faceLocal !== 0) visit({ bondId: instrumentIdAt(v2, r), holderKey, holderClass, faceLocal });
         }
       });
   }
 
-  // 2. THE BANKS' OWN BOOKS, and 3. their DESKS' inventory — both outside the register.
+  // 2. THE DESKS' inventory — still outside the register (§3.13-BOOK d3d).
   state.companies.forEach((c) => {
     if (!isActiveCompany(c)) return;
     const sheet = c.bankBalanceSheet;
     if (!sheet) return;
-    // A bank holds its OWN sovereign as its liquidity buffer (07c's domestic mandate), so the
-    // bank's region is the issuer's — neither book says so itself.
     if (c.region !== regionId) return;
-    Object.entries(sheet.sovereignBondHoldingsByBond ?? {}).forEach(([bondId, v]) => {
-      const faceLocal = Number(v) || 0;
-      if (faceLocal !== 0) visit({ bondId, holderKey: c.ticker, holderClass: 'BANK', faceLocal });
-    });
     // The DESKS off the banks that carry them, not off `bankingSector.sovBondDealerInventory` —
     // that regional array is a derived roll-up (`regionalDeskView`) which keeps only the money,
     // so it cannot report a face at all (§9.13-CREDIT row 5b found `O1` reading it for one).
@@ -105,7 +100,7 @@ export function forEachSovereignPosition(
     });
   });
 
-  // 4. A COMPANY'S OWN TREASURY BOOK. `stage08-back` writes it, `O1`'s credit arms counted it and
+  // 3. A COMPANY'S OWN TREASURY BOOK. `stage08-back` writes it, `O1`'s credit arms counted it and
   // no sovereign walk ever did — so a treasury's government paper was outstanding, held, and
   // invisible to every check that asks who holds a bond.
   state.companies.forEach((c) => {
@@ -136,28 +131,59 @@ export function sovereignHeldByClass(v2: V2World, state: GameState, regionId: Re
   return out;
 }
 
-/** One row of a central bank's book: the bond, its FACE and its VALUE (the mark). */
-export interface CentralBankPosition { row: number; bondId: InstrumentId; faceLocal: number; valueLocal: number }
+/** One sovereign row of a register book: the bond, its FACE and its VALUE (the mark). */
+export interface SovereignRow { row: number; bondId: InstrumentId; issuerRegion: RegionId; faceLocal: number; valueLocal: number }
 
 /**
- * §3.13-BOOK d3a — THE CENTRAL BANK'S BOOK, read off the register. Every reader of the deleted
- * `centralBankSheet.sovereignHoldingsByBond` asks this: the auction's participant (face it holds),
- * stage 11's maturities and reinvestment (face), its coupon income (face), and its balance sheet
- * (value — the mark, which is what the Record held and what `register-marking` now moves).
+ * §3.13-BOOK d3a/d3b — A BOOK'S SOVEREIGN ROWS, read off the register. Every reader of the deleted
+ * `Record<bondId, dollars>` books asks this: an auction's participant (face held), stage 11's
+ * maturities and reinvestment (face), coupon income (face), repo collateral (face), and a balance
+ * sheet (value — the mark, which is what the Record held and what `register-marking` moves).
  */
-export function centralBankPositions(v2: V2World, regionId: RegionId): CentralBankPosition[] {
+export function sovereignRowsOf(v2: V2World, bookId: string): SovereignRow[] {
   const H = v2.holdings;
-  const out: CentralBankPosition[] = [];
-  for (let r = bookHeadOf(v2, centralBankBookId(regionId)); r >= 0; r = H.next[r]) {
-    out.push({ row: r, bondId: instrumentIdAt(v2, r), faceLocal: rowUnits(H, r), valueLocal: H.qtyLocal[r] });
+  const govRef = typeRefOf(v2, 'GOV_BOND');
+  const out: SovereignRow[] = [];
+  if (govRef < 0) return out;
+  for (let r = bookHeadOf(v2, bookId); r >= 0; r = H.next[r]) {
+    if (H.typeRef[r] !== govRef) continue;
+    out.push({ row: r, bondId: instrumentIdAt(v2, r), issuerRegion: regionOf(v2, H.regionRef[r]) as RegionId, faceLocal: rowUnits(H, r), valueLocal: H.qtyLocal[r] });
   }
   return out;
 }
 
-/** The central bank's sovereign book at its marked VALUE — the asset line on its sheet. */
-export function centralBankBookLocal(v2: V2World, regionId: RegionId): number {
+/** A book's sovereign rows at their marked VALUE — the asset line on the holder's sheet. */
+export function sovereignBookLocalOf(v2: V2World, bookId: string): number {
   const H = v2.holdings;
+  const govRef = typeRefOf(v2, 'GOV_BOND');
   let total = 0;
-  for (let r = bookHeadOf(v2, centralBankBookId(regionId)); r >= 0; r = H.next[r]) total += H.qtyLocal[r];
+  if (govRef < 0) return 0;
+  for (let r = bookHeadOf(v2, bookId); r >= 0; r = H.next[r]) if (H.typeRef[r] === govRef) total += H.qtyLocal[r];
   return total;
+}
+
+/** The central bank's book, by region. */
+export const centralBankPositions = (v2: V2World, regionId: RegionId): SovereignRow[] => sovereignRowsOf(v2, centralBankBookId(regionId));
+export const centralBankBookLocal = (v2: V2World, regionId: RegionId): number => sovereignBookLocalOf(v2, centralBankBookId(regionId));
+/** A bank's OWN book (§3.13-BOOK d3b), by its entity id — its liquidity buffer, not its desk. */
+export const bankSovereignPositions = (v2: V2World, bankId: string): SovereignRow[] => sovereignRowsOf(v2, bankId);
+export const bankSovereignBookLocal = (v2: V2World, bankId: string): number => sovereignBookLocalOf(v2, bankId);
+/** A bank's own book as `bondId → face`, for the readers that ask by bond. */
+export function bankSovereignFaceByBond(v2: V2World, bankId: string): Map<InstrumentId, number> {
+  const out = new Map<InstrumentId, number>();
+  bankSovereignPositions(v2, bankId).forEach((p) => out.set(p.bondId, (out.get(p.bondId) ?? 0) + p.faceLocal));
+  return out;
+}
+/** A bank's own book as `bondId → marked value`, for the yield read that weights by position. */
+export function bankSovereignValueRecord(v2: V2World, bankId: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  bankSovereignPositions(v2, bankId).forEach((p) => { out[p.bondId] = (out[p.bondId] ?? 0) + p.valueLocal; });
+  return out;
+}
+/** Every bank of a region's own book, summed by bond at marked value — the regional aggregate
+ *  `bankingSector.sovereignBondHoldingsByBond` used to store (§3.13-BOOK d3b: a read now). */
+export function regionBankSovereignValueRecord(v2: V2World, bankIds: readonly string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  bankIds.forEach((id) => bankSovereignPositions(v2, id).forEach((p) => { out[p.bondId] = (out[p.bondId] ?? 0) + p.valueLocal; }));
+  return out;
 }

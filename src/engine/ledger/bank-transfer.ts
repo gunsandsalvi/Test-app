@@ -7,6 +7,11 @@
  */
 
 import { BankingSector } from '../../domain/banking';
+import type { V2World } from '../../engine2/world';
+import type { EntityId } from '../../domain/ids';
+import { bankPartyOf } from '../../domain/party';
+import { transferHolding } from './holdings-ledger';
+import { bankSovereignPositions } from '../sovereign-register';
 import { BankResolutionPlan, mergeDesks, mergeHouseholdPool } from '../../domain/bank-resolution';
 
 /**
@@ -14,7 +19,7 @@ import { BankResolutionPlan, mergeDesks, mergeHouseholdPool } from '../../domain
  * the amount the caller says is assumed; equity is the caller's arithmetic (it depends on both
  * sides).
  */
-export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, centralBankLoanAssumedLocal: number): void {
+export function absorbBankSheet(v2: V2World, acquirerId: EntityId, targetId: EntityId, acquirer: BankingSector, target: BankingSector, centralBankLoanAssumedLocal: number): void {
   // A3.6c: the deposit lines are the depositors' accounts — the household sector's and the
   // pools' rows move with `moveSectorRowsToBank` at the caller, the firms' and institutions'
   // accounts follow their house bank (`rekeyBankLinks`); nothing to move here.
@@ -38,12 +43,14 @@ export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, 
   acquirer.householdLoans = pools;
   target.householdLoans = [];
   acquirer.primeBrokerageLoansLocal = (acquirer.primeBrokerageLoansLocal ?? 0) + (target.primeBrokerageLoansLocal ?? 0); target.primeBrokerageLoansLocal = 0;
-  // The securities books.
-  const tenors = { ...(acquirer.sovereignBondHoldingsByBond || {}) };
-  Object.entries(target.sovereignBondHoldingsByBond || {}).forEach(([k, v]) => { tenors[k] = (tenors[k] ?? 0) + (Number(v) || 0); });
-  acquirer.sovereignBondHoldingsByBond = tenors;
-  acquirer.sovereignBondHoldingsLocal = Object.values(tenors).reduce((a, v) => a + v, 0);
-  target.sovereignBondHoldingsByBond = {}; target.sovereignBondHoldingsLocal = 0;
+  // The securities books. §3.13-BOOK d3b: the target's own sovereign book is register rows, and
+  // it moves row by row, by wire, from the failed bank's book to the assuming bank's.
+  bankSovereignPositions(v2, targetId).forEach((p) => {
+    if (!(p.faceLocal > 0) && !(p.valueLocal > 0)) return;
+    transferHolding(v2, bankPartyOf(targetId), bankPartyOf(acquirerId),
+      { instrumentType: 'GOV_BOND', instrumentId: p.bondId, issuerRegion: p.issuerRegion, valueLocal: p.valueLocal, units: p.faceLocal },
+      'bank resolution: sovereign book assumed');
+  });
   acquirer.sovereignAccruedCouponLocal = (acquirer.sovereignAccruedCouponLocal ?? 0) + (target.sovereignAccruedCouponLocal ?? 0); target.sovereignAccruedCouponLocal = 0;
   acquirer.dealerDeskInventory = mergeDesks(acquirer.dealerDeskInventory, target.dealerDeskInventory);
   target.dealerDeskInventory = undefined;
@@ -61,8 +68,8 @@ export function absorbBankSheet(acquirer: BankingSector, target: BankingSector, 
 }
 
 /** A merger: everything moves, cash and equity included, at the sheet level. */
-export function mergeBankSheets(acquirer: BankingSector, target: BankingSector): void {
-  absorbBankSheet(acquirer, target, target.centralBankLoanLocal ?? 0);
+export function mergeBankSheets(v2: V2World, acquirerId: EntityId, targetId: EntityId, acquirer: BankingSector, target: BankingSector): void {
+  absorbBankSheet(v2, acquirerId, targetId, acquirer, target, target.centralBankLoanLocal ?? 0);
   // A3.6c: the reserves move on the accounts (`moveBankReserves`, at the caller).
   acquirer.bankEquityLocal += target.bankEquityLocal; target.bankEquityLocal = 0;
 }
@@ -77,8 +84,8 @@ export function mergeBankSheets(acquirer: BankingSector, target: BankingSector):
  * The whole central-bank loan moves with the books, so nothing is left on the shell for the
  * zeroing below to erase while the central bank still carries the asset.
  */
-export function assumeBankBooks(acquirer: BankingSector, target: BankingSector, plan: BankResolutionPlan, cashLocal: number): void {
-  absorbBankSheet(acquirer, target, plan.centralBankLoanAssumedLocal);
+export function assumeBankBooks(v2: V2World, acquirerId: EntityId, targetId: EntityId, acquirer: BankingSector, target: BankingSector, plan: BankResolutionPlan, cashLocal: number): void {
+  absorbBankSheet(v2, acquirerId, targetId, acquirer, target, plan.centralBankLoanAssumedLocal);
   acquirer.bankEquityLocal += plan.netBookLocal - cashLocal;
   target.bankEquityLocal = cashLocal;
 }

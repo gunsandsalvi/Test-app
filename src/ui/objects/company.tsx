@@ -1,6 +1,7 @@
 /** AU · object: company — a firm, a bank (a company with a sheet), or a fund's manager shell. */
 
 import { Company } from '../../types';
+import { bankSovereignBookLocal } from '../../engine/sovereign-register';
 import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf } from '../../domain/banking';
 import { defineObject, PeerColumn } from './registry';
 import { Card, KV, Link, Stat, StatGrid, T } from '../ui';
@@ -149,7 +150,7 @@ export const company = defineObject<Company>({
           <Card style={{ padding: '2px 0' }}>
             <KV k="deposits" hint="all classes" v={money((() => { const l = stateDepositLines(world.state, c); return l.householdLocal + l.corporateLocal + l.institutionalLocal + l.smeLocal; })())} />
             <KV k="loans" hint="business · household" v={`${money(businessLoanBookOf(sheet, facilityBookOf(ensureV2(world.state), c.id)))} · ${money(consumerLoanBookOf(sheet))}`} />
-            <KV k="sovereign book" v={money(sheet.sovereignBondHoldingsLocal)} />
+            <KV k="sovereign book" hint="register rows, marked" v={money(bankSovereignBookLocal(ensureV2(world.state), c.id))} />
             <KV k="reserves at the central bank" v={money(bankReservesOf(ensureV2(world.state), c.id))} />
             <KV k="central bank loan" hint="lender of last resort" v={money(sheet.centralBankLoanLocal ?? 0)} />
             <KV k="at the window" v={money(sheet.srfBorrowingLocal)} />

@@ -509,9 +509,10 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d3. **THE OUTSIDE BOOKS COME IN — 13-OUTSIDE, moved up from (f).** The banks'
-        `sovereignBondHoldingsByBond`, `Company.treasuryHoldings` and the desks' inventories become
-        register rows (the central bank's `sovereignHoldingsByBond` already has — d3a in §9), so
+    d3. **THE OUTSIDE BOOKS COME IN — 13-OUTSIDE, moved up from (f).** `Company.treasuryHoldings`
+        and the desks' inventories become
+        register rows (the central bank's `sovereignHoldingsByBond` and the banks' own books already
+        have — d3a and d3b in §9), so
         `sovereign-register.ts` collapses from a four-store walk to a filter and the last book that
         stores a VALUE with no quantity (`sovereign-credit.md` E3) stops existing. This one moves
         numbers (the marks meet the audit), and that is the finding. **Split 2026-09-04 into one
@@ -519,16 +520,6 @@ written from here):
         must land together** — every existing `transferHolding` that names a company or a desk as
         a party would otherwise debit an EMPTY register book and defect at the site (found
         writing d3a: the issuer side of a merger's share exchange is a `companyParty` too):
-        d3b. **THE BANKS' OWN BOOK.** `sovereignBondHoldingsByBond` → rows on the bank's own book
-            (`BANK` party). Writers today, none a wire in itself: `07c` and `07f` (fills, which do
-            wire the delta under `bankSecuritiesParty` — the own book and the desk are ONE party in
-            the journal today, and this is where they become two), `02b`, `bill-accretion`,
-            `bank-transfer`, `11-fiscal` (maturities), `macro/banking` (the regional roll-up).
-            Readers: `repo-clearing` (collateral), `sovereign-calendar` (coupons, accrued to the
-            securities party today — they move to the bank's own), `holdings-view`, `irs`,
-            `bank-lending`, `profiles/bank`, `macro/banking`, `audit/money`, the identity trace, the
-            UI. `sovereignBondHoldingsLocal` beside it is a stored total of the same book and dies
-            with it.
         d3c. **`Company.treasuryHoldings`.** A company holds OTHER issuers' paper on its own book
             (`COMPANY` party as HOLDER — `holderIdOf` must answer the id only when the instrument's
             issuer is not the company itself, since the same party stands on the ISSUER side of
@@ -1750,6 +1741,35 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d3b — THE BANKS' OWN SOVEREIGN BOOK IS REGISTER ROWS.** `BankingSector.
+sovereignBondHoldingsByBond` and its stored total `sovereignBondHoldingsLocal` are deleted — from
+the per-bank sheet and from the regional aggregate that shares the type. A bank's own book (its
+liquidity buffer, not its desk) is rows on the entity's register book under the `BANK` party, the
+party whose reserves buy it: `holderIdOf` answers `BANK`, `registerBooks` takes the banks beside the
+institutions, the seed's allocation (OWN6) rides a stash and `openSeededBooks` issues it by wire,
+and every writer is a ledger operation — `07c` and `07f` fills are `transferHolding` against the
+house in face (a bond the engine reports no holding for is left standing; the Record rebuild used
+to drop it with no wire), stage 11's maturities are `retireHolding` with the treasury repaying
+FACE, `bill-accretion` marks the bills `units × price`, and a resolution or merger moves the failed
+bank's rows to the assuming bank's book row by row (`bank-transfer.ts:absorbBankSheet`, which takes
+the world and the two ids now). Every reader asks `sovereign-register.ts:bankSovereignPositions`,
+`bankSovereignFaceByBond` or `bankSovereignBookLocal`; the sheet-total helpers that read the field
+(`bankTotalAssetsLocal`, `leverageHeadroomLocal`, `sovereignBookCapacityLocal`,
+`bankSheetAssetsLocal`, `planBankResolution`, `evolveBankingSector`, the identity trace's
+`fieldsOf`/`residualOf`, repo's `collateralCapacityLocal`/`unencumberedByBond`) take the book as an
+argument, 18 call sites; the regional yield reads `regionBankSovereignValueRecord` off the banks'
+rows. THE PARTY CHANGES, DELIBERATELY: the own book's fills, its coupon accruals and its
+redemptions named `BANK_SECURITIES` — the desk — so the bank's buffer and its trading book were one
+party in the journal; they are `BANK` now, and a redemption lands in reserves rather than in the
+securities account (money moves between two accounts of one bank; its sheet's total does not).
+NUMBERS MOVE: the banks' bonds are marked at every close, their bills at `units × price`, and the
+routing above. FOUND AND FIXED ON THE WAY, two seed defects of the same shape: `seedOpeningAccruals`
+and `seedOpeningCreditPrices` ran inside `buildSeededGameState` against a store with no rows and no
+ladders in it — every register holder opened at zero accrued and no seeded bond was priced, since
+37-SEED — and both now run in `createInitialGameState` after `openSeededBooks`. `test/
+bank-resolution.test.ts` states the sovereign book beside the sheet as it states cash. The sovereign
+walk has three stores left: the register, the desks, the treasuries. Gates green; no run.
 
 **13-BOOK d3a — THE CENTRAL BANK'S BOOK IS REGISTER ROWS.** `CentralBank.sovereignHoldingsByBond`
 is deleted. The central bank is a register holder (`holdings-ledger.ts:holderIdOf` answers its

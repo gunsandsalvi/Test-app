@@ -16,7 +16,7 @@
  *                     P retires it when value becomes price × quantity by construction)
  */
 import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
-import { companyParty } from '../../domain/party';
+import { companyParty, bankPartyOf } from '../../domain/party';
 import {
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
@@ -90,7 +90,10 @@ const holderIdOf = (p: PartyRef): string | undefined => (
     : p.kind === 'HOUSEHOLD' ? householdBookId(p.region)
       // §3.13-BOOK d3a: the central bank holds its sovereign book here, like any holder.
       : p.kind === 'CENTRAL_BANK' ? centralBankBookId(p.region)
-        : undefined);
+        // §3.13-BOOK d3b: a bank's OWN book (its liquidity buffer) is the entity's book, under the
+        // party whose money buys it — its reserves. Its desk (`BANK_SECURITIES`) is d3d's.
+        : p.kind === 'BANK' ? p.id
+          : undefined);
 
 /**
  * §3.13-BOOK slice (c) — WHO ISSUED THE PAPER ON THIS ROW.
@@ -131,9 +134,11 @@ export function issuerOfHoldingRow(
  * sector free shares. The institutions come first and in the order given, so a caller that still
  * needs to rebuild its entity array off the same flags can index straight into them.
  */
-export function registerBooks(entityIds: readonly EntityId[]): { id: string; payee: PartyRef }[] {
+export function registerBooks(entityIds: readonly EntityId[], bankIds: readonly EntityId[]): { id: string; payee: PartyRef }[] {
   return [
     ...entityIds.map((id) => ({ id, payee: { kind: 'INSTITUTION' as const, id } })),
+    // §3.13-BOOK d3b: the banks' own books, paid as the bank (its reserves).
+    ...bankIds.map((id) => ({ id, payee: bankPartyOf(id) })),
     ...REGION_IDS.map((region) => ({ id: householdBookId(region), payee: { kind: 'HOUSEHOLD' as const, region } })),
     // §3.13-BOOK d3a: and the central banks' books — consolidated and marked with everyone else's.
     ...REGION_IDS.map((region) => ({ id: centralBankBookId(region), payee: { kind: 'CENTRAL_BANK' as const, region } })),

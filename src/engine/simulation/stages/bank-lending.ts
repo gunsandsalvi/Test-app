@@ -1,5 +1,5 @@
 import { levelPaymentFactor } from '../../../domain/pricing';
-import { openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf } from '../../ledger/accounts';
+import { openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf, seedBankBookLocalOf } from '../../ledger/accounts';
 /**
  * G2 — itemized bank lending and endogenous money.
  *
@@ -172,7 +172,7 @@ export function migrateSmeDebtAtSeed(
     // double-count) leaves the bank sheet entirely. Funding side re-derived so the sheet still
     // balances (same discipline as the WS6 seed); the consumer side is the seed's stated book
     // until HH3 seeds the real pools and re-derives this again.
-    const sovLocal = Object.values(sheet.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+    const sovLocal = seedBankBookLocalOf(sheet); // §3.13-BOOK d3b: the seed's stash, issued by wire at `openSeededBooks`
     stashSeedHouseholdLine(sheet, Math.round((
       businessLoanBookOf(sheet, facilityBookOf(v2, bank.id)) + seedConsumerLoanBookLocal(reg, bank) + sovLocal + openingCashOf(sheet) - sheet.bankEquityLocal
     )));
@@ -468,7 +468,7 @@ export function migrateHouseholdDebtAtSeed(
     // Equity scales with the risk the books add, at the ratio this bank already ran — no new
     // constant, and the opening capital ratio is preserved by construction.
     sheet.bankEquityLocal = Math.round((sheet.bankEquityLocal + Math.max(0, newHouseholdRwaLocal - replacedRwaLocal) * priorRatio));
-    applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookLocal, Math.round(openingCashOf(hs) * share)); // the seed's provisional sizing (close-seed strikes the line)
+    applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookLocal, Math.round(openingCashOf(hs) * share), seedBankBookLocalOf(sheet)); // the seed's provisional sizing (close-seed strikes the line)
     sheet.bankCapitalRatio = Number((sheet.bankEquityLocal / Math.max(1, bankRwaLocal(sheet, facilityBookLocal))).toFixed(4));
   });
 
@@ -951,7 +951,9 @@ export function applyBankFundingSplit(
    *  so a split struck on the raw balance bakes the difference into wholesale funding, where
    *  nothing ever takes it out again. Measured as a one-week 15.7M identity break on the bank
    *  whose repo book halved that week. */
-  pendingCashLocal = 0
+  pendingCashLocal = 0,
+  /** §3.13-BOOK d3b: the bank's own sovereign book — its register rows (at the seed, the stash). */
+  sovLocal = 0
 ): void {
   // CASH/rule 4 — ONE IDENTITY, NOT TWO. This used to re-derive the funding need from its own
   // partial list of assets: loans, sovereigns and cash, and nothing else. It knew nothing about
@@ -966,7 +968,7 @@ export function applyBankFundingSplit(
   // this split is not responsible for. Whatever is left is what deposits and wholesale money
   // have to cover.
   const fundingNeedLocal = Math.round((
-    bankTotalAssetsLocal(sheet, cashLocal, facilityBookLocal) + pendingCashLocal - sheet.bankEquityLocal
+    bankTotalAssetsLocal(sheet, cashLocal, facilityBookLocal, sovLocal) + pendingCashLocal - sheet.bankEquityLocal
       - (sheet.repoBorrowedLocal ?? 0) - (sheet.srfBorrowingLocal ?? 0)
   ));
   // §5-CLOSE: household money funds what the real corporate, institutional and segment

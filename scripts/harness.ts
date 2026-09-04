@@ -140,7 +140,7 @@ import { mortgageSeverityAtLtv, vintageCurrentLtv, householdBookRwaLocal } from 
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS } from '../src/engine/macro/banking';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../src/domain/market-microstructure';
 import { centralBankAssetsLocal, centralBankFxReservesLocal } from '../src/domain/central-bank';
-import { centralBankBookLocal, centralBankPositions } from '../src/engine/sovereign-register';
+import { centralBankBookLocal, centralBankPositions, bankSovereignBookLocal, bankSovereignPositions, bankSovereignFaceByBond } from '../src/engine/sovereign-register';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
 import { unclassifiedReasons } from '../src/engine/simulation/stages/settlement';
 import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
@@ -153,7 +153,7 @@ import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
 import { DERIVATIVE_CLASSES } from '../src/domain/derivatives/registry';
 import { auditWeek, auditSeed, auditSummary, AuditFinding } from '../src/engine/audit';
 import { ownershipCoverage } from '../src/engine/audit/ownership';
-import { instrumentEntries, type InstrumentId, asEntityId } from '../src/domain/ids';
+import { type InstrumentId, asEntityId } from '../src/domain/ids';
 import type { EntityId } from '../src/domain/ids';
 
 interface Violation {
@@ -870,8 +870,7 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
       // bank with drained CASH still bids — it funds the purchase secured against its
       // collateral, which is exactly why real sovereign auctions rarely fail. "Buyers with no
       // money" now means no cash AND no unencumbered collateral to borrow against.
-      const sovLocal = Object.values((c.bankBalanceSheet.sovereignBondHoldingsByBond || {}) as Record<string, number>)
-        .reduce((a, v) => a + (Number(v) || 0), 0);
+      const sovLocal = bankSovereignBookLocal(ensureV2(shocked), c.id); // §3.13-BOOK d3b: register rows
       c.bankBalanceSheet.repoEncumberedCollateralLocal = sovLocal;
     }
   });
@@ -1109,8 +1108,8 @@ function couponReceipts(s: GameState, region: RegionId) {
   const cb = sovereignCouponByBond(materializeGovLadder(ensureV2(s), region));
   const rate = (id: string) => cb[id] ?? 0;
   const banks = banksOf(s.companies, region)
-    .reduce((a: number, c: Company) => a + Object.entries(c.bankBalanceSheet!.sovereignBondHoldingsByBond || {})
-      .reduce((x: number, [k, v]) => x + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0), 0);
+    .reduce((a: number, c: Company) => a + bankSovereignPositions(ensureV2(s), c.id)
+      .reduce((x: number, p) => x + (p.faceLocal * (cb[p.bondId] ?? 0)) / 52, 0), 0);
   const insts = s.institutionalEntities
     .filter((e: InstitutionalEntity) => e.region === region && !e.isDefaulted)
     .reduce((a: number, e: InstitutionalEntity) => a + (e.itemizedHoldings || [])
@@ -2329,7 +2328,7 @@ function runHarness() {
       const bs = c.bankBalanceSheet!;
       const reservesLocal = bankReservesOf(ensureV2(state), c.id);
       const lines = stateDepositLines(state, c);
-      const sovLocal = Object.values((bs.sovereignBondHoldingsByBond || {}) as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
+      const sovLocal = bankSovereignBookLocal(ensureV2(state), c.id); // §3.13-BOOK d3b: register rows
       // §5-WIRES D: the loan books are READS of the sheet's rows. This check subtracted
       // `bs.businessLoanBookLocal` and `bs.consumerLoanBookLocal`, two fields that stopped existing
       // when the rows became the truth — so the residual was `number - undefined` = NaN,
@@ -2477,11 +2476,10 @@ function runHarness() {
         // could fail a bank the engine had just declared clean.
         overPledgedByBond({
           pledgedByBond: (pledgedBy.get(c.id) ?? new Map()) as Map<InstrumentId, number>,
-          heldByBond: new Map(instrumentEntries(bs.sovereignBondHoldingsByBond)
-            .map(([k, v]) => [k, Number(v) || 0] as const)),
+          heldByBond: bankSovereignFaceByBond(ensureV2(state), c.id),
         }).forEach((excessLocal: number, bondId: InstrumentId) => {
           const faceLocal = (pledgedBy.get(c.id) as Map<string, number>).get(bondId) ?? 0;
-          const heldLocal = Number(bs.sovereignBondHoldingsByBond?.[bondId] ?? 0);
+          const heldLocal = bankSovereignFaceByBond(ensureV2(state), c.id).get(bondId) ?? 0;
           if (excessLocal > 0) {
             violations.push({ week: w, message: `Bank ${c.ticker} pledged ${(faceLocal / 1e9).toFixed(2)}B of ${bondId} against ${(heldLocal / 1e9).toFixed(2)}B held of it` });
           }
@@ -2491,7 +2489,7 @@ function runHarness() {
 
     banksOf(state.companies).forEach((c: Company) => {
       const bs = c.bankBalanceSheet!;
-      const sovLocal = Object.values((bs.sovereignBondHoldingsByBond || {}) as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
+      const sovLocal = bankSovereignBookLocal(ensureV2(state), c.id); // §3.13-BOOK d3b: register rows
       // §7.246: the ONE pledge tolerance (domain/collateral.ts, $1) — this line sat at 1e6 one
       // screen below the unified per-bucket check, the §7.230 split-tolerance shape surviving in
       // the aggregate.

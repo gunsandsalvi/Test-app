@@ -40,6 +40,7 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import { bankSovereignFaceByBond } from '../../sovereign-register';
 import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { bankParty, bankPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf } from '../../../domain/party';
@@ -62,7 +63,7 @@ import {
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 
 import { repoOvernightInstrumentId, repoTermInstrumentId } from '../../../domain/instrument-keys';
-import { instrumentEntries, type InstrumentId, asEntityId } from '../../../domain/ids';
+import { type InstrumentId, asEntityId } from '../../../domain/ids';
 import { bankParticipantId, bankTickerOfParticipant, repoInstitutionSeatId, repoInstitutionIdOfSeat } from '../../../domain/participant-keys';
 import type { Ticker } from '../../../domain/ids';
 /** The zero curve's own points, at the tenors they are quoted for — a curve HAS points, and this
@@ -132,12 +133,12 @@ function nearestCurvePoint(years: number): 'tenor3M' | 'tenor2Y' | 'tenor5Y' | '
 
 /** A bank's total repo-able collateral value net of haircuts, and its face total. */
 export function collateralCapacityLocal(
-  sheet: BankingSector,
+  heldByBond: ReadonlyMap<InstrumentId, number>,
   haircutOf: (bondId: string) => number | undefined
 ): { faceLocal: number; capacityLocal: number } {
   let faceLocal = 0; let capacityLocal = 0;
-  Object.entries(sheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, v]) => {
-    const usd = Number(v) || 0;
+  // §3.13-BOOK d3b: the bank's book is its register rows, handed in as face by bond.
+  heldByBond.forEach((usd, bondId) => {
     if (usd <= 0) return;
     // §3.13-SOV row 3: a bond whose haircut cannot be computed is not pledgeable collateral.
     // It is not pledged at a guessed one.
@@ -156,12 +157,12 @@ export function collateralCapacityLocal(
  * the cash a pledge raises is that bond's own haircut rather than a blended average.
  */
 export function unencumberedByBond(
-  sheet: BankingSector,
+  heldByBond: ReadonlyMap<InstrumentId, number>,
   encumberedFace: Map<InstrumentId, number>
 ): Map<InstrumentId, number> {
   const free = new Map<InstrumentId, number>();
-  instrumentEntries(sheet.sovereignBondHoldingsByBond).forEach(([key, v]) => {
-    const freeLocal = Math.max(0, (Number(v) || 0) - (encumberedFace.get(key) ?? 0));
+  heldByBond.forEach((v, key) => {
+    const freeLocal = Math.max(0, v - (encumberedFace.get(key) ?? 0));
     if (freeLocal > 0) free.set(key, freeLocal);
   });
   return free;
@@ -175,6 +176,8 @@ export function unencumberedByBond(
  */
 export function unencumberedBorrowingCapacityLocal(
   sheet: BankingSector,
+  /** §3.13-BOOK d3b: the bank's own sovereign rows, face by bond (`bankSovereignFaceByBond`). */
+  heldByBond: ReadonlyMap<InstrumentId, number>,
   haircutOf: (bondId: string) => number | undefined,
   /** What this bank has already pledged, by bond. Omitted falls back to the sheet's
    *  derived scalar, for the callers that have no book to hand. */
@@ -182,14 +185,14 @@ export function unencumberedBorrowingCapacityLocal(
 ): number {
   if (encumberedFace) {
     let capacityLocal = 0;
-    unencumberedByBond(sheet, encumberedFace).forEach((freeLocal, bondId) => {
+    unencumberedByBond(heldByBond, encumberedFace).forEach((freeLocal, bondId) => {
       const haircut = haircutOf(bondId);
       if (haircut === undefined) return;
       capacityLocal += freeLocal * (1 - haircut);
     });
     return Math.max(0, capacityLocal);
   }
-  const { faceLocal, capacityLocal } = collateralCapacityLocal(sheet, haircutOf);
+  const { faceLocal, capacityLocal } = collateralCapacityLocal(heldByBond, haircutOf);
   if (faceLocal <= 0) return 0;
   const encumberedFaceLocal = Math.min(faceLocal, sheet.repoEncumberedCollateralLocal ?? 0);
   const unencumberedShare = (faceLocal - encumberedFaceLocal) / faceLocal;
@@ -354,7 +357,7 @@ export function runRegionalRepoSession(
       + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
     const shortfallLocal = householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO - settledCashLocal;
     if (shortfallLocal <= 0) return;
-    const capacityLocal = unencumberedBorrowingCapacityLocal(sheet, haircuts, encumberedByTicker.get(bank.ticker));
+    const capacityLocal = unencumberedBorrowingCapacityLocal(sheet, bankSovereignFaceByBond(ctx.v2, bank.id), haircuts, encumberedByTicker.get(bank.ticker));
     const needLocal = Math.min(shortfallLocal, capacityLocal);
     if (needLocal <= 0) return;
     const termLocal = Math.min(needLocal, rolledByTicker.get(bank.id) ?? 0);
@@ -579,12 +582,11 @@ export function runRegionalRepoSession(
       const ticker = tickerOfBankId.get(bankId)!;
       const wantLocal = needOf(bankId) * fundedShare;
       if (wantLocal <= 0) return;
-      const sheet = sheetByTicker.get(ticker)!;
       const worked = encumberedWorking.get(ticker)!;
       lentByParty.forEach((lentLocal, pid) => {
         const shareLocal = wantLocal * (lentLocal / totalLentLocal);
         if (shareLocal <= 1) return;
-        const free = unencumberedByBond(sheet, worked);
+        const free = unencumberedByBond(bankSovereignFaceByBond(ctx.v2, bankId), worked);
         const { pledges, raisedLocal } = selectCollateral(free, haircuts, shareLocal);
         if (raisedLocal <= 1) return;
         const principalLocal = Math.min(shareLocal, raisedLocal);
@@ -779,8 +781,7 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       const pledged = encumberedFaceByBond(book, bankId);
       const shortfallByBond = overPledgedByBond({
         pledgedByBond: pledged,
-        heldByBond: new Map(instrumentEntries(sheet.sovereignBondHoldingsByBond)
-          .map(([k, v]) => [k, Number(v) || 0] as const)),
+        heldByBond: bankSovereignFaceByBond(ctx.v2, bankId),
       });
       if (shortfallByBond.size === 0) return;
 

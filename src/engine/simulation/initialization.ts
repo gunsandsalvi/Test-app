@@ -1,7 +1,7 @@
 
 import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
 import type { EntityId } from '../../domain/ids';
-import { companyParty } from '../../domain/party';
+import { companyParty, bankPartyOf } from '../../domain/party';
 import { stashSeedRevenueHistory, drainSeedRevenueHistories, drainSeedRings, peekSeedRing, typeRefOf } from '../../engine2/world';
 import { getSimulationDate } from '../formatters';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
@@ -76,7 +76,7 @@ import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGOR
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
-import { openAccount, openingCashOf, stashOpeningCash, stashSeedHouseholdLine, seedGovLadderOf, seedCentralBankBookOf, openSectorRow } from '../ledger/accounts';
+import { openAccount, openingCashOf, stashOpeningCash, stashSeedHouseholdLine, seedGovLadderOf, seedCentralBankBookOf, stashSeedBankBook, seedBankBookOf, seedBankBookLocalOf, openSectorRow } from '../ledger/accounts';
 import { newWireJournal, setActiveWireJournal, setActiveWireWorld, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { wireWorldOf } from '../ledger/wire-world';
 import { seedLadder } from '../ledger/tranche-ledger';
@@ -388,6 +388,15 @@ function openSeededBooks(state: GameState): void {
         .map(([id, v]) => ({ instrumentId: asInstrumentId(id), instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalLocal: Number(v), units: Number(v) }));
       seedBook(v2, { kind: 'CENTRAL_BANK', region: regionId }, book, issuerOfHolding);
     });
+    // §3.13-BOOK d3b — THE BANKS' OWN BOOKS, the same way: each bond the seed allocated to a bank
+    // (OWN6, `seedBankBookOf`) is issued by the treasury to the bank at its face.
+    state.companies.forEach((c) => {
+      if (!c.isBankEntity || !c.bankBalanceSheet) return;
+      const book: ItemizedHolding[] = Object.entries(seedBankBookOf(c.bankBalanceSheet))
+        .filter(([, v]) => (Number(v) || 0) > 0)
+        .map(([id, v]) => ({ instrumentId: asInstrumentId(id), instrumentType: 'GOV_BOND', issuerRegion: c.region, quantityOrNotionalLocal: Number(v), units: Number(v) }));
+      seedBook(v2, bankPartyOf(c.id), book, issuerOfHolding);
+    });
     // §9.13-EQUITY — AND THE HOUSEHOLD SECTOR'S BOOK, opened by wire like every other holder's.
     // Every share of every listed company is either on a named book or held directly by
     // households; the institutions' books have just been opened, so what is left of each issue is
@@ -470,6 +479,15 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   // §5-BRAINS — every deciding entity is born with its two preference primitives.
   ensureManagements(state.companies, state.institutionalEntities ?? [], 0);
   openSeededBooks(state);
+  // §3.37-SEED / D2 and §3.13, AFTER THE BOOKS ARE OPEN (§3.13-BOOK d3b moved both here: they ran
+  // inside `buildSeededGameState` against an empty store, so the accruals opened at zero for every
+  // register holder and no seeded bond was priced). The accrual ledger opens at what the aged
+  // ladders have actually accrued, on the rows the seed just wired; and every seeded bond opens
+  // with a PRICE, so week 1's session prices each piece of paper from what its own aged cash flows
+  // are worth rather than from one spread per borrower.
+  seedOpeningAccruals(state.regions, state.companies, state.institutionalEntities, seedV2, 1,
+    state.holderAccruedInterestLocal, state.sovereignAccruedInterestLocal);
+  seedOpeningCreditPrices(state.regions, state.companies, seedV2, 1);
   projectSeededSectorViews(state);
   // §5-STRUCT step 6 — OFF unless asked for. Burn-in hands back a world the ENGINE produced rather
   // than one this function asserted, which is the end state for every §7.4 defect. It changes every
@@ -759,7 +777,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // holder of the stock the central bank and the institutions do not take; where the
       // cohort's headroom cannot absorb that residual it is rationed pro-rata, never forced.
       const headroomByBank = new Map(regionBanksForSov.map(b =>
-        [b.ticker, leverageHeadroomLocal(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id))]));
+        // The book is allocated just below, so the headroom here is struck with none of it — as it
+        // was when the sheet's Record was still empty at this point.
+        [b.ticker, leverageHeadroomLocal(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id), 0)]));
       const totalHeadroomLocal = Array.from(headroomByBank.values()).reduce((a, v) => a + v, 0);
       const takenByOthersLocal = (reg.institutionalSector.sovBondHoldingsLocal || 0)
         + totalSovOutstandingLocal * CENTRAL_BANK_SOVEREIGN_SHARE;
@@ -776,10 +796,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           const heldLocal = targetLocal * (bondFaceLocal / totalSovOutstandingLocal);
           if (heldLocal > 1) byBond[bondId] = heldLocal;
         });
-        bank.bankBalanceSheet!.sovereignBondHoldingsByBond = byBond;
-        bank.bankBalanceSheet!.sovereignBondHoldingsLocal = Number(
-          Object.values(byBond).reduce((sum, v) => sum + v, 0).toFixed(0)
-        );
+        // §3.13-BOOK d3b: the bank's book is REGISTER ROWS, issued by wire at `openSeededBooks`
+        // from this stash — not a field on the sheet.
+        stashSeedBankBook(bank.bankBalanceSheet!, byBond);
         // §7.4, applied to the FUNDING side this time. This sovereign book is seeded from the
         // market (the bank share of the real outstanding stock — the S2 fix), but the deposit
         // seed still came from a GDP ratio chosen when the sov book was a 2%-of-GDP scalar.
@@ -793,25 +812,18 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // §5-WIRES D: the seed's STATED loan books (the rows arrive with the migrations below)
         // stand in the funding side here exactly as the stored scalars did.
         stashSeedHouseholdLine(bs, Math.round((
-          seedLoanBookShareLocal(reg, bank, 'business') + seedLoanBookShareLocal(reg, bank, 'consumer') + bs.sovereignBondHoldingsLocal +
+          seedLoanBookShareLocal(reg, bank, 'business') + seedLoanBookShareLocal(reg, bank, 'consumer') + seedBankBookLocalOf(bs) +
           openingCashOf(bs) - bs.bankEquityLocal
         )));
       });
 
       // The region aggregate is the derived sum of the named banks (the 02b/S7 doctrine),
-      // re-projected here so week 0 reads the same books week 1 will.
-      const aggByTenor: Record<string, number> = {};
-      regionBanksForSov.forEach(b => {
-        Object.entries(b.bankBalanceSheet!.sovereignBondHoldingsByBond || {}).forEach(([k, v]) => {
-          aggByTenor[k] = (aggByTenor[k] ?? 0) + v;
-        });
-      });
+      // re-projected here so week 0 reads the same books week 1 will. §3.13-BOOK d3b: it carries
+      // no sovereign book — a regional sovereign figure is the sum of the banks' register rows.
       const sumBank = (f: (bs: import('../../types').BankingSector) => number) =>
         Math.round(regionBanksForSov.reduce((sum, b) => sum + f(b.bankBalanceSheet!), 0));
       reg.bankingSector = {
         ...reg.bankingSector,
-        sovereignBondHoldingsByBond: aggByTenor,
-        sovereignBondHoldingsLocal: sumBank(bs => bs.sovereignBondHoldingsLocal),
         bankEquityLocal: sumBank(bs => bs.bankEquityLocal),
       };
       // OWN6/OWN7: whatever the central bank and the capital-constrained banks left is the
@@ -820,7 +832,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       reg.institutionalSector.sovBondHoldingsLocal = Math.round(Math.max(0,
         totalSovOutstandingLocal
         - totalSovOutstandingLocal * CENTRAL_BANK_SOVEREIGN_SHARE
-        - reg.bankingSector.sovereignBondHoldingsLocal));
+        - sumBank(bs => seedBankBookLocalOf(bs))));
     }
 
     // G2 slice 1: itemize the business book onto real borrowers, and recalibrate the SME
@@ -897,7 +909,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // Now that the corporate leg is known, the funding identity is re-derived: wholesale is
         // the residual AFTER real deposits, not a plug carrying money the companies already
         // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
-        applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
+        applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)), seedBankBookLocalOf(b.bankBalanceSheet!));
       });
     }
 
@@ -1191,8 +1203,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // A bank's opening revenue IS what its opening balance sheet earns.
     banksOf(regionCompanies).forEach((c) => {
       const sheet = c.bankBalanceSheet!;
-      const sovLocal = Object.values(sheet.sovereignBondHoldingsByBond || {})
-        .reduce((a, v) => a + (Number(v) || 0), 0);
+      const sovLocal = seedBankBookLocalOf(sheet); // §3.13-BOOK d3b: the seed's stash, issued by wire below
       const earningAssetsLocal = loanBooksOf(sheet, facilityBookOf(seedV2, c.id)) + sovLocal;
       const nimRevenueLocal = earningAssetsLocal * reg.bankingSector.netInterestMarginPct;
       if (!(nimRevenueLocal > 0)) return;
@@ -1413,7 +1424,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     regionBanks.forEach(b => {
       const instLocal = Math.round(byBank.get(b.ticker) ?? 0);
       stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + instLocal);
-      applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+      applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)), seedBankBookLocalOf(b.bankBalanceSheet!));
     });
   });
 
@@ -1428,7 +1439,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   });
 
   // G3b: the dealers the player trades with ARE the named banks' desks.
-  const dealers = dealersFromBanks((b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.id), companies);
+  const dealers = dealersFromBanks((b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.id), (b) => seedBankBookLocalOf(b.bankBalanceSheet!), companies);
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities, undefined, seedV2, 1);
   const recentIPOs: { ticker: Ticker; name: string; category: string; week: number }[] = [];
   const recentMergers: { acquirerTicker: Ticker; acquirerName: string; targetTicker: Ticker; targetName: string; week: number; dealValueLocal: number }[] = [];
@@ -1697,7 +1708,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const corpLocal = Math.round(lateCorporateByBank.get(b.ticker) ?? 0);
       const instLocal = Math.round(lateInstitutionalByBank.get(b.ticker) ?? 0);
       stashOpeningCash(sheet, openingCashOf(sheet) + corpLocal + instLocal);
-      applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+      applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)), seedBankBookLocalOf(sheet));
     });
   });
 
@@ -1715,15 +1726,12 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // every sovereign bond has a holder. Runs after every book exists and before the projection.
   closeSeedMoney(regions, companies, institutionalEntities, seedV2);
 
-  // §3.37-SEED / D2: the accrual ledger opens at what the aged ladders have actually accrued —
-  // built here so the state below opens with it rather than empty (the maps stay REQUIRED, §7.274).
+  // §3.37-SEED / D2: the accrual ledger opens at what the aged ladders have actually accrued
+  // (the maps stay REQUIRED, §7.274) — filled by `seedOpeningAccruals` in `createInitialGameState`,
+  // AFTER `openSeededBooks` has issued the rows it walks (§3.13-BOOK d3b found it running here,
+  // against a store with no rows in it, so every institution opened at zero accrued).
   const openingHolderAccruals = new Map<string, Map<string, number>>();
   const openingSovereignAccruals = new Map<string, number>();
-  seedOpeningAccruals(regions, companies, institutionalEntities, seedV2, 1,
-    openingHolderAccruals, openingSovereignAccruals);
-  // §3.13: and every seeded bond opens with a PRICE, so week 1's session prices each piece of
-  // paper from what its own aged cash flows are worth rather than from one spread per borrower.
-  seedOpeningCreditPrices(regions, companies, seedV2, 1);
 
   const state: GameState = {
     currentWeek: 1,

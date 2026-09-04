@@ -126,6 +126,8 @@ export function evolveRegionMacro(
     householdWeek?: { receiptsLocal: number; taxPaidLocal: number; dividendsLocal: number };
     /** §3.13-SOV row 2: the region's sovereign ladder, read off the ONE store by the caller. */
     govLadder: GovDebtTrancheView[];
+    /** §3.13-BOOK d3b: the region's banks' own sovereign books, summed by bond off their register rows. */
+    bankSovereignByBond: Record<string, number>;
   },
   week: number,
   equityReturn: number = 0,
@@ -801,6 +803,7 @@ export function evolveRegionMacro(
     // §5-WIRES D / step 10: the region's loan books are its named banks' rows, summed by the caller.
     microFeedback.bankLoanBooks,
     microFeedback.bankReservesLocal,
+    Object.values(microFeedback.bankSovereignByBond).reduce((a, v) => a + v, 0),
     microFeedback.bankDepositLines,
     newEstimatedHouseholdIncomeLocal,
     newSavingsRate,
@@ -808,7 +811,7 @@ export function evolveRegionMacro(
     newUnemployment,
     // The aggregate book's real yield at the real cleared curve — the per-bank truth is
     // recomputed in 02b, which overwrites this aggregate with the sum of named banks.
-    computeSovereignBookAnnualYield(region.bankingSector.sovereignBondHoldingsByBond, region.zeroRates,
+    computeSovereignBookAnnualYield(microFeedback.bankSovereignByBond, region.zeroRates,
       sovereignTenorResolver(microFeedback.govLadder, week)),
     region.creditConditionsSpilloverAdjustment ?? 0
   );

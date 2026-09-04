@@ -389,7 +389,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   if (target.bankBalanceSheet && acquirer.bankBalanceSheet) {
     const tb = target.bankBalanceSheet;
     const ab = acquirer.bankBalanceSheet;
-    mergeBankSheets(ab, tb);
+    mergeBankSheets(ctx.v2, acquirer.id, target.id, ab, tb);
     moveSectorRowsToBank(ctx.v2, target.ticker, acquirer.ticker); // A3.3: the sector parties' rows at the target join the acquirer's
     moveBankReserves(ctx.v2, target.id, acquirer.id); // A3.6a: and its reserves join the acquirer's row
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (target.bankMarketShare ?? 0)).toFixed(4));

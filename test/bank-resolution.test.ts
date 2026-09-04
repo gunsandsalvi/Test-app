@@ -13,17 +13,17 @@ import {
   bankAssumedLiabilitiesLocal, bankSheetAssetsLocal, chooseAssumingBank, isBankUnderPca,
   mergeHouseholdPool, planBankResolution, PCA_CAPITAL_RATIO,
 } from '../src/domain/bank-resolution';
-import { asInstrumentId } from '../src/domain/ids';
+import { asInstrumentId, asEntityId } from '../src/domain/ids';
+import { ensureV2 } from '../src/engine2/world';
 
 // Step 10: a bank's facility book is its rows on the borrowers' ladders, read by the caller and
 // stated beside the sheet here — 100 unless said.
 const FAC = 100;
 const sheet = (over: Partial<BankingSector> = {}): BankingSector => ({
-  sovereignBondHoldingsLocal: 20,
   bankEquityLocal: 5, bankCapitalRatio: 0.05, netInterestMarginPct: 0.02,
   loanLossProvisionRateAnnualPct: 0.01, creditConditionsIndex: 0, centralBankReservesLocal: 10,
   moneySupplyM2Local: 80, itemizedHoldings: [], srfBorrowingLocal: 0, onRrpLendingLocal: 0,
-  corpBondDealerInventory: [], sovereignBondHoldingsByBond: { t10: 20 }, sovBondDealerInventory: [],
+  corpBondDealerInventory: [], sovBondDealerInventory: [],
   loanDealerInventory: [], repoLentLocal: 0, repoBorrowedLocal: 0, repoEncumberedCollateralLocal: 0,
   businessLoans: [], householdLoans: [], centralBankLoanLocal: 30,
   ...over,
@@ -31,12 +31,15 @@ const sheet = (over: Partial<BankingSector> = {}): BankingSector => ({
 
 // A3.6c: a bank's reserves are its account, not a line — every sheet here banks 10 unless said.
 const CASH = 10;
+// §3.13-BOOK d3b: a bank's sovereign book is its register rows, read by the caller and stated
+// beside the sheet here — 20 unless said.
+const SOV = 20;
 // A3.6c: the deposit lines are reads of the depositors' accounts; here they are stated beside
 // the sheet — 80 of household money and 15 of corporate unless said.
 const linesOf = (over: Partial<DepositLines> = {}): DepositLines =>
   ({ householdLocal: 80, corporateLocal: 15, institutionalLocal: 0, smeLocal: 0, ...over });
-const identityResidual = (s: BankingSector, cashLocal = CASH, lines = linesOf(), facilityBookLocal = FAC) =>
-  bankAssumedLiabilitiesLocal(s, lines) + (s.centralBankLoanLocal ?? 0) + s.bankEquityLocal - bankSheetAssetsLocal(s, cashLocal, facilityBookLocal);
+const identityResidual = (s: BankingSector, cashLocal = CASH, lines = linesOf(), facilityBookLocal = FAC, sovLocal = SOV) =>
+  bankAssumedLiabilitiesLocal(s, lines) + (s.centralBankLoanLocal ?? 0) + s.bankEquityLocal - bankSheetAssetsLocal(s, cashLocal, facilityBookLocal, sovLocal);
 
 test('PCA: closed below the ratio, open above it, closed at negative capital with no RWA', () => {
   assert.equal(isBankUnderPca(sheet({ bankEquityLocal: 100 * PCA_CAPITAL_RATIO - 1 }), FAC), true);
@@ -47,7 +50,7 @@ test('PCA: closed below the ratio, open above it, closed at negative capital wit
 test('positive net: the acquirer is capitalised first, the receivership gets what is left', () => {
   const s = sheet(); // assets 130, assumed 95, wholesale 30, equity 5 — identity holds
   assert.equal(identityResidual(s), 0);
-  const plan = planBankResolution(s, 12, 4, CASH, linesOf(), FAC);
+  const plan = planBankResolution(s, 12, 4, CASH, linesOf(), FAC, SOV);
   // The whole central-bank loan moves; the shell's own ladder stays on its rows as a claim and
   // is never netted against it, so the net book is the equity and nothing else.
   assert.equal(plan.ladderBailedInLocal, 12);
@@ -60,23 +63,23 @@ test('positive net: the acquirer is capitalised first, the receivership gets wha
 
 test('a shortfall: the central bank is never haircut — the treasury guarantees the whole of it', () => {
   const smallSheet = sheet({ bankEquityLocal: -8, centralBankLoanLocal: 43 });
-  const small = planBankResolution(smallSheet, 0, 0, CASH, linesOf(), FAC);
+  const small = planBankResolution(smallSheet, 0, 0, CASH, linesOf(), FAC, SOV);
   assert.equal(small.centralBankLoanAssumedLocal, 43);
   assert.equal(small.guaranteeLocal, 8);
   assert.equal(small.estateLocal, 0);
-  const capital = planBankResolution(sheet(), 0, 20, CASH, linesOf(), FAC); // net 5, capital 20 → shortfall 15, guaranteed
+  const capital = planBankResolution(sheet(), 0, 20, CASH, linesOf(), FAC, SOV); // net 5, capital 20 → shortfall 15, guaranteed
   assert.equal(capital.centralBankLoanAssumedLocal, 30);
   assert.equal(capital.estateLocal, 0);
   assert.equal(capital.guaranteeLocal, 15);
   const beyondSheet = sheet({ bankEquityLocal: -50, centralBankLoanLocal: 30 });
-  const beyond = planBankResolution(beyondSheet, 0, 5, CASH, linesOf({ householdLocal: 135 }), FAC);
+  const beyond = planBankResolution(beyondSheet, 0, 5, CASH, linesOf({ householdLocal: 135 }), FAC, SOV);
   assert.equal(beyond.centralBankLoanAssumedLocal, 30);
   assert.equal(beyond.guaranteeLocal, 55);
 });
 
 test('the ladder is bailed in whole and never nets against the central bank loan', () => {
   const ladderSheet = sheet({ centralBankLoanLocal: 10 });
-  const plan = planBankResolution(ladderSheet, 25, 0, CASH, linesOf(), FAC);
+  const plan = planBankResolution(ladderSheet, 25, 0, CASH, linesOf(), FAC, SOV);
   assert.equal(plan.ladderBailedInLocal, 25);
   assert.equal(plan.centralBankLoanAssumedLocal, 10);
 });
@@ -97,9 +100,13 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
   });
   assert.equal(identityResidual(A, CASH, linesOf({ householdLocal: 90 })), 0);
   let fCash = CASH, aCash = CASH; // the two accounts, moved here as the pass would
-  const plan = planBankResolution(F, 0, 3, fCash, fLines, FAC);
+  // §3.13-BOOK d3b: the sovereign books are register rows, moved by wire at the stage; here they
+  // are stated beside the sheets and moved by hand, as the cash is.
+  let fSov = SOV, aSov = SOV;
+  const plan = planBankResolution(F, 0, 3, fCash, fLines, FAC, fSov);
   const cash = fCash;
-  absorbBankSheet(A, F, plan.centralBankLoanAssumedLocal);
+  absorbBankSheet(ensureV2({}), asEntityId('A'), asEntityId('F'), A, F, plan.centralBankLoanAssumedLocal);
+  aSov += fSov; fSov = 0;
   A.bankEquityLocal += plan.netBookLocal - cash;
   F.bankEquityLocal = cash;
   // The cash leg is a payment (reserves and equity on both sides); replay it here.
@@ -109,12 +116,12 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
   const fLeft: DepositLines = { householdLocal: 0, corporateLocal: 0, institutionalLocal: 0, smeLocal: 0 };
   // The facilities follow the books: the ladders now name the acquirer as lender (moveFacilityLender at the stage).
   const aFac = FAC + FAC, fFac = 0;
-  assert.ok(Math.abs(identityResidual(A, aCash, aLines, aFac)) < 1e-9, `acquirer residual ${identityResidual(A, aCash, aLines, aFac)}`);
+  assert.ok(Math.abs(identityResidual(A, aCash, aLines, aFac, aSov)) < 1e-9, `acquirer residual ${identityResidual(A, aCash, aLines, aFac, aSov)}`);
   // The guarantee and the receivership payment are flows on the acquirer's own account.
   aCash += plan.guaranteeLocal - plan.estateLocal; A.bankEquityLocal += plan.guaranteeLocal - plan.estateLocal;
-  assert.ok(Math.abs(identityResidual(A, aCash, aLines, aFac)) < 1e-9);
+  assert.ok(Math.abs(identityResidual(A, aCash, aLines, aFac, aSov)) < 1e-9);
   assert.ok(Math.abs(A.bankEquityLocal - (6 + plan.acquirerCapitalLocal)) < 1e-9, 'the acquirer gains exactly the capital the book needs');
-  assert.equal(bankSheetAssetsLocal(F, fCash, fFac), 0);
+  assert.equal(bankSheetAssetsLocal(F, fCash, fFac, fSov), 0);
   assert.equal(bankAssumedLiabilitiesLocal(F, fLeft) + F.bankEquityLocal, 0);
   const mortgage = A.householdLoans.find((p) => p.kind === 'MORTGAGE')!;
   assert.equal(mortgage.vintages!.length, 2);

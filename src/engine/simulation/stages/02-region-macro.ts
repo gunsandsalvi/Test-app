@@ -16,6 +16,7 @@ import { computeOccupationDemand } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
 import { marketCapOf, banksOf } from '../../../domain/company';
+import { regionBankSovereignValueRecord } from '../../sovereign-register';
 
 /**
  * What households received and paid over the whole of LAST week: every wage, transfer and
@@ -123,6 +124,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         householdWeek: householdWeekOf(ctx, regionId, state.regions[regionId].householdDepositInterestWeeklyLocal ?? 0),
         // §3.13-SOV row 2: the ladder is the store's, read here and passed in.
         govLadder: materializeGovLadder(ctx.v2, regionId),
+        bankSovereignByBond: regionBankSovereignValueRecord(ctx.v2, banksOf(ctx.updatedCompanies, regionId).map((b) => b.id)),
       },
       ctx.nextWeek,
       equityRet,

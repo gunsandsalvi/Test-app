@@ -16,6 +16,7 @@
  */
 
 import { bankReservesOf } from '../../../ledger/accounts';
+import { bankSovereignBookLocal } from '../../../sovereign-register';
 import type { Ticker } from '../../../../domain/ids';
 import { buildEntityIndex } from '../../../ledger/entity-index';
 import { bankParty, companyParty, companyPartyOf } from '../../../../domain/party';
@@ -130,7 +131,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         banks.forEach((bank) => {
           const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
           const capacityLocal = deskNotionalCapacityLocal(
-            leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id)), standing.pfeChargeLocal(bankPartyKey(bank.id)), 'COMMODITY_FUTURE');
+            leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id)), standing.pfeChargeLocal(bankPartyKey(bank.id)), 'COMMODITY_FUTURE');
           const units = capacityLocal / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
           if (units > 0.0001) {
             sellers.push({ party: bankParty(bank), units });

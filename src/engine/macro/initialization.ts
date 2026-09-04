@@ -1,4 +1,4 @@
-import { stashOpeningCash, stashSeedHouseholdLine, stashSeedGovLadder, stashSeedCentralBankBook } from '../ledger/accounts';
+import { stashOpeningCash, stashSeedHouseholdLine, stashSeedGovLadder, stashSeedCentralBankBook, stashSeedSovereignBookLocal } from '../ledger/accounts';
 import { govBondTrancheId } from '../../domain/sovereign-id';
 import { SEED_BUSINESS_LOAN_BOOK_TO_GDP, SEED_CONSUMER_LOAN_BOOK_TO_GDP } from '../../domain/stated';
 import { calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
@@ -456,7 +456,6 @@ function buildRegion(regionId: RegionId): Region {
   // stated loan-to-GDP ratios survive only where the seed SIZES something off them
   // (`seedLoanBookLocal`: a bank's opening revenue, the consumer scalar the HH3 migration replaced).
   const bankingSector = {
-    sovereignBondHoldingsLocal: Math.round((estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp)),
     bankEquityLocal: Math.round((estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.bankEquityToGdp)),
     bankCapitalRatio: BANK_CAPITAL_RATIO,
     netInterestMarginPct,
@@ -468,7 +467,6 @@ function buildRegion(regionId: RegionId): Region {
     srfBorrowingLocal: 0,
     onRrpLendingLocal: 0,
     corpBondDealerInventory: [],
-    sovereignBondHoldingsByBond: {},
     sovBondDealerInventory: [],
     loanDealerInventory: [],
     // WS6: overnight positions are struck weekly and mature at the next session, so a cold
@@ -480,6 +478,9 @@ function buildRegion(regionId: RegionId): Region {
     householdLoans: [],
     wholesaleFundingLocal: 0,
   };
+  // §3.13-BOOK d3b: the provisional sovereign-book scalar (a GDP ratio) sizes a bank's opening
+  // revenue in the generator and nothing else; it rides a stash, never a field.
+  stashSeedSovereignBookLocal(bankingSector, Math.round((estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp)));
   // §5-WIRES A3.6c: the seed's stated reserves ride the opening-cash stash (the same channel a
   // firm's opening cash rides) until close-seed opens each bank's account; no sheet carries them.
   stashOpeningCash(bankingSector, Math.round(estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.cashReservesToGdp));

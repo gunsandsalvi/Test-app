@@ -106,7 +106,6 @@ export interface BankingSector {
   // no loan book of its own: a region's book is `regionLoanBooksLocal` over its named banks.
   // §5-WIRES A3.6c: a bank's reserves are its account (`bankReservesOf`) and its four deposit
   // lines are its depositors' accounts (`DepositLines`, `depositLinesAt`) — no field carries them.
-  sovereignBondHoldingsLocal: number;
   bankEquityLocal: number;
   bankCapitalRatio: number;
   netInterestMarginPct: number;
@@ -132,19 +131,15 @@ export interface BankingSector {
   // clears per tranche. A genuine balance-sheet line updated only by real trade fills, not a
   // formula. See stages/07b-corporate-bond-clearing.ts.
   corpBondDealerInventory: { instrumentId: InstrumentId; inventoryLocal: number }[];
-  // Wall Street: the banking sector's real sovereign-bond holdings, broken out by tenor bucket
-  // (t2/t5/t10/t30) — banks hold government bonds substantially for real regulatory-liquidity
-  // (HQLA) purposes; this per-bucket breakdown is what lets the real sovereign-bond clearing
-  // engine (07c-sovereign-bond-clearing.ts) treat "the banking sector" as a real participant in
-  // the tenor-point auction rather than one scalar total with no maturity composition.
-  // sovereignBondHoldingsLocal stays the derived sum of these buckets.
-  /** §3.13-BOOK slice (a): keyed by INSTRUMENT id. TypeScript types an object's keys as `string`
-   *  whatever its index signature says, so the brand cannot live here — it lives on
-   *  `instrumentEntries`, which is how this is read. Slice (e) replaces it with a Map. */
-  sovereignBondHoldingsByBond: Record<string, number>;
+  // §3.13-BOOK d3b: A BANK'S OWN SOVEREIGN BOOK IS REGISTER ROWS. `sovereignBondHoldingsByBond`
+  // (a value per bond, no quantity) and `sovereignBondHoldingsLocal` (its stored total) are
+  // deleted; the bank's `GOV_BOND` rows live on its own register book under the `BANK` party,
+  // read by `sovereign-register.ts:bankSovereignPositions` / `bankSovereignBookLocal`. The
+  // regional aggregate that shares this type carries no book either — a regional figure is the
+  // sum of the named banks' rows.
   // Real dealer inventory for the sovereign-bond clearing auction, by tenor bucket — the same
   // shared-regional-dealer-desk role banks play for corporate bonds (corpBondDealerInventory),
-  // distinct from banks' own real investment-portfolio holdings above (sovereignBondHoldingsByBond).
+  // distinct from banks' own real investment-portfolio holdings (the register rows above).
   sovBondDealerInventory: { bondId: InstrumentId; inventoryLocal: number }[];
   // Same shared-regional-dealer-desk role for leveraged loans, keyed by the PIECE OF PAPER for
   // the same reason the bond book is (§3.13 row 3). See 07d-leveraged-loan-clearing.ts.
