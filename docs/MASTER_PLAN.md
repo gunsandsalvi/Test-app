@@ -394,30 +394,100 @@ written from here):
     **13-BILL — DONE, in §9.** A bill's return is the pull to par its own auction printed, for
     every holder class. What it left behind is one finding, and it is the next thing here:
 
-    **13-OUTSIDE — TWO BOOKS HOLD A VALUE WHERE THEIR OWN AUCTIONS WRITE A FACE** (found closing
-    13-BILL). *(**The enabling half is done** — commit "13-OUTSIDE a". Before moving a store, the
-    READ had to have one owner: a sovereign holding lives in FIVE stores, not the two this step
-    names, and **five places open-coded the walk over them** — the seed's reconciliation,
-    `holdings-view`'s shares, `O1`'s sovereign arm, `O11` and the UI's holder list. They had
-    already diverged: `holdings-view` missed the desks, `O11` missed the companies' treasuries,
-    the UI showed the institutions alone, and none had heard of the household books.
-    `engine/sovereign-register.ts` is that walk now and the five are projections of it, so moving
-    a store is a change in ONE function. §9.12's own lesson: separate the read first, change the
-    key second.)* A bank's `sovereignBondHoldingsByBond` and the central bank's
-    `sovereignHoldingsByBond` are `Record<billId, dollars>`: a value per line with NO QUANTITY.
-    `07c` and `07f` rewrite that field every week from the auction's fills — which are FACE — and
-    then `bill-accretion` multiplies it by the week's price ratio, so the book ends each week at
-    neither face nor `face × price`, and `O1` compares it to a ladder's face. It is the exact
-    defect `faceLocal` was on the register (§9.13-CREDIT row 5a: a value with no quantity beside
-    it), one store over, and it cannot be fixed inside either writer.
-    **The fix is that those two books ARE register books**, which is `the-register.md` A1.a's own
-    statement of its boundary — *"a company's treasury book, a bank's sovereign book and a
-    household's equity are held OUTSIDE this register"*. The household third of that sentence went
-    in §9.13-EQUITY and cost less than it looked: `holderIdOf` resolves the party, `registerBooks`
-    says who the holders are, and every walk that must reach them takes it. A bank's securities
-    book is the same move with more readers — `07c`, `07f`, the repo collateral, the capital
-    ratio, `O1` and `O11` — and it deletes `sovereignBondHoldingsLocal`, the derived scalar beside
-    it, as well. Expect it to move the numbers: a marked book is not a par book.
+    **13-BOOK — THE ONE BOOK: ONE ID SPACE, ONE WRITE PATH, AND TABLES THAT CAN BE CHECKED
+    AGAINST EACH OTHER** (user, 2026-09-05: *"I want a single source of truth for whatever is
+    possible to do so, at any cost"*, *"make it impossible for something to change an object or an
+    entity outside of some clear input/output layer and make it easy to check between the tables
+    if they are consistent (all issuers still exist, etc.), similar to how money already works"*,
+    and *"currency should live in the right place, it's a fundamental nature of an asset"*).
+    **This absorbs 13-OUTSIDE**, which was the same step seen through one asset class.
+
+    **THE MODEL ALREADY HAS ONE EXAMPLE OF WHAT IS BEING ASKED FOR, AND IT IS MONEY.** A balance
+    moves only through `pay()`; identity is a `PartyRef` and never an object reference;
+    `v2.accounts` is the only store; and a payment with no counterparty is a defect at its site
+    rather than a leak. Nothing else in the model has all four. This step is that discipline
+    applied to everything that can carry it.
+
+    **WHAT IS TRUE TODAY, MEASURED.**
+    · **Entities have four identities.** `PartyRef` (the ledger's), `v2.rowById` (a universal
+      id→row allocator, 28 sites), `Company.id` and `Company.ticker` — **744 `.ticker` references
+      and 159 `ByTicker` maps** — and `PartyRef` is itself inconsistent, keying COMPANY and the
+      three BANK kinds by TICKER and INSTITUTION by ID.
+    · **Instruments have no registry of instances.** Debt is `v2.tranches` (real, one writer);
+      **equity's issued side is `Company.sharesOutstanding`, a scalar with no instrument record**;
+      derivatives are `v2.contracts`; fund shares reuse the holder's ENTITY id as an instrument
+      id; goods are sub-unit ids. The KIND has four taxonomies, which `assets/index.ts` documents
+      and reconciles with a superset rather than replacing — a migration it defers in writing.
+    · **Positions live in eight stores** — the register plus the bank's `sovereignBondHoldingsByBond`
+      and `dealerDeskInventory`, the central bank's book, `Company.treasuryHoldings`, three derived
+      regional desk arrays, `etfShares` and `portfolioCompanyIds` — and `v2.lots` beside them.
+    · **One intern table holds every id space.** `internString` is shared, so an instrument id, a
+      region id, an entity id and the literal string `'CORP_BOND'` are refs into one array:
+      `H.instrRef`, `H.regionRef` and `H.typeRef` are the same integers. Only naming convention
+      prevents a collision.
+    · **CURRENCY IS DERIVED FROM A PROXY, AND SMUGGLED INTO A UNIT'S NAME.** `DebtTranche` has NO
+      currency field; every amount is `…Local` and every payment reaches for `currencyOf(region)`.
+      `UnitOfMeasure` is `PAR_USD | SHARES | GOODS_UNITS | CONTRACTS | USD` — **the quantity's
+      unit and the money are one label**, so a bond's par and its currency cannot be stated
+      separately and a cross-currency issue is inexpressible. §9.13c-DENOM gave an OBLIGATION and
+      a BOOK their currency; the INSTRUMENT never got one, which is the half that matters, because
+      it is the instrument that has the currency and everything else that borrows it.
+      (`sovereign-credit.md` A4.b is the same absence from the sovereign's side: *"in its own money
+      it can always create more; in someone else's it cannot"* — inexpressible while the money is
+      a function of the region.)
+
+    **THE SEVEN STORES, each the only place its fact lives.** ENTITY (who exists) · ASSET (what
+    KINDS exist, and what a unit of each is) · INSTRUMENT (what INSTANCES exist: kind, issuer,
+    currency, issued units — an INDEX that copies no quantity) · POSITION (who holds what, as LOTS
+    with a basis) · PRICE (`v2.prices`, done) · TERMS (a bond's schedule, a contract's legs — per
+    class, each already one writer) · ACCOUNT (`v2.accounts`, done).
+
+    **THE I/O LAYER, AND IT IS THE POINT.** Each store exposes a `Readonly` view and a ledger, and
+    the mutable handle is module-private — the shape `mutableHoldings` and `mutableTranches` already
+    have, made total. `structuredClone` on the host state must keep working, so these are plain
+    data with private accessors, never classes.
+
+    **THE CROSS-TABLE CHECK.** Referential integrity as a GATE, not an audit: every position names
+    an instrument that exists, every instrument names an issuer that exists, every position names a
+    holder that exists, every price names an instrument. It is a scan of four tables — cheap enough
+    to run in `check-hygiene.sh` beside the atlas gate, which means it runs on every commit rather
+    than waiting for step 38. `O3`, `O8` and `O11` become its consumers rather than its substitutes.
+
+    **THE SLICES, each its own commit, in this order.**
+    a. **BRAND THE STORE KEYS** — `EntityId`, `InstrumentId`, `Ticker` as branded strings, applied
+       to the KEYS (`rowById`, the intern maps, every `Map<…>` that keys by identity) and NOT to
+       the fields: branding `Company.ticker` lights up 744 mostly-legitimate sites, branding the
+       keys lights up exactly the conflations. Types erase, so this cannot move a number — which
+       is what makes it first and what makes it the measurement.
+    b. **SPLIT THE INTERN TABLE** — one ref space per id kind, so an instrument ref cannot be a
+       region ref by construction.
+    c. **THE ENTITY REGISTRY** — one store; `PartyRef` becomes a VIEW of it rather than a parallel
+       union; the ByTicker maps collapse; `O8`'s party arm widens from the derivatives book to
+       every party-keyed store.
+    d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
+       share and contract gets a row: kind, issuer, **currency**, issued units, and nothing else.
+       Terms stay in the class store, so the index copies no quantity and cannot drift.
+       `UnitOfMeasure` loses its money: `PAR` and `USD` become a unit and a currency, separately.
+       `sharesOutstanding` moves here, which gives `O2` a real issued side. **Closes step 13's
+       item 6** — the registry becomes what the adapter reads.
+    e. **COLLAPSE THE FOUR TAXONOMIES** into the index's kind.
+    f. **ONE POSITION BOOK, AS LOTS** — `v2.holdings` and `v2.lots` merge. A fungible asset sums
+       its lots, an identified one addresses them, and **every position gains a basis**, which
+       closes `the-register.md` D4 (❌ today, *no code at all*), unblocks the capital-gains base
+       (`the-treasury.md` C1) and lets `equity.md` E4.a — realised versus unrealised — close.
+       This is where 13-OUTSIDE lands: the bank, central-bank, treasury and desk books all become
+       rows, and `sovereign-register.ts` collapses from a five-store walk to a filter.
+    g. **PLANT AND HOUSING JOIN** — BLOCKED on step 26 deciding what a unit of plant is. Not a
+       cost exclusion: there is no unit to register until that decision is made.
+
+    **IT WILL MOVE THE NUMBERS AND SLICE (f) WILL MOVE THEM A LOT** — the merge changes iteration
+    order, so float identity goes, and the basis columns are new. That is expected (rule 11: the
+    harness is red by design and step 38 owns the measurement). What does NOT bend is the
+    sequencing: (f) is done WRITERS-FIRST — every writer maintains a lot chain while the chain's
+    sum still equals today's `units`, where nothing can break because the two numbers are equal,
+    and only then do readers take the basis. That discipline is what made §9.13-CREDIT row 5 and
+    the household books work and its absence is what parked `13 (part 3)`. Speed here is bought by
+    slicing, never by skipping it.
 
     **THE CONTINUOUS-VERSUS-DISCRETE CONVENTION** (step 12b, §9.12b): `engine/nelsonSiegel.ts`
     discounts CONTINUOUSLY (`exp(-z·t)`) where `domain/pricing/` compounds discretely — two answers
