@@ -83,7 +83,7 @@ export function auditSeed(state: GameState): AuditFinding[] {
   run('names', () => auditNames(state, 0));
   run('wires', () => auditWires(undefined, state, 0));
   // The seed is now week 1's "before". It opens its own ladders and register BY WIRE, in its own
-  // week-0 journal (`initialization.ts:openSeededMirrors`), so those wires are no longer sitting
+  // week-0 journal (`initialization.ts:openSeededBooks`), so those wires are no longer sitting
   // in week 1's journal waiting to explain a delta measured from nothing. Week 1 is therefore
   // asked the sharper question — did WEEK 1's wires explain WEEK 1's movement — and the seed's
   // own wires are asked of the seed.

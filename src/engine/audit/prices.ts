@@ -14,7 +14,7 @@ import { ensureV2, typeOf } from '../../engine2/world';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { isTrancheKind } from '../../domain/assets';
 import { trancheClearedPricePerFace, issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../credit-price';
-import { materializeGovLadder, TR_SUBORDINATED } from '../../engine2/tranches';
+import { materializeGovLadder, ladderRowsOf, TR_SUBORDINATED, TR_CP, TR_FACILITY } from '../../engine2/tranches';
 
 import { STANDARD_CORP_TENOR_YEARS } from '../../domain/primary-market';
 import { CDS_TENOR_WEEKS } from '../../domain/derivatives/classes/cds';
@@ -54,10 +54,13 @@ function p1(state: GameState, week: number): AuditFinding[] {
     // cleared prices — the same maturity as the bond leg above, which is what makes the two
     // comparable at all.
     const loan = issuerSpreadAtOnCurve(v2, reg, c.id, week, P1_COMPARISON_TENOR_YEARS, IS_LOAN_ROW)?.spreadBps;
-    const cp = (c.debtTranches ?? []).find((t) => t.isCommercialPaper);
-    const cpSpread = cp ? ((cp.couponRate ?? 0) - policy) * 1e4 : undefined;
-    const facility = (c.debtTranches ?? []).find((t) => t.isBankFacility);
-    const facSpread = facility?.floatingMarginBps;
+    // §3.13-BOOK d1b: the ladder's rows, not the array.
+    const rows = ladderRowsOf(v2, c.id);
+    const TS = v2.tranches;
+    const cp = rows.find((r) => (TS.flags[r] & TR_CP) !== 0);
+    const cpSpread = cp !== undefined ? ((Number.isNaN(TS.couponRate[cp]) ? 0 : TS.couponRate[cp]) - policy) * 1e4 : undefined;
+    const facility = rows.find((r) => (TS.flags[r] & TR_FACILITY) !== 0);
+    const facSpread = facility !== undefined && !Number.isNaN(TS.floatingMarginBps[facility]) ? TS.floatingMarginBps[facility] : undefined;
     const subSpread = at(1);
     n++;
     const bad: string[] = [];

@@ -22,7 +22,7 @@
  */
 
 import { ensureV2, regionOf, typeOf } from '../../../engine2/world';
-import { ladderRowsOf, ensureLaddersSynced, facilityRowsOf, materializeGovLadder } from '../../../engine2/tranches';
+import { ladderRowsOf, facilityRowsOf, materializeGovLadder } from '../../../engine2/tranches';
 import { bookHeadOf, materializeBook } from '../../../engine2/holdings';
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../domain/assets';
@@ -60,7 +60,7 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
   let corp = 0, sov = 0, loan = 0, equity = 0, cash = 0, lent = 0, liabilities = 0;
 
   // The rows ARE the register; the flattened view the UI reads is materialized from them here.
-  // (The seed calls this after `openSeededMirrors` has wired every book; the UI, after a week.)
+  // (The seed calls this after `openSeededBooks` has wired every book; the UI, after a week.)
   const v2a = ensureV2(state);
   state.institutionalEntities.forEach((e) => {
     if (e.region !== regionId || e.isDefaulted) return;
@@ -244,11 +244,9 @@ const ZERO_OWNERSHIP = (): MeasuredOwnership =>
 
 /** One pass over every book; a holding contributes to its ISSUER's region, not its holder's. */
 export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, MeasuredOwnershipByClass> {
-  // Callable outside the weekly step (harness reports), where the week-start catch-up has not
-  // run yet — the ladders' idempotent sync makes their rows trustworthy either way; the
-  // register's rows are the register (§3.13-BOOK d1) and need no catch-up.
+  // Callable outside the weekly step (harness reports, the seed after `openSeededBooks`): the
+  // rows are the ladders and the register (§3.13-BOOK d1, d1b), so there is nothing to catch up.
   const v2hv = ensureV2(state);
-  ensureLaddersSynced(v2hv, state.companies);
   const out = {} as Record<RegionId, MeasuredOwnershipByClass>;
   const regionIds = Object.keys(state.regions) as RegionId[];
   regionIds.forEach((r) => {

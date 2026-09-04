@@ -332,11 +332,12 @@ let seedV2: import('../../engine2/world').V2World;
  * had no row — which is what the week-0 audit found the first time it was allowed to look.
  *
  * The catch-up sits where it does for a stated reason: it opens the ladders BY WIRE, and a wire
- * needs a live journal. That reason is real and it is why the naive fix is wrong — calling
- * `ensureLaddersSynced` here marks every firm `synced`, which turns `core.ts`'s `seedLadder` into
- * a no-op and leaves the ladders standing with no wires behind them. Measured, that is exactly
- * what happens: W3 "wires reproduce the ladders" fails at week 1 for the full 260.74B of USA
- * CORP_BOND. The mirror is not the point; the WIRE is the point.
+ * needs a live journal. That reason is real and it is why the naive fix was wrong — a bare
+ * catch-up here (the mirror's `ensureLaddersSynced`, since deleted by §3.13-BOOK d1b) marked
+ * every firm opened, which turned `core.ts`'s `seedLadder` into a no-op and left the ladders
+ * standing with no wires behind them. Measured, that is exactly what happened: W3 "wires
+ * reproduce the ladders" failed at week 1 for the full 260.74B of USA CORP_BOND. The WIRE is the
+ * point.
  *
  * So the seed opens a journal of its own, numbered week 0, and does the opening itself. The
  * catch-up in `core.ts` stays exactly as it is — it is guarded on `synced` and is now a no-op for
@@ -346,7 +347,7 @@ let seedV2: import('../../engine2/world').V2World;
 /** The treasury's issuer id in the tranche store — one per region, stable for the run. It is a
  *  GOVERNMENT party (`TrancheIssuer.kind`), so its wires name the treasury and not a company. */
 
-function openSeededMirrors(state: GameState): void {
+function openSeededBooks(state: GameState): void {
   const v2 = ensureV2(state);
   // Nothing is active before the first week; the guard is here so this cannot silently steal a
   // journal if the seed is ever run from inside one.
@@ -422,7 +423,7 @@ function openSeededMirrors(state: GameState): void {
  * have to exist first); this replaces them with what the resulting real books actually hold —
  * notably including the HC private tier, which the share-times-outstanding seeds never saw.
  *
- * §3.13-BOOK d1: this runs AFTER `openSeededMirrors`, on the state's own world. It used to run
+ * §3.13-BOOK d1: this runs AFTER `openSeededBooks`, on the state's own world. It used to run
  * inside `buildSeededGameState` on a throwaway host with no world at all, where the mirror's
  * catch-up copied the object arrays into an empty store so the view had rows to read — and every
  * account was absent there, so the sector's opening CASH projected as zero. The mirror is gone;
@@ -452,7 +453,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   drainSeedRings(state);
   // §5-BRAINS — every deciding entity is born with its two preference primitives.
   ensureManagements(state.companies, state.institutionalEntities ?? [], 0);
-  openSeededMirrors(state);
+  openSeededBooks(state);
   projectSeededSectorViews(state);
   // §5-STRUCT step 6 — OFF unless asked for. Burn-in hands back a world the ENGINE produced rather
   // than one this function asserted, which is the end state for every §7.4 defect. It changes every
@@ -531,7 +532,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // The carves. Debt: serviceable ladders only (see HC1's finding on the segment debt
         // primitive). Revenue, employment and capex: exactly what the named tier now carries.
         const namedRevenueLocal = segFirms.reduce((a, f) => a + f.annualRevenue, 0);
-        // §3.13-READ C1: the object, deliberately — pre-`openSeededMirrors`, it is the source.
+        // §3.13-READ C1: the object, deliberately — pre-`openSeededBooks`, it is the source.
         seg.debtLocal = Math.round(Math.max(0, seg.debtLocal - segFirms.reduce((a, f) => a + totalDebtOf(f), 0)));
         seg.employment = Math.max(1000, Math.round(seg.employment - segFirms.reduce((a, f) => a + f.employeeCount, 0)));
         seg.annualRevenueLocal = Math.max(1, Math.round(seg.annualRevenueLocal - namedRevenueLocal));
@@ -1482,7 +1483,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // valuation from week 1's. A bare `8 *` here and in the weekly mark was one company valued
     // two ways, and it made every seeded holding's entry basis a number nothing had cleared.
     // §3.13-READ C1: THE OBJECT, DELIBERATELY. This runs inside `buildSeededGameState`, before
-    // `openSeededMirrors` opens the tranche store, so `debtTranches` is not a mirror here — it is
+    // `openSeededBooks` opens the tranche store, so `debtTranches` is not a mirror here — it is
     // what the generator wrote, and what the store is about to be filled FROM.
     const seedEvMultiple = publicComparableEvMultiple(totalDebtOf, regionId, companies);
     const stakeValue = (f: Company) => Math.max(0, seedEvMultiple * f.ebitda - totalDebtOf(f)) * 0.75;

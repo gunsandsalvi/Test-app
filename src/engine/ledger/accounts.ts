@@ -200,7 +200,7 @@ export function openingCashOf(comp: object): number { return openingCashStash.ge
  * array beside the one tranche store, written by three stages a week and read by fifteen callers.
  * The store is the ladder now. What is left is the SEED's need to build a ladder before the store
  * exists to hold it, which is the same need `stashOpeningCash` answers for an account — so it
- * rides the same kind of stash, and dies at `openSeededMirrors` when the rows are issued. Nothing
+ * rides the same kind of stash, and dies at `openSeededBooks` when the rows are issued. Nothing
  * in the weekly loop can read it, because a stash is not on the state.
  */
 const seedGovLadderStash = new WeakMap<object, GovDebtTranche[]>();

@@ -906,7 +906,7 @@ export const marketCapOf = (c: { stockPrice: number; sharesOutstanding: number }
 /**
  * Total debt off the OBJECT ARRAY. §3.13-READ C1 left this with exactly three callers, all in the
  * seed, and they are the only correct ones: `buildSeededGameState` runs before
- * `openSeededMirrors`, so the tranche store has no rows yet and `debtTranches` is what the
+ * `openSeededBooks`, so the tranche store has no rows yet and `debtTranches` is what the
  * generator wrote rather than a copy of anything.
  *
  * Everywhere else, read `ladderTotalLocal(v2, id)`. `core.ts:450` rebuilds this array from the

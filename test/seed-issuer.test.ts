@@ -20,10 +20,25 @@ import { ensureV2 } from '../src/engine2/world';
 import { buildEntityIndex } from '../src/engine/ledger/entity-index';
 import type { Company } from '../src/domain/company';
 
-import { issuerIdOf, syncLadderRows } from '../src/engine2/tranches';
+import { issuerIdOf } from '../src/engine2/tranches';
+import { seedLadder } from '../src/engine/ledger/tranche-ledger';
+import { newWireJournal, setActiveWireJournal } from '../src/engine/ledger/wire';
 import { issuerOfHoldingRow } from '../src/engine/ledger/holdings-ledger';
 import type { ItemizedHolding } from '../src/domain/banking';
 import { asEntityId, asInstrumentId, asTicker } from '../src/domain/ids';
+
+/** One firm's one-rung ladder, opened by wire inside a throwaway week-0 journal. */
+function openLadder(v2: ReturnType<typeof ensureV2>, id: ReturnType<typeof corporateTrancheId>): void {
+  setActiveWireJournal(newWireJournal(1, 0));
+  try {
+    seedLadder(v2, { id: asEntityId('USA_ACME'), ticker: asTicker('ACME'), region: 'USA' }, [{
+      id, principalLocal: 1_000_000, rateType: 'FIXED', couponRate: 0.05,
+      originationWeek: 0, maturityWeek: 260, seniority: 'SENIOR',
+    }]);
+  } finally {
+    setActiveWireJournal(undefined);
+  }
+}
 
 test('a tranche id and its issuer company id are never the same string', () => {
   // The two grammars that were being compared. If these ever coincide the defect hides again.
@@ -33,12 +48,9 @@ test('a tranche id and its issuer company id are never the same string', () => {
 test('the issuer of a corporate tranche is its company, not the tranche itself', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
   const id = corporateTrancheId(asTicker('ACME'), 1);
-  // The mirror rather than the ledger: `issueTranche` wires, and a wire needs a journal. What is
-  // under test is the issuer READ, which reads the rows either way puts there.
-  syncLadderRows(v2, asEntityId('USA_ACME'), [{
-    id, principalLocal: 1_000_000, rateType: 'FIXED', couponRate: 0.05,
-    originationWeek: 0, maturityWeek: 260, seniority: 'SENIOR',
-  }]);
+  // §3.13-BOOK d1b: the mirror is gone, so the ladder opens the one way it can — by wire, in a
+  // journal of its own. What is under test is the issuer READ off the rows the wire put there.
+  openLadder(v2, id);
 
   // What the seed asks. Before the fix this returned the tranche id, so the seed booked the
   // holding against an institution named `ACME-T1`.
@@ -55,10 +67,7 @@ test('an instrument that is not a tranche is its own issuer', () => {
 test('a seeded CORPORATE BOND row is issued by its company, not by a party that does not exist', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
   const id = corporateTrancheId(asTicker('ACME'), 1);
-  syncLadderRows(v2, asEntityId('USA_ACME'), [{
-    id, principalLocal: 1_000_000, rateType: 'FIXED', couponRate: 0.05,
-    originationWeek: 0, maturityWeek: 260, seniority: 'SENIOR',
-  }]);
+  openLadder(v2, id);
   // §3.13-BOOK (c-then-2): `issuerOfHoldingRow` takes the ENTITY INDEX now, not a `Map<id, ticker>`
   // mirror of it — and since (c-then-3b) the party it returns names the issuer by ENTITY id, so
   // a one-firm index is all this needs and the assertion below is on the id, not the ticker.

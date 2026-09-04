@@ -147,7 +147,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 a named entity with a balance sheet | `src/domain/company.ts:Company` | ✅ |
-| A2 a capital structure and a reason for it | `src/domain/company.ts:DebtTranche` | ✅ |
+| A2 a capital structure and a reason for it | `src/engine2/tranches.ts:TrancheStore` · `src/domain/company.ts:DebtTranche` | ✅ |
 | A2.a a mix of kinds and seniorities, each a real instrument | `src/engine2/tranches.ts:TR_SUBORDINATED` | ⚠️ |
 | A2.b a target or constraint it manages towards | `src/engine/simulation/stages/corporate-financing.ts:decideCorporateFinancing` | ✅ |
 | A2.c VERIFY the structure is an outcome, never assigned | — | ❌ |
@@ -405,6 +405,15 @@ measured there at 67 tight and 139 wide prints over the 16-week reference.
 Nothing reads the resulting capital structure against `decideCorporateFinancing`'s inputs, so the
 claim that the structure is an outcome of the CFO's constraint meeting the market's price is
 untested. **A measurement, for §3 step 38.**
+
+### ✅ A2 — CLOSED: THE LADDER IS ONE REPRESENTATION, THE ROWS
+
+`engine2/tranches.ts` called itself a synced mirror of `Company.debtTranches` — two ladders per
+firm, kept in step by `syncLadderRows` and compared behind `TRANCHE_SYNC_CHECK=1`. §9.13-BOOK d1b
+deleted the mirror, the week after d1 deleted the register's: the rows are the ladder, the seed
+and every birth open a ladder by wire (`seedLadder`), the array is the week-end view `core.ts`
+materialises and nothing in a week reads, and W3 tests the rows against the journal rather than a
+copy against its source.
 
 ### PRESENT AND NOT WORTH RE-CHECKING
 

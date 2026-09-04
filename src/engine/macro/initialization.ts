@@ -722,7 +722,7 @@ function buildRegion(regionId: RegionId): Region {
   }
 
   // §3.13-SOV row 2: the ladder the seed just built is the STORE's, not a field on the region.
-  // It rides a stash until `openSeededMirrors` issues its rows and then it is gone.
+  // It rides a stash until `openSeededBooks` issues its rows and then it is gone.
   stashSeedGovLadder(region, govDebtTranches);
   return region;
 }

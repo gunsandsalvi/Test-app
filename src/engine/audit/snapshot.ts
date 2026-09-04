@@ -11,11 +11,10 @@ import { loanBooksOf, spendableDepositsOf } from '../../domain/banking';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
 import { centralBankAssetsLocal } from '../../domain/central-bank';
 import { banksOf } from '../../domain/company';
-import { trancheKindOf } from '../../domain/assets';
 import { V2World, ensureV2 } from '../../engine2/world';
 import { inputUnitsHeld } from '../../engine2/lots';
 import { SUBUNITS } from '../../engine2/state';
-import { facilityBookOf } from '../../engine2/tranches';
+import { facilityBookOf, ladderRowsOf, trancheKindOfRow } from '../../engine2/tranches';
 import { materializeBook } from '../../engine2/holdings';
 import { heldInShares } from '../../domain/assets';
 import { ASSET_KINDS } from '../ledger/wire';
@@ -62,20 +61,20 @@ export function snapshotOf(state: GameState): AuditSnapshot {
 
 /** §5-WIRES W3: every firm's ladder, summed per region and kind of paper — what the wires must reproduce. */
 /**
- * §3.13-READ C5 — THE OBJECT ARRAY, DELIBERATELY, AND THE ONE PLACE THAT IS TRUE.
- *
- * Every other audit walk moved to the tranche store; this one must not. W3 asks whether the
- * LADDER MIRROR's change between two weeks is exactly the issuers' wires. Reading the store here
- * would compare the store against the store's own wires and pass by construction — a check that
- * cannot fail is not a check. `Company.debtTranches` is the thing under test, and the audit runs
- * at the close, after `core.ts:450` has rebuilt it, which is precisely when it is comparable.
+ * §3.13-BOOK d1b — THE ROWS. §3.13-READ C5 kept this one walk on `Company.debtTranches` while the
+ * store was a mirror of it, on the argument that the ARRAY was the thing under test. The mirror is
+ * gone: the array is materialised from the rows at the close and carries nothing of its own, so
+ * the two reads were one read. What W3 tests is the store's face against the journal's wires —
+ * two separate records — and a ledger operation that moved a row without writing its wire fails
+ * it exactly as before.
  */
 export function ladderUSDByKey(state: GameState): Record<string, number> {
   const out: Record<string, number> = {};
+  const v2 = ensureV2(state);
   for (const c of state.companies) {
-    for (const t of c.debtTranches ?? []) {
-      const key = `${c.region}|${trancheKindOf(t)}`;
-      out[key] = (out[key] ?? 0) + t.principalLocal;
+    for (const r of ladderRowsOf(v2, c.id)) {
+      const key = `${c.region}|${trancheKindOfRow(v2, r)}`;
+      out[key] = (out[key] ?? 0) + v2.tranches.principalLocal[r];
     }
   }
   return out;
@@ -84,10 +83,11 @@ export function ladderUSDByKey(state: GameState): Record<string, number> {
 /** LADDER_TRACE=1: every firm's ladder per `ticker|kind` — the per-issuer side of W3's trace. */
 export function ladderUSDByTicker(state: GameState): Record<string, number> {
   const out: Record<string, number> = {};
+  const v2 = ensureV2(state);
   for (const c of state.companies) {
-    for (const t of c.debtTranches ?? []) {
-      const key = `${c.ticker}|${trancheKindOf(t)}`;
-      out[key] = (out[key] ?? 0) + t.principalLocal;
+    for (const r of ladderRowsOf(v2, c.id)) {
+      const key = `${c.ticker}|${trancheKindOfRow(v2, r)}`;
+      out[key] = (out[key] ?? 0) + v2.tranches.principalLocal[r];
     }
   }
   return out;

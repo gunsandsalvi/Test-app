@@ -69,7 +69,7 @@ import { runTradeSettlementStage } from './stages/trade-settlement';
 // Side effect only: registers the (Node-only, env-gated) clearing worker pool with the engine.
 import './stages/clearing-worker-pool';
 import { ensureV2, typeRefOf } from '../../engine2/world';
-import { assertLaddersInSync, materializeLadder, facilityBookOf, ensureLaddersSynced } from '../../engine2/tranches';
+import { materializeLadder, facilityBookOf } from '../../engine2/tranches';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
 import { buildEntityIndex } from '../ledger/entity-index';
@@ -84,7 +84,6 @@ import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
 import { distributeMoneyFundIncome } from './stages/money-market-fund';
 import { REGION_IDS } from '../../domain/geography';
 import { equityIssuerId } from '../../domain/instrument-keys';
-import type { Ticker } from '../../domain/ids';
 
 export { computeOccupationDemand } from './stages/shared-helpers';
 
@@ -148,7 +147,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // The week's wire journal is active from the first stage to the last write-back.
   setActiveWireJournal(baseCtx.wireJournal);
   {
-    // THE LADDERS' CATCH-UP, INSIDE THE JOURNAL. Any firm not yet mirrored — the seed, and every
+    // THE LADDERS' CATCH-UP, INSIDE THE JOURNAL. Any firm whose ladder is not yet open — every
     // birth path — opens its ladder here, by wire, which is why this cannot run before the
     // journal is live (it used to, and that is precisely why the opening ladders had none).
     // It must still come before any stage: the register's rows name tranches and every reader
@@ -158,7 +157,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     for (const c of state.companies) {
       if (!v2.tranches.synced.has(c.id)) seedLadder(v2, { id: c.id, ticker: c.ticker, region: c.region }, c.debtTranches);
     }
-    ensureLaddersSynced(v2, state.companies);
     // The REGISTER opens the same way. A holding's issuer is the party its instrument names: a
     // firm for equity and corporate paper (the id IS the company's), the treasury for a sovereign
     // tranche, the fund itself for its own shares.
@@ -187,24 +185,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       return result;
     } finally {
       if (trace) { trace.end(); ctx = baseCtx; }
-      if (process.env.ALIAS_TRACE === '1' && stage === '01-macro-feedback') {
-        const scan = (label: string, list: { ticker: Ticker; id: string; debtTranches?: unknown }[]): void => {
-          const seen = new Map<object, { ticker: Ticker; id: string }>();
-          let pairs = 0; let cloneFam = 0; const ex: string[] = [];
-          for (const c of list) {
-            if (!c.debtTranches) continue;
-            const prior = seen.get(c.debtTranches as object);
-            if (prior) {
-              pairs++;
-              if (c.id.startsWith(prior.id) || prior.id.startsWith(c.id)) cloneFam++;
-              if (ex.length < 3) ex.push(`${prior.ticker}(${prior.id})~${c.ticker}(${c.id})`);
-            } else seen.set(c.debtTranches as object, { ticker: c.ticker, id: c.id });
-          }
-          console.log(`[alias] w${baseCtx.nextWeek} ${label}: ${pairs} pairs (${cloneFam} clone-family) ${ex.join(' | ')}`);
-        };
-        scan('updatedCompanies', baseCtx.updatedCompanies as never);
-        scan('state.companies', state.companies as never);
-      }
       idTrace?.afterStage(stage, state, baseCtx);
       cbTrace?.afterStage(stage, state, baseCtx);
       // MINT_STAGE_TRACE=<companyId> — read-only: prints the stage after which the named
@@ -452,9 +432,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('news-derivation', () => runNewsDerivationStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
   {
-    // §7.311 WRITER FLIP — the rows are the ladder's authority; the object arrays are a view
-    // materialized once here, for the UI, STATE_DUMP and the seed-time readers. One linear pass
-    // replaces the per-writer syncs and every mid-week object rebuild.
+    // §7.311 WRITER FLIP — the rows ARE the ladder; the object arrays are a view materialized
+    // once here, for the UI, STATE_DUMP and the seed-time readers, and nothing in a week reads
+    // them (§3.13-BOOK d1b).
     const v2 = ensureV2(state);
     for (const c of nextState.companies) c.debtTranches = materializeLadder(v2, c.id);
     // §7.313 flip, holdings — same pattern: the rows ARE the register; the object books are a
@@ -468,7 +448,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     }
     clearDirtyBooks(v2);
   }
-  if (process.env.TRANCHE_SYNC_CHECK === '1') assertLaddersInSync(ensureV2(state), nextState.companies);
   idTrace?.report(baseCtx.nextWeek);
   cbTrace?.report(baseCtx.nextWeek);
 

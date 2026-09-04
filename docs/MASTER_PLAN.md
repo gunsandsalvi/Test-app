@@ -466,9 +466,9 @@ written from here):
     and d1 in §9.** No file outside `engine/ledger/` and `engine2/` names a mutable handle, and
     `check-hygiene.sh` fails the first that does; the rows are the register, `entity.itemizedHoldings`
     is the week-end view `core.ts` materialises and nothing in a week reads, and the mirror's sync
-    machinery is deleted. What is LEFT on the enforcement side is the write that does not resolve
-    its parties (d2) and the books outside the register (d3) — and the LADDER still has the mirror
-    the register just lost (d1b).
+    machinery is deleted, on the register (d1) and the ladder (d1b) alike. What is LEFT on the
+    enforcement side is the write that does not resolve its parties (d2) and the books outside the
+    register (d3).
 
     **THE CROSS-TABLE CHECK IS AT THE WRITE, NOT IN A GATE** (reviewed 2026-09-04: a scan of four
     tables needs a STATE, so "a gate in `check-hygiene.sh`" is either a run — rule 11 forbids it —
@@ -509,14 +509,6 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d1b. **THE LADDER MIRROR DIES TOO** (inserted 2026-09-04 at d1: the same defect on the tranche
-        store, found while deleting the register's). `engine2/tranches.ts` still carries
-        `syncLadderRows`, `ensureLaddersSynced` and `assertLaddersInSync` / `TRANCHE_SYNC_CHECK`,
-        `holdings-view.ts:measuredOwnershipAllRegions` still catches ladders up from the
-        `c.debtTranches` arrays, and `core.ts:462` materialises the arrays back. Same shape as d1:
-        `seedLadder` claims the chain through `relinkLadder`, the catch-up and the check go, every
-        in-week reader of `debtTranches` reads the store, and `initialization.ts:336`'s note about
-        the seed marking ladders synced becomes moot. Byte-identical in state.
     d2. **THE WRITE THROWS.** `wire()` and every ledger operation resolve `from`, `to`, the holder
         and the issuer through `entity-index.ts` and the instrument through its store, and
         `defect()` on a miss. Needs only an *instrument-exists* resolver over the tranche store,
@@ -1634,7 +1626,7 @@ Dump/diff: `STATE_DUMP=<f> STATE_DUMP_WEEK=<n>`, then `DIFF_STATE=a.json,b.json 
 
 **Instruments, env-gated.** Adding one costs nothing now and step 38's runs carry it free, so a
 step that needs evidence later leaves an instrument behind instead of a run: `FP`, `STAGE_TRACE`,
-`BANK_IDENTITY_TRACE`, `COMPANY_STORE_AUDIT`, `TRANCHE_SYNC_CHECK`,
+`BANK_IDENTITY_TRACE`, `COMPANY_STORE_AUDIT`,
 `OWN_TRACE`, `W2_TRACE`, `SPLIT_TRACE`, `WIRE_TRACE`, `DESK_TRACE`, `PNL_TRACE`, `DEFAULT_TRACE`,
 `LABOR_CAUSES`, `SEED_BURN_IN`, `COUPON_TRACE`, `SOV_TRACE`, `BILL_TRACE`.
 
@@ -1738,6 +1730,23 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d1b — THE LADDER MIRROR DIES TOO.** The same deletion on the tranche store, the week
+after d1 found it there: `syncLadderRows`, `ensureLaddersSynced`, `assertLaddersInSync` and
+`TRANCHE_SYNC_CHECK` are gone; `seedLadder` claims the chain through `tranches.ts:clearLadder` and
+issues each rung by wire as before; `comp.debtTranches` is the week-end view `core.ts` materialises
+and nothing in a week reads. Readers moved to the rows: `audit/names` N1's tranche-id test,
+`audit/prices` P1's paper and facility spreads, and W3's two ladder sums (`snapshot.ts`) — which
+§3.13-READ C5 had kept on the array on the argument that the array was the thing under test; that
+was the mirror's argument, and with the array materialised from the rows the two reads were one
+read, so W3 now tests the rows against the journal, two separate records, as W5 does. A newborn's
+facility (`pe-lifecycle.ts:fundNewbornDebt`) opens its ladder in the store — empty, then the
+facility by wire — instead of writing the array beside the wire, and the birth's opening-cash
+carve reads the ladder off the store. `ALIAS_TRACE`, which checked whether two firms shared one
+`debtTranches` array, is deleted: a per-firm view materialised each close cannot alias.
+`openSeededMirrors` is `openSeededBooks` — it opens ladders and books by wire and mirrors nothing.
+`test/seed-issuer.test.ts` opened its one-rung ladder through the mirror and now opens it by wire
+in a week-0 journal of its own. Byte-identical in state. Gates green; no run.
 
 **13-BOOK d1 — THE MIRROR DIES.** The register is one representation: the rows. `engine2/holdings.ts`
 no longer calls itself a mirror — `syncBookRows`, `ensureBooksSynced`, `assertBooksInSync` and

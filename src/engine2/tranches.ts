@@ -1,13 +1,14 @@
 /**
- * ENGINE V2 — THE DEBT LADDER AS PERSISTENT ROWS (the §7.307 tranche authority flip, staged).
+ * ENGINE V2 — THE DEBT LADDER AS PERSISTENT ROWS.
  *
- * Stage 1 of the flip (§7.310): the store is a SYNCED MIRROR — `comp.debtTranches` stays
- * authoritative, and every writer that rebuilds or appends to a ladder calls `syncLadderRows`
- * so the rows are always fresh. Readers then move onto rows file by file (each FP-gated), and
- * only when every reader is on rows do the writers convert to row operations and the object
- * arrays die. `TRANCHE_SYNC_CHECK=1` compares the canonical projection of every firm's rows
- * against its object ladder at each week end and throws on the first mismatch — a missed
- * writer is found empirically, not by audit (§7.221).
+ * The rows ARE the ladder. Every rung a firm or a treasury owes is a row on its chain here, put
+ * there by a wire through `engine/ledger/tranche-ledger.ts` — the seed's opening ladders included
+ * (`seedLadder`), so a ladder is the replay of its wires from week 0. `comp.debtTranches` is a
+ * VIEW: `core.ts` materialises every ladder once at the week end, for the UI, the state dump and
+ * the seed-time readers, and nothing in a week reads or writes it. §3.13-BOOK d1b deleted the
+ * mirror this file used to be (`syncLadderRows`, `ensureLaddersSynced`, `TRANCHE_SYNC_CHECK`),
+ * the week after d1 deleted the register's: there is no second representation left to keep in
+ * step.
  *
  * Same plain-data rules as the lot and contract tables (world.ts): typed arrays + one side
  * array of plain objects, `structuredClone`-safe, chains per firm row in ladder order.
@@ -57,7 +58,8 @@ export interface TrancheStore {
   /** Per firm row: chain head/tail, -1 = empty (grown as firm rows appear). */
   head: Int32Array;
   tail: Int32Array;
-  /** Firms whose ladder has ever been synced — the week-start catch-up uses it to spot births. */
+  /** Issuers whose ladder has been OPENED — by the seed's wires, or by the week-start catch-up
+   *  that opens a newborn's the same way. The catch-up spots births by their absence. */
   synced: Set<string>;
   /** §5-FINALIZATION 13b: the live row of a tranche id (interned) — an instrument resolves to its
    *  issuer in one read (`issuerIdOf`). Maintained by the row writer and the row freer only. */
@@ -183,16 +185,12 @@ function writeRow(S: TrancheStore, r: number, v2: V2World, t: DebtTranche): void
   S.callProt[r] = t.callProtection;
 }
 
-/**
- * Mirror one firm's ladder into rows, replacing whatever the chain held. Called by every
- * writer after it rebuilds or appends to `comp.debtTranches`; O(ladder) with row recycling.
- */
-export function syncLadderRows(v2: V2World, companyId: string, ladder: DebtTranche[] | undefined): void {
+/** Claim the issuer's chain EMPTY and mark the ladder opened — the ledger's `seedLadder` then
+ *  issues each rung by wire. Ledger-internal. */
+export function clearLadder(v2: V2World, companyId: string): void {
   const S = mutableTranches(v2);
   S.synced.add(companyId);
-  const firmRow = rowOf(v2, companyId);
-  const slot = slotFor(S, firmRow);
-  // free the old chain
+  const slot = slotFor(S, rowOf(v2, companyId));
   for (let r = S.head[slot]; r >= 0; ) {
     const nxt = S.next[r];
     freeRow(S, r, v2);
@@ -200,74 +198,6 @@ export function syncLadderRows(v2: V2World, companyId: string, ladder: DebtTranc
   }
   S.head[slot] = -1;
   S.tail[slot] = -1;
-  if (!ladder || ladder.length === 0) return;
-  let prev = -1;
-  for (let i = 0; i < ladder.length; i++) {
-    const r = allocRow(S);
-    writeRow(S, r, v2, ladder[i]);
-    S.issuerRef[r] = internEntity(v2, companyId);
-    S.issuerRefByIdRef.set(S.idRef[r], S.issuerRef[r]);
-    S.wireRef[r] = -1;
-    S.next[r] = -1;
-    if (prev >= 0) S.next[prev] = r; else S.head[slot] = r;
-    prev = r;
-  }
-  S.tail[slot] = prev;
-}
-
-/** The canonical projection both representations reduce to for the sync check. */
-function canonical(t: DebtTranche): string {
-  return [
-    t.principalLocal, t.rateType === 'FLOATING' ? 1 : 0,
-    t.couponRate ?? 'x', t.floatingMarginBps ?? 'x',
-    t.originationWeek, t.maturityWeek,
-    t.seniority === 'SUBORDINATED' ? 1 : 0,
-    t.isCommercialPaper ? 1 : 0, t.isBankFacility ? 1 : 0,
-    t.facilityBankId ?? 'x', t.id,
-    t.paymentsPerYear ?? 'x', t.paymentAnchorWeek ?? 'x',
-    t._refinanceInitiated ? 1 : 0,
-    t.callProtection ? JSON.stringify(t.callProtection) : 'x',
-  ].join('|');
-}
-
-function canonicalRow(S: TrancheStore, v2: V2World, r: number): string {
-  const f = S.flags[r];
-  return [
-    S.principalLocal[r], f & TR_FLOATING ? 1 : 0,
-    Number.isNaN(S.couponRate[r]) ? 'x' : S.couponRate[r],
-    Number.isNaN(S.floatingMarginBps[r]) ? 'x' : S.floatingMarginBps[r],
-    S.originationWeek[r], S.maturityWeek[r],
-    f & TR_SUBORDINATED ? 1 : 0,
-    f & TR_CP ? 1 : 0, f & TR_FACILITY ? 1 : 0,
-    S.bankRef[r] < 0 ? 'x' : entityOf(v2, S.bankRef[r]), instrumentOf(v2, S.idRef[r]),
-    Number.isNaN(S.paymentsPerYear[r]) ? 'x' : S.paymentsPerYear[r],
-    Number.isNaN(S.paymentAnchorWeek[r]) ? 'x' : S.paymentAnchorWeek[r],
-    f & TR_REFI_INITIATED ? 1 : 0,
-    S.callProt[r] ? JSON.stringify(S.callProt[r]) : 'x',
-  ].join('|');
-}
-
-/** TRANCHE_SYNC_CHECK=1 — throw on the first firm whose rows disagree with its object ladder. */
-export function assertLaddersInSync(v2: V2World, companies: { id: string; ticker: string; debtTranches?: DebtTranche[] }[]): void {
-  const S = mutableTranches(v2);
-  for (const comp of companies) {
-    const ladder = comp.debtTranches ?? [];
-    const firmRow = v2.rowById.get(comp.id);
-    const rows: number[] = [];
-    if (firmRow !== undefined && firmRow < S.head.length) {
-      for (let r = S.head[firmRow]; r >= 0; r = S.next[r]) rows.push(r);
-    }
-    if (rows.length !== ladder.length) {
-      throw new Error(`TRANCHE SYNC: ${comp.ticker} has ${ladder.length} object tranches but ${rows.length} rows — a writer is not syncing`);
-    }
-    for (let i = 0; i < ladder.length; i++) {
-      const a = canonical(ladder[i]);
-      const b = canonicalRow(S, v2, rows[i]);
-      if (a !== b) {
-        throw new Error(`TRANCHE SYNC: ${comp.ticker}[${i}] diverges\n  obj: ${a}\n  row: ${b}`);
-      }
-    }
-  }
 }
 
 /** The firm's ladder as row indices, in ladder order; empty when the firm has no rows. */
@@ -278,14 +208,6 @@ export function ladderRowsOf(v2: V2World, companyId: string): number[] {
   if (firmRow === undefined || firmRow >= S.head.length) return rows;
   for (let r = S.head[firmRow]; r >= 0; r = S.next[r]) rows.push(r);
   return rows;
-}
-
-/** Idempotent catch-up for entry points that can run OUTSIDE the weekly step (UI/harness reads):
- *  mirrors any firm not yet synced. The weekly step's own catch-up makes this a no-op in-week. */
-export function ensureLaddersSynced(v2: V2World, companies: { id: string; debtTranches?: DebtTranche[] }[]): void {
-  for (const c of companies) {
-    if (!v2.tranches.synced.has(c.id)) syncLadderRows(v2, c.id, c.debtTranches);
-  }
 }
 
 // ---- §7.311 writer-flip API: rows become the authority; these are the only mutators. ----

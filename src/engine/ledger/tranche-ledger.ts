@@ -21,7 +21,7 @@
  */
 import { V2World, internEntity, entityOf, entityRefOf } from '../../engine2/world';
 import { bankPartyOf, companyParty } from '../../domain/party';
-import { mutableTranches, pushLadderRow, relinkLadder, syncLadderRows, ladderRowsOf, TR_FACILITY, trancheIdOf, trancheKindOfRow } from '../../engine2/tranches';
+import { mutableTranches, pushLadderRow, relinkLadder, clearLadder, ladderRowsOf, TR_FACILITY, trancheIdOf, trancheKindOfRow } from '../../engine2/tranches';
 import { DebtTranche } from '../../domain/company';
 import { RegionId } from '../../domain/geography';
 import { trancheKindOf } from '../../domain/assets';
@@ -162,6 +162,6 @@ export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromBankI
  * ladder — the rows come only from the issues below.
  */
 export function seedLadder(v2: V2World, issuer: TrancheIssuer, ladder: DebtTranche[] | undefined): void {
-  syncLadderRows(v2, issuer.id, []);
+  clearLadder(v2, issuer.id);
   for (const t of ladder ?? []) if (t.principalLocal > LADDER_FACE_DUST_LOCAL) issueTranche(v2, issuer, t, 'seed: ladder opened');
 }

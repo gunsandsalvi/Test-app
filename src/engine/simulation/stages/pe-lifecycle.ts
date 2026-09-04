@@ -39,7 +39,7 @@ import { smePoolSubUnits } from '../../../domain/industry-registry';
 import { STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../../credit-price';
 import { facilityMarginBpsFor } from './bank-lending';
-import { issueTranche } from '../../ledger/tranche-ledger';
+import { issueTranche, seedLadder } from '../../ledger/tranche-ledger';
 import { marketCapOf } from '../../../domain/company';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, openingCashOf, entityCashOf, poolCashOf, obligationCurrencyOf } from '../../ledger/accounts';
@@ -80,7 +80,7 @@ export function publicComparableEvMultiple(
    * tranche STORE (`ladderTotalLocal`): `Company.debtTranches` is rebuilt from it once, at
    * `core.ts:450`, after every stage has run, so a mid-week read of the array is last week's
    * leverage. At the SEED it is the array: `buildSeededGameState` runs before
-   * `openSeededMirrors`, so the store has no rows yet and the objects the generator wrote ARE the
+   * `openSeededBooks`, so the store has no rows yet and the objects the generator wrote ARE the
    * source. Naming the read at the call site is what keeps the seed's choice a decision rather
    * than the accident it was when both sides silently took the array.
    */
@@ -789,9 +789,13 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
  * appears on a ladder from nowhere.
  */
 function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWeek: number): void {
+  // The generator's sketch is the birth's DECLARATION, read once; the ladder itself is opened
+  // in the store — empty here, then the facility by wire — and `c.debtTranches` is the view the
+  // week end materialises from it (§3.13-BOOK d1b), never written here.
   const seeded = c.debtTranches ?? [];
   const debtLocal = seeded.reduce((a, t) => a + t.principalLocal, 0);
-  c.debtTranches = [];
+  const issuer = { id: c.id, ticker: c.ticker, region: c.region };
+  seedLadder(ctx.v2, issuer, []);
   if (!(debtLocal > 1) || !c.homeBankId) return;
   // §3.13-BOOK (c-then-3b): a lookup on the entity index, not a scan of every company per birth.
   const bank = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities).companyById.get(c.homeBankId);
@@ -807,7 +811,7 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
     isBankFacility: true,
     facilityBankId: bank?.id,
   };
-  issueTranche(ctx.v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'firm birth: facility lent by the home bank');
+  issueTranche(ctx.v2, issuer, tranche, 'firm birth: facility lent by the home bank');
   pay(ctx, {
     payer: bank ? bankCreditParty(bank) : defect(`newborn ${c.id} banks at ${c.homeBankId}, which is not an entity`),
     payee: companyParty(c),
@@ -815,7 +819,6 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
     currency: currencyOf(c.region),
     reason: 'firm birth: facility proceeds',
   });
-  c.debtTranches = [tranche];
 }
 
 export function runFirmBirthsForRegion(
@@ -901,7 +904,7 @@ export function runFirmBirthsForRegion(
     newborn.forEach((c) => {
       // W6: the home bank's facility (fundNewbornDebt, below) funds the opening balance
       // first; the pool carves out the founders' remainder.
-      const loanLocal = (c.debtTranches ?? []).reduce((a, t) => a + t.principalLocal, 0);
+      const loanLocal = ladderTotalLocal(ctx.v2, c.id);
       const openingCashLocal = Math.min(Math.max(0, openingCashOf(c) - loanLocal), Math.max(0, poolCashOf(ctx.v2, regionId, seg.industry)));
       if (openingCashLocal > 0) {
         pay(ctx, {

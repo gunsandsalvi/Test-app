@@ -131,7 +131,7 @@ export function closeSeedMoney(
         .forEach((h) => { if (holdingClassOf(h.instrumentType) === 'SOVEREIGN' && h.issuerRegion === regionId) add(h.instrumentId, h.quantityOrNotionalLocal ?? 0); });
     });
     (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => add(p.bondId, p.inventoryLocal));
-    // §3.13-SOV row 2: the seed's ladder is a stash, not a field — `openSeededMirrors` issues
+    // §3.13-SOV row 2: the seed's ladder is a stash, not a field — `openSeededBooks` issues
     // its rows next and the stash is gone. The outstanding of a bond IS what its holders hold:
     // no group, no share of a bucket.
     stashSeedGovLadder(reg, seedGovLadderOf(reg).map((t) => ({
