@@ -512,17 +512,18 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    dII. **THE MINTED IDS ARE DECLARED.** Every id `instrument-keys.ts` mints for a book or a
-        contract — the swap tenors, the CDS names, the FX pairs and basis books, the futures, the
-        repo books — is declared on the index where its adapter builds it (kind, no issuer, the
-        book's money), so `issuerIdOf`'s "an undeclared id is its own issuer" fallback and
-        `wire-world.ts`'s `undefined` for CONTRACT go: an id the index does not hold is an id
-        nothing issued, at the site. `DerivativeContract.referenceId`'s four id spaces resolve
-        here — the index says what a reference names (`the-derivative-layer.md`).
+    dIIb. **A CONTRACT'S REFERENCE IS TYPED BY CLASS.** `DerivativeContract.referenceId` is four
+        id spaces in one `string` — an issuer's entity id (CDS), a commodity id (futures), a
+        REGION (FX forward), `''` (swap) — discriminated by `classId` alone, so
+        `DerivativeMarketView`'s accessors take a `string` and are right only on the CDS path
+        (`the-derivative-layer.md`). The field splits by class: each class's reference is its own
+        typed field, and the CDS's is the reference issuer's `EntityId`. Byte-identical.
     dIII. **THE ETF SHARE HAS ONE KEY.** `etfShareInstrumentId` (the clearing book's
         `ETFSHARE-<fund>`) or `etfShareRegisterId` (the fund's own id) is deleted — the register
         and the index keep one, the clearing book and its price move to it, and `etfShareFundId`
-        becomes a read of the index's issuer (`the-register.md` F1).
+        becomes a read of the index's issuer (`the-register.md` F1). With every instrument the
+        world names declared, `issuerIdOf`'s "an undeclared id is its own issuer" fallback goes:
+        an id the index does not hold is an id nothing issued, at the site.
     dIV. **THE ISSUED AMOUNT LIVES ON THE INDEX.** `Company.sharesOutstanding` moves to the index
         as issued units, one owner, which gives `O2` a real issued side (`the-register.md` B2);
         a tranche's is a read of its row. **Closes step 13's item 5** — the registry is what the
@@ -1730,6 +1731,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK dII — THE MINTED IDS ARE DECLARED.** Every id `instrument-keys.ts` mints for a book
+the adapters clear — a swap tenor (`IRS`), a single-name CDS (`CDS`), a spot pair (`FX_SPOT`, in
+the quote currency), a cross-currency basis book (`XCS`, in the foreign currency), a futures
+contract (`COMMODITY_FUTURE`, in the numéraire), the two repo books (`REPO`) and a name's
+stock-borrow book (`SBL`) — is declared on the instrument index where the adapter builds it
+(`instrument-ledger.ts:registerBook`: kind and money, NO issuer, idempotent since an adapter builds
+its books every week), and a private-equity fund's interest is declared at the seed with the ETF
+and money-market shares (`registerFundShares`). The wire's CONTRACT kind resolves against the
+index like every other instrument kind, so `wire-world.ts` answers `undefined` for HOUSE alone.
+The index's kind vocabulary is stated on `InstrumentKind`: the register's kinds plus the seven
+book kinds — the one list slice (e) collapses the four taxonomies into. `issuerIdOf`'s fallback
+stays until dIII deletes the ETF share's second key, the last id the register names that the
+index does not; the contract's four-space `referenceId` is its own step, dIIb, inserted after
+this one. Byte-identical. Gates green; no run.
 
 **13-BOOK dI — THE INSTRUMENT INDEX EXISTS, AND CURRENCY LANDS ON IT.** `v2.instruments`
 (`engine2/instruments.ts`) is one row per instrument the world has ISSUED, addressed by the intern

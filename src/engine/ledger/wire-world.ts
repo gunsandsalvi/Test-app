@@ -9,8 +9,9 @@
  * week's (or the seed's) start and grown by `admit` at each birth — so a wire naming anything
  * outside those spaces is refused at the site.
  *
- * HOUSE and CONTRACT answer `undefined`: the index does not hold them yet (slices dII and f); until
- * it does they are unchecked, and this file says so rather than passing them.
+ * HOUSE answers `undefined`: the index does not hold houses yet (slice g); until it does they are
+ * unchecked, and this file says so rather than passing them. CONTRACT resolves against the index
+ * like every other instrument kind (§3.13-BOOK dII: the books the adapters mint are declared).
  */
 import type { V2World } from '../../engine2/world';
 import { isRegisteredInstrument } from '../../engine2/instruments';
@@ -21,7 +22,7 @@ import { assertNever } from '../../domain/defect';
 import type { PartyRef } from '../../domain/party';
 import type { AssetKind, WireWorld } from './wire';
 
-const INSTRUMENT_KINDS: ReadonlySet<AssetKind> = new Set<AssetKind>(['CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER', 'BANK_FACILITY', 'EQUITY', 'ETF_SHARE', 'MMF_SHARE']);
+const INSTRUMENT_KINDS: ReadonlySet<AssetKind> = new Set<AssetKind>(['CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER', 'BANK_FACILITY', 'EQUITY', 'ETF_SHARE', 'MMF_SHARE', 'CONTRACT']);
 
 export function wireWorldOf(
   v2: V2World,
@@ -51,8 +52,8 @@ export function wireWorldOf(
       switch (kind) {
         case 'GOOD': return goods.has(asset);
         case 'MONEY': return currencies.has(asset);
-        case 'HOUSE': case 'CONTRACT': return undefined;
-        case 'EQUITY': case 'ETF_SHARE': case 'MMF_SHARE':
+        case 'HOUSE': return undefined;
+        case 'EQUITY': case 'ETF_SHARE': case 'MMF_SHARE': case 'CONTRACT':
         case 'CORP_BOND': case 'LEVERAGED_LOAN': case 'GOV_BOND': case 'COMMERCIAL_PAPER': case 'BANK_FACILITY': return undefined; // handled above
         default: return assertNever(kind, 'wireWorld.instrumentExists');
       }

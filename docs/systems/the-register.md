@@ -250,8 +250,12 @@ idempotent; a second that disagrees throws at the site. A ladder rung is declare
 comes into being (the seed and the three birth passes), a fund's shares at the seed. `issuerIdOf`
 reads the index first, the wire resolves every instrument kind against it (the company and fund
 sets `wire-world.ts` kept for equity and shares are gone), and a coupon or corporate action pays
-in the money the INSTRUMENT states. What the index does not yet hold: the minted contract and
-book ids (dII), the ETF share's second key (dIII), the issued share count (dIV).
+in the money the INSTRUMENT states. §9.13-BOOK dII added the books the adapters mint an id for
+— swap tenors, single-name CDS, spot pairs, basis books, futures, repo and stock-borrow books —
+declared where they are built, with no issuer (`registerBook`), and a private-equity fund's
+interest; a CONTRACT wire resolves against the index too. What the index does not yet hold: the
+ETF share's second key (dIII, which also ends `issuerIdOf`'s fallback), the issued share count
+(dIV).
 
 ### ⚠️ F1 / F1.a — ONE INSTRUMENT, TWO KEYS: THE ETF SHARE
 

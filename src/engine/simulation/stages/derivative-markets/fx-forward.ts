@@ -47,6 +47,7 @@ import { cashOf, bankReservesOf } from '../../../ledger/accounts';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
 import { fxBasisInstrumentId } from '../../../../domain/instrument-keys';
+import { registerBook } from '../../../ledger/instrument-ledger';
 import type { InstrumentId } from '../../../../domain/ids';
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
 
@@ -256,6 +257,9 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     issuers.forEach((issuer) => {
       const key = bookKey(holderRegion, issuer);
       const instrumentId = fxBasisInstrumentId(key);
+      // §3.13-BOOK dII: the basis book is declared on the instrument index where it is built; its
+      // money is the FOREIGN one — the currency the holder is funding an asset in.
+      registerBook(ctx.v2, instrumentId, 'XCS', currencyOf(issuer));
       const participants: ClearingParticipant[] = [];
       ctx.updatedInstitutionalEntities.forEach((e) => {
         if (e.region !== holderRegion) return;

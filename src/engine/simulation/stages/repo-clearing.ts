@@ -63,6 +63,7 @@ import {
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 
 import { repoOvernightInstrumentId, repoTermInstrumentId } from '../../../domain/instrument-keys';
+import { registerBook } from '../../ledger/instrument-ledger';
 import { type InstrumentId, asEntityId } from '../../../domain/ids';
 import { bankParticipantId, bankTickerOfParticipant, repoInstitutionSeatId, repoInstitutionIdOfSeat } from '../../../domain/participant-keys';
 import type { Ticker } from '../../../domain/ids';
@@ -298,6 +299,9 @@ export function runRegionalRepoSession(
   const corridorWidthBps = Math.max(1, srfBps - rrpBps);
   const onInstrumentId = repoOvernightInstrumentId(regionId);
   const termInstrumentId = repoTermInstrumentId(regionId);
+  // §3.13-BOOK dII: the two books are declared on the instrument index where they are built.
+  registerBook(ctx.v2, onInstrumentId, 'REPO', currencyOf(regionId));
+  registerBook(ctx.v2, termInstrumentId, 'REPO', currencyOf(regionId));
   // §3.13-SOV row 3: haircuts are per BOND, off this region's ladder.
   const haircuts = computeSovereignRepoHaircuts(reg, sovereignTenorResolver(materializeGovLadder(ctx.v2, regionId), ctx.nextWeek));
 

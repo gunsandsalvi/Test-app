@@ -38,6 +38,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
 import type { InstrumentId } from '../../../domain/ids';
 import { sblInstrumentId, equityInstrumentId, equityIssuerId } from '../../../domain/instrument-keys';
+import { registerBook } from '../../ledger/instrument-ledger';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import type { EntityId } from '../../../domain/ids';
 import { asInstrumentId, isKnownEntity } from '../../../domain/ids';
@@ -354,6 +355,8 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
 
     const instruments: ClearingInstrument[] = borrowNames.map((c) => {
       const demandShares = (borrowDemandByCompany.get(c.id) ?? []).reduce((a, d) => a + d.shares, 0);
+      // §3.13-BOOK dII: the name's borrow book is declared on the instrument index where it is built.
+      registerBook(v2sl, sblInstrumentId(regionId, c.id), 'SBL', currencyOf(regionId));
       return {
         id: sblInstrumentId(regionId, c.id),
         outstandingLocal: demandShares,

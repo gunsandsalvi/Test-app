@@ -57,6 +57,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 
 import { fxSpotInstrumentId } from '../../../domain/instrument-keys';
+import { registerBook } from '../../ledger/instrument-ledger';
 import type { InstrumentId } from '../../../domain/ids';
 import { regionOf } from '../../../engine2/world';
 import type { Ticker } from '../../../domain/ids';
@@ -219,6 +220,9 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     // HF3: this pair's own weekly volatility — what every schedule below is scaled by.
     const sigma = fxWeeklySigma(fx.historicalRates);
 
+    // §3.13-BOOK dII: the pair's book is declared on the instrument index where it is built; its
+    // money is the QUOTE currency, the one a unit of the base is priced in.
+    registerBook(ctx.v2, fxSpotInstrumentId(key), 'FX_SPOT', currencyOf(fx.quote));
     const instrument: ClearingInstrument = {
       id: fxSpotInstrumentId(key),
       outstandingLocal: Math.abs(netBaseDemandLocal),

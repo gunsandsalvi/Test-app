@@ -11,12 +11,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
 import { isRegisteredInstrument, instrumentKindOf, instrumentIssuerOf, instrumentCurrencyOf, registeredInstrumentRefs } from '../src/engine2/instruments';
-import { registerInstrument, registerCompanyEquity, registerFundShares } from '../src/engine/ledger/instrument-ledger';
+import { registerInstrument, registerCompanyEquity, registerFundShares, registerBook } from '../src/engine/ledger/instrument-ledger';
 import { issuerIdOf } from '../src/engine2/tranches';
 import { seedLadder } from '../src/engine/ledger/tranche-ledger';
 import { newWireJournal, setActiveWireJournal, setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
-import { corporateTrancheId, equityInstrumentId } from '../src/domain/instrument-keys';
+import { corporateTrancheId, equityInstrumentId, swapInstrumentId, peFundInterestId } from '../src/domain/instrument-keys';
 import { governmentIssuer } from '../src/domain/entity-keys';
 import { asEntityId, asInstrumentId, asTicker } from '../src/domain/ids';
 
@@ -73,4 +73,20 @@ test('a wire resolves an equity or a fund share against the index, so an undecla
   registerFundShares(v2, { id: asEntityId('INST-ETF-1'), region: 'USA', entityType: 'ETF' });
   assert.equal(w.instrumentExists('ETF_SHARE', 'INST-ETF-1'), true);
   assert.equal(instrumentKindOf(v2, asInstrumentId('INST-ETF-1')), 'ETF_SHARE');
+});
+
+test('a book the adapter mints is declared with no issuer, and a fund interest with its fund', () => {
+  const v2 = world();
+  const swap = swapInstrumentId('UK', 's5');
+  const ref = registerBook(v2, swap, 'IRS', 'GBP');
+  assert.equal(registerBook(v2, swap, 'IRS', 'GBP'), ref, 'the adapter builds the book every week; the declaration is one');
+  assert.equal(instrumentKindOf(v2, swap), 'IRS');
+  assert.equal(instrumentIssuerOf(v2, swap), undefined, 'nobody issues a swap tenor');
+  assert.equal(instrumentCurrencyOf(v2, swap), 'GBP');
+  const w = wireWorldOf(v2, [], []);
+  assert.equal(w.instrumentExists('CONTRACT', swap), true);
+  assert.equal(w.instrumentExists('CONTRACT', 'UK-IRS-s30'), false);
+  registerFundShares(v2, { id: asEntityId(peFundInterestId('UK', 1)), region: 'UK', entityType: 'PRIVATE_EQUITY' });
+  assert.equal(instrumentKindOf(v2, peFundInterestId('UK', 1)), 'PE_FUND_INTEREST');
+  assert.equal(instrumentIssuerOf(v2, peFundInterestId('UK', 1)), asEntityId(peFundInterestId('UK', 1)));
 });

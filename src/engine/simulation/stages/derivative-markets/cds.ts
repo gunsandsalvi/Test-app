@@ -43,6 +43,7 @@ import { issuerSpreadAtOnCurve } from '../../../credit-price';
 
 
 import { cdsInstrumentId } from '../../../../domain/instrument-keys';
+import { registerBook } from '../../../ledger/instrument-ledger';
 import type { InstrumentId, EntityId } from '../../../../domain/ids';
 import { asEntityId } from '../../../../domain/ids';
 import { asTicker } from '../../../../domain/ids';
@@ -109,6 +110,8 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
     const instruments: ClearingInstrument[] = referenceIssuers.map((c) => {
       const demand = hedgeDemandByIssuer.get(c.id)!;
       const floatLocal = demand.reduce((a, d) => a + d.usd, 0);
+      // §3.13-BOOK dII: the name's book is declared on the instrument index where it is built.
+      registerBook(v2cds, cdsInstrumentId(regionId, c.id), 'CDS', currencyOf(regionId));
       return {
         id: cdsInstrumentId(regionId, c.id),
         outstandingLocal: floatLocal,

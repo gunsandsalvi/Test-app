@@ -18,9 +18,18 @@ import { defect } from '../../domain/defect';
 import type { AssetKind } from './wire';
 import type { InstitutionalEntityType } from '../../domain/institutions';
 
-/** What the index can hold: every wire asset kind that is an INSTRUMENT (money and goods have
- *  their own ledgers; a house and a contract are slice (dII)'s and (f)'s). */
-export type InstrumentKind = Exclude<AssetKind, 'MONEY' | 'GOOD' | 'HOUSE' | 'CONTRACT'>;
+/**
+ * What the index can hold. The register's kinds are the wire's instrument kinds plus the
+ * private-equity interest (a wire kind of its own once a fund interest moves by wire); the BOOK
+ * kinds (§3.13-BOOK dII) are the instruments the adapters mint an id for and clear — a swap
+ * tenor, a single-name CDS, a spot pair, a cross-currency basis book, a futures contract, a repo
+ * book, a stock-borrow book — which nobody issues and nobody holds on the register, and which the
+ * index therefore holds with NO issuer. Money, goods and houses have their own ledgers; a bilateral
+ * contract is slice (d4)'s.
+ */
+export type InstrumentKind =
+  | Exclude<AssetKind, 'MONEY' | 'GOOD' | 'HOUSE' | 'CONTRACT'> | 'PE_FUND_INTEREST'
+  | 'IRS' | 'CDS' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'REPO' | 'SBL';
 
 export interface InstrumentDeclaration {
   id: InstrumentId;
@@ -49,10 +58,20 @@ export function registerCompanyEquity(v2: V2World, c: { id: EntityId; region: Re
   return registerInstrument(v2, { id: equityInstrumentId(c.id), kind: 'EQUITY', issuer: c.id, currency: currencyOf(c.region) });
 }
 
-/** A fund's shares, for the fund kinds whose shares are an instrument on the register: an ETF's
- *  and a money-market fund's, both keyed by the fund's own id (the wire's convention). */
+/** A fund's shares, for the fund kinds whose shares are an instrument on the register: an ETF's,
+ *  a money-market fund's and a private-equity fund's interest, all keyed by the fund's own id
+ *  (the wire's convention; `peFundInterestId` is the fund's entity id verbatim). */
 export function registerFundShares(v2: V2World, e: { id: EntityId; region: RegionId; entityType: InstitutionalEntityType }): InstrRef | undefined {
-  const kind: InstrumentKind | undefined = e.entityType === 'ETF' ? 'ETF_SHARE' : e.entityType === 'MONEY_MARKET_FUND' ? 'MMF_SHARE' : undefined;
+  const kind: InstrumentKind | undefined = e.entityType === 'ETF' ? 'ETF_SHARE'
+    : e.entityType === 'MONEY_MARKET_FUND' ? 'MMF_SHARE'
+      : e.entityType === 'PRIVATE_EQUITY' ? 'PE_FUND_INTEREST' : undefined;
   if (kind === undefined) return undefined;
   return registerInstrument(v2, { id: etfShareRegisterId(e.id), kind, issuer: e.id, currency: currencyOf(e.region) });
+}
+
+/** §3.13-BOOK dII — A BOOK THE ADAPTER MINTS AN ID FOR, declared where it is built: kind and
+ *  money, no issuer. Idempotent, so an adapter that builds the same book every week declares it
+ *  once and reads it thereafter. */
+export function registerBook(v2: V2World, id: InstrumentId, kind: 'IRS' | 'CDS' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'REPO' | 'SBL', currency: CurrencyCode): InstrRef {
+  return registerInstrument(v2, { id, kind, currency });
 }

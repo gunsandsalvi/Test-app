@@ -44,6 +44,7 @@ import { facilityBookOf } from '../../../../engine2/tranches';
 
 
 import { commodityFutureInstrumentId } from '../../../../domain/instrument-keys';
+import { registerBook } from '../../../ledger/instrument-ledger';
 import type { InstrumentId } from '../../../../domain/ids';
 import type { EntityId } from '../../../../domain/ids';
 import { asEntityId } from '../../../../domain/ids';
@@ -97,6 +98,9 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       if (!(oneSigma > 0)) return;
       const id = commodityFutureInstrumentId(comm.id, tenorMonths);
       const termKey = futuresTermKey(tenorMonths);
+      // §3.13-BOOK dII: the contract is declared on the instrument index where it is built; a
+      // commodity is quoted in the numéraire (`contract.ts:currency`).
+      registerBook(ctx.v2, id, 'COMMODITY_FUTURE', NUMERAIRE);
 
       // How much the producers between them need to lay off, in UNITS: the revenue exposure their
       // covenant headroom cannot absorb, less what they have already sold forward.

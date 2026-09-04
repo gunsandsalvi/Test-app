@@ -40,6 +40,7 @@ import { institutionTotalAssetsLocal, institutionBookLocal } from '../institutio
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
 import { swapInstrumentId } from '../../../../domain/instrument-keys';
+import { registerBook } from '../../../ledger/instrument-ledger';
 import type { InstrumentId } from '../../../../domain/ids';
 import { isKnownEntity } from '../../../../domain/ids';
 import type { EntityId } from '../../../../domain/ids';
@@ -160,6 +161,8 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       floatByTenor.set(k, totalLocal);
       if (!(totalLocal > 0)) return;
       const zeroRate = reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]] ?? reg.policyRate;
+      // §3.13-BOOK dII: the tenor's book is declared on the instrument index where it is built.
+      registerBook(ctx.v2, swapInstrumentId(regionId, k), 'IRS', currencyOf(regionId));
       instruments.push({
         id: swapInstrumentId(regionId, k),
         outstandingLocal: totalLocal,
