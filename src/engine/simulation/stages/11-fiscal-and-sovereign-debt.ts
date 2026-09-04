@@ -103,7 +103,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const hs = reg.householdState;
 
     // C — household consumption, already-established convention
-    const consumptionComponentUSD = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
+    const consumptionComponentUSD = reg.estimatedHouseholdIncomeLocal * (1 - hs.savingsRate);
 
     // I — tracked company investment, scaled up to represent the whole private sector via Phase 1's employment split
     const trackedFirms = updatedCompanies.filter(f => f.region === regionId && isActiveCompany(f));
@@ -349,9 +349,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         const newHeld = held.map(h => {
           const fraction = redeemedFractionByBond.get(h.instrumentId) ?? 0;
           if (fraction <= 0) return h;
-          redeemedUSD += h.quantityOrNotionalUSD * fraction;
-          return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 - fraction) };
-        }).filter(h => h.quantityOrNotionalUSD > 1);
+          redeemedUSD += h.quantityOrNotionalLocal * fraction;
+          return { ...h, quantityOrNotionalLocal: h.quantityOrNotionalLocal * (1 - fraction) };
+        }).filter(h => h.quantityOrNotionalLocal > 1);
         if (!(redeemedUSD > 0)) return c;
         redemptionPaidUSD += redeemedUSD;
         pay(ctx, {
@@ -420,7 +420,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         let redeemedCashUSD = 0;
         redeem.forEach((x) => {
           retireHolding(ctx.v2, { kind: 'INSTITUTION', id: entity.id }, { kind: 'GOVERNMENT', region: regionId },
-            { instrumentType: 'GOV_BOND', instrumentId: x.id, issuerRegion: regionId, valueUSD: x.usd }, 'sovereign redemption');
+            { instrumentType: 'GOV_BOND', instrumentId: x.id, issuerRegion: regionId, valueLocal: x.usd }, 'sovereign redemption');
           redeemedCashUSD += x.usd;
         });
         if (redeemedCashUSD > 0) {
@@ -464,7 +464,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // smooth expectation; the PAYMENT is per segment.
     let smeAccrualWeeklyUSD = 0;
     (reg.smePools || []).forEach((sg) => {
-      const accrualUSD = Math.max(0, sg.annualRevenueUSD * sg.marginPct) * reg.effectiveTaxRate / 52;
+      const accrualUSD = Math.max(0, sg.annualRevenueLocal * sg.marginPct) * reg.effectiveTaxRate / 52;
       smeAccrualWeeklyUSD += accrualUSD;
       sg.accruedTaxUSD = (sg.accruedTaxUSD ?? 0) + accrualUSD;
       if (isQuarterEnd && (sg.accruedTaxUSD ?? 0) > 0) {
@@ -556,8 +556,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     );
     const procurementSpentUSD = reg.governmentProcurementSpentUSD ?? 0;
     reg.governmentOutlaysUSD = Math.round(governmentOutlaysUSD({
-      interestUSD: govBudget.interestUSD,
-      payrollUSD: govBudget.payrollUSD,
+      interestLocal: govBudget.interestLocal,
+      payrollLocal: govBudget.payrollLocal,
       transfersUSD: govBudget.transfersUSD,
       procurementSpentUSD,
     }));
@@ -752,11 +752,11 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       const cb = reg.centralBankSheet;
       // XB5: the open-market operation is about the SOVEREIGN book. FX reserves are also assets
       // but they are not what a bond purchase adds to.
-      const bookUSD = centralBankSovereignBookUSD(cb);
+      const bookLocal = centralBankSovereignBookUSD(cb);
       const { reinvestmentShare, netPurchaseUSD } = openMarketPolicy({
         policyRate: reg.policyRate,
         taylorTargetRate: reg.taylorTargetRate,
-        bookUSD,
+        bookLocal,
         sovereignStockUSD: totalGovDebtUSD,
       });
       // Reinvestment goes back into the bucket that matured — a maturing bill is rolled into
@@ -766,9 +766,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       cbRedeemedByBond.forEach((redeemedUSD, key) => {
         orders[key] = redeemedUSD * reinvestmentShare;
       });
-      if (netPurchaseUSD > 0 && bookUSD > 0) {
+      if (netPurchaseUSD > 0 && bookLocal > 0) {
         Object.entries(cb.sovereignHoldingsByBond).forEach(([key, held]) => {
-          orders[key] = (orders[key] ?? 0) + netPurchaseUSD * ((Number(held) || 0) / bookUSD);
+          orders[key] = (orders[key] ?? 0) + netPurchaseUSD * ((Number(held) || 0) / bookLocal);
         });
       }
       cb.plannedPurchasesByBond = orders;
@@ -779,7 +779,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     updatedRegions[regionId] = {
       ...reg,
       gdpGrowth: finalGdpGrowth,
-      estimatedNominalGdpUSD: newDerivedNominalGdpUSD,
+      estimatedNominalGdpLocal: newDerivedNominalGdpUSD,
       derivedNominalGdpUSD: newDerivedNominalGdpUSD,
       gdpGrowthBottomUp: Number(gdpGrowthBottomUp.toFixed(4)),
       smoothedWeeklyGrowthRate: smoothedWeeklyRate,

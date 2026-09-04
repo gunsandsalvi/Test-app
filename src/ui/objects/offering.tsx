@@ -14,8 +14,8 @@ export const offering = defineObject<PrimaryOffering>({
   searchable: false,
   find: (world, id) => (world.state.primaryOfferings ?? []).find((o) => o.id === id),
   list: (world) => (world.state.primaryOfferings ?? []).map((o) => ({ id: o.id, obj: o })),
-  label: (_w, id, o) => ({ ticker: id, name: `${o.issuerTicker} ${words(o.instrumentType)} · ${money(o.sizeUSD)}`, kind: 'primary offering', region: o.region }),
-  headline: (_w, _id, o) => ({ value: money(o.sizeUSD), sub: words(o.instrumentType) }),
+  label: (_w, id, o) => ({ ticker: id, name: `${o.issuerTicker} ${words(o.instrumentType)} · ${money(o.sizeLocal)}`, kind: 'primary offering', region: o.region }),
+  headline: (_w, _id, o) => ({ value: money(o.sizeLocal), sub: words(o.instrumentType) }),
   peers: {
     groups: (world, _id, o) => [
       { name: `${o.region} pipeline`, ids: (world.state.primaryOfferings ?? []).filter((x) => x.region === o.region).map((x) => x.id) },
@@ -25,7 +25,7 @@ export const offering = defineObject<PrimaryOffering>({
     columns: [
       { key: 'issuer', label: 'issuer', render: (r, world, nav) => { const c = world.state.companies.find((x) => x.id === r.obj.issuerId); return c ? <Link to={{ type: 'company', id: c.id }} nav={nav}>{r.obj.issuerTicker}</Link> : r.obj.issuerTicker; }, value: (r) => r.obj.issuerTicker },
       { key: 'type', label: 'paper', render: (r) => words(r.obj.instrumentType), value: (r) => r.obj.instrumentType },
-      { key: 'size', label: 'size', render: (r) => money(r.obj.sizeUSD), value: (r) => r.obj.sizeUSD },
+      { key: 'size', label: 'size', render: (r) => money(r.obj.sizeLocal), value: (r) => r.obj.sizeLocal },
       { key: 'walk', label: 'walk-away', render: (r) => bps(r.obj.walkAwayStat), value: (r) => r.obj.walkAwayStat },
       { key: 'lead', label: 'lead', render: (r, world, nav) => { const b = world.state.companies.find((x) => x.ticker === r.obj.leadBankTicker); return b ? <Link to={{ type: 'company', id: b.id }} nav={nav}>{r.obj.leadBankTicker}</Link> : r.obj.leadBankTicker ?? '—'; }, value: (r) => r.obj.leadBankTicker ?? '' },
     ],
@@ -37,7 +37,7 @@ export const offering = defineObject<PrimaryOffering>({
       <>
         <ObjectHeader name={`${o.issuerTicker} ${words(o.instrumentType)}`} sub={<>primary offering · {words(o.purpose)} · <RegionLink id={o.region} nav={nav} /> · announced {formatDate(displayWeek(world.state, o.announcedWeek))}</>} />
         <StatGrid>
-          <Stat label="size" value={money(o.sizeUSD)} sub={words(o.rateType ?? '')} />
+          <Stat label="size" value={money(o.sizeLocal)} sub={words(o.rateType ?? '')} />
           <Stat label="walk-away" value={`${bps(o.walkAwayStat)}bp`} sub="the issuer's own arithmetic" />
           <Stat label="lead bank" value={lead ? lead.ticker : o.leadBankTicker ?? '—'} sub="underwrites" />
         </StatGrid>

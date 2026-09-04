@@ -3,13 +3,13 @@ import { ensureV2, rowOf, revHistPush } from '../../../../engine2/world';
 import { managedEntityIdsOf } from '../../../../domain/company';
 import { PREMIUM_TO_SURPLUS_RATIO } from '../../../../domain/institutions';
 import { ProfileInput, ProfilePnl } from './types';
-import { institutionTotalAssetsUSD } from '../institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 
 export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, entityById } = input;
 
   // HH1b — ONE INSURER, NOT TWO. This branch used to refuse the entity behind it, on the
-  // reasoning that `institutionTotalAssetsUSD(input.ctx, instEnt)` was "a macro-level slice meant for
+  // reasoning that `institutionTotalAssetsLocal(input.ctx, instEnt)` was "a macro-level slice meant for
   // portfolio-composition bookkeeping, not a per-firm P&L input". That was true when it was
   // written and stopped being true at S11, which made `totalAssetsUSD` a real per-firm book
   // recomputed weekly from real cash and real holdings — the ASSET_MANAGER branch below reads
@@ -18,7 +18,7 @@ export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // with `technicalReservesUSD` printing 0.2B against a 221.9B beneficiary liability — the
   // same obligations represented twice, three orders of magnitude apart (§7.49).
   const instEnt = entityById.get(managedEntityIdsOf(comp)[0]);
-  const floatAssets = instEnt ? institutionTotalAssetsUSD(input.ctx, instEnt) : comp.annualRevenue * 5;
+  const floatAssets = instEnt ? institutionTotalAssetsLocal(input.ctx, instEnt) : comp.annualRevenue * 5;
   // The reserves ARE the beneficiary liability HH1a records on the entity. One number.
   comp.technicalReservesUSD = instEnt?.beneficiaryLiabilityUSD ?? floatAssets * 0.85;
 
@@ -26,7 +26,7 @@ export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // premium-to-surplus ratio is the real constraint every regulator supervises, and reading
   // it off real equity replaces a self-referential premium that grew from its own prior value
   // at GDP plus a random draw, anchored to nothing.
-  const surplusUSD = instEnt ? Math.max(0, instEnt.equityCapitalUSD) : comp.annualRevenue;
+  const surplusUSD = instEnt ? Math.max(0, instEnt.equityCapitalLocal) : comp.annualRevenue;
   const weeklyPremiums = Math.max(10, (surplusUSD * PREMIUM_TO_SURPLUS_RATIO) / 52);
   comp.insurancePremiumsWrittenUSD = weeklyPremiums * 52;
 

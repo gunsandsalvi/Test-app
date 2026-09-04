@@ -199,7 +199,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | E6 a leveraged holder is funded, and it can be withdrawn | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageStage` | ✅ |
 | E6.a a named liability to a named lender | `src/domain/repo.ts:RepoContract` | ✅ |
 | E6.b withdrawal forces a sale | `src/engine/simulation/stages/prime-brokerage.ts:measuredHaircutsFor` | ✅ |
-| E7 the position consumes regulatory capital | `src/engine/macro/banking.ts:leverageHeadroomUSD` | ⚠️ |
+| E7 the position consumes regulatory capital | `src/engine/macro/banking.ts:leverageHeadroomLocal` | ⚠️ |
 | E8 pledgeable at a haircut, and then encumbered | `src/domain/repo.ts:encumberedFaceByBond` | ⚠️ |
 | E9 the holder's statement shows position, price, income, P&L | `src/ui/functions/statements.tsx:statements` | ⚠️ |
 | F1 interest accrues to the holder of record (N6) | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |

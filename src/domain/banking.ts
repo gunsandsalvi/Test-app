@@ -21,7 +21,7 @@ import { DealerDeskInventory } from './dealer-desk';
  * NOT a field here: a stored value cannot be re-marked, because the price that produced it is
  * gone, and wherever a value has been stored beside units in this model the two have drifted.
  *
- * `quantityOrNotionalUSD` is what that stored value was called. It is still here and it is on its
+ * `quantityOrNotionalLocal` is what that stored value was called. It is still here and it is on its
  * way out: every writer now sets `units`, and the readers move to `units × price` per asset class
  * (step 13). When the last one has, the field goes and this type is `(instrument, units)`.
  */
@@ -30,7 +30,7 @@ export interface ItemizedHolding {
   /** Named and derived from the one superset (domain/assets — step 4); members unchanged. */
   instrumentType: ItemizedHoldingType;
   issuerRegion: RegionId;
-  quantityOrNotionalUSD: number; // dollar-denominated market value at cost
+  quantityOrNotionalLocal: number; // dollar-denominated market value at cost
   /**
    * EQUITY only (WS4): the real SHARE COUNT held. Shares are the thing owned; the USD figure
    * above is shares x the cleared price and is therefore a derived view of this. Storing only
@@ -45,7 +45,7 @@ export interface ItemizedHolding {
    */
   units: number;
   /**
-   * CREDIT only: the FACE the row holds. `quantityOrNotionalUSD` is then face x price — a derived
+   * CREDIT only: the FACE the row holds. `quantityOrNotionalLocal` is then face x price — a derived
    * view of this, for exactly the reason `quantityShares` exists for equity: storing only the
    * value would make the size of the book depend on the price the book is supposed to set.
    *

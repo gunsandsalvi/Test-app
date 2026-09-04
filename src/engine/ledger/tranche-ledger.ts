@@ -77,7 +77,7 @@ function holderOfTranche(t: DebtTranche, region: RegionId): PartyRef {
 /** The issuer places a tranche with its holder. Returns the new row. */
 export function issueTranche(v2: V2World, issuer: TrancheIssuer, t: DebtTranche, reason: string): number {
   if (!(t.principalLocal > 0)) return defect(`tranche ${t.id} issued with principal ${t.principalLocal}`);
-  const n = wire({ from: issuerParty(issuer), to: holderOfTranche(t, issuer.region), kind: trancheKindOf(t), asset: t.id, quantity: t.principalLocal, priceUSD: 1, reason }, internReason);
+  const n = wire({ from: issuerParty(issuer), to: holderOfTranche(t, issuer.region), kind: trancheKindOf(t), asset: t.id, quantity: t.principalLocal, priceLocal: 1, reason }, internReason);
   return pushLadderRow(v2, issuer.id, t, n);
 }
 
@@ -87,7 +87,7 @@ export function retireTranche(v2: V2World, issuer: TrancheIssuer, r: number, fac
   if (!(faceLocal > 0)) return -1;
   const take = Math.min(faceLocal, S.principalLocal[r]);
   if (faceLocal > S.principalLocal[r] + LADDER_FACE_DUST_USD) defect(`tranche ${v2.internedStrings[S.idRef[r]]} retired ${(faceLocal / 1e6).toFixed(3)}M against ${(S.principalLocal[r] / 1e6).toFixed(3)}M of principal`);
-  const n = wire({ from: holderOfRow(v2, r, issuer.region), to: issuerParty(issuer), kind: kindOfRow(v2, r), asset: v2.internedStrings[S.idRef[r]], quantity: take, priceUSD: 1, reason }, internReason);
+  const n = wire({ from: holderOfRow(v2, r, issuer.region), to: issuerParty(issuer), kind: kindOfRow(v2, r), asset: v2.internedStrings[S.idRef[r]], quantity: take, priceLocal: 1, reason }, internReason);
   S.principalLocal[r] -= take;
   return n;
 }
@@ -101,12 +101,12 @@ export function retireLadderFace(v2: V2World, issuer: TrancheIssuer, kind: Asset
   if (!(faceLocal > 0)) return 0;
   const S = v2.tranches;
   const rows = ladderRowsOf(v2, issuer.id).filter((r) => kindOfRow(v2, r) === kind && S.principalLocal[r] > 0.01);
-  const totalUSD = rows.reduce((a, r) => a + S.principalLocal[r], 0);
-  if (!(totalUSD > 0)) return 0;
-  const take = Math.min(faceLocal, totalUSD);
+  const totalLocal = rows.reduce((a, r) => a + S.principalLocal[r], 0);
+  if (!(totalLocal > 0)) return 0;
+  const take = Math.min(faceLocal, totalLocal);
   let retired = 0;
   rows.forEach((r) => {
-    const slice = Math.min(S.principalLocal[r], take * (S.principalLocal[r] / totalUSD));
+    const slice = Math.min(S.principalLocal[r], take * (S.principalLocal[r] / totalLocal));
     if (slice > 0.01) { retireTranche(v2, issuer, r, slice, reason); retired += slice; }
   });
   commitLadder(v2, issuer, ladderRowsOf(v2, issuer.id).filter((r) => S.principalLocal[r] > 0.01));
@@ -145,7 +145,7 @@ export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromTicke
   for (const r of ladderRowsOf(v2, issuer.id)) {
     if (S.bankRef[r] !== fromRef) continue;
     if (S.principalLocal[r] > 0.01) {
-      wire({ from: { kind: 'BANK', ticker: fromTicker }, to: { kind: 'BANK', ticker: toTicker }, kind: kindOfRow(v2, r), asset: v2.internedStrings[S.idRef[r]], quantity: S.principalLocal[r], priceUSD: 1, reason }, internReason);
+      wire({ from: { kind: 'BANK', ticker: fromTicker }, to: { kind: 'BANK', ticker: toTicker }, kind: kindOfRow(v2, r), asset: v2.internedStrings[S.idRef[r]], quantity: S.principalLocal[r], priceLocal: 1, reason }, internReason);
     }
     S.bankRef[r] = toRef;
     moved++;

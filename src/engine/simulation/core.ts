@@ -220,7 +220,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
             // ASSET_SWITCH ratchet keeps counting real dispatch sites only.
             const corpBond: string = 'CORP_BOND';
             if (focusIds.size > 0 ? focusIds.has(h.instrumentId) : h.instrumentId === mintFocus) {
-              if (h.instrumentType === corpBond) usd += h.quantityOrNotionalUSD ?? 0;
+              if (h.instrumentType === corpBond) usd += h.quantityOrNotionalLocal ?? 0;
             }
           });
         });
@@ -390,7 +390,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // hedging flow the desks just generated, which now has a counterparty.
   run('fx-clearing', () => { runFxClearingStage(state, ctx); recordForeignHoldingsSnapshot(ctx); });
   run('money-fund-income', () => distributeMoneyFundIncome(ctx));
-  syncCompanyField(state, 'mmfSharesUSD');
+  syncCompanyField(state, 'mmfSharesLocal');
   run('bill-accretion', () => runBillAccretionStage(state, ctx));
   // CAL: the sovereign calendar. After every book that trades government paper has cleared and
   // the bills have accreted, so the holders it walks are the ones the week ended with; before the
@@ -472,7 +472,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // SETL2: the week's settlement, decomposed. §6 watches the boundary line DOWN, and a number
     // you cannot attribute is a number you cannot watch — this carries what hit it and why.
     lastSettlement: ctx.lastSettlementReport && {
-      grossUSD: ctx.lastSettlementReport.grossUSD,
+      grossLocal: ctx.lastSettlementReport.grossLocal,
       grossByCurrency: { ...ctx.lastSettlementReport.grossByCurrency },
       unresolvedUSD: ctx.lastSettlementReport.unresolvedUSD,
       clearingHouseResidualUSD: ctx.lastSettlementReport.clearingHouseResidualUSD,

@@ -985,8 +985,8 @@ export function industryRecipeIntensity(industry: Industry): number {
  * The SME productivity gap is not stated here and should not be: it is an OUTCOME of the pools'
  * own measured P&L (rule 2, and says so).
  */
-export function smePoolEmployment(industry: Industry, annualRevenueUSD: number, productivityPerWorkerUSD: number): number {
-  const valueAddedUSD = annualRevenueUSD * (1 - industryRecipeIntensity(industry));
+export function smePoolEmployment(industry: Industry, annualRevenueLocal: number, productivityPerWorkerUSD: number): number {
+  const valueAddedUSD = annualRevenueLocal * (1 - industryRecipeIntensity(industry));
   return Math.max(1, Math.round(valueAddedUSD / Math.max(1, productivityPerWorkerUSD)));
 }
 

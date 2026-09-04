@@ -16,7 +16,7 @@
  */
 
 export interface IncomeStatement {
-  ebitdaUSD: number;
+  ebitdaLocal: number;
   ebitUSD: number;
   netIncomeUSD: number;
   epsUSD: number;
@@ -127,7 +127,7 @@ export function netIncomeUSD(
  * default trigger, the rating and the tax rule above, which is the whole point of measuring it.
  */
 export function industrialIncome(i: {
-  revenueUSD: number;
+  revenueLocal: number;
   ebitdaMargin: number;
   daShareOfRevenue: number;
   annualInterestUSD: number;
@@ -136,13 +136,13 @@ export function industrialIncome(i: {
   /** §5-TAXR — the firm's tax attributes; absent = the legacy no-carryforward rule. */
   tax?: Omit<TaxInputs, 'bookDepreciationAnnualUSD'>;
 }): IncomeStatement {
-  const ebitdaUSD = i.revenueUSD * i.ebitdaMargin;
-  const daUSD = i.revenueUSD * i.daShareOfRevenue;
-  const ebitUSD = ebitdaUSD - daUSD;
+  const ebitdaLocal = i.revenueLocal * i.ebitdaMargin;
+  const daUSD = i.revenueLocal * i.daShareOfRevenue;
+  const ebitUSD = ebitdaLocal - daUSD;
   const r = netIncomeUSD(ebitUSD, i.annualInterestUSD, i.taxRate,
     i.tax ? { ...i.tax, bookDepreciationAnnualUSD: daUSD } : undefined);
   return {
-    ebitdaUSD,
+    ebitdaLocal,
     ebitUSD,
     netIncomeUSD: r.netUSD,
     epsUSD: i.sharesOutstanding > 0 ? r.netUSD / i.sharesOutstanding : 0,
@@ -160,7 +160,7 @@ export function industrialIncome(i: {
  * to do with its interest income.
  */
 export function profileIncome(i: {
-  revenueUSD: number;
+  revenueLocal: number;
   otherIncomeAnnualUSD: number;
   /** The three cost lines are separate, and they are subtracted in THIS ORDER, because floating
    *  point addition is not associative: folding them into one `operatingCosts` argument changed
@@ -177,14 +177,14 @@ export function profileIncome(i: {
   /** §5-TAXR — the firm's tax attributes; absent = the legacy no-carryforward rule. */
   tax?: Omit<TaxInputs, 'bookDepreciationAnnualUSD'>;
 }): IncomeStatement {
-  const ebitdaUSD = i.revenueUSD + i.otherIncomeAnnualUSD
+  const ebitdaLocal = i.revenueLocal + i.otherIncomeAnnualUSD
     - i.inputCostAnnualUSD - i.payrollAnnualUSD - i.profileCostsAnnualUSD;
   const bookDaUSD = i.grossPPELocal / Math.max(1, i.ppeDepreciationYears);
-  const ebitUSD = ebitdaUSD - bookDaUSD;
+  const ebitUSD = ebitdaLocal - bookDaUSD;
   const r = netIncomeUSD(ebitUSD, i.annualInterestUSD, i.taxRate,
     i.tax ? { ...i.tax, bookDepreciationAnnualUSD: bookDaUSD } : undefined);
   return {
-    ebitdaUSD,
+    ebitdaLocal,
     ebitUSD,
     netIncomeUSD: r.netUSD,
     epsUSD: i.sharesOutstanding > 0 ? r.netUSD / i.sharesOutstanding : 0,

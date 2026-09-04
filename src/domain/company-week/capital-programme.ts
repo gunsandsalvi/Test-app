@@ -29,7 +29,7 @@ export interface CapitalProgrammeInputs {
   weeklyInterestUSD: number;
   cashLocal: number;
   currentLiabilitiesUSD: number;
-  annualRevenueUSD: number;
+  annualRevenueLocal: number;
   newRevenueUSD: number;
   /** Last week's programme, which this one moves smoothly away from. */
   priorMaintenanceCapexUSD: number;
@@ -143,7 +143,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   const cashHealthFactor = i.cashLocal < 0 ? 0.05 : (i.cashLocal < i.currentLiabilitiesUSD * 0.25 * ra ? 0.4 : 1.0);
   const safeMarketCap = Math.max(0, isFinite(i.marketCapUSD) ? i.marketCapUSD : 0);
   const safeTotalDebt = Math.max(0, isFinite(i.totalDebtUSD) ? i.totalDebtUSD : 0);
-  const safeRev = Math.max(1, isFinite(i.annualRevenueUSD) ? i.annualRevenueUSD : 1);
+  const safeRev = Math.max(1, isFinite(i.annualRevenueLocal) ? i.annualRevenueLocal : 1);
   const tobinsQ = Math.max(0.1, Math.min(10.0, safeMarketCap / Math.max(1, safeTotalDebt + safeRev * 1.5)));
   const qCapexEffect = (tobinsQ - 1) * 0.2;
   const competitivenessCapexEffect = i.avgCompetitiveness * 0.15;
@@ -169,7 +169,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   // does: the firm RAISES the money first (the financing decision and the primary market),
   // the proceeds land as cash, and the next week's cap has grown by exactly what was raised.
   const deployableCashUSD = Math.max(0,
-    i.cashLocal - i.annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * ra);
+    i.cashLocal - i.annualRevenueLocal * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * ra);
   const growthFundingCapUSD = Math.max(0, fcfBeforeGrowthCapex) + deployableCashUSD;
   const targetGrowthCapex = Math.min(desiredGrowthCapex, growthFundingCapUSD);
   // The stock-adjustment weight is the median's 0.10 at the median horizon (§7.288's convention),
@@ -257,13 +257,13 @@ export function capacityRetirement(i: CapacityRetirementInputs): CapacityRetirem
 /** IND13 — the plant grows by what was COMMISSIONED, not what was ordered or delivered. That lag
  *  is the capacity cycle. */
 export function commissionCapital(
-  underConstruction: { valueUSD: number; entersServiceWeek: number }[],
+  underConstruction: { valueLocal: number; entersServiceWeek: number }[],
   week: number
-): { commissionedUSD: number; stillUnderConstruction: { valueUSD: number; entersServiceWeek: number }[] } {
+): { commissionedUSD: number; stillUnderConstruction: { valueLocal: number; entersServiceWeek: number }[] } {
   let commissionedUSD = 0;
-  const stillUnderConstruction: { valueUSD: number; entersServiceWeek: number }[] = [];
+  const stillUnderConstruction: { valueLocal: number; entersServiceWeek: number }[] = [];
   for (const lot of underConstruction) {
-    if (lot.entersServiceWeek <= week) commissionedUSD += lot.valueUSD;
+    if (lot.entersServiceWeek <= week) commissionedUSD += lot.valueLocal;
     else stillUnderConstruction.push(lot);
   }
   return { commissionedUSD, stillUnderConstruction };

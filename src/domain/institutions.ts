@@ -98,12 +98,12 @@ export interface InstitutionalEntity {
    *  Its purchasing capacity above its own cash, and the replacement for a leverage ALLOWANCE
    *  that no one granted and no one could withdraw. Written by the prime-brokerage stage. */
   primeBrokerageAvailableUSD?: number;
-  // D: total assets are a READ — `institutionTotalAssetsUSD` (domain) over the book's
+  // D: total assets are a READ — `institutionTotalAssetsLocal` (domain) over the book's
   // rows, cash, receivables and the sponsor's portfolio mark; never a stored mark.
-  equityCapitalUSD: number;
+  equityCapitalLocal: number;
   /**
    * What this institution owes its ultimate BENEFICIARIES: policyholder reserves, pension
-   * entitlements, fund shares. A derived residual, `totalAssetsUSD - equityCapitalUSD`, carried
+   * entitlements, fund shares. A derived residual, `totalAssetsUSD - equityCapitalLocal`, carried
    * here so both sides of the claim are visible on the books that hold them.
    *
    * THE DIRECTION IS BACKWARDS, and it is load-bearing. In reality an institution's
@@ -172,7 +172,7 @@ export interface InstitutionalEntity {
   priorForeignHoldingsByRegion?: Record<string, number>;
   /**
    * MONEY_MARKET_FUND only (WS7): the fund's share liabilities at its fixed $1 NAV — every
-   * dollar of shares is a dollar some real holder (a corporate treasury's `mmfSharesUSD`, the
+   * dollar of shares is a dollar some real holder (a corporate treasury's `mmfSharesLocal`, the
    * household boundary) put in. Assets (cash + bills + repo/RRP claims) exceed shares by the
    * fund's own retained fee income; the yield PAID to holders is the real asset yield minus
    * the fee.
@@ -191,7 +191,7 @@ export interface InstitutionalEntity {
    */
   peFund?: {
     portfolioCompanyIds: string[];
-    lpCommitments: { lpEntityId: string; committedUSD: number; drawnUSD: number }[];
+    lpCommitments: { lpEntityId: string; committedUSD: number; drawnLocal: number }[];
   };
   /**
    * ETF only: the fund's index, its sponsor, its share count and the residual the authorised
@@ -212,15 +212,15 @@ export interface InstitutionalEntity {
  * companies at the public comparable. The stored `totalAssetsUSD` this replaces was a week-end
  * mark of exactly this sum, read a week stale by every sizing pass.
  */
-export function institutionTotalAssetsUSD(
+export function institutionTotalAssetsLocal(
   e: { repoLentLocal?: number; rrpLentUSD?: number; stockLoanNetUSD?: number; entityType: InstitutionalEntityType; peFund?: unknown },
-  cashLocal: number, bookUSD: number, pendingUSD: number, portfolioUSD: number
+  cashLocal: number, bookLocal: number, pendingUSD: number, portfolioUSD: number
 ): number {
   return cashLocal + pendingUSD + (e.repoLentLocal ?? 0) + (e.rrpLentUSD ?? 0) + (e.stockLoanNetUSD ?? 0)
-    + (e.entityType === 'PRIVATE_EQUITY' && e.peFund ? portfolioUSD : bookUSD);
+    + (e.entityType === 'PRIVATE_EQUITY' && e.peFund ? portfolioUSD : bookLocal);
 }
 
 /** The seed's read, before the register exists: cash plus the entity's own itemized rows. */
-export function seedInstitutionTotalAssetsUSD(e: { itemizedHoldings: { quantityOrNotionalUSD?: number }[] }, openingCashUSD: number): number {
-  return openingCashUSD + e.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
+export function seedInstitutionTotalAssetsUSD(e: { itemizedHoldings: { quantityOrNotionalLocal?: number }[] }, openingCashUSD: number): number {
+  return openingCashUSD + e.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalLocal ?? 0), 0);
 }

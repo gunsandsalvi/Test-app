@@ -42,7 +42,7 @@ export interface PrimaryOffering {
   instrumentType: PrimaryOfferingInstrumentType;
   purpose: PrimaryOfferingPurpose;
   /** Face value offered (for EQUITY: the number of new SHARES — the equity book clears in shares). */
-  sizeUSD: number;
+  sizeLocal: number;
   /**
    * The issuer's own price talk, in the book's statistic — used only by a DEBUT, which has no
    * prior print for the book to reference. A listed name's last cleared price and an existing
@@ -79,7 +79,7 @@ export interface PrimaryOffering {
     kind: 'LBO' | 'TAKE_PRIVATE' | 'RECAP' | 'IPO';
     sponsorId: string;
     /** LBO and TAKE_PRIVATE: the sponsor's equity cheque, paid from dry powder at settlement. */
-    equityUSD?: number;
+    equityLocal?: number;
     /** TAKE_PRIVATE: what the sponsor pays each public shareholder to tender. */
     takeoutPricePerShare?: number;
   };
@@ -213,17 +213,17 @@ export function chooseLeadBank(issuerId: string, banks: LeadBankCandidate[]): st
  * banks in proportion to the balance sheet each actually has — the same quantity that decides
  * whether a bank could serve the client at all, in place of a hash of the client's id.
  */
-export function mandateAllocator(banks: { ticker: string; bankMarketShare?: number; capacityUSD: number }[]) {
-  const freeUSD = new Map(banks.map((b) => [b.ticker, Math.max(0, b.capacityUSD)]));
+export function mandateAllocator(banks: { ticker: string; bankMarketShare?: number; capacityLocal: number }[]) {
+  const freeUSD = new Map(banks.map((b) => [b.ticker, Math.max(0, b.capacityLocal)]));
   return {
-    pick(clientId: string, sizeUSD: number, relationshipUSD?: (ticker: string) => number): string {
+    pick(clientId: string, sizeLocal: number, relationshipUSD?: (ticker: string) => number): string {
       const ticker = chooseLeadBank(clientId, banks.map((b) => ({
         ticker: b.ticker,
         bankMarketShare: b.bankMarketShare,
         relationshipUSD: relationshipUSD ? relationshipUSD(b.ticker) : 0,
         freeCapacityUSD: freeUSD.get(b.ticker) ?? 0,
       })));
-      if (ticker) freeUSD.set(ticker, Math.max(0, (freeUSD.get(ticker) ?? 0) - Math.max(0, sizeUSD)));
+      if (ticker) freeUSD.set(ticker, Math.max(0, (freeUSD.get(ticker) ?? 0) - Math.max(0, sizeLocal)));
       return ticker;
     },
   };

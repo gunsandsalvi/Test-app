@@ -58,7 +58,7 @@ import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 // Senior-secured first-lien loans trade at a real, structural discount to the same issuer's
 // unsecured bond spread — collateral and seniority mean less loss given default.
 const SENIOR_LIEN_DISCOUNT = 0.85;
@@ -177,7 +177,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // reweights when a new issue enters it. What the book still cannot do is pay with money it
     // does not have: `maxNetPurchaseUSD` is untouched, so a deal the market cannot fund is still
     // pulled — which is the honest reason for a deal to fail.
-    const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0;
+    const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeLocal ?? 0;
     const liveTradableFloatUSD = (c: Company) => floatingDebtOf(c) + offeringSizeUSD(c);
 
 
@@ -185,11 +185,11 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingLocal: floatingDebtOf(c),
-      tradableFloatUSD: floatingDebtOf(c),
+      tradableFloatLocal: floatingDebtOf(c),
       currentStat: c.leveragedLoan!.discountMarginBps,
       statKind: 'YIELD_LIKE',
       durationYears: loanCreditDurationYears(c),
-      primaryOfferingUSD: offeringsByIssuerId.get(c.id)?.sizeUSD,
+      primaryOfferingUSD: offeringsByIssuerId.get(c.id)?.sizeLocal,
       primaryWithdrawStat: offeringsByIssuerId.get(c.id)?.walkAwayStat,
       // No ceiling — same reasoning as the bond book (07b): the distressed regime always bids at
       // some price, and where it stands is where a widening arrests.
@@ -220,7 +220,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       store.scan(entity.id, 'LEVERAGED_LOAN', (h) => {
         const issuerId = issuerIdOf(v2, h.instrumentId); // 13b: a row names a tranche or its issuer
         if (!issuerIdsThisRegion.has(issuerId)) return false;
-        currentHoldingByCompany.set(issuerId, (currentHoldingByCompany.get(issuerId) ?? 0) + h.quantityOrNotionalUSD);
+        currentHoldingByCompany.set(issuerId, (currentHoldingByCompany.get(issuerId) ?? 0) + h.quantityOrNotionalLocal);
         return true;
       });
       currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);
@@ -242,20 +242,20 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     });
     // OWN7, first half: the float is what this book's holders hold, and the INSTITUTIONS' half of
     // it is known here. It is set before the desks are built rather than after, because a desk is
-    // sized against the LIVE float — leaving `tradableFloatUSD` at the whole outstanding until
+    // sized against the LIVE float — leaving `tradableFloatLocal` at the whole outstanding until
     // after the desk build gave every desk capacity against an issue that is not for sale, and a
     // float of zero makes `buildDealerDeskParticipants` hand back no desk at all.
     const heldByInstitutionsUSD = new Map<string, number>();
     currentHoldingByCompanyByEntity.forEach((byCompany) => byCompany.forEach((usd, id) => {
       if (usd > 0) heldByInstitutionsUSD.set(id, (heldByInstitutionsUSD.get(id) ?? 0) + usd);
     }));
-    instruments.forEach((inst) => { inst.tradableFloatUSD = heldByInstitutionsUSD.get(inst.id) ?? 0; });
+    instruments.forEach((inst) => { inst.tradableFloatLocal = heldByInstitutionsUSD.get(inst.id) ?? 0; });
 
     // XB1: each entity's own book decides its target — assets x loan allocation x mandate.
     const rawEntityTargets = new Map<string, number>(
       regionEntities.map((e) => [
         e.id,
-        institutionTotalAssetsUSD(ctx, e) * e.assetAllocationTarget.loanPct
+        institutionTotalAssetsLocal(ctx, e) * e.assetAllocationTarget.loanPct
           * mandateWeightForIssuer(e.entityType, e.region, regionId, loanStockByRegion),
       ])
     );
@@ -305,7 +305,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       });
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
       const entityShare = entityShareOfSector / sectorTotal;
-      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsUSD(ctx, entity));
+      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
       // HF1: the distressed bid is a DISTRESSED fund's, not every hedge fund's. Pricing off
       // discounted expected recovery instead of expected loss, and running the conviction size
       // that goes with it, is one strategy — the credit long-short book beside it is an ordinary
@@ -322,7 +322,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // issuer's index weight rather than its own size. Measured on an LBO financing: the book
       // could HOLD it (53.7M of capacity against a 40.1M post-issue float) but could only FUND
       // 14.0M, so the solve ran past the sponsor's walk-away and every deal was pulled.
-      const classBudgetUSD = stagePurchaseBudgetUSD(ctx, entity, institutionTotalAssetsUSD(ctx, entity), 'LEVERAGED_LOAN', institutionUnsettledLessCollateralUSD(ctx, entity.id));
+      const classBudgetUSD = stagePurchaseBudgetUSD(ctx, entity, institutionTotalAssetsLocal(ctx, entity), 'LEVERAGED_LOAN', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
@@ -394,7 +394,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // behaviour falls out of the quarterly rebalance without any special case.)
       const fundShareOfIndex = index.totalValueUSD > 0 ? investableUSD / index.totalValueUSD : 0;
       index.constituents.forEach((c) => {
-        const offeringUSD = offeringsByIssuerId.get(c.instrumentId)?.sizeUSD ?? 0;
+        const offeringUSD = offeringsByIssuerId.get(c.instrumentId)?.sizeLocal ?? 0;
         const targetUSD = investableUSD * c.weight + offeringUSD * fundShareOfIndex;
         demandByInstrumentId.set(
           c.instrumentId,
@@ -424,7 +424,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       if (usd > 0) deskHeldUSD.set(id, (deskHeldUSD.get(id) ?? 0) + usd);
     }));
     instruments.forEach((inst) => {
-      inst.tradableFloatUSD = (heldByInstitutionsUSD.get(inst.id) ?? 0) + (deskHeldUSD.get(inst.id) ?? 0);
+      inst.tradableFloatLocal = (heldByInstitutionsUSD.get(inst.id) ?? 0) + (deskHeldUSD.get(inst.id) ?? 0);
     });
 
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
@@ -497,7 +497,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
             ? { trancheId: primaryTrancheId(issuerId, offering.purpose, ctx.nextWeek), sliceUSD: primarySliceOf(newHoldingUSD - (prior?.get(issuerId) ?? 0), boughtByInstrument[ii], outcome.marketTakeUSD) }
             : undefined;
           splitAcrossTranches(v2, issuerId, 'LEVERAGED_LOAN', newHoldingUSD, primary).forEach((t) => {
-            if (t.usd > 1) newLoanHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceLocal: t.usd, units: t.usd });
+            if (t.usd > 1) newLoanHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalLocal: t.usd, faceLocal: t.usd, units: t.usd });
           });
         }
       }
@@ -510,7 +510,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // §7.259: AFTER the fills application, so the residual written onto the lead's desk
     // survives to next week's clearing — where the build hands it to the kernel as a real prior
     // position that can be genuinely sold.
-    settlePricedOfferings(regionId, 'LEVERAGED_LOAN', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD,
+    settlePricedOfferings(regionId, 'LEVERAGED_LOAN', offeringsByIssuerId, result, ctx, (o) => o.sizeLocal,
       (o, clearedStat) => underwritingFeeBps({
         bookSpreadBps: DEALER_SPREAD_BPS,
         oneWeekPriceRiskBps: oneWeekPriceRiskBps({
@@ -519,7 +519,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
           minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
           durationYears: durationById.get(o.issuerId) ?? 0,
         }),
-        dealSizeUSD: o.sizeUSD,
+        dealSizeUSD: o.sizeLocal,
         deskCapacityUSD: bookCapacityUSD,
       }),
       BOOK);
@@ -535,7 +535,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       ctx, regionId, currencyOf(regionId), BOOK,
       result.netCashDeltaByParticipantId,
       (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
-      { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
+      { netCashUSD: result.dealerNetCashUSD, feeLocal: result.totalDealerRevenueUSD },
       feeDesksForRegion(ctx, regionId),
       // WS8: the CCP pays each issuer for the paper its deal actually placed.
       // The paper's leg is the tranche's own wire (issuer → house at issue, W3) — no asset here.

@@ -66,7 +66,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     put(`region:${r}:2y`, reg.zeroRates?.tenor2Y);
     put(`region:${r}:inflation`, reg.inflation);
     put(`region:${r}:repo`, reg.repoRateAnnual);
-    put(`region:${r}:gdp`, reg.derivedNominalGdpUSD ?? reg.estimatedNominalGdpUSD);
+    put(`region:${r}:gdp`, reg.derivedNominalGdpUSD ?? reg.estimatedNominalGdpLocal);
     put(`region:${r}:wage growth`, reg.wageGrowth);
     put(`region:${r}:bank nim`, reg.bankingSector?.netInterestMarginPct);
     put(`region:${r}:bank capital`, reg.bankingSector?.bankCapitalRatio);
@@ -87,13 +87,13 @@ export function recordTape(tape: Tape, state: GameState): void {
     }
     Object.entries(reg.categoryDemand).forEach(([su, d]) => {
       if (!d) return;
-      put(`market:${r}:${su}:price`, d.unitPriceUSD);
+      put(`market:${r}:${su}:price`, d.unitPriceLocal);
       put(`market:${r}:${su}:supplied`, d.totalUnitsSuppliedThisWeek);
       put(`market:${r}:${su}:demanded`, d.totalUnitsDemandedThisWeek);
-      put(`market:${r}:${su}:demand usd`, d.demandLevelAnnualUSD);
+      put(`market:${r}:${su}:demand usd`, d.demandLevelAnnualLocal);
     });
     (reg.smePools ?? []).forEach((p) => {
-      put(`pool:${r}:${p.industry}:revenue`, p.annualRevenueUSD);
+      put(`pool:${r}:${p.industry}:revenue`, p.annualRevenueLocal);
       put(`pool:${r}:${p.industry}:margin`, p.marginPct);
       put(`pool:${r}:${p.industry}:employment`, p.employment);
       put(`pool:${r}:${p.industry}:default rate`, p.defaultRateAnnualPct);
@@ -116,7 +116,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     put(`institution:${e.id}:assets`, institutionTotalAssetsFromState(state, e));
     put(`institution:${e.id}:cash`, entityCashOf(ensureV2(state), e));
     put(`institution:${e.id}:price`, e.stockPrice);
-    put(`institution:${e.id}:equity`, e.equityCapitalUSD);
+    put(`institution:${e.id}:equity`, e.equityCapitalLocal);
   });
   state.companies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet) return;

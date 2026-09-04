@@ -47,10 +47,10 @@ test('§7.291 — a bank at its regulatory floor prices at coin-flip PD; a capit
   // composes: buffer over RWA x loss rate is the distance. Reproduce the arithmetic here so a
   // change to either side breaks this pin.
   const { bankRwaUSD } = await import('../src/domain/bank-pricing');
-  const sheet = (equityUSD: number) => ({
+  const sheet = (equityLocal: number) => ({
     businessLoans: [],
     householdLoans: [{ kind: 'CREDIT_CARD', principalLocal: 10e9, marginBps: 0 }],
-    bankEquityLocal: equityUSD, loanLossProvisionRateAnnualPct: 0.02,
+    bankEquityLocal: equityLocal, loanLossProvisionRateAnnualPct: 0.02,
   }) as never;
   // Step 10: the facility book is the bank's rows on the borrowers' ladders, read by the caller.
   const rwa = bankRwaUSD(sheet(0), 10e9);

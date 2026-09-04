@@ -113,13 +113,13 @@ export interface BackKernelDeps {
   mmfSweepBooks: ReturnType<typeof openCorporateSweepBooks>;
   primarySettlementByIssuerId: Map<string, { offering: PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; issuedUSD: number; proceedsUSD: number }>;
   pendingOfferingIssuerIds: Set<string>;
-  leadBankFor: (comp: Company, sizeUSD: number) => string;
+  leadBankFor: (comp: Company, sizeLocal: number) => string;
   enqueueOffering: (o: PrimaryOffering) => void;
   /** Appends to the stage's refinance-news accumulator (swapped by the shard machinery). */
   pushNews: (n: NewsItem) => void;
   /** §7.321 barrier mode: reports the post sweep's exact share delta so the merge can rebuild
    *  the region book's netInflow float sum in original firm order. */
-  onSweepDelta?: (row: number, deltaUSD: number) => void;
+  onSweepDelta?: (row: number, deltaLocal: number) => void;
   /** §7.325 barrier/worker capture: the cash walk's two exact tax amounts by row (NaN = no
    *  write), so the firm-major replay adds the SAME floats the serial walk added — a delta
    *  recovered by subtracting map values would be a different float (§7.324's lesson). */
@@ -252,13 +252,13 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
     weeklyInterestUSD: weeklyInterest,
     cashLocal: L.cashLocal[row],
     currentLiabilitiesUSD: L.currentLiabilitiesUSD[row],
-    annualRevenueUSD: L.annualRevenueUSD[row],
+    annualRevenueLocal: L.annualRevenueLocal[row],
     newRevenueUSD: newRevenue,
     priorMaintenanceCapexUSD: Number.isNaN(L.maintenanceCapexUSD[row]) ? (L.capexUSD[row] * 0.6) : L.maintenanceCapexUSD[row],
     priorGrowthCapexUSD: Number.isNaN(L.growthCapexUSD[row]) ? (L.capexUSD[row] * 0.4) : L.growthCapexUSD[row],
     priorMaintenanceShortfallStreak: Number.isNaN(L.maintenanceShortfallStreak[row]) ? 0 : L.maintenanceShortfallStreak[row],
     baselineGrowthCapexToRevenueRatio: Number.isNaN(L.baselineGrowthCapexToRevenueRatio[row])
-      ? ((Number.isNaN(L.growthCapexUSD[row]) ? (L.capexUSD[row] * 0.4) : L.growthCapexUSD[row]) / Math.max(1, L.annualRevenueUSD[row]))
+      ? ((Number.isNaN(L.growthCapexUSD[row]) ? (L.capexUSD[row] * 0.4) : L.growthCapexUSD[row]) / Math.max(1, L.annualRevenueLocal[row]))
       : L.baselineGrowthCapexToRevenueRatio[row],
     isInvestmentGrade: L.investmentGrade[row] === 1,
     hasHouseBank: homeBankTicker !== undefined,
@@ -361,11 +361,11 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
  *  one post; the walk and every later block write through the same instance, exactly as the
  *  closure binding did. */
 function makeCashPoster(ticker: string, region: Company['region'], cashLocal: number, ctx: WeeklyStepContext, retainCashLedger: boolean): {
-  post: (label: string, amountUSD: number, counterparty?: PartyRef, settle?: boolean) => void;
+  post: (label: string, amountLocal: number, counterparty?: PartyRef, settle?: boolean) => void;
   cash: { usd: number };
-  cashLedger: { label: string; amountUSD: number }[];
+  cashLedger: { label: string; amountLocal: number }[];
 } {
-    const cashLedger: { label: string; amountUSD: number }[] = [];
+    const cashLedger: { label: string; amountLocal: number }[] = [];
     const cash = { usd: cashLocal };
     // SETL2: a ledger entry IS a payment instruction. The S5 walk already named every flow and
     // its amount; what it never named was the OTHER SIDE, which is why corporate cash could move
@@ -379,29 +379,29 @@ function makeCashPoster(ticker: string, region: Company['region'], cashLocal: nu
     // §3.13c: a firm's cash walk is in the firm's own money — every leg it posts is
     // denominated there, and a counterparty in another money converts on receipt.
     const money = currencyOf(region as RegionId);
-    const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true, settleWeek?: number) => {
-      if (!isFinite(amountUSD) || amountUSD === 0) return;
+    const post = (label: string, amountLocal: number, counterparty?: PartyRef, settle = true, settleWeek?: number) => {
+      if (!isFinite(amountLocal) || amountLocal === 0) return;
       // §5-WIRES N: a leg dated past this week is an OBLIGATION — journaled now, numbered now,
       // moving no cash until its week (settlement moves the deposit then). The walk's running
       // cash is what the firm can spend this week, and a dated row is not that.
       if (settleWeek !== undefined && settleWeek > settlementWeek()) {
         const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted dated '${label}' for ${ticker} with no counterparty`);
         const reasonId = internReason(label);
-        if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, money, reasonId, settleWeek);
-        else payByIds(ctx, selfPartyId, otherId, -amountUSD, money, reasonId, settleWeek);
+        if (amountLocal > 0) payByIds(ctx, otherId, selfPartyId, amountLocal, money, reasonId, settleWeek);
+        else payByIds(ctx, selfPartyId, otherId, -amountLocal, money, reasonId, settleWeek);
         return;
       }
       // SCALE §7.303 — the drill-down rows are display retention with NO consumer anywhere in
       // the tree (grepped: written, never read). ~40 objects x 2,492 firms x 52 weeks of pure
       // GC food; kept only under CASH_LEDGER=1 for debugging.
-      if (retainCashLedger) cashLedger.push({ label, amountUSD: Math.round(amountUSD) });
-      cash.usd += amountUSD;
+      if (retainCashLedger) cashLedger.push({ label, amountLocal: Math.round(amountLocal) });
+      cash.usd += amountLocal;
       // BYPASS_TRACE=1 — the settle:false legs are cash the walk moves while claiming the money
       // moves elsewhere; any label whose elsewhere-leg does not actually debit/credit this
       // company is the 02b reconcile's corporate class, attributed here by name.
       if (!settle && process.env.BYPASS_TRACE === '1') {
         const key = `${region}:${label}`;
-        bypassTraceByLabel.set(key, (bypassTraceByLabel.get(key) ?? 0) + amountUSD);
+        bypassTraceByLabel.set(key, (bypassTraceByLabel.get(key) ?? 0) + amountLocal);
       }
       // `settle: false` = the line is REPORTED here but the money moves elsewhere, itemised. A
       // dividend is the case: the issuer owes the register, and the register pays each holder by
@@ -409,10 +409,10 @@ function makeCashPoster(ticker: string, region: Company['region'], cashLocal: nu
       // one here as well would move the same money twice.
       if (!settle) return;
       // §5-CLOSE: a settled leg with no counterparty is a defect at the site that posted it.
-      const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted '${label}' for ${ticker} (${(amountUSD / 1e6).toFixed(3)}M) with no counterparty`);
+      const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted '${label}' for ${ticker} (${(amountLocal / 1e6).toFixed(3)}M) with no counterparty`);
       const reasonId = internReason(label);
-      if (amountUSD > 0) payByIds(ctx, otherId, selfPartyId, amountUSD, money, reasonId);
-      else payByIds(ctx, selfPartyId, otherId, -amountUSD, money, reasonId);
+      if (amountLocal > 0) payByIds(ctx, otherId, selfPartyId, amountLocal, money, reasonId);
+      else payByIds(ctx, selfPartyId, otherId, -amountLocal, money, reasonId);
     };
   return { post, cash, cashLedger };
 }
@@ -464,7 +464,7 @@ function runCashWalk(args: {
   currentWeekMod13: number;
   weeklyDebtFundedPortion: number;
   bankCredit: PartyRef | undefined;
-  post: (label: string, amountUSD: number, counterparty?: PartyRef, settle?: boolean, settleWeek?: number) => void;
+  post: (label: string, amountLocal: number, counterparty?: PartyRef, settle?: boolean, settleWeek?: number) => void;
   /** §7.325 — this firm's row and the capture column for the walk's tax accrual. */
   row: number;
   taxCapture?: { accrueUSD: Float64Array };
@@ -580,7 +580,7 @@ function runCashWalk(args: {
       // the wage those occupations clear at, times the wage this firm itself offers
       // (`offeredWageIndex`, which moves with its own hiring success in the labor market).
       //
-      // What this replaces: `employeeCount x (estimatedHouseholdIncomeUSD / regionEmployed)`, a
+      // What this replaces: `employeeCount x (estimatedHouseholdIncomeLocal / regionEmployed)`, a
       // per-capita INCOME figure standing in for a wage. Every employer in a region paid the same
       // average regardless of who it employed or what it offered, and once household income
       // became the sum of what employers pay, the number would have depended on itself.
@@ -624,18 +624,18 @@ function runCashWalk(args: {
       // no distribution firm at all, which is a fact about that region rather than a gap.
       if (carryingCostUSD > 0) {
         const holders = ctx.channelShareByRegion[region];
-        let paidUSD = 0;
+        let paidLocal = 0;
         holders?.forEach((share, holderTicker) => {
           if (holderTicker === ticker) return; // a distributor warehouses its own stock
-          const amountUSD = carryingCostUSD * share;
-          if (!(amountUSD > 0)) return;
-          paidUSD += amountUSD;
-          post('inventory carrying cost', -amountUSD, { kind: 'COMPANY', ticker: holderTicker });
+          const amountLocal = carryingCostUSD * share;
+          if (!(amountLocal > 0)) return;
+          paidLocal += amountLocal;
+          post('inventory carrying cost', -amountLocal, { kind: 'COMPANY', ticker: holderTicker });
         });
         // §5-CLOSE: stock nobody else warehouses is warehoused by the firm itself, at its own
         // cost already inside its operating expense — no payment leaves, and nothing is paid to
         // nobody. (The residual is a distributor's own share and rounding.)
-        void paidUSD;
+        void paidLocal;
       }
       // SETL4: reported here, paid itemised below — the house bank for its facilities, the
       // register for market paper. One aggregate line on the cash walk, three real payees.
@@ -770,8 +770,8 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
      * and the honest answer is zero — not a figure produced by dividing into a fabricated share
      * count that the generator used to hand every private firm.
      */
-    const perShare = (amountUSD: number): number =>
-      L8.sharesOutstanding[row] > 0 ? round2(amountUSD / L8.sharesOutstanding[row]) : 0;
+    const perShare = (amountLocal: number): number =>
+      L8.sharesOutstanding[row] > 0 ? round2(amountLocal / L8.sharesOutstanding[row]) : 0;
 
     const reg = updatedRegions[L8.region[row]];
     // ENGINE V2 — THE FRONT HALF OF THIS KERNEL LIVES IN src/engine2/stage08-front.ts NOW:
@@ -903,12 +903,12 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       const profileInputRate = Object.values(firmInputIntensities(comp.productLines, profileKey))
         .reduce((a, b) => a + b, 0);
       const pnl = profileModule({ comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
-        weeklyPayrollUSD, inputCostAnnualUSD: L8.annualRevenueUSD[row] * profileInputRate });
+        weeklyPayrollUSD, inputCostAnnualUSD: L8.annualRevenueLocal[row] * profileInputRate });
       newRevenue = pnl.newRevenue;
       const profileInputCostUSD = newRevenue * profileInputRate;
       // §5-STRUCT step 2 — the statement lives on the firm (domain/company-week/income-statement.ts).
       const profilePnl = profileIncome({
-        revenueUSD: newRevenue,
+        revenueLocal: newRevenue,
         otherIncomeAnnualUSD: pnl.otherIncomeAnnualUSD ?? 0,
         inputCostAnnualUSD: profileInputCostUSD,
         payrollAnnualUSD: weeklyPayrollUSD * 52,
@@ -920,7 +920,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
         sharesOutstanding: L8.sharesOutstanding[row],
         tax: taxAttrs,
       });
-      newEbitda = profilePnl.ebitdaUSD;
+      newEbitda = profilePnl.ebitdaLocal;
       newEbit = profilePnl.ebitUSD;
       newNetIncome = profilePnl.netIncomeUSD;
       newEps = perShare(newNetIncome);
@@ -1016,8 +1016,8 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     const { leverage: newLeverage, coverage: newCoverage } = creditMetrics({
       isBank: L8.sector[row] === 'Banks',
       totalDebtUSD: newTotalDebt,
-      revenueUSD: newRevenue,
-      ebitdaUSD: newEbitda,
+      revenueLocal: newRevenue,
+      ebitdaLocal: newEbitda,
       ebitUSD: newEbit,
       annualInterestUSD: annualInterest,
       // §7.268: the bank's OWN sheet, not the region average — a solvency rating on the
@@ -1059,19 +1059,19 @@ export function runMmfRedemption(comp: Company, row: number, d: BackKernelDeps, 
   const { ctx, mmfSweepBooks } = d;
   const L8 = d.backLanes;
   const { cash, post } = a;
-    if (L8.wasMergerAcquired[row] !== 1 && cash.usd < 0 && (comp.mmfSharesUSD ?? 0) > 0) {
+    if (L8.wasMergerAcquired[row] !== 1 && cash.usd < 0 && (comp.mmfSharesLocal ?? 0) > 0) {
       const book = mmfSweepBooks.get(L8.region[row]);
       if (book) {
-        const wantedUSD = Math.min(comp.mmfSharesUSD ?? 0, -cash.usd);
-        const paidUSD = Math.min(wantedUSD, book.redeemableUSD);
-        if (paidUSD > 1) {
-          book.netInflowUSD -= paidUSD;
-          book.redeemableUSD -= paidUSD;
-          comp.mmfSharesUSD = (comp.mmfSharesUSD ?? 0) - paidUSD;
+        const wantedUSD = Math.min(comp.mmfSharesLocal ?? 0, -cash.usd);
+        const paidLocal = Math.min(wantedUSD, book.redeemableUSD);
+        if (paidLocal > 1) {
+          book.netInflowUSD -= paidLocal;
+          book.redeemableUSD -= paidLocal;
+          comp.mmfSharesLocal = (comp.mmfSharesLocal ?? 0) - paidLocal;
           const shortfallFund = findRegionMmf(ctx.updatedInstitutionalEntities, L8.region[row]);
-          post('money fund share redemption: liquidity shortfall', paidUSD,
+          post('money fund share redemption: liquidity shortfall', paidLocal,
             shortfallFund ? { kind: 'INSTITUTION', id: shortfallFund.id } : undefined);
-          return paidUSD;
+          return paidLocal;
         }
       }
     }
@@ -1243,11 +1243,11 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       const calculatedRating = determineCreditRating(newLeverage, newCoverage,
         L8.sector[row] === 'Banks'
           ? {
-            annualRevenueUSD: newRevenue,
+            annualRevenueLocal: newRevenue,
             peerMedianRevenueUSD: regionMedianRevenueUSD,
           }
           : {
-            annualRevenueUSD: newRevenue,
+            annualRevenueLocal: newRevenue,
             peerMedianRevenueUSD: regionMedianRevenueUSD,
             customerConcentration: Number.isNaN(L8.customerConcentration[row]) ? undefined : L8.customerConcentration[row],
             supplierConcentration: Number.isNaN(L8.supplierConcentration[row]) ? undefined : L8.supplierConcentration[row],
@@ -1256,7 +1256,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
             revenueVolatility: revVol,
             // CRD: the earnings themselves, so the rater can answer the case the ratio clamps
             // were covering up rather than inheriting a bounded number that has lost it.
-            ebitdaUSD: newEbitda,
+            ebitdaLocal: newEbitda,
           });
       // Wall Street: rating migration is deliberately sticky (a 25%/week chance to move even one
       // notch) to mirror how real rating agencies don't instantly re-rate every week — but the
@@ -1310,7 +1310,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // pro-rata action, paid to the issuer as a placement — paper minted onto the register that
     // the lead already held (measured: USA desks 34B → 93B over the ladders in two weeks).
     const primaryPlacedUSD = settlement && !settlement.withdrawn
-      ? Math.max(0, Math.min(settlement.offering.sizeUSD, settlement.issuedUSD ?? settlement.offering.sizeUSD)) : 0;
+      ? Math.max(0, Math.min(settlement.offering.sizeLocal, settlement.issuedUSD ?? settlement.offering.sizeLocal)) : 0;
     const primaryFixedAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FIXED' ? primaryPlacedUSD : 0;
     const primaryFloatingAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FLOATING' ? primaryPlacedUSD : 0;
     // SCALE — the two filtered reduces as one walk; each accumulator sums its subset in array
@@ -1327,15 +1327,15 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     const preActionFloatingUSD = preFloatingSumUSD + primaryFloatingAdjUSD;
 
     /**
-     * What retiring `amountUSD` of `tranche` early costs this issuer ON TOP of the principal —
+     * What retiring `amountLocal` of `tranche` early costs this issuer ON TOP of the principal —
      * the call premium (`domain/call-protection.ts`). Zero at maturity and on bank facilities;
      * real everywhere else, which is what makes a refinancing an economic decision.
      */
-    const callPremiumRowUSD = (r: number, amountUSD: number): number => {
-      if (!(amountUSD > 0)) return 0;
+    const callPremiumRowUSD = (r: number, amountLocal: number): number => {
+      if (!(amountLocal > 0)) return 0;
       const remainingYears = Math.max(0.5, (TS.maturityWeek[r] - state.currentWeek) / 52);
       const riskFree = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams);
-      return amountUSD * (callPricePerDollar(viewOf(r), state.currentWeek, riskFree) - 1);
+      return amountLocal * (callPricePerDollar(viewOf(r), state.currentWeek, riskFree) - 1);
     };
     /**
      * Is retiring this paper early worth what it costs, and how does it rank against the rest of
@@ -1395,7 +1395,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       const currentFairRate = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams) + L8.oasSpreadBps[row] / 10000;
       // A floating tranche carries a margin rather than a coupon; there is nothing to refinance
       // INTO a lower fixed rate, so its saving is zero rather than NaN.
-      const excessCashAvailable = cash.usd > L8.annualRevenueUSD[row] * 0.15;
+      const excessCashAvailable = cash.usd > L8.annualRevenueLocal[row] * 0.15;
       // The real test is not "is the coupon above the market" — it is whether the saving is worth
       // what the call costs. A treasurer discounts the coupon saving over the paper's remaining
       // life and compares it to the premium; below that line the bond stays outstanding.
@@ -1417,7 +1417,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         const calledAmountUSD = callableAmountUSD({
           tranchePrincipalUSD: TS.principalLocal[rTr],
           cashLocal: cash.usd,
-          cashFloorUSD: L8.annualRevenueUSD[row] * 0.15,
+          cashFloorUSD: L8.annualRevenueLocal[row] * 0.15,
           premiumPerDollar,
         });
         retireTranche(v2, issuer, rTr, calledAmountUSD, 'accretive call: principal retired');
@@ -1486,7 +1486,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         region: L8.region[row],
         instrumentType: refinanceAsFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
         purpose: 'REFINANCE',
-        sizeUSD: TS.principalLocal[rTr],
+        sizeLocal: TS.principalLocal[rTr],
         // Need-driven: the issuer walks only where the market is worse than its revolver.
         walkAwayStat: refinanceAsFixed
           ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
@@ -1607,7 +1607,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         id: `refi-fail-${L8.ticker[row]}-${nextWeek}`,
         week: nextWeek,
         title: `${L8.ticker[row]} Pulls Refinancing, Draws Revolver`,
-        description: `${L8.name[row]} withdrew a ${formatCurrency(settlement.offering.sizeUSD, { compact: true })} refinancing at its walk-away and drew its revolver at policy+${L8.facilityMarginBps[row]}bps.`,
+        description: `${L8.name[row]} withdrew a ${formatCurrency(settlement.offering.sizeLocal, { compact: true })} refinancing at its walk-away and drew its revolver at policy+${L8.facilityMarginBps[row]}bps.`,
         category: 'CREDIT',
         impactBadge: '[FUNDING SQUEEZE]',
         impactRegion: L8.region[row],
@@ -1652,7 +1652,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           region: L8.region[row],
           instrumentType: asFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
           purpose: 'MAINTENANCE_TERM_OUT',
-          sizeUSD: bridgeUSD,
+          sizeLocal: bridgeUSD,
           // Terming out only makes sense below the bridge's own cost.
           walkAwayStat: asFixed
             ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
@@ -1780,7 +1780,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         region: L8.region[row],
         instrumentType: 'CORP_BOND',
         purpose: 'OPPORTUNISTIC',
-        sizeUSD: dealSizeUSD,
+        sizeLocal: dealSizeUSD,
         walkAwayStat: walkAwayOasBps,
         rateType: 'FIXED',
         leadBankTicker: leadBankFor(comp, dealSizeUSD),
@@ -1874,7 +1874,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 /**
  * §7.317 steps 1.5/1.7 — THE BACK CORE, lifted whole: capital → cash walk → liquidity → debt →
  * rating, verbatim, ending where the earnings/filing/write-back POST begins. Reads lanes and v2
- * rows only, except the four §7.320 exceptions (the profile branch, mmfSharesUSD, the capital
+ * rows only, except the four §7.320 exceptions (the profile branch, mmfSharesLocal, the capital
  * write application, the revenueHistory fold). Returns the measured 50-value crossing interface
  * plus the cash poster the post zone keeps writing through.
  */
@@ -2054,7 +2054,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const quarterIdx = Math.floor((nextWeek - 1) / 13) + 4;
     const prevSnapshot = comp.historicalFundamentals ? comp.historicalFundamentals[comp.historicalFundamentals.length - 1] : undefined;
     const currentTreasuryHoldingsUSD = (newTreasuryHoldings || [])
-      .reduce((s: number, h: { quantityOrNotionalUSD: number }) => s + h.quantityOrNotionalUSD, 0);
+      .reduce((s: number, h: { quantityOrNotionalLocal: number }) => s + h.quantityOrNotionalLocal, 0);
     // Real current-portion-of-debt: tranches actually maturing within a year, from this
     // company's own updated ladder — not a flat 15% guess.
     // Settle this week's corporate actions against the real holders of this issuer's paper. A
@@ -2104,7 +2104,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         cash.usd,
         newTotalDebt,
         currentTreasuryHoldingsUSD,
-        Object.values(newOutputInventoryBySubUnit).reduce((s, inv) => s + inv.valueUSD, 0),
+        Object.values(newOutputInventoryBySubUnit).reduce((s, inv) => s + inv.valueLocal, 0),
         newMaintenanceCapex,
         newGrowthCapex,
         newOasBps,
@@ -2157,8 +2157,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const share = line.revenueShare || 1.0;
       return {
         subUnitId: line.subUnitId,
-        revenueUSD: Math.round((newRevenue * share)),
-        ebitdaUSD: Math.round((newEbitda * share)),
+        revenueLocal: Math.round((newRevenue * share)),
+        ebitdaLocal: Math.round((newEbitda * share)),
         capexUSD: Math.round((newCapex * share)),
       };
     });
@@ -2169,14 +2169,14 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // cash this week. The sweep only ever moves the EXCESS, so it cannot push a company toward
     // the default trigger; a redemption arriving the week after distress began is the real
     // T+1 of a treasury pulling money home.
-    let newMmfSharesUSD = comp.mmfSharesUSD ?? 0;
+    let newMmfSharesUSD = comp.mmfSharesLocal ?? 0;
     // §5-MNC — REPATRIATION IS THE SUBSIDIARY'S TREASURY SWEEP. A wholly-owned sub's excess
     // cash belongs to the parent, not to a money fund: the same above-the-buffer excess the
     // sweep below would move goes home instead, as a real cross-border payment through the same
     // settlement/FX path as every other. (The dividend path cannot serve here: a private sub
     // has no market cap for a declared yield to price, and its holder of record IS the parent.)
     if (comp.parentTicker && !isDefaulted) {
-      const bufferUSD = L8.annualRevenueUSD[row] * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * L8.mgmtRiskAversion[row];
+      const bufferUSD = L8.annualRevenueLocal[row] * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * L8.mgmtRiskAversion[row];
       const excessUSD = Math.max(0, cash.usd - bufferUSD);
       if (excessUSD > 1e6) {
         post('subsidiary excess cash repatriated to the parent', -excessUSD,
@@ -2339,7 +2339,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // instruction and the settlement stage (which runs immediately after this one) applies the
       // net to this company's balance AND to its bank's deposits and reserves. One mover.
       // `newCash` above stays the stage's own running view, which is what settlement will produce.
-    comp.mmfSharesUSD = newMmfSharesUSD;
+    comp.mmfSharesLocal = newMmfSharesUSD;
 
     comp.lastOpportunisticOfferingWeek = newLastOpportunisticOfferingWeek;
 

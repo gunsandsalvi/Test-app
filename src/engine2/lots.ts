@@ -33,7 +33,7 @@ export interface LotStore {
   /** Lot rows (parallel columns); `next` chains a (firm, sub-unit) holding in FIFO order. */
   cap: number;
   units: Float64Array;
-  priceUSD: Float64Array;
+  priceLocal: Float64Array;
   acquiredWeek: Int32Array;
   sellerId: Int32Array;
   next: Int32Array;
@@ -67,7 +67,7 @@ export function newLotStore(): LotStore {
   return {
     cap,
     units: new Float64Array(cap),
-    priceUSD: new Float64Array(cap),
+    priceLocal: new Float64Array(cap),
     acquiredWeek: new Int32Array(cap),
     sellerId: new Int32Array(cap),
     next: new Int32Array(cap).fill(-1),
@@ -87,7 +87,7 @@ function growLots(L: LotStore): void {
     return a;
   };
   L.units = g(L.units, (n) => new Float64Array(n));
-  L.priceUSD = g(L.priceUSD, (n) => new Float64Array(n));
+  L.priceLocal = g(L.priceLocal, (n) => new Float64Array(n));
   L.acquiredWeek = g(L.acquiredWeek, (n) => new Int32Array(n));
   L.sellerId = g(L.sellerId, (n) => new Int32Array(n));
   const next = new Int32Array(cap).fill(-1);
@@ -125,7 +125,7 @@ function slotOf(L: LotStore, firmRow: number, subIdx: number): number {
 /** Append one real purchase lot to the firm's holding (FIFO tail). */
 export function pushLot(
   v2: V2World, companyId: string, subUnitId: string,
-  sellerKey: string, unitsHeld: number, unitPriceUSD: number, acquiredWeek: number,
+  sellerKey: string, unitsHeld: number, unitPriceLocal: number, acquiredWeek: number,
   /** §5-WIRES W4: the wire that delivered the lot — a lot with no wire does not compile. */
   wireNo: number
 ): void {
@@ -137,7 +137,7 @@ export function pushLot(
   const slot = slotOf(L, firmRow, subIdx);
   const r = allocRow(L);
   L.units[r] = unitsHeld;
-  L.priceUSD[r] = unitPriceUSD;
+  L.priceLocal[r] = unitPriceLocal;
   L.acquiredWeek[r] = acquiredWeek | 0;
   L.sellerId[r] = internString(v2, sellerKey);
   L.next[r] = -1;
@@ -190,7 +190,7 @@ export function consumeFifo(
 /** The columns a FIFO draw touches — the store itself, or a worker's shared mirror of it. */
 export interface LotViews {
   units: Float64Array;
-  priceUSD: Float64Array;
+  priceLocal: Float64Array;
   acquiredWeek: Int32Array;
   next: Int32Array;
   head: Int32Array;
@@ -245,7 +245,7 @@ export function consumeFifoOnViews(
     if (left <= 0.0001) { firstKept = r; break; }
     const take = Math.min(L.units[r], left);
     left -= take;
-    costsUSD.push(take * L.priceUSD[r]);
+    costsUSD.push(take * L.priceLocal[r]);
     const unitsLeftInLot = L.units[r] - take;
     // §5-WIRES W4: a residue too small to keep goes with the draw — the units taken are what
     // the lot store actually lost, so the consumption record is exact.
@@ -279,7 +279,7 @@ export function slotValueUSD(v2: V2World, companyId: string, subUnitId: string):
   const L = mutableLots(v2);
   const { rows } = chainOf(L, v2, companyId, subUnitId);
   let v = 0;
-  for (const r of rows) v += L.units[r] * L.priceUSD[r];
+  for (const r of rows) v += L.units[r] * L.priceLocal[r];
   return v;
 }
 
@@ -294,7 +294,7 @@ export function totalInputValueUSD(v2: V2World, companyId: string): number {
   for (const subIdx of touched) {
     const slot = firmRow * NSUB + subIdx;
     let v = 0;
-    for (let r = L.head[slot]; r >= 0; r = L.next[r]) v += L.units[r] * L.priceUSD[r];
+    for (let r = L.head[slot]; r >= 0; r = L.next[r]) v += L.units[r] * L.priceLocal[r];
     total += v;
   }
   return total;
@@ -338,7 +338,7 @@ export function materializeInputInventory(v2: V2World, companyId: string): Recor
       lots.push({
         sellerId: v2.internedStrings[L.sellerId[r]],
         unitsHeld: L.units[r],
-        unitPriceUSD: L.priceUSD[r],
+        unitPriceLocal: L.priceLocal[r],
         acquiredWeek: L.acquiredWeek[r],
       });
     }

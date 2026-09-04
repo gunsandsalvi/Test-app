@@ -137,7 +137,7 @@ export function dryPowderUSD(
   lpById: Map<string, InstitutionalEntity>
 ): number {
   return (sponsor.peFund?.lpCommitments ?? []).reduce((sum, c) => {
-    const undrawnUSD = Math.max(0, c.committedUSD - c.drawnUSD);
+    const undrawnUSD = Math.max(0, c.committedUSD - c.drawnLocal);
     const lp = lpById.get(c.lpEntityId);
     return sum + Math.min(undrawnUSD, Math.max(0, lp ? entityCashOf(v2, lp) : 0));
   }, 0);
@@ -178,7 +178,7 @@ function callCapitalUSD(ctx: WeeklyStepContext, sponsorId: string, requestedUSD:
       : 0;
     return {
       commitment: c,
-      availableUSD: Math.min(Math.max(0, c.committedUSD - c.drawnUSD), lpBudgetUSD),
+      availableUSD: Math.min(Math.max(0, c.committedUSD - c.drawnLocal), lpBudgetUSD),
     };
   });
   const totalAvailableUSD = capacity.reduce((a, x) => a + x.availableUSD, 0);
@@ -187,15 +187,15 @@ function callCapitalUSD(ctx: WeeklyStepContext, sponsorId: string, requestedUSD:
 
   capacity.forEach((x) => {
     if (!(x.availableUSD > 0)) return;
-    const shareUSD = calledUSD * (x.availableUSD / totalAvailableUSD);
-    x.commitment.drawnUSD += shareUSD;
+    const shareLocal = calledUSD * (x.availableUSD / totalAvailableUSD);
+    x.commitment.drawnLocal += shareLocal;
     // The call is a PAYMENT — LP to fund — where it used to be a bare debit of the LP
     // with no credit to anyone, so the buy side of every sponsor-to-sponsor deal paid twice and
     // one purchase price was destroyed per deal. Both legs live in the journal now.
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: x.commitment.lpEntityId },
       payee: { kind: 'INSTITUTION', id: sponsorId },
-      amount: shareUSD,
+      amount: shareLocal,
       currency: obligationCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: sponsorId }),
       reason: 'private fund capital call',
     });
@@ -208,15 +208,15 @@ function callCapitalUSD(ctx: WeeklyStepContext, sponsorId: string, requestedUSD:
  * The cash returns pro rata to drawn capital and reduces it, which is what a recallable
  * distribution really is: the commitment becomes available to deploy again.
  */
-function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: number): void {
+function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountLocal: number): void {
   const sponsor = ctx.updatedInstitutionalEntities.find((e) => e.id === sponsorId);
-  if (!sponsor?.peFund || !(amountUSD > 0)) return;
-  const totalDrawnUSD = sponsor.peFund.lpCommitments.reduce((a, c) => a + Math.max(0, c.drawnUSD), 0);
+  if (!sponsor?.peFund || !(amountLocal > 0)) return;
+  const totalDrawnUSD = sponsor.peFund.lpCommitments.reduce((a, c) => a + Math.max(0, c.drawnLocal), 0);
   if (!(totalDrawnUSD > 0)) return;
   // A FUND DISTRIBUTES WHAT IT HAS. `callCapitalUSD` above already bounds a call by the LPs'
   // real cash — "a call that comes up short is a deal that does not close" — and the
   // distribution side never got the same treatment. So a sponsor wired recap and exit proceeds
-  // against `drawnUSD` alone and went negative: MEASURED, PEF1 paid 0.495B out of a 0.000B
+  // against `drawnLocal` alone and went negative: MEASURED, PEF1 paid 0.495B out of a 0.000B
   // balance at week 12 and carried the same -0.50B for the next forty weeks, the single largest
   // violation family in the 60-week harness. This is not a clamp on a price: it is the
   // constraint itself, and it is one side of an asymmetry rather than a new rule. What cannot be
@@ -228,17 +228,17 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: n
   // The fund's payable budget includes what settlement already owes or is owed it.
   const sponsorBudgetUSD = entityCashOf(ctx.v2, sponsor)
     + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: sponsorId });
-  const { payableUSD: paidUSD } = distributable(amountUSD, totalDrawnUSD, sponsorBudgetUSD);
-  if (!(paidUSD > 0)) return;
+  const { payableUSD: paidLocal } = distributable(amountLocal, totalDrawnUSD, sponsorBudgetUSD);
+  if (!(paidLocal > 0)) return;
   sponsor.peFund.lpCommitments.forEach((c) => {
-    if (!(c.drawnUSD > 0)) return;
-    const shareUSD = paidUSD * (c.drawnUSD / totalDrawnUSD);
-    c.drawnUSD = Math.max(0, c.drawnUSD - shareUSD);
+    if (!(c.drawnLocal > 0)) return;
+    const shareLocal = paidLocal * (c.drawnLocal / totalDrawnUSD);
+    c.drawnLocal = Math.max(0, c.drawnLocal - shareLocal);
     // A distribution is a PAYMENT — fund to LP — not a pair of object rebuilds.
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: sponsorId },
       payee: { kind: 'INSTITUTION', id: c.lpEntityId },
-      amount: shareUSD,
+      amount: shareLocal,
       currency: obligationCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: sponsorId }),
       reason: 'private fund distribution',
     });
@@ -272,7 +272,7 @@ export function runPeLifecycleForRegion(
     .filter((c) => c.region === regionId && c.isBankEntity)
     .map((c) => ({
       ticker: c.ticker, bankMarketShare: c.bankMarketShare,
-      capacityUSD: (ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet)?.bankEquityLocal ?? 0,
+      capacityLocal: (ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet)?.bankEquityLocal ?? 0,
     })));
   const byId = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
   const lpById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
@@ -335,7 +335,7 @@ export function runPeLifecycleForRegion(
             region: regionId,
             instrumentType: 'LEVERAGED_LOAN',
             purpose: 'OPPORTUNISTIC',
-            sizeUSD: recapUSD,
+            sizeLocal: recapUSD,
             // A recap is discretionary: the sponsor walks if the market prices it wide.
             walkAwayStat: RECAP_DM_THRESHOLD_BPS,
             rateType: 'FLOATING',
@@ -385,7 +385,7 @@ export function runPeLifecycleForRegion(
           instrumentType: 'EQUITY',
           purpose: 'IPO',
           // The equity book clears in SHARES: the size is a share count, not money.
-          sizeUSD: sharesOffered,
+          sizeLocal: sharesOffered,
           // The sponsor pulls the deal below its private hold value — a weak book is a pulled
           // IPO, which is exactly what happens in reality.
           walkAwayStat: talkPerShare / IPO_PREMIUM_OVER_ENTRY,
@@ -415,24 +415,24 @@ export function runPeLifecycleForRegion(
       return ebitdaOf(c) > 0 && equityValueUSD(c, markEvMultiple) > 0;
     });
     if (saleCandidate) {
-      const priceUSD = equityValueUSD(saleCandidate, markEvMultiple);
+      const priceLocal = equityValueUSD(saleCandidate, markEvMultiple);
       // Whichever OTHER sponsor in this region can actually fund it. A buyer that cannot pay is
       // not a buyer, so a company nobody can afford stays where it is — an illiquid exit window,
       // which is a real thing for a fund at the end of its life.
       const buyer = sponsors.find((s2) =>
         s2.id !== sponsor.id && !s2.isDefaulted
-        && dryPowderUSD(ctx.v2, s2, lpById) >= priceUSD);
-      if (buyer && priceUSD > 1e6) {
-        const drawnUSD = callCapitalUSD(ctx, buyer.id, priceUSD);
-        if (drawnUSD >= priceUSD * 0.999) {
+        && dryPowderUSD(ctx.v2, s2, lpById) >= priceLocal);
+      if (buyer && priceLocal > 1e6) {
+        const drawnLocal = callCapitalUSD(ctx, buyer.id, priceLocal);
+        if (drawnLocal >= priceLocal * 0.999) {
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: buyer.id },
             payee: { kind: 'INSTITUTION', id: sponsor.id },
-            amount: priceUSD,
+            amount: priceLocal,
             currency: obligationCurrencyOf(ctx.v2, { kind: 'INSTITUTION', id: sponsor.id }),
             reason: 'private company sold sponsor-to-sponsor',
           });
-          distributeToLps(ctx, sponsor.id, priceUSD);
+          distributeToLps(ctx, sponsor.id, priceLocal);
           sponsor.peFund!.portfolioCompanyIds = sponsor.peFund!.portfolioCompanyIds
             .filter((id) => id !== saleCandidate.id);
           buyer.peFund!.portfolioCompanyIds = [...buyer.peFund!.portfolioCompanyIds, saleCandidate.id];
@@ -474,14 +474,14 @@ export function runPeLifecycleForRegion(
              < availablePowderUSD
       );
       if (target) {
-        const priceUSD = equityValueUSD(target, markEvMultiple);
+        const priceLocal = equityValueUSD(target, markEvMultiple);
         // As far as the covenant goes; the loan market decides whether it funds it.
-        const debtUSD = Math.min(
-          priceUSD,
+        const debtLocal = Math.min(
+          priceLocal,
           Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(target) - ladderTotalUSD(ctx.v2, target.id))
         );
-        const equityUSD = priceUSD - debtUSD;
-        if (equityUSD > 0 && equityUSD <= availablePowderUSD && debtUSD > 1e6) {
+        const equityLocal = priceLocal - debtLocal;
+        if (equityLocal > 0 && equityLocal <= availablePowderUSD && debtLocal > 1e6) {
           // The financing is a REAL primary offering: if the loan market will not fund it at a
           // level the sponsor accepts, the deal does not happen.
           ctx.primaryOfferingsWorking.push({
@@ -491,12 +491,12 @@ export function runPeLifecycleForRegion(
             region: regionId,
             instrumentType: 'LEVERAGED_LOAN',
             purpose: 'OPPORTUNISTIC',
-            sizeUSD: debtUSD,
+            sizeLocal: debtLocal,
             walkAwayStat: RECAP_DM_THRESHOLD_BPS * 2,
             rateType: 'FLOATING',
-            leadBankTicker: leadBanks.pick(target.id, debtUSD),
+            leadBankTicker: leadBanks.pick(target.id, debtLocal),
             announcedWeek: nextWeek,
-            peDeal: { kind: 'LBO', sponsorId: sponsor.id, equityUSD },
+            peDeal: { kind: 'LBO', sponsorId: sponsor.id, equityLocal },
           } as PrimaryOffering);
           pendingIssuers.add(target.id);
         }
@@ -537,20 +537,20 @@ export function runPeLifecycleForRegion(
         );
         const takeoutPricePerShare = Math.max(listedTarget.stockPrice, patientValuePerShare);
         const takeoutValueUSD = takeoutPricePerShare * listedTarget.sharesOutstanding;
-        const debtUSD = Math.min(
+        const debtLocal = Math.min(
           takeoutValueUSD,
           Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(listedTarget) - ladderTotalUSD(ctx.v2, listedTarget.id))
         );
-        const equityUSD = takeoutValueUSD - debtUSD;
+        const equityLocal = takeoutValueUSD - debtLocal;
         // The sponsor's underwriting test: cash the business throws off after servicing the whole
         // post-deal stack, against the cheque it has to write. Its hurdle is higher than any
         // liquid holder's, which is why it needs the leverage to get there.
-        const allInDebtUSD = ladderTotalUSD(ctx.v2, listedTarget.id) + debtUSD;
+        const allInDebtUSD = ladderTotalUSD(ctx.v2, listedTarget.id) + debtLocal;
         const debtCostAnnual = reg.policyRate + listedTarget.oasSpreadBps / 10000;
         const leveredCashFlowUSD = ebitdaOf(listedTarget) - allInDebtUSD * debtCostAnnual;
         const clearsHurdle =
-          equityUSD > 0 && leveredCashFlowUSD / equityUSD > REQUIRED_RETURN_ON_CAPITAL.PRIVATE_EQUITY;
-        if (clearsHurdle && equityUSD <= availablePowderUSD && debtUSD > 1e6) {
+          equityLocal > 0 && leveredCashFlowUSD / equityLocal > REQUIRED_RETURN_ON_CAPITAL.PRIVATE_EQUITY;
+        if (clearsHurdle && equityLocal <= availablePowderUSD && debtLocal > 1e6) {
           ctx.primaryOfferingsWorking.push({
             id: `PO-${listedTarget.id}-${nextWeek}-TAKEPRIVATE`,
             issuerId: listedTarget.id,
@@ -558,12 +558,12 @@ export function runPeLifecycleForRegion(
             region: regionId,
             instrumentType: 'LEVERAGED_LOAN',
             purpose: 'OPPORTUNISTIC',
-            sizeUSD: debtUSD,
+            sizeLocal: debtLocal,
             walkAwayStat: RECAP_DM_THRESHOLD_BPS * 2,
             rateType: 'FLOATING',
-            leadBankTicker: leadBanks.pick(listedTarget.id, debtUSD),
+            leadBankTicker: leadBanks.pick(listedTarget.id, debtLocal),
             announcedWeek: nextWeek,
-            peDeal: { kind: 'TAKE_PRIVATE', sponsorId: sponsor.id, equityUSD, takeoutPricePerShare },
+            peDeal: { kind: 'TAKE_PRIVATE', sponsorId: sponsor.id, equityLocal, takeoutPricePerShare },
           } as PrimaryOffering);
           pendingIssuers.add(listedTarget.id);
         }
@@ -588,12 +588,12 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
 
     if (deal.kind === 'LBO') {
       if (failed) return; // financing failed: the deal simply does not happen
-      const equityUSD = deal.equityUSD ?? 0;
+      const equityLocal = deal.equityLocal ?? 0;
       // The cheque is real money called from the fund's LPs. A call that comes up short — an LP
       // that cannot fund what it committed — is a deal that does not close, so nothing is
       // half-drawn: what was raised goes back before the deal is abandoned.
-      const calledUSD = callCapitalUSD(ctx, deal.sponsorId, equityUSD);
-      if (calledUSD < equityUSD * 0.999) {
+      const calledUSD = callCapitalUSD(ctx, deal.sponsorId, equityLocal);
+      if (calledUSD < equityLocal * 0.999) {
         if (calledUSD > 0) distributeToLps(ctx, deal.sponsorId, calledUSD);
         return;
       }
@@ -623,19 +623,19 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       });
       comp.ownership = {
         founderPct: 0.05, peSponsorId: deal.sponsorId, peSponsorPct: 0.95, acquiredWeek: nextWeek,
-        entryEvMultiple: comp.ebitda > 0 ? (ladderTotalUSD(ctx.v2, comp.id) + equityUSD) / comp.ebitda : 0,
+        entryEvMultiple: comp.ebitda > 0 ? (ladderTotalUSD(ctx.v2, comp.id) + equityLocal) / comp.ebitda : 0,
       };
       return;
     }
 
     if (deal.kind === 'TAKE_PRIVATE') {
       if (failed) return; // the loan market would not fund it: the company stays public
-      const equityUSD = deal.equityUSD ?? 0;
+      const equityLocal = deal.equityLocal ?? 0;
       const pricePerShare = deal.takeoutPricePerShare ?? 0;
       const shares = comp.sharesOutstanding;
       if (!(pricePerShare > 0) || !(shares > 0)) return;
-      const calledUSD = callCapitalUSD(ctx, deal.sponsorId, equityUSD);
-      if (calledUSD < equityUSD * 0.999) {
+      const calledUSD = callCapitalUSD(ctx, deal.sponsorId, equityLocal);
+      if (calledUSD < equityLocal * 0.999) {
         if (calledUSD > 0) distributeToLps(ctx, deal.sponsorId, calledUSD);
         return;
       }
@@ -665,7 +665,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       if (process.env.CASH_LEDGER === '1') {
         comp.lastCashLedger = [
           ...(comp.lastCashLedger ?? []),
-          { label: 'taken private: public register bought out', amountUSD: 0 },
+          { label: 'taken private: public register bought out', amountLocal: 0 },
         ];
       }
       return;
@@ -708,7 +708,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
     // sale and no cash (`sponsorPortfolioUSD` reads the portfolio list, which this pass empties),
     // and, unregistered, the same shares were counted as the public float and credited to
     // households. Ownership destroyed at one end and re-granted at the other.
-    const offeredShares = settlement.offering.sizeUSD;
+    const offeredShares = settlement.offering.sizeLocal;
     const retainedShares = Math.max(0, shares - offeredShares);
     if (retainedShares > 0) {
       issueHolding(ctx.v2,
@@ -716,7 +716,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
         { kind: 'INSTITUTION', id: deal.sponsorId },
         {
           instrumentType: 'EQUITY', instrumentId: comp.id, issuerRegion: comp.region as RegionId,
-          valueUSD: retainedShares * comp.stockPrice, shares: retainedShares,
+          valueLocal: retainedShares * comp.stockPrice, shares: retainedShares,
         },
         'ipo: the sponsor retains its unsold stake');
       bumpRegister(ctx);
@@ -747,14 +747,14 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
  */
 function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWeek: number): void {
   const seeded = c.debtTranches ?? [];
-  const debtUSD = seeded.reduce((a, t) => a + t.principalLocal, 0);
+  const debtLocal = seeded.reduce((a, t) => a + t.principalLocal, 0);
   c.debtTranches = [];
-  if (!(debtUSD > 1) || !c.homeBankTicker) return;
+  if (!(debtLocal > 1) || !c.homeBankTicker) return;
   const bank = ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker);
   const marginBps = facilityMarginBpsFor(ctx.v2, c, reg, bank);
   const tranche: DebtTranche = {
     id: `${c.id}-FACILITY-BIRTH-${nextWeek}`,
-    principalLocal: Math.round(debtUSD),
+    principalLocal: Math.round(debtLocal),
     rateType: 'FLOATING',
     floatingMarginBps: marginBps,
     originationWeek: nextWeek,
@@ -808,10 +808,10 @@ export function runFirmBirthsForRegion(
   const candidates = segs
     .map((seg) => ({
       seg,
-      ratio: (seg.annualRevenueUSD / Math.max(1, namedBySegment.get(seg.industry) ?? 1))
+      ratio: (seg.annualRevenueLocal / Math.max(1, namedBySegment.get(seg.industry) ?? 1))
         * Math.max(0, seg.marginPct ?? 0),
     }))
-    .filter((x) => x.seg.annualRevenueUSD > 0 && x.ratio > 0)
+    .filter((x) => x.seg.annualRevenueLocal > 0 && x.ratio > 0)
     .sort((a, b) => b.ratio - a.ratio);
   if (candidates.length === 0) return [];
 
@@ -822,9 +822,9 @@ export function runFirmBirthsForRegion(
     // Born SMALL — a new firm is a fraction of a percent of its pool, which is what a real
     // entrant is. Its leverage is what the SME pools actually carry (G2's serviceable ceiling),
     // so it enters the credit universe at a realistic rung rather than a chosen rating.
-    const revenueUSD = seg.annualRevenueUSD * 0.004;
-    if (revenueUSD < 1e6) return;
-    const employees = Math.max(10, Math.round(seg.employment * (revenueUSD / Math.max(1, seg.annualRevenueUSD))));
+    const revenueLocal = seg.annualRevenueLocal * 0.004;
+    if (revenueLocal < 1e6) return;
+    const employees = Math.max(10, Math.round(seg.employment * (revenueLocal / Math.max(1, seg.annualRevenueLocal))));
     // SEG-D: the newborn sells what its pool sells — the pool's own measured mix by sub-unit, or
     // (before the pool has measured receipts) its industry's sub-units weighted by the region's
     // real demand for each, so a new firm opens where there is business to win.
@@ -833,12 +833,12 @@ export function runFirmBirthsForRegion(
     const productMixBySubUnit: Record<string, number> = measuredTotalUSD > 0
       ? { ...measuredMix }
       : Object.fromEntries(smePoolSubUnits(seg.industry)
-        .map((su) => [su.unitId, reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0]));
+        .map((su) => [su.unitId, reg.categoryDemand[su.unitId]?.demandLevelAnnualLocal ?? 0]));
 
     const newborn = generate(regionId, [{
       industry: seg.industry,
       productMixBySubUnit,
-      annualRevenueUSD: revenueUSD,
+      annualRevenueLocal: revenueLocal,
       ebitdaMargin: seg.marginPct,
       leverage: 2.5,
       sponsorStyle: random() < 0.5,
@@ -848,7 +848,7 @@ export function runFirmBirthsForRegion(
     newborn.forEach((c) => { tickers.add(c.ticker); names.add(c.name); });
 
     // Conservation: the pool loses exactly what the firm gains.
-    seg.annualRevenueUSD = Math.max(0, seg.annualRevenueUSD - revenueUSD);
+    seg.annualRevenueLocal = Math.max(0, seg.annualRevenueLocal - revenueLocal);
     seg.employment = Math.max(1, seg.employment - employees);
     // The opening balance too. A born firm's working capital used to be conjured by the
     // generator; now it is CARVED from the pool's own money, as a payment through settlement
@@ -881,7 +881,7 @@ export function runFirmBirthsForRegion(
     .filter((b) => b.region === regionId && b.isBankEntity && isActiveCompany(b))
     .map((b) => ({
       ticker: b.ticker, bankMarketShare: b.bankMarketShare,
-      capacityUSD: (ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet)?.bankEquityLocal ?? 0,
+      capacityLocal: (ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet)?.bankEquityLocal ?? 0,
     })));
   // Its real share of each market it entered, measured against what the region's firms already
   // sell there — the weekly evolution scales this number, so a firm starting at zero could never

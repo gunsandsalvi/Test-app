@@ -112,7 +112,7 @@ export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType,
  *
  * This is the one place a wage bill is computed, and every employer uses it — named firms,
  * SME pools, and the government. It replaces two different derivations that both keyed off
- * `estimatedHouseholdIncomeUSD / employed`: a per-capita income figure standing in for a wage,
+ * `estimatedHouseholdIncomeLocal / employed`: a per-capita income figure standing in for a wage,
  * which made every employer pay the same average, and — once household income became the sum of
  * what employers pay — made the number depend on itself.
  *

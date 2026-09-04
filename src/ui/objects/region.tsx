@@ -49,7 +49,7 @@ export const region = defineObject<Region>({
       { key: 'infl', label: 'inflation', render: (r) => pctLevel(r.obj.inflation), value: (r) => r.obj.inflation },
       { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRate, 2), value: (r) => r.obj.policyRate },
       { key: '10y', label: '10y', render: (r) => pctLevel(r.obj.zeroRates?.tenor10Y, 2), value: (r) => r.obj.zeroRates?.tenor10Y ?? 0 },
-      { key: 'gdp', label: 'gdp', render: (r) => money(r.obj.derivedNominalGdpUSD ?? r.obj.estimatedNominalGdpUSD), value: (r) => r.obj.derivedNominalGdpUSD ?? r.obj.estimatedNominalGdpUSD ?? 0 },
+      { key: 'gdp', label: 'gdp', render: (r) => money(r.obj.derivedNominalGdpUSD ?? r.obj.estimatedNominalGdpLocal), value: (r) => r.obj.derivedNominalGdpUSD ?? r.obj.estimatedNominalGdpLocal ?? 0 },
     ],
   },
   overview({ world, obj: r, nav }) {
@@ -72,7 +72,7 @@ export const region = defineObject<Region>({
           <Stat label="policy rate" value={pctLevel(r.policyRate, 2)} sub={`10y ${pctLevel(r.zeroRates?.tenor10Y, 2)} · 2y ${pctLevel(r.zeroRates?.tenor2Y, 2)}`} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
-          <KV k="gdp, annualised" hint={gdp.filter(Number.isFinite).length > 1 ? <ChangeSub series={gdp} /> : undefined} v={money(r.derivedNominalGdpUSD ?? r.estimatedNominalGdpUSD)} />
+          <KV k="gdp, annualised" hint={gdp.filter(Number.isFinite).length > 1 ? <ChangeSub series={gdp} /> : undefined} v={money(r.derivedNominalGdpUSD ?? r.estimatedNominalGdpLocal)} />
           <KV k="price level" hint={cpi.length > 1 ? <ChangeSub series={cpi} /> : 'seed = 100'} v={num(r.consumerPriceIndex, 1)} />
           <KV k="labour market" hint="tightness · wage growth" v={`${num(r.laborMarketTightness, 2)} · ${pctLevel(r.wageGrowth)}`} />
           <KV k="banks" hint="capital · margin" v={`${pctLevel(r.bankingSector?.bankCapitalRatio, 1)} · ${pctLevel(r.bankingSector?.netInterestMarginPct, 2)}`} onTap={() => nav.go('banks')} />

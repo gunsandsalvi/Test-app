@@ -140,18 +140,18 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   prevActiveFirms.forEach(c => {
     let total = 0;
     Object.entries(c.outputInventoryBySubUnit || {}).forEach(([su, inv]) => {
-      total += (inv as { valueUSD: number }).valueUSD * (annualCarryingCostRateOf(su) / 52);
+      total += (inv as { valueLocal: number }).valueLocal * (annualCarryingCostRateOf(su) / 52);
     });
     if (total > 0) carryingCostByTicker.set(c.ticker, total);
   });
-  carryingCostByTicker.forEach((costUSD, ticker) => {
+  carryingCostByTicker.forEach((costLocal, ticker) => {
     const owner = prevActiveFirms.find(c => c.ticker === ticker);
     if (!owner) return;
     ctx.channelShareByRegion[owner.region]?.forEach((share, holderTicker) => {
       if (holderTicker === ticker) return; // a distributor warehouses its own stock
-      const amountUSD = costUSD * share;
-      if (amountUSD > 0) {
-        ctx.channelMarginRevenue[holderTicker] = (ctx.channelMarginRevenue[holderTicker] ?? 0) + amountUSD;
+      const amountLocal = costLocal * share;
+      if (amountLocal > 0) {
+        ctx.channelMarginRevenue[holderTicker] = (ctx.channelMarginRevenue[holderTicker] ?? 0) + amountLocal;
       }
     });
   });
@@ -173,11 +173,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     ));
   });
   /** Who leads this issuer's deal — re-asked every time, so the mandate can be lost. */
-  const leadBankFor = (comp: Company, sizeUSD: number): string => {
+  const leadBankFor = (comp: Company, sizeLocal: number): string => {
     const alloc = leadAllocatorByRegion.get(comp.region);
     if (!alloc) return comp.homeBankTicker ?? '';
     const ticker = chooseLeadBank(comp.id, alloc.candidatesFor(comp.id));
-    if (ticker) alloc.award(ticker, sizeUSD);
+    if (ticker) alloc.award(ticker, sizeLocal);
     return ticker || (comp.homeBankTicker ?? '');
   };
   const enqueueOffering = (o: PrimaryOffering) => {
@@ -462,7 +462,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       setRngState(streamAfterA[i]!);
       bRes[i] = runBackCoreB(companyRows[i], i, backDeps, aRes[i]!);
     });
-    backDeps.onSweepDelta = (row, deltaUSD) => { sweepDelta[row] = deltaUSD; };
+    backDeps.onSweepDelta = (row, deltaLocal) => { sweepDelta[row] = deltaLocal; };
     const postCap = runPhase((i) => {
       const comp = companyRows[i];
       if (!aRes[i]) { updatedCompanies[i] = companyWeekKernel(comp, i); syncCompanyRow(companyStore, updatedCompanies[i], i); return; }
@@ -642,7 +642,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const rows = Array.from(boundaryTraceByFirm.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([key, usd]) => `${key} ${(usd / 1e6).toFixed(1)}M`);
-    const totalUSD = Array.from(boundaryTraceByFirm.values()).reduce((a, v) => a + v, 0);
-    console.log(`  [boundary] w${nextWeek} non-auction receipts ${(totalUSD / 1e9).toFixed(2)}B :: ${rows.slice(0, 12).join(' | ')}`);
+    const totalLocal = Array.from(boundaryTraceByFirm.values()).reduce((a, v) => a + v, 0);
+    console.log(`  [boundary] w${nextWeek} non-auction receipts ${(totalLocal / 1e9).toFixed(2)}B :: ${rows.slice(0, 12).join(' | ')}`);
   }
 }

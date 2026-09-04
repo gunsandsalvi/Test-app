@@ -16,35 +16,35 @@ const bankSheet = (bankCapitalRatio: number) =>
 
 test('coverage is unbounded, because a bound is not a measurement', () => {
   // The old [-50, 50] clamp destroyed the information that a firm has no earnings at all.
-  const wrecked = creditMetrics({ isBank: false, totalDebtUSD: 1e9, revenueUSD: 1e9,
-    ebitdaUSD: 1, ebitUSD: -2e8, annualInterestUSD: 1e6, ...bankSheet(0.1) });
+  const wrecked = creditMetrics({ isBank: false, totalDebtUSD: 1e9, revenueLocal: 1e9,
+    ebitdaLocal: 1, ebitUSD: -2e8, annualInterestUSD: 1e6, ...bankSheet(0.1) });
   assert.ok(wrecked.coverage < -50, `coverage ${wrecked.coverage} should not be clamped`);
 });
 
 test('a firm with no earnings still reports a finite leverage', () => {
-  const m = creditMetrics({ isBank: false, totalDebtUSD: 1e9, revenueUSD: 0,
-    ebitdaUSD: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(0.1) });
+  const m = creditMetrics({ isBank: false, totalDebtUSD: 1e9, revenueLocal: 0,
+    ebitdaLocal: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(0.1) });
   assert.ok(isFinite(m.leverage) && isFinite(m.coverage));
   assert.ok(m.leverage > 0);
 });
 
 test('a bank is rated on its capital, not on an EBITDA it does not report', () => {
-  const thin = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueUSD: 1e9,
-    ebitdaUSD: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(0.04) });
-  const sound = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueUSD: 1e9,
-    ebitdaUSD: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(0.12) });
+  const thin = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueLocal: 1e9,
+    ebitdaLocal: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(0.04) });
+  const sound = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueLocal: 1e9,
+    ebitdaLocal: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(0.12) });
   assert.ok(thin.coverage < sound.coverage);
 });
 
 test("a bank's coverage is a continuum, not a step: every ratio has its own number", () => {
-  const at = (ratio: number) => creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueUSD: 1e9,
-    ebitdaUSD: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(ratio) }).coverage;
+  const at = (ratio: number) => creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueLocal: 1e9,
+    ebitdaLocal: 0, ebitUSD: 0, annualInterestUSD: 0, ...bankSheet(ratio) }).coverage;
   const ladder = [0.09, 0.10, 0.11, 0.12, 0.13];
   const seen = ladder.map(at);
   assert.equal(new Set(seen).size, ladder.length, `two-valued coverage: ${seen.join(', ')}`);
   for (let i = 1; i < seen.length; i++) assert.ok(seen[i] > seen[i - 1]);
   // And a worse loan book buys fewer years of buffer at the same capital.
-  const risky = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueUSD: 1e9, ebitdaUSD: 0,
+  const risky = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueLocal: 1e9, ebitdaLocal: 0,
     ebitUSD: 0, annualInterestUSD: 0, bankCapitalRatio: 0.12, bankEquityLocal: 1e8,
     bankLossRateAnnual: 0.04 }).coverage;
   assert.ok(risky < at(0.12));

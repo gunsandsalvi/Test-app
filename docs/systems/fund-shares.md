@@ -93,7 +93,7 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a named party with an account and a register | `src/domain/institutions.ts:InstitutionalEntity` | ✅ |
 | A2 its liability is its shares, held by named holders | `src/engine/ledger/holdings-ledger.ts:issueHolding` | ⚠️ |
-| **A3 its equity is zero by construction** | `src/engine/simulation/initialization.ts:equityCapitalUSD` | ⚠️ |
+| **A3 its equity is zero by construction** | `src/engine/simulation/initialization.ts:equityCapitalLocal` | ⚠️ |
 | A4 a mandate that really constrains what it buys | `src/domain/institutions.ts:mandatePctOf` | ✅ |
 | **B1 NAV is a READ, never a stored series** | `src/engine/simulation/stages/etf-flows.ts:fundNavUSD` | ⚠️ |
 | B2 assets marked at cleared prices | `src/engine/ledger/holdings-ledger.ts:markHolding` | ✅ |

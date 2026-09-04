@@ -103,7 +103,7 @@ checked by `scripts/check-atlas.sh`.
 | **C5.a FORBID no spread applied to a mid** | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ❌ |
 | D1 a position limit per instrument and in aggregate | `src/domain/dealer-desk.ts:dealerDeskGrossUSD` | ✅ |
 | D2 a capital charge on what it holds, and it is real | `src/engine/macro/banking.ts:bankTotalAssetsUSD` | ✅ |
-| D3 a funding cost on the inventory, paid every week it holds it | `src/engine/macro/banking.ts:leverageHeadroomUSD` | ⚠️ |
+| D3 a funding cost on the inventory, paid every week it holds it | `src/engine/macro/banking.ts:leverageHeadroomLocal` | ⚠️ |
 | **D4 when a limit binds it widens, shrinks size, or stops quoting** | `src/domain/dealer-desk.ts:DEALER_DESK_SHARE_OF_BALANCE_SHEET` | ⚠️ |
 | **D4.a which is what makes a failed auction possible at all** | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | D5 VERIFY in a stress week inventory, spreads and capital move together | — | ❌ |

@@ -36,18 +36,18 @@ export const INTERNAL_MOVE = 0;
 
 /** Goods move from one party to another. Returns the wire number (`INTERNAL_MOVE` when the two
  *  parties are one — a firm supplying itself moves nothing between parties). */
-export function deliverGoods(from: PartyRef, to: PartyRef, subUnitId: string, units: number, unitPriceUSD: number, reason: string): number {
+export function deliverGoods(from: PartyRef, to: PartyRef, subUnitId: string, units: number, unitPriceLocal: number, reason: string): number {
   if (!(units > 0)) return -1;
   if (partyId(from) === partyId(to)) return INTERNAL_MOVE;
   // A negative unit price arriving here is an arithmetic error at the caller. Floored, it became
   // a free delivery and defeated the wire ledger's own write-site guard.
-  if (unitPriceUSD < 0) defect(`${subUnitId} delivered at ${unitPriceUSD} per unit (${reason})`);
-  return wire({ from, to, kind: 'GOOD', asset: subUnitId, quantity: units, priceUSD: unitPriceUSD, reason }, internReason);
+  if (unitPriceLocal < 0) defect(`${subUnitId} delivered at ${unitPriceLocal} per unit (${reason})`);
+  return wire({ from, to, kind: 'GOOD', asset: subUnitId, quantity: units, priceLocal: unitPriceLocal, reason }, internReason);
 }
 
 /** A delivered consignment lands on the buyer's input lots, with the wire that delivered it. */
 export function receiveInputLot(
-  v2: V2World, buyerId: string, subUnitId: string, sellerKey: string, units: number, unitPriceUSD: number, week: number, wireNo: number
+  v2: V2World, buyerId: string, subUnitId: string, sellerKey: string, units: number, unitPriceLocal: number, week: number, wireNo: number
 ): void {
   if (!(units > 0.0001)) return;
   if (wireNo < 0) defect(`input lot of ${units} ${subUnitId} for ${buyerId} lands with no wire`);
@@ -56,7 +56,7 @@ export function receiveInputLot(
     const key = `${buyerId}|${subUnitId}`;
     (j.lotReceipts ??= {})[key] = (j.lotReceipts[key] ?? 0) + units;
   }
-  pushLot(v2, buyerId, subUnitId, sellerKey, units, unitPriceUSD, week, wireNo);
+  pushLot(v2, buyerId, subUnitId, sellerKey, units, unitPriceLocal, week, wireNo);
 }
 
 /** Units finished this week (a transformation, not a move). */
@@ -78,9 +78,9 @@ export function scrapGoods(region: RegionId, subUnitId: string, units: number): 
  * A good that cannot be held is never held — its unsold capacity was unused, not produced.
  */
 export function settleOutputInventory(
-  update: { outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueUSD: number }> },
+  update: { outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }> },
   region: RegionId, subUnitId: string,
-  initialUnits: number, arrivedUnits: number, contractUnits: number, marketUnits: number, unitPriceUSD: number
+  initialUnits: number, arrivedUnits: number, contractUnits: number, marketUnits: number, unitPriceLocal: number
 ): void {
   const storable = isStorable(subUnitId);
   const deliveredUnits = contractUnits + marketUnits;
@@ -104,37 +104,37 @@ export function settleOutputInventory(
     }
     const heldUnits = held < 0 ? 0 : held;
     if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
-    update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: heldUnits, valueUSD: heldUnits * unitPriceUSD };
+    update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: heldUnits, valueLocal: heldUnits * unitPriceLocal };
   } else {
     produceGoods(region, subUnitId, deliveredUnits);
     if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
-    update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: 0, valueUSD: 0 };
+    update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: 0, valueLocal: 0 };
   }
 }
 
 /** A running stock write with no production behind it — the contract deliveries' balance
  *  within the week; every unit that left did so by a wire at the delivery. */
 export function setOutputStock(
-  update: { outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueUSD: number }> },
-  subUnitId: string, unitsHeld: number, unitPriceUSD: number
+  update: { outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }> },
+  subUnitId: string, unitsHeld: number, unitPriceLocal: number
 ): void {
   const held = isStorable(subUnitId) ? unitsHeld : 0;
   if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
-  update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: held, valueUSD: held * unitPriceUSD };
+  update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: held, valueLocal: held * unitPriceLocal };
 }
 
-type StockHolder = { ticker: string; region: RegionId; outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueUSD: number }> };
+type StockHolder = { ticker: string; region: RegionId; outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }> };
 
 /** Finished stock moves from one firm to another (an estate's sale to a peer): a wire, the rows follow. */
-export function moveOutputUnits(from: StockHolder, to: StockHolder, subUnitId: string, units: number, valueUSD: number, reason: string): number {
+export function moveOutputUnits(from: StockHolder, to: StockHolder, subUnitId: string, units: number, valueLocal: number, reason: string): number {
   if (!(units > 1e-9)) return -1;
   const src = from.outputInventoryBySubUnit?.[subUnitId];
   if (!src || src.unitsHeld + 1e-9 < units) return defect(`${from.ticker} moves ${units} ${subUnitId} it does not hold`);
-  const n = deliverGoods({ kind: 'COMPANY', ticker: from.ticker }, { kind: 'COMPANY', ticker: to.ticker }, subUnitId, units, valueUSD / units, reason);
-  src.unitsHeld -= units; src.valueUSD -= valueUSD;
+  const n = deliverGoods({ kind: 'COMPANY', ticker: from.ticker }, { kind: 'COMPANY', ticker: to.ticker }, subUnitId, units, valueLocal / units, reason);
+  src.unitsHeld -= units; src.valueLocal -= valueLocal;
   const inv = to.outputInventoryBySubUnit ?? (to.outputInventoryBySubUnit = {});
-  const dst = inv[subUnitId] ?? (inv[subUnitId] = { unitsHeld: 0, valueUSD: 0 });
-  dst.unitsHeld += units; dst.valueUSD += valueUSD;
+  const dst = inv[subUnitId] ?? (inv[subUnitId] = { unitsHeld: 0, valueLocal: 0 });
+  dst.unitsHeld += units; dst.valueLocal += valueLocal;
   return n;
 }
 
@@ -146,9 +146,9 @@ export function moveInputUnits(v2: V2World, from: { id: string; ticker: string }
   const drawn = consumeFifo(v2, from.id, subUnitId, units);
   const moved = Math.min(units, drawn.availableUnits);
   if (!(moved > 1e-9)) return -1;
-  let costUSD = 0; for (const c of drawn.costsUSD) costUSD += c;
-  const n = deliverGoods({ kind: 'COMPANY', ticker: from.ticker }, { kind: 'COMPANY', ticker: to.ticker }, subUnitId, moved, costUSD / moved, reason);
-  pushLot(v2, to.id, subUnitId, `ESTATE:${from.ticker}`, moved, costUSD / moved, week, n);
+  let costLocal = 0; for (const c of drawn.costsUSD) costLocal += c;
+  const n = deliverGoods({ kind: 'COMPANY', ticker: from.ticker }, { kind: 'COMPANY', ticker: to.ticker }, subUnitId, moved, costLocal / moved, reason);
+  pushLot(v2, to.id, subUnitId, `ESTATE:${from.ticker}`, moved, costLocal / moved, week, n);
   return n;
 }
 
@@ -166,5 +166,5 @@ export function scrapOutputUnitsTo(comp: StockHolder, subUnitId: string, unitsAf
   if (!row) return;
   const lost = row.unitsHeld - unitsAfter;
   if (lost > 1e-9) scrapGoods(comp.region, subUnitId, lost);
-  row.unitsHeld = unitsAfter; row.valueUSD = valueAfterUSD;
+  row.unitsHeld = unitsAfter; row.valueLocal = valueAfterUSD;
 }

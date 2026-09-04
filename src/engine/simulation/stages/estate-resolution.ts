@@ -231,13 +231,13 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     const availableUSD = estateComp
       ? Math.max(0, cashOf(ctx.v2, estateComp) + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: estate.ticker }))
       : 0;
-    const paidUSD = availableUSD > 1 ? distribute(ctx, index, estate, availableUSD) : 0;
+    const paidLocal = availableUSD > 1 ? distribute(ctx, index, estate, availableUSD) : 0;
     // THE ESTATE'S CASH IS ITS ACCOUNT, RE-READ EVERY WEEK like the other three assets — and
     // read after the waterfall, so it is what the week actually left behind. Written once at
     // `openEstate` and never touched again, it kept the close test below permanently false: an
     // estate opened with any cash at all could never close, its holders kept dead paper for
     // ever, and the dead issuer's ladder was never extinguished.
-    estate.assets.cashLocal = availableUSD - paidUSD;
+    estate.assets.cashLocal = availableUSD - paidLocal;
 
     // Closed when there is nothing left to sell or collect AND the account is empty (or every
     // claim is satisfied, in which case the waterfall stopped short of the money): the residual
@@ -319,10 +319,10 @@ function sellAssetsToPeers(
   if (totalPeerCashUSD <= 1) return;
   const weekPriceUSD = invPriceUSD + ppePriceUSD;
   // The week's slice is of the whole inventory — finished stock AND input lots (step 8).
-  const preInvUSD = Object.values(comp?.outputInventoryBySubUnit ?? {}).reduce((a, r) => a + Math.max(0, r.valueUSD), 0)
+  const preInvUSD = Object.values(comp?.outputInventoryBySubUnit ?? {}).reduce((a, r) => a + Math.max(0, r.valueLocal), 0)
     + (comp ? totalInputValueUSD(ctx.v2, comp.id) : 0);
-  const origRows: Record<string, { unitsHeld: number; valueUSD: number }> = {};
-  Object.entries(comp?.outputInventoryBySubUnit ?? {}).forEach(([k, r]) => { origRows[k] = { unitsHeld: r.unitsHeld, valueUSD: r.valueUSD }; });
+  const origRows: Record<string, { unitsHeld: number; valueLocal: number }> = {};
+  Object.entries(comp?.outputInventoryBySubUnit ?? {}).forEach(([k, r]) => { origRows[k] = { unitsHeld: r.unitsHeld, valueLocal: r.valueLocal }; });
   const origInputUnits: Record<string, number> = {};
   if (comp) Object.keys(materializeInputInventory(ctx.v2, comp.id)).forEach((k) => { origInputUnits[k] = inputUnitsHeld(ctx.v2, comp.id, k); });
   peers.forEach((peer) => {
@@ -348,7 +348,7 @@ function sellAssetsToPeers(
       // are of the week's slice, not of what earlier peers left).
       const frac = Math.min(1, (invSoldUSD * share) / preInvUSD);
       Object.entries(origRows).forEach(([subUnitId, row]) => {
-        moveOutputUnits(comp, peer, subUnitId, row.unitsHeld * frac, row.valueUSD * frac, 'estate inventory sold to peers');
+        moveOutputUnits(comp, peer, subUnitId, row.unitsHeld * frac, row.valueLocal * frac, 'estate inventory sold to peers');
       });
       // The input lots the receiver holds go the same way, by wire.
       Object.entries(origInputUnits).forEach(([subUnitId, units]) => {
@@ -362,7 +362,7 @@ function sellAssetsToPeers(
     // did not take of the week's slice is scrapped, by wire-less transformation.
     const keepFrac = Math.max(0, 1 - invSoldUSD / preInvUSD);
     Object.entries(origRows).forEach(([subUnitId, row]) => {
-      scrapOutputUnitsTo(comp, subUnitId, row.unitsHeld * keepFrac, row.valueUSD * keepFrac);
+      scrapOutputUnitsTo(comp, subUnitId, row.unitsHeld * keepFrac, row.valueLocal * keepFrac);
     });
     Object.entries(origInputUnits).forEach(([subUnitId, units]) => {
       const keepUnits = units * keepFrac;
@@ -385,21 +385,21 @@ function distribute(
     claims.forEach((claim) => {
       const stillOwedUSD = Math.max(0, claim.principalLocal - claim.recoveredUSD);
       if (stillOwedUSD <= 0) return;
-      const shareUSD = payUSD * (stillOwedUSD / owedUSD);
-      if (shareUSD <= 0) return;
-      claim.recoveredUSD += shareUSD;
-      estate.distributedUSD += shareUSD;
+      const shareLocal = payUSD * (stillOwedUSD / owedUSD);
+      if (shareLocal <= 0) return;
+      claim.recoveredUSD += shareLocal;
+      estate.distributedUSD += shareLocal;
       // The estate pays FROM THE DEBTOR'S OWN ACCOUNT — the issuer's assets reaching
       // the people it owed, as one instruction between two named accounts. The caller caps the
       // week's waterfall at what that account actually holds, so this never overdraws it.
       pay(ctx, {
         payer: { kind: 'COMPANY', ticker: estate.ticker },
         payee: holderRef(claim),
-        amount: shareUSD,
+        amount: shareLocal,
         currency: currencyOf(estate.regionId),
         reason: 'estate distribution',
       });
-      reduceHolding(ctx, index, claim, estate.companyId, shareUSD, false);
+      reduceHolding(ctx, index, claim, estate.companyId, shareLocal, false);
     });
     remainingUSD -= payUSD;
   });
@@ -427,7 +427,7 @@ function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Es
       const region = index.v2.internedStrings[H.regionRef[r]] as RegionId;
       const id = index.v2.internedStrings[H.instrRef[r]];
       transferHolding(index.v2, { kind: 'INSTITUTION', id: holderId }, { kind: 'CLEARING_HOUSE', region },
-        { instrumentType: type, instrumentId: id, issuerRegion: region, valueUSD: leftUSD },
+        { instrumentType: type, instrumentId: id, issuerRegion: region, valueLocal: leftUSD },
         'estate closed: residue written off');
       const dead = index.companyById.get(estate.companyId);
       if (dead && isTrancheKind(type)) {
@@ -446,7 +446,7 @@ function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Es
  */
 function reduceHolding(
   ctx: WeeklyStepContext, index: EstateIndex, claim: EstateClaim,
-  companyId: string, amountUSD: number, isLoss: boolean
+  companyId: string, amountLocal: number, isLoss: boolean
 ): void {
   if (claim.holder.kind === 'INSTITUTION') {
     // The holder is looked up, its rows for THIS issuer are looked up, and only those are
@@ -456,7 +456,7 @@ function reduceHolding(
     const id = claim.holder.id;
     const e = index.entityById.get(id);
     if (!e) return;
-    let leftUSD = amountUSD;
+    let leftUSD = amountLocal;
     const rows = index.rowsByEntityInstrument.get(id)?.get(companyId);
     if (rows) {
       // The paper goes back to the estate by wire — recovered (cash arrived) or
@@ -475,14 +475,14 @@ function reduceHolding(
       const dead = index.companyById.get(companyId);
       takes.forEach((t) => {
         transferHolding(index.v2, { kind: 'INSTITUTION', id }, { kind: 'CLEARING_HOUSE', region: t.region },
-          { instrumentType: t.type, instrumentId: t.id, issuerRegion: t.region, valueUSD: t.usd }, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
+          { instrumentType: t.type, instrumentId: t.id, issuerRegion: t.region, valueLocal: t.usd }, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
         if (dead && isTrancheKind(t.type)) {
           retireLadderFace(index.v2, { id: dead.id, ticker: dead.ticker, region: dead.region }, t.type as 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER', t.usd, isLoss ? 'estate: claim written off' : 'estate: claim recovered');
         }
       });
       index.touchedEntityIds.add(id);
     }
-    e.equityCapitalUSD = Math.max(0, (e.equityCapitalUSD ?? 0) - (isLoss ? amountUSD : 0));
+    e.equityCapitalLocal = Math.max(0, (e.equityCapitalLocal ?? 0) - (isLoss ? amountLocal : 0));
     return;
   }
   if (claim.holder.kind === 'BANK') {
@@ -499,12 +499,12 @@ function reduceHolding(
     // what this write can extinguish.
     const onLadderUSD = facilitiesOfBorrower(index.v2, companyId)
       .filter((f) => f.bankTicker === ticker).reduce((a, f) => a + f.principalLocal, 0);
-    const leftUSD = Math.max(0, amountUSD - onLadderUSD);
+    const leftUSD = Math.max(0, amountLocal - onLadderUSD);
     // Equity moves by what the BOOK moved: a LOSS writes equity down by what was actually
     // extinguished — no more; a RECOVERY is an asset swap for the matched slice (cash in, facility
     // off the ladder) and INCOME for the unmatched slice — cash arriving against an asset the
     // ladder no longer carries. Both branches balance by construction, whatever the rows hold.
-    const extinguishedUSD = amountUSD - leftUSD;
+    const extinguishedUSD = amountLocal - leftUSD;
     // The facility comes off the dead issuer's ladder by the same face, bank → issuer.
     const deadFirm = index.companyById.get(companyId);
     if (deadFirm && extinguishedUSD > 0) {

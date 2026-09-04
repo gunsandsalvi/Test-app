@@ -148,9 +148,9 @@ export class HoldingsStore {
     let sum = 0;
     for (let i = 0; i < slot.rows.length; i++) {
       const c = slot.claimed[i];
-      if (c === 0 || c === this.epoch) sum += slot.rows[i].quantityOrNotionalUSD ?? 0;
+      if (c === 0 || c === this.epoch) sum += slot.rows[i].quantityOrNotionalLocal ?? 0;
     }
-    for (const r of slot.appended) sum += r.quantityOrNotionalUSD ?? 0;
+    for (const r of slot.appended) sum += r.quantityOrNotionalLocal ?? 0;
     return sum;
   }
 
@@ -195,7 +195,7 @@ export class HoldingsStore {
         const take = remaining < 0 ? -Math.min(held, -remaining) : remaining;
         const next = held + take;
         row.quantityShares = next;
-        row.quantityOrNotionalUSD = next * pricePerShare;
+        row.quantityOrNotionalLocal = next * pricePerShare;
         // The persistent row is the authority; the delivery lands on it too.
         const rid = slot.rowIds[i];
         if (rid >= 0) {
@@ -221,7 +221,7 @@ export class HoldingsStore {
       instrumentType: type,
       issuerRegion,
       quantityShares: shares,
-      quantityOrNotionalUSD: shares * pricePerShare, units: shares,
+      quantityOrNotionalLocal: shares * pricePerShare, units: shares,
     };
     slot.rows = [...slot.rows, row];
     slot.rowIds.push(-1); // a real row is allocated for it at the write-back
@@ -256,7 +256,7 @@ export class HoldingsStore {
     this.slots.forEach((slot) => {
       for (const h of slot.appended) {
         if (h.quantityShares !== undefined && h.quantityShares > 0 && !markById.has(`${h.instrumentType}|${h.issuerRegion}|${h.instrumentId}`)) {
-          markById.set(`${h.instrumentType}|${h.issuerRegion}|${h.instrumentId}`, (h.quantityOrNotionalUSD ?? 0) / h.quantityShares);
+          markById.set(`${h.instrumentType}|${h.issuerRegion}|${h.instrumentId}`, (h.quantityOrNotionalLocal ?? 0) / h.quantityShares);
         }
       }
     });
@@ -270,13 +270,13 @@ export class HoldingsStore {
       // house of the instrument's region — bought or sold, one number each.
       {
         const group = (rows: ItemizedHolding[], pick: (i: number) => boolean) => {
-          const byBook = new Map<string, Map<string, { valueUSD: number; shares?: number }>>();
+          const byBook = new Map<string, Map<string, { valueLocal: number; shares?: number }>>();
           rows.forEach((h, i) => {
             if (!pick(i)) return;
             const key = `${h.instrumentType}|${h.issuerRegion}`;
             let m = byBook.get(key); if (!m) { m = new Map(); byBook.set(key, m); }
-            const cur = m.get(h.instrumentId) ?? { valueUSD: 0, shares: undefined };
-            cur.valueUSD += h.quantityOrNotionalUSD ?? 0;
+            const cur = m.get(h.instrumentId) ?? { valueLocal: 0, shares: undefined };
+            cur.valueLocal += h.quantityOrNotionalLocal ?? 0;
             if (h.quantityShares !== undefined) cur.shares = (cur.shares ?? 0) + h.quantityShares;
             m.set(h.instrumentId, cur);
           });
@@ -296,8 +296,8 @@ export class HoldingsStore {
             const mark = markById.get(`${key}|${id}`);
             if (mark !== undefined) return mark;
             const x = a.get(id), y = b.get(id);
-            if (x?.shares && x.shares > 0) return x.valueUSD / x.shares;
-            if (y?.shares && y.shares > 0) return y.valueUSD / y.shares;
+            if (x?.shares && x.shares > 0) return x.valueLocal / x.shares;
+            if (y?.shares && y.shares > 0) return y.valueLocal / y.shares;
             return undefined;
           };
           clearedBookDelta(

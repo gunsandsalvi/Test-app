@@ -40,8 +40,8 @@ export interface GovernmentFields {
 /** What a week of this government's finances looks like, in one shape rather than four call sites. */
 export interface FiscalWeek {
   /** Contractual, paid in full: the coupon bill and the staff. */
-  interestUSD: number;
-  payrollUSD: number;
+  interestLocal: number;
+  payrollLocal: number;
   /** Discretionary, what is left after the contractual lines. */
   procurementBudgetUSD: number;
   transfersUSD: number;
@@ -93,10 +93,10 @@ export class Government {
       this.f.fiscalStanceScore,
       this.payrollWeeklyUSD(),
     );
-    const budgetUSD = parts.interestUSD + parts.payrollUSD + parts.procurementBudgetUSD + parts.transfersUSD;
+    const budgetUSD = parts.interestLocal + parts.payrollLocal + parts.procurementBudgetUSD + parts.transfersUSD;
     const outlaysUSD = governmentOutlaysUSD({
-      interestUSD: parts.interestUSD,
-      payrollUSD: parts.payrollUSD,
+      interestLocal: parts.interestLocal,
+      payrollLocal: parts.payrollLocal,
       transfersUSD: this.f.governmentTransfersWeeklyUSD ?? parts.transfersUSD,
       procurementSpentUSD: this.f.governmentProcurementSpentUSD ?? 0,
     });
@@ -121,8 +121,8 @@ export class Government {
     const w = this.week();
     return {
       overrunUSD: w.overrunUSD,
-      contractualUSD: w.interestUSD + w.payrollUSD,
-      discretionaryUSD: w.outlaysUSD - w.interestUSD - w.payrollUSD,
+      contractualUSD: w.interestLocal + w.payrollLocal,
+      discretionaryUSD: w.outlaysUSD - w.interestLocal - w.payrollLocal,
     };
   }
 

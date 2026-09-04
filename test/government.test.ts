@@ -35,7 +35,7 @@ test('the budget is the decomposition, not the spending line', () => {
   // The bug in one assertion: budgetUSD is what the parts sum to, and reading
   // governmentSpendingWeeklyUSD in its place is what made the old check measure nothing.
   const w = new Government('EUR', fields(), []).week();
-  const parts = w.interestUSD + w.payrollUSD + w.procurementBudgetUSD + w.transfersUSD;
+  const parts = w.interestLocal + w.payrollLocal + w.procurementBudgetUSD + w.transfersUSD;
   assert.ok(Math.abs(w.budgetUSD - parts) < 1e-6);
 });
 
@@ -43,7 +43,7 @@ test('payroll comes off the top, so a rising wage bill cuts programmes', () => {
   const lean = new Government('EUR', fields({ governmentPayrollWeeklyUSD: 100_000_000 }), []).week();
   const heavy = new Government('EUR', fields({ governmentPayrollWeeklyUSD: 900_000_000 }), []).week();
   assert.ok(heavy.procurementBudgetUSD < lean.procurementBudgetUSD);
-  assert.ok(heavy.payrollUSD > lean.payrollUSD);
+  assert.ok(heavy.payrollLocal > lean.payrollLocal);
 });
 
 test('the deficit is outlays less revenue, both off the same object', () => {

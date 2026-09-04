@@ -44,7 +44,7 @@ export function markCreditToMarket(state: GameState, ctx: WeeklyStepContext): vo
   let markedUSD = 0, rows = 0;
   ctx.updatedInstitutionalEntities.forEach((e) => {
     const r = markCreditBook(ctx.v2, e.id, priceOf);
-    rows += r.rows; markedUSD += r.deltaUSD;
+    rows += r.rows; markedUSD += r.deltaLocal;
   });
   if (process.env.CREDIT_MARK_TRACE === '1') {
     console.log(`  [credit-mark] w${week} ${rows} rows re-marked, ${(markedUSD / 1e9).toFixed(2)}B of value moved`);

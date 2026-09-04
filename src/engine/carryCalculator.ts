@@ -2,12 +2,12 @@ import { AssetType } from '../types';
 import { assertNever } from '../domain/defect';
 
 export interface CarryEstimate {
-  weeklyCarryUSD: number;
+  weeklyCarryLocal: number;
   annualizedCarryUSD: number;
   annualizedCarryPct: number;
   components: {
     incomeOrYieldUSD: number;
-    financingCostUSD: number;
+    financingCostLocal: number;
     description: string;
   };
 }
@@ -36,9 +36,9 @@ export function calculateExpectedCarry(
 ): CarryEstimate {
   const isBuyOrLong = direction === 'LONG' || direction === 'BUY' || direction === 'PAY_FIXED' || direction === 'BUY_PROTECTION';
   const rf = params.policyRate || 0.045;
-  let weeklyCarryUSD = 0;
+  let weeklyCarryLocal = 0;
   let incomeOrYieldUSD = 0;
-  let financingCostUSD = 0;
+  let financingCostLocal = 0;
   let description = '';
 
   switch (assetType) {
@@ -47,13 +47,13 @@ export function calculateExpectedCarry(
       const repoRate = rf + 0.005; // policy rate + 50 bps
       if (isBuyOrLong) {
         incomeOrYieldUSD = (notional * divYield) / 52;
-        financingCostUSD = (notional * repoRate) / 52;
-        weeklyCarryUSD = incomeOrYieldUSD - financingCostUSD;
+        financingCostLocal = (notional * repoRate) / 52;
+        weeklyCarryLocal = incomeOrYieldUSD - financingCostLocal;
         description = `+${(divYield * 100).toFixed(2)}% Div Yield - ${(repoRate * 100).toFixed(2)}% Repo Financing`;
       } else {
         incomeOrYieldUSD = 0;
-        financingCostUSD = (notional * (divYield + 0.015)) / 52; // Short borrowing fee + dividend liability
-        weeklyCarryUSD = -financingCostUSD;
+        financingCostLocal = (notional * (divYield + 0.015)) / 52; // Short borrowing fee + dividend liability
+        weeklyCarryLocal = -financingCostLocal;
         description = `Short Borrow & Dividend Drag (-${((divYield + 0.015) * 100).toFixed(2)}% p.a.)`;
       }
       break;
@@ -64,13 +64,13 @@ export function calculateExpectedCarry(
       const repoCost = rf + 0.004; // policy + 40 bps
       if (isBuyOrLong) {
         incomeOrYieldUSD = (notional * coupon) / 52;
-        financingCostUSD = (notional * repoCost) / 52;
-        weeklyCarryUSD = incomeOrYieldUSD - financingCostUSD;
+        financingCostLocal = (notional * repoCost) / 52;
+        weeklyCarryLocal = incomeOrYieldUSD - financingCostLocal;
         description = `+${(coupon * 100).toFixed(2)}% Coupon Accrual - ${(repoCost * 100).toFixed(2)}% Funding`;
       } else {
         incomeOrYieldUSD = 0;
-        financingCostUSD = (notional * (coupon + 0.008)) / 52;
-        weeklyCarryUSD = -financingCostUSD;
+        financingCostLocal = (notional * (coupon + 0.008)) / 52;
+        weeklyCarryLocal = -financingCostLocal;
         description = `Short Coupon Liability & Repo`;
       }
       break;
@@ -82,13 +82,13 @@ export function calculateExpectedCarry(
       const repoCost = rf + 0.005; // policy + 50 bps
       if (isBuyOrLong) {
         incomeOrYieldUSD = (notional * loanCoupon) / 52;
-        financingCostUSD = (notional * repoCost) / 52;
-        weeklyCarryUSD = incomeOrYieldUSD - financingCostUSD;
+        financingCostLocal = (notional * repoCost) / 52;
+        weeklyCarryLocal = incomeOrYieldUSD - financingCostLocal;
         description = `+${(loanCoupon * 100).toFixed(2)}% Floating Coupon - ${(repoCost * 100).toFixed(2)}% Repo`;
       } else {
         incomeOrYieldUSD = 0;
-        financingCostUSD = (notional * (loanCoupon + 0.008)) / 52;
-        weeklyCarryUSD = -financingCostUSD;
+        financingCostLocal = (notional * (loanCoupon + 0.008)) / 52;
+        weeklyCarryLocal = -financingCostLocal;
         description = `Short Loan Coupon Drag`;
       }
       break;
@@ -99,13 +99,13 @@ export function calculateExpectedCarry(
       const repoCost = rf + 0.002;
       if (isBuyOrLong) {
         incomeOrYieldUSD = (notional * coupon) / 52;
-        financingCostUSD = (notional * repoCost) / 52;
-        weeklyCarryUSD = incomeOrYieldUSD - financingCostUSD;
+        financingCostLocal = (notional * repoCost) / 52;
+        weeklyCarryLocal = incomeOrYieldUSD - financingCostLocal;
         description = `+${(coupon * 100).toFixed(2)}% Benchmark Coupon - ${(repoCost * 100).toFixed(2)}% GC Repo`;
       } else {
         incomeOrYieldUSD = 0;
-        financingCostUSD = (notional * (coupon + 0.005)) / 52;
-        weeklyCarryUSD = -financingCostUSD;
+        financingCostLocal = (notional * (coupon + 0.005)) / 52;
+        weeklyCarryLocal = -financingCostLocal;
         description = `Short Sovereign Coupon Drag`;
       }
       break;
@@ -116,15 +116,15 @@ export function calculateExpectedCarry(
       const flt = params.floatingRate ?? rf;
       if (direction === 'PAY_FIXED' || direction === 'BUY') {
         // Pay Fixed, Receive Floating
-        weeklyCarryUSD = (notional * (flt - fix)) / 52;
-        incomeOrYieldUSD = Math.max(0, weeklyCarryUSD);
-        financingCostUSD = Math.max(0, -weeklyCarryUSD);
+        weeklyCarryLocal = (notional * (flt - fix)) / 52;
+        incomeOrYieldUSD = Math.max(0, weeklyCarryLocal);
+        financingCostLocal = Math.max(0, -weeklyCarryLocal);
         description = `Rec Floating (${(flt * 100).toFixed(2)}%) - Pay Fixed (${(fix * 100).toFixed(2)}%)`;
       } else {
         // Receive Fixed, Pay Floating
-        weeklyCarryUSD = (notional * (fix - flt)) / 52;
-        incomeOrYieldUSD = Math.max(0, weeklyCarryUSD);
-        financingCostUSD = Math.max(0, -weeklyCarryUSD);
+        weeklyCarryLocal = (notional * (fix - flt)) / 52;
+        incomeOrYieldUSD = Math.max(0, weeklyCarryLocal);
+        financingCostLocal = Math.max(0, -weeklyCarryLocal);
         description = `Rec Fixed (${(fix * 100).toFixed(2)}%) - Pay Floating (${(flt * 100).toFixed(2)}%)`;
       }
       break;
@@ -134,12 +134,12 @@ export function calculateExpectedCarry(
       const cdsSpread = (params.cdsSpreadBps ?? 100) / 10000;
       if (direction === 'BUY_PROTECTION' || direction === 'BUY') {
         // Buyer pays premium
-        weeklyCarryUSD = -(notional * cdsSpread) / 52;
-        financingCostUSD = (notional * cdsSpread) / 52;
+        weeklyCarryLocal = -(notional * cdsSpread) / 52;
+        financingCostLocal = (notional * cdsSpread) / 52;
         description = `Pays ${(params.cdsSpreadBps ?? 100)} bps/yr Protection Premium`;
       } else {
         // Seller earns premium
-        weeklyCarryUSD = (notional * cdsSpread) / 52;
+        weeklyCarryLocal = (notional * cdsSpread) / 52;
         incomeOrYieldUSD = (notional * cdsSpread) / 52;
         description = `Collects ${(params.cdsSpreadBps ?? 100)} bps/yr Protection Premium`;
       }
@@ -151,13 +151,13 @@ export function calculateExpectedCarry(
       // Net roll yield = Convenience Yield - Risk-Free USD Cost
       const netRollYield = cy - rf;
       if (isBuyOrLong) {
-        weeklyCarryUSD = (notional * netRollYield) / 52;
+        weeklyCarryLocal = (notional * netRollYield) / 52;
         incomeOrYieldUSD = (notional * Math.max(0, cy)) / 52;
-        financingCostUSD = (notional * rf) / 52;
+        financingCostLocal = (notional * rf) / 52;
         description = `+${(cy * 100).toFixed(1)}% Convenience Yield vs ${(rf * 100).toFixed(1)}% USD Funding`;
       } else {
-        weeklyCarryUSD = -(notional * netRollYield) / 52;
-        financingCostUSD = (notional * Math.max(0, cy)) / 52;
+        weeklyCarryLocal = -(notional * netRollYield) / 52;
+        financingCostLocal = (notional * Math.max(0, cy)) / 52;
         description = `Short Commodity Roll Spread`;
       }
       break;
@@ -167,12 +167,12 @@ export function calculateExpectedCarry(
       // Theta decay per week
       const weeklyTheta = (params.thetaPerContractUSD ?? 0) * (params.quantity || notional / 100);
       if (isBuyOrLong) {
-        weeklyCarryUSD = -Math.abs(weeklyTheta || notional * 0.02);
-        financingCostUSD = Math.abs(weeklyCarryUSD);
+        weeklyCarryLocal = -Math.abs(weeklyTheta || notional * 0.02);
+        financingCostLocal = Math.abs(weeklyCarryLocal);
         description = `Option Theta Time Decay (-1W Roll)`;
       } else {
-        weeklyCarryUSD = Math.abs(weeklyTheta || notional * 0.02);
-        incomeOrYieldUSD = weeklyCarryUSD;
+        weeklyCarryLocal = Math.abs(weeklyTheta || notional * 0.02);
+        incomeOrYieldUSD = weeklyCarryLocal;
         description = `Short Premium Theta Time Decay Harvest (+1W)`;
       }
       break;
@@ -182,13 +182,13 @@ export function calculateExpectedCarry(
       const divYield = params.dividendYield ?? 0.02;
       const financingRate = rf + 0.0075;
       if (isBuyOrLong) {
-        weeklyCarryUSD = (notional * (divYield - financingRate)) / 52;
+        weeklyCarryLocal = (notional * (divYield - financingRate)) / 52;
         incomeOrYieldUSD = (notional * divYield) / 52;
-        financingCostUSD = (notional * financingRate) / 52;
+        financingCostLocal = (notional * financingRate) / 52;
         description = `TRS Dividend Pass-through - ${(financingRate * 100).toFixed(2)}% Financing Leg`;
       } else {
-        weeklyCarryUSD = -(notional * (divYield + financingRate)) / 52;
-        financingCostUSD = Math.abs(weeklyCarryUSD);
+        weeklyCarryLocal = -(notional * (divYield + financingRate)) / 52;
+        financingCostLocal = Math.abs(weeklyCarryLocal);
         description = `Short TRS Financing & Dividend Drag`;
       }
       break;
@@ -197,10 +197,10 @@ export function calculateExpectedCarry(
     case 'XCS': {
       const basis = (params.basisSpreadBps ?? -20) / 10000;
       if (isBuyOrLong) {
-        weeklyCarryUSD = (notional * basis) / 52;
+        weeklyCarryLocal = (notional * basis) / 52;
         description = `Cross Currency Basis Spread (${(params.basisSpreadBps ?? -20)} bps)`;
       } else {
-        weeklyCarryUSD = -(notional * basis) / 52;
+        weeklyCarryLocal = -(notional * basis) / 52;
         description = `Cross Currency Basis Spread (${-(params.basisSpreadBps ?? -20)} bps)`;
       }
       break;
@@ -210,9 +210,9 @@ export function calculateExpectedCarry(
       const baseRate = params.baseRate ?? rf;
       const quoteRate = params.quoteRate ?? rf;
       const rateDiff = isBuyOrLong ? (baseRate - quoteRate) : (quoteRate - baseRate);
-      weeklyCarryUSD = (notional * rateDiff) / 52;
-      incomeOrYieldUSD = Math.max(0, weeklyCarryUSD);
-      financingCostUSD = Math.max(0, -weeklyCarryUSD);
+      weeklyCarryLocal = (notional * rateDiff) / 52;
+      incomeOrYieldUSD = Math.max(0, weeklyCarryLocal);
+      financingCostLocal = Math.max(0, -weeklyCarryLocal);
       description = `FX Interest Rate Differential (${(baseRate * 100).toFixed(2)}% vs ${(quoteRate * 100).toFixed(2)}%)`;
       break;
     }
@@ -222,16 +222,16 @@ export function calculateExpectedCarry(
       assertNever(assetType, 'carry calculation');
   }
 
-  const annualizedCarryUSD = weeklyCarryUSD * 52;
+  const annualizedCarryUSD = weeklyCarryLocal * 52;
   const annualizedCarryPct = notional > 0 ? (annualizedCarryUSD / notional) * 100 : 0;
 
   return {
-    weeklyCarryUSD,
+    weeklyCarryLocal,
     annualizedCarryUSD,
     annualizedCarryPct,
     components: {
       incomeOrYieldUSD,
-      financingCostUSD,
+      financingCostLocal,
       description,
     },
   };

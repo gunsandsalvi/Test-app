@@ -36,7 +36,7 @@ import { hedgeToleranceBps } from '../../../../domain/derivatives/hedging';
 import { DerivativeContract, DerivativeParty, derivativePartyKey } from '../../../../domain/derivatives/contract';
 import { DERIVATIVE_CLASSES, deskNotionalCapacityUSD } from '../../../../domain/derivatives/registry';
 import { FxDealerBook, emptyFxDealerBook } from '../../../../domain/dealer-derivatives';
-import { leverageHeadroomUSD } from '../../../macro/banking';
+import { leverageHeadroomLocal } from '../../../macro/banking';
 import { fxWeeklySigma } from '../../../../domain/fx-market';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
@@ -133,7 +133,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     const sheet = c.bankBalanceSheet;
     desks.set(c.ticker, {
       book: emptyFxDealerBook(),
-      headroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, c.ticker), facilityBookOf(ctx.v2, c.ticker)),
+      headroomUSD: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.ticker), facilityBookOf(ctx.v2, c.ticker)),
       chargedPfeUSD: standing.pfeChargeUSD(`BANK:${c.ticker}`),
       marginReceivedUSD: 0,
     });
@@ -182,8 +182,8 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     if (entity.isDefaulted) return;
     const gaps = new Map<RegionId, number>();
     hedgeableExposureByRegion(ctx.v2, entity).forEach((wantUSD, issuer) => {
-      const gapUSD = wantUSD - coveredUSD({ kind: 'INSTITUTION', id: entity.id }, issuer);
-      if (gapUSD > 1e6) gaps.set(issuer, gapUSD);
+      const gapLocal = wantUSD - coveredUSD({ kind: 'INSTITUTION', id: entity.id }, issuer);
+      if (gapLocal > 1e6) gaps.set(issuer, gapLocal);
     });
     if (gaps.size > 0) gapByEntityRegion.set(entity.id, gaps);
   });
@@ -216,9 +216,9 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         riskAversion: riskAversionOf(c.management),
       });
       if (!(mustHedgeUSD > 0)) return;
-      const gapUSD = mustHedgeUSD - coveredUSD({ kind: 'COMPANY', ticker: c.ticker }, foreign);
-      if (gapUSD <= 1e6) return;
-      gaps.set(foreign, gapUSD);
+      const gapLocal = mustHedgeUSD - coveredUSD({ kind: 'COMPANY', ticker: c.ticker }, foreign);
+      if (gapLocal <= 1e6) return;
+      gaps.set(foreign, gapLocal);
       tolerances.set(foreign, hedgeToleranceBps(annualSigmaFor(foreign), mustHedgeUSD / exposureUSD));
     });
     if (gaps.size > 0) {
@@ -235,11 +235,11 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   ctx.updatedInstitutionalEntities.forEach((e) => holderRegions.add(e.region));
   ctx.updatedCompanies.forEach((c) => { if (corpGapByTicker.has(c.ticker)) holderRegions.add(c.region); });
   holderRegions.forEach((holderRegion) => {
-    let capacityUSD = 0;
+    let capacityLocal = 0;
     ctx.updatedCompanies.forEach((c) => {
       if (c.region !== holderRegion || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
       const desk = desks.get(c.ticker);
-      if (desk) capacityUSD += deskCapacityUSD(desk);
+      if (desk) capacityLocal += deskCapacityUSD(desk);
     });
     const issuers = new Set<RegionId>();
     ctx.updatedInstitutionalEntities.forEach((e) => {
@@ -256,23 +256,23 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       const participants: ClearingParticipant[] = [];
       ctx.updatedInstitutionalEntities.forEach((e) => {
         if (e.region !== holderRegion) return;
-        const gapUSD = gapByEntityRegion.get(e.id)?.get(issuer) ?? 0;
-        if (!(gapUSD > 0)) return;
+        const gapLocal = gapByEntityRegion.get(e.id)?.get(issuer) ?? 0;
+        if (!(gapLocal > 0)) return;
         const toleranceBps = entityHedgeToleranceBps(e, annualSigmaFor(issuer));
         if (!(toleranceBps > 0)) return;
         const demand = new Map<string, ParticipantDemand>();
         // Full size when the hedge is free, nothing at all at its own tolerance.
         demand.set(instrumentId, {
           reservationStat: toleranceBps,
-          maxHoldingUSD: gapUSD,
+          maxHoldingLocal: gapLocal,
           fullSizeStatRange: toleranceBps,
         });
         participants.push({ id: e.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
       });
       ctx.updatedCompanies.forEach((c) => {
         if (c.region !== holderRegion) return;
-        const gapUSD = corpGapByTicker.get(c.ticker)?.get(issuer) ?? 0;
-        if (!(gapUSD > 0)) return;
+        const gapLocal = corpGapByTicker.get(c.ticker)?.get(issuer) ?? 0;
+        if (!(gapLocal > 0)) return;
         const toleranceBps = corpToleranceByTicker.get(c.ticker)?.get(issuer) ?? 0;
         if (!(toleranceBps > 0)) return;
         participants.push({
@@ -280,16 +280,16 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
           currentHoldingsByInstrumentId: new Map(),
           demandByInstrumentId: new Map<string, ParticipantDemand>([[instrumentId, {
             reservationStat: toleranceBps,
-            maxHoldingUSD: gapUSD,
+            maxHoldingLocal: gapLocal,
             fullSizeStatRange: toleranceBps,
           }]]),
         });
       });
-      if (participants.length === 0 || !(capacityUSD > 0)) { clearedBasisBps.set(key, 0); return; }
+      if (participants.length === 0 || !(capacityLocal > 0)) { clearedBasisBps.set(key, 0); return; }
       const instrument: ClearingInstrument = {
         id: instrumentId,
-        outstandingLocal: capacityUSD,
-        tradableFloatUSD: capacityUSD,
+        outstandingLocal: capacityLocal,
+        tradableFloatLocal: capacityLocal,
         currentStat: Math.max(1, ctx.updatedRegions[holderRegion]?.crossCurrencyBasisBps?.[issuer] ?? 10),
         statKind: 'PRICE_LIKE',
         durationYears: 0,
@@ -300,11 +300,11 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       const basisBps = Math.max(0, result.newStatById.get(instrumentId) ?? 0);
       clearedBasisBps.set(key, basisBps);
       result.newParticipantHoldings.forEach((byInstrument, entityId) => {
-        const filledUSD = byInstrument.get(instrumentId) ?? 0;
-        if (filledUSD <= 1e6) return;
+        const filledLocal = byInstrument.get(instrumentId) ?? 0;
+        if (filledLocal <= 1e6) return;
         let byRegion = filledByEntityRegion.get(entityId);
         if (!byRegion) { byRegion = new Map(); filledByEntityRegion.set(entityId, byRegion); }
-        byRegion.set(issuer, filledUSD);
+        byRegion.set(issuer, filledLocal);
       });
     });
     // Published so the spot desks can quote off a real price next week, and so it can be watched.
@@ -327,12 +327,12 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   ): void => {
     const holderKey = derivativePartyKey(holder);
     let budgetUSD = Math.max(0, cashLocal + pendingSettlementUSD(ctx, holder)) + (settledNetByParty.get(holderKey) ?? 0);
-    gaps.forEach((gapUSD, issuer) => {
+    gaps.forEach((gapLocal, issuer) => {
       const dealer = pickDealerBank(dealerBanksByRegion.get(holderRegion), desks);
       if (!dealer) return;
       const desk = desks.get(dealer)!;
-      const filledUSD = filledByEntityRegion.get(participantId)?.get(issuer) ?? 0;
-      const writableUSD = Math.min(gapUSD, filledUSD, deskCapacityUSD(desk));
+      const filledLocal = filledByEntityRegion.get(participantId)?.get(issuer) ?? 0;
+      const writableUSD = Math.min(gapLocal, filledLocal, deskCapacityUSD(desk));
       if (writableUSD <= 1e6) return;
       const basisBps = clearedBasisBps.get(bookKey(holderRegion, issuer)) ?? 0;
       const contract: DerivativeContract = {

@@ -48,7 +48,7 @@ export interface ClearingInstrument {
    * who do not bid in this auction. The auction clears demand against THIS, not against the whole
    * issue, because the passive share was never for sale.
    */
-  tradableFloatUSD: number;
+  tradableFloatLocal: number;
   /** Last week's quoted statistic — the starting point for the solve, and the fallback. */
   currentStat: number;
   /**
@@ -97,7 +97,7 @@ export interface ParticipantDemand {
    */
   reservationStat: number;
   /** The most it would hold at any level — its mandate or policy ceiling for this name. */
-  maxHoldingUSD: number;
+  maxHoldingLocal: number;
   /** How far past the reservation level it takes to pull in that full size. */
   fullSizeStatRange: number;
   /**
@@ -176,12 +176,12 @@ export function claimDemandRow(D: DemandStaging): number {
   return row;
 }
 /** One (participant, instrument) schedule — the exact scalars packClearing stored per pair. */
-export function setDemand(D: DemandStaging, row: number, i: number, reservationStat: number, fullSizeStatRange: number, maxHoldingUSD: number, maxNetPurchaseUSDOrNaN: number, minHoldingUSD: number): void {
+export function setDemand(D: DemandStaging, row: number, i: number, reservationStat: number, fullSizeStatRange: number, maxHoldingLocal: number, maxNetPurchaseUSDOrNaN: number, minHoldingUSD: number): void {
   const at = row * D.n + i;
   D.present[at] = 1;
   D.res[at] = reservationStat;
   D.range[at] = fullSizeStatRange;
-  D.maxH[at] = maxHoldingUSD;
+  D.maxH[at] = maxHoldingLocal;
   D.maxNet[at] = maxNetPurchaseUSDOrNaN;
   D.minH[at] = minHoldingUSD;
 }
@@ -207,7 +207,7 @@ export interface ClearingParams {
    * OWN7 — **an unsold holding stays with its holder.**
    *
    * Every book here allocates the float across the participants and hands whatever is left over
-   * to a RESIDUAL DEALER: `tradableFloatUSD - allocatedUSD`, financed by nobody. Once OWN7's
+   * to a RESIDUAL DEALER: `tradableFloatLocal - allocatedUSD`, financed by nobody. Once OWN7's
    * float rule made the float exactly "what these participants hold between them", that residual
    * stopped being a market maker's inventory and became what it always was — a counterparty the
    * model does not name, buying paper from holders who could not find a real buyer. Measured at
@@ -271,7 +271,7 @@ export interface ClearingResult {
   /**
    * GUARD — did ANY participant's ceiling leave room above what it already holds?
    *
-   * A `maxHoldingUSD` that equals the position it is meant to bound is not a constraint, it is
+   * A `maxHoldingLocal` that equals the position it is meant to bound is not a constraint, it is
    * an identity wearing a constraint's name, and the market it governs cannot trade: OWN8's
    * `investableSurplusUSD` was the balance-sheet identity rearranged, so no bank could ever buy
    * a bond and the repo market ran at zero volume for eight commits while every check passed.
@@ -368,7 +368,7 @@ export function sortIndexByKey(keys: ArrayLike<number>, n: number): Int32Array {
 }
 
 function solveClearingStat(
-  inst: { statKind: ClearingInstrument['statKind']; tradableFloatUSD: number },
+  inst: { statKind: ClearingInstrument['statKind']; tradableFloatLocal: number },
   bracketLow: number,
   bracketHigh: number
 ): number {
@@ -406,7 +406,7 @@ function solveClearingStat(
   // point — the least aggressive level at which every willing buyer has taken full size. A bound
   // is not a price (§7.21, §7.75).
   const demandAtWideEnd = demandAtU(uHi);
-  const targetUSD = Math.min(inst.tradableFloatUSD, demandAtWideEnd * 0.999999);
+  const targetUSD = Math.min(inst.tradableFloatLocal, demandAtWideEnd * 0.999999);
   if (demandAtU(uLo) > targetUSD) return toStat(uLo); // oversubscribed even at the extreme
 
   // Slope-change events: where each entry's ramp rises out of its core, and where it caps.
@@ -607,13 +607,13 @@ export function packClearing(
   }
   instruments.forEach((inst, i) => {
     const offeringUSD = Math.max(0, inst.primaryOfferingUSD ?? 0);
-    packed.float[i] = inst.tradableFloatUSD;
+    packed.float[i] = inst.tradableFloatLocal;
     packed.offering[i] = offeringUSD;
     packed.withdrawStat[i] = inst.primaryWithdrawStat === undefined ? Number.NaN : inst.primaryWithdrawStat;
     packed.currentStat[i] = inst.currentStat;
     packed.yieldLike[i] = inst.statKind === 'YIELD_LIKE' ? 1 : 0;
     packed.damperStreak[i] = Math.max(0, Math.min(255, Math.round(inst.damperBindStreak ?? damperStreakByRawId.get(inst.id) ?? 0)));
-    packed.skip[i] = inst.tradableFloatUSD + offeringUSD > 0 ? 0 : 1;
+    packed.skip[i] = inst.tradableFloatLocal + offeringUSD > 0 ? 0 : 1;
   });
   participants.forEach((p, pi) => {
     const base = pi * n;
@@ -637,7 +637,7 @@ export function packClearing(
         packed.present[base + i] = 1;
         packed.dRes[base + i] = d.reservationStat;
         packed.dRange[base + i] = d.fullSizeStatRange;
-        packed.dMaxH[base + i] = d.maxHoldingUSD;
+        packed.dMaxH[base + i] = d.maxHoldingLocal;
         packed.dMaxNet[base + i] = d.maxNetPurchaseUSD === undefined ? Number.NaN : d.maxNetPurchaseUSD;
         packed.dMinH[base + i] = d.minHoldingUSD ?? 0;
       }
@@ -648,7 +648,7 @@ export function packClearing(
         packed.present[base + i] = 1;
         packed.dRes[base + i] = d.reservationStat;
         packed.dRange[base + i] = d.fullSizeStatRange;
-        packed.dMaxH[base + i] = d.maxHoldingUSD;
+        packed.dMaxH[base + i] = d.maxHoldingLocal;
         packed.dMaxNet[base + i] = d.maxNetPurchaseUSD === undefined ? Number.NaN : d.maxNetPurchaseUSD;
         packed.dMinH[base + i] = d.minHoldingUSD ?? 0;
       });
@@ -734,7 +734,7 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
 
     let liveFloatUSD = packed.float[i] + offeringUSD;
     let solvedStat = solveClearingStat(
-      { statKind: isYieldLike ? 'YIELD_LIKE' : 'PRICE_LIKE', tradableFloatUSD: liveFloatUSD },
+      { statKind: isYieldLike ? 'YIELD_LIKE' : 'PRICE_LIKE', tradableFloatLocal: liveFloatUSD },
       bracketLow, bracketHigh
     );
     let offeringWithdrawn = false;
@@ -745,7 +745,7 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
         offeringWithdrawn = true;
         liveFloatUSD = packed.float[i];
         solvedStat = solveClearingStat(
-          { statKind: isYieldLike ? 'YIELD_LIKE' : 'PRICE_LIKE', tradableFloatUSD: liveFloatUSD },
+          { statKind: isYieldLike ? 'YIELD_LIKE' : 'PRICE_LIKE', tradableFloatLocal: liveFloatUSD },
           bracketLow, bracketHigh
         );
       }
@@ -778,7 +778,7 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
     for (let pi = 0; pi < pCount; pi++) {
       const k = pi * n + i;
       const previousUSD = packed.prevHolding[k];
-      let filledUSD = 0;
+      let filledLocal = 0;
       let coreUSD = 0;
       if (packed.present[k]) {
         const range = Math.max(1e-6, packed.dRange[k]);
@@ -788,12 +788,12 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
         const maxNet = packed.dMaxNet[k];
         const affordableUSD = Number.isNaN(maxNet) ? Infinity : previousUSD + Math.max(0, maxNet);
         const mandatedCoreUSD = Math.min(packed.dMinH[k], affordableUSD);
-        filledUSD = Math.max(mandatedCoreUSD, Math.min(wantedUSD, affordableUSD));
-        coreUSD = Math.min(packed.dMinH[k], affordableUSD, filledUSD);
+        filledLocal = Math.max(mandatedCoreUSD, Math.min(wantedUSD, affordableUSD));
+        coreUSD = Math.min(packed.dMinH[k], affordableUSD, filledLocal);
       }
-      kernWanted[pi] = filledUSD;
+      kernWanted[pi] = filledLocal;
       kernCore[pi] = coreUSD;
-      wantedTotalUSD += filledUSD;
+      wantedTotalUSD += filledLocal;
       coreTotalUSD += coreUSD;
     }
     const coreScale = coreTotalUSD > liveFloatUSD ? liveFloatUSD / coreTotalUSD : 1;
@@ -815,9 +815,9 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
       priorTotalUSD += previousUSD;
       const coreUSD = kernCore[pi] * coreScale;
       const discretionaryUSD = Math.max(0, kernWanted[pi] - kernCore[pi]);
-      const filledUSD = coreUSD + discretionaryUSD * discretionaryScale;
-      kernFilled[pi] = filledUSD;
-      const tradedUSD = filledUSD - previousUSD;
+      const filledLocal = coreUSD + discretionaryUSD * discretionaryScale;
+      kernFilled[pi] = filledLocal;
+      const tradedUSD = filledLocal - previousUSD;
       if (tradedUSD > 0) grossBuysUSD += tradedUSD; else grossSellsUSD -= tradedUSD;
     }
 
@@ -845,18 +845,18 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
       const previousUSD = packed.prevHolding[k];
       const wantedTradeUSD = kernFilled[pi] - previousUSD;
       const tradedUSD = wantedTradeUSD > 0 ? wantedTradeUSD * buyScale : wantedTradeUSD * sellScale;
-      const filledUSD = previousUSD + tradedUSD;
-      const feeUSD = Math.abs(tradedUSD) * (packed.dealerSpreadBps / 10000);
-      allocatedUSD += filledUSD;
+      const filledLocal = previousUSD + tradedUSD;
+      const feeLocal = Math.abs(tradedUSD) * (packed.dealerSpreadBps / 10000);
+      allocatedUSD += filledLocal;
       // Emit only rows that can move anything: a participant with no demand and no prior
       // holding contributes exact zeros everywhere (the old loop added -0-0 to its cash).
       if (packed.present[k] || previousUSD !== 0) {
         const f = out.fillCount++;
         out.fillInst[f] = i;
         out.fillPart[f] = pi;
-        out.fillFilled[f] = filledUSD;
+        out.fillFilled[f] = filledLocal;
         out.fillTraded[f] = tradedUSD;
-        out.fillFee[f] = feeUSD;
+        out.fillFee[f] = feeLocal;
       }
     }
     // With both sides rationed there is nothing left over by construction, so there is no
@@ -922,23 +922,23 @@ function accumulateShard(
   let f = 0;
   // Fill rows are already globally ordered within the shard.
   for (; f < shard.fillCount; f++) {
-    const filledUSD = shard.fillFilled[f];
+    const filledLocal = shard.fillFilled[f];
     const tradedUSD = shard.fillTraded[f];
-    const feeUSD = shard.fillFee[f];
+    const feeLocal = shard.fillFee[f];
     // Dust is a DOLLAR: a position worth a dollar or less is not carried. The unit here is the
     // book's — dollars on the credit books, SHARES on the equity book — so the test is in money
-    // (units × the cleared price where the stat is a price). Measured at §7.373: `filledUSD > 1`
+    // (units × the cleared price where the stat is a price). Measured at §7.373: `filledLocal > 1`
     // in units dropped 0.44 shares of a $279,800 name, $124k the holder was paid for by nobody.
     const fi = shard.fillInst[f];
     const unitValueUSD = instruments[fi].statKind === 'PRICE_LIKE' ? shard.clearedStat[fi - shard.from] : 1;
-    if (filledUSD * unitValueUSD > 1) {
+    if (filledLocal * unitValueUSD > 1) {
       const cell = shard.fillPart[f] * nI + fi;
-      result.holdingsMatrix[cell] = filledUSD;
+      result.holdingsMatrix[cell] = filledLocal;
       noteDenseWrite(cell);
     }
-    cashByPi[shard.fillPart[f]] = cashByPi[shard.fillPart[f]] - tradedUSD - feeUSD;
-    result.totalDealerRevenueUSD += feeUSD;
-    result.dealerNetCashUSD += tradedUSD + feeUSD;
+    cashByPi[shard.fillPart[f]] = cashByPi[shard.fillPart[f]] - tradedUSD - feeLocal;
+    result.totalDealerRevenueUSD += feeLocal;
+    result.dealerNetCashUSD += tradedUSD + feeLocal;
   }
 }
 
@@ -975,7 +975,7 @@ function anyCeilingAboveHolding(
         : p.demandByInstrumentId.get(instruments[i].id);
       if (!d) continue;
       const held = p.currentHoldingsByInstrumentId.get(instruments[i].id) ?? 0;
-      if (d.maxHoldingUSD > held + 1) return true;
+      if (d.maxHoldingLocal > held + 1) return true;
     }
   }
   return participants.length === 0;

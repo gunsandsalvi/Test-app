@@ -33,7 +33,7 @@ export interface WireInstruction {
   /** In the asset's unit: USD for money, shares, face, units. Always positive. */
   quantity: number;
   /** Per unit, in USD (1 for money). Value moved = quantity × price. */
-  priceUSD: number;
+  priceLocal: number;
   reason: string;
   /** The week the wire settles; this week when omitted (an obligation is a dated wire — N). */
   settleWeek?: number;
@@ -50,7 +50,7 @@ export interface WireJournal {
   kindId: Int8Array;
   assetRef: Int32Array;
   quantity: Float64Array;
-  priceUSD: Float64Array;
+  priceLocal: Float64Array;
   reasonId: Int32Array;
   settleWeek: Int32Array;
   /** §5-WIRES W4: the week's transformations of goods (produced, consumed, scrapped) per
@@ -64,7 +64,7 @@ export function newWireJournal(base: number, week: number, cap = 1 << 14): WireJ
   return {
     n: 0, base, week, goodsFlows: {},
     fromId: new Int32Array(cap), toId: new Int32Array(cap), kindId: new Int8Array(cap),
-    assetRef: new Int32Array(cap), quantity: new Float64Array(cap), priceUSD: new Float64Array(cap),
+    assetRef: new Int32Array(cap), quantity: new Float64Array(cap), priceLocal: new Float64Array(cap),
     reasonId: new Int32Array(cap), settleWeek: new Int32Array(cap),
   };
 }
@@ -93,16 +93,16 @@ function grow(j: WireJournal): void {
   const gb = (o: Int8Array) => { const a = new Int8Array(cap); a.set(o); return a; };
   const gf = (o: Float64Array) => { const a = new Float64Array(cap); a.set(o); return a; };
   j.fromId = gi(j.fromId); j.toId = gi(j.toId); j.kindId = gb(j.kindId); j.assetRef = gi(j.assetRef);
-  j.quantity = gf(j.quantity); j.priceUSD = gf(j.priceUSD); j.reasonId = gi(j.reasonId); j.settleWeek = gi(j.settleWeek);
+  j.quantity = gf(j.quantity); j.priceLocal = gf(j.priceLocal); j.reasonId = gi(j.reasonId); j.settleWeek = gi(j.settleWeek);
 }
 
 /** The hot-loop write: ids already interned. Returns the wire number. */
 export function wirePush(
   j: WireJournal, fromId: number, toId: number, kindId: number, assetRef: number,
-  quantity: number, priceUSD: number, reasonId: number, settleWeek: number
+  quantity: number, priceLocal: number, reasonId: number, settleWeek: number
 ): number {
-  if (!(quantity > 0) || !isFinite(quantity) || !isFinite(priceUSD) || priceUSD < 0) {
-    throw new Error(`ENGINE DEFECT: wire ${ASSET_KINDS[kindId]} ${assetText(assetRef)} carries quantity=${quantity} price=${priceUSD} — a wire moves a positive quantity at a finite price`);
+  if (!(quantity > 0) || !isFinite(quantity) || !isFinite(priceLocal) || priceLocal < 0) {
+    throw new Error(`ENGINE DEFECT: wire ${ASSET_KINDS[kindId]} ${assetText(assetRef)} carries quantity=${quantity} price=${priceLocal} — a wire moves a positive quantity at a finite price`);
   }
   if (fromId === toId) {
     throw new Error(`ENGINE DEFECT: wire ${ASSET_KINDS[kindId]} ${assetText(assetRef)} from a party to itself`);
@@ -110,7 +110,7 @@ export function wirePush(
   if (j.n >= j.fromId.length) grow(j);
   const i = j.n;
   j.fromId[i] = fromId; j.toId[i] = toId; j.kindId[i] = kindId; j.assetRef[i] = assetRef;
-  j.quantity[i] = quantity; j.priceUSD[i] = priceUSD; j.reasonId[i] = reasonId; j.settleWeek[i] = settleWeek;
+  j.quantity[i] = quantity; j.priceLocal[i] = priceLocal; j.reasonId[i] = reasonId; j.settleWeek[i] = settleWeek;
   j.n++;
   return j.base + i;
 }
@@ -134,11 +134,11 @@ export function wire(instruction: WireInstruction, internReasonId: (reason: stri
   // WIRE_TRACE=<asset substring>: print every non-money wire naming that asset (a probe's instrument).
   if (typeof process !== 'undefined' && process.env?.WIRE_TRACE && instruction.kind !== 'MONEY' && instruction.asset.includes(process.env.WIRE_TRACE)) {
     const who = (p: PartyRef) => { const q = p as { kind: string; ticker?: string; id?: string; region?: string }; return `${q.kind}:${q.ticker ?? q.id ?? q.region ?? ''}`; };
-    console.log(`  [wire] w${j.week} ${instruction.kind} ${instruction.asset} ${who(instruction.from)} -> ${who(instruction.to)} ${(instruction.quantity * instruction.priceUSD / 1e6).toFixed(1)}M :: ${instruction.reason}`);
+    console.log(`  [wire] w${j.week} ${instruction.kind} ${instruction.asset} ${who(instruction.from)} -> ${who(instruction.to)} ${(instruction.quantity * instruction.priceLocal / 1e6).toFixed(1)}M :: ${instruction.reason}`);
   }
   return wirePush(
     j, partyId(instruction.from), partyId(instruction.to), kindIdOf.get(instruction.kind)!,
-    internAsset(instruction.asset), instruction.quantity, instruction.priceUSD,
+    internAsset(instruction.asset), instruction.quantity, instruction.priceLocal,
     internReasonId(instruction.reason), instruction.settleWeek ?? j.week
   );
 }
@@ -226,14 +226,14 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
   };
   for (let i = 0; i < j.n; i++) {
     const k = ASSET_KINDS[j.kindId[i]];
-    let valueUSD = j.quantity[i] * j.priceUSD[i];
+    let valueLocal = j.quantity[i] * j.priceLocal[i];
     if (k === 'MONEY') {
       const cur = assetText(j.assetRef[i]);
-      moneyByCurrency[cur] = (moneyByCurrency[cur] ?? 0) + valueUSD;
-      valueUSD = toNumeraire(valueUSD, cur as CurrencyCode, fx);
+      moneyByCurrency[cur] = (moneyByCurrency[cur] ?? 0) + valueLocal;
+      valueLocal = toNumeraire(valueLocal, cur as CurrencyCode, fx);
     }
     byKind[k] = (byKind[k] ?? 0) + 1;
-    valueUSDByKind[k] = (valueUSDByKind[k] ?? 0) + valueUSD;
+    valueUSDByKind[k] = (valueUSDByKind[k] ?? 0) + valueLocal;
     if (k === 'MONEY') continue;
     const from = partyOf(j.fromId[i]), to = partyOf(j.toId[i]);
     if (k === 'GOOD') {
@@ -260,11 +260,11 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
       registerNetQtyByKind[k] = (registerNetQtyByKind[k] ?? 0) - j.quantity[i];
       if (registerNetQtyByHolder) { const hk = `${from.id}|${k}`; registerNetQtyByHolder[hk] = (registerNetQtyByHolder[hk] ?? 0) - j.quantity[i]; }
     }
-    if (to.kind === 'CLEARING_HOUSE') { const key = `${to.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) + valueUSD; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) + valueUSD; } }
-    if (from.kind === 'CLEARING_HOUSE') { const key = `${from.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) - valueUSD; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) - valueUSD; } }
+    if (to.kind === 'CLEARING_HOUSE') { const key = `${to.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) + valueLocal; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) + valueLocal; } }
+    if (from.kind === 'CLEARING_HOUSE') { const key = `${from.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) - valueLocal; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) - valueLocal; } }
     if (regionOfIssuer) {
-      if (from.kind === 'COMPANY') { const rg = regionOfIssuer(from.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) + valueUSD; if (issuerNetUSDByTicker) { const tk = `${from.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) + valueUSD; } } }
-      if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueUSD; if (issuerNetUSDByTicker) { const tk = `${to.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueUSD; } } }
+      if (from.kind === 'COMPANY') { const rg = regionOfIssuer(from.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) + valueLocal; if (issuerNetUSDByTicker) { const tk = `${from.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) + valueLocal; } } }
+      if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueLocal; if (issuerNetUSDByTicker) { const tk = `${to.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueLocal; } } }
     }
   }
   return { count: j.n, byKind, valueUSDByKind, moneyPendingUSD, moneyByCurrency, moneyPendingByCurrency, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };

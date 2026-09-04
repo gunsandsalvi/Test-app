@@ -15,10 +15,10 @@
  * duplicated every lot in the world every week (~55,000 and growing), all of it garbage.
  */
 
-export interface OutputStock { unitsHeld: number; valueUSD: number }
+export interface OutputStock { unitsHeld: number; valueLocal: number }
 
 /** A real purchase: units bought at a price, in a week. The three facts FIFO needs. */
-export interface CostedLot { unitsHeld: number; unitPriceUSD: number; acquiredWeek: number }
+export interface CostedLot { unitsHeld: number; unitPriceLocal: number; acquiredWeek: number }
 
 /**
  * A week of carrying cost on the output warehouse. Returns the new stock AND the charge, because
@@ -31,9 +31,9 @@ export function chargeCarryingCost(
   let totalCostUSD = 0;
   const out: Record<string, OutputStock> = {};
   for (const [subUnitId, inv] of Object.entries(stock)) {
-    const costUSD = inv.valueUSD * (annualRateOf(subUnitId) / 52);
-    totalCostUSD += costUSD;
-    out[subUnitId] = { unitsHeld: inv.unitsHeld, valueUSD: Math.max(0, inv.valueUSD - costUSD) };
+    const costLocal = inv.valueLocal * (annualRateOf(subUnitId) / 52);
+    totalCostUSD += costLocal;
+    out[subUnitId] = { unitsHeld: inv.unitsHeld, valueLocal: Math.max(0, inv.valueLocal - costLocal) };
   }
   return { stock: out, totalCostUSD };
 }
@@ -53,7 +53,7 @@ export function chargeCarryingCost(
 export function consumeLotsFifo<T extends CostedLot>(
   lots: T[],
   unitsWanted: number
-): { remaining: T[]; unitsTaken: number; costUSD: number; costsUSD: number[]; availableUnits: number } {
+): { remaining: T[]; unitsTaken: number; costLocal: number; costsUSD: number[]; availableUnits: number } {
   // SCALE §7.303 — lots are appended in week order, so they arrive sorted almost always; the
   // unconditional slice().sort() paid an allocation and an O(n log n) pass per firm-sub-unit-
   // week for nothing. One linear check keeps the sorted guarantee and the same order exactly.
@@ -65,7 +65,7 @@ export function consumeLotsFifo<T extends CostedLot>(
   const availableUnits = sorted.reduce((s, lot) => s + lot.unitsHeld, 0);
   let left = Math.min(availableUnits, Math.max(0, unitsWanted));
   let unitsTaken = 0;
-  let costUSD = 0;
+  let costLocal = 0;
   // PER-LOT costs, in consumption order, because the caller folds them into a running total that
   // spans several sub-units — and floating-point addition is not associative, so summing here and
   // adding once changes the world at the third decimal. The three-week fingerprint caught exactly
@@ -77,13 +77,13 @@ export function consumeLotsFifo<T extends CostedLot>(
     const take = Math.min(lot.unitsHeld, left);
     left -= take;
     unitsTaken += take;
-    const lotCostUSD = take * lot.unitPriceUSD;
+    const lotCostUSD = take * lot.unitPriceLocal;
     costsUSD.push(lotCostUSD);
-    costUSD += lotCostUSD;
+    costLocal += lotCostUSD;
     const unitsLeftInLot = lot.unitsHeld - take;
     if (unitsLeftInLot > 0.0001) remaining.push({ ...lot, unitsHeld: unitsLeftInLot });
   }
-  return { remaining, unitsTaken, costUSD, costsUSD, availableUnits };
+  return { remaining, unitsTaken, costLocal, costsUSD, availableUnits };
 }
 
 /** How much of what a line needed its stock could actually cover. 1 = fully supplied. */

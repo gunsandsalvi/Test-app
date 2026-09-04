@@ -30,10 +30,10 @@ import { isActiveCompany } from '../../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from '../shared-helpers';
 import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequiredReturn, fullSizeSpreadRangeBpsOf } from '../asset-allocation';
 import { bankRequiredReturnAnnual } from '../bank-lending';
-import { leverageHeadroomUSD } from '../../../macro/banking';
+import { leverageHeadroomLocal } from '../../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { strikeDerivatives } from '../derivative-lifecycle';
-import { institutionTotalAssetsUSD } from '../institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf, facilityRowsOf } from '../../../../engine2/tranches';
 
@@ -92,7 +92,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       return {
         id: cdsInstrumentId(regionId, c.id),
         outstandingLocal: floatUSD,
-        tradableFloatUSD: floatUSD,
+        tradableFloatLocal: floatUSD,
         // Opens at the issuer's own cleared cash spread — the alternative a seller is pricing
         // against — and moves from there on this book's own supply and demand. The BASIS between
         // the two is what the market then produces.
@@ -118,9 +118,9 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      const capacityUSD = deskNotionalCapacityUSD(
-        leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'CDS');
-      if (!(capacityUSD > 0)) return;
+      const capacityLocal = deskNotionalCapacityUSD(
+        leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'CDS');
+      if (!(capacityLocal > 0)) return;
       referenceIssuers.forEach((c) => {
         const annualPd = pdByIssuerId.get(c.id)!;
         const capitalChargeRate = spreadRiskCapitalChargeRate(c.creditRating, CDS_TENOR_WEEKS / 52);
@@ -135,7 +135,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
         // selling protection is the same concentration as making the loan.
         demandByInstrumentId.set(cdsInstrumentId(regionId, c.id), {
           reservationStat: reservationBps,
-          maxHoldingUSD: capacityUSD / Math.max(1, referenceIssuers.length),
+          maxHoldingLocal: capacityLocal / Math.max(1, referenceIssuers.length),
           fullSizeStatRange: fullSizeSpreadRangeBpsOf(bank),
         });
       });
@@ -154,10 +154,10 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
         && institutionProfile(e.entityType).sellsCdsProtection
     );
     creditFunds.forEach((entity) => {
-      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsUSD(ctx, entity));
+      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      const capacityUSD = Math.max(0, entity.equityCapitalUSD);
-      if (!(capacityUSD > 0)) return;
+      const capacityLocal = Math.max(0, entity.equityCapitalLocal);
+      if (!(capacityLocal > 0)) return;
       referenceIssuers.forEach((c) => {
         const annualPd = pdByIssuerId.get(c.id)!;
         demandByInstrumentId.set(cdsInstrumentId(regionId, c.id), {
@@ -168,7 +168,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
             capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, CDS_TENOR_WEEKS / 52),
             creditConditionsIndex,
           }),
-          maxHoldingUSD: capacityUSD / Math.max(1, referenceIssuers.length),
+          maxHoldingLocal: capacityLocal / Math.max(1, referenceIssuers.length),
           fullSizeStatRange: fullSizeSpreadRangeBpsOf(entity),
         });
       });

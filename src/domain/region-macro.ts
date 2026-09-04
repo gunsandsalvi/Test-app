@@ -62,7 +62,7 @@ export interface WealthTierData {
    * own balance sheets and the split derives."* §7.145 gave them balance sheets. These are the
    * split, measured where the balance sheets are built.
    */
-  debtUSD?: number;
+  debtLocal?: number;
   institutionalClaimsUSD?: number;
   equityExposureShare: number;
   homeEquityUSD?: number;
@@ -265,7 +265,7 @@ export interface HouseholdState {
    * insurer's bond book falls, household wealth falls with it — the transmission that could not
    * exist while these claims were nobody's.
    */
-  institutionalClaims: { entityId: string; valueUSD: number }[];
+  institutionalClaims: { entityId: string; valueLocal: number }[];
   /** Marked total of the above. */
   institutionalClaimsUSD: number;
   /**
@@ -292,7 +292,7 @@ export interface HouseholdState {
   lifeCycleSavingAnnualUSD?: number;
   /** HH4d — the households' money-fund share stock: the savings the WS7 gate diverted from
    * deposits, now a real asset line instead of money that vanished from the household view. */
-  mmfSharesUSD?: number;
+  mmfSharesLocal?: number;
   // §5-WIRES A2: the household sector's money lands on its banks at settlement; nothing is in transit.
   /** HH4b/§5-CLOSE C5 — this week's annual capital receipts recycling into the consumption
    * budget: deposit interest the banks paid plus the dividends the public float was paid. Both
@@ -390,9 +390,9 @@ export interface SmePool {
   accruedTaxUSD?: number;
   /** The DERIVED SUM of the SME_POOL loans the region's banks hold against this pool — one
    * representation (rule 4); bank-lending.ts and 02b own it. */
-  debtUSD: number;
+  debtLocal: number;
   /** §7.241 — the principal-weighted margin (bps over policy) of those SAME loans, derived
-   * beside `debtUSD` by 02b from the banks' real quoted margins. The pool's debt service used to
+   * beside `debtLocal` by 02b from the banks' real quoted margins. The pool's debt service used to
    * be priced at an invented `policyRate + 0.03` inline, so a credit tightening widened every
    * quoted margin and moved measured pool distress by ZERO — the transmission loop was open
    * exactly where its comment claimed it closed. One writer (02b), read by sme-pools. */
@@ -403,7 +403,7 @@ export interface SmePool {
   /** The pool's recent annual-revenue prints, so its hiring reads its own real output growth
    * the way a named firm reads its revenue history. */
   revenueHistoryUSD?: number[];
-  annualRevenueUSD: number;
+  annualRevenueLocal: number;
   marginPct: number;
   /** SEG-B — this week's real annualized receipts per sub-unit sold, from the pool's own
    * participation in stage 05's auctions. One book: a pool sells every sub-unit its industry
@@ -689,7 +689,7 @@ export interface Region {
   measuredForeignOwnership?: { equity: number; corpBond: number; sovBond: number };
   institutionalSector: InstitutionalSector;
   laggedCorporateDemandBase: number;
-  estimatedHouseholdIncomeUSD: number;
+  estimatedHouseholdIncomeLocal: number;
   
   // Macro fundamentals
   policyRate: number;
@@ -825,7 +825,7 @@ export interface Region {
   vacancyRate?: number;
 
   // Government & Nominal GDP
-  estimatedNominalGdpUSD: number;
+  estimatedNominalGdpLocal: number;
   derivedNominalGdpUSD: number;
   gdpGrowthBottomUp: number;
   smoothedWeeklyGrowthRate: number;

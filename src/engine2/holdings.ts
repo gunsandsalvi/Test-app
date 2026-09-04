@@ -141,7 +141,7 @@ export function syncBookRows(v2: V2World, entityId: string, book: ItemizedHoldin
     H.typeRef[r] = internString(v2, h.instrumentType);
     H.instrRef[r] = internString(v2, h.instrumentId);
     H.regionRef[r] = internString(v2, h.issuerRegion);
-    H.qtyLocal[r] = h.quantityOrNotionalUSD ?? 0;
+    H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
     H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
     H.units[r] = h.units;
     H.next[r] = -1;
@@ -179,7 +179,7 @@ export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): 
   H.typeRef[r] = internString(v2, h.instrumentType);
   H.instrRef[r] = internString(v2, h.instrumentId);
   H.regionRef[r] = internString(v2, h.issuerRegion);
-  H.qtyLocal[r] = h.quantityOrNotionalUSD ?? 0;
+  H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
   H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
   H.units[r] = h.units;
   H.next[r] = -1;
@@ -228,7 +228,7 @@ export function newBookRow(v2: V2World, h: ItemizedHolding): number {
   H.typeRef[r] = internString(v2, h.instrumentType);
   H.instrRef[r] = internString(v2, h.instrumentId);
   H.regionRef[r] = internString(v2, h.issuerRegion);
-  H.qtyLocal[r] = h.quantityOrNotionalUSD ?? 0;
+  H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
   H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
   H.next[r] = -1;
   return r;
@@ -288,7 +288,7 @@ export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[
       instrumentId: v2.internedStrings[H.instrRef[r]],
       instrumentType: v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'],
       issuerRegion: v2.internedStrings[H.regionRef[r]] as ItemizedHolding['issuerRegion'],
-      quantityOrNotionalUSD: H.qtyLocal[r],
+      quantityOrNotionalLocal: H.qtyLocal[r],
       units: Number.isNaN(H.units[r]) ? (Number.isNaN(sh) ? H.qtyLocal[r] : sh) : H.units[r],
     };
     if (!Number.isNaN(sh)) h.quantityShares = sh;
@@ -305,7 +305,7 @@ export function ensureBooksSynced(v2: V2World, entities: { id: string; itemizedH
 }
 
 function canonical(h: ItemizedHolding): string {
-  return `${h.instrumentType}|${h.instrumentId}|${h.issuerRegion}|${h.quantityOrNotionalUSD ?? 0}|${h.quantityShares ?? 'x'}|${h.units}`;
+  return `${h.instrumentType}|${h.instrumentId}|${h.issuerRegion}|${h.quantityOrNotionalLocal ?? 0}|${h.quantityShares ?? 'x'}|${h.units}`;
 }
 
 function canonicalRow(v2: V2World, r: number): string {

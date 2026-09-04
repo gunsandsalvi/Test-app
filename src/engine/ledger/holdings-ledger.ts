@@ -37,11 +37,11 @@ export interface HoldingSpec {
   instrumentId: string;
   issuerRegion: RegionId;
   /** Notional / market value moved, USD. */
-  valueUSD: number;
+  valueLocal: number;
   /** Shares moved (equity, fund shares); undefined for notional-only paper. */
   shares?: number;
   /** HOW MANY UNITS moved, in the instrument's own unit — par for credit, shares for equity.
-   *  `valueUSD` is units x price, so the wire carries a real price instead of the 1.00 every
+   *  `valueLocal` is units x price, so the wire carries a real price instead of the 1.00 every
    *  notional instrument used to move at. Defaults to shares, then to the value. */
   faceLocal?: number;
 }
@@ -56,10 +56,10 @@ const holderIdOf = (p: PartyRef): string | undefined => (p.kind === 'INSTITUTION
  * had doubled still wired at 100. A row that carries no face yet falls back to the old reading,
  * where value and face are the same number because the price was always one.
  */
-function priceOf(spec: HoldingSpec): { quantity: number; priceUSD: number } {
-  if (spec.shares !== undefined && spec.shares > 0) return { quantity: spec.shares, priceUSD: spec.valueUSD / spec.shares };
-  if (spec.faceLocal !== undefined && spec.faceLocal > 0) return { quantity: spec.faceLocal, priceUSD: spec.valueUSD / spec.faceLocal };
-  return { quantity: spec.valueUSD, priceUSD: 1 };
+function priceOf(spec: HoldingSpec): { quantity: number; priceLocal: number } {
+  if (spec.shares !== undefined && spec.shares > 0) return { quantity: spec.shares, priceLocal: spec.valueLocal / spec.shares };
+  if (spec.faceLocal !== undefined && spec.faceLocal > 0) return { quantity: spec.faceLocal, priceLocal: spec.valueLocal / spec.faceLocal };
+  return { quantity: spec.valueLocal, priceLocal: 1 };
 }
 
 /** Add to (or open) the holder's row of this instrument. */
@@ -68,19 +68,19 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const tRef = internString(v2, spec.instrumentType), iRef = internString(v2, spec.instrumentId);
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
-    H.qtyLocal[r] += spec.valueUSD;
+    H.qtyLocal[r] += spec.valueLocal;
     if (spec.shares !== undefined) H.shares[r] = (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]) + spec.shares;
-    const movedUnits = spec.shares ?? spec.faceLocal ?? spec.valueUSD;
+    const movedUnits = spec.shares ?? spec.faceLocal ?? spec.valueLocal;
     H.units[r] = (Number.isNaN(H.units[r]) ? 0 : H.units[r]) + movedUnits;
     markBookDirty(v2, holderId);
     return;
   }
   pushBookRow(v2, holderId, {
     instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
-    quantityOrNotionalUSD: spec.valueUSD, quantityShares: spec.shares, faceLocal: spec.faceLocal,
+    quantityOrNotionalLocal: spec.valueLocal, quantityShares: spec.shares, faceLocal: spec.faceLocal,
     // UNITS: shares where the instrument is share-counted, else par — which today equals the
     // value, because credit's price is still pinned at 1 (step 13 is what unpins it).
-    units: spec.shares ?? spec.faceLocal ?? spec.valueUSD,
+    units: spec.shares ?? spec.faceLocal ?? spec.valueLocal,
   });
 }
 
@@ -114,7 +114,7 @@ const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
 function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const H = mutableHoldings(v2);
   const tRef = internString(v2, spec.instrumentType), iRef = internString(v2, spec.instrumentId);
-  let leftUSD = spec.valueUSD; let leftShares = spec.shares ?? Number.NaN;
+  let leftUSD = spec.valueLocal; let leftShares = spec.shares ?? Number.NaN;
   let hit = false; let drops = false;
   // The residue of a row-by-row subtraction scales with the whole position the walk draws from,
   // not with the amount asked for: a debit of a thousand dollars taken out of a book of billions
@@ -135,7 +135,7 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   }
   // What is left after the walk is either float noise from the row-by-row subtraction — which
   // scales with the position it walked — or paper the holder never had.
-  if (leftUSD > 1e-9 * Math.max(1, spec.valueUSD, walkedUSD)
+  if (leftUSD > 1e-9 * Math.max(1, spec.valueLocal, walkedUSD)
     || leftShares > 1e-9 * Math.max(1, spec.shares ?? 0, walkedShares)) {
     defect(`${holderId} was debited ${spec.instrumentType} ${spec.instrumentId} beyond its position`
       + ` — ${(leftUSD / 1e6).toFixed(6)}M and ${Number.isNaN(leftShares) ? 0 : leftShares} shares undelivered`);
@@ -164,13 +164,13 @@ export function wireHoldingMove(from: PartyRef, to: PartyRef, spec: HoldingSpec,
 }
 
 function wireHolding(from: PartyRef, to: PartyRef, spec: HoldingSpec, reason: string): number {
-  const { quantity, priceUSD } = priceOf(spec);
-  return wire({ from, to, kind: kindOfType(spec.instrumentType), asset: spec.instrumentId, quantity, priceUSD, reason }, internReason);
+  const { quantity, priceLocal } = priceOf(spec);
+  return wire({ from, to, kind: kindOfType(spec.instrumentType), asset: spec.instrumentId, quantity, priceLocal, reason }, internReason);
 }
 
 /** A holding moves from one holder to another. Returns the wire number. */
 export function transferHolding(v2: V2World, from: PartyRef, to: PartyRef, spec: HoldingSpec, reason: string): number {
-  if (!(spec.valueUSD > 0) && !((spec.shares ?? 0) > 0)) return -1;
+  if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const fromId = holderIdOf(from), toId = holderIdOf(to);
   const n = wireHolding(from, to, spec, reason);
   if (fromId) debitRow(v2, fromId, spec);
@@ -186,7 +186,7 @@ export function transferHolding(v2: V2World, from: PartyRef, to: PartyRef, spec:
  * followed, and the O family lit up four weeks later).
  */
 export function issueHolding(v2: V2World, issuer: PartyRef, holder: PartyRef, spec: HoldingSpec, reason: string): number {
-  if (!(spec.valueUSD > 0) && !((spec.shares ?? 0) > 0)) return -1;
+  if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const n = wireHolding(issuer, holder, spec, reason);
   const toId = holderIdOf(holder);
   if (toId) creditRow(v2, toId, spec);
@@ -217,7 +217,7 @@ export function seedBook(
       instrumentType: h.instrumentType,
       instrumentId: h.instrumentId,
       issuerRegion: h.issuerRegion,
-      valueUSD: h.quantityOrNotionalUSD ?? 0,
+      valueLocal: h.quantityOrNotionalLocal ?? 0,
       shares: h.quantityShares,
     }, 'seed: book opened');
   }
@@ -225,7 +225,7 @@ export function seedBook(
 
 /** A holder's paper returns to the issuer: a redemption, a buyback, a write-off. */
 export function retireHolding(v2: V2World, holder: PartyRef, issuer: PartyRef, spec: HoldingSpec, reason: string): number {
-  if (!(spec.valueUSD > 0) && !((spec.shares ?? 0) > 0)) return -1;
+  if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const n = wireHolding(holder, issuer, spec, reason);
   const fromId = holderIdOf(holder);
   if (fromId) debitRow(v2, fromId, spec);
@@ -244,15 +244,15 @@ export function scaleHoldings(
   if (!holderId || !(ratio >= 0) || Math.abs(ratio - 1) < 1e-12) return 0;
   const H = mutableHoldings(v2);
   const tRef = internString(v2, instrumentType), iRef = internString(v2, instrumentId);
-  let valueUSD = 0, shares = 0, anyShares = false, region: RegionId | undefined;
+  let valueLocal = 0, shares = 0, anyShares = false, region: RegionId | undefined;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
-    valueUSD += H.qtyLocal[r] * Math.abs(1 - ratio);
+    valueLocal += H.qtyLocal[r] * Math.abs(1 - ratio);
     if (!Number.isNaN(H.shares[r])) { anyShares = true; shares += H.shares[r] * Math.abs(1 - ratio); }
     region = v2.internedStrings[H.regionRef[r]] as RegionId;
   }
-  if (!(valueUSD > 0) || !region) return 0;
-  const spec: HoldingSpec = { instrumentType, instrumentId, issuerRegion: region, valueUSD, shares: anyShares ? shares : undefined };
+  if (!(valueLocal > 0) || !region) return 0;
+  const spec: HoldingSpec = { instrumentType, instrumentId, issuerRegion: region, valueLocal, shares: anyShares ? shares : undefined };
   return ratio < 1 ? retireHolding(v2, holder, issuer, spec, reason) : issueHolding(v2, issuer, holder, spec, reason);
 }
 
@@ -264,8 +264,8 @@ export function scaleHoldings(
  */
 export function clearedBookDelta(
   holder: PartyRef, region: RegionId, instrumentType: HoldingKind,
-  before: Map<string, { valueUSD: number; shares?: number }>,
-  after: Map<string, { valueUSD: number; shares?: number }>,
+  before: Map<string, { valueLocal: number; shares?: number }>,
+  after: Map<string, { valueLocal: number; shares?: number }>,
   priceOf: (instrumentId: string) => number | undefined,
   reason: string
 ): number {
@@ -278,12 +278,12 @@ export function clearedBookDelta(
     const bShares = b?.shares, aShares = a?.shares;
     const inShares = bShares !== undefined || aShares !== undefined;
     const dSh = (aShares ?? 0) - (bShares ?? 0);
-    const dUSD = (a?.valueUSD ?? 0) - (b?.valueUSD ?? 0);
+    const dUSD = (a?.valueLocal ?? 0) - (b?.valueLocal ?? 0);
     const moved = inShares ? Math.abs(dSh) > 1e-9 : Math.abs(dUSD) > 1;
     if (!moved) return;
     const spec: HoldingSpec = inShares
-      ? { instrumentType, instrumentId: id, issuerRegion: region, shares: Math.abs(dSh), valueUSD: Math.abs(dSh) * (px ?? (Math.abs(dUSD) / Math.max(1e-12, Math.abs(dSh)))) }
-      : { instrumentType, instrumentId: id, issuerRegion: region, valueUSD: Math.abs(dUSD) };
+      ? { instrumentType, instrumentId: id, issuerRegion: region, shares: Math.abs(dSh), valueLocal: Math.abs(dSh) * (px ?? (Math.abs(dUSD) / Math.max(1e-12, Math.abs(dSh)))) }
+      : { instrumentType, instrumentId: id, issuerRegion: region, valueLocal: Math.abs(dUSD) };
     const sign = inShares ? dSh : dUSD;
     if (sign > 0) wireHolding(house, holder, spec, reason); else wireHolding(holder, house, spec, reason);
     n++;
@@ -306,9 +306,9 @@ export function clearedBookDelta(
 export function markCreditBook(
   v2: V2World, holderId: string,
   priceOfInstrument: (instrumentId: string) => number | undefined
-): { rows: number; deltaUSD: number } {
+): { rows: number; deltaLocal: number } {
   const H = mutableHoldings(v2);
-  let rows = 0, deltaUSD = 0;
+  let rows = 0, deltaLocal = 0;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (!isTrancheKind(v2.internedStrings[H.typeRef[r]])) continue;
     if (Number.isNaN(H.units[r])) H.units[r] = H.qtyLocal[r];
@@ -318,17 +318,17 @@ export function markCreditBook(
     if (price === undefined) continue;
     const before = H.qtyLocal[r];
     H.qtyLocal[r] = faceLocal * price;
-    deltaUSD += H.qtyLocal[r] - before;
+    deltaLocal += H.qtyLocal[r] - before;
     rows++;
   }
   if (rows > 0) markBookDirty(v2, holderId);
-  return { rows, deltaUSD };
+  return { rows, deltaLocal };
 }
 
 /** A change of value with no change of quantity — accretion, a NAV mark. No wire: nothing moved. */
-export function markHolding(v2: V2World, holderId: string, row: number, valueUSD: number): void {
+export function markHolding(v2: V2World, holderId: string, row: number, valueLocal: number): void {
   const H: HoldingStore = mutableHoldings(v2);
-  H.qtyLocal[row] = valueUSD;
+  H.qtyLocal[row] = valueLocal;
   markBookDirty(v2, holderId);
 }
 
@@ -336,15 +336,15 @@ export function markHolding(v2: V2World, holderId: string, row: number, valueUSD
 export function closeEmptyPositions(v2: V2World, holderId: string): void { pruneEmptyRows(v2, holderId); }
 
 /** The book's rows, keyed by instrument, for a delta read (before/after a clearing). */
-export function bookPositions(v2: V2World, holderId: string, instrumentType: HoldingKind): Map<string, { valueUSD: number; shares?: number }> {
+export function bookPositions(v2: V2World, holderId: string, instrumentType: HoldingKind): Map<string, { valueLocal: number; shares?: number }> {
   const H = v2.holdings; const tRef = v2.internedIdByString.get(instrumentType);
-  const out = new Map<string, { valueUSD: number; shares?: number }>();
+  const out = new Map<string, { valueLocal: number; shares?: number }>();
   if (tRef === undefined) return out;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef) continue;
     const id = v2.internedStrings[H.instrRef[r]];
-    const cur = out.get(id) ?? { valueUSD: 0, shares: undefined };
-    cur.valueUSD += H.qtyLocal[r];
+    const cur = out.get(id) ?? { valueLocal: 0, shares: undefined };
+    cur.valueLocal += H.qtyLocal[r];
     if (!Number.isNaN(H.shares[r])) cur.shares = (cur.shares ?? 0) + H.shares[r];
     out.set(id, cur);
   }

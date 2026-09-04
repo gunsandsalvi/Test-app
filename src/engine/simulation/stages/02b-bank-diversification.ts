@@ -115,7 +115,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // week's real yield gap, BEFORE the banks' deposit flow posts — the deposits simply never
     // arrive at the banks. This is the funding competition WS7 exists to create.
     const depositShare = savingsToDepositsShare(reg.householdState);
-    const regionSavingsDepositInflowUSD = (reg.householdState.savingsRate * reg.estimatedHouseholdIncomeUSD) / 52 * depositShare;
+    const regionSavingsDepositInflowUSD = (reg.householdState.savingsRate * reg.estimatedHouseholdIncomeLocal) / 52 * depositShare;
     const regionDivertedUSD = divertHouseholdSavingsToMmf(regionId, reg, regionSavingsDepositInflowUSD, ctx);
 
     // G2 slice 4: corporate deposits ARE the home companies' S5 cash — one representation,
@@ -190,7 +190,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     // The week's real household-credit flows, per bank, for the region roll-up below.
     const householdFlowsByBank = new Map<string, {
-      interestUSD: number; debtServicePrincipalUSD: number; principalLocal: number;
+      interestLocal: number; debtServicePrincipalUSD: number; principalLocal: number;
       mortgageOriginationUSD: number; mortgageDischargeUSD: number; mortgageRateQuotedAnnual: number; turnoverRateAnnual: number; mortgageBookUSD: number;
       consumerCreditOriginationUSD: number;
     }>();
@@ -203,9 +203,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const maturingRepo = (ticker: string) => {
       let borrowPrincipalUSD = 0, borrowInterestUSD = 0, lendPrincipalUSD = 0, lendInterestUSD = 0;
       dueThisWeek.forEach((c) => {
-        const interestUSD = repoInterestToMaturityUSD(c);
-        if (c.borrowerTicker === ticker) { borrowPrincipalUSD += c.principalLocal; borrowInterestUSD += interestUSD; }
-        if (c.lender.kind === 'BANK' && c.lender.ticker === ticker) { lendPrincipalUSD += c.principalLocal; lendInterestUSD += interestUSD; }
+        const interestLocal = repoInterestToMaturityUSD(c);
+        if (c.borrowerTicker === ticker) { borrowPrincipalUSD += c.principalLocal; borrowInterestUSD += interestLocal; }
+        if (c.lender.kind === 'BANK' && c.lender.ticker === ticker) { lendPrincipalUSD += c.principalLocal; lendInterestUSD += interestLocal; }
       });
       return { borrowPrincipalUSD, borrowInterestUSD, lendPrincipalUSD, lendInterestUSD };
     };
@@ -237,12 +237,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         .forEach((l) => {
           const seg = (reg.smePools || []).find((s) => smePoolId(regionId, s.industry) === l.borrowerId);
           if (!seg) return;
-          const interestUSD = (l.principalLocal * (reg.policyRate + l.marginBps / 10000)) / 52;
-          priorSmeInterestWeeklyUSD += interestUSD;
+          const interestLocal = (l.principalLocal * (reg.policyRate + l.marginBps / 10000)) / 52;
+          priorSmeInterestWeeklyUSD += interestLocal;
           pay(ctx, {
             payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
             payee: { kind: 'BANK', ticker: bank.ticker },
-            amount: interestUSD,
+            amount: interestLocal,
             currency: currencyOf(regionId),
             reason: 'SME pool interest to the lending bank',
           });
@@ -264,7 +264,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         { businessLoanUSD: businessLoanBookOf(prevSheet, facilityBookLocal), consumerLoanUSD: consumerLoanBookOf(prevSheet) },
         reservesUSD,
         bankDepositLines(ctx, bank.ticker),
-        reg.estimatedHouseholdIncomeUSD * share,
+        reg.estimatedHouseholdIncomeLocal * share,
         reg.householdState.savingsRate,
         reg.policyRate,
         // A higher-risk bank's book is more exposed to the SAME regional unemployment print, the
@@ -347,7 +347,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         bank, lending.sheet, reg, reg.unemploymentRate * (0.6 + riskFactor * 0.4), ctx.nextWeek
       );
       householdFlowsByBank.set(bank.ticker, {
-        interestUSD: priorHouseholdInterestWeeklyUSD,
+        interestLocal: priorHouseholdInterestWeeklyUSD,
         debtServicePrincipalUSD: household.debtServicePrincipalWeeklyUSD,
         mortgageOriginationUSD: household.mortgageOriginationUSD,
         mortgageDischargeUSD: household.mortgageDischargeUSD,
@@ -380,7 +380,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     });
 
     // The pool's debt is the DERIVED SUM of the loans the banks actually hold against it
-    // one representation (rule 4). The in-place `debtUSD += granted` during origination only
+    // one representation (rule 4). The in-place `debtLocal += granted` during origination only
     // sequences demand across banks within the pass; this write is the record, and it now
     // carries the loss leg too (write-offs used to shrink the banks' books while the segment's
     // number never noticed).
@@ -396,7 +396,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       (reg.smePools || []).forEach((seg) => {
         const id = smePoolId(regionId, seg.industry);
         const principalLocal = poolTotals.get(id) ?? 0;
-        seg.debtUSD = Math.round(principalLocal);
+        seg.debtLocal = Math.round(principalLocal);
         // The blended margin of the pool's REAL loans, derived beside the principal —
         // sme-pools reads it for debt service instead of an invented +300bp, closing the
         // credit-transmission loop (a tightening now reaches measured pool distress).
@@ -583,7 +583,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const mortgageDebtUSD = Math.round(sumPools('MORTGAGE'));
     const creditCardDebtUSD = Math.round(sumPools('CREDIT_CARD'));
     const otherConsumerLoanDebtUSD = Math.round(sumPools('CONSUMER_TERM'));
-    let interestUSD = 0; let servicePrincipalUSD = 0; let mortgageOriginationUSD = 0;
+    let interestLocal = 0; let servicePrincipalUSD = 0; let mortgageOriginationUSD = 0;
     let mortgageDischargeUSD = 0; let consumerCreditUSD = 0;
     // HSG: a borrower shops, so the region's going mortgage rate is the KEENEST quote it can
     // find. The quotes differ now — each bank prices its own book's measured loss experience at
@@ -596,7 +596,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     let turnoverBookUSD = 0;
     let bookPrincipalUSD = 0;
     householdFlowsByBank.forEach((f) => {
-      interestUSD += f.interestUSD;
+      interestLocal += f.interestLocal;
       servicePrincipalUSD += f.debtServicePrincipalUSD;
       bookPrincipalUSD += f.principalLocal;
       mortgageOriginationUSD += f.mortgageOriginationUSD;
@@ -619,20 +619,20 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // borrower's deposit, a repayment and the interest destroy it — reported so the money-stock
     // decomposition can count the banks' second creator (the first is the payment ledger).
     reg.householdBookDepositFlowWeeklyUSD = Math.round(
-      mortgageOriginationUSD - mortgageDischargeUSD + consumerCreditUSD - bookPrincipalUSD - interestUSD);
+      mortgageOriginationUSD - mortgageDischargeUSD + consumerCreditUSD - bookPrincipalUSD - interestLocal);
     reg.householdState = {
       ...hs,
-      mmfSharesUSD: Math.round(((hs.mmfSharesUSD ?? 0) + regionDivertedUSD)),
+      mmfSharesLocal: Math.round(((hs.mmfSharesLocal ?? 0) + regionDivertedUSD)),
       mortgageDebtUSD,
       creditCardDebtUSD,
       otherConsumerLoanDebtUSD,
       priorMortgageDebtUSD,
-      householdDebtToIncomeRatio: reg.estimatedHouseholdIncomeUSD > 0
-        ? Number(((mortgageDebtUSD + creditCardDebtUSD + otherConsumerLoanDebtUSD) / reg.estimatedHouseholdIncomeUSD).toFixed(4))
+      householdDebtToIncomeRatio: reg.estimatedHouseholdIncomeLocal > 0
+        ? Number(((mortgageDebtUSD + creditCardDebtUSD + otherConsumerLoanDebtUSD) / reg.estimatedHouseholdIncomeLocal).toFixed(4))
         : hs.householdDebtToIncomeRatio,
       // Burden is interest plus REQUIRED principal (annuity schedules and card minimums);
       // transactor turnover is consumption already counted, cycled through a card.
-      weeklyDebtServiceUSD: Math.round((interestUSD + servicePrincipalUSD)),
+      weeklyDebtServiceUSD: Math.round((interestLocal + servicePrincipalUSD)),
       // The household sector's NET deposit credit from housing: buyers' new loans minus the
       // sellers' loans the sale proceeds retired.
       weeklyMortgageOriginationUSD: Math.round((mortgageOriginationUSD - mortgageDischargeUSD)),

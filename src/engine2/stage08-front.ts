@@ -28,7 +28,7 @@ import { SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
 import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
 
 type ProductLines = NonNullable<Company['productLines']>;
-type ConstructionLot = { valueUSD: number; entersServiceWeek: number };
+type ConstructionLot = { valueLocal: number; entersServiceWeek: number };
 
 /** The kernel's coupon-due flags, packed. */
 export const DUE_BOND = 1, DUE_CP = 2, DUE_LOAN = 4;
@@ -52,7 +52,7 @@ export interface FrontPass {
   stillUnderConstruction: (ConstructionLot[])[];
   newExecutionQuality: Float64Array;
   carryingCostUSD: Float64Array;
-  outputInv: Record<string, { unitsHeld: number; valueUSD: number }>[];
+  outputInv: Record<string, { unitsHeld: number; valueLocal: number }>[];
   updatedProductLines: ProductLines[];
   newRevenue: Float64Array;
   measuredInputConsumptionWeeklyUSD: Float64Array;

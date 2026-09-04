@@ -93,7 +93,7 @@ checked by `scripts/check-atlas.sh`.
 | A4 both legs in one currency | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ✅ |
 | B1 a borrower who issued fixed and wants floating, or the reverse | `src/engine/simulation/stages/derivative-markets/irs.ts:runSwapMarket` | ⚠️ |
 | B2 an asset manager with a duration mismatch | `src/domain/institution-profiles.ts:liabilityDriven` | ✅ |
-| B2.a a structural, one-way demand | `src/engine/simulation/stages/institutional-balance-sheet.ts:institutionTotalAssetsUSD` | ✅ |
+| B2.a a structural, one-way demand | `src/engine/simulation/stages/institutional-balance-sheet.ts:institutionTotalAssetsLocal` | ✅ |
 | B3 a bank managing its own repricing gap | `src/domain/derivatives/classes/irs.ts:repricingLossUSD` | ✅ |
 | B4 a speculator with a view on rates | — | ❌ |
 | B5 a dealer running a book, hedging its net position | — | ❌ |

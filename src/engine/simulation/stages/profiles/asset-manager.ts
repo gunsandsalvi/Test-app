@@ -3,7 +3,7 @@ import { ensureV2, rowOf, revHistPush } from '../../../../engine2/world';
 import { managedEntityIdsOf } from '../../../../domain/company';
 
 import { ProfileInput, ProfilePnl } from './types';
-import { institutionTotalAssetsUSD } from '../institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 
 export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, state, entityById } = input;
@@ -17,7 +17,7 @@ export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) 
   const marketGrowth = equityIndex.value / Math.max(1, equityIndex.historical[equityIndex.historical.length - 2] ?? equityIndex.value);
   const flows = (random() - 0.4) * 0.01;
   comp.aumUSD = instEnt
-    ? institutionTotalAssetsUSD(input.ctx, instEnt)
+    ? institutionTotalAssetsLocal(input.ctx, instEnt)
     : (comp.aumUSD ?? comp.annualRevenue * 50) * marketGrowth * (1 + flows);
   comp.managementFeeRate = comp.managementFeeRate ?? (0.005 + random() * 0.005);
 

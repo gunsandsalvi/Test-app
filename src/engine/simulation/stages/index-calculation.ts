@@ -100,25 +100,25 @@ function indexValueUSD(v2: V2World, def: IndexDefinition, comp: Company, curveOf
  */
 function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], curveOf: (r: RegionId) => NelsonSiegelParams, week: number): IndexConstituent[] {
   const eligible = companies
-    .map((c) => ({ instrumentId: c.id, valueUSD: indexValueUSD(v2, def, c, curveOf, week) }))
-    .filter((x) => x.valueUSD > 0)
-    .sort((a, b) => b.valueUSD - a.valueUSD);
+    .map((c) => ({ instrumentId: c.id, valueLocal: indexValueUSD(v2, def, c, curveOf, week) }))
+    .filter((x) => x.valueLocal > 0)
+    .sort((a, b) => b.valueLocal - a.valueLocal);
   if (eligible.length === 0) return [];
 
-  const totalUSD = eligible.reduce((s, x) => s + x.valueUSD, 0);
+  const totalLocal = eligible.reduce((s, x) => s + x.valueLocal, 0);
   let members = eligible;
   if (def.tier === 'LARGE_CAP' || def.tier === 'SMALL_CAP') {
     let cumulative = 0;
     let cut = 0;
     for (; cut < eligible.length; cut++) {
-      cumulative += eligible[cut].valueUSD;
-      if (cumulative / totalUSD >= LARGE_CAP_CUMULATIVE_SHARE) { cut++; break; }
+      cumulative += eligible[cut].valueLocal;
+      if (cumulative / totalLocal >= LARGE_CAP_CUMULATIVE_SHARE) { cut++; break; }
     }
     members = def.tier === 'LARGE_CAP' ? eligible.slice(0, cut) : eligible.slice(cut);
   }
-  const memberTotalUSD = members.reduce((s, x) => s + x.valueUSD, 0);
+  const memberTotalUSD = members.reduce((s, x) => s + x.valueLocal, 0);
   if (!(memberTotalUSD > 0)) return [];
-  return members.map((x) => ({ instrumentId: x.instrumentId, weight: x.valueUSD / memberTotalUSD }));
+  return members.map((x) => ({ instrumentId: x.instrumentId, weight: x.valueLocal / memberTotalUSD }));
 }
 
 /** This week's aggregate value of a fixed membership, at cleared prices. */

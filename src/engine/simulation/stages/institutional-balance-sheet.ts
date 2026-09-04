@@ -35,7 +35,7 @@ import { institutionProfile } from '../../../domain/institution-profiles';
 
 import { bookHeadOf } from '../../../engine2/holdings';
 import { RegionId, InstitutionalEntity, Company, GameState } from '../../../types';
-import { institutionTotalAssetsUSD as totalAssetsRead } from '../../../domain/institutions';
+import { institutionTotalAssetsLocal as totalAssetsRead } from '../../../domain/institutions';
 import { V2World, ensureV2 } from '../../../engine2/world';
 import { isActiveCompany } from '../../../domain/company';
 import { mandatePctOf } from '../../../domain/institutions';
@@ -101,7 +101,7 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashLo
 export function stagePurchaseBudgetUSD(
   ctx: WeeklyStepContext,
   entity: InstitutionalEntity,
-  /** D: the entity's live total assets (`institutionTotalAssetsUSD`), the sleeve's base. */
+  /** D: the entity's live total assets (`institutionTotalAssetsLocal`), the sleeve's base. */
   totalAssetsUSD: number,
   assetClass: 'CORP_BOND' | 'GOV_BOND' | 'LEVERAGED_LOAN',
   unsettledUSD = 0
@@ -150,7 +150,7 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       }
       const couponRate = cb.get(h.instrumentId);
       if (couponRate === undefined) return;
-      weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * couponRate) / 52;
+      weeklyIncomeUSD += ((h.quantityOrNotionalLocal ?? 0) * couponRate) / 52;
     });
     // A week with no income is written as ZERO, not skipped. Returned unchanged, the field kept
     // last week's number for ever and every reader — the pension entitlement above all — credited
@@ -195,7 +195,7 @@ function sponsorPortfolioUSD(entity: InstitutionalEntity, evMultiple: number, pr
   }, 0);
 }
 
-export function institutionTotalAssetsUSD(ctx: WeeklyStepContext, entity: InstitutionalEntity): number {
+export function institutionTotalAssetsLocal(ctx: WeeklyStepContext, entity: InstitutionalEntity): number {
   const pendingUSD = ctx.holdingsStore ? 0 : pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id });
   const portfolioUSD = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
     ? sponsorPortfolioUSD(entity, comparableMultiple(ctx, entity.region, ctx.prevActiveFirms), privateFirmIndex(ctx), ctx.v2)

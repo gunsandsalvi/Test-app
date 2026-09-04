@@ -66,9 +66,9 @@ import { centralBankParticipant, applyCentralBankFills, wireCentralBankFills, CE
 import { clearedBookDelta } from '../../ledger/holdings-ledger';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { encumberedFaceByBond } from '../../../domain/repo';
-import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
+import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
@@ -227,7 +227,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     ctx.prevActiveFirms.forEach((c) => {
       if (c.region !== regionId) return;
       (c.treasuryHoldings || []).forEach((h) =>
-        reserveBond(h.instrumentId, h.quantityOrNotionalUSD ?? 0));
+        reserveBond(h.instrumentId, h.quantityOrNotionalLocal ?? 0));
     });
 
     //   - AND THE THIRD, which OWN7 missed, IS NOT A HOLDER AT ALL — it is UNSOLD PAPER, and it
@@ -264,13 +264,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           .forEach(([id, usd]) => addReal(id, Number(usd) || 0));
       }
       (c.treasuryHoldings || []).forEach((h) =>
-        addReal(h.instrumentId, h.quantityOrNotionalUSD ?? 0));
+        addReal(h.instrumentId, h.quantityOrNotionalLocal ?? 0));
     });
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.isDefaulted) return;
       (e.itemizedHoldings || []).forEach((h) => {
         if (holdingClassOf(h.instrumentType) !== 'SOVEREIGN' || h.issuerRegion !== regionId) return;
-        addReal(h.instrumentId, h.quantityOrNotionalUSD ?? 0);
+        addReal(h.instrumentId, h.quantityOrNotionalLocal ?? 0);
       });
     });
     if (reg.centralBankSheet) {
@@ -323,7 +323,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // XB1 removed the `foreignShare` carve-out, which subtracted an owner that did not exist.
       // OWN7 puts back the carve-out that IS real: what holders outside this book already own.
       // Every bidder here is a real holder, so what is left is genuinely in play.
-      tradableFloatUSD: Math.max(0,
+      tradableFloatLocal: Math.max(0,
         b.outstandingLocal - (nonParticipantById.get(b.id) ?? 0) - (unheldById.get(b.id) ?? 0)),
       // PUB: the treasury's own offering — every dollar of THIS BOND no book holds yet.
       primaryOfferingUSD: unheldById.get(b.id) ?? 0,
@@ -355,7 +355,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const rawEntityTargets = new Map<string, number>(
       biddingEntities.map((e) => [
         e.id,
-        institutionTotalAssetsUSD(ctx, e) * e.assetAllocationTarget.govBondPct
+        institutionTotalAssetsLocal(ctx, e) * e.assetAllocationTarget.govBondPct
           * mandateWeightForIssuer(e.entityType, e.region, regionId, sovStockByRegion),
       ])
     );
@@ -381,7 +381,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const currentByBond = new Map<string, number>();
       store.scan(entity.id, 'GOV_BOND', (h) => {
         if (!ownInstrumentIds.has(h.instrumentId)) return false;
-        currentByBond.set(h.instrumentId, (currentByBond.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+        currentByBond.set(h.instrumentId, (currentByBond.get(h.instrumentId) ?? 0) + h.quantityOrNotionalLocal);
         return true;
       });
 
@@ -394,7 +394,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // The entity's real money for this auction (S11), apportioned across the bonds by
       // their share of the market. Banks below carry no such cap: their real constraint is the
       // reserve position S2 already built, not a cash budget.
-      const classBudgetUSD = stagePurchaseBudgetUSD(ctx, entity, institutionTotalAssetsUSD(ctx, entity), 'GOV_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
+      const classBudgetUSD = stagePurchaseBudgetUSD(ctx, entity, institutionTotalAssetsLocal(ctx, entity), 'GOV_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       bonds.forEach((b) => {
         // Its share of the market is its own face over the whole stock — the bond's, not a
         // share is the bond's own.
@@ -408,7 +408,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
             computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS)
             + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
                 ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate))),
-          maxHoldingUSD: entityTarget * shareOfMarket * maxOverweightMultipleOf(entity),
+          maxHoldingLocal: entityTarget * shareOfMarket * maxOverweightMultipleOf(entity),
           fullSizeStatRange: priceRangeOfYieldRange(b, curveYieldBpsOf(b), SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
           maxNetPurchaseUSD: classBudgetUSD * shareOfMarket,
           // Liability-driven core: an insurer's claim reserves and a pension fund's benefit
@@ -452,7 +452,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const fundableUSD = Math.min(
         Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
           + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
-        leverageHeadroomUSD(sheet, reservesUSD, facilityBookLocal)
+        leverageHeadroomLocal(sheet, reservesUSD, facilityBookLocal)
       );
       // REPO2: collateral already pledged cannot simultaneously be sold, and the pledge names
       // the paper. The floor is now the face of THIS BOND that is actually encumbered — a
@@ -472,7 +472,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           // The duration premium is on THIS bond's remaining life, so a rung six years into a
           // ten-year life is priced as the four-year bond it now is.
           reservationStat: priceAtYieldBps(b, reg.policyRate * 10000 + durationPremiumBps(b.years, BANK_PREFERRED_TENOR_YEARS)),
-          maxHoldingUSD: appetiteUSD * shareOfSovStock,
+          maxHoldingLocal: appetiteUSD * shareOfSovStock,
           fullSizeStatRange: priceRangeOfYieldRange(b, curveYieldBpsOf(b), SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
           maxNetPurchaseUSD: fundableUSD * shareOfMarket,
           // Two floors, whichever binds: collateral already pledged overnight cannot be sold,
@@ -524,7 +524,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       .filter((p): p is { tenorYears: number; yield: number } => p !== undefined);
     if (process.env.SOV_TRACE === '1') {
       console.log(`  [sov-trace] ${regionId} w${ctx.nextWeek}: bonds=${bonds.length} points=${observedPoints.length} ` +
-        bonds.slice(0, 4).map((b) => `${b.id}@${b.years.toFixed(2)}y out=${(b.outstandingLocal / 1e9).toFixed(1)}B float=${((instruments.find((i) => i.id === b.id)?.tradableFloatUSD ?? 0) / 1e9).toFixed(1)}B px=${result.newStatById.get(b.id)?.toFixed(5) ?? 'none'}`).join(' | '));
+        bonds.slice(0, 4).map((b) => `${b.id}@${b.years.toFixed(2)}y out=${(b.outstandingLocal / 1e9).toFixed(1)}B float=${((instruments.find((i) => i.id === b.id)?.tradableFloatLocal ?? 0) / 1e9).toFixed(1)}B px=${result.newStatById.get(b.id)?.toFixed(5) ?? 'none'}`).join(' | '));
     }
     // §3.13-SOV row 5 / §3.25 — THIS STAGE DOES NOT OWN THE CURVE. It cleared bonds against the
     // curve standing at week start, which is what a real session prices against, and deposits what
@@ -548,7 +548,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
       const newGovHoldings: ItemizedHolding[] = [];
       newHoldings.forEach((usd, instrumentId) => {
-        if (usd > 1) newGovHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd, units: usd });
+        if (usd > 1) newGovHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalLocal: usd, units: usd });
       });
       store.append(entity.id, newGovHoldings);
     });
@@ -571,14 +571,14 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // invariant existed to catch it (measured: 26.6B of USA bank bills vanished in week 1).
       const newBook: Record<string, number> = {};
       // Step 13 (W2): the bank's bond book moves by wire against the house, bond by bond.
-      const bondsBefore = new Map<string, { valueUSD: number }>(), bondsAfter = new Map<string, { valueUSD: number }>();
+      const bondsBefore = new Map<string, { valueLocal: number }>(), bondsAfter = new Map<string, { valueLocal: number }>();
       Object.entries(existingSheet?.sovereignBondHoldingsByBond || {}).forEach(([id, v]) => {
         if (!ownInstrumentIds.has(id)) newBook[id] = Number(v) || 0;
-        else bondsBefore.set(id, { valueUSD: Number(v) || 0 });
+        else bondsBefore.set(id, { valueLocal: Number(v) || 0 });
       });
       newHoldings.forEach((usd, instrumentId) => {
         newBook[instrumentId] = usd;
-        bondsAfter.set(instrumentId, { valueUSD: usd });
+        bondsAfter.set(instrumentId, { valueLocal: usd });
       });
       clearedBookDelta({ kind: 'BANK_SECURITIES', ticker: bank.ticker }, regionId, 'GOV_BOND', bondsBefore, bondsAfter, () => undefined, 'sovereign bond clearing fill');
       const prevClearedUSD = bonds.reduce((acc, b) => acc + (existingSheet?.sovereignBondHoldingsByBond?.[b.id] ?? 0), 0);
@@ -587,13 +587,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const cashDeltaUSD = result.netCashDeltaByParticipantId.get(bank.ticker) ?? 0;
       // The dealer fee inside the cash leg is an expense: cash left the bank beyond what the
       // bonds cost, and P&L must say so or the balance-sheet identity drifts by the fee.
-      const feeUSD = Math.max(0, -(cashDeltaUSD + (newClearedUSD - prevClearedUSD)));
+      const feeLocal = Math.max(0, -(cashDeltaUSD + (newClearedUSD - prevClearedUSD)));
       if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
       // The securities and the P&L; the reserves leg settles below (SETL6), so that the bank
       // that sold and the bank that bought move against each other rather than each moving
       // alone.
       updateBankSheet(ctx, bank.ticker, {
-        ...bookPnL(existingSheet, -feeUSD, 'sovereign book fee', bank.ticker),
+        ...bookPnL(existingSheet, -feeLocal, 'sovereign book fee', bank.ticker),
         sovereignBondHoldingsByBond: newBook,
         sovereignBondHoldingsLocal: Math.round(newTotalUSD),
       });
@@ -643,7 +643,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         : bankTickers.has(id) ? { kind: 'BANK_SECURITIES', ticker: id }
           : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
             : dealerDeskPartyOf(id, deskTickers)),
-      { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
+      { netCashUSD: result.dealerNetCashUSD, feeLocal: result.totalDealerRevenueUSD },
       feeDesksForRegion(ctx, regionId),
       // PUB: the treasury is paid for the paper this week's auction actually placed.
       primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }), undefined, primaryAssetOf('GOV_BOND', regionId))

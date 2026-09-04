@@ -32,7 +32,7 @@ export interface ContractTable {
   supplierRef: Int32Array;
   customerRef: Int32Array;
   subIdx: Int32Array;
-  priceUSD: Float64Array;
+  priceLocal: Float64Array;
   qtyPerWeek: Float64Array;
   weeksRemaining: Int32Array;
   backlogUnits: Float64Array;
@@ -56,7 +56,7 @@ export function newContractTable(): ContractTable {
     supplierRef: new Int32Array(cap),
     customerRef: new Int32Array(cap),
     subIdx: new Int32Array(cap),
-    priceUSD: new Float64Array(cap),
+    priceLocal: new Float64Array(cap),
     qtyPerWeek: new Float64Array(cap),
     weeksRemaining: new Int32Array(cap),
     backlogUnits: new Float64Array(cap),
@@ -77,7 +77,7 @@ function grow(T: ContractTable): void {
   T.supplierRef = gi(T.supplierRef);
   T.customerRef = gi(T.customerRef);
   T.subIdx = gi(T.subIdx);
-  T.priceUSD = gf(T.priceUSD);
+  T.priceLocal = gf(T.priceLocal);
   T.qtyPerWeek = gf(T.qtyPerWeek);
   T.weeksRemaining = gi(T.weeksRemaining);
   T.backlogUnits = gf(T.backlogUnits);
@@ -103,7 +103,7 @@ function regionTables(T: ContractTable, region: string): { head: Int32Array; tai
 export function formContractRow(
   v2: V2World, region: string, subUnitId: string,
   supplierKey: string, customerKey: string,
-  priceUSD: number, qtyPerWeek: number, weeksRemaining: number, escalationBaseUSD: number
+  priceLocal: number, qtyPerWeek: number, weeksRemaining: number, escalationBaseUSD: number
 ): void {
   const T = v2.contracts;
   const subIdx = SUBUNIT_INDEX.get(subUnitId);
@@ -114,7 +114,7 @@ export function formContractRow(
   T.supplierRef[r] = internString(v2, supplierKey);
   T.customerRef[r] = internString(v2, customerKey);
   T.subIdx[r] = subIdx;
-  T.priceUSD[r] = priceUSD;
+  T.priceLocal[r] = priceLocal;
   T.qtyPerWeek[r] = qtyPerWeek;
   T.weeksRemaining[r] = weeksRemaining | 0;
   T.backlogUnits[r] = 0;

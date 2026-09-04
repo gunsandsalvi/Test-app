@@ -66,19 +66,19 @@ export function settlePricedOfferings(
     // and the lead owns whatever the book did not take, at the cleared level, in its own desk
     // inventory — which is the business the fee below is the price of. Paying the issuer on the
     // market take alone would be best-efforts placement wearing a firm commitment's name.
-    const takeShare = Math.min(1, outcome.marketTakeUSD / Math.max(1, offering.sizeUSD));
+    const takeShare = Math.min(1, outcome.marketTakeUSD / Math.max(1, offering.sizeLocal));
     const fullGrossUSD = statToGrossProceedsUSD(offering, outcome.clearedStat);
     const lead = ctx.updatedCompanies.find((c: Company) => c.ticker === offering.leadBankTicker && c.bankBalanceSheet)
       ?? ctx.prevActiveFirms.find((c: Company) => c.ticker === offering.leadBankTicker && c.bankBalanceSheet);
     const firmCommitment = !!(lead && deskBook);
-    const grossUSD = firmCommitment ? fullGrossUSD : fullGrossUSD * takeShare;
+    const grossLocal = firmCommitment ? fullGrossUSD : fullGrossUSD * takeShare;
     const residualUSD = firmCommitment ? Math.max(0, fullGrossUSD - fullGrossUSD * takeShare) : 0;
     const feeBps = feeBpsOf ? feeBpsOf(offering, outcome.clearedStat) : UNDERWRITING_FEE_BPS[instrumentType];
-    const feeUSD = grossUSD * (feeBps / 10000);
+    const feeLocal = grossLocal * (feeBps / 10000);
 
     // Lead bank: the fee and the residual, both as REAL PAYMENTS between it and the issuer.
     //
-    // They used to be a direct write on the lead's reserves (`cashReservesUSD + feeUSD -
+    // They used to be a direct write on the lead's reserves (`cashReservesUSD + feeLocal -
     // residualUSD`) while the issuer's proceeds were posted against the UNMODELED boundary on
     // stage 08's cash walk — one transaction, two books, and neither leg pointed at the other.
     // The issuer is paid on the whole deal (firm commitment): the CCP pays it for what the book
@@ -101,11 +101,11 @@ export function settlePricedOfferings(
           reason: 'underwriting residual taken by the lead',
         });
       }
-      if (feeUSD > 0) {
+      if (feeLocal > 0) {
         pay(ctx, {
           payer: { kind: 'COMPANY', ticker: issuerCompany.ticker },
           payee: { kind: 'BANK', ticker: lead.ticker },
-          amount: feeUSD,
+          amount: feeLocal,
           currency: currencyOf(issuerCompany.region),
           reason: 'underwriting fee',
         });
@@ -147,8 +147,8 @@ export function settlePricedOfferings(
       // side attributed one movement to two different senders.
       const leadDesk: PartyRef = { kind: 'BANK_SECURITIES', ticker: lead.ticker };
       const spec: HoldingSpec = heldInShares(instrumentType)
-        ? { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueUSD: residualUSD, shares: residualUnits }
-        : { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueUSD: residualUSD };
+        ? { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueLocal: residualUSD, shares: residualUnits }
+        : { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueLocal: residualUSD };
       if (heldInShares(instrumentType)) issueHolding(ctx.v2, { kind: 'COMPANY', ticker: issuerCompany!.ticker }, leadDesk, spec, 'underwriting residual taken by the lead');
       else transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: regionId }, leadDesk, spec, 'underwriting residual taken by the lead');
     }
@@ -161,8 +161,8 @@ export function settlePricedOfferings(
       // Firm commitment issues the WHOLE deal — the lead owns what the book did not take, and
       // that paper has to exist for the lead to own it. Creating the tranche at the market take
       // instead had the lead's desk holding a claim on nothing.
-      issuedUSD: firmCommitment ? offering.sizeUSD : outcome.marketTakeUSD,
-      proceedsUSD: Math.round((grossUSD - feeUSD)),
+      issuedUSD: firmCommitment ? offering.sizeLocal : outcome.marketTakeUSD,
+      proceedsUSD: Math.round((grossLocal - feeLocal)),
     });
   });
 

@@ -289,7 +289,7 @@ function buildCarrierCompany(
   // ONE OWNER: the rating ladder lives in simulation/credit.ts — this
   // file carried its own three-cutoff copy, so a carrier opened rated on different arithmetic
   // than the market re-rates it with a week later.
-  const rating: CreditRating = determineCreditRating(leverage, coverage, { ebitdaUSD: ebitda });
+  const rating: CreditRating = determineCreditRating(leverage, coverage, { ebitdaLocal: ebitda });
 
   const fleet: CarrierFleet = {
     assets,

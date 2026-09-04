@@ -43,7 +43,7 @@ export const institution = defineObject<InstitutionalEntity>({
       { key: 'kind', label: 'kind', width: 1.3, render: (r) => words(r.obj.entityType), value: (r) => r.obj.entityType },
       { key: 'assets', label: 'assets', render: (r, w) => money(institutionTotalAssetsFromState(w.state, r.obj)), value: (r, w) => institutionTotalAssetsFromState(w.state, r.obj) },
       { key: 'cash', label: 'cash', render: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? pctLevel(entityCashOf(ensureV2(w.state), r.obj) / t, 0) : '—'; }, value: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? entityCashOf(ensureV2(w.state), r.obj) / t : 0; } },
-      { key: 'equity', label: 'equity', render: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? pctLevel(r.obj.equityCapitalUSD / t, 0) : '—'; }, value: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? r.obj.equityCapitalUSD / t : 0; } },
+      { key: 'equity', label: 'equity', render: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? pctLevel(r.obj.equityCapitalLocal / t, 0) : '—'; }, value: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? r.obj.equityCapitalLocal / t : 0; } },
       { key: 'region', label: 'reg', width: 0.6, render: (r, _w, nav) => <Link to={{ type: 'region', id: r.obj.region }} nav={nav}>{r.obj.region}</Link>, value: (r) => r.obj.region },
     ],
   },
@@ -73,7 +73,7 @@ export const institution = defineObject<InstitutionalEntity>({
         <StatGrid>
           <Stat label="assets" value={money(totalAssetsUSD)} sub={<ChangeSub series={assets} />} />
           <Stat label="cash" value={money(eCashUSD)} sub={totalAssetsUSD > 0 ? `${pctLevel(eCashUSD / totalAssetsUSD, 0)} of assets` : ''} neg={eCashUSD < 0} />
-          <Stat label="equity" value={money(e.equityCapitalUSD)} sub={totalAssetsUSD > 0 ? `${pctLevel(e.equityCapitalUSD / totalAssetsUSD, 0)} of assets` : ''} />
+          <Stat label="equity" value={money(e.equityCapitalLocal)} sub={totalAssetsUSD > 0 ? `${pctLevel(e.equityCapitalLocal / totalAssetsUSD, 0)} of assets` : ''} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="holdings" hint={`${book.length} positions`} v={money(holdingsUSD)} onTap={() => nav.go('holdings')} />

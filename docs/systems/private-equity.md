@@ -85,10 +85,10 @@ checked by `scripts/check-atlas.sh`.
 | A4 the fund has a life: invest, hold, exit, wind up | `src/engine/simulation/stages/pe-lifecycle.ts:PE_FUND_LIFE_WEEKS` | ⚠️ |
 | A5 the firms are held in named vehicles with their own sheets | `src/engine/simulation/stages/pe-lifecycle.ts:portfolioCompanyIds` | ✅ |
 | B1 it buys at a price agreed with the sellers | `src/engine/simulation/stages/pe-lifecycle.ts:equityValueUSD` | ⚠️ |
-| B2 most of the price is debt raised against the target | `src/engine/simulation/stages/pe-lifecycle.ts:debtUSD` | ✅ |
+| B2 most of the price is debt raised against the target | `src/engine/simulation/stages/pe-lifecycle.ts:debtLocal` | ✅ |
 | B2.a the debt is the TARGET's liability, not the fund's | `src/engine/ledger/tranche-ledger.ts:issueTranche` | ✅ |
 | B2.b the credit market decides which buyouts occur | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:runLeveragedLoanClearingStage` | ✅ |
-| B3 the equity cheque is the rest, funded by A2 | `src/engine/simulation/stages/pe-lifecycle.ts:equityUSD` | ✅ |
+| B3 the equity cheque is the rest, funded by A2 | `src/engine/simulation/stages/pe-lifecycle.ts:equityLocal` | ✅ |
 | B4 the target's sheet is transformed at the moment of purchase | `src/engine/simulation/stages/pe-lifecycle.ts:entryEvMultiple` | ✅ |
 | **B5 VERIFY sources and uses balance, out of named accounts** | `src/engine/simulation/stages/settlement.ts:pay` | ⚠️ |
 | C1 the firm operates and services its debt out of cash flow | `src/engine2/stage08-back.ts:annualInterest` | ✅ |

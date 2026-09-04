@@ -54,7 +54,7 @@ export interface PaymentInstruction {
   /** How much, IN `currency`. Both legs move this same amount of this same money: a payment is
    *  one instruction, and what each side then reports on its own books is a conversion. */
   amount: number;
-  /** §3.13c — WHAT MONEY. Before this the field was called `amountUSD` and was whatever the
+  /** §3.13c — WHAT MONEY. Before this the field was called `amountLocal` and was whatever the
    *  caller's own books happened to be in, so a cross-border payment took euros out of one
    *  account and put dollars into another and the ledger balanced. */
   currency: CurrencyCode;
@@ -292,14 +292,14 @@ export function payByIds(
 
 /** The running net, as a dense array indexed by party id. Touched ids are remembered so the
  *  week's reset is proportional to what moved rather than to the table's size. */
-function addPending(ctx: PendingNetCtx, id: number, deltaUSD: number): void {
+function addPending(ctx: PendingNetCtx, id: number, deltaLocal: number): void {
   // barrier mode: the running net is applied at MERGE time, leg by leg in the journal's
   // merged order (applyPendingLeg below), so per-party float sums keep the exact summation tree
   // the interleaved loop had. Emission-time application is suppressed inside the phase loops.
   if (ctx.deferPendingNet) return;
   const net = ctx.pendingNetById;
-  if (net[id] === undefined) { net[id] = deltaUSD; ctx.pendingTouchedIds.push(id); return; }
-  net[id] += deltaUSD;
+  if (net[id] === undefined) { net[id] = deltaLocal; ctx.pendingTouchedIds.push(id); return; }
+  net[id] += deltaLocal;
 }
 
 /** barrier merge: one journal leg's effect on the running net, applied in merged order. */
@@ -388,7 +388,7 @@ export function institutionUnsettledLessCollateralUSD(ctx: WeeklyStepContext, en
 
 export interface SettlementReport {
   instructions: number;
-  grossUSD: number;
+  grossLocal: number;
   /** A4: the tallies below are `settledTallies` — reads of the account rows' deltas. */
   /** Reserve movement per bank — what it had to settle across the central bank's books. */
   reserveDeltaByBank: Map<string, number>;
@@ -425,7 +425,7 @@ export interface SettlementReport {
    *  the equity ledger above does not see (no P&L, one asset for another). */
   bankSecuritiesDeltaByBank: Map<string, number>;
   /** §3.13c — the week's settled gross PER CURRENCY, in that currency's units: the exact form of
-   *  the identity the wire ledger checks (`grossUSD` is the same thing brought to one money,
+   *  the identity the wire ledger checks (`grossLocal` is the same thing brought to one money,
    *  which a dated row written at another week's rate can only match approximately). */
   grossByCurrency: Record<string, number>;
   /** §3.13c — the official-settlement leg per region IN THE NUMÉRAIRE. A claim between two
@@ -491,7 +491,7 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
   return {
     ...b,
     instructions: a.instructions + b.instructions,
-    grossUSD: a.grossUSD + b.grossUSD,
+    grossLocal: a.grossLocal + b.grossLocal,
     grossByCurrency: mergeNumbers(a.grossByCurrency, b.grossByCurrency),
     reserveDeltaByBank: mergeMap(a.reserveDeltaByBank, b.reserveDeltaByBank),
     tgaDeltaByRegion: mergeMap(a.tgaDeltaByRegion, b.tgaDeltaByRegion),
@@ -546,7 +546,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const nInstructions = journal.n;
   const report: SettlementReport = {
     instructions: nInstructions,
-    grossUSD: 0,
+    grossLocal: 0,
     grossByCurrency: {},
     crossBorderNumeraireByRegion: new Map(),
     reserveDeltaByBank: new Map(),
@@ -600,20 +600,20 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const accounts = buildAccountMirror(ctx);
   for (let n = 0; n < nInstructions; n++) {
     if (!rowDue(journal, n, week)) continue; // §5-WIRES N: dated past this pass — carried below
-    const amountUSD = journal.amount[n];
+    const amountLocal = journal.amount[n];
     const payerIdx = journal.payerId[n];
-    if (!applySettledRow(accounts, payerIdx, journal.payeeId[n], amountUSD, currencyOfId(journal.currencyId[n]))) {
+    if (!applySettledRow(accounts, payerIdx, journal.payeeId[n], amountLocal, currencyOfId(journal.currencyId[n]))) {
       report.accountRowsUnmapped++;
-      report.accountUnmappedUSD += amountUSD;
+      report.accountUnmappedUSD += amountLocal;
       // Which side had no row, and of what kind: a count says a hole exists, this says where.
       const noRow = (id: number): boolean => !accounts.rowsOfParty.get(id)?.length;
       if (noRow(payerIdx)) {
         const k = `payer ${partyOf(payerIdx).kind}`;
-        report.accountUnmappedByKind.set(k, (report.accountUnmappedByKind.get(k) ?? 0) + amountUSD);
+        report.accountUnmappedByKind.set(k, (report.accountUnmappedByKind.get(k) ?? 0) + amountLocal);
       }
       if (noRow(journal.payeeId[n])) {
         const k = `payee ${partyOf(journal.payeeId[n]).kind}`;
-        report.accountUnmappedByKind.set(k, (report.accountUnmappedByKind.get(k) ?? 0) + amountUSD);
+        report.accountUnmappedByKind.set(k, (report.accountUnmappedByKind.get(k) ?? 0) + amountLocal);
       }
     }
     const payeeIdx = journal.payeeId[n];
@@ -625,15 +625,15 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     // spans every book, so it is the numéraire. Recording the raw journal amount in all of them
     // is how a yen payment used to land on a dollar statement.
     const legCurrency = currencyOfId(journal.currencyId[n]);
-    const inMoneyOf = (r: RegionId): number => convert(amountUSD, legCurrency, currencyOf(r), ctx.fx);
-    report.grossUSD += convert(amountUSD, legCurrency, NUMERAIRE, ctx.fx);
-    report.grossByCurrency[legCurrency] = (report.grossByCurrency[legCurrency] ?? 0) + amountUSD;
+    const inMoneyOf = (r: RegionId): number => convert(amountLocal, legCurrency, currencyOf(r), ctx.fx);
+    report.grossLocal += convert(amountLocal, legCurrency, NUMERAIRE, ctx.fx);
+    report.grossByCurrency[legCurrency] = (report.grossByCurrency[legCurrency] ?? 0) + amountLocal;
     if (sheetByTicker) {
       // A leg addressed to a bank that has no sheet any more (resolved, merged) is money with
       // no account; name the stage's reason here, where the leg is still legible.
       [payerRef, payeeRef].forEach((ref, side) => {
         if ((ref.kind === 'BANK' || ref.kind === 'BANK_SECURITIES' || ref.kind === 'BANK_CREDIT') && sheetByTicker.get(ref.ticker) === false) {
-          console.log(`  [unresolved] ${ref.kind} ${ref.ticker} (${side === 0 ? 'payer' : 'payee'}) ${(amountUSD / 1e6).toFixed(3)}M '${reasonText(journal.reasonId[n])}' — no sheet`);
+          console.log(`  [unresolved] ${ref.kind} ${ref.ticker} (${side === 0 ? 'payer' : 'payee'}) ${(amountLocal / 1e6).toFixed(3)}M '${reasonText(journal.reasonId[n])}' — no sheet`);
         }
       });
     }
@@ -642,7 +642,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     const payerRegion = regionOfParty(payerRef);
     const payeeRegion = regionOfParty(payeeRef);
     if (payerRegion !== payeeRegion) {
-      const numeraireLeg = convert(amountUSD, legCurrency, NUMERAIRE, ctx.fx);
+      const numeraireLeg = convert(amountLocal, legCurrency, NUMERAIRE, ctx.fx);
       if (payerRegion !== undefined) { addTo(report.crossBorderByRegion, payerRegion, -inMoneyOf(payerRegion)); addTo(report.crossBorderNumeraireByRegion, payerRegion, -numeraireLeg); }
       if (payeeRegion !== undefined) { addTo(report.crossBorderByRegion, payeeRegion, inMoneyOf(payeeRegion)); addTo(report.crossBorderNumeraireByRegion, payeeRegion, numeraireLeg); }
       // XBORDER_TRACE=1 names what the official-settlement leg is made of, by the two kinds on
@@ -732,8 +732,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // A2: the treasury's account and the advance are the two signs
   // of its net position at the central bank — projected above. A region the tallies name but
   // the store does not is money with no account.
-  report.tgaDeltaByRegion.forEach((deltaUSD, region) => {
-    if (!ctx.updatedRegions[region as RegionId]?.centralBankSheet) report.unresolvedUSD += deltaUSD;
+  report.tgaDeltaByRegion.forEach((deltaLocal, region) => {
+    if (!ctx.updatedRegions[region as RegionId]?.centralBankSheet) report.unresolvedUSD += deltaLocal;
   });
 
   if (xborderByPair) {
@@ -760,18 +760,18 @@ function mergeNumbers(a: Record<string, number>, b: Record<string, number>): Rec
   return out;
 }
 
-function addToPool(report: SettlementReport, region: string, industry: string, reason: string, deltaUSD: number): void {
-  addToNested(report.smePoolFlowsByPool, `${region}:${industry}`, reason, deltaUSD);
+function addToPool(report: SettlementReport, region: string, industry: string, reason: string, deltaLocal: number): void {
+  addToNested(report.smePoolFlowsByPool, `${region}:${industry}`, reason, deltaLocal);
 }
 
-function addToNested(outer: Map<string, Map<string, number>>, key: string, reason: string, deltaUSD: number): void {
+function addToNested(outer: Map<string, Map<string, number>>, key: string, reason: string, deltaLocal: number): void {
   let inner = outer.get(key);
   if (!inner) { inner = new Map(); outer.set(key, inner); }
-  inner.set(reason, (inner.get(reason) ?? 0) + deltaUSD);
+  inner.set(reason, (inner.get(reason) ?? 0) + deltaLocal);
 }
 
-function addTo(map: Map<string, number>, key: string, deltaUSD: number): void {
-  map.set(key, (map.get(key) ?? 0) + deltaUSD);
+function addTo(map: Map<string, number>, key: string, deltaLocal: number): void {
+  map.set(key, (map.get(key) ?? 0) + deltaLocal);
 }
 
 // The central bank's liabilities only move BETWEEN buckets: what the treasury took in came out of

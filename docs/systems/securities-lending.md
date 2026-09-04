@@ -86,7 +86,7 @@ checked by `scripts/check-atlas.sh`.
 | **A5.b a rebate when the collateral is cash** | — | ❌ |
 | B1 the borrower needs the security | `src/domain/institution-profiles.ts:shortsEquity` | ✅ |
 | B2 the lender has it and wants the fee | `src/engine/simulation/stages/securities-lending.ts:participants` | ✅ |
-| B2.a within a mandate, against acceptable collateral, with a limit | `src/engine/simulation/stages/securities-lending.ts:maxHoldingUSD` | ⚠️ |
+| B2.a within a mandate, against acceptable collateral, with a limit | `src/engine/simulation/stages/securities-lending.ts:maxHoldingLocal` | ⚠️ |
 | **B3 an agent may sit in the middle** | — | ❌ |
 | B4 VERIFY the lendable pool is a read, and caps the short | `src/engine/simulation/stages/securities-lending.ts:deliverable` | ✅ |
 | **C1 the collateral is worth MORE than the loan — a haircut** | `src/engine/simulation/stages/securities-lending.ts:collateralLocal` | ⚠️ |

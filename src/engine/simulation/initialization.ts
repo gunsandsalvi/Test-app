@@ -8,7 +8,7 @@ import { PREMIUM_TO_SURPLUS_RATIO, INSTITUTIONAL_CAPITAL_RATIO } from '../../dom
 import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
 import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, applyBankFundingSplit, seedLoanBookShareUSD } from './stages/bank-lending';
 import { loanBooksOf } from '../../domain/banking';
-import { leverageHeadroomUSD } from '../macro/banking';
+import { leverageHeadroomLocal } from '../macro/banking';
 import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
 import { facilityBookOf } from '../../engine2/tranches';
 
@@ -133,7 +133,7 @@ function seedUnitMassTonnes(regions: Record<RegionId, Region>): Record<string, n
   const masses: Record<string, number> = {};
   Object.values(INDUSTRY_SUBUNITS).flat().forEach((subUnit) => {
     const prices = regionIds
-      .map((r) => regions[r].categoryDemand[subUnit.unitId]?.unitPriceUSD)
+      .map((r) => regions[r].categoryDemand[subUnit.unitId]?.unitPriceLocal)
       .filter((p): p is number => typeof p === 'number' && p > 0);
     // §7.241: a silent skip here left the sub-unit WEIGHTLESS — every reader defaults a missing
     // mass to zero, so its goods would ship with free freight forever (armed for DYN/PROD's
@@ -175,7 +175,7 @@ export function seedRegionCategoryDemand(
   companies: Company[]
 ): void {
     const hs = reg.householdState;
-    const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
+    const C = reg.estimatedHouseholdIncomeLocal * (1 - hs.savingsRate);
     // §7.4: the seed uses the SAME procurement owner the weekly stage does, so week 0's
     // government demand and week 1's are the same shape.
     const G = decomposeGovernmentSpending(
@@ -243,9 +243,9 @@ export function seedRegionCategoryDemand(
 
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
-        const demandLevelAnnualUSD = totalOutputBySubUnit[su.unitId] ?? finalDemandBySubUnit[su.unitId];
+        const demandLevelAnnualLocal = totalOutputBySubUnit[su.unitId] ?? finalDemandBySubUnit[su.unitId];
         reg.categoryDemand[su.unitId] = createSeedCategoryDemandState(
-          demandLevelAnnualUSD,
+          demandLevelAnnualLocal,
           reg.gdpGrowth ?? 0.02,
           // §7.127: FINAL demand prices the good; total output is the quantity behind it. The
           // intermediate slice is passed so a PURE intermediate prices off its producer buyers.
@@ -280,10 +280,10 @@ export function seedRegionCategoryDemand(
     (reg.smePools ?? []).forEach((pool) => {
       const spec = INDUSTRY_REGISTRY[pool.industry];
       const subUnits: { unitId: string }[] = spec?.subUnits ?? [];
-      const demandOf = (id: string) => Number(reg.categoryDemand[id]?.demandLevelAnnualUSD) || 0;
+      const demandOf = (id: string) => Number(reg.categoryDemand[id]?.demandLevelAnnualLocal) || 0;
       const totalDemandUSD = subUnits.reduce((a, su) => a + demandOf(su.unitId), 0);
       if (!(totalDemandUSD > 0)) return;
-      const poolRevenueUSD = Number(pool.annualRevenueUSD) || 0;
+      const poolRevenueUSD = Number(pool.annualRevenueLocal) || 0;
       subUnits.forEach((su) => {
         smeRevenueBySubUnit.set(su.unitId,
           (smeRevenueBySubUnit.get(su.unitId) ?? 0) + poolRevenueUSD * (demandOf(su.unitId) / totalDemandUSD));
@@ -291,12 +291,12 @@ export function seedRegionCategoryDemand(
     });
     normalizeProducingSectorRevenue(
       companies.filter(c => c.region === regionId),
-      (unitId) => Number(reg.categoryDemand[unitId]?.demandLevelAnnualUSD) || 0,
+      (unitId) => Number(reg.categoryDemand[unitId]?.demandLevelAnnualLocal) || 0,
       (unitId) => smeRevenueBySubUnit.get(unitId) ?? 0
     );
     dealProductLinesAndHeadcount(
       companies.filter(c => c.region === regionId),
-      (_r, unitId) => Number(reg.categoryDemand[unitId]?.demandLevelAnnualUSD) || 0,
+      (_r, unitId) => Number(reg.categoryDemand[unitId]?.demandLevelAnnualLocal) || 0,
       (_r, unitId) => smeRevenueBySubUnit.get(unitId) ?? 0
     );
 
@@ -489,7 +489,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const segIdx = seeds.map((sd, i) => sd.industry === seg.industry ? i : -1).filter(i => i >= 0);
         const segFirms = segIdx.map(i => firms[i]);
         const subUnits = INDUSTRY_REGISTRY[seg.industry].subUnits;
-        const demandOf = (id: string) => reg.categoryDemand[id]?.demandLevelAnnualUSD ?? 0;
+        const demandOf = (id: string) => reg.categoryDemand[id]?.demandLevelAnnualLocal ?? 0;
         const demandTotal = subUnits.reduce((a, su) => a + demandOf(su.unitId), 0);
         segFirms.forEach(f => {
           f.productLines = subUnits.map(su => ({
@@ -503,9 +503,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // The carves. Debt: serviceable ladders only (see HC1's finding on the segment debt
         // primitive). Revenue, employment and capex: exactly what the named tier now carries.
         const namedRevenueUSD = segFirms.reduce((a, f) => a + f.annualRevenue, 0);
-        seg.debtUSD = Math.round(Math.max(0, seg.debtUSD - segFirms.reduce((a, f) => a + totalDebtOf(f), 0)));
+        seg.debtLocal = Math.round(Math.max(0, seg.debtLocal - segFirms.reduce((a, f) => a + totalDebtOf(f), 0)));
         seg.employment = Math.max(1000, Math.round(seg.employment - segFirms.reduce((a, f) => a + f.employeeCount, 0)));
-        seg.annualRevenueUSD = Math.max(1, Math.round(seg.annualRevenueUSD - namedRevenueUSD));
+        seg.annualRevenueLocal = Math.max(1, Math.round(seg.annualRevenueLocal - namedRevenueUSD));
         seg.capexUSD = Math.round(Math.max(0, seg.capexUSD - segFirms.reduce((a, f) => a + f.capex, 0)));
       });
 
@@ -520,7 +520,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // derivation off the named tier's revenue per worker, which silently overwrote the pools'
       // own and made the seed's headcount rule differ by tier.
       segs.forEach(seg => {
-        seg.employment = smePoolEmployment(seg.industry, seg.annualRevenueUSD, getRegionProductivityPerCapitaUSD(regionId));
+        seg.employment = smePoolEmployment(seg.industry, seg.annualRevenueLocal, getRegionProductivityPerCapitaUSD(regionId));
       });
 
       privateFirmsByRegion.set(regionId, firms);
@@ -537,8 +537,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         marketUSD.set(l.subUnitId, (marketUSD.get(l.subUnitId) ?? 0) + l.revenueShare * c.annualRevenue);
       }));
       regionSellers.forEach(c => (c.productLines || []).forEach(l => {
-        const totalUSD = marketUSD.get(l.subUnitId) ?? 0;
-        l.categoryMarketShare = totalUSD > 0 ? Number(((l.revenueShare * c.annualRevenue) / totalUSD).toFixed(6)) : 0;
+        const totalLocal = marketUSD.get(l.subUnitId) ?? 0;
+        l.categoryMarketShare = totalLocal > 0 ? Number(((l.revenueShare * c.annualRevenue) / totalLocal).toFixed(6)) : 0;
       }));
     });
   }
@@ -611,14 +611,14 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         .map(t => ({ id: t.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingLocal: t.principalLocal })))
       .filter(c => c.outstandingLocal > 0);
     const totalLoanCandidatesUSD = loanCandidates.reduce((s, c) => s + c.outstandingLocal, 0) || 1;
-    const attributeLoanHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
+    const attributeLoanHoldingsProportionally = (shareLocal: number): ItemizedHolding[] =>
       loanCandidates
-        .filter(c => shareUSD * (c.outstandingLocal / totalLoanCandidatesUSD) > 1)
+        .filter(c => shareLocal * (c.outstandingLocal / totalLoanCandidatesUSD) > 1)
         .map(c => ({
           instrumentId: c.id,
           instrumentType: c.type,
           issuerRegion: c.region,
-          quantityOrNotionalUSD: shareUSD * (c.outstandingLocal / totalLoanCandidatesUSD), units: shareUSD * (c.outstandingLocal / totalLoanCandidatesUSD),
+          quantityOrNotionalLocal: shareLocal * (c.outstandingLocal / totalLoanCandidatesUSD), units: shareLocal * (c.outstandingLocal / totalLoanCandidatesUSD),
         }));
     // Proportional-by-size, not attributeItemizedHoldings' size-sorted-greedy-with-a-40%-cap
     // fill: the real weekly clearing engine (07b-corporate-bond-clearing.ts) distributes an
@@ -627,14 +627,14 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // entity's real week-1 gap per issuer is genuinely small, instead of the greedy fill
     // concentrating holdings in the 2-3 biggest issuers and leaving every smaller one to open
     // with an artificial, systemic buy gap on its first real clearing week.
-    const attributeCorpBondHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
+    const attributeCorpBondHoldingsProportionally = (shareLocal: number): ItemizedHolding[] =>
       corpCandidates
-        .filter(c => shareUSD * (c.outstandingLocal / totalCorpCandidatesUSD) > 1)
+        .filter(c => shareLocal * (c.outstandingLocal / totalCorpCandidatesUSD) > 1)
         .map(c => ({
           instrumentId: c.id,
           instrumentType: c.type,
           issuerRegion: c.region,
-          quantityOrNotionalUSD: shareUSD * (c.outstandingLocal / totalCorpCandidatesUSD), units: shareUSD * (c.outstandingLocal / totalCorpCandidatesUSD),
+          quantityOrNotionalLocal: shareLocal * (c.outstandingLocal / totalCorpCandidatesUSD), units: shareLocal * (c.outstandingLocal / totalCorpCandidatesUSD),
         }));
 
     // Equity is seeded in SHARES, proportional to each name's market cap — the same shape
@@ -652,11 +652,11 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // nobody issued at week 1); now the allocation stops at the issue and the unplaced budget
     // stays as the entity's CASH — money it holds at its bank and will bid with in 07e.
     const equityFillRatio = Math.min(1, totalEquityCandidatesUSD / Math.max(1, reg.institutionalSector.equityHoldingsUSD || 0));
-    const attributeEquityHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
+    const attributeEquityHoldingsProportionally = (shareLocal: number): ItemizedHolding[] =>
       equityCandidates
-        .filter(c => shareUSD * equityFillRatio * (c.outstandingLocal / totalEquityCandidatesUSD) > 1)
+        .filter(c => shareLocal * equityFillRatio * (c.outstandingLocal / totalEquityCandidatesUSD) > 1)
         .map(c => {
-          const nameUSD = shareUSD * equityFillRatio * (c.outstandingLocal / totalEquityCandidatesUSD);
+          const nameUSD = shareLocal * equityFillRatio * (c.outstandingLocal / totalEquityCandidatesUSD);
           // SHARES are the quantity; the dollars are shares x price, which is why the division
           // happens once and both fields read the same number.
           const shares = nameUSD / Math.max(0.01, equityPriceById.get(c.id) ?? 1);
@@ -665,7 +665,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
             instrumentType: c.type,
             issuerRegion: c.region,
             quantityShares: shares,
-            quantityOrNotionalUSD: nameUSD,
+            quantityOrNotionalLocal: nameUSD,
             units: shares,
           };
         });
@@ -686,14 +686,14 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       govDebtTranches.filter((t) => t.principalLocal > 0).map((t) => [t.id, t.principalLocal])
     );
     const totalSovOutstandingUSD = Array.from(sovOutstandingByBond.values()).reduce((s, v) => s + v, 0) || 1;
-    const attributeSovBondHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
+    const attributeSovBondHoldingsProportionally = (shareLocal: number): ItemizedHolding[] =>
       Array.from(sovOutstandingByBond.entries())
-        .filter(([, bondUSD]) => shareUSD * (bondUSD / totalSovOutstandingUSD) > 1)
+        .filter(([, bondUSD]) => shareLocal * (bondUSD / totalSovOutstandingUSD) > 1)
         .map(([bondId, bondUSD]) => ({
           instrumentId: bondId,
           instrumentType: 'GOV_BOND' as const,
           issuerRegion: regionId,
-          quantityOrNotionalUSD: shareUSD * (bondUSD / totalSovOutstandingUSD), units: shareUSD * (bondUSD / totalSovOutstandingUSD),
+          quantityOrNotionalLocal: shareLocal * (bondUSD / totalSovOutstandingUSD), units: shareLocal * (bondUSD / totalSovOutstandingUSD),
         }));
 
     // Seed each named bank's real sovereign book across the same bonds the weekly
@@ -715,7 +715,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // holder of the stock the central bank and the institutions do not take; where the
       // cohort's headroom cannot absorb that residual it is rationed pro-rata, never forced.
       const headroomByBank = new Map(regionBanksForSov.map(b =>
-        [b.ticker, leverageHeadroomUSD(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.ticker))]));
+        [b.ticker, leverageHeadroomLocal(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.ticker))]));
       const totalHeadroomUSD = Array.from(headroomByBank.values()).reduce((a, v) => a + v, 0);
       const takenByOthersUSD = (reg.institutionalSector.sovBondHoldingsUSD || 0)
         + totalSovOutstandingUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
@@ -780,7 +780,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     }
 
     // G2 slice 1: itemize the business book onto real borrowers, and recalibrate the SME
-    // seed scalar (`debtUSD = 2 x revenue`, ~17.8x EBITDA — §6's unpriced primitive) down to
+    // seed scalar (`debtLocal = 2 x revenue`, ~17.8x EBITDA — §6's unpriced primitive) down to
     // what the pools can service AND the banks' capital can carry.
     const regionBanksForLending = regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet);
     if (regionBanksForLending.length > 0) {
@@ -810,7 +810,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // nothing any bank did.
       const houseBanks = mandateAllocator(regionBanksForLending.map(b => ({
         ticker: b.ticker, bankMarketShare: b.bankMarketShare,
-        capacityUSD: b.bankBalanceSheet?.bankEquityLocal ?? 0,
+        capacityLocal: b.bankBalanceSheet?.bankEquityLocal ?? 0,
       })));
       regionCompanies.forEach(c => {
         if (c.isBankEntity) return;
@@ -832,7 +832,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const tierCashUSD = namedPrivate.reduce((a, c) => a + Math.max(0, openingCashOf(c)), 0);
         const cashToRevenue = tierRevenueUSD > 0 ? tierCashUSD / tierRevenueUSD : 0.08;
         (reg.smePools || []).forEach(seg => {
-          stashOpeningCash(seg, Math.round(Math.max(0, seg.annualRevenueUSD) * cashToRevenue));
+          stashOpeningCash(seg, Math.round(Math.max(0, seg.annualRevenueLocal) * cashToRevenue));
         });
       }
       const bankShareTotal = regionBanksForLending.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
@@ -958,7 +958,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const pensionEntitlementStockUSD = (() => {
         const retiredShare = Math.max(0, Math.min(1,
           reg.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0.2));
-        const annualContributionsUSD = Math.max(0, reg.estimatedHouseholdIncomeUSD) * retiredShare;
+        const annualContributionsUSD = Math.max(0, reg.estimatedHouseholdIncomeLocal) * retiredShare;
         const workingLifeYears = Math.max(1, RETIREMENT_AGE_YEARS - WORKFORCE_ENTRY_AGE_YEARS);
         const drawdownYears = Math.max(1, remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS));
         return annualContributionsUSD * ((workingLifeYears + drawdownYears) / 2);
@@ -977,7 +977,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const totalAssetsUSD = beneficiaryLiabilityUSD !== undefined
         ? beneficiaryLiabilityUSD / (1 - INSTITUTIONAL_CAPITAL_RATIO)
         : totalMacroAssetsUSD * share;
-      const equityCapitalUSD = totalAssetsUSD * INSTITUTIONAL_CAPITAL_RATIO;
+      const equityCapitalLocal = totalAssetsUSD * INSTITUTIONAL_CAPITAL_RATIO;
 
       const entCorpShareUSD = rawEntityCorpTargetsUSD.get(comp.id) ?? 0;
       const entSovShareUSD = rawEntitySovTargetsUSD.get(comp.id) ?? 0;
@@ -1004,7 +1004,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // Real opening cash: the entity's own policy cash weight against its own book. Every
         // clearing fill from here on settles against this balance.
         // §5-CLOSE O2: plus the equity budget the issue could not absorb (see equityFillRatio).
-        equityCapitalUSD,
+        equityCapitalLocal,
         sharesOutstanding: comp.sharesOutstanding,
         stockPrice: comp.stockPrice,
         itemizedHoldings,
@@ -1044,19 +1044,19 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // A manager's revenue is a fee on the book it runs; an insurer's is the premium its own
       // capital lets it write. Both read the entity, because both ARE the entity.
       if (isManager) comp.aumUSD = seedInstitutionTotalAssetsUSD(entity, openingCashOf(entity));
-      const revenueUSD = isManager
+      const revenueLocal = isManager
         ? Math.max(10, comp.aumUSD! * comp.managementFeeRate!)
-        : Math.max(10, Math.max(0, entity.equityCapitalUSD) * PREMIUM_TO_SURPLUS_RATIO);
+        : Math.max(10, Math.max(0, entity.equityCapitalLocal) * PREMIUM_TO_SURPLUS_RATIO);
       if (isInsurer) {
-        comp.insurancePremiumsWrittenUSD = revenueUSD;
-        comp.technicalReservesUSD = Math.max(0, seedInstitutionTotalAssetsUSD(entity, openingCashOf(entity)) - entity.equityCapitalUSD);
+        comp.insurancePremiumsWrittenUSD = revenueLocal;
+        comp.technicalReservesUSD = Math.max(0, seedInstitutionTotalAssetsUSD(entity, openingCashOf(entity)) - entity.equityCapitalLocal);
       }
-      const ebitdaUSD = revenueUSD * (isManager ? 0.35 : 0.15);
-      comp.annualRevenue = revenueUSD;
-      comp.baselineAnnualRevenue = revenueUSD;
-      stashSeedRevenueHistory(comp, [revenueUSD]); // §4.C II.5: ring-seeded at drain
-      comp.ebitda = ebitdaUSD;
-      comp.ebit = Math.max(1, ebitdaUSD);
+      const ebitdaLocal = revenueLocal * (isManager ? 0.35 : 0.15);
+      comp.annualRevenue = revenueLocal;
+      comp.baselineAnnualRevenue = revenueLocal;
+      stashSeedRevenueHistory(comp, [revenueLocal]); // §4.C II.5: ring-seeded at drain
+      comp.ebitda = ebitdaLocal;
+      comp.ebit = Math.max(1, ebitdaLocal);
       comp.netIncome = comp.ebit * (1 - INSTITUTIONAL_EFFECTIVE_TAX_RATE);
       comp.eps = comp.sharesOutstanding > 0 ? Number((comp.netIncome / comp.sharesOutstanding).toFixed(2)) : 0;
     });
@@ -1076,8 +1076,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           const held = heldById.get(h.instrumentId) ?? 0; const issued = issuedById.get(h.instrumentId) ?? 0;
           if (!(issued > 0) || held <= issued) return h;
           const keep = issued / held;
-          freedUSD += h.quantityOrNotionalUSD * (1 - keep);
-          return { ...h, quantityShares: h.quantityShares * keep, quantityOrNotionalUSD: h.quantityOrNotionalUSD * keep , units: h.quantityShares * keep};
+          freedUSD += h.quantityOrNotionalLocal * (1 - keep);
+          return { ...h, quantityShares: h.quantityShares * keep, quantityOrNotionalLocal: h.quantityOrNotionalLocal * keep , units: h.quantityShares * keep};
         });
         if (freedUSD > 0) stashOpeningCash(e, openingCashOf(e) + freedUSD);
       });
@@ -1177,9 +1177,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     {
       const unitPools = Object.fromEntries((Object.keys(reg.occupationPools) as OccupationType[])
         .map(o => [o, { wageIndex: 1 }])) as Record<OccupationType, { wageIndex: number }>;
-      let ebitdaUSD = 0; let basePayrollUSD = 0; let capitalChargeUSD = 0;
+      let ebitdaLocal = 0; let basePayrollUSD = 0; let capitalChargeUSD = 0;
       regionCompanies.filter(c => !c.isBankEntity && isActiveCompany(c)).forEach(c => {
-        ebitdaUSD += c.ebitda;
+        ebitdaLocal += c.ebitda;
         basePayrollUSD += weeklyWageBillUSD(
           c.employeeCount, SECTOR_OCCUPATION_MIX[c.sector] ?? { GENERAL: 1.0 },
           baseAnnualWageUSD, unitPools, 1.0
@@ -1188,7 +1188,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         capitalChargeUSD += netPpeUSD * Math.max(0, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (c.beta ?? 1) * EQUITY_RISK_PREMIUM);
       });
       if (basePayrollUSD > 0) {
-        const affordableIndex = (ebitdaUSD + basePayrollUSD - capitalChargeUSD) / basePayrollUSD;
+        const affordableIndex = (ebitdaLocal + basePayrollUSD - capitalChargeUSD) / basePayrollUSD;
         if (affordableIndex > 0 && isFinite(affordableIndex)) {
           (Object.keys(reg.occupationPools) as OccupationType[]).forEach((occ) => {
             reg.occupationPools[occ].wageIndex = Number(affordableIndex.toFixed(5));
@@ -1218,14 +1218,14 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       averageAnnualWageUSD: realEmployedForWages > 0 ? realWageIncomeUSD / realEmployedForWages : 0,
       fiscalStanceScore: reg.fiscalStanceScore,
     });
-    reg.governmentSpendingWeeklyUSD = Math.round(seedObligations.totalUSD);
-    reg.estimatedHouseholdIncomeUSD = Math.round(computeHouseholdDisposableIncomeUSD({
+    reg.governmentSpendingWeeklyUSD = Math.round(seedObligations.totalLocal);
+    reg.estimatedHouseholdIncomeLocal = Math.round(computeHouseholdDisposableIncomeUSD({
       wageIncomeUSD: realWageIncomeUSD,
       transfersWeeklyUSD: seedObligations.transfersUSD,
     }));
 
     // With income now on its real footing, restate the reported GDP series to what this
-    // economy's own components actually sum to. estimatedNominalGdpUSD stays the supply-side
+    // economy's own components actually sum to. estimatedNominalGdpLocal stays the supply-side
     // potential-output anchor it always was (it sizes the wage table, the government's budget
     // and the bank balance-sheet ratios); what gets reported, compared year-over-year and fed to
     // the Taylor rule is the real bottom-up measure, and it has to start where the real economy
@@ -1236,7 +1236,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const privateEmployment = (reg.smePools || []).reduce((sum, seg) => sum + seg.employment, 0);
     const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + privateEmployment) / trackedEmployment : 1;
     const { gdpUSD: bottomUpGdpUSD } = computeExpenditureGdpUSD({
-      householdIncomeUSD: reg.estimatedHouseholdIncomeUSD,
+      householdIncomeUSD: reg.estimatedHouseholdIncomeLocal,
       savingsRate: reg.householdState.savingsRate,
       investmentUSD: trackedInvestmentUSD * investmentScaleFactor,
       // PUB1e/PUB3b: G is the procurement budget the government will actually bid, annualised —
@@ -1278,10 +1278,10 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     (Object.keys(regions) as RegionId[]).forEach(r => { regions[r].exportsUSD = 0; regions[r].importsUSD = 0; });
     bookings.forEach(b => {
       if (b.from === b.to) return;
-      const exWorks = Number(regions[b.from].categoryDemand[b.subUnitId]?.unitPriceUSD) || 0;
-      const valueUSD = localToUsd(b.units * exWorks, b.from, seedFxToUsd) * 52;
-      regions[b.from].exportsUSD += valueUSD;
-      regions[b.to].importsUSD += valueUSD;
+      const exWorks = Number(regions[b.from].categoryDemand[b.subUnitId]?.unitPriceLocal) || 0;
+      const valueLocal = localToUsd(b.units * exWorks, b.from, seedFxToUsd) * 52;
+      regions[b.from].exportsUSD += valueLocal;
+      regions[b.to].importsUSD += valueLocal;
     });
     (Object.keys(regions) as RegionId[]).forEach(r => {
       regions[r].exportsUSD = Math.round(regions[r].exportsUSD);
@@ -1309,7 +1309,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       if (transit <= 0) return;
       const pool = buyersByRegion[b.to];
       if (!pool || pool.length === 0) return;
-      const exWorks = Number(regions[b.from].categoryDemand[b.subUnitId]?.unitPriceUSD) || 0;
+      const exWorks = Number(regions[b.from].categoryDemand[b.subUnitId]?.unitPriceLocal) || 0;
       const perUnit = convertLocal(exWorks, b.from, b.to, seedFxToUsd);
       // One week's worth arriving in each of the next `transit` weeks: what a lane in steady
       // state is carrying.
@@ -1364,7 +1364,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     if (regionBanks.length === 0) return;
     const byBank = new Map<string, number>();
     const houseBanks = mandateAllocator(regionBanks.map(b => ({
-      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityUSD: b.bankBalanceSheet!.bankEquityLocal,
+      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityLocal: b.bankBalanceSheet!.bankEquityLocal,
     })));
     institutionalEntities.forEach(e => {
       if (e.region !== regionId) return;
@@ -1473,7 +1473,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       ticker: `MMF1`,
       region: regionId,
       entityType: 'MONEY_MARKET_FUND',
-      equityCapitalUSD: 0,
+      equityCapitalLocal: 0,
       sharesOutstanding: 1,
       stockPrice: 0,
       itemizedHoldings: [],
@@ -1511,7 +1511,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           ticker: `${def.id.replace(/_/g, '').slice(0, 5)}X`,
           region: regionId,
           entityType: 'ETF',
-          equityCapitalUSD: 0,
+          equityCapitalLocal: 0,
           sharesOutstanding: 0,
           stockPrice: 0,
           itemizedHoldings: [],
@@ -1550,7 +1550,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         ticker: `PEF${fundIdx + 1}`,
         region: regionId,
         entityType: 'PRIVATE_EQUITY',
-        equityCapitalUSD: investedUSD,
+        equityCapitalLocal: investedUSD,
         sharesOutstanding: 1,
         stockPrice: 0,
         itemizedHoldings: [],
@@ -1562,14 +1562,14 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           lpCommitments: lps.map(e => ({
             lpEntityId: e.id,
             committedUSD: Math.round(committedUSD * (lpWeights.get(e.id)! / lpWeightSum)),
-            drawnUSD: Math.round(investedUSD * (lpWeights.get(e.id)! / lpWeightSum)),
+            drawnLocal: Math.round(investedUSD * (lpWeights.get(e.id)! / lpWeightSum)),
           })),
         },
       });
       lps.forEach(e => {
-        const interestUSD = Math.round(investedUSD * (lpWeights.get(e.id)! / lpWeightSum));
-        if (interestUSD > 1) {
-          e.itemizedHoldings.push({ instrumentId: fundId, instrumentType: 'PE_FUND_INTEREST', issuerRegion: regionId, quantityOrNotionalUSD: interestUSD, units: interestUSD });
+        const interestLocal = Math.round(investedUSD * (lpWeights.get(e.id)! / lpWeightSum));
+        if (interestLocal > 1) {
+          e.itemizedHoldings.push({ instrumentId: fundId, instrumentType: 'PE_FUND_INTEREST', issuerRegion: regionId, quantityOrNotionalLocal: interestLocal, units: interestLocal });
         }
       });
     }
@@ -1623,7 +1623,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
             regionEntities.forEach((e, i) => {
               const qty = t.principalLocal * (weights[i] / wSum);
               if (qty > 1) {
-                e.itemizedHoldings.push({ instrumentId: t.id, instrumentType: kind, issuerRegion: regionId, quantityOrNotionalUSD: Math.round(qty), units: Math.round(qty) });
+                e.itemizedHoldings.push({ instrumentId: t.id, instrumentType: kind, issuerRegion: regionId, quantityOrNotionalLocal: Math.round(qty), units: Math.round(qty) });
               }
             });
           });
@@ -1647,7 +1647,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const regionBanks = companies.filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     if (regionBanks.length === 0) return;
     const lateHouseBanks = mandateAllocator(regionBanks.map(b => ({
-      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityUSD: b.bankBalanceSheet!.bankEquityLocal,
+      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityLocal: b.bankBalanceSheet!.bankEquityLocal,
     })));
     const lateCorporateByBank = new Map<string, number>();
     const lateInstitutionalByBank = new Map<string, number>();

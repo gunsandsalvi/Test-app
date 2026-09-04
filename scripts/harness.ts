@@ -260,7 +260,7 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
   const addHolding = (h: ItemizedHolding) => {
     const b = held[h.issuerRegion];
     if (!b) return;
-    const v = h.quantityOrNotionalUSD ?? 0;
+    const v = h.quantityOrNotionalLocal ?? 0;
     if (h.instrumentType === 'CORP_BOND') b.corp += v;
     else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v;
     else if (h.instrumentType === 'GOV_BOND') b.sov += v;
@@ -286,7 +286,7 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     }
     // A drawn facility is floating corporate debt on the BORROWER's region, which is not
     // necessarily the lender's. Pool loans are excluded: an SME pool's debt is a scalar on the
-    // pool (`seg.debtUSD`), not a tranche on any company, so it has no outstanding to score
+    // pool (`seg.debtLocal`), not a tranche on any company, so it has no outstanding to score
     // against and counting it here reported 41% over from week 1. §5-FINALIZATION step 10: the
     // bank's facilities are the borrowers' ladder rows, read from the lender's side.
     facilityRowsOf(ensureV2(state), c.ticker).forEach((l) => {
@@ -322,12 +322,12 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     // phantom "excess" that was simply the OTHER classes' real holdings (§7.292 — this
     // instrument's own first version did exactly that; §7.221's lesson, self-inflicted).
     const heldByIssuer = new Map<string, { usd: number; cls: string }>();
-    const addTrace = (h: { instrumentType: string; instrumentId: string; quantityOrNotionalUSD?: number }) => {
+    const addTrace = (h: { instrumentType: string; instrumentId: string; quantityOrNotionalLocal?: number }) => {
       if (h.instrumentType !== 'LEVERAGED_LOAN' && h.instrumentType !== 'CORP_BOND'
         && h.instrumentType !== 'COMMERCIAL_PAPER') return;
       const key = `${h.instrumentId}|${h.instrumentType}`;
       const cur = heldByIssuer.get(key) ?? { usd: 0, cls: h.instrumentType };
-      cur.usd += h.quantityOrNotionalUSD ?? 0;
+      cur.usd += h.quantityOrNotionalLocal ?? 0;
       heldByIssuer.set(key, cur);
     };
     state.institutionalEntities.forEach((e) => { if (!e.isDefaulted) e.itemizedHoldings.forEach(addTrace); });
@@ -364,7 +364,7 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
       state.institutionalEntities.forEach((e) => {
         if (e.isDefaulted) return;
         const usd = e.itemizedHoldings.reduce((a: number, h) =>
-          a + (h.instrumentId === topId ? (h.quantityOrNotionalUSD ?? 0) : 0), 0);
+          a + (h.instrumentId === topId ? (h.quantityOrNotionalLocal ?? 0) : 0), 0);
         if (usd > 100e6) holders.push(`${e.id}:${(usd / 1e6).toFixed(0)}M[${e.entityType}${e.region === byId.get(topId)?.region ? '' : '/x-border'}]`);
       });
       console.log(`  [mint-top] ${byId.get(topId)?.ticker}: ${holders.sort((a, b) => parseFloat(b.split(':')[1]) - parseFloat(a.split(':')[1])).slice(0, 6).join(' ')}`);
@@ -412,7 +412,7 @@ const institutionalBookOf = (s: GameState, region: RegionId) =>
     .reduce(
       (sum, e) =>
         sum + entityCashOf(ensureV2(s), e) + ((e as { repoLentLocal?: number }).repoLentLocal ?? 0) + ((e as { rrpLentUSD?: number }).rrpLentUSD ?? 0)
-          + e.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0),
+          + e.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalLocal, 0),
       0
     );
 /** Read at the close of each week, never off the previous state object: the persistent
@@ -449,14 +449,14 @@ function checkInstitutionalBookConservation(prevBooks: Map<RegionId, number>, st
     (state.institutionalEntities || [])
       .filter((e) => e.region === region && !e.isDefaulted && e.entityType === 'MONEY_MARKET_FUND')
       .forEach((mmf) => {
-        const bookUSD = entityCashOf(ensureV2(state), mmf) + ((mmf as { repoLentLocal?: number }).repoLentLocal ?? 0)
+        const bookLocal = entityCashOf(ensureV2(state), mmf) + ((mmf as { repoLentLocal?: number }).repoLentLocal ?? 0)
           + ((mmf as { rrpLentUSD?: number }).rrpLentUSD ?? 0)
-          + mmf.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0);
+          + mmf.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalLocal, 0);
         const sharesUSD = mmf.mmfSharesOutstandingUSD ?? 0;
-        if (sharesUSD > 1e9 && Math.abs(bookUSD - sharesUSD) / sharesUSD > 0.02) {
+        if (sharesUSD > 1e9 && Math.abs(bookLocal - sharesUSD) / sharesUSD > 0.02) {
           violations.push({
             week,
-            message: `${region} money fund book ${(bookUSD / 1e9).toFixed(1)}B departs its $1-NAV share liability ${(sharesUSD / 1e9).toFixed(1)}B by more than 2% — a subscription or redemption moved only one side`,
+            message: `${region} money fund book ${(bookLocal / 1e9).toFixed(1)}B departs its $1-NAV share liability ${(sharesUSD / 1e9).toFixed(1)}B by more than 2% — a subscription or redemption moved only one side`,
           });
         }
       });
@@ -568,7 +568,7 @@ function checkGuards(state: GameState, week: number) {
   });
 
   // 3. A holding CEILING may not equal the position it bounds. `investableSurplusUSD` was the
-  //    balance-sheet identity rearranged, so every bank's `maxHoldingUSD` came out at exactly
+  //    balance-sheet identity rearranged, so every bank's `maxHoldingLocal` came out at exactly
   //    its own book and no bank could buy a bond — a constraint that binds identically on
   //    everyone, every week, is an identity wearing a constraint's name (§7.102).
   (state.lastWeekDeadCeilingBooks ?? []).forEach((book: string) => {
@@ -601,13 +601,13 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     // placed. A week whose fill exceeds the order is the auction handing the central bank paper
     // it never bid for — the forced-placement failure mode, in the other direction.
     const orderedUSD = cb.lastOrderPlacedUSD ?? 0;
-    const filledUSD = cb.lastOpenMarketPurchasesUSD ?? 0;
+    const filledLocal = cb.lastOpenMarketPurchasesUSD ?? 0;
     // §7.246: the `orderedUSD > 0` arm made this VACUOUS in exactly the failure it exists for —
     // a fill against NO order is the purest forced placement, and the guard skipped it.
-    if (filledUSD > 0 && filledUSD > orderedUSD * 1.01 + 1e6) {
+    if (filledLocal > 0 && filledLocal > orderedUSD * 1.01 + 1e6) {
       violations.push({
         week,
-        message: `${region} central bank filled ${(filledUSD / 1e9).toFixed(2)}B against an order of ${(orderedUSD / 1e9).toFixed(2)}B`,
+        message: `${region} central bank filled ${(filledLocal / 1e9).toFixed(2)}B against an order of ${(orderedUSD / 1e9).toFixed(2)}B`,
       });
     }
     if (Object.values(cb.sovereignHoldingsByBond || {}).some((v) => (Number(v) || 0) < -1)) {
@@ -688,7 +688,7 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
       return;
     }
     const sumDisposable = cohorts.reduce((a, c) => a + c.disposableIncomeUSD, 0);
-    const agg = reg.estimatedHouseholdIncomeUSD;
+    const agg = reg.estimatedHouseholdIncomeLocal;
     if (agg > 0 && Math.abs(sumDisposable - agg) / agg > 1e-4) {
       violations.push({
         week,
@@ -765,13 +765,13 @@ function checkBeneficiaryClaimsHaveHolders(state: GameState, week: number) {
   const heldLocal = REGION_IDS_SEED_ORDER
     .reduce((sum, r) => sum + (state.regions[r]?.householdState?.institutionalClaimsUSD ?? 0), 0);
   if (owedUSD <= 0 && heldLocal <= 0) return;
-  const gapUSD = Math.abs(owedUSD - heldLocal);
-  if (gapUSD / Math.max(1, owedUSD) > 0.001) {
+  const gapLocal = Math.abs(owedUSD - heldLocal);
+  if (gapLocal / Math.max(1, owedUSD) > 0.001) {
     violations.push({
       week,
       message:
         `Beneficiary claims do not reconcile: institutions owe ${(owedUSD / 1e9).toFixed(1)}B, ` +
-        `households hold ${(heldLocal / 1e9).toFixed(1)}B (gap ${(gapUSD / 1e9).toFixed(1)}B). ` +
+        `households hold ${(heldLocal / 1e9).toFixed(1)}B (gap ${(gapLocal / 1e9).toFixed(1)}B). ` +
         `A reserve or entitlement is an asset on one book and a liability on another, never one alone.`,
     });
   }
@@ -1059,7 +1059,7 @@ const hhModule: HarnessModule = (() => {
           .reduce((a, e) => a + (e.beneficiaryLiabilityUSD ?? 0), 0);
         const held = hs.institutionalClaimsUSD ?? 0;
         const gap = Math.abs(instLiab - held) / Math.max(1, instLiab);
-        const nwParts = householdDepositsOf(ensureV2(s), r) + (hs.mmfSharesUSD ?? 0) + (hs.equityHoldingsUSD ?? 0)
+        const nwParts = householdDepositsOf(ensureV2(s), r) + (hs.mmfSharesLocal ?? 0) + (hs.equityHoldingsUSD ?? 0)
           + (hs.housingStockUSD ?? 0)
           - ((hs.mortgageDebtUSD ?? 0) + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0));
         const nwGap = Math.abs(nwParts - (hs.netWorthUSD ?? 0)) / Math.max(1, Math.abs(hs.netWorthUSD ?? 1));
@@ -1075,22 +1075,22 @@ const hhModule: HarnessModule = (() => {
       REGIONS.forEach(r => {
         const h = s.regions[r].householdState;
         const hDepositsUSD = householdDepositsOf(ensureV2(s), r);
-        const dep = Math.max(0, hDepositsUSD + (h.mmfSharesUSD ?? 0));
+        const dep = Math.max(0, hDepositsUSD + (h.mmfSharesLocal ?? 0));
         const ds = Math.max(0, h.weeklyDebtServiceUSD ?? 0);
-        const cons = Math.max(0, s.regions[r].estimatedHouseholdIncomeUSD) * (1 - (h.savingsRate ?? 0)) / 52;
+        const cons = Math.max(0, s.regions[r].estimatedHouseholdIncomeLocal) * (1 - (h.savingsRate ?? 0)) / 52;
         const committed = ds + cons;
         // Any forced-selling or buffer rule is a THRESHOLD on this number. If the cash covers
         // hundreds of weeks of outflow, no such threshold can ever be crossed and a rule built on
         // one would be a mechanism that binds on nothing (§7.146, §7.149, §7.159).
-        out.push(`  ${r}: liquid ${B(dep)} vs committed ${B(committed)}/wk = ${(committed > 0 ? dep / committed : 0).toFixed(1)} weeks of cover | savings rate ${pct(h.savingsRate ?? 0)} | income ${B(s.regions[r].estimatedHouseholdIncomeUSD)}`);
+        out.push(`  ${r}: liquid ${B(dep)} vs committed ${B(committed)}/wk = ${(committed > 0 ? dep / committed : 0).toFixed(1)} weeks of cover | savings rate ${pct(h.savingsRate ?? 0)} | income ${B(s.regions[r].estimatedHouseholdIncomeLocal)}`);
         // HOW FAR IS THE FORCED-SALE THRESHOLD? A household sells only what its deposits above
         // the buffer cannot cover, so the distance is the headroom divided by the weekly gap.
         // Printing it keeps "not firing" an observation about CONDITIONS rather than a mechanism
         // that binds on nothing — the failure mode this project keeps finding (§7.146, §7.159).
-        const incomeUSD = Math.max(0, s.regions[r].estimatedHouseholdIncomeUSD);
+        const incomeUSD = Math.max(0, s.regions[r].estimatedHouseholdIncomeLocal);
         const floorUSD = (incomeUSD / 52) * 12;
         const headroomUSD = Math.max(0, hDepositsUSD - floorUSD);
-        const gapUSD = Math.max(0, -(incomeUSD * (h.savingsRate ?? 0)) / 52);
+        const gapLocal = Math.max(0, -(incomeUSD * (h.savingsRate ?? 0)) / 52);
         // What a forced sale could actually REACH. Only fund shares are sellable: household
         // direct equity and private business have no trading channel, so they are wealth the
         // household cannot turn into cash however badly it needs to.
@@ -1098,10 +1098,10 @@ const hhModule: HarnessModule = (() => {
         const sellableUSD = etfRows.reduce((a: number, x) => {
           const f = s.institutionalEntities?.find((e: InstitutionalEntity) => e.id === x.fundId);
           const sh = f?.etf?.sharesOutstanding ?? 0;
-          const nav = sh > 0 && f ? ((f.itemizedHoldings ?? []).reduce((b: number, hh: ItemizedHolding) => b + (hh.quantityOrNotionalUSD ?? 0), 0) + Math.max(0, f ? entityCashOf(ensureV2(s), f) : 0)) / sh : 0;
+          const nav = sh > 0 && f ? ((f.itemizedHoldings ?? []).reduce((b: number, hh: ItemizedHolding) => b + (hh.quantityOrNotionalLocal ?? 0), 0) + Math.max(0, f ? entityCashOf(ensureV2(s), f) : 0)) / sh : 0;
           return a + (x.shares ?? 0) * nav;
         }, 0);
-        out.push(`      deposit headroom over the buffer ${B(headroomUSD)} vs a ${B(gapUSD)}/wk gap = ${gapUSD > 0 ? (headroomUSD / gapUSD).toFixed(0) : '∞'} weeks before forced selling starts`);
+        out.push(`      deposit headroom over the buffer ${B(headroomUSD)} vs a ${B(gapLocal)}/wk gap = ${gapLocal > 0 ? (headroomUSD / gapLocal).toFixed(0) : '∞'} weeks before forced selling starts`);
         out.push(`      sellable (fund shares) ${B(sellableUSD)} of ${B(h.equityHoldingsUSD ?? 0)} total household equity — the rest has no trading channel`);
       });
       out.push('--- the mortgage book as a CROSS-SECTION: E[f(LTV)] against f(E[LTV]) ---');
@@ -1143,7 +1143,7 @@ const hhModule: HarnessModule = (() => {
         // can borrow (affordability), and reach households who already borrowed (resets).
         const reg2 = s.regions[r];
         const hh = Math.max(1, (reg2.totalPopulation ?? 0) / 2.5);
-        const wkInc = Math.max(0, reg2.estimatedHouseholdIncomeUSD) / 52 / hh;
+        const wkInc = Math.max(0, reg2.estimatedHouseholdIncomeLocal) / 52 / hh;
         const mortRate = Math.max(0.005, (reg2.zeroRates?.tenor10Y ?? reg2.policyRate) + 0.017);
         const afford = (rate: number) => {
           const rw = Math.max(0.00001, rate / 52);
@@ -1176,7 +1176,7 @@ const hhModule: HarnessModule = (() => {
       out.push(`  u range ${pct(Math.min(...series.u))}-${pct(Math.max(...series.u))}   v range ${pct(Math.min(...series.v))}-${pct(Math.max(...series.v))}`);
       const realWage = series.wage.map((x, i) => x - series.infl[i]);
       out.push(`  mean nominal wage growth ${pct(series.wage.reduce((a, x) => a + x, 0) / series.wage.length)}, mean real ${pct(realWage.reduce((a, x) => a + x, 0) / realWage.length)}`);
-      out.push(`  net worth / income (USA): ${((s.regions.USA.householdState.netWorthUSD ?? 0) / s.regions.USA.estimatedHouseholdIncomeUSD).toFixed(2)}x`);
+      out.push(`  net worth / income (USA): ${((s.regions.USA.householdState.netWorthUSD ?? 0) / s.regions.USA.estimatedHouseholdIncomeLocal).toFixed(2)}x`);
       return out;
     },
     shock(snapshot, rngState, shockWeek, weeks) {
@@ -1203,7 +1203,7 @@ const hhModule: HarnessModule = (() => {
           const reg = x.regions.USA;
           o.u.push(reg.unemploymentRate);
           o.c.push((reg.householdState.cohorts ?? []).reduce((a, ch) => a + ch.consumptionBudgetUSD, 0));
-          o.inc.push(reg.estimatedHouseholdIncomeUSD);
+          o.inc.push(reg.estimatedHouseholdIncomeLocal);
         }
         return { o, killedName, killedJobs };
       };
@@ -1234,7 +1234,7 @@ function couponReceipts(s: GameState, region: RegionId) {
     .filter((e: InstitutionalEntity) => e.region === region && !e.isDefaulted)
     .reduce((a: number, e: InstitutionalEntity) => a + (e.itemizedHoldings || [])
       .filter((h: ItemizedHolding) => h.instrumentType === 'GOV_BOND' && h.issuerRegion === region)
-      .reduce((x: number, h: ItemizedHolding) => x + ((h.quantityOrNotionalUSD ?? 0) * rate(h.instrumentId)) / 52, 0), 0);
+      .reduce((x: number, h: ItemizedHolding) => x + ((h.quantityOrNotionalLocal ?? 0) * rate(h.instrumentId)) / 52, 0), 0);
   const central = Object.entries(reg.centralBankSheet?.sovereignHoldingsByBond || {})
     .reduce((a: number, [k, v]: [string, unknown]) => a + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0);
   const paid = weeklyInterestExpenseUSD(materializeGovLadder(ensureV2(s), region));
@@ -1255,7 +1255,7 @@ const pubModule: HarnessModule = (() => {
       const cb = reg.centralBankSheet;
       const dec = decomposeGovernmentSpending(reg.governmentSpendingWeeklyUSD, reg.governmentInterestWeeklyUSD ?? 0,
         GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore);
-      series.interestShare.push(dec.interestUSD / Math.max(1, reg.governmentSpendingWeeklyUSD));
+      series.interestShare.push(dec.interestLocal / Math.max(1, reg.governmentSpendingWeeklyUSD));
       series.procShare.push(dec.procurementBudgetUSD / Math.max(1, reg.governmentSpendingWeeklyUSD));
       series.procSpent.push(reg.governmentProcurementSpentUSD ?? 0);
       series.unspentProc.push(reg.unspentProcurementBudgetUSD ?? 0);
@@ -1343,7 +1343,7 @@ const pubModule: HarnessModule = (() => {
           const reg = x.regions.USA;
           const dec = decomposeGovernmentSpending(reg.governmentSpendingWeeklyUSD, reg.governmentInterestWeeklyUSD ?? 0,
             GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore);
-          o.interest.push(dec.interestUSD); o.transfers.push(dec.transfersUSD);
+          o.interest.push(dec.interestLocal); o.transfers.push(dec.transfersUSD);
           o.proc.push(reg.governmentProcurementSpentUSD ?? 0);
           o.debt.push(reg.debtToGdpPctBottomUp ?? 0);
         }
@@ -1387,7 +1387,7 @@ const xbModule: HarnessModule = (() => {
         const mass = s.unitMassTonnes[su.unitId] ?? 0;
         if (!(mass > 0)) return;
         const rate = s.freightRatePerTonneLaneMoneyByLane[laneKey('EUR', 'USA')] ?? 0;
-        const price = Number((s.regions.USA.categoryDemand[su.unitId])?.unitPriceUSD) || 1;
+        const price = Number((s.regions.USA.categoryDemand[su.unitId])?.unitPriceLocal) || 1;
         density.push(phys.baselineValueDensityUsdPerTonne);
         imported.push(-(mass * rate) / price);
       });
@@ -1435,8 +1435,8 @@ const xbModule: HarnessModule = (() => {
       REGIONS.forEach(r => {
         const fx = getFxToUsd(s.fxPairs, r);
         const mean = Object.values(INDUSTRY_SUBUNITS).flat().reduce((acc, su) => {
-          const p = Number((s.regions[r].categoryDemand[su.unitId])?.unitPriceUSD) || 0;
-          const pu = Number((s.regions.USA.categoryDemand[su.unitId])?.unitPriceUSD) || 0;
+          const p = Number((s.regions[r].categoryDemand[su.unitId])?.unitPriceLocal) || 0;
+          const pu = Number((s.regions.USA.categoryDemand[su.unitId])?.unitPriceLocal) || 0;
           return p > 0 && pu > 0 ? { n: acc.n + 1, sum: acc.sum + (p * fx) / pu } : acc;
         }, { n: 0, sum: 0 });
         const cb = s.regions[r].centralBankSheet;
@@ -1462,13 +1462,13 @@ const indModule: HarnessModule = (() => {
     const CT = v2.contracts;
     const out = new Map<string, {
       supplierCompanyId: string; customerCompanyId: string; subUnitId: string;
-      quantityUnitsPerWeek: number; priceUSD: number; backlogUnits: number; shortWeeks: number;
+      quantityUnitsPerWeek: number; priceLocal: number; backlogUnits: number; shortWeeks: number;
       weeksRemaining: number; escalationBaseUSD: number; prepaidUSD: number;
     }>();
     REGIONS.forEach(r => forEachContract(v2, r, (row, supplierKey, customerKey, subUnitId) => {
       out.set(`${supplierKey}|${customerKey}|${subUnitId}`, {
         supplierCompanyId: supplierKey, customerCompanyId: customerKey, subUnitId,
-        quantityUnitsPerWeek: CT.qtyPerWeek[row], priceUSD: CT.priceUSD[row],
+        quantityUnitsPerWeek: CT.qtyPerWeek[row], priceLocal: CT.priceLocal[row],
         backlogUnits: CT.backlogUnits[row], shortWeeks: CT.shortWeeks[row],
         weeksRemaining: CT.weeksRemaining[row], escalationBaseUSD: CT.escalationBaseUSD[row],
         prepaidUSD: CT.prepaidUSD[row],
@@ -1543,9 +1543,9 @@ const indModule: HarnessModule = (() => {
       out.push(`  lead ${String(lead).padStart(2)}wk: ${String(e.lines).padStart(4)} lines  WIP ${weeksHeld.toFixed(2)} weeks of throughput [should be ${lead}]`);
     });
     const totalWipUSD = s.companies.reduce((a, c) => {
-      const wip = c.wipBySubUnit as unknown as Record<string, { valueUSD: number }[]> | undefined;
+      const wip = c.wipBySubUnit as unknown as Record<string, { valueLocal: number }[]> | undefined;
       if (!wip) return a;
-      return a + Object.values(wip).reduce((b, q) => b + q.reduce((x, l) => x + l.valueUSD, 0), 0);
+      return a + Object.values(wip).reduce((b, q) => b + q.reduce((x, l) => x + l.valueLocal, 0), 0);
     }, 0);
     out.push(`  work in progress carried across every firm: ${B(totalWipUSD)}`);
 
@@ -1741,14 +1741,14 @@ const indModule: HarnessModule = (() => {
         // solve; the firms bid their OWN capex figure. If those disagree the sector was built to
         // supply one number and asked for another (rule 4).
         const capexCats = Object.keys(CAPEX_SUPPLIER_WEIGHTS); // §7.246: the registry's list, not a copy
-        const seededUSD = capexCats.reduce((a, su) => a + ((s.regions[r].categoryDemand?.[su]?.demandLevelAnnualUSD) ?? 0), 0);
+        const seededUSD = capexCats.reduce((a, su) => a + ((s.regions[r].categoryDemand?.[su]?.demandLevelAnnualLocal) ?? 0), 0);
         out.push(`      capex industries sized for ${B(seededUSD)}/yr of demand; firms bid ${B(capexA)}/yr = ${(seededUSD > 0 ? capexA / seededUSD : 0).toFixed(2)}x what was built`);
         capexCats.forEach(su => {
           const cd = s.regions[r].categoryDemand?.[su];
           if (!cd) return;
           const d = cd.totalUnitsDemandedThisWeek ?? 0;
           const sup = cd.totalUnitsSuppliedThisWeek ?? 0;
-          out.push(`      ${su.padEnd(24)} supplied/demanded ${(d > 0 ? sup / d : 0).toFixed(2)}x  (px ${(cd.unitPriceUSD ?? 0).toFixed(0)} vs base ${(cd.baseUnitPriceUSD ?? 0).toFixed(0)})`);
+          out.push(`      ${su.padEnd(24)} supplied/demanded ${(d > 0 ? sup / d : 0).toFixed(2)}x  (px ${(cd.unitPriceLocal ?? 0).toFixed(0)} vs base ${(cd.baseUnitPriceUSD ?? 0).toFixed(0)})`);
         });
       }
       out.push(`  ${r}: EBITDA/rev ${pct(ebitda / rev)}  inputs/rev ${pct(inputs / rev)}  netPPE/rev ${(netPpe / rev).toFixed(2)}x  |  below cost of capital: ${below}/${firms.length} (${pct(below / firms.length)})`);
@@ -1842,7 +1842,7 @@ const indModule: HarnessModule = (() => {
 
     out.push('--- IND13: capital that has arrived and is not yet plant ---');
     const aucFirms = s.companies.filter(c => isActiveCompany(c) && (c.assetsUnderConstruction ?? []).length > 0);
-    const aucUSD = aucFirms.reduce((a, c) => a + (c.assetsUnderConstruction!).reduce((b, l) => b + l.valueUSD, 0), 0);
+    const aucUSD = aucFirms.reduce((a, c) => a + (c.assetsUnderConstruction!).reduce((b, l) => b + l.valueLocal, 0), 0);
     const grossPpeUSD = s.companies.filter(isActiveCompany).reduce((a, c) => a + (c.grossPPELocal ?? 0), 0);
     const commissionedUSD = s.companies.reduce((a, c) => a + (c.capexCommissionedLastWeekUSD ?? 0), 0);
     out.push(`  ${aucFirms.length} firms carrying construction in progress, ${B(aucUSD)} against ${B(grossPpeUSD)} of gross PP&E (${pct(grossPpeUSD ? aucUSD / grossPpeUSD : 0)})`);
@@ -1867,10 +1867,10 @@ const indModule: HarnessModule = (() => {
       receivableByTicker.set(iv.sellerTicker, (receivableByTicker.get(iv.sellerTicker) ?? 0) + usd);
       payableByTicker.set(iv.buyerTicker, (payableByTicker.get(iv.buyerTicker) ?? 0) + usd);
     });
-    const totalUSD = domesticUSD + crossUSD;
+    const totalLocal = domesticUSD + crossUSD;
     const receivables = [...receivableByTicker.values()].reduce((a, x) => a + x, 0);
     const payables = [...payableByTicker.values()].reduce((a, x) => a + x, 0);
-    out.push(`  ${invoices.length} invoices outstanding, ${B(totalUSD)} — domestic ${B(domesticUSD)} (${pct(totalUSD ? domesticUSD / totalUSD : 0)}), cross-border ${B(crossUSD)}`);
+    out.push(`  ${invoices.length} invoices outstanding, ${B(totalLocal)} — domestic ${B(domesticUSD)} (${pct(totalLocal ? domesticUSD / totalLocal : 0)}), cross-border ${B(crossUSD)}`);
     out.push(`  receivables ${B(receivables)} vs payables ${B(payables)} [must be equal: every invoice is two-sided]`);
     out.push(`  mean terms ${(invoices.length ? termSum / invoices.length : 0).toFixed(1)} weeks`);
     // The design's third check: a long-cycle firm ties up more working capital, so it should
@@ -1898,7 +1898,7 @@ const indModule: HarnessModule = (() => {
     const owed = contracts.filter(c => (c.backlogUnits ?? 0) > 0.0001);
     const weeklyObligation = contracts.reduce((a, c) => a + (c.quantityUnitsPerWeek ?? 0), 0);
     const backlogUnits = contracts.reduce((a, c) => a + (c.backlogUnits ?? 0), 0);
-    const backlogUSD = contracts.reduce((a, c) => a + (c.backlogUnits ?? 0) * (c.priceUSD ?? 0), 0);
+    const backlogUSD = contracts.reduce((a, c) => a + (c.backlogUnits ?? 0) * (c.priceLocal ?? 0), 0);
     const indexed = contracts.filter(c => (c.escalationBaseUSD ?? 0) > 0).length;
     const short = contracts.filter(c => (c.shortWeeks ?? 0) > 0);
     out.push(`  ${contracts.length} live contracts, ${owed.length} of them owing units (${pct(contracts.length ? owed.length / contracts.length : 0)})`);
@@ -1977,7 +1977,7 @@ const fpModule: HarnessModule = {
         e.itemizedHoldings.forEach((h) => {
           const k = `${e.id}\t${h.instrumentType}\t${h.instrumentId}`;
           const cur = agg.get(k) ?? [0, 0];
-          cur[0] += h.quantityOrNotionalUSD ?? 0; cur[1] += h.quantityShares ?? 0;
+          cur[0] += h.quantityOrNotionalLocal ?? 0; cur[1] += h.quantityShares ?? 0;
           agg.set(k, cur);
         });
         agg.forEach((v, k) => lines.push(`${k}\t${v[0].toFixed(2)}\t${v[1].toFixed(4)}`));
@@ -2038,7 +2038,7 @@ const bookTraceModule: HarnessModule = {
           parts.cashLocal += entityCashOf(ensureV2(s), e);
           parts.repoLentLocal += e.repoLentLocal ?? 0;
           e.itemizedHoldings.forEach((h) => {
-            parts[h.instrumentType] = (parts[h.instrumentType] ?? 0) + h.quantityOrNotionalUSD;
+            parts[h.instrumentType] = (parts[h.instrumentType] ?? 0) + h.quantityOrNotionalLocal;
           });
         });
         return parts;
@@ -2066,7 +2066,7 @@ const bookTraceModule: HarnessModule = {
         e.itemizedHoldings.forEach((h) => {
           if (h.issuerRegion !== region) return;
           if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN' || h.instrumentType === 'COMMERCIAL_PAPER') {
-            const usd = h.quantityOrNotionalUSD ?? 0;
+            const usd = h.quantityOrNotionalLocal ?? 0;
             creditHeldUSD += usd;
             // instrumentId IS the issuer's company.id for the credit classes (domain/banking.ts).
             if (issuerAliveById.get(h.instrumentId) === false) heldOnDeadIssuerUSD += usd;
@@ -2093,7 +2093,7 @@ const bookTraceModule: HarnessModule = {
  */
 const SPIRAL = process.env.SPIRAL === '1';
 /** SPIRAL_PRICES=1 — per region, the top category price movers week-over-week (landed
- *  unitPriceUSD), to localize WHICH goods run when one region's inflation departs. */
+ *  unitPriceLocal), to localize WHICH goods run when one region's inflation departs. */
 const SPIRAL_PRICES = process.env.SPIRAL_PRICES === '1';
 const spiralPrevPriceByKey = new Map<string, number>();
 const spiralModule: HarnessModule = {
@@ -2116,15 +2116,15 @@ const spiralModule: HarnessModule = {
             + ` cap${(cap / 1e6).toFixed(2)}M staffedAvg${sup.length ? (staffed / sup.length).toFixed(2) : '-'}`
             + ` s${((cd?.totalUnitsSuppliedThisWeek ?? 0) / 1e6).toFixed(2)}M`
             + ` d${((cd?.totalUnitsDemandedThisWeek ?? 0) / 1e6).toFixed(2)}M`
-            + ` p${(cd?.unitPriceUSD ?? 0).toFixed(0)}`
-            + ` dLvl${((cd?.demandLevelAnnualUSD ?? 0) / 1e9).toFixed(2)}B`);
+            + ` p${(cd?.unitPriceLocal ?? 0).toFixed(0)}`
+            + ` dLvl${((cd?.demandLevelAnnualLocal ?? 0) / 1e9).toFixed(2)}B`);
         });
       }
       REGION_IDS_SEED_ORDER.forEach((region) => {
         const r = state.regions[region];
         const movers: { id: string; ratio: number; p: number; idx: number; inv: number; short: number }[] = [];
         Object.entries(r.categoryDemand).forEach(([id, cd]) => {
-          const p = cd.unitPriceUSD ?? 0;
+          const p = cd.unitPriceLocal ?? 0;
           const key = `${region}:${id}`;
           const prev = spiralPrevPriceByKey.get(key);
           if (prev !== undefined && prev > 0 && p > 0) {
@@ -2158,9 +2158,9 @@ const spiralModule: HarnessModule = {
       const ledgerTicker = process.env.CARRIER_LEDGER;
       if (ledgerTicker) {
         const c = carriers.find((x) => x.ticker === ledgerTicker);
-        const rows = ((c as unknown as { lastCashLedger?: { label: string; amountUSD: number }[] })?.lastCashLedger ?? [])
-          .filter((r) => Math.abs(r.amountUSD) > 1e6)
-          .map((r) => `${r.label} ${(r.amountUSD / 1e6).toFixed(1)}M`);
+        const rows = ((c as unknown as { lastCashLedger?: { label: string; amountLocal: number }[] })?.lastCashLedger ?? [])
+          .filter((r) => Math.abs(r.amountLocal) > 1e6)
+          .map((r) => `${r.label} ${(r.amountLocal / 1e6).toFixed(1)}M`);
         console.log(`  [car-ledger] w${w} ${ledgerTicker} :: ${rows.join(' | ')}`);
       }
     }

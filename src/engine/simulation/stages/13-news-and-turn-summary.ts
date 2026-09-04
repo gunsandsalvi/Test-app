@@ -45,7 +45,7 @@ export function runNewsAndTurnSummaryStage(state: GameState, ctx: WeeklyStepCont
     pnlDeltaUSD,
     pnlDeltaPct: state.portfolio.navUSD > 0 ? Number(((pnlDeltaUSD / state.portfolio.navUSD) * 100).toFixed(2)) : 0,
     interestIncomeUSD: ctx.weeklyInterestIncomeUSD,
-    financingCostUSD: ctx.weeklyFinancingCostUSD,
+    financingCostLocal: ctx.weeklyFinancingCostUSD,
     defaultedCompanies: ctx.defaultedTickers,
     ratingsChanges: ctx.ratingChanges,
     earningsReported: ctx.earningsReportedThisTurn,

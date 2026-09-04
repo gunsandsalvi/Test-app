@@ -144,14 +144,14 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
       ladder.filter((b) => couponByBond[b.id] > 0 && sovereignCouponDueShare(b, ctx.nextWeek) > 0)
         .map((b) => b.id)
     );
-    let paidUSD = 0;
+    let paidLocal = 0;
     if (dueBonds.size > 0) {
       const cleared: string[] = [];
-      accrued.forEach((amountUSD, k) => {
+      accrued.forEach((amountLocal, k) => {
         const firstBar = k.indexOf('|');
         if (k.slice(0, firstBar) !== regionId) return;
         const secondBar = k.indexOf('|', firstBar + 1);
-        if (!dueBonds.has(k.slice(firstBar + 1, secondBar)) || !(amountUSD > 0)) return;
+        if (!dueBonds.has(k.slice(firstBar + 1, secondBar)) || !(amountLocal > 0)) return;
         const payee = partyFromKey(k.slice(secondBar + 1));
         if (!payee) return;
         // A BANK is paid as BANK_SECURITIES rather than BANK: the coupon is not income arriving
@@ -161,11 +161,11 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
           payee,
-          amount: amountUSD,
+          amount: amountLocal,
           currency: currencyOf(regionId),
           reason: 'sovereign coupon',
         });
-        paidUSD += amountUSD;
+        paidLocal += amountLocal;
         cleared.push(k);
       });
       cleared.forEach((k) => accrued.delete(k));
@@ -174,7 +174,7 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
     // ---- 4. The treasury's own side of the same balance, so its expense can stay smooth while
     // its account moves on the dates (stages/central-bank.ts reads the change in this level). ----
     reg.sovereignCouponPayableUSD = Math.round(sovereignAccruedPayableUSD(accrued, regionId));
-    reg.sovereignCouponPaidUSD = Math.round(paidUSD);
+    reg.sovereignCouponPaidUSD = Math.round(paidLocal);
   });
 
   // ---- 5. The banks' books. The receivable is SET to the ledger — one writer, so the holder's

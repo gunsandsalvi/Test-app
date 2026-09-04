@@ -201,7 +201,7 @@ function InstitutionStatements({ world, e }: { world: World; e: InstitutionalEnt
       { label: 'Cash at the house bank', usd: eCashUSD },
       { label: 'Total assets', usd: assets, total: true },
       { label: 'Owed to beneficiaries', usd: e.beneficiaryLiabilityUSD ?? 0 },
-      { label: 'Equity capital', usd: e.equityCapitalUSD, total: true },
+      { label: 'Equity capital', usd: e.equityCapitalLocal, total: true },
     ]} />
   );
 }
@@ -213,7 +213,7 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
   const bs = r.bankingSector; const hs = r.householdState;
   let body: React.ReactNode;
   if (active === 'national accounts') {
-    const gdp = r.derivedNominalGdpUSD ?? r.estimatedNominalGdpUSD;
+    const gdp = r.derivedNominalGdpUSD ?? r.estimatedNominalGdpLocal;
     body = <Statement units="USD millions · annualised from the week" asOf={asOf} lines={[
       { label: 'Consumption', usd: r.consumptionComponentUSD },
       { label: 'Investment', usd: r.investmentComponentUSD },
@@ -261,7 +261,7 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
   } else {
     body = <Statement units="USD millions · the household sector" asOf={asOf} lines={[
       { label: 'Deposits', usd: householdDepositsOf(ensureV2(world.state), r.id as RegionId) },
-      { label: 'Money fund shares', usd: hs?.mmfSharesUSD },
+      { label: 'Money fund shares', usd: hs?.mmfSharesLocal },
       { label: 'Direct equity', usd: hs?.directEquityUSD },
       { label: 'ETF holdings', usd: hs?.etfHoldingsUSD },
       { label: 'Housing', usd: hs?.housingStockUSD },

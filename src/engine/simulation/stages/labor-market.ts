@@ -107,7 +107,7 @@ function occupationMixFor(sector: string): Partial<Record<OccupationType, number
  * direction was nominal and one was real, and only the shedding direction could happen.
  *
  * The deflator is a MEASUREMENT, not an index anyone chose: each good's own cleared price
- * against the price it was seeded at (`unitPriceUSD / baseUnitPriceUSD`), revenue-weighted
+ * against the price it was seeded at (`unitPriceLocal / baseUnitPriceUSD`), revenue-weighted
  * across the firm's lines. A firm whose own product has halved in price is not overstaffed.
  */
 function outputPriceVsBaselineOf(comp: Company, reg: Region): number {
@@ -117,7 +117,7 @@ function outputPriceVsBaselineOf(comp: Company, reg: Region): number {
     return {
       weight: Math.max(0, line.revenueShare ?? 0),
       base: cd?.baseUnitPriceUSD ?? 0,
-      now: cd?.unitPriceUSD ?? 0,
+      now: cd?.unitPriceLocal ?? 0,
     };
   }));
 }
@@ -409,10 +409,10 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const segLines = smePoolSubUnits(seg.industry).map((su) => ({
         subUnitId: su.unitId,
         revenueShare: (seg.salesDerivedAnnualRevenueUSDBySubUnit?.[su.unitId]
-          ?? reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0),
+          ?? reg.categoryDemand[su.unitId]?.demandLevelAnnualLocal ?? 0),
       }));
       const growthAnnual = desiredGrowthAnnualOf(
-        seg.revenueHistoryUSD, seg.annualRevenueUSD, inflationAnnual, segLines, reg,
+        seg.revenueHistoryUSD, seg.annualRevenueLocal, inflationAnnual, segLines, reg,
         LABOR_PRODUCTIVITY_GROWTH_ANNUAL
       );
       const desiredWeeklyChange = current * (growthAnnual / 52);

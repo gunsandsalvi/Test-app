@@ -155,7 +155,7 @@ const TIER_TRANSFER_WEIGHT: Record<WealthTier, number> = {
  */
 function tierShareOfMeasured(
   wealthDistribution: Record<WealthTier, WealthTierData>,
-  field: 'debtUSD' | 'institutionalClaimsUSD'
+  field: 'debtLocal' | 'institutionalClaimsUSD'
 ): Record<WealthTier, number> {
   const raw = {} as Record<WealthTier, number>;
   let total = 0;
@@ -437,7 +437,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   // allocated; consumption the residual. ----
   const annualDebtServiceUSD = Math.max(0, weeklyDebtServiceUSD) * 52;
   // RULE 19 — the split is MEASURED (see `tierShareOfMeasured`).
-  const debtShareByTier = tierShareOfMeasured(wealthDistribution, 'debtUSD');
+  const debtShareByTier = tierShareOfMeasured(wealthDistribution, 'debtLocal');
 
   // HH: the cohorts DISTRIBUTE household income; they do not re-derive it. The cross-section —
   // who earns what, relative to whom — is built above from real employment, real occupation
@@ -448,10 +448,10 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   // both derivations stayed identical — they stopped the moment income became a measured sum
   // (measured: cohorts summed to 440.48B against an aggregate of 377.12B).
   const rawPreliminary = cells.map((c) => {
-    const grossUSD = grossOf(c);
+    const grossLocal = grossOf(c);
     const taxRate = HOUSEHOLD_EFFECTIVE_TAX_RATE * (TIER_TAX_RATE_MULTIPLIER[c.tier] / taxMultNorm);
-    const taxUSD = grossUSD * taxRate;
-    return { c, grossUSD, taxUSD, dispUSD: grossUSD - taxUSD };
+    const taxUSD = grossLocal * taxRate;
+    return { c, grossLocal, taxUSD, dispUSD: grossLocal - taxUSD };
   });
   const rawDisposableUSD = rawPreliminary.reduce((a, x) => a + x.dispUSD, 0);
   const incomeScale = (measuredDisposableIncomeUSD !== undefined && rawDisposableUSD > 0)
@@ -459,7 +459,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     : 1;
   const preliminary = rawPreliminary.map((x) => ({
     c: x.c,
-    grossUSD: x.grossUSD * incomeScale,
+    grossLocal: x.grossLocal * incomeScale,
     taxUSD: x.taxUSD * incomeScale,
     dispUSD: x.dispUSD * incomeScale,
   }));
@@ -567,7 +567,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
       Math.max(0, inputs.annualCapitalReceiptsUSD.depositInterestUSD) * (nw / netWorthNorm)
       + Math.max(0, inputs.annualCapitalReceiptsUSD.dividendsUSD) * ((nw * exp) / exposureNorm);
   });
-  const cohorts: HouseholdCohort[] = preliminary.map(({ c, grossUSD, taxUSD, dispUSD }, i) => {
+  const cohorts: HouseholdCohort[] = preliminary.map(({ c, grossLocal, taxUSD, dispUSD }, i) => {
     const tierEarners = earnersByTier[c.tier] || 1;
     const share = (c.employed + c.unemployed) / tierEarners;
     const plannedSavingsUSD = cohortSavingsUSD[i];
@@ -602,7 +602,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
       unemploymentBenefitsUSD: Math.round(c.benefitsUSD),
       transferIncomeUSD: Math.round((excessTransfersUSD * (TIER_TRANSFER_WEIGHT[c.tier] * (c.employed + c.unemployed)) / transferNorm)),
       capitalIncomeUSD: Math.round((tierCapitalUSD[c.tier] * share)),
-      grossIncomeUSD: Math.round(grossUSD),
+      grossIncomeUSD: Math.round(grossLocal),
       taxUSD: Math.round(taxUSD),
       disposableIncomeUSD: Math.round(dispUSD),
       debtServiceUSD: Math.round(effectiveDebtServiceUSD),

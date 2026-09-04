@@ -9,7 +9,7 @@
  * nominal growth less inflation, that one formula dragged reported real growth to -20%.
  *
  * This module replaces it with the real thing. Every week, stage 05's auction clears a real unit
- * price for every sub-unit against real bids from real buyers (`CategoryDemandState.unitPriceUSD`)
+ * price for every sub-unit against real bids from real buyers (`CategoryDemandState.unitPriceLocal`)
  * the prices households genuinely transact at. A consumer price index is nothing more than
  * those prices, weighted by how much households actually spend on each of them:
  *
@@ -48,14 +48,14 @@ import { shelfPriceUSD } from '../../../domain/distribution';
  * dropped out of the basket entirely.
  */
 function shelfPriceFor(
-  demand: { shelfUnitPriceUSD?: number; unitPriceUSD?: number } | undefined,
+  demand: { shelfUnitPriceUSD?: number; unitPriceLocal?: number } | undefined,
   subUnitId: string,
   region: Region
 ): number {
   if (!demand) return 0;
   const written = demand.shelfUnitPriceUSD;
   if (typeof written === 'number' && isFinite(written) && written > 0) return written;
-  const landed = demand.unitPriceUSD;
+  const landed = demand.unitPriceLocal;
   if (!(typeof landed === 'number' && isFinite(landed) && landed > 0)) return 0;
   const shortRate = region.zeroRates?.tenor3M ?? region.policyRate ?? 0;
   return shelfPriceUSD(landed, subUnitId, shortRate);
@@ -100,7 +100,7 @@ export function buildCpiBasket(region: Region, week: number, baseIndexLevel: num
       // channel's cost out of the household's cost of living entirely.
       const price = shelfPriceFor(demand, su.unitId, region);
       if (!demand || !(price > 0)) return;
-      const spendUSD = demand.demandLevelAnnualUSD * su.buyerMix.HOUSEHOLD;
+      const spendUSD = demand.demandLevelAnnualLocal * su.buyerMix.HOUSEHOLD;
       if (!(spendUSD > 0)) return;
       householdSpendBySubUnit[su.unitId] = spendUSD;
       basePriceBySubUnit[su.unitId] = price;

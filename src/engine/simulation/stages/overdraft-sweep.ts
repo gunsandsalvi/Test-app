@@ -86,7 +86,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       const penalty = withinLineUSD >= drawUSD ? 0 : OVERDRAFT_PENALTY_BPS;
       const line = book.find((l) => l.fundId === fund.id);
       if (line) {
-        line.drawnUSD = Math.round(line.drawnUSD + drawUSD);
+        line.drawnLocal = Math.round(line.drawnLocal + drawUSD);
         if (penalty) line.rateAnnual = Number(Math.max(line.rateAnnual, reg.policyRate + (WHOLESALE_FUNDING_SPREAD_BPS + penalty) / 10000).toFixed(6));
       } else {
         book.push({
@@ -94,7 +94,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
           regionId,
           brokerTicker,
           fundId: fund.id,
-          drawnUSD: Math.round(drawUSD),
+          drawnLocal: Math.round(drawUSD),
           haircutRate: 0.5,
           rateAnnual: Number((reg.policyRate + (WHOLESALE_FUNDING_SPREAD_BPS + penalty) / 10000).toFixed(6)),
           struckWeek: ctx.nextWeek,
@@ -115,15 +115,15 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       if (balanceUSD >= -1 || !(totalShare > 0)) return;
       const drawUSD = -balanceUSD;
       banks.forEach((b) => {
-        const shareUSD = drawUSD * ((b.bankMarketShare ?? 0) / totalShare);
-        if (shareUSD <= 1) return;
+        const shareLocal = drawUSD * ((b.bankMarketShare ?? 0) / totalShare);
+        if (shareLocal <= 1) return;
         const rows = smeDrawByBank.get(b.ticker) ?? [];
-        rows.push({ industry: seg.industry, poolId: smePoolId(regionId, seg.industry), usd: shareUSD });
+        rows.push({ industry: seg.industry, poolId: smePoolId(regionId, seg.industry), usd: shareLocal });
         smeDrawByBank.set(b.ticker, rows);
         pay(ctx, {
           payer: { kind: 'BANK_CREDIT', ticker: b.ticker },
           payee: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
-          amount: shareUSD,
+          amount: shareLocal,
           currency: currencyOf(regionId),
           reason: 'pool overdraft converted to SME facility draw',
         });
@@ -134,9 +134,9 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     // that survives, ).
     ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
       if (!c.bankBalanceSheet || c.region !== regionId) return c;
-      const drawnUSD = drawnByBroker.get(c.ticker) ?? 0;
+      const drawnLocal = drawnByBroker.get(c.ticker) ?? 0;
       const smeRows = smeDrawByBank.get(c.ticker);
-      if (!drawnUSD && !smeRows) return c;
+      if (!drawnLocal && !smeRows) return c;
       const loans = [...(c.bankBalanceSheet.businessLoans ?? [])];
       (smeRows ?? []).forEach((r) => {
         const existing = loans.find((l) => l.borrowerKind === 'SME_POOL' && l.borrowerId === r.poolId);
@@ -148,7 +148,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       });
       const sheet = {
         ...c.bankBalanceSheet,
-        primeBrokerageLoansLocal: Math.round((c.bankBalanceSheet.primeBrokerageLoansLocal ?? 0) + drawnUSD),
+        primeBrokerageLoansLocal: Math.round((c.bankBalanceSheet.primeBrokerageLoansLocal ?? 0) + drawnLocal),
         businessLoans: loans,
       };
       return { ...c, bankBalanceSheet: sheet };

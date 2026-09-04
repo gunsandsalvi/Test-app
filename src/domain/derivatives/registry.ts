@@ -77,11 +77,11 @@ export function pfeAddOnRateOf(c: DerivativeContract, isInvestmentGrade?: (refer
  * unavailable at any price, which no formula-priced hedge can express.
  */
 export function deskNotionalCapacityUSD(
-  leverageHeadroomUSD: number,
+  leverageHeadroomLocal: number,
   standingChargeUSD: number,
   classId: DerivativeClassId
 ): number {
-  const budgetUSD = Math.max(0, leverageHeadroomUSD) * DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM;
+  const budgetUSD = Math.max(0, leverageHeadroomLocal) * DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM;
   return Math.max(0, budgetUSD - Math.max(0, standingChargeUSD))
     / DERIVATIVE_CLASSES[classId].pfeAddOnRate;
 }

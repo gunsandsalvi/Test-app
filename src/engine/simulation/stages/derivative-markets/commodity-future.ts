@@ -32,7 +32,7 @@ import { CATEGORY_INPUT_REQUIREMENTS } from '../../../../domain/market-microstru
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { isActiveCompany } from '../../../../domain/company';
 import { exposureToHedgeUSD } from '../corporate-financing';
-import { leverageHeadroomUSD } from '../../../macro/banking';
+import { leverageHeadroomLocal } from '../../../macro/banking';
 import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
 import { strikeDerivatives } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
@@ -120,9 +120,9 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       if (priorPrint > carryBound) {
         banks.forEach((bank) => {
           const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-          const capacityUSD = deskNotionalCapacityUSD(
-            leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'COMMODITY_FUTURE');
-          const units = capacityUSD / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
+          const capacityLocal = deskNotionalCapacityUSD(
+            leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeUSD(`BANK:${bank.ticker}`), 'COMMODITY_FUTURE');
+          const units = capacityLocal / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
           if (units > 0.0001) {
             sellers.push({ party: { kind: 'BANK', ticker: bank.ticker }, units });
             arbUnits += units;
@@ -135,7 +135,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       const instruments: ClearingInstrument[] = [{
         id,
         outstandingLocal: floatUnits,
-        tradableFloatUSD: floatUnits,
+        tradableFloatLocal: floatUnits,
         currentStat: priorPrint,
         statKind: 'PRICE_LIKE',
         durationYears: tenorYears,
@@ -164,7 +164,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         });
         const demandByInstrumentId = new Map<string, ParticipantDemand>([[id, {
           reservationStat: reservation,
-          maxHoldingUSD: hedgeUSD / spot,
+          maxHoldingLocal: hedgeUSD / spot,
           // Full size once the price is a whole concession below what it would pay — the same
           // distance that sets the reservation, so the schedule has one scale, not two.
           fullSizeStatRange: Math.max(0.01, reservation - spot),
@@ -184,14 +184,14 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         (e) => !e.isDefaulted && (hedgeFundStrategyProfile(e)?.tradesCommodityFutures ?? false)
       );
       macroFunds.forEach((fund) => {
-        const capacityUSD = Math.max(0, fund.equityCapitalUSD) / FUTURES_TENOR_MONTHS.length;
-        if (!(capacityUSD > 0)) return;
+        const capacityLocal = Math.max(0, fund.equityCapitalLocal) / FUTURES_TENOR_MONTHS.length;
+        if (!(capacityLocal > 0)) return;
         participants.push({
           id: fund.id,
           currentHoldingsByInstrumentId: new Map(),
           demandByInstrumentId: new Map([[id, {
             reservationStat: carryBound,
-            maxHoldingUSD: capacityUSD / Math.max(0.01, spot),
+            maxHoldingLocal: capacityLocal / Math.max(0.01, spot),
             fullSizeStatRange: Math.max(0.01, carryBound - spot),
           }]]),
         });

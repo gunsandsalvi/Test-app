@@ -16,7 +16,7 @@ import {
   dealerDeskTicker, regionalDeskView,
 } from '../../../domain/dealer-desk';
 import { LeadBankCandidate } from '../../../domain/primary-market';
-import { leverageHeadroomUSD, BASEL_MIN_LEVERAGE_RATIO } from '../../macro/banking';
+import { leverageHeadroomLocal, BASEL_MIN_LEVERAGE_RATIO } from '../../macro/banking';
 import { ClearingInstrument, ClearingParticipant, ClearingResult, ParticipantDemand } from './financial-clearing-engine';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
@@ -94,7 +94,7 @@ export function buildDealerDeskParticipants(args: {
 }): ClearingParticipant[] {
   const { ctx, banks, book, instruments, spreadBps } = args;
   const unitPrice = (i: number) => Math.max(1e-9, args.unitPriceOf ? args.unitPriceOf(i) : 1);
-  const liveFloatUSD = instruments.map((i, idx) => Math.max(0, i.tradableFloatUSD + (i.primaryOfferingUSD ?? 0)) * (args.unitPriceOf ? unitPrice(idx) : 1));
+  const liveFloatUSD = instruments.map((i, idx) => Math.max(0, i.tradableFloatLocal + (i.primaryOfferingUSD ?? 0)) * (args.unitPriceOf ? unitPrice(idx) : 1));
   const totalFloatUSD = liveFloatUSD.reduce((a, b) => a + b, 0);
   if (totalFloatUSD <= 0) return [];
 
@@ -103,15 +103,15 @@ export function buildDealerDeskParticipants(args: {
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
     const prior = priorByClearingKey(ctx.v2, sheet.dealerDeskInventory, book);
-    const capacityUSD = dealerDeskCapacityUSD({
+    const capacityLocal = dealerDeskCapacityUSD({
       balanceSheetCapacityUSD: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
+      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
     let priorTotalUSD = 0;
     prior.forEach((p) => { priorTotalUSD += Math.abs(p.inventoryLocal); });
-    if (capacityUSD <= 0 && priorTotalUSD <= 0) return;
+    if (capacityLocal <= 0 && priorTotalUSD <= 0) return;
 
     // A desk pays for inventory with the bank's own reserves, above the buffer it must keep —
     // the same real constraint the bank's investment book faces in 07c, and the reason a desk
@@ -140,12 +140,12 @@ export function buildDealerDeskParticipants(args: {
       if (priorUnits > 0) currentHoldingsByInstrumentId.set(inst.id, priorUnits);
       if (liveFloatUSD[i] <= 0) return;
       const floatShare = liveFloatUSD[i] / totalFloatUSD;
-      const roomUSD = capacityUSD * floatShare;
-      const maxHoldingUSD = priorUSD + roomUSD;
-      if (maxHoldingUSD <= 0) return;
+      const roomUSD = capacityLocal * floatShare;
+      const maxHoldingLocal = priorUSD + roomUSD;
+      if (maxHoldingLocal <= 0) return;
       // Where the desk is neutral: the level at which its schedule asks for exactly what it
       // already holds. Everything else about the quote follows from that anchor.
-      const neutralFraction = Math.max(0, Math.min(1, priorUSD / maxHoldingUSD));
+      const neutralFraction = Math.max(0, Math.min(1, priorUSD / maxHoldingLocal));
       const isYieldLike = inst.statKind === 'YIELD_LIKE';
       const range = isYieldLike
         ? Math.max(1, spreadBps)
@@ -156,7 +156,7 @@ export function buildDealerDeskParticipants(args: {
       demandByIndex[i] = {
         reservationStat,
         fullSizeStatRange: range,
-        maxHoldingUSD: maxHoldingUSD / px,
+        maxHoldingLocal: maxHoldingLocal / px,
         maxNetPurchaseUSD: (fundableUSD * floatShare) / px,
       };
     });
@@ -280,12 +280,12 @@ export function applyDealerDeskFills(args: {
       const kind = DESK_BOOK_KIND[book] ?? defect(`desk book '${book}' names no register kind — its fills cannot be wired`);
       const inUnits = args.unitPriceOf !== undefined;
       const toEntry = (units: number, instrumentId: string) =>
-        inUnits ? { valueUSD: units * unitPrice(instrumentId), shares: units } : { valueUSD: units };
-      const before = new Map<string, { valueUSD: number; shares?: number }>();
+        inUnits ? { valueLocal: units * unitPrice(instrumentId), shares: units } : { valueLocal: units };
+      const before = new Map<string, { valueLocal: number; shares?: number }>();
       prior.forEach((p, instrumentId) => {
         if (clearedIds.has(instrumentId)) before.set(instrumentId, toEntry(p.units ?? p.inventoryLocal, instrumentId));
       });
-      const after = new Map<string, { valueUSD: number; shares?: number }>();
+      const after = new Map<string, { valueLocal: number; shares?: number }>();
       positions.forEach((p) => {
         if (clearedIds.has(p.instrumentId)) after.set(p.instrumentId, toEntry(p.units ?? p.inventoryLocal, p.instrumentId));
       });
@@ -311,7 +311,7 @@ export function applyDealerDeskFills(args: {
       // The wiped-name decomposition: each cleared prior position, whether the fills map came
       // back with the name, and the name's float in this clearing — the three facts that decide
       // whether its removal had a cash leg.
-      const floatById = new Map(args.instruments.map((i2) => [i2.id, i2.tradableFloatUSD]));
+      const floatById = new Map(args.instruments.map((i2) => [i2.id, i2.tradableFloatLocal]));
       prior.forEach((p, instrumentId) => {
         if (!clearedIds.has(instrumentId) || Math.abs(p.inventoryLocal) < 25e6) return;
         console.log(`    [desk-prior] ${bank.ticker} ${instrumentId} held ${(p.inventoryLocal / 1e6).toFixed(1)}M`
@@ -333,18 +333,18 @@ export function applyDealerDeskFills(args: {
  *  placed into without anyone taking price risk, and therefore what an underwriter's fee is
  *  quoted against (G3c). */
 export function totalDeskCapacityUSD(ctx: WeeklyStepContext, banks: Company[], book: string): number {
-  let capacityUSD = 0;
+  let capacityLocal = 0;
   banks.forEach((bank) => {
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
-    capacityUSD += dealerDeskCapacityUSD({
+    capacityLocal += dealerDeskCapacityUSD({
       balanceSheetCapacityUSD: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
+      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
   });
-  return capacityUSD;
+  return capacityLocal;
 }
 
 /**
@@ -362,7 +362,7 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
     if (!sheet) return;
     freeUSD.set(bank.ticker, dealerDeskCapacityUSD({
       balanceSheetCapacityUSD: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
+      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
     }));
@@ -381,8 +381,8 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
       freeCapacityUSD: freeUSD.get(bank.ticker) ?? 0,
     })),
     /** The winner's desk is that much less able to win the next one. */
-    award: (ticker: string, sizeUSD: number) => {
-      freeUSD.set(ticker, Math.max(0, (freeUSD.get(ticker) ?? 0) - Math.max(0, sizeUSD)));
+    award: (ticker: string, sizeLocal: number) => {
+      freeUSD.set(ticker, Math.max(0, (freeUSD.get(ticker) ?? 0) - Math.max(0, sizeLocal)));
     },
   };
 }

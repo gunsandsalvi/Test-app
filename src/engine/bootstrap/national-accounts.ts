@@ -123,7 +123,7 @@ export const UNEMPLOYMENT_REPLACEMENT_RATE = 0.35;
 /**
  * Household disposable income: the one definition used by both the cold-start bootstrap and the
  * weekly evolution, so the two can never drift apart. Every downstream consumer
- * (`Region.estimatedHouseholdIncomeUSD`) treats this figure as spendable, which is why it is
+ * (`Region.estimatedHouseholdIncomeLocal`) treats this figure as spendable, which is why it is
  * disposable (post-tax) rather than gross.
  *
  * Unemployment benefits are themselves government transfers, so they are counted inside the

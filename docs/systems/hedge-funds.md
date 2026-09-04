@@ -79,10 +79,10 @@ checked by `scripts/check-atlas.sh`.
 | **A2 investor capital is equity: the investors bear the result** | `src/engine/simulation/stages/household-balance-sheet.ts:beneficiaryLiabilityUSD` | ⚠️ |
 | A3 a manager on a management fee and a performance fee | `src/engine/simulation/stages/profiles/asset-manager.ts:managementFeeRate` | ⚠️ |
 | A4 a wide mandate: long, short, levered, many markets | `src/domain/institution-profiles.ts:HEDGE_FUND_STRATEGY_PROFILES` | ✅ |
-| A5 everything marked to market, so its equity moves | `src/engine/simulation/stages/institutional-balance-sheet.ts:institutionTotalAssetsUSD` | ✅ |
+| A5 everything marked to market, so its equity moves | `src/engine/simulation/stages/institutional-balance-sheet.ts:institutionTotalAssetsLocal` | ✅ |
 | B1 it borrows from a named lender | `src/domain/prime-brokerage.ts:PrimeBrokerageLine` | ✅ |
 | **B1.a leverage is a fact about a LOAN, never a property of the fund** | `src/domain/institution-profiles.ts:leverage` | ✅ |
-| B2 it also levers through derivatives | `src/engine/simulation/stages/derivative-markets/commodity-future.ts:capacityUSD` | ⚠️ |
+| B2 it also levers through derivatives | `src/engine/simulation/stages/derivative-markets/commodity-future.ts:capacityLocal` | ⚠️ |
 | **B3 and through repo, against the securities it holds** | — | ❌ |
 | B4 the amount available is the lender's decision, and it changes | `src/engine/simulation/stages/prime-brokerage.ts:lineUSD` | ✅ |
 | B5 VERIFY gross, net and equity are three different reads | — | ❌ |

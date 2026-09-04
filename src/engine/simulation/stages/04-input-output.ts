@@ -84,7 +84,7 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
     bidQuantitiesByRegionAndInputCat[regionId] = {};
     Object.entries(demandersByInputCat).forEach(([inputCat, demanders]) => {
       bidQuantitiesByRegionAndInputCat[regionId][inputCat] = demanders.map(d => {
-        const demanderDemandLevel = reg.categoryDemand[d.demanderSubUnit]?.demandLevelAnnualUSD ?? 0;
+        const demanderDemandLevel = reg.categoryDemand[d.demanderSubUnit]?.demandLevelAnnualLocal ?? 0;
         return { demanderSubUnit: d.demanderSubUnit, bidQuantity: demanderDemandLevel * d.intensity / 52 };
       });
     });

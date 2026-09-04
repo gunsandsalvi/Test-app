@@ -43,8 +43,8 @@ export function householdPrivateBusinessEquityUSD(
     if (c.region !== regionId || !isActiveCompany(c) || isPubliclyListed(c)) return sum;
     const founderPct = c.ownership?.founderPct ?? 1;
     if (!(founderPct > 0)) return sum;
-    const equityUSD = Math.max(0, evMultiple * c.ebitda - totalDebtOf(c));
-    return sum + equityUSD * founderPct;
+    const equityLocal = Math.max(0, evMultiple * c.ebitda - totalDebtOf(c));
+    return sum + equityLocal * founderPct;
   }, 0);
 }
 

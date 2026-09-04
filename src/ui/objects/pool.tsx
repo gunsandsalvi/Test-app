@@ -60,7 +60,7 @@ export const pool = defineObject<Pool>({
     columns: [
       { key: 'name', label: 'pool', width: 1.7, render: (r, _w, nav) => <Link to={{ type: 'pool', id: r.id }} nav={nav}>{words(r.obj.pool.industry)}</Link>, value: (r) => r.obj.pool.industry },
       { key: 'region', label: 'reg', width: 0.55, render: (r) => r.obj.region, value: (r) => r.obj.region },
-      { key: 'revenue', label: 'revenue', render: (r) => money(r.obj.pool.annualRevenueUSD), value: (r) => r.obj.pool.annualRevenueUSD },
+      { key: 'revenue', label: 'revenue', render: (r) => money(r.obj.pool.annualRevenueLocal), value: (r) => r.obj.pool.annualRevenueLocal },
       { key: 'margin', label: 'margin', render: (r) => pctLevel(r.obj.pool.marginPct, 0), value: (r) => r.obj.pool.marginPct },
       { key: 'people', label: 'people', render: (r) => count(Math.round(r.obj.pool.employment)), value: (r) => r.obj.pool.employment },
       { key: 'pd', label: 'pd', render: (r) => pctLevel(r.obj.pool.defaultRateAnnualPct, 1), value: (r) => r.obj.pool.defaultRateAnnualPct },
@@ -76,12 +76,12 @@ export const pool = defineObject<Pool>({
       <>
         <ObjectHeader name={`${words(s.industry)} small businesses`} sub={<><RegionLink id={p.region} nav={nav} /> · the firms too small to name, as one book · {count(Math.round(s.employment))} people</>} />
         <StatGrid>
-          <Stat label="revenue" value={money(s.annualRevenueUSD)} sub={<ChangeSub series={rev} />} />
+          <Stat label="revenue" value={money(s.annualRevenueLocal)} sub={<ChangeSub series={rev} />} />
           <Stat label="margin" value={pctLevel(s.marginPct)} sub="measured on receipts" neg={s.marginPct < 0} />
           <Stat label="default rate" value={pctLevel(s.defaultRateAnnualPct, 1)} sub={`${pctLevel(s.distressedFirmShare ?? 0, 0)} distressed`} neg={(s.defaultRateAnnualPct ?? 0) > 0.05} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
-          <KV k="debt" hint={`${((s.blendedMarginBps ?? 0)).toFixed(0)}bp over policy`} v={money(s.debtUSD)} />
+          <KV k="debt" hint={`${((s.blendedMarginBps ?? 0)).toFixed(0)}bp over policy`} v={money(s.debtLocal)} />
           <KV k="cash" v={money(poolCashOf(ensureV2(world.state), p.region as RegionId, s.industry))} />
           <KV k="investment" hint="annualised" v={money(s.capexUSD)} />
           <KV k="tax accrued" v={money(s.accruedTaxUSD)} />

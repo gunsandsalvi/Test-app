@@ -27,8 +27,8 @@
 export function creditMetrics(i: {
   isBank: boolean;
   totalDebtUSD: number;
-  revenueUSD: number;
-  ebitdaUSD: number;
+  revenueLocal: number;
+  ebitdaLocal: number;
   ebitUSD: number;
   annualInterestUSD: number;
   bankCapitalRatio: number;
@@ -52,7 +52,7 @@ export function creditMetrics(i: {
   // rating a thin but solvent bank below a corporate with no earnings at all.
   const rawLeverage = i.isBank
     ? i.totalDebtUSD / Math.max(1, i.bankEquityLocal)
-    : i.totalDebtUSD / Math.max(1, i.ebitdaUSD);
+    : i.totalDebtUSD / Math.max(1, i.ebitdaLocal);
   const rawCoverage = i.isBank
     ? Math.max(0, i.bankCapitalRatio) / Math.max(1e-4, i.bankLossRateAnnual)
     : i.ebitUSD / Math.max(0.5, i.annualInterestUSD);

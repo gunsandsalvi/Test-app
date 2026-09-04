@@ -99,7 +99,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       (c) => c.region === region && isActiveCompany(c) && !c.isBankEntity && !c.isInstitutionalEntity
     );
     const corporateBaseUSD = operating.reduce((a, c) => a + corporateInsurableBaseUSD(c), 0);
-    const householdBaseUSD = Math.max(0, hs.netWorthUSD) + Math.max(0, reg.estimatedHouseholdIncomeUSD);
+    const householdBaseUSD = Math.max(0, hs.netWorthUSD) + Math.max(0, reg.estimatedHouseholdIncomeLocal);
     const totalBaseUSD = corporateBaseUSD + householdBaseUSD;
     if (!(totalBaseUSD > 0) || !(weeklyPremiumsUSD > 0)) return;
 
@@ -112,9 +112,9 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     const insurerEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === region && e.entityType === 'INSURER' && !e.isDefaulted
     );
-    const insurerCapitalUSD = insurerEntities.reduce((a, e) => a + Math.max(0, e.equityCapitalUSD), 0) || 1;
+    const insurerCapitalUSD = insurerEntities.reduce((a, e) => a + Math.max(0, e.equityCapitalLocal), 0) || 1;
     const insurerShares = insurerEntities.map((e) => ({
-      id: e.id, share: Math.max(0, e.equityCapitalUSD) / insurerCapitalUSD,
+      id: e.id, share: Math.max(0, e.equityCapitalLocal) / insurerCapitalUSD,
     }));
     if (insurerShares.length === 0) return;
 

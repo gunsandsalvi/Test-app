@@ -75,7 +75,7 @@ export const links: FunctionModule = {
           </Card>
           {clients.length ? <Card style={{ padding: '2px 0' }}>{clients.slice(0, 40).map((x) => <KV key={x.id} k={<Link to={{ type: 'company', id: x.id }} nav={nav}>{x.ticker}</Link>} hint={x.sector} v={money(x.annualRevenue)} />)}</Card> : null}
         </>) : null}
-        <Refs title="offerings" world={world} nav={nav} refs={offerings.map((o) => ({ ref: { type: 'offering' as const, id: o.id }, hint: o.issuerId === c.id ? 'raising' : 'leading', v: money(o.sizeUSD) }))} empty="nothing in the pipeline" />
+        <Refs title="offerings" world={world} nav={nav} refs={offerings.map((o) => ({ ref: { type: 'offering' as const, id: o.id }, hint: o.issuerId === c.id ? 'raising' : 'leading', v: money(o.sizeLocal) }))} empty="nothing in the pipeline" />
         <Card style={{ padding: '2px 0' }}><KV k="derivative contracts" v={count(contracts.length)} onTap={() => nav.go('contracts')} /></Card>
       </>);
     }

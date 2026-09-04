@@ -87,7 +87,7 @@ function ensureMirror(rowCap: number, slotCap: number): LotViews {
     mirrorSlotCap = Math.max(slotCap, mirrorSlotCap * 2, 1 << 12);
     mirror = {
       units: new Float64Array(new SharedArrayBuffer(mirrorRowCap * 8)),
-      priceUSD: new Float64Array(new SharedArrayBuffer(mirrorRowCap * 8)),
+      priceLocal: new Float64Array(new SharedArrayBuffer(mirrorRowCap * 8)),
       acquiredWeek: new Int32Array(new SharedArrayBuffer(mirrorRowCap * 4)),
       next: new Int32Array(new SharedArrayBuffer(mirrorRowCap * 4)),
       head: new Int32Array(new SharedArrayBuffer(mirrorSlotCap * 4)),
@@ -123,7 +123,7 @@ export function runFrontSharded(S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2:
   const L = v2.lots;
   const M = ensureMirror(L.cap, L.head.length);
   M.units.set(L.units);
-  M.priceUSD.set(L.priceUSD);
+  M.priceLocal.set(L.priceLocal);
   M.acquiredWeek.set(L.acquiredWeek);
   M.next.set(L.next);
   M.head.set(L.head);
@@ -160,7 +160,7 @@ export function runFrontSharded(S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2:
 
   // Copy the mutated lot columns home, then merge the dead rows in shard order.
   L.units.set(M.units.subarray(0, L.cap));
-  L.priceUSD.set(M.priceUSD.subarray(0, L.cap));
+  L.priceLocal.set(M.priceLocal.subarray(0, L.cap));
   L.acquiredWeek.set(M.acquiredWeek.subarray(0, L.cap));
   L.next.set(M.next.subarray(0, L.cap));
   L.head.set(M.head.subarray(0, L.head.length));

@@ -29,7 +29,7 @@ export interface PrimeBrokerageLine {
   brokerTicker: string;
   /** The fund borrowing on it. */
   fundId: string;
-  drawnUSD: number;
+  drawnLocal: number;
   /** The share of posted collateral the broker will not lend against, this week. */
   haircutRate: number;
   /** Annualised financing rate (rule 8), struck at the broker's own cost of money. */
@@ -51,14 +51,14 @@ export function maxDrawnUSD(fundEquityUSD: number, haircutRate: number): number 
 }
 
 export function drawnByFund(book: PrimeBrokerageLine[], fundId: string): number {
-  return book.reduce((a, l) => a + (l.fundId === fundId ? l.drawnUSD : 0), 0);
+  return book.reduce((a, l) => a + (l.fundId === fundId ? l.drawnLocal : 0), 0);
 }
 
 export function lentByBroker(book: PrimeBrokerageLine[], brokerTicker: string): number {
-  return book.reduce((a, l) => a + (l.brokerTicker === brokerTicker ? l.drawnUSD : 0), 0);
+  return book.reduce((a, l) => a + (l.brokerTicker === brokerTicker ? l.drawnLocal : 0), 0);
 }
 
 /** One week's financing on a line, at the rate it was struck at. */
 export function weeklyFinancingUSD(line: PrimeBrokerageLine): number {
-  return (line.drawnUSD * line.rateAnnual) / 52;
+  return (line.drawnLocal * line.rateAnnual) / 52;
 }

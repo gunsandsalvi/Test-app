@@ -148,7 +148,7 @@ export function computeSourcingIntent(args: {
         if (!originIsPossible(subUnitId, origin, buyer)) return;
         const originState = regions[origin].categoryDemand[subUnitId];
         if (!originState) return;
-        const exWorks = Number(originState.unitPriceUSD);
+        const exWorks = Number(originState.unitPriceLocal);
         if (!(exWorks > 0)) return;
         if (supplyRemaining[origin] === undefined) {
           supplyRemaining[origin] = Math.max(0, Number(originState.totalUnitsSuppliedThisWeek) || 0);
@@ -201,7 +201,7 @@ export function computeSourcingIntent(args: {
         break;
       }
       if (!isFinite(alternativeLanded)) {
-        const ownPrice = Number(regions[pair.buyer].categoryDemand[subUnitId]?.unitPriceUSD);
+        const ownPrice = Number(regions[pair.buyer].categoryDemand[subUnitId]?.unitPriceLocal);
         alternativeLanded = ownPrice > 0 ? ownPrice : pair.landed;
       }
 

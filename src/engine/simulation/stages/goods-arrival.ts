@@ -116,7 +116,7 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
         // same lead a domestic one is; the ocean crossing was the other half of the wait.
         if (!update.capexUnderConstruction) update.capexUnderConstruction = [];
         update.capexUnderConstruction.push({
-          valueUSD: shipment.units * shipment.landedCostPerUnit,
+          valueLocal: shipment.units * shipment.landedCostPerUnit,
           entersServiceWeek: ctx.nextWeek + commissioningLeadWeeksOf(shipment.subUnitId),
         });
       }

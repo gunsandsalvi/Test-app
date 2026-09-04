@@ -41,12 +41,12 @@ export function liveTranchesOf(v2: V2World, issuerId: string, kind: CreditKind):
  * names its issuer resolves through `issuerIdOf` like any other).
  */
 export function splitAcrossTranches(
-  v2: V2World, issuerId: string, kind: CreditKind, totalUSD: number,
+  v2: V2World, issuerId: string, kind: CreditKind, totalLocal: number,
   primary?: { trancheId: string; sliceUSD: number }
 ): { instrumentId: string; usd: number }[] {
-  if (!(totalUSD > 0)) return [];
+  if (!(totalLocal > 0)) return [];
   const out: { instrumentId: string; usd: number }[] = [];
-  let leftUSD = totalUSD;
+  let leftUSD = totalLocal;
   if (primary && primary.sliceUSD > 0) {
     const usd = Math.min(leftUSD, primary.sliceUSD);
     out.push({ instrumentId: primary.trancheId, usd });
@@ -56,7 +56,7 @@ export function splitAcrossTranches(
   const live = liveTranchesOf(v2, issuerId, kind).filter((t) => t.id !== primary?.trancheId);
   const faceLocal = live.reduce((a, t) => a + t.faceLocal, 0);
   if (!(faceLocal > 0)) {
-    if (process.env.SPLIT_TRACE === '1') console.log(`  [split-fallback] ${issuerId} ${kind} total ${(totalUSD / 1e6).toFixed(1)}M ladderRows ${ladderRowsOf(v2, issuerId).length} rowById ${v2.rowById.get(issuerId)} primary ${primary?.trancheId ?? '-'}`);
+    if (process.env.SPLIT_TRACE === '1') console.log(`  [split-fallback] ${issuerId} ${kind} total ${(totalLocal / 1e6).toFixed(1)}M ladderRows ${ladderRowsOf(v2, issuerId).length} rowById ${v2.rowById.get(issuerId)} primary ${primary?.trancheId ?? '-'}`);
     // Nothing live of this kind: the primary carries it when there is one, else the issuer's id.
     if (primary) { const p = out.find((x) => x.instrumentId === primary.trancheId); if (p) p.usd += leftUSD; else out.push({ instrumentId: primary.trancheId, usd: leftUSD }); }
     else out.push({ instrumentId: issuerId, usd: leftUSD });

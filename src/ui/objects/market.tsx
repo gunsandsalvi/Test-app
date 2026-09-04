@@ -54,7 +54,7 @@ export const market = defineObject<Market>({
     }
     return undefined;
   },
-  headline: (_w, _id, m) => { const f = fillOf(m.d); return { value: num(m.d.unitPriceUSD), sub: f !== undefined ? `fill ${pctLevel(f, 0)}` : 'no bids', neg: f !== undefined && f < 0.8 }; },
+  headline: (_w, _id, m) => { const f = fillOf(m.d); return { value: num(m.d.unitPriceLocal), sub: f !== undefined ? `fill ${pctLevel(f, 0)}` : 'no bids', neg: f !== undefined && f < 0.8 }; },
   series: (world, id) => [
     taped(world, `market:${id}:price`, 'price', 'USD per unit', (v) => num(v)),
     taped(world, `market:${id}:supplied`, 'supplied', 'units per week', (v) => count(Math.round(v))),
@@ -75,9 +75,9 @@ export const market = defineObject<Market>({
     columns: [
       { key: 'name', label: 'market', width: 1.7, render: (r, _w, nav) => <Link to={{ type: 'market', id: r.id }} nav={nav}>{words(r.obj.subUnitId)}</Link>, value: (r) => r.obj.subUnitId },
       { key: 'region', label: 'reg', width: 0.55, render: (r) => r.obj.region, value: (r) => r.obj.region },
-      { key: 'price', label: 'price', width: 1.1, render: (r) => num(r.obj.d.unitPriceUSD), value: (r) => r.obj.d.unitPriceUSD ?? 0 },
+      { key: 'price', label: 'price', width: 1.1, render: (r) => num(r.obj.d.unitPriceLocal), value: (r) => r.obj.d.unitPriceLocal ?? 0 },
       { key: 'fill', label: 'fill', width: 0.7, render: (r) => { const f = fillOf(r.obj.d); return f !== undefined ? pctLevel(f, 0) : '—'; }, value: (r) => fillOf(r.obj.d) ?? -1 },
-      { key: 'demand', label: 'demand', width: 1, render: (r) => money(r.obj.d.demandLevelAnnualUSD), value: (r) => r.obj.d.demandLevelAnnualUSD },
+      { key: 'demand', label: 'demand', width: 1, render: (r) => money(r.obj.d.demandLevelAnnualLocal), value: (r) => r.obj.d.demandLevelAnnualLocal },
       { key: 'move', label: '1w', width: 0.7, render: (r) => { const ph = r.obj.d.priceHistory ?? []; const p0 = ph[ph.length - 2]; return p0 > 0 ? pctLevel(ph[ph.length - 1] / p0 - 1, 0) : '—'; }, value: (r) => { const ph = r.obj.d.priceHistory ?? []; const p0 = ph[ph.length - 2]; return p0 > 0 ? ph[ph.length - 1] / p0 - 1 : 0; } },
     ],
   },
@@ -96,9 +96,9 @@ export const market = defineObject<Market>({
       <>
         <ObjectHeader name={`${subUnitLabel(m.subUnitId)}, ${m.region}`} sub={<>goods market · <RegionLink id={m.region} nav={nav} /> · {words(ind ?? '')}{mix && mix.HOUSEHOLD > 0 ? ` · a ${tier.toLowerCase()} for households` : ''} · {spec?.deliveryMode === 'PHYSICAL' ? 'shipped' : 'delivered on site'}</>} />
         <StatGrid>
-          <Stat label="price" value={num(d.unitPriceUSD)} sub={price.filter(Number.isFinite).length > 1 ? <ChangeSub series={price} /> : wk !== undefined ? `${pctLevel(wk, 1)} this week` : 'USD per unit'} />
+          <Stat label="price" value={num(d.unitPriceLocal)} sub={price.filter(Number.isFinite).length > 1 ? <ChangeSub series={price} /> : wk !== undefined ? `${pctLevel(wk, 1)} this week` : 'USD per unit'} />
           <Stat label="fill" value={fill !== undefined ? pctLevel(fill, 0) : '—'} sub={fill !== undefined ? `${count(Math.round(d.totalUnitsSuppliedThisWeek ?? 0))} of ${count(Math.round(d.totalUnitsDemandedThisWeek ?? 0))} units` : 'no bids this week'} neg={fill !== undefined && fill < 0.8} />
-          <Stat label="demand" value={money(d.demandLevelAnnualUSD)} sub="USD, annualised" />
+          <Stat label="demand" value={money(d.demandLevelAnnualLocal)} sub="USD, annualised" />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="who buys" hint="hh · firms · gov" v={mix ? `${pctLevel(mix.HOUSEHOLD, 0)} · ${pctLevel(mix.CORPORATE, 0)} · ${pctLevel(mix.GOVERNMENT, 0)}` : '—'} />

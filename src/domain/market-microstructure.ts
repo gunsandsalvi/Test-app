@@ -28,7 +28,7 @@ export interface SupplyContract {
   supplierCompanyId: string;
   customerCompanyId: string;
   subUnitId: string;
-  priceUSD: number;
+  priceLocal: number;
   quantityUnitsPerWeek: number;
   weeksRemaining: number;
   /**
@@ -57,7 +57,7 @@ export interface SupplyContract {
 }
 
 export interface CategoryDemandState {
-  demandLevelAnnualUSD: number;
+  demandLevelAnnualLocal: number;
   demandGrowthAnnual: number;
   demandHistory: number[];
   crowdingIntensity: number;
@@ -81,12 +81,12 @@ export interface CategoryDemandState {
    * and it is a MEASUREMENT of transactions, never an input to one. The two books each price
    * against their own anchor below.
    */
-  unitPriceUSD?: number;
+  unitPriceLocal?: number;
   /**
    * IND16 — what this good costs a HOUSEHOLD: the landed price above plus the channel's margin
    * for holding the stock it is sold out of (domain/distribution.ts). Three real price levels
    * now, each a real cost step with a real payee — ex-works is what the producer received,
-   * `unitPriceUSD` is what a business pays delivered, and this is what is on the shelf. Recipes
+   * `unitPriceLocal` is what a business pays delivered, and this is what is on the shelf. Recipes
    * and input costs keep reading the landed one, because that is genuinely what a firm pays.
    */
   shelfUnitPriceUSD?: number;
@@ -98,7 +98,7 @@ export interface CategoryDemandState {
   priceHistory?: number[];
   /** The HOUSEHOLD leg of this category's demand this week, measured where it is owned: the
    *  cohorts' real consumption budgets (C), allocated by tier and buyer mix in stage 03. Stage
-   *  05 sizes the household's bid ladder from THIS, never from `demandLevelAnnualUSD × hhShare` — the
+   *  05 sizes the household's bid ladder from THIS, never from `demandLevelAnnualLocal × hhShare` — the
    *  demand level carries the corporate leg (nominal firm revenues) and the Leontief
    *  intermediate half, so a budget carved from it scales with other buyers' prices instead of
    *  with household income. That was a second representation of one budget (rule 4), and the
@@ -112,7 +112,7 @@ export interface CategoryDemandState {
   // intensity constant that only covered a handful of categories.
   corporateDemandUSD?: number;
   /** IND16: what the producer received at the factory gate this week — the first of the three
-   *  price levels (ex-works → landed `unitPriceUSD` → `shelfUnitPriceUSD`). Written by stage 05;
+   *  price levels (ex-works → landed `unitPriceLocal` → `shelfUnitPriceUSD`). Written by stage 05;
    *  currently recorded only (no reader) — surfaced from behind an `as any` by §7.241's Tier 0. */
   exWorksUnitPriceUSD?: number;
   _fulfillmentRatio?: number; // transient, read by AA3 same week, not persisted
@@ -125,34 +125,34 @@ export interface CategoryDemandState {
  * write this object shape out independently (macro/initialization and simulation/initialization
  * — a third writer, stage 03, is an UPDATER that spreads the existing entry and owns only its
  * demand-side fields). Duplicated shapes drift (§7.5): a field added to one copy and not the
- * other is exactly how the unitPriceUSD-drop bug family starts.
+ * other is exactly how the unitPriceLocal-drop bug family starts.
  */
 export function createSeedCategoryDemandState(
-  demandLevelAnnualUSD: number,
+  demandLevelAnnualLocal: number,
   demandGrowthAnnual: number,
-  unitPriceUSD: number
-): CategoryDemandState & { upstreamScarcityIndex: number; lastWeekInventoryLevelUSD: number; unitPriceUSD: number } {
+  unitPriceLocal: number
+): CategoryDemandState & { upstreamScarcityIndex: number; lastWeekInventoryLevelUSD: number; unitPriceLocal: number } {
   return {
-    demandLevelAnnualUSD,
+    demandLevelAnnualLocal,
     demandGrowthAnnual,
-    demandHistory: [demandLevelAnnualUSD],
+    demandHistory: [demandLevelAnnualLocal],
     crowdingIntensity: 0.1,
-    inventoryLevelUSD: demandLevelAnnualUSD * 0.10,
+    inventoryLevelUSD: demandLevelAnnualLocal * 0.10,
     inputCostPressure: 0,
     clearedInputPriceIndex: 1.0,
     upstreamScarcityIndex: 1.0,
-    lastWeekInventoryLevelUSD: demandLevelAnnualUSD * 0.10,
-    unitPriceUSD,
+    lastWeekInventoryLevelUSD: demandLevelAnnualLocal * 0.10,
+    unitPriceLocal,
     // XB3a: both books open on the bootstrap price, so week 1 is the first week either of them
     // moves. Seeding the local book anywhere else would be a §7.4 cold start — a step change on
     // the opening week that reads as an economic event.
-    localUnitPriceUSD: unitPriceUSD,
-    smoothedUnitPriceUSD: unitPriceUSD,
+    localUnitPriceUSD: unitPriceLocal,
+    smoothedUnitPriceUSD: unitPriceLocal,
     // XB3a-3: the week's real quantities, which the sourcing intent reads to decide where to buy
     // and how much freight to book. Seeded at the bootstrap demand a week represents, so the
     // opening week forms an intent against the same observables every later week does (§7.4).
-    totalUnitsDemandedThisWeek: unitPriceUSD > 0 ? (demandLevelAnnualUSD / 52) / unitPriceUSD : 0,
-    totalUnitsSuppliedThisWeek: unitPriceUSD > 0 ? (demandLevelAnnualUSD / 52) / unitPriceUSD : 0,
+    totalUnitsDemandedThisWeek: unitPriceLocal > 0 ? (demandLevelAnnualLocal / 52) / unitPriceLocal : 0,
+    totalUnitsSuppliedThisWeek: unitPriceLocal > 0 ? (demandLevelAnnualLocal / 52) / unitPriceLocal : 0,
   };
 }
 

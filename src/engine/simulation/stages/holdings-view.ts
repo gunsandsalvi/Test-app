@@ -79,7 +79,7 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
         instrumentId: v2a.internedStrings[Ha.instrRef[r]],
         instrumentType: type,
         issuerRegion: v2a.internedStrings[Ha.regionRef[r]] as ItemizedHolding['issuerRegion'],
-        quantityOrNotionalUSD: Ha.qtyLocal[r],
+        quantityOrNotionalLocal: Ha.qtyLocal[r],
         units: Number.isNaN(Ha.units[r]) ? Ha.qtyLocal[r] : Ha.units[r],
       };
       if (!Number.isNaN(sh)) h.quantityShares = sh;
@@ -115,7 +115,7 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
         instrumentId: bondId,
         instrumentType: 'GOV_BOND',
         issuerRegion: regionId,
-        quantityOrNotionalUSD: v, units: v,
+        quantityOrNotionalLocal: v, units: v,
       });
     });
   });
@@ -320,7 +320,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   // Second pass: a facility's issuer region comes from the borrower, which may not be the
   // lender's — resolved only once every company's region is known.
   //
-  // POOL loans are excluded. An SME pool's debt is a scalar on the pool (`seg.debtUSD`),
+  // POOL loans are excluded. An SME pool's debt is a scalar on the pool (`seg.debtLocal`),
   // not a tranche on any company, so it has no place in a register whose denominator is the
   // named companies' debt ladders — counting it put ~22% of corporate "ownership" in the banks'
   // column against paper that does not exist, which is most of what made these shares sum above

@@ -103,7 +103,7 @@ export function bankTotalAssetsUSD(sheet: BankingSector, cashLocal: number, faci
 }
 
 /** How much balance sheet the bank's equity still supports under the leverage floor. */
-export function leverageHeadroomUSD(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
+export function leverageHeadroomLocal(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
   return Math.max(0, sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsUSD(sheet, cashLocal, facilityBookLocal));
 }
 
@@ -153,12 +153,12 @@ export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector, cashLocal
  * `funding + equity - loans - cash - repoLent`. The balance sheet already says
  * `funding + equity = loans + cash + repoLent + sovereign`, so **that expression IS the
  * sovereign book, rearranged** — an accounting identity wearing a constraint's name. It equalled
- * `sovBook` to the cent for every bank every week, so `maxHoldingUSD` came out strictly BELOW
+ * `sovBook` to the cent for every bank every week, so `maxHoldingLocal` came out strictly BELOW
  * current holdings and no bank could ever buy another bond. Measured against pre-OWN: the USA
  * sovereign book went 147B->285B before and 78B->53B after, cash/deposits 2.2% -> 47-68%, and
  * because no bank was ever short its operating buffer the whole repo market printed ZERO volume.
  *
- * A ceiling must be able to exceed the position it bounds. Capital can: `leverageHeadroomUSD` is
+ * A ceiling must be able to exceed the position it bounds. Capital can: `leverageHeadroomLocal` is
  * equity against unweighted assets, the one constraint that sees a zero-risk-weight sovereign
  * book at all, and it is already what bounds the weekly FLOW in 07c/07f. What actually binds
  * week to week is that flow — cash above the operating buffer plus unencumbered borrowing
@@ -170,7 +170,7 @@ export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector, cashLocal
 export function sovereignBookCapacityUSD(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
-  return Math.max(0, sovUSD) + leverageHeadroomUSD(sheet, cashLocal, facilityBookLocal);
+  return Math.max(0, sovUSD) + leverageHeadroomLocal(sheet, cashLocal, facilityBookLocal);
 }
 
 /**
@@ -193,17 +193,17 @@ export function computeSovereignBookAnnualYield(
   // §3.13-SOV row 5: the yield at a tenor is `pricing/bond.ts:zeroRateAt`, the same read every
   // other consumer of the curve takes. This carried its own copy of that interpolation — a second
   // answer to one question (rule 4), and the second place the curve was effectively re-expressed.
-  let bookUSD = 0; let incomeUSD = 0;
+  let bookLocal = 0; let incomeUSD = 0;
   Object.entries(byBond || {}).forEach(([bondId, usd]) => {
     const v = Number(usd) || 0;
     if (v <= 0) return;
     const years = tenorYearsOf(bondId);
     // A line whose bond cannot be found is not valued at a guessed tenor — it is not valued.
     if (years === undefined) return;
-    bookUSD += v;
+    bookLocal += v;
     incomeUSD += v * zeroRateAt(zeroRates, years);
   });
-  return bookUSD > 0 ? incomeUSD / bookUSD : 0;
+  return bookLocal > 0 ? incomeUSD / bookLocal : 0;
 }
 
 export function evolveBankingSector(
@@ -216,7 +216,7 @@ export function evolveBankingSector(
   cashLocal: number,
   /** §5-WIRES A3.6c-ii: the bank's deposit lines, read off the ledger by the caller. */
   deposits: DepositLines,
-  estimatedHouseholdIncomeUSD: number,
+  estimatedHouseholdIncomeLocal: number,
   savingsRate: number,
   policyRate: number,
   unemploymentRate: number,
@@ -280,7 +280,7 @@ export function evolveBankingSector(
   traceLabel?: string
 ): { sheet: BankingSector; householdLineUSD: number } {
   // ---- The ledger. Every mutation below is a named flow posting to both of its sides. ----
-  let equityUSD = prevBanking.bankEquityLocal;
+  let equityLocal = prevBanking.bankEquityLocal;
   let depositsLocal = deposits.householdLocal;
   // G2/HH3: both credit books are ITEMIZED on the named banks and only the lending passes move
   // them; §5-WIRES D: this aggregate reads them as the caller's sum over those rows.
@@ -307,8 +307,8 @@ export function evolveBankingSector(
   // layer, posted by the repo session as instructions between the two named counterparties. The
   // cash legs used to be taken here and credited to the lender in another stage — two direct
   // mutations that happened to cancel, which is exactly what the ledger exists to replace.
-  equityUSD -= maturingRepoBorrowInterestUSD;
-  equityUSD += maturingRepoLendInterestUSD;
+  equityLocal -= maturingRepoBorrowInterestUSD;
+  equityLocal += maturingRepoLendInterestUSD;
 
   // ---- 2. Household deposit flow — HH4d: REAL flows only, no target. The full savings
   // inflow arrives (less what the money fund's yield gate diverted) and last week's household ETF
@@ -317,7 +317,7 @@ export function evolveBankingSector(
   // does not print deposits into household accounts. The 0.999-decay target that used to size this is gone, and with it the drift between
   // the bank's deposit line and the household stock it claims to be: they are ONE number now,
   // reconciled by the bank-diversification stage every week.
-  const weeklySavingsInflowUSD = (savingsRate * estimatedHouseholdIncomeUSD) / 52;
+  const weeklySavingsInflowUSD = (savingsRate * estimatedHouseholdIncomeLocal) / 52;
   // SETL-B: the savings inflow is NO LONGER credited here. Households are paid real wages by
   // real employers and pay for real goods, and both move their deposits through settlement — so
   // adding a rate-times-estimate on top was the second of two independent quantities for one
@@ -428,10 +428,10 @@ export function evolveBankingSector(
   // slice is zero by construction: every business loan is a facility or an SME pool and both
   // pay through settlement; the parameter survives as the measure it always was.
   depositsLocal -= householdLoanInterestWeeklyUSD;
-  equityUSD += householdLoanInterestWeeklyUSD;
+  equityLocal += householdLoanInterestWeeklyUSD;
   const weeklyDepositInterestUSD = (depositsLocal * depositRate) / 52;
   depositsLocal += weeklyDepositInterestUSD;
-  equityUSD -= weeklyDepositInterestUSD;
+  equityLocal -= weeklyDepositInterestUSD;
 
   // ---- 5. Loan losses: a write-down, not a cash event — the asset shrinks and equity absorbs
   // it. (The re-lending the targets do next week is the re-origination of written-off credit
@@ -462,7 +462,7 @@ export function evolveBankingSector(
   // holders of record as a payment from this bank — reserves and equity leave at settlement,
   // and every dollar arrives on a named holder's book. Nothing here moves cash.
   const regularDividendUSD = Math.min(Math.max(0, weeklyNetIncomeUSD) * targetPayoutRatio, distributableCashUSD());
-  const equityAfterRegularUSD = equityUSD - regularDividendUSD;
+  const equityAfterRegularUSD = equityLocal - regularDividendUSD;
   const excessCapitalUSD = riskWeightedAssetsUSD > 0 ? equityAfterRegularUSD - riskWeightedAssetsUSD * 0.140 : 0;
   const specialDividendUSD = (riskWeightedAssetsUSD > 0 && equityAfterRegularUSD / riskWeightedAssetsUSD > 0.145)
     ? Math.min(excessCapitalUSD, Math.max(0, distributableCashUSD() - regularDividendUSD))
@@ -488,7 +488,7 @@ export function evolveBankingSector(
       + ` corpDep ${(corporateDepositsLocal / 1e9).toFixed(2)}B wholesale ${(wholesaleUSD / 1e9).toFixed(2)}B`
       + ` | policy ${(policyRate * 100).toFixed(2)}%`);
   }
-  const newBankCapitalRatio = riskWeightedAssetsUSD > 0 ? equityUSD / riskWeightedAssetsUSD : 0.13;
+  const newBankCapitalRatio = riskWeightedAssetsUSD > 0 ? equityLocal / riskWeightedAssetsUSD : 0.13;
   const capitalGap = 0.12 - newBankCapitalRatio;
   const newCreditConditionsIndex = (capitalGap * 8 + (0.025 - netInterestMarginPct) * 10 + spilloverAdjustment);
 
@@ -514,7 +514,7 @@ export function evolveBankingSector(
     corporateDepositInterestWeeklyUSD: Math.round(corporateDepositInterestUSD),
     dividendWeeklyUSD: Math.round(dividendWeeklyUSD),
     sovereignBondHoldingsLocal: Math.round(sovereignUSD),
-    bankEquityLocal: Math.round(equityUSD),
+    bankEquityLocal: Math.round(equityLocal),
     bankCapitalRatio: Number(newBankCapitalRatio.toFixed(4)),
     netInterestMarginPct: Number(netInterestMarginPct.toFixed(4)),
     // G2: reported from the REAL book by bank-lending.ts after its write-offs; carried here.

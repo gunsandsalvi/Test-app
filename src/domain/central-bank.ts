@@ -226,14 +226,14 @@ export function openMarketPolicy(args: {
   policyRate: number;
   /** The Taylor rule's UNCLAMPED target — the rate the rule wanted before the floor bound it. */
   taylorTargetRate: number;
-  bookUSD: number;
+  bookLocal: number;
   sovereignStockUSD: number;
 }): { reinvestmentShare: number; netPurchaseUSD: number } {
-  const bookShare = args.sovereignStockUSD > 0 ? args.bookUSD / args.sovereignStockUSD : 0;
+  const bookShare = args.sovereignStockUSD > 0 ? args.bookLocal / args.sovereignStockUSD : 0;
   const blockedCutPoints = Math.max(0, EFFECTIVE_LOWER_BOUND - args.taylorTargetRate) * 100;
   if (blockedCutPoints > 0) {
     const headroomUSD = Math.max(
-      0, args.sovereignStockUSD * CENTRAL_BANK_MAX_STOCK_SHARE - args.bookUSD
+      0, args.sovereignStockUSD * CENTRAL_BANK_MAX_STOCK_SHARE - args.bookLocal
     );
     const wantedUSD = (args.sovereignStockUSD *
       Math.min(QE_STOCK_SHARE_PER_RATE_POINT_ANNUAL * blockedCutPoints, QE_MAX_PACE_ANNUAL_SHARE_OF_STOCK)) / 52;

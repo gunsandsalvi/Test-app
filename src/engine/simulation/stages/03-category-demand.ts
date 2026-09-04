@@ -66,7 +66,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     const cohorts = hs.cohorts ?? [];
     const C = cohorts.length > 0
       ? cohorts.reduce((a, c) => a + c.consumptionBudgetUSD, 0)
-      : reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
+      : reg.estimatedHouseholdIncomeLocal * (1 - hs.savingsRate);
     // Government purchases only — the transfer share of outlays reaches demand through C, not
     // here. PUB1e: ONE owner of the procurement budget, including the fiscal stance, so the
     // goods market cannot bid for a stimulus the treasury never pays for.
@@ -77,12 +77,12 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     // until HC gives those segments a ledger of their own. Together these are the economy's wage
     // bill, and household deposits move by them instead of by a rate applied to an estimate.
     {
-      const payrollUSD = reg.governmentPayrollWeeklyUSD ?? 0;
-      if (payrollUSD > 0) {
+      const payrollLocal = reg.governmentPayrollWeeklyUSD ?? 0;
+      if (payrollLocal > 0) {
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
           payee: { kind: 'HOUSEHOLD', region: regionId },
-          amount: payrollUSD,
+          amount: payrollLocal,
           currency: currencyOf(regionId),
           reason: 'government payroll',
         });
@@ -235,7 +235,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           govBudgetByCategory[su.unitId] = suCapexGovDemand / 52;
           allTargets[su.unitId] = (capexDemandUSD > 0
             ? capexDemandUSD
-            : (reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelAnnualUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId])))
+            : (reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelAnnualLocal ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId])))
             + suCapexGovDemand;
           smoothingByCategory[su.unitId] = 0.08;
           return;
@@ -311,8 +311,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       }
       const smoothing = smoothingByCategory[cat] ?? 0.1;
       const existingEntry = reg.categoryDemand[cat as keyof typeof reg.categoryDemand];
-      const hasPriorDemand = Boolean(existingEntry && existingEntry.demandLevelAnnualUSD > 0);
-      const prevLevel = hasPriorDemand ? existingEntry.demandLevelAnnualUSD : target;
+      const hasPriorDemand = Boolean(existingEntry && existingEntry.demandLevelAnnualLocal > 0);
+      const prevLevel = hasPriorDemand ? existingEntry.demandLevelAnnualLocal : target;
       const newLevel = hasPriorDemand ? prevLevel * (1 - smoothing) + target * smoothing : target;
       const isStartupTransition = (state.currentWeek <= 1) || prevLevel < newLevel * 0.2 || newLevel < prevLevel * 0.2;
       const rawGrowthAnnual = hasPriorDemand && prevLevel > 0 && !isStartupTransition ? ((newLevel / prevLevel) - 1) * 52 : 0;
@@ -321,7 +321,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       const crowdingIntensity = Math.max(0, Math.min(1, (categorySupplyGrowth[cat] ?? 0) * 8 - (target ? growthAnnual : 0)));
       // Spread the existing entry first: this stage owns the demand-side fields it sets below and
       // nothing else. Rebuilding the object from scratch silently dropped every field owned by a
-      // later stage — above all `unitPriceUSD`, the real cleared price 05-unit-bidding.ts writes.
+      // later stage — above all `unitPriceLocal`, the real cleared price 05-unit-bidding.ts writes.
       // That price is bootstrapped per sub-unit (deriveSubUnitUnitPrice, ~$70k/unit for some
       // categories); losing it meant stage 05 fell back to its `Math.max(1, seed || 1)` default
       // from week 1 onward and every price in the economy silently rebased to a ~$1 scale, one
@@ -329,7 +329,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       // most of all — was comparing two different units.
       reg.categoryDemand[cat] = {
         ...(existingEntry ?? {}),
-        demandLevelAnnualUSD: newLevel,
+        demandLevelAnnualLocal: newLevel,
         demandGrowthAnnual: growthAnnual,
         demandHistory: [...prevHistory.slice(-25), newLevel],
         crowdingIntensity,

@@ -95,7 +95,7 @@ export interface GameState {
    * missing a real counterparty and how much it moved; §6 watches the total DOWN as each one
    * gets named, and this is what makes that watchable rather than asserted. */
   lastSettlement?: {
-    grossUSD: number;
+    grossLocal: number;
     /** §3.13c: the same gross per currency, in that currency's own units — W1's exact form. */
     grossByCurrency?: Record<string, number>;
     unresolvedUSD: number;
@@ -167,7 +167,7 @@ export interface GameState {
     pnlDeltaUSD: number;
     pnlDeltaPct: number;
     interestIncomeUSD: number;
-    financingCostUSD: number;
+    financingCostLocal: number;
     defaultedCompanies: string[];
     ratingsChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[];
     earningsReported: { ticker: string; name: string; actualEps: number; consensusEps: number; surprisePct: number }[];

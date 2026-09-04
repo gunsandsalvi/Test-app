@@ -39,7 +39,7 @@ import {
 } from '../../macro/household-portfolio';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { REGION_IDS } from '../../../domain/geography';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { regionalDeskView } from '../../../domain/dealer-desk';
 
 // Whose beneficiaries are households is the kind registry's `beneficiariesAreHouseholds` row
@@ -66,12 +66,12 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // The claim grows by the week's measured investment income; the fund's capital stays what it
     // is meant to be, the surplus or deficit against what it owes.
     const openingUSD = entity.beneficiaryLiabilityUSD
-      ?? (institutionTotalAssetsUSD(ctx, entity) - Math.max(0, entity.equityCapitalUSD));
+      ?? (institutionTotalAssetsLocal(ctx, entity) - Math.max(0, entity.equityCapitalLocal));
     const liabilityUSD = Math.max(0, openingUSD + Math.max(0, entity.lastWeeklyInvestmentIncomeUSD ?? 0));
     return {
       ...entity,
       beneficiaryLiabilityUSD: liabilityUSD,
-      equityCapitalUSD: institutionTotalAssetsUSD(ctx, entity) - liabilityUSD,
+      equityCapitalLocal: institutionTotalAssetsLocal(ctx, entity) - liabilityUSD,
     };
   });
 
@@ -117,8 +117,8 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // ---- 3. The claims on institutions, marked against the balance sheets that owe them. ----
     const institutionalClaims = ctx.updatedInstitutionalEntities
       .filter((e) => e.region === region && !e.isDefaulted && (e.beneficiaryLiabilityUSD ?? 0) > 0)
-      .map((e) => ({ entityId: e.id, valueUSD: e.beneficiaryLiabilityUSD! }));
-    const institutionalClaimsUSD = institutionalClaims.reduce((a, c) => a + c.valueUSD, 0);
+      .map((e) => ({ entityId: e.id, valueLocal: e.beneficiaryLiabilityUSD! }));
+    const institutionalClaimsUSD = institutionalClaims.reduce((a, c) => a + c.valueLocal, 0);
 
     // ---- 4. The rest of the real book, marked from this week's clears. ----
     const evMultiple = publicComparableEvMultiple(region, ctx.updatedCompanies);
@@ -156,7 +156,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // debits it — doing both moved the same dollar twice, and the max(0,…) that guarded the
     // debit died with it. Only the SHARE register settles here.
     const depositsLocal = householdDepositsOf(ctx.v2, region);
-    const mmfSharesUSD = Math.max(0, hs.mmfSharesUSD ?? 0);
+    const mmfSharesLocal = Math.max(0, hs.mmfSharesLocal ?? 0);
     const equityHoldingsUSD = realClaimsUSD;
 
     // The tier balance sheets are DERIVED SPLITS of the same marked components —
@@ -250,7 +250,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
 
       WEALTH_TIERS.forEach((t: WealthTier, i: number) => {
         const tierAssetsUSD =
-          (depositsLocal + mmfSharesUSD) * depositShareOf(t, i)
+          (depositsLocal + mmfSharesLocal) * depositShareOf(t, i)
           + (etfHoldingsUSD + directEquityUSD) * riskyShareOf(t, i)
           + privateBusinessEquityUSD * riskyShareOf(t, i)
           + institutionalClaimsUSD * cautiousShareOf(t, i)
@@ -265,7 +265,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
           // RULE 19 — published so the cohort build can weight by MEASURED debt and MEASURED
           // claims rather than by `TIER_DEBT_SERVICE_WEIGHT` and `TIER_RESIDUAL_RECEIPT_WEIGHT`.
           // Both were computed here already and thrown away.
-          debtUSD: Math.round(tierDebtUSD),
+          debtLocal: Math.round(tierDebtUSD),
           institutionalClaimsUSD: Math.round(tierClaimsUSD),
           shareOfNetWorthUSD: Math.round((tierAssetsUSD - tierDebtUSD)),
           homeEquityUSD: Math.round((housingStockUSD * incomeShareOf(t, i)
@@ -280,7 +280,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       priorNetWorthUSD: hs.netWorthUSD ?? 0,
       housingStockUSD,
       homeEquityUSD,
-      mmfSharesUSD,
+      mmfSharesLocal,
       etfShares,
       etfHoldingsUSD,
       directEquityUSD,
@@ -291,7 +291,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // The house is an ASSET at full value and the mortgage a liability, as in any set of
       // national accounts. Omitting the asset while carrying the debt understated net worth by
       // the entire housing stock.
-      netWorthUSD: depositsLocal + mmfSharesUSD + equityHoldingsUSD + housingStockUSD
+      netWorthUSD: depositsLocal + mmfSharesLocal + equityHoldingsUSD + housingStockUSD
         - (mortgageUSD + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0)),
     };
   });

@@ -40,7 +40,7 @@ import { WeeklyStepContext } from './context';
 import { computeSovereignBookAnnualYield, ON_RRP_SPREAD_BPS } from '../../macro/banking';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 
 /** The fund's annual expense ratio — a structural primitive like the deposit beta; G6/BP make
  * fees competitive between funds. */
@@ -76,8 +76,8 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashLocal: n
   entity.itemizedHoldings.forEach((h) => {
     if (holdingClassOf(h.instrumentType) !== 'SOVEREIGN') return;
     if (!billTenorById.has(h.instrumentId)) return;
-    billByTenor[h.instrumentId] = (billByTenor[h.instrumentId] ?? 0) + h.quantityOrNotionalUSD;
-    billUSD += h.quantityOrNotionalUSD;
+    billByTenor[h.instrumentId] = (billByTenor[h.instrumentId] ?? 0) + h.quantityOrNotionalLocal;
+    billUSD += h.quantityOrNotionalLocal;
   });
   const billYieldAnnual = billUSD > 0
     ? computeSovereignBookAnnualYield(billByTenor, reg.zeroRates, (id) => billTenorById.get(id))
@@ -88,11 +88,11 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashLocal: n
   // earns nothing until the next session decides where it goes.
   const rrpLentUSD = entity.rrpLentUSD ?? 0;
   const idleCashUSD = Math.max(0, cashLocal);
-  const totalUSD = billUSD + repoLentLocal + rrpLentUSD + idleCashUSD;
-  if (totalUSD <= 0) return Math.max(0, rrpRateAnnual - MMF_FEE_ANNUAL);
+  const totalLocal = billUSD + repoLentLocal + rrpLentUSD + idleCashUSD;
+  if (totalLocal <= 0) return Math.max(0, rrpRateAnnual - MMF_FEE_ANNUAL);
 
   const grossAnnual =
-    (billUSD * billYieldAnnual + repoLentLocal * repoRateAnnual + rrpLentUSD * rrpRateAnnual) / totalUSD;
+    (billUSD * billYieldAnnual + repoLentLocal * repoRateAnnual + rrpLentUSD * rrpRateAnnual) / totalLocal;
   return Math.max(0, grossAnnual - MMF_FEE_ANNUAL);
 }
 
@@ -178,7 +178,7 @@ export function corporateSweepDecision(
 ): { cashDeltaUSD: number; shareDeltaUSD: number } {
   if (!book) return { cashDeltaUSD: 0, shareDeltaUSD: 0 };
   const bufferUSD = comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
-  const sharesUSD = comp.mmfSharesUSD ?? 0;
+  const sharesUSD = comp.mmfSharesLocal ?? 0;
 
   if (cashAfterOperationsUSD > bufferUSD) {
     const sweepUSD = cashAfterOperationsUSD - bufferUSD;
@@ -192,11 +192,11 @@ export function corporateSweepDecision(
   }
   if (cashAfterOperationsUSD < bufferUSD && sharesUSD > 0) {
     const wantedUSD = Math.min(sharesUSD, bufferUSD - cashAfterOperationsUSD);
-    const paidUSD = Math.min(wantedUSD, book.redeemableUSD);
-    if (paidUSD <= 0) return { cashDeltaUSD: 0, shareDeltaUSD: 0 };
-    book.netInflowUSD -= paidUSD;
-    book.redeemableUSD -= paidUSD;
-    return { cashDeltaUSD: paidUSD, shareDeltaUSD: -paidUSD };
+    const paidLocal = Math.min(wantedUSD, book.redeemableUSD);
+    if (paidLocal <= 0) return { cashDeltaUSD: 0, shareDeltaUSD: 0 };
+    book.netInflowUSD -= paidLocal;
+    book.redeemableUSD -= paidLocal;
+    return { cashDeltaUSD: paidLocal, shareDeltaUSD: -paidLocal };
   }
   return { cashDeltaUSD: 0, shareDeltaUSD: 0 };
 }
@@ -249,11 +249,11 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     // holdings flip: row walk on the mirror.
     let holdingsUSD = 0;
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyLocal[r];
-    const bookUSD = entityCashOf(ctx.v2, e) + holdingsUSD + (e.repoLentLocal ?? 0) + (e.rrpLentUSD ?? 0);
-    if (bookUSD <= 0) return e;
-    const feeUSD = (bookUSD * MMF_FEE_ANNUAL) / 52;
+    const bookLocal = entityCashOf(ctx.v2, e) + holdingsUSD + (e.repoLentLocal ?? 0) + (e.rrpLentUSD ?? 0);
+    if (bookLocal <= 0) return e;
+    const feeLocal = (bookLocal * MMF_FEE_ANNUAL) / 52;
     // A STABLE-NAV FUND DISTRIBUTES WHAT IT EARNED, NOT WHAT IT QUOTED.
-    // This paid `bookUSD × mmfNetYieldAnnual`, a QUOTE, while the assets earned their realized
+    // This paid `bookLocal × mmfNetYieldAnnual`, a QUOTE, while the assets earned their realized
     // income — two derivations of one number (rule 4), and the share liability outran the book
     // by the gap, compounding (: 47 NAV-departure violations, book 2-3% under shares).
     // The $1-NAV identity is its own measure: the book's excess over the share liability, net
@@ -261,8 +261,8 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     // income. Distributing exactly that keeps book = shares by construction; a genuine LOSS
     // leaves book below shares and distributes nothing, which is what breaking the buck looks
     // like and exactly what the harness's departure check should catch.
-    const paidToHoldersUSD = Math.max(0, bookUSD - feeUSD - (e.mmfSharesOutstandingUSD ?? 0));
-    feeByRegion.set(e.region, (feeByRegion.get(e.region) ?? 0) + feeUSD);
+    const paidToHoldersUSD = Math.max(0, bookLocal - feeLocal - (e.mmfSharesOutstandingUSD ?? 0));
+    feeByRegion.set(e.region, (feeByRegion.get(e.region) ?? 0) + feeLocal);
     feePayerByRegion.set(e.region, e.id);
     issuedByRegion.set(e.region, (issuedByRegion.get(e.region) ?? 0) + paidToHoldersUSD);
     // The fee's cash leg is a payment now (fund → manager, below); only the SHARE
@@ -274,25 +274,25 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   });
 
   // The other leg: the new shares go to the holders that already own the fund, pro rata — the
-  // region's corporate treasuries by their own `mmfSharesUSD` and the household sector by its.
+  // region's corporate treasuries by their own `mmfSharesLocal` and the household sector by its.
   // A stable-NAV fund distributes income as SHARES, so a holder's dollar becomes 1.0004 dollars
   // of shares; that is a real claim arriving on a real book, not a number growing on the fund's.
   issuedByRegion.forEach((issuedUSD, regionId) => {
     if (!(issuedUSD > 0)) return;
     const reg = ctx.updatedRegions[regionId];
-    const hhSharesUSD = Math.max(0, reg?.householdState?.mmfSharesUSD ?? 0);
+    const hhSharesUSD = Math.max(0, reg?.householdState?.mmfSharesLocal ?? 0);
     const corpSharesUSD = ctx.updatedCompanies.reduce(
-      (a, c) => a + (c.region === regionId ? Math.max(0, c.mmfSharesUSD ?? 0) : 0), 0);
+      (a, c) => a + (c.region === regionId ? Math.max(0, c.mmfSharesLocal ?? 0) : 0), 0);
     const totalHeldUSD = hhSharesUSD + corpSharesUSD;
     if (totalHeldUSD <= 0) return;
     ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
       if (c.region !== regionId) return c;
-      const held = Math.max(0, c.mmfSharesUSD ?? 0);
+      const held = Math.max(0, c.mmfSharesLocal ?? 0);
       if (held <= 0) return c;
-      return Object.assign(c, { mmfSharesUSD: held + issuedUSD * (held / totalHeldUSD) });
+      return Object.assign(c, { mmfSharesLocal: held + issuedUSD * (held / totalHeldUSD) });
     });
     if (reg?.householdState && hhSharesUSD > 0) {
-      reg.householdState.mmfSharesUSD = hhSharesUSD + issuedUSD * (hhSharesUSD / totalHeldUSD);
+      reg.householdState.mmfSharesLocal = hhSharesUSD + issuedUSD * (hhSharesUSD / totalHeldUSD);
     }
   });
 
@@ -301,21 +301,21 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.entityType !== 'ASSET_MANAGER') return;
     const cur = managersByRegion.get(e.region) ?? { total: 0 };
-    cur.total += Math.max(0, institutionTotalAssetsUSD(ctx, e));
+    cur.total += Math.max(0, institutionTotalAssetsLocal(ctx, e));
     managersByRegion.set(e.region, cur);
   });
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.entityType !== 'ASSET_MANAGER') return;
-    const feeUSD = feeByRegion.get(e.region) ?? 0;
+    const feeLocal = feeByRegion.get(e.region) ?? 0;
     const pool = managersByRegion.get(e.region)?.total ?? 0;
     const payerId = feePayerByRegion.get(e.region);
-    if (feeUSD <= 0 || pool <= 0 || !payerId) return;
+    if (feeLocal <= 0 || pool <= 0 || !payerId) return;
     // The management fee moves as a PAYMENT (fund → manager), not as two object rebuilds
     // no bank ever saw. Settlement carries both deposit legs.
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: payerId },
       payee: { kind: 'INSTITUTION', id: e.id },
-      amount: feeUSD * (Math.max(0, institutionTotalAssetsUSD(ctx, e)) / pool),
+      amount: feeLocal * (Math.max(0, institutionTotalAssetsLocal(ctx, e)) / pool),
       currency: currencyOf(e.region),
       reason: 'money fund management fee',
     });

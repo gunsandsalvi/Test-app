@@ -123,7 +123,7 @@ function x2(state: GameState, week: number): AuditFinding[] {
   let wide = 0, n = 0; const examples: string[] = [];
   subUnits.forEach((su) => {
     const prices: [string, number][] = [];
-    REGION_IDS.forEach((r) => { const d = state.regions[r]?.categoryDemand[su as 'apparel_retail']; const f = fx(r); if (d?.unitPriceUSD && f) prices.push([r, d.unitPriceUSD * f]); });
+    REGION_IDS.forEach((r) => { const d = state.regions[r]?.categoryDemand[su as 'apparel_retail']; const f = fx(r); if (d?.unitPriceLocal && f) prices.push([r, d.unitPriceLocal * f]); });
     if (prices.length < 2) return;
     n++;
     const lo = Math.min(...prices.map((p) => p[1])), hi = Math.max(...prices.map((p) => p[1]));
@@ -157,26 +157,26 @@ function p5(state: GameState, week: number): AuditFinding[] {
     regionById: (r: string) => state.regions[r as RegionId],
   };
   let faceLocal = 0, markedUSD = 0, impliedUSD = 0, rows = 0, unpriced = 0;
-  let widest = { id: '', gapUSD: 0 };
+  let widest = { id: '', gapLocal: 0 };
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     e.itemizedHoldings.forEach((h) => {
       if (!isTrancheKind(h.instrumentType)) return;
-      const face = h.faceLocal ?? h.quantityOrNotionalUSD ?? 0;
+      const face = h.faceLocal ?? h.quantityOrNotionalLocal ?? 0;
       if (!(Math.abs(face) > 0)) return;
       const price = trancheClearedPricePerFace(world, v2, h.instrumentId, week);
       if (price === undefined) { unpriced++; return; }
       faceLocal += face;
-      markedUSD += h.quantityOrNotionalUSD ?? 0;
+      markedUSD += h.quantityOrNotionalLocal ?? 0;
       impliedUSD += face * price;
       rows++;
-      const gap = (h.quantityOrNotionalUSD ?? 0) - face * price;
-      if (Math.abs(gap) > Math.abs(widest.gapUSD)) widest = { id: h.instrumentId, gapUSD: gap };
+      const gap = (h.quantityOrNotionalLocal ?? 0) - face * price;
+      if (Math.abs(gap) > Math.abs(widest.gapLocal)) widest = { id: h.instrumentId, gapLocal: gap };
     });
   });
-  const gapUSD = markedUSD - impliedUSD;
-  if (rows > 0 && Math.abs(gapUSD) > 1e6) {
-    out.push({ family: 'P', check: 'P5 the register marks credit at its cleared spread', week, usd: gapUSD, message: `${rows} credit rows on ${B(faceLocal)} of face are marked at ${B(markedUSD)} against ${B(impliedUSD)} implied by their own cleared spreads — a ${B(gapUSD)} gap (widest ${widest.id} by ${B(widest.gapUSD)}${unpriced ? `; ${unpriced} rows could not be priced` : ''})` });
+  const gapLocal = markedUSD - impliedUSD;
+  if (rows > 0 && Math.abs(gapLocal) > 1e6) {
+    out.push({ family: 'P', check: 'P5 the register marks credit at its cleared spread', week, usd: gapLocal, message: `${rows} credit rows on ${B(faceLocal)} of face are marked at ${B(markedUSD)} against ${B(impliedUSD)} implied by their own cleared spreads — a ${B(gapLocal)} gap (widest ${widest.id} by ${B(widest.gapLocal)}${unpriced ? `; ${unpriced} rows could not be priced` : ''})` });
   }
   return out;
 }
@@ -267,10 +267,10 @@ function p8(state: GameState, week: number): AuditFinding[] {
       byRegion.push(`${r} ${pct(implied / face - 1)}`);
     }
   });
-  const gapUSD = faceLocal - impliedUSD;
-  if (rungs > 0 && Math.abs(gapUSD) > 1e6) {
-    out.push({ family: 'P', check: 'P8 the sovereign book is carried at par', week, usd: gapUSD,
-      message: `${rungs} sovereign rungs on ${B(faceLocal)} of face are carried at face against ${B(impliedUSD)} implied by the curve this book itself cleared — a ${B(gapUSD)} gap (${byRegion.join(' | ')}); the auction prices it now, and the register still carries it at par` });
+  const gapLocal = faceLocal - impliedUSD;
+  if (rungs > 0 && Math.abs(gapLocal) > 1e6) {
+    out.push({ family: 'P', check: 'P8 the sovereign book is carried at par', week, usd: gapLocal,
+      message: `${rungs} sovereign rungs on ${B(faceLocal)} of face are carried at face against ${B(impliedUSD)} implied by the curve this book itself cleared — a ${B(gapLocal)} gap (${byRegion.join(' | ')}); the auction prices it now, and the register still carries it at par` });
   }
   return out;
 }

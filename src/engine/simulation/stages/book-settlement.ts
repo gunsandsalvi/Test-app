@@ -55,7 +55,7 @@ export interface FeeDesk { ticker: string; share: number }
 /** What one issuer's deal placed with this book's participants, and who to pay for it. */
 export interface PrimaryTake {
   party: PartyRef;
-  amountUSD: number;
+  amountLocal: number;
   /** §5-WIRES W2: the paper the issuer delivers to the clearing house against that money —
    *  the participants' fills draw it down (holdings-store, `clearedBookDelta`). */
   asset?: HoldingSpec;
@@ -75,30 +75,30 @@ export function settleClearedBook(
   book: string,
   netCashByParticipantId: Map<string, number>,
   partyOf: (participantId: string) => PartyRef | undefined,
-  dealer: { netCashUSD: number; feeUSD: number },
+  dealer: { netCashUSD: number; feeLocal: number },
   feeDesks: FeeDesk[],
   primaryTakes: PrimaryTake[] = []
 ): void {
   const ccp: PartyRef = { kind: 'CLEARING_HOUSE', region: regionId };
   const reason = `${book} clearing`;
 
-  netCashByParticipantId.forEach((deltaUSD, participantId) => {
-    if (!deltaUSD) return;
+  netCashByParticipantId.forEach((deltaLocal, participantId) => {
+    if (!deltaLocal) return;
     const party = partyOf(participantId) ?? defect(`${book} clearing: participant '${participantId}' names no party this model can pay`);
     const legReason = reason;
-    if (deltaUSD > 0) pay(ctx, { payer: ccp, payee: party, amount: deltaUSD, currency: quoteCurrency, reason: legReason });
-    else pay(ctx, { payer: party, payee: ccp, amount: -deltaUSD, currency: quoteCurrency, reason: legReason });
+    if (deltaLocal > 0) pay(ctx, { payer: ccp, payee: party, amount: deltaLocal, currency: quoteCurrency, reason: legReason });
+    else pay(ctx, { payer: party, payee: ccp, amount: -deltaLocal, currency: quoteCurrency, reason: legReason });
   });
 
   // What is left after the fees is what the week's PRIMARY placed, and it belongs to the issuers
   // who brought the paper. Paid to each by name, pro rata to what its own deal placed.
-  const tradingUSD = dealer.netCashUSD - dealer.feeUSD;
-  const takeTotalUSD = primaryTakes.reduce((a, t) => a + Math.max(0, t.amountUSD), 0);
+  const tradingUSD = dealer.netCashUSD - dealer.feeLocal;
+  const takeTotalUSD = primaryTakes.reduce((a, t) => a + Math.max(0, t.amountLocal), 0);
   const primaryUSD = Math.max(0, Math.min(takeTotalUSD, Math.max(0, tradingUSD)));
   if (primaryUSD > 0 && takeTotalUSD > 0) {
     primaryTakes.forEach((t) => {
-      const amountUSD = Math.max(0, t.amountUSD) * (primaryUSD / takeTotalUSD);
-      if (amountUSD > 0) pay(ctx, { payer: ccp, payee: t.party, amount: amountUSD, currency: quoteCurrency, reason: `${book} primary proceeds` });
+      const amountLocal = Math.max(0, t.amountLocal) * (primaryUSD / takeTotalUSD);
+      if (amountLocal > 0) pay(ctx, { payer: ccp, payee: t.party, amount: amountLocal, currency: quoteCurrency, reason: `${book} primary proceeds` });
     });
   }
   // §5-WIRES W2: the asset half of the primary — the issuer's paper to the clearing house, the
@@ -115,20 +115,20 @@ export function settleClearedBook(
   const roundingToleranceUSD = Math.max(1e4, Math.abs(dealer.netCashUSD) * 1e-6);
   if (process.env.LEFTOVER_TRACE === '1' && Math.abs(leftoverUSD) > 1) {
     console.log(`  [leftover] ${regionId} ${book}: leftover ${(leftoverUSD / 1e6).toFixed(3)}M`
-      + ` (dealerNet ${(dealer.netCashUSD / 1e6).toFixed(3)}M fee ${(dealer.feeUSD / 1e6).toFixed(3)}M primary ${(primaryUSD / 1e6).toFixed(3)}M)`);
+      + ` (dealerNet ${(dealer.netCashUSD / 1e6).toFixed(3)}M fee ${(dealer.feeLocal / 1e6).toFixed(3)}M primary ${(primaryUSD / 1e6).toFixed(3)}M)`);
   }
-  if (Math.abs(leftoverUSD) > roundingToleranceUSD) defect(`${regionId} ${book} clearing left ${(leftoverUSD / 1e6).toFixed(3)}M with no owner (dealer net ${(dealer.netCashUSD / 1e6).toFixed(3)}M, fee ${(dealer.feeUSD / 1e6).toFixed(3)}M, primary ${(primaryUSD / 1e6).toFixed(3)}M)`);
+  if (Math.abs(leftoverUSD) > roundingToleranceUSD) defect(`${regionId} ${book} clearing left ${(leftoverUSD / 1e6).toFixed(3)}M with no owner (dealer net ${(dealer.netCashUSD / 1e6).toFixed(3)}M, fee ${(dealer.feeLocal / 1e6).toFixed(3)}M, primary ${(primaryUSD / 1e6).toFixed(3)}M)`);
 
   // The desks' fee income (plus the rounding dust): cash and equity together, because nothing
   // else arrived against it. Shares are normalised — the clients paid the whole fee, so the whole
   // fee reaches the desks that earned it however their market shares happen to sum.
   const totalShare = feeDesks.reduce((a, d) => a + d.share, 0);
-  const deskTotalUSD = dealer.feeUSD + leftoverUSD;
+  const deskTotalUSD = dealer.feeLocal + leftoverUSD;
   if (deskTotalUSD !== 0 && totalShare > 0) {
     feeDesks.forEach((desk) => {
-      const amountUSD = deskTotalUSD * (desk.share / totalShare);
-      if (amountUSD > 0) pay(ctx, { payer: ccp, payee: { kind: 'BANK', ticker: desk.ticker }, amount: amountUSD, currency: quoteCurrency, reason: `${book} dealer fee` });
-      else if (amountUSD < 0) pay(ctx, { payer: { kind: 'BANK', ticker: desk.ticker }, payee: ccp, amount: -amountUSD, currency: quoteCurrency, reason: `${book} dealer fee` });
+      const amountLocal = deskTotalUSD * (desk.share / totalShare);
+      if (amountLocal > 0) pay(ctx, { payer: ccp, payee: { kind: 'BANK', ticker: desk.ticker }, amount: amountLocal, currency: quoteCurrency, reason: `${book} dealer fee` });
+      else if (amountLocal < 0) pay(ctx, { payer: { kind: 'BANK', ticker: desk.ticker }, payee: ccp, amount: -amountLocal, currency: quoteCurrency, reason: `${book} dealer fee` });
     });
   }
 }
@@ -154,9 +154,9 @@ export function primaryTakes(
   const takes: PrimaryTake[] = [];
   result.primaryOutcomeById.forEach((o, issuerId) => {
     if (o.withdrawn) return;
-    const amountUSD = valueOf(o.marketTakeUSD, o.clearedStat);
+    const amountLocal = valueOf(o.marketTakeUSD, o.clearedStat);
     const party = partyOfIssuerId(issuerId);
-    if (party && amountUSD > 0) takes.push({ party, amountUSD, asset: assetOf?.(issuerId, o.marketTakeUSD, o.clearedStat) });
+    if (party && amountLocal > 0) takes.push({ party, amountLocal, asset: assetOf?.(issuerId, o.marketTakeUSD, o.clearedStat) });
   });
   return takes;
 }
@@ -170,7 +170,7 @@ export function primaryAssetOf(instrumentType: HoldingKind, region: RegionId) {
   return (issuerId: string, marketTake: number, clearedStat: number): HoldingSpec | undefined => {
     if (!(marketTake > 0)) return undefined;
     return heldInShares(instrumentType)
-      ? { instrumentType, instrumentId: issuerId, issuerRegion: region, valueUSD: marketTake * clearedStat, shares: marketTake }
-      : { instrumentType, instrumentId: issuerId, issuerRegion: region, valueUSD: marketTake };
+      ? { instrumentType, instrumentId: issuerId, issuerRegion: region, valueLocal: marketTake * clearedStat, shares: marketTake }
+      : { instrumentType, instrumentId: issuerId, issuerRegion: region, valueLocal: marketTake };
   };
 }

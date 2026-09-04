@@ -34,7 +34,7 @@ import { FULL_SIZE_PRICE_DISCOUNT } from './07e-equity-clearing';
 import { medianOf } from '../../../domain/volatility';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
 
 const sblInstrumentId = (regionId: RegionId, companyId: string) => `${regionId}-SBL-${companyId}`;
@@ -76,7 +76,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       store.scan(e.id, 'EQUITY', (h) => {
         const comp = companyById.get(h.instrumentId);
         if (!comp) return false;
-        const shares = h.quantityShares ?? h.quantityOrNotionalUSD / Math.max(0.01, comp.stockPrice);
+        const shares = h.quantityShares ?? h.quantityOrNotionalLocal / Math.max(0.01, comp.stockPrice);
         byName.set(h.instrumentId, (byName.get(h.instrumentId) ?? 0) + shares);
         return false; // read-only: 07e claims these rows, not this stage
       });
@@ -93,7 +93,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       // them a second time.
       wireHoldingMove(
         { kind: 'INSTITUTION', id: fromId }, { kind: 'INSTITUTION', id: toId },
-        { instrumentType: 'EQUITY', instrumentId: companyId, issuerRegion: regionId, valueUSD: shares * price, shares },
+        { instrumentType: 'EQUITY', instrumentId: companyId, issuerRegion: regionId, valueLocal: shares * price, shares },
         'stock loan: shares delivered'
       );
       store.addShares(fromId, 'EQUITY', companyId, regionId, -shares, price);
@@ -135,12 +135,12 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
         return;
       }
 
-      const feeUSD = loanWeeklyFeeUSD(loan, comp.stockPrice);
-      if (feeUSD > 0) {
+      const feeLocal = loanWeeklyFeeUSD(loan, comp.stockPrice);
+      if (feeLocal > 0) {
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id: loan.borrower.id },
           payee: { kind: 'INSTITUTION', id: loan.lender.id },
-          amount: feeUSD,
+          amount: feeLocal,
           currency: currencyOf(comp.region),
           reason: 'stock borrow fee',
         });
@@ -279,9 +279,9 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     shortFunds.forEach((fund) => {
       const mandate = mandateWeightForIssuer(fund.entityType, fund.region, regionId, mcapByRegion);
       if (!(mandate > 0)) return;
-      const poolUSD = institutionTotalAssetsUSD(ctx, fund) * fund.assetAllocationTarget.equityPct * mandate;
+      const poolUSD = institutionTotalAssetsLocal(ctx, fund) * fund.assetAllocationTarget.equityPct * mandate;
       if (!(poolUSD > 0)) return;
-      const requiredReturn = entityRequiredReturn(fund, institutionTotalAssetsUSD(ctx, fund));
+      const requiredReturn = entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund));
       // A short is collateralised at the market value on the day it is struck, so a fund cannot
       // put on more of one than it can fund — its own cash, what this week's settlement already
       // owes it, and whatever its prime broker still has open to it.
@@ -349,7 +349,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       return {
         id: sblInstrumentId(regionId, c.id),
         outstandingLocal: demandShares,
-        tradableFloatUSD: demandShares,
+        tradableFloatLocal: demandShares,
         currentStat: Math.max(1, lastFee[c.id] ?? 0) || 1,
         statKind: 'YIELD_LIKE',
         durationYears: 1 / 52,
@@ -376,7 +376,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     const participants: ClearingParticipant[] = [];
     ctx.updatedInstitutionalEntities.forEach((entity) => {
       if (entity.isDefaulted) return;
-      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsUSD(ctx, entity));
+      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
       const alreadyLent = lentAlreadyByEntity.get(entity.id) ?? new Map<string, number>();
       const current = new Map<string, number>();
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
@@ -394,7 +394,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
             oneWeekGap: gapByCompanyId.get(c.id) ?? bookWeeklyMove,
           }),
           // Its whole inventory is lendable — the shares it can deliver plus what it has out.
-          maxHoldingUSD: held + lent,
+          maxHoldingLocal: held + lent,
           fullSizeStatRange: fullSizeSpreadRangeBpsOf(entity),
         });
       });

@@ -107,11 +107,11 @@ export function runForeignDirectInvestment(
       if (subsidiaryExists(comp, target)) continue;
 
       const flows = exportFlowUSDBySubUnit(comp, target, ctx);
-      const revenueUSD = Object.values(flows).reduce((a, v) => a + v, 0);
-      if (!(revenueUSD > 1e6)) continue;
+      const revenueLocal = Object.values(flows).reduce((a, v) => a + v, 0);
+      if (!(revenueLocal > 1e6)) continue;
 
       const revenuePerHead = comp.employeeCount > 0 ? comp.annualRevenue / comp.employeeCount : 0;
-      const employees = revenuePerHead > 0 ? Math.max(10, Math.round(revenueUSD / revenuePerHead)) : 10;
+      const employees = revenuePerHead > 0 ? Math.max(10, Math.round(revenueLocal / revenuePerHead)) : 10;
       const industry = comp.productLines![0].industry;
       if (!INDUSTRY_REGISTRY[industry]) continue;
 
@@ -121,7 +121,7 @@ export function runForeignDirectInvestment(
       if (!reg) continue;
       const seeds: PrivateFirmSeed[] = [{
         industry,
-        annualRevenueUSD: revenueUSD,
+        annualRevenueLocal: revenueLocal,
         ebitdaMargin: comp.annualRevenue > 0 ? Math.max(0.02, comp.ebitda / comp.annualRevenue) : 0.1,
         leverage: 0, // FDI is equity: the parent raises or holds the money first (§7.288).
         sponsorStyle: false,

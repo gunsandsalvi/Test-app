@@ -32,7 +32,7 @@ const RATING_SCALE: CreditRating[] = ['CCC', 'B', 'BB', 'BBB', 'A', 'AA', 'AAA']
  */
 export interface CreditContext {
   /** Scale: a $50B issuer and a $500M one at identical leverage are not the same credit. */
-  annualRevenueUSD?: number;
+  annualRevenueLocal?: number;
   /** The median issuer's revenue in the same market, so scale is RELATIVE and not a stated size. */
   peerMedianRevenueUSD?: number;
   /** 09-concentration-risk measures these every week and nothing has ever priced off them. */
@@ -49,7 +49,7 @@ export interface CreditContext {
    * when there are none. See the note on the ladder below: that is what the ratio clamps in stage
    * 08 were standing in for, and it is the honest place for it.
    */
-  ebitdaUSD?: number;
+  ebitdaLocal?: number;
 }
 
 /**
@@ -74,7 +74,7 @@ export function determineCreditRating(
   // With no earnings the two ratios carry no information, so the rating rests on what is left,
   // which is liquidity: a firm that can cover its debt from cash and its committed line is not
   // yet distressed, and one that cannot is.
-  if (ctx?.ebitdaUSD !== undefined && ctx.ebitdaUSD <= 0) {
+  if (ctx?.ebitdaLocal !== undefined && ctx.ebitdaLocal <= 0) {
     return (ctx.liquidityToDebt ?? 0) >= 1 ? 'B' : 'CCC';
   }
 
@@ -89,8 +89,8 @@ export function determineCreditRating(
 
   if (ctx) {
     // SCALE, relative to the issuers it is rated against — an order of magnitude either way.
-    if (ctx.annualRevenueUSD !== undefined && (ctx.peerMedianRevenueUSD ?? 0) > 0) {
-      const rel = ctx.annualRevenueUSD / ctx.peerMedianRevenueUSD!;
+    if (ctx.annualRevenueLocal !== undefined && (ctx.peerMedianRevenueUSD ?? 0) > 0) {
+      const rel = ctx.annualRevenueLocal / ctx.peerMedianRevenueUSD!;
       if (rel > 10) notch += 1;
       else if (rel < 0.1) notch -= 1;
     }

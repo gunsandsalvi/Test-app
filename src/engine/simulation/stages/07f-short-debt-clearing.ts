@@ -44,7 +44,7 @@ import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetUSD } from '.
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { encumberedFaceByBond } from '../../../domain/repo';
-import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
+import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementUSD, institutionSpendableUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, PrimaryTake } from './book-settlement';
@@ -61,7 +61,7 @@ import {
   CP_SINGLE_ISSUER_LIMIT, CP_SHARE_OF_TERM_SLEEVE, CP_FULL_SIZE_YIELD_RANGE_BPS,
   cpCreditPolicyShare, cpReservationYieldBps,
 } from '../../../domain/commercial-paper';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
@@ -160,7 +160,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const instruments: ClearingInstrument[] = activeBills.map((b) => ({
         id: b.key,
         outstandingLocal: outstandingByBond.get(b.key) ?? 0,
-        tradableFloatUSD: outstandingByBond.get(b.key) ?? 0,
+        tradableFloatLocal: outstandingByBond.get(b.key) ?? 0,
         currentStat: billPriceAtYieldBps(b, billCurrentYieldBps(b)),
         statKind: 'PRICE_LIKE',
         durationYears: b.years,
@@ -217,7 +217,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const fundableUSD = Math.min(
           Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
-          leverageHeadroomUSD(sheet, reservesUSD, facilityBookLocal)
+          leverageHeadroomLocal(sheet, reservesUSD, facilityBookLocal)
         );
         const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD, facilityBookLocal);
         const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD, bankDepositLines(ctx, bank.ticker));
@@ -228,7 +228,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const bondShareOfSovStock = (outstandingByBond.get(b.key) ?? 0) / wholeSovStockUSD;
           demand.set(b.key, {
             reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000 + BANK_BILL_PICKUP_BPS),
-            maxHoldingUSD: appetiteUSD * bondShareOfSovStock,
+            maxHoldingLocal: appetiteUSD * bondShareOfSovStock,
             fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
             maxNetPurchaseUSD: fundableUSD * bondShare,
             minHoldingUSD: Math.max(encumberedFace.get(b.key) ?? 0, liquidityFloorUSD * bondShareOfSovStock),
@@ -242,7 +242,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       regionEntities.forEach((entity) => {
         const holdings = new Map<string, number>();
         const demand = new Map<string, ParticipantDemand>();
-        const sleeveUSD = institutionTotalAssetsUSD(ctx, entity) * entity.assetAllocationTarget.cashPct * CASH_SLEEVE_BILL_SHARE;
+        const sleeveUSD = institutionTotalAssetsLocal(ctx, entity) * entity.assetAllocationTarget.cashPct * CASH_SLEEVE_BILL_SHARE;
         // SCALE C1: read-only scan of the store's GOV_BOND rows — nothing is claimed here.
         // Which rows this auction actually rewrites is decided at apply time, where the
         // auctioned-bill predicate lives (a bill that matured is NOT
@@ -250,7 +250,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         ctx.holdingsStore!.scan(entity.id, 'GOV_BOND', (h) => {
           if (h.issuerRegion === regionId) {
             // §3.13-SOV row 3: it is a bill because the ladder says so, not because its id parses.
-            if (billIds.has(h.instrumentId)) holdings.set(h.instrumentId, (holdings.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+            if (billIds.has(h.instrumentId)) holdings.set(h.instrumentId, (holdings.get(h.instrumentId) ?? 0) + h.quantityOrNotionalLocal);
           }
           return false;
         });
@@ -258,7 +258,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const bondShare = (outstandingByBond.get(b.key) ?? 0) / totalBillStockUSD;
           demand.set(b.key, {
             reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000 + INSTITUTIONAL_BILL_TERM_PREMIUM_BPS_PER_YEAR * b.years),
-            maxHoldingUSD: sleeveUSD * bondShare,
+            maxHoldingLocal: sleeveUSD * bondShare,
             fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
             maxNetPurchaseUSD: institutionSpendableUSD(ctx, entity) * CASH_SLEEVE_BILL_SHARE * bondShare,
           });
@@ -292,7 +292,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           // the treasurer's sizing and the tranche fallback below was dead code.
           // §3.13-SOV row 3: a row is a bill if its id names one of THIS region's live bills.
           if (!billIds.has(h.instrumentId)) return;
-          heldByBond.set(h.instrumentId, (heldByBond.get(h.instrumentId) ?? 0) + (h.quantityOrNotionalUSD ?? 0));
+          heldByBond.set(h.instrumentId, (heldByBond.get(h.instrumentId) ?? 0) + (h.quantityOrNotionalLocal ?? 0));
         });
         const cashLocal = cashOf(ctx.v2, comp);
         const targetUSD = corporateTreasuryTargetUSD(cashLocal, comp.annualRevenue ?? 0, riskAversionOf(comp.management));
@@ -307,7 +307,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           holdings.set(b.key, heldByBond.get(b.key) ?? 0);
           demand.set(b.key, {
             reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000),
-            maxHoldingUSD: targetUSD * bondShare,
+            maxHoldingLocal: targetUSD * bondShare,
             fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
             maxNetPurchaseUSD: budgetUSD * bondShare,
           });
@@ -337,7 +337,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       participants.forEach((p) => p.currentHoldingsByInstrumentId.forEach((usd, id) => {
         if (usd > 0) heldByBiddersUSD.set(id, (heldByBiddersUSD.get(id) ?? 0) + usd);
       }));
-      instruments.forEach((inst) => { inst.tradableFloatUSD = heldByBiddersUSD.get(inst.id) ?? 0; });
+      instruments.forEach((inst) => { inst.tradableFloatLocal = heldByBiddersUSD.get(inst.id) ?? 0; });
 
       // G3a: the banks' bill desks — the same market makers, a different book.
       const deskParticipants = buildDealerDeskParticipants({
@@ -353,7 +353,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         if (usd > 0) deskHeldUSD.set(id, (deskHeldUSD.get(id) ?? 0) + usd);
       }));
       instruments.forEach((inst) => {
-        inst.tradableFloatUSD = (heldByBiddersUSD.get(inst.id) ?? 0) + (deskHeldUSD.get(inst.id) ?? 0);
+        inst.tradableFloatLocal = (heldByBiddersUSD.get(inst.id) ?? 0) + (deskHeldUSD.get(inst.id) ?? 0);
       });
 
       // PUB — and what NO book holds is the treasury's OFFERING, not a reservation. Stage 11
@@ -371,7 +371,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         if (!inst) return;
         inst.primaryOfferingUSD = Math.max(0,
           (outstandingByBond.get(b.key) ?? 0)
-          - inst.tradableFloatUSD
+          - inst.tradableFloatLocal
           - (passiveCbByBond.get(b.key) ?? 0));
       });
 
@@ -518,15 +518,15 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const byTenor: Record<string, number> = { ...(existingSheet.sovereignBondHoldingsByBond || {}) };
         let faceDeltaUSD = 0;
         // Step 13 (W2): the bank's bill book moves by wire against the house, bill by bill.
-        const billsBefore = new Map<string, { valueUSD: number }>(), billsAfter = new Map<string, { valueUSD: number }>();
+        const billsBefore = new Map<string, { valueLocal: number }>(), billsAfter = new Map<string, { valueLocal: number }>();
         activeBills.forEach((b) => {
           // Item 13: the primary slice books at cost — the rebate is the same instruction's
           // booking half (the cash half was adjusted on the participant's net above).
           const newUSD = (fills.get(b.key) ?? 0)
             - rebateOf(`BANK-${bank.ticker}`, b.key);
           faceDeltaUSD += newUSD - (byTenor[b.key] ?? 0);
-          billsBefore.set(b.key, { valueUSD: byTenor[b.key] ?? 0 });
-          billsAfter.set(b.key, { valueUSD: newUSD > 1 ? newUSD : 0 });
+          billsBefore.set(b.key, { valueLocal: byTenor[b.key] ?? 0 });
+          billsAfter.set(b.key, { valueLocal: newUSD > 1 ? newUSD : 0 });
           if (newUSD > 1) byTenor[b.key] = newUSD; else delete byTenor[b.key];
         });
         clearedBookDelta({ kind: 'BANK_SECURITIES', ticker: bank.ticker }, regionId, 'GOV_BOND', billsBefore, billsAfter, () => undefined, 'bill clearing fill');
@@ -535,9 +535,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // settles through the clearing house below, so the buyer and the seller move against
         // each other rather than each moving alone.
         const cashDeltaUSD = result.netCashDeltaByParticipantId.get(`BANK-${bank.ticker}`) ?? -faceDeltaUSD;
-        const feeUSD = Math.max(0, -(cashDeltaUSD + faceDeltaUSD));
+        const feeLocal = Math.max(0, -(cashDeltaUSD + faceDeltaUSD));
         updateBankSheet(ctx, bank.ticker, {
-          ...bookPnL(existingSheet, -feeUSD, 'bill book fee', bank.ticker),
+          ...bookPnL(existingSheet, -feeLocal, 'bill book fee', bank.ticker),
           sovereignBondHoldingsByBond: byTenor,
           sovereignBondHoldingsLocal: Math.round(Object.values(byTenor).reduce((s, v) => s + v, 0)),
         });
@@ -559,7 +559,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const billHoldings: ItemizedHolding[] = [];
         fills.forEach((usd, instrumentId) => {
           const bookedUSD = usd - rebateOf(entity.id, instrumentId);
-          if (bookedUSD > 1) billHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: bookedUSD, units: bookedUSD });
+          if (bookedUSD > 1) billHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalLocal: bookedUSD, units: bookedUSD });
         });
         ctx.holdingsStore!.append(entity.id, billHoldings);
       });
@@ -574,16 +574,16 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const billRows: ItemizedHolding[] = [];
         fills.forEach((usd, instrumentId) => {
           const bookedUSD = usd - rebateOf(treasuryParticipantId(ticker), instrumentId);
-          if (bookedUSD > 1) billRows.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: bookedUSD, units: bookedUSD });
+          if (bookedUSD > 1) billRows.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalLocal: bookedUSD, units: bookedUSD });
         });
         // Step 13 (W2): the treasury's bill rows move by wire against the house (its rows are
         // keyed by bill id, as every other holder's are).
-        const tBefore = new Map<string, { valueUSD: number }>(), tAfter = new Map<string, { valueUSD: number }>();
+        const tBefore = new Map<string, { valueLocal: number }>(), tAfter = new Map<string, { valueLocal: number }>();
         (comp.treasuryHoldings || []).forEach((h) => {
           if (!billIds.has(h.instrumentId)) return;
-          tBefore.set(h.instrumentId, { valueUSD: (tBefore.get(h.instrumentId)?.valueUSD ?? 0) + (h.quantityOrNotionalUSD ?? 0) });
+          tBefore.set(h.instrumentId, { valueLocal: (tBefore.get(h.instrumentId)?.valueLocal ?? 0) + (h.quantityOrNotionalLocal ?? 0) });
         });
-        billRows.forEach((h) => tAfter.set(h.instrumentId, { valueUSD: (tAfter.get(h.instrumentId)?.valueUSD ?? 0) + (h.quantityOrNotionalUSD ?? 0) }));
+        billRows.forEach((h) => tAfter.set(h.instrumentId, { valueLocal: (tAfter.get(h.instrumentId)?.valueLocal ?? 0) + (h.quantityOrNotionalLocal ?? 0) }));
         clearedBookDelta({ kind: 'COMPANY', ticker }, regionId, 'GOV_BOND', tBefore, tAfter, () => undefined, 'bill clearing fill');
         if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
         ctx.companyUpdates[ticker].treasuryHoldings = [...kept, ...billRows];
@@ -602,7 +602,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
                 : dealerDeskPartyOf(id, deskTickers)),
         // Item 13: the CCP receives less by exactly the rebates its buyers kept, and pays the
         // treasury less by the same total — flat by construction, as a clearing house is.
-        { netCashUSD: result.dealerNetCashUSD - totalCashRebatesUSD, feeUSD: result.totalDealerRevenueUSD },
+        { netCashUSD: result.dealerNetCashUSD - totalCashRebatesUSD, feeLocal: result.totalDealerRevenueUSD },
         feeDesksForRegion(ctx, regionId),
         // PUB/item 13: the treasury receives the DISCOUNTED proceeds the auction's yield
         // implies — that shortfall against face is exactly the government's borrowing cost,
@@ -614,12 +614,12 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           result.primaryOutcomeById.forEach((o, instrumentId) => {
             if (o.withdrawn) return;
             const pf = priceFractionById.get(instrumentId) ?? 1;
-            const amountUSD = Math.max(0, o.marketTakeUSD) * pf
+            const amountLocal = Math.max(0, o.marketTakeUSD) * pf
               + (deskPrimaryFaceByInstrument.get(instrumentId) ?? 0);
             // §5-WIRES W2: the bill delivered at what its holders BOOK (face less the register
             // buyers' rebates — the desks book face); the money at the discount. P (step 13's
             // register per tranche) makes this face × price by construction.
-            if (amountUSD > 0) takes.push({ party: { kind: 'GOVERNMENT', region: regionId }, amountUSD, asset: billAsset(instrumentId, Math.max(0, o.marketTakeUSD - (rebateByInstrument.get(instrumentId) ?? 0)), o.clearedStat) });
+            if (amountLocal > 0) takes.push({ party: { kind: 'GOVERNMENT', region: regionId }, amountLocal, asset: billAsset(instrumentId, Math.max(0, o.marketTakeUSD - (rebateByInstrument.get(instrumentId) ?? 0)), o.clearedStat) });
           });
           return takes;
         })()
@@ -746,8 +746,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         store.scan(entity.id, 'COMMERCIAL_PAPER', (h) => {
           const issuerId = issuerIdOf(v2Mirror, h.instrumentId); // 13b: a row names a tranche or its issuer
           if (!cpIssuerIds.has(issuerId)) return false;
-          byIssuer.set(issuerId, (byIssuer.get(issuerId) ?? 0) + h.quantityOrNotionalUSD);
-          byTranche.set(h.instrumentId, (byTranche.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+          byIssuer.set(issuerId, (byIssuer.get(issuerId) ?? 0) + h.quantityOrNotionalLocal);
+          byTranche.set(h.instrumentId, (byTranche.get(h.instrumentId) ?? 0) + h.quantityOrNotionalLocal);
           return true;
         });
         heldByIssuerByEntity.set(entity.id, byIssuer);
@@ -787,7 +787,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             // Step 13 (W2): the matured paper leaves the desk by wire, to the house (the ladder's
             // retirement wire meets it there).
             transferHolding(ctx.v2, { kind: 'BANK_SECURITIES', ticker }, { kind: 'CLEARING_HOUSE', region: regionId },
-              { instrumentType: 'COMMERCIAL_PAPER', instrumentId: iss.comp.id, issuerRegion: regionId, valueUSD: repaidUSD }, 'commercial paper redeemed: desk paper matured');
+              { instrumentType: 'COMMERCIAL_PAPER', instrumentId: iss.comp.id, issuerRegion: regionId, valueLocal: repaidUSD }, 'commercial paper redeemed: desk paper matured');
           }
         });
         heldByIssuerByEntity.forEach((byIssuer, entityId) => {
@@ -874,7 +874,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           // added below — the desks have to be sized against a live float, and a float of zero
           // makes `buildDealerDeskParticipants` return no desk at all.
           outstandingLocal: iss.survivingUSD,
-          tradableFloatUSD: heldByInstitutionsUSD.get(iss.comp.id) ?? 0,
+          tradableFloatLocal: heldByInstitutionsUSD.get(iss.comp.id) ?? 0,
           currentStat: weightedCouponBps > 0 ? weightedCouponBps : Math.max(1, fairOpeningBps),
           statKind: 'YIELD_LIKE',
           durationYears: CP_TENOR_WEEKS / 52,
@@ -893,7 +893,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // SIZE, never a veto (domain/commercial-paper.ts).
       const cpParticipants: ClearingParticipant[] = [];
       cpEntities.forEach((entity) => {
-        const sleeveUSD = institutionTotalAssetsUSD(ctx, entity) * entity.assetAllocationTarget.cashPct * CP_SHARE_OF_TERM_SLEEVE;
+        const sleeveUSD = institutionTotalAssetsLocal(ctx, entity) * entity.assetAllocationTarget.cashPct * CP_SHARE_OF_TERM_SLEEVE;
         const holdings = heldByIssuerByEntity.get(entity.id) ?? new Map<string, number>();
         if (!(sleeveUSD > 0) && holdings.size === 0) return;
         const cashLocal = institutionSpendableUSD(ctx, entity) * CP_SHARE_OF_TERM_SLEEVE;
@@ -915,7 +915,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
               recoveryRate: cpRecoveryRate,
               tenorWeeks: CP_TENOR_WEEKS,
             }),
-            maxHoldingUSD: lineUSD,
+            maxHoldingLocal: lineUSD,
             fullSizeStatRange: CP_FULL_SIZE_YIELD_RANGE_BPS,
             maxNetPurchaseUSD: cashLocal * bidShare,
           });
@@ -936,7 +936,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           if (usd > 0) cpDeskHeldUSD.set(id, (cpDeskHeldUSD.get(id) ?? 0) + usd);
         }));
       cpInstruments.forEach((inst) => {
-        inst.tradableFloatUSD = (heldByInstitutionsUSD.get(inst.id) ?? 0) + (cpDeskHeldUSD.get(inst.id) ?? 0);
+        inst.tradableFloatLocal = (heldByInstitutionsUSD.get(inst.id) ?? 0) + (cpDeskHeldUSD.get(inst.id) ?? 0);
       });
 
       const cpResult = clearFinancialAsset(cpInstruments, [...cpParticipants, ...cpDeskParticipants], new Map(), {
@@ -970,7 +970,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             ? { trancheId: `${iss.comp.ticker}-CP-${ctx.nextWeek}`, sliceUSD: primarySliceOf(usd - (prior?.get(issuerId) ?? 0), cpBoughtByIssuer.get(issuerId) ?? 0, outcome.marketTakeUSD) }
             : undefined;
           splitAcrossTranches(v2Mirror, issuerId, 'COMMERCIAL_PAPER', usd, primary).forEach((t) => {
-            if (t.usd > 1) rows.push({ instrumentId: t.instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, units: t.usd, faceLocal: t.usd });
+            if (t.usd > 1) rows.push({ instrumentId: t.instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalLocal: t.usd, units: t.usd, faceLocal: t.usd });
           });
         });
         store.append(entity.id, rows);
@@ -1051,7 +1051,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         ctx, regionId, currencyOf(regionId), CP_BOOK,
         cpResult.netCashDeltaByParticipantId,
         (id) => (cpEntityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, cpDeskTickers)),
-        { netCashUSD: cpResult.dealerNetCashUSD, feeUSD: cpResult.totalDealerRevenueUSD },
+        { netCashUSD: cpResult.dealerNetCashUSD, feeLocal: cpResult.totalDealerRevenueUSD },
         feeDesksForRegion(ctx, regionId),
         // The paper's leg is the tranche's own wire (issuer → house at issue, W3) — no asset here.
         primaryTakes(cpResult, (issuerId) => {

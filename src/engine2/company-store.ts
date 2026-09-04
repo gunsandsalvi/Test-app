@@ -51,7 +51,7 @@ const F64_FIELDS = [
   'accumulatedDepreciationLocal', 'capexCommissionedLastWeekUSD', 'rndExpense',
   'baselineGrowthCapexToRevenueRatio', 'maintenanceShortfallStreak', 'executionQuality',
   // clocks / market
-  'earningsWeekModulo', 'lastEarningsReportWeek', 'lastEarningsSurprisePct', 'mmfSharesUSD',
+  'earningsWeekModulo', 'lastEarningsReportWeek', 'lastEarningsSurprisePct', 'mmfSharesLocal',
   'lastOpportunisticOfferingWeek', 'pendingLboEquityUSD', 'pendingIpoShares', 'lastRecapWeek',
   'bornWeek', 'leverage', 'interestCoverage', 'recoveryRate', 'baselineRecoveryRate', 'stockPrice',
   'forwardPE', 'marketCap', 'dividendYield', 'baselineDividendYield', 'bankMarketShare',

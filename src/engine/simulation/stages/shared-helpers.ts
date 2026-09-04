@@ -299,7 +299,7 @@ export function attributeItemizedHoldings(
         instrumentId: c.id,
         instrumentType: c.type,
         issuerRegion: c.region,
-        quantityOrNotionalUSD: take, units: take,
+        quantityOrNotionalLocal: take, units: take,
       });
       remaining -= take;
     }
@@ -403,9 +403,9 @@ function holderPayee(holderId: string): import('./settlement').PartyRef {
 function bookDeskIncome(companies: Company[] | undefined, byTicker: Map<string, number>, reason: string): void {
   if (byTicker.size === 0) return;
   companies?.forEach((bank) => {
-    const deltaUSD = byTicker.get(bank.ticker);
-    if (!deltaUSD || !bank.bankBalanceSheet) return;
-    bank.bankBalanceSheet = bookPnL(bank.bankBalanceSheet, deltaUSD, reason, bank.ticker);
+    const deltaLocal = byTicker.get(bank.ticker);
+    if (!deltaLocal || !bank.bankBalanceSheet) return;
+    bank.bankBalanceSheet = bookPnL(bank.bankBalanceSheet, deltaLocal, reason, bank.ticker);
   });
 }
 
@@ -505,15 +505,15 @@ export function applyPendingCorporateActionSettlements(
           const issuerTicker = issuerTickerOf(p.instrumentId);
           const issuerRegion = regionByIssuerId.get(issuerIdOf(v2, p.instrumentId));
           if (!issuerTicker || !issuerRegion) return p;
-          const deltaUSD = p.inventoryLocal * (ratio - 1);
+          const deltaLocal = p.inventoryLocal * (ratio - 1);
           const house = { kind: 'CLEARING_HOUSE' as const, region: issuerRegion };
           const desk = { kind: 'BANK_SECURITIES' as const, ticker: bank.ticker };
-          const spec = { instrumentType: type as ItemizedHolding['instrumentType'], instrumentId: p.instrumentId, issuerRegion, valueUSD: Math.abs(deltaUSD) };
-          if (deltaUSD < 0) {
-            journalPayment(ctx, { payer: { kind: 'COMPANY', ticker: issuerTicker }, payee: desk, amount: -deltaUSD, currency: currencyOf(issuerRegion), reason: 'principal redeemed to holder of record' });
+          const spec = { instrumentType: type as ItemizedHolding['instrumentType'], instrumentId: p.instrumentId, issuerRegion, valueLocal: Math.abs(deltaLocal) };
+          if (deltaLocal < 0) {
+            journalPayment(ctx, { payer: { kind: 'COMPANY', ticker: issuerTicker }, payee: desk, amount: -deltaLocal, currency: currencyOf(issuerRegion), reason: 'principal redeemed to holder of record' });
             transferHolding(ctx.v2, desk, house, spec, 'corporate action: desk paper retired pro rata');
           } else {
-            journalPayment(ctx, { payer: desk, payee: { kind: 'COMPANY', ticker: issuerTicker }, amount: deltaUSD, currency: currencyOf(issuerRegion), reason: 'placement paid by holder of record' });
+            journalPayment(ctx, { payer: desk, payee: { kind: 'COMPANY', ticker: issuerTicker }, amount: deltaLocal, currency: currencyOf(issuerRegion), reason: 'placement paid by holder of record' });
             transferHolding(ctx.v2, house, desk, spec, 'corporate action: desk paper placed pro rata');
           }
           touched = true;
@@ -616,17 +616,17 @@ export function applyPendingCorporateActionSettlements(
           let deskBookUSD = 0;
           byDesk?.forEach((usd) => { deskBookUSD += usd; });
           byDesk?.forEach((usd, deskId) => {
-            const amountUSD = owedUSD * (deskUSD / denomUSD) * (usd / deskBookUSD);
-            if (!(amountUSD > 0)) return;
+            const amountLocal = owedUSD * (deskUSD / denomUSD) * (usd / deskBookUSD);
+            if (!(amountLocal > 0)) return;
             journalPayment(ctx, {
-              payer, payee: holderPayee(deskId), amount: amountUSD,
+              payer, payee: holderPayee(deskId), amount: amountLocal,
               // The paper's own money, off the ISSUER — which is the payer here. Read from the
               // party rather than from `issuer`, which is `undefined` for every non-equity
               // instrument at this site and would have thrown the moment a credit desk was paid.
               currency: obligationCurrencyOf(ctx.v2, payer), reason: 'security payment to holder of record',
             });
             const deskTicker = dealerDeskTicker(deskId);
-            if (deskTicker !== undefined) deskIncomeByTicker.set(deskTicker, (deskIncomeByTicker.get(deskTicker) ?? 0) + amountUSD);
+            if (deskTicker !== undefined) deskIncomeByTicker.set(deskTicker, (deskIncomeByTicker.get(deskTicker) ?? 0) + amountLocal);
           });
         }
         const floatUSD = denomUSD - registerUSD - deskUSD;
@@ -659,22 +659,22 @@ export function applyPendingCorporateActionSettlements(
       const k = pairKeyOf(r);
       if (hasCash) {
         const owedUSD = owedByPair.get(k);
-        const totalUSD = totalByPair.get(k) ?? 0;
-        if (owedUSD !== undefined && totalUSD > 0) {
+        const totalLocal = totalByPair.get(k) ?? 0;
+        if (owedUSD !== undefined && totalLocal > 0) {
           // The holder's share of what the issuer owes, paid AS A PAYMENT from the issuer, so
           // the money has a payer and a payee instead of appearing on the holder's book while
           // the issuer's ledger says it left.
-          const shareUSD = owedUSD * (H.qtyLocal[r] / (denomByPair.get(k) ?? totalUSD));
+          const shareLocal = owedUSD * (H.qtyLocal[r] / (denomByPair.get(k) ?? totalLocal));
           const issuerTicker = issuerTickerOf(v2.internedStrings[H.instrRef[r]]);
           // A holder paid by an issuer nobody can name is money from nobody: a defect at the
           // site that recorded the action, never a credit.
           if (!ctx.paymentJournal || !issuerTicker) {
-            defect(`security payment of ${(shareUSD / 1e6).toFixed(3)}M to ${entity.id} from an issuer with no ticker (${v2.internedStrings[H.instrRef[r]]})`);
+            defect(`security payment of ${(shareLocal / 1e6).toFixed(3)}M to ${entity.id} from an issuer with no ticker (${v2.internedStrings[H.instrRef[r]]})`);
           }
           journalPayment(ctx, {
             payer: { kind: 'COMPANY', ticker: issuerTicker },
             payee: { kind: 'INSTITUTION', id: entity.id },
-            amount: shareUSD,
+            amount: shareLocal,
             currency: currencyOf(v2.internedStrings[H.regionRef[r]] as RegionId),
             reason: 'security payment to holder of record',
           });
@@ -778,12 +778,12 @@ export function applyPendingCorporateActionSettlements(
       // creates them from the issuer to the house — and the house nets to zero on equity too.
       const equityIssuerTicker = heldInShares(a.type) ? issuerTickerOf(a.id) : undefined;
       if (a.retiredUSD > 0) {
-        const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.retiredUSD, shares: a.anyShares ? a.retiredSh : undefined };
+        const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueLocal: a.retiredUSD, shares: a.anyShares ? a.retiredSh : undefined };
         transferHolding(v2, holder, house, spec, 'corporate action: paper retired pro rata');
         if (equityIssuerTicker) transferHolding(v2, house, { kind: 'COMPANY', ticker: equityIssuerTicker }, spec, 'corporate action: shares retired by the issuer');
       }
       if (a.placedUSD > 0) {
-        const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueUSD: a.placedUSD, shares: a.anyShares ? a.placedSh : undefined };
+        const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueLocal: a.placedUSD, shares: a.anyShares ? a.placedSh : undefined };
         if (equityIssuerTicker) transferHolding(v2, { kind: 'COMPANY', ticker: equityIssuerTicker }, house, spec, 'corporate action: shares placed by the issuer');
         transferHolding(v2, house, holder, spec, 'corporate action: paper placed pro rata');
       }
@@ -805,11 +805,11 @@ export function payHoldersCash(
   /** The instrument the rows name — a tranche id for the credit kinds, the issuer for equity. */
   instrumentId: string,
   instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'EQUITY',
-  amountUSD: number
+  amountLocal: number
 ): void {
-  if (!(amountUSD > 0)) return;
+  if (!(amountLocal > 0)) return;
   const key = `${instrumentType}:${instrumentId}`;
-  ctx.pendingHolderCashUSD.set(key, (ctx.pendingHolderCashUSD.get(key) ?? 0) + amountUSD);
+  ctx.pendingHolderCashUSD.set(key, (ctx.pendingHolderCashUSD.get(key) ?? 0) + amountLocal);
 }
 
 /**
@@ -977,10 +977,10 @@ export function applyHolderInterestAccruals(
         const instrumentText = accruingRow[iid];
         if (instrumentText === undefined) continue;
         const weeklyUSD = accruingWeekly[iid];
-        const totalUSD = totalByInst[iid] ?? 0;
-        if (weeklyUSD === undefined || !(totalUSD > 0)) continue;
-        const shareUSD = weeklyUSD * (qtyCol[row] / totalUSD) * (registerShare[iid] ?? 1);
-        if (!(shareUSD > 0)) continue;
+        const totalLocal = totalByInst[iid] ?? 0;
+        if (weeklyUSD === undefined || !(totalLocal > 0)) continue;
+        const shareLocal = weeklyUSD * (qtyCol[row] / totalLocal) * (registerShare[iid] ?? 1);
+        if (!(shareLocal > 0)) continue;
         let byHolder = byHolderByInst[iid];
         if (byHolder === undefined) {
           const key = `${type}:${instrumentText}`;
@@ -989,7 +989,7 @@ export function applyHolderInterestAccruals(
           byHolderByInst[iid] = byHolder;
         }
         const entityId = entityIdByRow[entCol[row]];
-        byHolder.set(entityId, (byHolder.get(entityId) ?? 0) + shareUSD);
+        byHolder.set(entityId, (byHolder.get(entityId) ?? 0) + shareLocal);
       }
       // Pass 3 — the desks' side of the same split, on the accrual ledger the register uses, so
       // the coupon date pays them out of the same balance. An issuer whose paper the register
@@ -1004,10 +1004,10 @@ export function applyHolderInterestAccruals(
           let byHolder = ctx.holderAccruedInterestUSD.get(key);
           if (!byHolder) { byHolder = new Map(); ctx.holderAccruedInterestUSD.set(key, byHolder); }
           deskByIssuer.get(issuerOfInst[iid])?.forEach((usd, deskId) => {
-            const shareUSD = deskCutUSD * (usd / deskUSD);
-            if (!(shareUSD > 0)) return;
-            byHolder.set(deskId, (byHolder.get(deskId) ?? 0) + shareUSD);
-            if (COUPON_TRACE) traceAdd(traceDeskAccruedUSD, type, shareUSD);
+            const shareLocal = deskCutUSD * (usd / deskUSD);
+            if (!(shareLocal > 0)) return;
+            byHolder.set(deskId, (byHolder.get(deskId) ?? 0) + shareLocal);
+            if (COUPON_TRACE) traceAdd(traceDeskAccruedUSD, type, shareLocal);
           });
         });
       }

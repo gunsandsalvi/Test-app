@@ -20,7 +20,7 @@ import { assertNever } from '../domain/defect';
 import { dealerDeskCapacityUSD, dealerDeskGrossUSD, DESK_SPREAD_BPS_BY_BOOK } from '../domain/dealer-desk';
 
 export { DESK_SPREAD_BPS_BY_BOOK };
-import { BASEL_MIN_LEVERAGE_RATIO, leverageHeadroomUSD } from './macro/banking';
+import { BASEL_MIN_LEVERAGE_RATIO, leverageHeadroomLocal } from './macro/banking';
 
 /** The desk book each tradable asset class lands in — the same names the clearing adapters use.
  *  A derivative consumes the desk through a PFE add-on rather than at notional, exactly as the
@@ -54,10 +54,10 @@ export function dealersFromBanks(
     .filter((b) => b.isBankEntity && b.bankBalanceSheet)
     .map((bank, i) => {
       const sheet = bank.bankBalanceSheet!;
-      const grossUSD = dealerDeskGrossUSD(sheet.dealerDeskInventory);
-      const capacityUSD = dealerDeskCapacityUSD({
+      const grossLocal = dealerDeskGrossUSD(sheet.dealerDeskInventory);
+      const capacityLocal = dealerDeskCapacityUSD({
         balanceSheetCapacityUSD: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-        leverageHeadroomUSD: leverageHeadroomUSD(sheet, reservesOf(bank), facilityBookOf(bank)),
+        leverageHeadroomLocal: leverageHeadroomLocal(sheet, reservesOf(bank), facilityBookOf(bank)),
         inventory: sheet.dealerDeskInventory,
         book: '',
       });
@@ -77,8 +77,8 @@ export function dealersFromBanks(
         axeDescription: 'Fills from its own book where it is long; elsewhere it has to source the '
           + 'paper and its own schedule prices the size.',
         axeAssetClasses,
-        creditLimitUSD: Math.round(capacityUSD),
-        currentExposureUSD: Math.round(grossUSD),
+        creditLimitUSD: Math.round(capacityLocal),
+        currentExposureUSD: Math.round(grossLocal),
         acceptedAssetClasses: ALL_ASSET_CLASSES,
         color: DEALER_COLORS[i % DEALER_COLORS.length],
       };

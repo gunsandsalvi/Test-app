@@ -144,7 +144,7 @@ checked by `scripts/check-atlas.sh`.
 | F1 a statement per book, in that book's own money | `src/engine/simulation/stages/settlement.ts:SettlementReport` | ✅ |
 | F1.a treasury, household, bank, pool statements | `src/engine/simulation/stages/settlement.ts:treasuryFlowsByRegion` | ✅ |
 | **F1.b FORBID a per-book statement is never a sum across currencies** | `src/engine/simulation/stages/settlement.ts:grossByCurrency` | ✅ |
-| F2 the gross and the net are both reported | `src/engine/simulation/stages/settlement.ts:grossUSD` | ✅ |
+| F2 the gross and the net are both reported | `src/engine/simulation/stages/settlement.ts:grossLocal` | ✅ |
 | F3 VERIFY the clearing house's residual is zero | `src/engine/simulation/stages/settlement.ts:clearingHouseResidualUSD` | ✅ |
 | F4 VERIFY money on a holder with no account is counted | `src/engine/simulation/stages/settlement.ts:unresolvedUSD` | ✅ |
 

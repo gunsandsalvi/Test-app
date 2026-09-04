@@ -76,7 +76,7 @@ export function emptyFreightClearing(): FreightClearing {
  *  per tonne, which is its cleared unit price over the physical mass of a unit. */
 export function fuelPriceUsdPerTonne(region: Region, unitMassTonnes: Record<string, number>): number {
   const mass = unitMassTonnes[FUEL_SUBUNIT_ID] ?? 0;
-  const unitPrice = Number(region.categoryDemand[FUEL_SUBUNIT_ID]?.unitPriceUSD);
+  const unitPrice = Number(region.categoryDemand[FUEL_SUBUNIT_ID]?.unitPriceLocal);
   if (!(mass > 0) || !(unitPrice > 0)) return 0;
   return unitPrice / mass;
 }

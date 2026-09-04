@@ -24,7 +24,7 @@ export const lines: FunctionModule = {
     const expected = c.expectedSalesUnitsBySubUnit ?? {};
     const inv = c.outputInventoryBySubUnit ?? {};
     const rows = [...ls].sort((a, b) => b.revenueShare - a.revenueShare);
-    const stockUSD = Object.values(inv).reduce((a, v) => a + v.valueUSD, 0);
+    const stockUSD = Object.values(inv).reduce((a, v) => a + v.valueLocal, 0);
     return (<>
       <Card style={{ padding: '2px 0' }}>
         <KV k="lines" hint={rows.map((l) => words(l.industry)).filter((v, i, a) => a.indexOf(v) === i).join(' · ')} v={count(rows.length)} />
@@ -51,7 +51,7 @@ export const lines: FunctionModule = {
       <SectionLabel>the markets</SectionLabel>
       <Table rows={rows} keyOf={(l) => l.subUnitId} columns={[
         { key: 'line', label: 'market', width: 2, render: (l) => <Link to={{ type: 'market', id: marketId(c.region, l.subUnitId) }} nav={nav}>{subUnitLabel(l.subUnitId)}</Link> },
-        { key: 'price', label: 'price', render: (l) => num(reg?.categoryDemand[l.subUnitId as keyof typeof reg.categoryDemand]?.unitPriceUSD) },
+        { key: 'price', label: 'price', render: (l) => num(reg?.categoryDemand[l.subUnitId as keyof typeof reg.categoryDemand]?.unitPriceLocal) },
         { key: 'fill', label: 'fill', render: (l) => { const d = reg?.categoryDemand[l.subUnitId as keyof typeof reg.categoryDemand]; const f = d ? fillOf(d) : undefined; return f !== undefined ? pctLevel(f, 0) : '—'; } },
         { key: 'mine', label: 'my share', render: (l) => pctLevel(l.categoryMarketShare, 1) },
       ]} />

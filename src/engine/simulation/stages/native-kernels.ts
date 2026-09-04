@@ -131,7 +131,7 @@ export function nativeFrontCore(
   const tl: ArrayBufferView[] = [
     tables.RECIPE_START, tables.RECIPE_INPUT, tables.RECIPE_INTENSITY,
     tables.HAS_INDUSTRY, tables.IS_SUBSCRIPTION, tables.CARRY_RATE_WEEKLY, tables.INDUSTRIAL_SET,
-    lots.units, lots.priceUSD, lots.acquiredWeek, lots.next, lots.head, lots.tail,
+    lots.units, lots.priceLocal, lots.acquiredWeek, lots.next, lots.head, lots.tail,
   ];
   const outs: ArrayBufferView[] = [
     F.isActive, F.isProfile, F.rngAfter,

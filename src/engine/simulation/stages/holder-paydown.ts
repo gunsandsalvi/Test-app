@@ -107,12 +107,12 @@ export function reconcileHolderPrincipal(args: {
     byIssuer.forEach((usd, issuerId) => {
       const factor = factorByIssuer.get(issuerId);
       if (factor === undefined || !(usd > 0)) return;
-      const paidUSD = usd * (1 - factor);
+      const paidLocal = usd * (1 - factor);
       byIssuer.set(issuerId, usd * factor);
-      if (paidUSD <= 1) return;
+      if (paidLocal <= 1) return;
       const payer = payerOf(issuerId);
       if (!payer) return;
-      pay(ctx, { payer, payee: { kind: 'INSTITUTION', id: entityId }, amount: paidUSD, currency: currencyOf(args.regionId), reason });
+      pay(ctx, { payer, payee: { kind: 'INSTITUTION', id: entityId }, amount: paidLocal, currency: currencyOf(args.regionId), reason });
     });
   });
   deskSheets.forEach(({ bank, sheet }) => {
@@ -123,17 +123,17 @@ export function reconcileHolderPrincipal(args: {
     const newRows = rows.map((p) => {
       const factor = factorByIssuer.get(p.instrumentId);
       if (factor === undefined || !(p.inventoryLocal > 0)) return p;
-      const paidUSD = p.inventoryLocal * (1 - factor);
-      if (paidUSD > 1) {
+      const paidLocal = p.inventoryLocal * (1 - factor);
+      if (paidLocal > 1) {
         const payer = payerOf(p.instrumentId);
         if (payer) {
           // The desk's principal comes back as reserves against the position it loses — an
           // asset swap on the securities account, exactly like a sale (rule 5).
-          pay(ctx, { payer, payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker }, amount: paidUSD, currency: currencyOf(args.regionId), reason });
+          pay(ctx, { payer, payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker }, amount: paidLocal, currency: currencyOf(args.regionId), reason });
           // Step 13 (W2): the paper paid down leaves the desk by wire, to the house (the ladder's
           // own retirement wire met it there; the register's share is wired at its write-back).
           transferHolding(ctx.v2, { kind: 'BANK_SECURITIES', ticker: bank.ticker }, { kind: 'CLEARING_HOUSE', region: args.regionId },
-            { instrumentType, instrumentId: p.instrumentId, issuerRegion: args.regionId, valueUSD: paidUSD }, `${reason}: desk paper paid down`);
+            { instrumentType, instrumentId: p.instrumentId, issuerRegion: args.regionId, valueLocal: paidLocal }, `${reason}: desk paper paid down`);
         }
       }
       touched = true;

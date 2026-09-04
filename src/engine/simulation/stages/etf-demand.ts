@@ -41,7 +41,7 @@ export function indexFundDemand(
 ): ParticipantDemand {
   return {
     reservationStat: statKind === 'YIELD_LIKE' ? -NO_RESERVATION_YIELD_BPS : NO_RESERVATION_PRICE,
-    maxHoldingUSD: Math.max(0, targetUSD),
+    maxHoldingLocal: Math.max(0, targetUSD),
     // Full size immediately: there is no level at which the fund scales in, because it is not
     // pricing. Any positive range would make it price-sensitive, which is the opposite of what
     // it is.
@@ -81,7 +81,7 @@ export function indexFundsForBook(
     // that is the refill path a real fund has, and the one this one was missing.
     const holdingsUSD = holdingsUsdOf
       ? holdingsUsdOf(e)
-      : e.itemizedHoldings.reduce((s, h) => s + (h.quantityOrNotionalUSD ?? 0), 0);
+      : e.itemizedHoldings.reduce((s, h) => s + (h.quantityOrNotionalLocal ?? 0), 0);
     // §7.273 — THE FUND KEEPS ITS OWN FEE AS A CASH SLEEVE. Fully invested, a fund that pays
     // its sponsor and its trading spreads out of a zero cash line orbits at dust-negative
     // forever: each refill sale nets proceeds-minus-fee and lands just below zero again

@@ -35,7 +35,7 @@ export function getCategoryDemandSeedUSD(
   // random stream spent on immediately-discarded objects.
   initialRegions: Record<RegionId, import('../types').Region> = getInitialRegions()
 ): number {
-  const income = initialRegions[region]?.estimatedHouseholdIncomeUSD ?? 10_000_000_000_000;
+  const income = initialRegions[region]?.estimatedHouseholdIncomeLocal ?? 10_000_000_000_000;
   const consumption = income * 0.95;
   const govBase = income * 0.18;
   const corpBase = income * 0.08;
@@ -90,11 +90,11 @@ export function producingSectorNamedTierDemandUSD(
   if (!list || list.length === 0) return 0;
   let total = 0;
   for (const { su } of list) {
-    const demandUSD = Number(initialRegions[region]?.categoryDemand[su.unitId]?.demandLevelAnnualUSD) || 0;
-    if (!(demandUSD > 0)) continue;
+    const demandLocal = Number(initialRegions[region]?.categoryDemand[su.unitId]?.demandLevelAnnualLocal) || 0;
+    if (!(demandLocal > 0)) continue;
     const industry = industryOfSubUnit(su.unitId);
     const smeShare = industry ? (INDUSTRY_REGISTRY[industry]?.smeShareOfActivity ?? 0) : 0;
-    total += demandUSD * Math.max(0, 1 - smeShare);
+    total += demandLocal * Math.max(0, 1 - smeShare);
   }
   return total;
 }
@@ -175,7 +175,7 @@ export function buildQuarterlyFundamentalSnapshot(
   // a flat spread-over-totalDebt formula.
   annualInterestOverride?: number,
   // 1$ is 1$ Phase 6: real held raw-material/input inventory value, as of this filing date (sum
-  // of InputLot.unitsHeld * unitPriceUSD) — genuine asset value the balance sheet previously had
+  // of InputLot.unitsHeld * unitPriceLocal) — genuine asset value the balance sheet previously had
   // no line for at all, defaulting to 0 for the synthetic pre-history seed snapshots below.
   rawMaterialsInventoryUSD: number = 0,
 ): FundamentalSnapshot {
@@ -875,7 +875,7 @@ export function generateInitialCompanies(
   // so far, and dealt AGAIN by `simulation/initialization.ts` once the authoritative demand
   // vector (real procurement, real firm capex) exists. See the function's own doc.
   dealProductLinesAndHeadcount(companies, (region, unitId) =>
-    Number(initialRegions[region]?.categoryDemand[unitId]?.demandLevelAnnualUSD) || 0);
+    Number(initialRegions[region]?.categoryDemand[unitId]?.demandLevelAnnualLocal) || 0);
 
   return companies;
 }
@@ -916,7 +916,7 @@ export function generateInitialCompanies(
  */
 export function normalizeProducingSectorRevenue(
   companies: Company[],
-  demandLevelAnnualUSD: (subUnitId: string) => number,
+  demandLevelAnnualLocal: (subUnitId: string) => number,
   /** What the SME tier of a sub-unit's industry ACTUALLY carries in this region. */
   smeRevenueForSubUnitUSD: (subUnitId: string) => number
 ): void {
@@ -932,9 +932,9 @@ export function normalizeProducingSectorRevenue(
     // thing that has to be true.
     let total = 0;
     for (const { su } of list) {
-      const demandUSD = demandLevelAnnualUSD(su.unitId);
-      if (!(demandUSD > 0)) continue;
-      total += Math.max(0, demandUSD - Math.max(0, smeRevenueForSubUnitUSD(su.unitId)));
+      const demandLocal = demandLevelAnnualLocal(su.unitId);
+      if (!(demandLocal > 0)) continue;
+      total += Math.max(0, demandLocal - Math.max(0, smeRevenueForSubUnitUSD(su.unitId)));
     }
     return total;
   };
@@ -947,12 +947,12 @@ export function normalizeProducingSectorRevenue(
     const cohort = companies.filter(
       (c) => c.sector === sector && !c.isBankEntity && !(c as { institutionalRole?: string }).institutionalRole);
     if (cohort.length === 0) return;
-    const demandUSD = namedTierDemandUSD(sector);
-    if (!(demandUSD > 0)) return;
+    const demandLocal = namedTierDemandUSD(sector);
+    if (!(demandLocal > 0)) return;
     cohortBySector.set(sector, cohort);
-    demandBySector.set(sector, demandUSD);
+    demandBySector.set(sector, demandLocal);
     producingRevenueUSD += cohort.reduce((a, c) => a + (c.annualRevenue || 0), 0);
-    producingDemandUSD += demandUSD;
+    producingDemandUSD += demandLocal;
   });
   if (!(producingRevenueUSD > 0) || !(producingDemandUSD > 0)) return;
 
@@ -1025,7 +1025,7 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
  * SUPPLY/CHAIN — DEAL THE PRODUCER BASE AGAINST THE DEMAND THE ECONOMY WILL ACTUALLY STATE.
  *
  * This pass decides which sub-units each firm produces, what share of each category it holds, and
- * through value added — how many people it employs. It is weighted by `demandLevelAnnualUSD`, so the
+ * through value added — how many people it employs. It is weighted by `demandLevelAnnualLocal`, so the
  * producer base converges on demand's own shape and a new sub-unit in the registry gets producers
  * with no generator edit (BP1b, rule 15).
  *
@@ -1047,7 +1047,7 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
  */
 export function dealProductLinesAndHeadcount(
   companies: Company[],
-  demandLevelAnnualUSD: (region: RegionId, subUnitId: string) => number,
+  demandLevelAnnualLocal: (region: RegionId, subUnitId: string) => number,
   /** What the SME pools ACTUALLY carry of a sub-unit in this region (discipline: the
    *  registry share is what they were sized from, not what they hold). Absent at the placeholder
    *  deal, where the stated share stands in. */
@@ -1084,7 +1084,7 @@ export function dealProductLinesAndHeadcount(
       const sectorSubUnits = (subUnitsByProducingSector()[sector as ProducingSector] ?? [])
         .map(({ industry, su }) => ({
           industry, unitId: su.unitId,
-          weightUSD: Math.max(0, demandLevelAnnualUSD(_regionId as RegionId, su.unitId)),
+          weightUSD: Math.max(0, demandLevelAnnualLocal(_regionId as RegionId, su.unitId)),
         }))
         .filter(x => x.weightUSD > 0);
       const totalWeightUSD = sectorSubUnits.reduce((a, x) => a + x.weightUSD, 0);
@@ -1158,11 +1158,11 @@ export function dealProductLinesAndHeadcount(
       categories.forEach((unitId) => {
         const industry = industryOfSubUnit(unitId);
         const smeShare = industry ? (INDUSTRY_REGISTRY[industry]?.smeShareOfActivity ?? 0) : 0;
-        const demandUSD = Math.max(0, demandLevelAnnualUSD(_regionId as RegionId, unitId));
+        const demandLocal = Math.max(0, demandLevelAnnualLocal(_regionId as RegionId, unitId));
         const smeLocal = smeRevenueForSubUnitUSD
           ? Math.max(0, smeRevenueForSubUnitUSD(_regionId as RegionId, unitId))
-          : demandUSD * Math.max(0, smeShare);
-        targetUSD.set(unitId, Math.max(0, demandUSD - smeLocal));
+          : demandLocal * Math.max(0, smeShare);
+        targetUSD.set(unitId, Math.max(0, demandLocal - smeLocal));
       });
       for (let round = 0; round < 24; round++) {
         const currentUSD = new Map<string, number>();
@@ -1272,7 +1272,7 @@ export function generatePrivateCompanies(
     const sector = INDUSTRY_REGISTRY[seed.industry].sector as Sector;
     const ticker = generateUniqueTicker(existingTickers);
     const name = generateUniqueName(`${region} ${sector}`, sector, existingNames);
-    const revBase = Math.round(seed.annualRevenueUSD);
+    const revBase = Math.round(seed.annualRevenueLocal);
     const ebitda = Math.round(revBase * seed.ebitdaMargin);
     const debtBase = Math.round(ebitda * seed.leverage);
     // A provisional rating seeds the ladder's coupon economics; the REAL rating below comes from
@@ -1287,7 +1287,7 @@ export function generatePrivateCompanies(
     const coverage = ebit / Math.max(0.5, annualInterest);
     // CRD/: the seed rater sees the same facts the weekly one does, so a firm born without
     // earnings opens at the rating the week would give it rather than at a bounded ratio's.
-    const rating = determineCreditRating(debtBase / Math.max(1, ebitda), coverage, { ebitdaUSD: ebitda });
+    const rating = determineCreditRating(debtBase / Math.max(1, ebitda), coverage, { ebitdaLocal: ebitda });
     const capex = Math.round(revBase * 0.05);
     const maintenanceCapex = Math.round(capex * 0.6);
     const ppeIntensity = SECTOR_PPE_INTENSITY[sector] ?? 0.5;

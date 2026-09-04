@@ -51,7 +51,7 @@ export function centralBankParticipant(
     holdings.set(key, heldLocal);
     demand.set(key, {
       reservationStat: statKind === 'PRICE_LIKE' ? NO_RESERVATION_STAT : -NO_RESERVATION_STAT,
-      maxHoldingUSD: heldLocal + orderUSD,
+      maxHoldingLocal: heldLocal + orderUSD,
       // Full size at once: any positive range would make it price-sensitive.
       fullSizeStatRange: 1e-6,
       maxNetPurchaseUSD: orderUSD,
@@ -73,13 +73,13 @@ export function wireCentralBankFills(
   regionId: RegionId, cb: CentralBank, bondIds: string[],
   newHoldings: Map<string, number>, reason: string
 ): void {
-  const before = new Map<string, { valueUSD: number }>(), after = new Map<string, { valueUSD: number }>();
+  const before = new Map<string, { valueLocal: number }>(), after = new Map<string, { valueLocal: number }>();
   bondIds.forEach((key) => {
     const id = key;
-    const filledUSD = newHoldings.get(id);
-    if (filledUSD === undefined) return;
-    before.set(id, { valueUSD: Number(cb.sovereignHoldingsByBond?.[key]) || 0 });
-    after.set(id, { valueUSD: filledUSD });
+    const filledLocal = newHoldings.get(id);
+    if (filledLocal === undefined) return;
+    before.set(id, { valueLocal: Number(cb.sovereignHoldingsByBond?.[key]) || 0 });
+    after.set(id, { valueLocal: filledLocal });
   });
   clearedBookDelta({ kind: 'CENTRAL_BANK', region: regionId }, regionId, 'GOV_BOND', before, after, () => undefined, reason);
 }
@@ -96,10 +96,10 @@ export function applyCentralBankFills(
   let purchasedUSD = 0;
   const book = { ...cb.sovereignHoldingsByBond };
   bondIds.forEach((key) => {
-    const filledUSD = newHoldings.get(key);
-    if (filledUSD === undefined) return;
-    purchasedUSD += filledUSD - (Number(book[key]) || 0);
-    book[key] = filledUSD;
+    const filledLocal = newHoldings.get(key);
+    if (filledLocal === undefined) return;
+    purchasedUSD += filledLocal - (Number(book[key]) || 0);
+    book[key] = filledLocal;
   });
   cb.sovereignHoldingsByBond = book;
   return purchasedUSD;

@@ -28,7 +28,7 @@ export const macro: FunctionModule = {
     const sub = (k: string) => { const s = tape(k); return s.filter(Number.isFinite).length > WEEKS_PER_MONTH ? <ChangeSub series={s} /> : undefined; };
     const hs = r.householdState; const bs = r.bankingSector; const hm = r.housingMarket;
     const books = regionLoanBooksUSD(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.ticker));
-    const gdp = r.derivedNominalGdpUSD ?? r.estimatedNominalGdpUSD ?? 0;
+    const gdp = r.derivedNominalGdpUSD ?? r.estimatedNominalGdpLocal ?? 0;
     return (<>
       <SectionLabel>activity</SectionLabel>
       <Card style={{ padding: '2px 0' }}>

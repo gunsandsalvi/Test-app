@@ -290,7 +290,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         + (dead.length ? `${dead.length} firm${dead.length > 1 ? 's' : ''} defaulted (${N(deadHeads)} people): ${dead.map((c) => c.ticker).join(', ')}. ` : '')
         + `Inflation ${P(after.inflation)}, policy rate ${P(after.policyRate, 2)}, tightness ${(after.laborMarketTightness ?? 0).toFixed(2)}.`,
       refs: [region(rid), ...movers.map((x) => company(x.c)), ...dead.map(company)],
-      materialityUSD: Math.abs(du) * (after.derivedNominalGdpUSD ?? after.estimatedNominalGdpUSD ?? 0),
+      materialityUSD: Math.abs(du) * (after.derivedNominalGdpUSD ?? after.estimatedNominalGdpLocal ?? 0),
       impactRegion: rid,
       urgent: Math.abs(du) >= 0.02,
     });
@@ -320,7 +320,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         : `index at ${after.consumerPriceIndex.toFixed(1)}; no year of history yet`}). `
         + (cats.length ? `Biggest moves: ${cats.map((x) => `${x.k.replace(/_/g, ' ')} ${x.move > 0 ? '+' : ''}${P(x.move, 0)} (${P(x.fill, 0)} of demand served)`).join('; ')}.` : ''),
       refs: [region(rid)],
-      materialityUSD: Math.abs(dp) * (after.derivedNominalGdpUSD ?? after.estimatedNominalGdpUSD ?? 0),
+      materialityUSD: Math.abs(dp) * (after.derivedNominalGdpUSD ?? after.estimatedNominalGdpLocal ?? 0),
       impactRegion: rid,
       urgent: Math.abs(dp) >= 0.05,
     });

@@ -27,29 +27,29 @@ test('the guard is on EBIT, not on pre-tax income', () => {
 });
 
 test('the industrial statement carries an operating loss at full size — no floor', () => {
-  const s = industrialIncome({ revenueUSD: 1000, ebitdaMargin: 0.01, daShareOfRevenue: 0.05,
+  const s = industrialIncome({ revenueLocal: 1000, ebitdaMargin: 0.01, daShareOfRevenue: 0.05,
     annualInterestUSD: 0, taxRate: 0.25, sharesOutstanding: 10 });
-  assert.equal(s.ebitdaUSD, 10);
+  assert.equal(s.ebitdaLocal, 10);
   assert.equal(s.ebitUSD, -40, 'EBITDA 10 less D&A 50 is a real -40, not a floored 1');
   assert.equal(s.netIncomeUSD, -40, 'and the loss is not rebated');
 });
 
 test('EPS is zero rather than Infinity for a company with no shares', () => {
-  const s = industrialIncome({ revenueUSD: 1000, ebitdaMargin: 0.2, daShareOfRevenue: 0.05,
+  const s = industrialIncome({ revenueLocal: 1000, ebitdaMargin: 0.2, daShareOfRevenue: 0.05,
     annualInterestUSD: 0, taxRate: 0, sharesOutstanding: 0 });
   assert.equal(s.epsUSD, 0);
 });
 
 test("a profile firm's depreciation comes off its PLANT, not its revenue", () => {
   // A bank's depreciation has nothing to do with its interest income.
-  const base = { revenueUSD: 1000, otherIncomeAnnualUSD: 0, inputCostAnnualUSD: 0,
+  const base = { revenueLocal: 1000, otherIncomeAnnualUSD: 0, inputCostAnnualUSD: 0,
     payrollAnnualUSD: 0, profileCostsAnnualUSD: 0, ppeDepreciationYears: 20,
     annualInterestUSD: 0, taxRate: 0, sharesOutstanding: 1 };
   const light = profileIncome({ ...base, grossPPELocal: 0 });
   const heavy = profileIncome({ ...base, grossPPELocal: 2000 });
   assert.equal(light.ebitUSD, 1000);
   assert.equal(heavy.ebitUSD, 900, '2000 of plant over 20 years is 100 a year');
-  assert.equal(light.ebitdaUSD, heavy.ebitdaUSD, 'and it does not touch EBITDA');
+  assert.equal(light.ebitdaLocal, heavy.ebitdaLocal, 'and it does not touch EBITDA');
 });
 
 // ---- §5-TAXR — the real tax base: accelerated depreciation, carryforwards, deferral ----
@@ -116,9 +116,9 @@ test('TAXR: the old EBIT-gate rebate corner is dead', () => {
 test('TAXR: the statement carries the attributes through both paths', () => {
   const tax = { taxBasisPpeUSD: 1000, usefulLifeYears: 10, capexDeliveredAnnualUSD: 0,
     carryforwardUSD: 0, bookNetPpeUSD: 1000 };
-  const ind = industrialIncome({ revenueUSD: 1000, ebitdaMargin: 0.3, daShareOfRevenue: 0.05,
+  const ind = industrialIncome({ revenueLocal: 1000, ebitdaMargin: 0.3, daShareOfRevenue: 0.05,
     annualInterestUSD: 0, taxRate: 0.25, sharesOutstanding: 10, tax });
-  const pro = profileIncome({ revenueUSD: 1000, otherIncomeAnnualUSD: 0, inputCostAnnualUSD: 0,
+  const pro = profileIncome({ revenueLocal: 1000, otherIncomeAnnualUSD: 0, inputCostAnnualUSD: 0,
     payrollAnnualUSD: 0, profileCostsAnnualUSD: 700, grossPPELocal: 1000, ppeDepreciationYears: 20,
     annualInterestUSD: 0, taxRate: 0.25, sharesOutstanding: 10, tax });
   [ind, pro].forEach((s) => {

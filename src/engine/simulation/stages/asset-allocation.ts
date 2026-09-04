@@ -183,7 +183,7 @@ export function entityRequiredReturn(entity: InstitutionalEntity, totalAssetsUSD
   // §5-BRAINS — the stated hurdle is the median board's; this board's own risk aversion weights
   // it. §7.347 — a liability-driven kind derives its own from its liabilities (the profile's
   // behaviour field); the derivation carries no preference. §5-WIRES D: the assets it is funded
-  // against are the caller's live read (`institutionTotalAssetsUSD`), not a stored mark.
+  // against are the caller's live read (`institutionTotalAssetsLocal`), not a stored mark.
   const stated = REQUIRED_RETURN_ON_CAPITAL[entity.entityType] * riskAversionOf(entity.management);
   return institutionProfile(entity.entityType).liabilityHurdle?.(entity, stated, totalAssetsUSD) ?? stated;
 }

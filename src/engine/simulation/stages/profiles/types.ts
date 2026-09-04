@@ -28,7 +28,7 @@ export interface ProfileInput {
   entityById: Map<string, InstitutionalEntity>;
   annualInterest: number;
   taxRate: number;
-  perShare: (amountUSD: number) => number;
+  perShare: (amountLocal: number) => number;
   /** IND-R1: the firm's real weekly wage bill, computed once for every firm before the dispatch.
    *  Charged in full by the shared code — a profile never sees it as a choice. */
   weeklyPayrollUSD: number;

@@ -71,9 +71,9 @@ export interface CompanyWeekUpdate {
   tradePayableSettledUSD?: number;
   /** IND10/IND13 — the stocks stage 05 moved: warehouse, input lots, the production pipeline and
    *  capital delivered but not yet commissioned. */
-  outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueUSD: number }>;
-  wipBySubUnit?: Record<string, { units: number; valueUSD: number }[]>;
-  capexUnderConstruction?: { valueUSD: number; entersServiceWeek: number }[];
+  outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }>;
+  wipBySubUnit?: Record<string, { units: number; valueLocal: number }[]>;
+  capexUnderConstruction?: { valueLocal: number; entersServiceWeek: number }[];
   /** WS7 — the treasury sweep's resulting holdings. */
   treasuryHoldings?: import('../../../types').ItemizedHolding[];
   /** The production target stage 05 set, carried so stage 08 books against the same number. The

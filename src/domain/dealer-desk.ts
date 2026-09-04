@@ -100,12 +100,12 @@ export function dealerDeskTicker(participantId: string): string | undefined {
  *  out. Gross, not net: a short is a position too, and it consumes the same balance sheet. */
 export function dealerDeskGrossUSD(inventory: DealerDeskInventory | undefined, exceptBook?: string): number {
   if (!inventory) return 0;
-  let grossUSD = 0;
+  let grossLocal = 0;
   Object.entries(inventory).forEach(([book, positions]) => {
     if (book === exceptBook) return;
-    positions.forEach((p) => { grossUSD += Math.abs(p.inventoryLocal); });
+    positions.forEach((p) => { grossLocal += Math.abs(p.inventoryLocal); });
   });
-  return grossUSD;
+  return grossLocal;
 }
 
 /**
@@ -122,7 +122,7 @@ export function dealerDeskGrossUSD(inventory: DealerDeskInventory | undefined, e
  */
 export function dealerDeskCapacityUSD(args: {
   balanceSheetCapacityUSD: number;
-  leverageHeadroomUSD: number;
+  leverageHeadroomLocal: number;
   inventory: DealerDeskInventory | undefined;
   book: string;
 }): number {
@@ -131,7 +131,7 @@ export function dealerDeskCapacityUSD(args: {
   const thisBookUSD = Math.max(0, dealerDeskGrossUSD(args.inventory) - otherBooksUSD);
   return Math.max(0, Math.min(
     committedUSD - otherBooksUSD,
-    Math.max(0, args.leverageHeadroomUSD) + thisBookUSD
+    Math.max(0, args.leverageHeadroomLocal) + thisBookUSD
   ));
 }
 

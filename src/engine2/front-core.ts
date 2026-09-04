@@ -342,7 +342,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
       const at = ri * NSUB + si;
       if (cd) {
         S.mktExists[at] = 1;
-        S.mktUnitPrice[at] = cd.unitPriceUSD ?? 1;
+        S.mktUnitPrice[at] = cd.unitPriceLocal ?? 1;
         S.mktFulfill[at] = cd._fulfillmentRatio ?? 1;
         S.mktCrowding[at] = cd.crowdingIntensity ?? 0;
       } else {
@@ -459,15 +459,15 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     for (const [su, inv] of Object.entries(comp.outputInventoryBySubUnit || {})) {
       S.outSub[atOut] = SUBUNIT_INDEX.get(su) ?? -1;
       S.outUnits[atOut] = inv.unitsHeld;
-      S.outValue[atOut] = inv.valueUSD;
+      S.outValue[atOut] = inv.valueLocal;
       atOut++;
     }
     const update = companyUpdates[comp.ticker];
     for (const lot of comp.assetsUnderConstruction ?? []) {
-      S.ucValue[atUc] = lot.valueUSD; S.ucServiceWeek[atUc] = lot.entersServiceWeek | 0; atUc++;
+      S.ucValue[atUc] = lot.valueLocal; S.ucServiceWeek[atUc] = lot.entersServiceWeek | 0; atUc++;
     }
     for (const lot of update?.capexUnderConstruction ?? []) {
-      S.ucValue[atUc] = lot.valueUSD; S.ucServiceWeek[atUc] = lot.entersServiceWeek | 0; atUc++;
+      S.ucValue[atUc] = lot.valueLocal; S.ucServiceWeek[atUc] = lot.entersServiceWeek | 0; atUc++;
     }
     for (const rel of supplyRelsByCustomer.get(comp.id) ?? []) {
       const stats = supplierShockStats.get(rel.supplierCompanyId);
@@ -593,9 +593,9 @@ export function runFrontCore(
     // carrying cost on the output CSR (entry order = the record's key order)
     let carryingCostUSD = 0;
     for (let o = S.outStart[row]; o < S.outStart[row + 1]; o++) {
-      const costUSD = S.outValue[o] * (S.outSub[o] >= 0 ? CARRY_RATE_WEEKLY[S.outSub[o]] : 0);
-      carryingCostUSD += costUSD;
-      O.outNewValue[o] = Math.max(0, S.outValue[o] - costUSD);
+      const costLocal = S.outValue[o] * (S.outSub[o] >= 0 ? CARRY_RATE_WEEKLY[S.outSub[o]] : 0);
+      carryingCostUSD += costLocal;
+      O.outNewValue[o] = Math.max(0, S.outValue[o] - costLocal);
     }
     F.carryingCostUSD[row] = carryingCostUSD;
 
@@ -751,7 +751,7 @@ export function runFrontCore(
     F.newRevenue[row] = newRevenue;
 
     const industrialPnl = industrialIncome({
-      revenueUSD: newRevenue,
+      revenueLocal: newRevenue,
       ebitdaMargin: newEbitdaMargin,
       daShareOfRevenue: 0.05,
       annualInterestUSD: annualInterest,
@@ -765,7 +765,7 @@ export function runFrontCore(
         bookNetPpeUSD: S.openingNetPpeUSD[row],
       },
     });
-    F.newEbitda[row] = industrialPnl.ebitdaUSD;
+    F.newEbitda[row] = industrialPnl.ebitdaLocal;
     F.newEbit[row] = industrialPnl.ebitUSD;
     F.newNetIncome[row] = industrialPnl.netIncomeUSD;
     F.newEps[row] = S.sharesOutstanding[row] > 0 ? round2(industrialPnl.netIncomeUSD / S.sharesOutstanding[row]) : 0;
@@ -796,16 +796,16 @@ export function applyFrontPost(
     const comp = companies[row];
 
     // construction survivors (value-equal materialisation of commissionCapital's split)
-    const keep: { valueUSD: number; entersServiceWeek: number }[] = [];
+    const keep: { valueLocal: number; entersServiceWeek: number }[] = [];
     for (let u = S.ucStart[row]; u < S.ucStart[row + 1]; u++) {
-      if (O.ucKeep[u]) keep.push({ valueUSD: S.ucValue[u], entersServiceWeek: S.ucServiceWeek[u] });
+      if (O.ucKeep[u]) keep.push({ valueLocal: S.ucValue[u], entersServiceWeek: S.ucServiceWeek[u] });
     }
     F.stillUnderConstruction[row] = keep;
 
     // carrying-decayed output record, in the entry order the seam read
-    const outRec: Record<string, { unitsHeld: number; valueUSD: number }> = {};
+    const outRec: Record<string, { unitsHeld: number; valueLocal: number }> = {};
     for (let o = S.outStart[row]; o < S.outStart[row + 1]; o++) {
-      outRec[SUBUNITS[S.outSub[o]]] = { unitsHeld: S.outUnits[o], valueUSD: O.outNewValue[o] };
+      outRec[SUBUNITS[S.outSub[o]]] = { unitsHeld: S.outUnits[o], valueLocal: O.outNewValue[o] };
     }
 
     if (F.isProfile[row]) {
@@ -844,7 +844,7 @@ export function applyFrontPost(
     if (ip >= 0 && S.plShare[ip] > 0) {
       const su = SUBUNITS[S.plSub[ip]];
       const update = companyUpdates[comp.ticker];
-      outRec[su] = update?.outputInventoryBySubUnit?.[su] ?? outRec[su] ?? { unitsHeld: 0, valueUSD: 0 };
+      outRec[su] = update?.outputInventoryBySubUnit?.[su] ?? outRec[su] ?? { unitsHeld: 0, valueLocal: 0 };
     }
     F.outputInv[row] = outRec;
 

@@ -48,7 +48,7 @@ import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } fro
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
@@ -129,7 +129,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const liveSharesOf = (c: Company) => {
       const o = offeringsByIssuerId.get(c.id);
       if (o?.postIssueSharesOutstanding) return o.postIssueSharesOutstanding;
-      return c.sharesOutstanding + (o?.sizeUSD ?? 0);
+      return c.sharesOutstanding + (o?.sizeLocal ?? 0);
     };
     /** The shares this book must find owners for: the register that will exist once a deal prices. */
     const liveTradableSharesOf = (c: Company) => liveSharesOf(c);
@@ -139,11 +139,11 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingLocal: c.sharesOutstanding,
-      tradableFloatUSD: c.sharesOutstanding,
+      tradableFloatLocal: c.sharesOutstanding,
       currentStat: refPriceOf(c),
       statKind: 'PRICE_LIKE',
       durationYears: 0,
-      primaryOfferingUSD: offeringsByIssuerId.get(c.id)?.sizeUSD,
+      primaryOfferingUSD: offeringsByIssuerId.get(c.id)?.sizeLocal,
       primaryWithdrawStat: offeringsByIssuerId.get(c.id)?.walkAwayStat,
     }));
 
@@ -156,7 +156,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const offeredValueById = new Map(
       regionCompanies.map((c) => [
         c.id,
-        (offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0) * refPriceOf(c),
+        (offeringsByIssuerId.get(c.id)?.sizeLocal ?? 0) * refPriceOf(c),
       ])
     );
     const totalFloatValueUSD = regionCompanies.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;
@@ -244,7 +244,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const comp = companyById.get(h.instrumentId);
         if (!comp) return false;
         // Pre-WS4 books stored equity as dollars only; convert once, at the current price.
-        const shares = h.quantityShares ?? (h.quantityOrNotionalUSD / Math.max(0.01, comp.stockPrice));
+        const shares = h.quantityShares ?? (h.quantityOrNotionalLocal / Math.max(0.01, comp.stockPrice));
         bySharesForCompany.set(h.instrumentId, (bySharesForCompany.get(h.instrumentId) ?? 0) + shares);
         return true;
       });
@@ -252,14 +252,14 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     });
 
     // OWN7, first half: the INSTITUTIONS' half of the float, set BEFORE the desks are built —
-    // a desk is sized against the live float, so leaving `tradableFloatUSD` at the whole share
+    // a desk is sized against the live float, so leaving `tradableFloatLocal` at the whole share
     // count until after the desk build gave every desk capacity against shares that are not for
     // sale (and a float of zero hands back no desk at all).
     const heldByInstitutionsShares = new Map<string, number>();
     currentSharesByEntity.forEach((byCompany) => byCompany.forEach((shares, companyId) => {
       if (shares > 0) heldByInstitutionsShares.set(companyId, (heldByInstitutionsShares.get(companyId) ?? 0) + shares);
     }));
-    instruments.forEach((inst) => { inst.tradableFloatUSD = heldByInstitutionsShares.get(inst.id) ?? 0; });
+    instruments.forEach((inst) => { inst.tradableFloatLocal = heldByInstitutionsShares.get(inst.id) ?? 0; });
 
     // G3a/G3e: the banks' equity desks, and the float they and the other participants make up.
     const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
@@ -270,7 +270,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const deskTickers = deskTickersOf(deskParticipants);
 
     // OWN7, second half: the desks' own books join the float now that they exist.
-    // `tradableFloatUSD` was `sharesOutstanding` — the whole company — while the only bidders
+    // `tradableFloatLocal` was `sharesOutstanding` — the whole company — while the only bidders
     // were institutions whose mandates keep them far below it, so the book asked a demand side
     // that can never reach the supply to price it, and the level printed at the damper week after
     // week (§6). Founders, households and corporates on the register do not bid, so their shares
@@ -281,7 +281,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       if (shares > 0) deskHeldShares.set(companyId, (deskHeldShares.get(companyId) ?? 0) + shares);
     }));
     instruments.forEach((inst) => {
-      inst.tradableFloatUSD = (heldByInstitutionsShares.get(inst.id) ?? 0) + (deskHeldShares.get(inst.id) ?? 0);
+      inst.tradableFloatLocal = (heldByInstitutionsShares.get(inst.id) ?? 0) + (deskHeldShares.get(inst.id) ?? 0);
     });
 
     // §7.281 — THE HOUSEHOLD DIRECT-EQUITY SELL CHANNEL. The households' listed shares are the
@@ -318,12 +318,12 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           householdPriorShares.set(companyId, sellShares);
           demandByInstrumentId.set(companyId, {
             reservationStat: 0,
-            maxHoldingUSD: 0,
+            maxHoldingLocal: 0,
             fullSizeStatRange: 1e-6,
             maxNetPurchaseUSD: 0,
           });
           const inst = instruments.find((i) => i.id === companyId);
-          if (inst) inst.tradableFloatUSD += sellShares;
+          if (inst) inst.tradableFloatLocal += sellShares;
         });
         householdParticipant = {
           id: householdParticipantId,
@@ -373,7 +373,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       // puts on equities. Unlike credit, there is no leverage allowance here — nobody in this
       // model runs a levered equity book.
       const budgetUSD = entity.assetAllocationTarget.equityPct * institutionSpendableUSD(ctx, entity);
-      const entityPoolUSD = institutionTotalAssetsUSD(ctx, entity) * entity.assetAllocationTarget.equityPct
+      const entityPoolUSD = institutionTotalAssetsLocal(ctx, entity) * entity.assetAllocationTarget.equityPct
         * mandateWeightForIssuer(entity.entityType, entity.region, regionId, mcapByRegion);
       // Same discipline as the credit books: this week's money goes where shares are actually
       // changing hands — a live offering, or the gap between the target holding and the current
@@ -391,7 +391,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       if (lentList) for (const [ci, shares] of lentList) { lentArr[ci] = shares; lentTouched.push(ci); }
       const buyInList = buyInByEntity.get(entity.id);
       if (buyInList) for (const [ci, shares] of buyInList) { buyInArr[ci] = shares; buyInTouched.push(ci); }
-      const holderRequiredReturn = entityRequiredReturn(entity, institutionTotalAssetsUSD(ctx, entity));
+      const holderRequiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
       let totalCashDemandWeightUSD = 0;
       for (let ci = 0; ci < nC; ci++) {
         const structuralUSD = entityPoolUSD * (floatValueArr[ci] / totalFloatValueUSD);
@@ -520,7 +520,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           if (!comp || shares <= 0.0001) return;
           equityHoldings.push({
             instrumentId: comp.id, instrumentType: 'EQUITY', issuerRegion: regionId,
-            quantityShares: shares, quantityOrNotionalUSD: shares * comp.stockPrice, units: shares,
+            quantityShares: shares, quantityOrNotionalLocal: shares * comp.stockPrice, units: shares,
           });
         });
         store.append(entity.id, equityHoldings);
@@ -536,7 +536,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           instrumentType: 'EQUITY',
           issuerRegion: regionId,
           quantityShares: shares,
-          quantityOrNotionalUSD: shares * comp.stockPrice, units: shares,
+          quantityOrNotionalLocal: shares * comp.stockPrice, units: shares,
         });
       }
       // The engine's cash delta is in the same unit as the quantity — shares — so convert the
@@ -544,12 +544,12 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       // spread on it, which this adapter never did because the engine's fee came back
       // share-denominated too — so equity trading was free while every other book paid.
       let cashDeltaUSD = 0;
-      let feeUSD = 0;
+      let feeLocal = 0;
       const chargeUSD = (tradedShares: number, comp: Company) => {
         cashDeltaUSD -= tradedShares * comp.stockPrice;
         const f = Math.abs(tradedShares) * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
         cashDeltaUSD -= f;
-        feeUSD += f;
+        feeLocal += f;
       };
       for (let ii = 0; ii < nI; ii++) {
         const shares = holdAt(epi, ii);
@@ -564,7 +564,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         if (comp) chargeUSD(-prevShares, comp);
       });
       netCashByEntityId.set(entity.id, cashDeltaUSD);
-      bookFeeUSD += feeUSD;
+      bookFeeUSD += feeLocal;
       store.append(entity.id, equityHoldings);
     });
 
@@ -603,7 +603,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       const hpi = piById.get(householdParticipantId);
       let cashDeltaUSD = 0;
       // Step 13 (W2): the shares the households sold go to the house by wire, at the print.
-      const hhBefore = new Map<string, { valueUSD: number; shares?: number }>(), hhAfter = new Map<string, { valueUSD: number; shares?: number }>();
+      const hhBefore = new Map<string, { valueLocal: number; shares?: number }>(), hhAfter = new Map<string, { valueLocal: number; shares?: number }>();
       const hhPrice = new Map<string, number>();
       householdPriorShares.forEach((prevShares, companyId) => {
         const comp = companyById.get(companyId);
@@ -614,8 +614,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const f = soldShares * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
         cashDeltaUSD += soldShares * comp.stockPrice - f;
         bookFeeUSD += f;
-        hhBefore.set(companyId, { shares: soldShares, valueUSD: soldShares * comp.stockPrice });
-        hhAfter.set(companyId, { shares: 0, valueUSD: 0 });
+        hhBefore.set(companyId, { shares: soldShares, valueLocal: soldShares * comp.stockPrice });
+        hhAfter.set(companyId, { shares: 0, valueLocal: 0 });
         hhPrice.set(companyId, comp.stockPrice);
       });
       clearedBookDelta({ kind: 'HOUSEHOLD', region: regionId }, regionId, 'EQUITY', hhBefore, hhAfter, (id) => hhPrice.get(id), 'equity clearing fill');
@@ -634,14 +634,14 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // §7.259: AFTER the fills application, so the lead's residual survives to next week's
     // clearing as a real prior position.
     settlePricedOfferings(regionId, 'EQUITY', offeringsByIssuerId, result, ctx,
-      (o, clearedStat) => o.sizeUSD * clearedStat,
+      (o, clearedStat) => o.sizeLocal * clearedStat,
       (o, clearedStat) => underwritingFeeBps({
         bookSpreadBps: DEALER_SPREAD_BPS,
         oneWeekPriceRiskBps: oneWeekPriceRiskBps({
           statKind: 'PRICE_LIKE', currentStat: clearedStat,
           weeklyMovePct: Math.abs(clearedStat - (priorPriceById.get(o.issuerId) ?? clearedStat)) / Math.max(1e-9, Math.abs(clearedStat)),
         }),
-        dealSizeUSD: o.sizeUSD * clearedStat,
+        dealSizeUSD: o.sizeLocal * clearedStat,
         deskCapacityUSD: bookCapacityUSD,
       }),
       BOOK);
@@ -663,7 +663,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       (takeShares, clearedStat) => takeShares * clearedStat,
       // Step 13 (W2): the paper leg at the PRINT every holder's row carries (the rounded
       // stockPrice), so the house nets in value as it does in shares.
-      (issuerId, takeShares) => (takeShares > 0 ? { instrumentType: 'EQUITY', instrumentId: issuerId, issuerRegion: regionId, valueUSD: takeShares * (companyById.get(issuerId)?.stockPrice ?? 0), shares: takeShares } : undefined)
+      (issuerId, takeShares) => (takeShares > 0 ? { instrumentType: 'EQUITY', instrumentId: issuerId, issuerRegion: regionId, valueLocal: takeShares * (companyById.get(issuerId)?.stockPrice ?? 0), shares: takeShares } : undefined)
     );
     const entityIds = new Set(bookEntities.map((e) => e.id));
     if (process.env.LEFTOVER_TRACE === '1') {
@@ -678,7 +678,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id }
         : id === householdParticipantId ? { kind: 'HOUSEHOLD', region: regionId }
         : dealerDeskPartyOf(id, deskTickers)),
-      { netCashUSD: dealerNetUSD, feeUSD: bookFeeUSD },
+      { netCashUSD: dealerNetUSD, feeLocal: bookFeeUSD },
       feeDesksForRegion(ctx, regionId),
       equityPrimaryTakes
     );

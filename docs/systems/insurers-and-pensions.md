@@ -88,7 +88,7 @@ checked by `scripts/check-atlas.sh`.
 | A2 a real liability: stated amounts at stated future times | `src/domain/institutions.ts:beneficiaryLiabilityUSD` | ⚠️ |
 | **A2.a a liability of the institution, not a fund share** | `src/engine/simulation/stages/household-balance-sheet.ts:institutionalClaims` | ❌ |
 | A2.b except where the contract says it IS a fund share | `src/domain/institution-profiles.ts:beneficiariesAreHouseholds` | ⚠️ |
-| A3 equity = assets − liabilities, and it can go negative | `src/engine/simulation/stages/household-balance-sheet.ts:equityCapitalUSD` | ⚠️ |
+| A3 equity = assets − liabilities, and it can go negative | `src/engine/simulation/stages/household-balance-sheet.ts:equityCapitalLocal` | ⚠️ |
 | A4 premiums/contributions in, claims/pensions out | `src/engine/simulation/stages/insurance-and-pensions.ts:runInsuranceAndPensionsStage` | ✅ |
 | **B1 the liability has a schedule** | — | ❌ |
 | **B2 its present value depends on a market discount rate** | — | ❌ |
@@ -109,7 +109,7 @@ checked by `scripts/check-atlas.sh`.
 | **D4.a a leveraged hedge turns solvency into liquidity** | `src/domain/derivatives/classes/irs.ts:initialMarginRate` | ❌ |
 | D5 VERIFY the asymmetry on a large rate move | — | ❌ |
 | E1 FORBID no liability without beneficiaries | `src/engine/simulation/stages/household-balance-sheet.ts:institutionalClaimsUSD` | ✅ |
-| E2 FORBID no asset that is not somebody's liability or a real thing | `src/domain/institutions.ts:institutionTotalAssetsUSD` | ✅ |
+| E2 FORBID no asset that is not somebody's liability or a real thing | `src/domain/institutions.ts:institutionTotalAssetsLocal` | ✅ |
 | **E3 FORBID no solvency against a stored liability value** | `src/domain/institutions.ts:beneficiaryLiabilityUSD` | ❌ |
 | E4 VERIFY holdings + every other holder = issued | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 

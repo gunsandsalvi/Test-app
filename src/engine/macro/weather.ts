@@ -75,12 +75,12 @@ export function regionExposure(regionId: RegionId, companies: Company[]): Region
     else if (ENERGY_IDS.has(c.producedCommodityId)) energyUSD += usd;
     else metalUSD += usd;
   });
-  const totalUSD = cropUSD + energyUSD + metalUSD;
-  if (!(totalUSD > 0)) return { cropShare: 0, energyShare: 0, metalShare: 0, commodityIds };
+  const totalLocal = cropUSD + energyUSD + metalUSD;
+  if (!(totalLocal > 0)) return { cropShare: 0, energyShare: 0, metalShare: 0, commodityIds };
   return {
-    cropShare: cropUSD / totalUSD,
-    energyShare: energyUSD / totalUSD,
-    metalShare: metalUSD / totalUSD,
+    cropShare: cropUSD / totalLocal,
+    energyShare: energyUSD / totalLocal,
+    metalShare: metalUSD / totalLocal,
     commodityIds,
   };
 }

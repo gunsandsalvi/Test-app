@@ -61,14 +61,14 @@ export interface ProductLine {
 export interface InputLot {
   sellerId: string;
   unitsHeld: number;
-  unitPriceUSD: number;
+  unitPriceLocal: number;
   acquiredWeek: number;
 }
 
 export interface SegmentFinancial {
   subUnitId: string;
-  revenueUSD: number;
-  ebitdaUSD: number;
+  revenueLocal: number;
+  ebitdaLocal: number;
   capexUSD: number;
 }
 
@@ -158,7 +158,7 @@ export interface QuarterlyBalanceSheet {
   accountsReceivable: number;
   finishedGoodsInventoryUSD: number;
   // 1$ is 1$ Phase 6: real held raw-material/input inventory value (sum of InputLot.unitsHeld *
-  // unitPriceUSD across every category, as of this filing date) — genuinely distinct from
+  // unitPriceLocal across every category, as of this filing date) — genuinely distinct from
   // finished goods, and previously missing from the balance sheet entirely (real input stock
   // existed on the company but nothing on the statements reflected its value as an asset).
   rawMaterialsInventoryUSD: number;
@@ -345,7 +345,7 @@ export interface Company {
    * delivery and this is the second half: investment shows up AFTER the demand that justified
    * it, which is what makes a capacity cycle a cycle.
    */
-  assetsUnderConstruction?: { valueUSD: number; entersServiceWeek: number }[];
+  assetsUnderConstruction?: { valueLocal: number; entersServiceWeek: number }[];
   /** IND13 — what actually entered service last week: what the plant really grew by. */
   capexCommissionedLastWeekUSD?: number;
   rndExpense?: number;
@@ -384,14 +384,14 @@ export interface Company {
    * posting helper in stage 08 is the single write path), so any unexplained cash move is a
    * missing entry, not a mystery.
    */
-  lastCashLedger?: { label: string; amountUSD: number }[];
+  lastCashLedger?: { label: string; amountLocal: number }[];
   /**
    * WS7: treasury cash swept into the region's money market fund at its $1 NAV — a corporate
    * near-cash asset, NOT cash (the S5 ledger moves real dollars out when shares are bought and
    * back in when they redeem). The treasurer sweeps what sits above the company's own
    * working-capital need and redeems the moment operations need it back.
    */
-  mmfSharesUSD?: number;
+  mmfSharesLocal?: number;
   /** WS8: week of this issuer's last OPPORTUNISTIC primary announcement. A quarterly-sized deal
    * covers a quarter's deployment, so the CFO does not return to the market for one. */
   lastOpportunisticOfferingWeek?: number;
@@ -531,7 +531,7 @@ export interface Company {
    *  sales this management EXPECTS by line (owner: stage 05, where production is decided). */
   lastWeekSalesUnitsBySubUnit?: Record<string, number>;
   expectedSalesUnitsBySubUnit?: Record<string, number>;
-  outputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }>;
+  outputInventoryBySubUnit: Record<string, { unitsHeld: number; valueLocal: number }>;
   // 1$ is 1$ Phase 2/6: real input inventory, keyed by the input sub-unit category (e.g.
   // upstream_extraction, specialty_metals) a company has actually bought and holds. Each entry is
   // a LIST of real purchase lots — not one blended average — because "you get out N output that
@@ -555,7 +555,7 @@ export interface Company {
    * asset side — and it is where a week's production cost sits between being spent and being
    * sellable.
    */
-  wipBySubUnit?: Record<string, { units: number; valueUSD: number }[]>;
+  wipBySubUnit?: Record<string, { units: number; valueLocal: number }[]>;
   recentFulfillmentEMA: number;
   /**
    * IND14 — THIS SUPPLIER'S DELIVERY RECORD: units delivered against units owed on its own
@@ -685,16 +685,16 @@ export function operatingBufferShareOf(c: { management?: import('./preferences')
 }
 
 /** What this firm wants to be holding in short government paper, given the cash it has now. */
-export function corporateTreasuryTargetUSD(cashLocal: number, annualRevenueUSD: number, riskAversion = 1): number {
-  const investableUSD = Math.max(0, cashLocal - annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversion);
+export function corporateTreasuryTargetUSD(cashLocal: number, annualRevenueLocal: number, riskAversion = 1): number {
+  const investableUSD = Math.max(0, cashLocal - annualRevenueLocal * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversion);
   return investableUSD * TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH;
 }
 
 export function getOutputInventoryUSD(comp: Company, subUnitId?: string): number {
   const inv = comp.outputInventoryBySubUnit;
   if (!inv) return 0;
-  if (subUnitId) return inv[subUnitId]?.valueUSD ?? 0;
-  return Object.values(inv).reduce((s, entry) => s + entry.valueUSD, 0);
+  if (subUnitId) return inv[subUnitId]?.valueLocal ?? 0;
+  return Object.values(inv).reduce((s, entry) => s + entry.valueLocal, 0);
 }
 
 export function getOutputInventoryUnits(comp: Company, subUnitId?: string): number {
@@ -707,7 +707,7 @@ export function getOutputInventoryUnits(comp: Company, subUnitId?: string): numb
 /** IND10 — units of this company's output that are started but not yet finished. */
 /** IND13 — capital delivered and not yet in service: the construction-in-progress asset. */
 export function assetsUnderConstructionUSD(comp: Company): number {
-  return (comp.assetsUnderConstruction ?? []).reduce((s, l) => s + l.valueUSD, 0);
+  return (comp.assetsUnderConstruction ?? []).reduce((s, l) => s + l.valueLocal, 0);
 }
 
 export function getWipUnits(comp: Company, subUnitId?: string): number {
@@ -722,7 +722,7 @@ export function getWipUnits(comp: Company, subUnitId?: string): number {
 export function getWipUSD(comp: Company, subUnitId?: string): number {
   const wip = comp.wipBySubUnit;
   if (!wip) return 0;
-  const q = (lots: { valueUSD: number }[]) => lots.reduce((s, l) => s + l.valueUSD, 0);
+  const q = (lots: { valueLocal: number }[]) => lots.reduce((s, l) => s + l.valueLocal, 0);
   if (subUnitId) return q(wip[subUnitId] ?? []);
   return Object.values(wip).reduce((s, lots) => s + q(lots), 0);
 }

@@ -47,11 +47,11 @@ import { centralBankFxReservesUSD } from '../../../domain/central-bank';
 import { DEALER_QUOTE_WIDTH_BPS } from '../../../domain/dealer-derivatives';
 import { deskNotionalCapacityUSD } from '../../../domain/derivatives/registry';
 import { deskStandingPfeChargeUSD } from './derivative-lifecycle';
-import { leverageHeadroomUSD } from '../../macro/banking';
+import { leverageHeadroomLocal } from '../../macro/banking';
 import { REGION_IDS, REGION_BY_CURRENCY, currencyOf } from '../../../domain/geography';
 import { toNumeraire } from '../../../domain/currency';
 import { heldCurrenciesOf } from '../../ledger/accounts';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 
 const REGIONS = REGION_IDS;
@@ -100,9 +100,9 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const prior = e.priorForeignHoldingsByRegion ?? {};
     const touched = new Set([...Object.keys(heldNow), ...Object.keys(prior)]);
     touched.forEach((issuer) => {
-      const deltaUSD = (heldNow[issuer] ?? 0) - (prior[issuer] ?? 0);
-      if (Math.abs(deltaUSD) < 1e5) return;
-      addPairFlow(flows, issuer as RegionId, e.region as RegionId, deltaUSD);
+      const deltaLocal = (heldNow[issuer] ?? 0) - (prior[issuer] ?? 0);
+      if (Math.abs(deltaLocal) < 1e5) return;
+      addPairFlow(flows, issuer as RegionId, e.region as RegionId, deltaLocal);
     });
   });
 
@@ -144,7 +144,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const sheet = c.bankBalanceSheet;
     if (!sheet) return;
     // DRV: the desk's remaining derivative budget is ONE number across every class it writes.
-    const capUSD = deskNotionalCapacityUSD(leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, c.ticker), facilityBookOf(ctx.v2, c.ticker)), deskStandingPfeChargeUSD(ctx, state, c.ticker), 'FX_FORWARD');
+    const capUSD = deskNotionalCapacityUSD(leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.ticker), facilityBookOf(ctx.v2, c.ticker)), deskStandingPfeChargeUSD(ctx, state, c.ticker), 'FX_FORWARD');
     if (capUSD > 0) deskCapacityByTicker.set(c.ticker, capUSD);
     arbitrageCapacityUSD += capUSD;
   });
@@ -216,7 +216,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const instrument: ClearingInstrument = {
       id: `FX-${key}`,
       outstandingLocal: Math.abs(netBaseDemandUSD),
-      tradableFloatUSD: Math.abs(netBaseDemandUSD),
+      tradableFloatLocal: Math.abs(netBaseDemandUSD),
       currentStat: bookRate,
       statKind: 'PRICE_LIKE',
       durationYears: 0,
@@ -231,12 +231,12 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       // HF3: the size is the margin identity on this fund's OWN capital at this pair's own
       // haircut, and the moves are the pair's own observed volatility — no risk budget, no
       // required-move constant, no range constant. A quiet pair is tight and a volatile one wide.
-      const capUSD = speculatorMaxPositionUSD(Math.max(0, institutionTotalAssetsUSD(ctx, e)), sigma);
+      const capUSD = speculatorMaxPositionUSD(Math.max(0, institutionTotalAssetsLocal(ctx, e)), sigma);
       if (capUSD <= 0) return;
       const demand = new Map<string, ParticipantDemand>();
       demand.set(instrument.id, {
         reservationStat: bookRate * (1 - speculatorReservationMoveFrac(sigma)),
-        maxHoldingUSD: capUSD,
+        maxHoldingLocal: capUSD,
         fullSizeStatRange: bookRate * speculatorFullSizeRangeFrac(sigma),
         // HF1: what it can actually pay with — its own cash plus what its prime broker will lend.
         maxNetPurchaseUSD: Math.max(0, entityCashOf(ctx.v2, e) + (e.primeBrokerageAvailableUSD ?? 0)),
@@ -274,7 +274,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       const demand = new Map<string, ParticipantDemand>();
       demand.set(instrument.id, {
         reservationStat: bookRate * (1 - centralBankReservationMoveFrac(sigma)),
-        maxHoldingUSD: defenceBudgetUSD,
+        maxHoldingLocal: defenceBudgetUSD,
         fullSizeStatRange: bookRate * centralBankFullSizeRangeFrac(sigma),
         maxNetPurchaseUSD: defenceBudgetUSD,
       });
@@ -293,7 +293,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       const demand = new Map<string, ParticipantDemand>();
       demand.set(instrument.id, {
         reservationStat: toBook(impliedRate),
-        maxHoldingUSD: arbitrageCapacityUSD,
+        maxHoldingLocal: arbitrageCapacityUSD,
         // Scales in over the gap between the print and the implied rate: a wider dislocation
         // pulls more capital, which is what makes the identity tighten rather than merely hold.
         fullSizeStatRange: Math.max(1e-9, Math.abs(toBook(impliedRate) - bookRate)),
@@ -317,12 +317,12 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     deskCapacityByTicker.forEach((capUSD, ticker) => {
       const bank = ctx.updatedCompanies.find((c) => c.ticker === ticker);
       const book = bank?.bankBalanceSheet?.fxDealerBook;
-      const grossUSD = Math.max(0, Number(book?.grossNotionalUSD) || 0);
-      const utilization = Math.min(1, grossUSD / Math.max(1, grossUSD + capUSD));
+      const grossLocal = Math.max(0, Number(book?.grossNotionalUSD) || 0);
+      const utilization = Math.min(1, grossLocal / Math.max(1, grossLocal + capUSD));
       const demand = new Map<string, ParticipantDemand>();
       demand.set(instrument.id, {
         reservationStat: bookRate * (1 - basisFrac * utilization),
-        maxHoldingUSD: capUSD,
+        maxHoldingLocal: capUSD,
         fullSizeStatRange: bookRate * basisFrac,
         maxNetPurchaseUSD: capUSD,
       });
@@ -353,12 +353,12 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     // base, absorbing base SUPPLY leaves it long. Its own schedule decided the size, and its own
     // capacity bounded it — no pro-rata split of a leftover.
     deskCapacityByTicker.forEach((_capUSD, ticker) => {
-      const filledUSD = result.newParticipantHoldings.get(`FXDESK-${ticker}-${key}`)?.get(instrument.id) ?? 0;
-      if (!(filledUSD > 1)) return;
+      const filledLocal = result.newParticipantHoldings.get(`FXDESK-${ticker}-${key}`)?.get(instrument.id) ?? 0;
+      if (!(filledLocal > 1)) return;
       let byRegion = deskFillByTicker.get(ticker);
       if (!byRegion) { byRegion = {}; deskFillByTicker.set(ticker, byRegion); }
-      if (fx.base !== 'USA') byRegion[fx.base] = (byRegion[fx.base] ?? 0) - sign * filledUSD;
-      if (fx.quote !== 'USA') byRegion[fx.quote] = (byRegion[fx.quote] ?? 0) + sign * filledUSD;
+      if (fx.base !== 'USA') byRegion[fx.base] = (byRegion[fx.base] ?? 0) - sign * filledLocal;
+      if (fx.quote !== 'USA') byRegion[fx.quote] = (byRegion[fx.quote] ?? 0) + sign * filledLocal;
     });
 
     // XB5: what a central bank actually took MOVES its reserves. Its fill is a purchase of the
@@ -402,14 +402,14 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
 
   // A currency's value against the USD is now a READING of its USD pair, for the consumers that
   // want one number per currency — no longer the thing every pair is derived from.
-  const valueUSD: Record<string, number> = { USA: 1 };
+  const valueLocal: Record<string, number> = { USA: 1 };
   REGIONS.filter(r => r !== 'USA').forEach(r => {
     const direct = ctx.updatedFxPairs.find(p => p.base === r && p.quote === 'USA');
     const inverse = ctx.updatedFxPairs.find(p => p.base === 'USA' && p.quote === r);
-    valueUSD[r] = direct && direct.rate > 0 ? direct.rate
+    valueLocal[r] = direct && direct.rate > 0 ? direct.rate
       : inverse && inverse.rate > 0 ? 1 / inverse.rate : 1;
   });
-  ctx.currencyValueUSD = valueUSD;
+  ctx.currencyValueUSD = valueLocal;
   // §3.13c: and the world's rate table, which the ledger settles at.
   publishFxRates(ctx.v2, ctx.updatedFxPairs);
 
@@ -435,10 +435,10 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       (Object.keys(delta) as RegionId[]).forEach(r => {
         nextNet[r] = (Number(nextNet[r]) || 0) + delta[r]!;
       });
-      const grossUSD = Object.values(nextNet).reduce((a: number, v) => a + Math.abs(Number(v) || 0), 0);
+      const grossLocal = Object.values(nextNet).reduce((a: number, v) => a + Math.abs(Number(v) || 0), 0);
       const nextSheet = {
         ...sheet,
-        fxDealerBook: { ...sheet.fxDealerBook, netNotionalByRegion: nextNet, grossNotionalUSD: grossUSD },
+        fxDealerBook: { ...sheet.fxDealerBook, netNotionalByRegion: nextNet, grossNotionalUSD: grossLocal },
       };
       return { ...c, bankBalanceSheet: nextSheet };
     });

@@ -177,15 +177,15 @@ export function decomposeGovernmentSpending(
   fiscalStanceScore: number = 0,
   /** PUB3: what the government owes its own staff this week — real headcount x real wages. */
   payrollWeeklyUSD: number = 0
-): { interestUSD: number; payrollUSD: number; procurementBudgetUSD: number; transfersUSD: number } {
-  const interestUSD = Math.max(0, interestWeeklyUSD);
-  const payrollUSD = Math.max(0, payrollWeeklyUSD);
+): { interestLocal: number; payrollLocal: number; procurementBudgetUSD: number; transfersUSD: number } {
+  const interestLocal = Math.max(0, interestWeeklyUSD);
+  const payrollLocal = Math.max(0, payrollWeeklyUSD);
   // Payroll is contractual like interest: it comes off the top, and what is left is the
   // discretionary budget. A government facing a rising wage bill cuts programs, not salaries.
-  const primaryUSD = Math.max(0, spendingWeeklyUSD - interestUSD - payrollUSD);
+  const primaryUSD = Math.max(0, spendingWeeklyUSD - interestLocal - payrollLocal);
   return {
-    interestUSD,
-    payrollUSD,
+    interestLocal,
+    payrollLocal,
     procurementBudgetUSD: primaryUSD * procurementShare * (1 + fiscalStanceScore * FISCAL_STANCE_PROCUREMENT_SENSITIVITY),
     transfersUSD: primaryUSD * (1 - procurementShare),
   };
@@ -235,13 +235,13 @@ export const FISCAL_STANCE_PROCUREMENT_SENSITIVITY = 0.25;
  * and it is named rather than assumed away.
  */
 export function governmentOutlaysUSD(parts: {
-  interestUSD: number;
+  interestLocal: number;
   /** PUB3: staff are paid in full — a government does not skip payroll. */
-  payrollUSD: number;
+  payrollLocal: number;
   transfersUSD: number;
   procurementSpentUSD: number;
 }): number {
-  return parts.interestUSD + parts.payrollUSD + parts.transfersUSD + parts.procurementSpentUSD;
+  return parts.interestLocal + parts.payrollLocal + parts.transfersUSD + parts.procurementSpentUSD;
 }
 
 
@@ -269,17 +269,17 @@ export function governmentObligationsWeeklyUSD(args: {
   /** The pools' real average annual wage — benefits are indexed to earnings, as they are. */
   averageAnnualWageUSD: number;
   fiscalStanceScore: number;
-}): { interestUSD: number; payrollUSD: number; transfersUSD: number; procurementBudgetUSD: number; totalUSD: number } {
+}): { interestLocal: number; payrollLocal: number; transfersUSD: number; procurementBudgetUSD: number; totalLocal: number } {
   const socialBenefitsUSD =
     (Math.max(0, args.retiredPopulation) * Math.max(0, args.averageAnnualWageUSD) * SOCIAL_BENEFIT_REPLACEMENT_RATE) / 52;
   const transfersUSD = Math.max(0, args.unemploymentBenefitsWeeklyUSD) + socialBenefitsUSD;
-  const payrollUSD = Math.max(0, args.payrollWeeklyUSD);
+  const payrollLocal = Math.max(0, args.payrollWeeklyUSD);
   const procurementBudgetUSD =
-    payrollUSD * PROCUREMENT_PER_PAYROLL_DOLLAR * (1 + args.fiscalStanceScore * FISCAL_STANCE_PROCUREMENT_SENSITIVITY);
-  const interestUSD = Math.max(0, args.interestWeeklyUSD);
+    payrollLocal * PROCUREMENT_PER_PAYROLL_DOLLAR * (1 + args.fiscalStanceScore * FISCAL_STANCE_PROCUREMENT_SENSITIVITY);
+  const interestLocal = Math.max(0, args.interestWeeklyUSD);
   return {
-    interestUSD, payrollUSD, transfersUSD, procurementBudgetUSD,
-    totalUSD: interestUSD + payrollUSD + transfersUSD + procurementBudgetUSD,
+    interestLocal, payrollLocal, transfersUSD, procurementBudgetUSD,
+    totalLocal: interestLocal + payrollLocal + transfersUSD + procurementBudgetUSD,
   };
 }
 

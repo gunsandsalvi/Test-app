@@ -95,7 +95,7 @@ export interface BufferBand {
   shareOfHouseholds: number;
   /** Months of its own spending this band could cover out of what it holds liquid. */
   bufferMonths: number;
-  debtUSD: number;
+  debtLocal: number;
 }
 
 /**
@@ -124,7 +124,7 @@ export function joinCreditTiersToBalanceSheets(
     wealthBands.map((b) => ({
       shareOfPopulation: b.shareOfHouseholds,
       value: b.bufferMonths,
-      carried: b.debtUSD,
+      carried: b.debtLocal,
     })),
     creditShares
   );

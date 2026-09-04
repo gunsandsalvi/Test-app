@@ -75,7 +75,7 @@ import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/derivatives/classes/fx-forward';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
-import { institutionTotalAssetsUSD } from './institutional-balance-sheet';
+import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
 // How much a tightening/loosening real credit-conditions backdrop (reg.bankingSector's own
@@ -183,18 +183,18 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // new supply at any spread (see the same fix in 07d, where it withdrew every LBO financing).
     // The cash constraint is untouched: `maxNetPurchaseUSD` still decides whether the market can
     // actually pay for the deal, which is the honest reason for one to fail.
-    const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0;
+    const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeLocal ?? 0;
     const liveTradableFloatUSD = (c: Company) => fixedDebtOf(c) + offeringSizeUSD(c);
 
     const priorOasById = new Map(regionCompanies.map((c) => [c.id, c.oasSpreadBps]));
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingLocal: fixedDebtOf(c),
-      tradableFloatUSD: fixedDebtOf(c),
+      tradableFloatLocal: fixedDebtOf(c),
       currentStat: c.oasSpreadBps,
       statKind: 'YIELD_LIKE',
       durationYears: creditDurationYears(v2, c),
-      primaryOfferingUSD: offeringsByIssuerId.get(c.id)?.sizeUSD,
+      primaryOfferingUSD: offeringsByIssuerId.get(c.id)?.sizeLocal,
       primaryWithdrawStat: offeringsByIssuerId.get(c.id)?.walkAwayStat,
       // No floor and no ceiling. The floor is an outcome: every bidder's reservation already
       // covers its own expected loss and capital cost, so demand tighter than that is genuinely
@@ -233,7 +233,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         if (!issuerIdsThisRegion.has(issuerId)) return false;
         // A book trades PAR amounts. This reads the value because nothing marks credit yet;
         // when the mark lands it reads `faceLocal`, or a price move looks like a trade.
-        currentHoldingByCompany.set(issuerId, (currentHoldingByCompany.get(issuerId) ?? 0) + h.quantityOrNotionalUSD);
+        currentHoldingByCompany.set(issuerId, (currentHoldingByCompany.get(issuerId) ?? 0) + h.quantityOrNotionalLocal);
         return true;
       });
       currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);
@@ -253,14 +253,14 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     });
     // OWN7, first half: the float is what this book's holders hold, and the INSTITUTIONS' half of
     // it is known here. It is set before the desks are built rather than after, because a desk is
-    // sized against the LIVE float — leaving `tradableFloatUSD` at the whole outstanding until
+    // sized against the LIVE float — leaving `tradableFloatLocal` at the whole outstanding until
     // after the desk build gave every desk capacity against an issue that is not for sale, and a
     // float of zero makes `buildDealerDeskParticipants` hand back no desk at all.
     const heldByInstitutionsUSD = new Map<string, number>();
     currentHoldingByCompanyByEntity.forEach((byCompany) => byCompany.forEach((usd, id) => {
       if (usd > 0) heldByInstitutionsUSD.set(id, (heldByInstitutionsUSD.get(id) ?? 0) + usd);
     }));
-    instruments.forEach((inst) => { inst.tradableFloatUSD = heldByInstitutionsUSD.get(inst.id) ?? 0; });
+    instruments.forEach((inst) => { inst.tradableFloatLocal = heldByInstitutionsUSD.get(inst.id) ?? 0; });
 
     // XB1: each entity's target is ITS OWN book — assets x its corporate-credit allocation x
     // what its mandate allows in this issuer's market. The imposed institutional share,
@@ -268,7 +268,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const rawEntityTargets = new Map<string, number>(
       regionEntities.map((e) => [
         e.id,
-        institutionTotalAssetsUSD(ctx, e) * e.assetAllocationTarget.corpBondPct
+        institutionTotalAssetsLocal(ctx, e) * e.assetAllocationTarget.corpBondPct
           * mandateWeightForIssuer(e.entityType, e.region, regionId, corpStockByRegion),
       ])
     );
@@ -332,7 +332,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // Per-entity invariants of the per-name loops below.
       const entityShare = entityShareOfSector / sectorTotal;
       const entitySubIGFactor = subInvestmentGradeSizeFactor(entity.entityType);
-      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsUSD(ctx, entity));
+      const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
       // HF1: the distressed bid is a DISTRESSED fund's, not every hedge fund's. Pricing off
       // discounted expected recovery instead of expected loss, and running the conviction size
       // that goes with it, is one strategy — the credit long-short book beside it is an ordinary
@@ -348,7 +348,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // money. Apportioning it across the whole STOCK instead gave a new issue a slice the size
       // of its issuer's index weight rather than of the deal, which starved the primary market by
       // construction (see the same fix and its measurement in 07d).
-      const classBudgetUSD = stagePurchaseBudgetUSD(ctx, entity, institutionTotalAssetsUSD(ctx, entity), 'CORP_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
+      const classBudgetUSD = stagePurchaseBudgetUSD(ctx, entity, institutionTotalAssetsLocal(ctx, entity), 'CORP_BOND', institutionUnsettledLessCollateralUSD(ctx, entity.id));
       // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
@@ -425,7 +425,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // behaviour falls out of the quarterly rebalance without any special case.)
       const fundShareOfIndex = index.totalValueUSD > 0 ? investableUSD / index.totalValueUSD : 0;
       index.constituents.forEach((c) => {
-        const offeringUSD = offeringsByIssuerId.get(c.instrumentId)?.sizeUSD ?? 0;
+        const offeringUSD = offeringsByIssuerId.get(c.instrumentId)?.sizeLocal ?? 0;
         const targetUSD = investableUSD * c.weight + offeringUSD * fundShareOfIndex;
         demandByInstrumentId.set(
           c.instrumentId,
@@ -459,7 +459,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       if (usd > 0) deskHeldUSD.set(id, (deskHeldUSD.get(id) ?? 0) + usd);
     }));
     instruments.forEach((inst) => {
-      inst.tradableFloatUSD = (heldByInstitutionsUSD.get(inst.id) ?? 0) + (deskHeldUSD.get(inst.id) ?? 0);
+      inst.tradableFloatLocal = (heldByInstitutionsUSD.get(inst.id) ?? 0) + (deskHeldUSD.get(inst.id) ?? 0);
     });
 
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
@@ -528,7 +528,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
             : undefined;
           splitAcrossTranches(v2, issuerId, 'CORP_BOND', newHoldingUSD, primary).forEach((t) => {
             // Written in par space; `credit-marking` prices it before anything reads a value.
-            if (t.usd > 1) newCorpHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceLocal: t.usd, units: t.usd });
+            if (t.usd > 1) newCorpHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalLocal: t.usd, faceLocal: t.usd, units: t.usd });
           });
         }
       }
@@ -540,7 +540,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const deskViewByCompany = applyDealerDeskFills({ piById, ctx, banks: regionBanks, book: BOOK, instruments, result });
     // §7.259: AFTER the fills application, so the lead's residual survives to next week's
     // clearing as a real prior position.
-    settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD,
+    settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx, (o) => o.sizeLocal,
       (o, clearedStat) => underwritingFeeBps({
         bookSpreadBps: DEALER_SPREAD_BPS,
         oneWeekPriceRiskBps: oneWeekPriceRiskBps({
@@ -549,7 +549,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
           minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
           durationYears: durationById.get(o.issuerId) ?? 0,
         }),
-        dealSizeUSD: o.sizeUSD,
+        dealSizeUSD: o.sizeLocal,
         deskCapacityUSD: bookCapacityUSD,
       }),
       BOOK);
@@ -565,7 +565,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       ctx, regionId, currencyOf(regionId), BOOK,
       result.netCashDeltaByParticipantId,
       (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
-      { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
+      { netCashUSD: result.dealerNetCashUSD, feeLocal: result.totalDealerRevenueUSD },
       feeDesksForRegion(ctx, regionId),
       // WS8: the CCP pays each issuer for the paper its deal actually placed.
       // The paper's leg is the tranche's own wire (issuer → house at issue, W3) — no asset here.

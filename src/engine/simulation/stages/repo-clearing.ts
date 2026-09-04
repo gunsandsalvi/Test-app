@@ -127,8 +127,8 @@ function nearestCurvePoint(years: number): 'tenor3M' | 'tenor2Y' | 'tenor5Y' | '
 export function collateralCapacityUSD(
   sheet: BankingSector,
   haircutOf: (bondId: string) => number | undefined
-): { faceLocal: number; capacityUSD: number } {
-  let faceLocal = 0; let capacityUSD = 0;
+): { faceLocal: number; capacityLocal: number } {
+  let faceLocal = 0; let capacityLocal = 0;
   Object.entries(sheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, v]) => {
     const usd = Number(v) || 0;
     if (usd <= 0) return;
@@ -137,9 +137,9 @@ export function collateralCapacityUSD(
     const haircut = haircutOf(bondId);
     if (haircut === undefined) return;
     faceLocal += usd;
-    capacityUSD += usd * (1 - haircut);
+    capacityLocal += usd * (1 - haircut);
   });
-  return { faceLocal, capacityUSD };
+  return { faceLocal, capacityLocal };
 }
 
 /**
@@ -174,19 +174,19 @@ export function unencumberedBorrowingCapacityUSD(
   encumberedFace?: Map<string, number>
 ): number {
   if (encumberedFace) {
-    let capacityUSD = 0;
+    let capacityLocal = 0;
     unencumberedByBond(sheet, encumberedFace).forEach((freeUSD, bondId) => {
       const haircut = haircutOf(bondId);
       if (haircut === undefined) return;
-      capacityUSD += freeUSD * (1 - haircut);
+      capacityLocal += freeUSD * (1 - haircut);
     });
-    return Math.max(0, capacityUSD);
+    return Math.max(0, capacityLocal);
   }
-  const { faceLocal, capacityUSD } = collateralCapacityUSD(sheet, haircutOf);
+  const { faceLocal, capacityLocal } = collateralCapacityUSD(sheet, haircutOf);
   if (faceLocal <= 0) return 0;
   const encumberedFaceUSD = Math.min(faceLocal, sheet.repoEncumberedCollateralUSD ?? 0);
   const unencumberedShare = (faceLocal - encumberedFaceUSD) / faceLocal;
-  return Math.max(0, capacityUSD * unencumberedShare);
+  return Math.max(0, capacityLocal * unencumberedShare);
 }
 
 /**
@@ -344,8 +344,8 @@ export function runRegionalRepoSession(
       + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
     const shortfallUSD = householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO - settledCashUSD;
     if (shortfallUSD <= 0) return;
-    const capacityUSD = unencumberedBorrowingCapacityUSD(sheet, haircuts, encumberedByTicker.get(bank.ticker));
-    const needUSD = Math.min(shortfallUSD, capacityUSD);
+    const capacityLocal = unencumberedBorrowingCapacityUSD(sheet, haircuts, encumberedByTicker.get(bank.ticker));
+    const needUSD = Math.min(shortfallUSD, capacityLocal);
     if (needUSD <= 0) return;
     const termUSD = Math.min(needUSD, rolledByTicker.get(bank.ticker) ?? 0);
     const onUSD = needUSD - termUSD;
@@ -408,9 +408,9 @@ export function runRegionalRepoSession(
     return finish(carriedBook, rrpBps / 10000, undefined, 0);
   }
 
-  const lenderSchedule = (reservationBps: number, maxHoldingUSD: number): ParticipantDemand => ({
+  const lenderSchedule = (reservationBps: number, maxHoldingLocal: number): ParticipantDemand => ({
     reservationStat: reservationBps,
-    maxHoldingUSD,
+    maxHoldingLocal,
     // A lender is fully committed by the top of the corridor: past the SRF rate its
     // counterparty funds at the window instead, so there is nothing above it to be paid for.
     fullSizeStatRange: corridorWidthBps,
@@ -443,7 +443,7 @@ export function runRegionalRepoSession(
     const instrument: ClearingInstrument = {
       id: args.instrumentId,
       outstandingLocal: args.needUSD,
-      tradableFloatUSD: args.needUSD,
+      tradableFloatLocal: args.needUSD,
       currentStat: args.currentBps,
       statKind: 'YIELD_LIKE',
       durationYears: 1 / 52,
@@ -478,7 +478,7 @@ export function runRegionalRepoSession(
         currentHoldingsByInstrumentId: new Map(),
         demandByInstrumentId: new Map([[args.instrumentId, {
           reservationStat: srfBps - SRF_SEAT_STEP_BPS,
-          maxHoldingUSD: args.needUSD,
+          maxHoldingLocal: args.needUSD,
           fullSizeStatRange: SRF_SEAT_STEP_BPS,
         }]]),
       });
@@ -569,12 +569,12 @@ export function runRegionalRepoSession(
       const sheet = sheetByTicker.get(ticker)!;
       const worked = encumberedWorking.get(ticker)!;
       lentByParty.forEach((lentUSD, pid) => {
-        const shareUSD = wantUSD * (lentUSD / totalLentUSD);
-        if (shareUSD <= 1) return;
+        const shareLocal = wantUSD * (lentUSD / totalLentUSD);
+        if (shareLocal <= 1) return;
         const free = unencumberedByBond(sheet, worked);
-        const { pledges, raisedUSD } = selectCollateral(free, haircuts, shareUSD);
+        const { pledges, raisedUSD } = selectCollateral(free, haircuts, shareLocal);
         if (raisedUSD <= 1) return;
-        const principalLocal = Math.min(shareUSD, raisedUSD);
+        const principalLocal = Math.min(shareLocal, raisedUSD);
         pledges.forEach((pl) => worked.set(pl.bondId, (worked.get(pl.bondId) ?? 0) + pl.faceLocal));
         const lender: RepoParty = pid === CB_SRF_SEAT_ID
           ? { kind: 'CENTRAL_BANK' }
@@ -713,13 +713,13 @@ function returnParkedCash(ctx: WeeklyStepContext, regionId: RegionId): void {
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.region !== regionId || !(e.rrpLentUSD ?? 0)) return e;
     const principalLocal = e.rrpLentUSD!;
-    const interestUSD = (principalLocal * (e.rrpRateAnnual ?? 0)) / 52;
+    const interestLocal = (principalLocal * (e.rrpRateAnnual ?? 0)) / 52;
     returnedUSD += principalLocal;
-    if (cb && interestUSD > 0) cb.lastReverseRepoInterestUSD = (cb.lastReverseRepoInterestUSD ?? 0) + interestUSD;
+    if (cb && interestLocal > 0) cb.lastReverseRepoInterestUSD = (cb.lastReverseRepoInterestUSD ?? 0) + interestLocal;
     pay(ctx, {
       payer: { kind: 'CENTRAL_BANK', region: regionId },
       payee: { kind: 'INSTITUTION', id: e.id },
-      amount: principalLocal + interestUSD,
+      amount: principalLocal + interestLocal,
       currency: currencyOf(regionId),
       reason: 'reverse repo returned with interest',
     });

@@ -132,7 +132,7 @@ export class HoldingsTable {
         rowInHolder[at] = r;
         instrumentType[at] = code;
         issuerRegion[at] = REGION_CODE.get(h.issuerRegion) ?? 0;
-        qtyLocal[at] = h.quantityOrNotionalUSD ?? 0;
+        qtyLocal[at] = h.quantityOrNotionalLocal ?? 0;
         shares[at] = h.quantityShares ?? 0;
         typeCounts[code]++;
         const list = this.byInstrument.get(iid);

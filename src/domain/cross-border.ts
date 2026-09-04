@@ -30,7 +30,7 @@ import { institutionProfile } from './institution-profiles';
  * RULE 5, OPEN: a real home-bias mandate is a LIMIT ("no more than X% foreign"), but
  * HF4 CHECKED THIS AND THE CLAIM DOES NOT HOLD. The review recorded it as "a mandate LIMIT
  * acting as a preference". It is not: `mandateWeightForIssuer` feeds `structuralSizeUSD`, which
- * becomes `maxHoldingUSD x overweightMultiple` — a CEILING — and the fill between zero and it is
+ * becomes `maxHoldingLocal x overweightMultiple` — a CEILING — and the fill between zero and it is
  * decided tactically by the entity's own reservation against the cleared level. The bound is
  * already a bound. What IS still stated is the seven LEVELS below: they are mandate primitives
  * (rule 2's PREFERENCE category), and deriving them would mean deriving what a pension fund's

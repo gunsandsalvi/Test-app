@@ -17,17 +17,17 @@ import { BankingSector } from '../../domain/banking';
 
 export function bookPnL(
   sheet: BankingSector,
-  deltaUSD: number,
+  deltaLocal: number,
   reason: string,
   ticker?: string
 ): BankingSector {
-  if (!isFinite(deltaUSD)) {
-    throw new Error(`ENGINE DEFECT: bookPnL('${reason}') carries deltaUSD=${deltaUSD} — `
+  if (!isFinite(deltaLocal)) {
+    throw new Error(`ENGINE DEFECT: bookPnL('${reason}') carries deltaLocal=${deltaLocal} — `
       + 'a NaN/infinite P&L is an arithmetic error at the caller, not earnings');
   }
-  if (deltaUSD === 0) return sheet;
-  if (process.env.PNL_TRACE === '1' && Math.abs(deltaUSD) > 10e6) {
-    console.log(`  [pnl] ${ticker ?? '?'} ${reason} ${(deltaUSD / 1e6).toFixed(1)}M`);
+  if (deltaLocal === 0) return sheet;
+  if (process.env.PNL_TRACE === '1' && Math.abs(deltaLocal) > 10e6) {
+    console.log(`  [pnl] ${ticker ?? '?'} ${reason} ${(deltaLocal / 1e6).toFixed(1)}M`);
   }
-  return { ...sheet, bankEquityLocal: sheet.bankEquityLocal + deltaUSD };
+  return { ...sheet, bankEquityLocal: sheet.bankEquityLocal + deltaLocal };
 }

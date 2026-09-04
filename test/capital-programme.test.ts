@@ -14,7 +14,7 @@ const healthy = (over: Partial<CapitalProgrammeInputs> = {}): CapitalProgrammeIn
   grossPPELocal: 1_200_000_000, accumulatedDepreciationLocal: 540_000_000, usefulLifeYears: 12,
   weeklyEbitdaUSD: 4_000_000, weeklyInterestUSD: 500_000,
   cashLocal: 200_000_000, currentLiabilitiesUSD: 300_000_000,
-  annualRevenueUSD: 1_000_000_000, newRevenueUSD: 1_000_000_000,
+  annualRevenueLocal: 1_000_000_000, newRevenueUSD: 1_000_000_000,
   priorMaintenanceCapexUSD: 100_000_000, priorGrowthCapexUSD: 40_000_000,
   priorMaintenanceShortfallStreak: 0, baselineGrowthCapexToRevenueRatio: 0.04,
   isInvestmentGrade: true, addressableGrowthAnnual: 0.03, categoryShortfall: 0,
@@ -69,10 +69,10 @@ test('investment is never negative, however hard the firm is squeezed', () => {
 
 test('the plant grows by what was COMMISSIONED, not what was ordered', () => {
   const { commissionedUSD, stillUnderConstruction } = commissionCapital(
-    [{ valueUSD: 100, entersServiceWeek: 5 }, { valueUSD: 900, entersServiceWeek: 40 }], 10);
+    [{ valueLocal: 100, entersServiceWeek: 5 }, { valueLocal: 900, entersServiceWeek: 40 }], 10);
   assert.equal(commissionedUSD, 100);
   assert.equal(stillUnderConstruction.length, 1);
-  assert.equal(stillUnderConstruction[0].valueUSD, 900);
+  assert.equal(stillUnderConstruction[0].valueLocal, 900);
 });
 
 test('§7.288: growth capex is bounded by the money the firm actually commands', () => {

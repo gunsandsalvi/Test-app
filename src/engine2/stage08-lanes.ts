@@ -31,7 +31,7 @@ export interface BackLanes {
   grossPPELocal: Float64Array;
   accumulatedDepreciationLocal: Float64Array;
   ppeDefaultUSD: Float64Array;          // annualRevenue × sector intensity, the ?? fallback
-  annualRevenueUSD: Float64Array;
+  annualRevenueLocal: Float64Array;
   cashLocal: Float64Array;
   currentLiabilitiesUSD: Float64Array;
   maintenanceCapexUSD: Float64Array;    // NaN = undefined
@@ -135,7 +135,7 @@ export function buildBackLanes(
   const L: BackLanes = {
     n,
     grossPPELocal: N.grossPPELocal, accumulatedDepreciationLocal: N.accumulatedDepreciationLocal, ppeDefaultUSD: f(),
-    annualRevenueUSD: N.annualRevenue, cashLocal: N.cash, currentLiabilitiesUSD: N.currentLiabilities,
+    annualRevenueLocal: N.annualRevenue, cashLocal: N.cash, currentLiabilitiesUSD: N.currentLiabilities,
     maintenanceCapexUSD: N.maintenanceCapex, growthCapexUSD: N.growthCapex, capexUSD: N.capex,
     maintenanceShortfallStreak: N.maintenanceShortfallStreak, baselineGrowthCapexToRevenueRatio: N.baselineGrowthCapexToRevenueRatio,
     marketCapUSD: N.marketCap, totalDebtUSD: N.totalDebt,

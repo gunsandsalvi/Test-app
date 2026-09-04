@@ -37,14 +37,14 @@ function o1(state: GameState, week: number): AuditFinding[] {
   // The VALUE, which is still the face: nothing marks credit yet (§9.13 part 3). When the mark
   // lands this must read `faceLocal` — a ladder carries face, and comparing a mark to it would
   // report every basis point of spread as paper that does not exist.
-  const add = (h: { instrumentType: string; issuerRegion: string; quantityOrNotionalUSD?: number }) => {
-    const b = held[h.issuerRegion]; if (!b) return; const v = h.quantityOrNotionalUSD ?? 0;
+  const add = (h: { instrumentType: string; issuerRegion: string; quantityOrNotionalLocal?: number }) => {
+    const b = held[h.issuerRegion]; if (!b) return; const v = h.quantityOrNotionalLocal ?? 0;
     if (h.instrumentType === 'CORP_BOND') b.corp += v; else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v; else if (h.instrumentType === 'GOV_BOND') b.sov += v; else if (h.instrumentType === 'COMMERCIAL_PAPER') b.cp += v;
   };
   state.institutionalEntities.forEach((e) => { if (!e.isDefaulted) e.itemizedHoldings.forEach(add); });
   state.companies.forEach((c) => {
     if (c.mergerAcquired) return;
-    ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; quantityOrNotionalUSD?: number }[] }).treasuryHoldings ?? []).forEach(add);
+    ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; quantityOrNotionalLocal?: number }[] }).treasuryHoldings ?? []).forEach(add);
     const bs = c.bankBalanceSheet; if (!bs || c.isDefaulted) return;
     held[c.region].sov += sum(Object.values(bs.sovereignBondHoldingsByBond ?? {}), (v) => Number(v) || 0);
     (bs.dealerDeskInventory?.['commercial paper'] ?? []).forEach((p) => { held[c.region].cp += p.inventoryLocal; });
@@ -92,7 +92,7 @@ function o3(state: GameState, week: number): AuditFinding[] {
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) { if (e.itemizedHoldings.length) deadHolders++; return; }
     e.itemizedHoldings.forEach((h) => {
-      const v = h.quantityOrNotionalUSD ?? 0;
+      const v = h.quantityOrNotionalLocal ?? 0;
       // §3.13-SOV row 3: a sovereign row names a bond on a GOVERNMENT's ladder, and this check
       // resolves an issuer against `state.companies`, where no government sits. O11 owns those
       // rows and holds them to the same standard against the government ladders. This used to be
@@ -166,12 +166,12 @@ function o6(state: GameState, week: number): AuditFinding[] {
     const inv = b.bankBalanceSheet?.dealerDeskInventory; if (!inv || !isActiveCompany(b)) return;
     Object.entries(DESK_BOOKS).forEach(([book, k]) => (inv[book] ?? []).forEach((p) => add(held, `${b.region}|${k}`, p.inventoryLocal)));
   });
-  const gaps: string[] = []; let gapUSD = 0;
+  const gaps: string[] = []; let gapLocal = 0;
   new Set([...issued.keys(), ...held.keys()]).forEach((key) => {
     const i = issued.get(key) ?? 0, h = held.get(key) ?? 0;
-    if (Math.abs(h - i) > Math.max(1e7, i * AUDIT_BOOKS_TOLERANCE)) { gaps.push(`${key.replace('|', ' ')} held ${B(h)} of ${B(i)}`); gapUSD += h - i; }
+    if (Math.abs(h - i) > Math.max(1e7, i * AUDIT_BOOKS_TOLERANCE)) { gaps.push(`${key.replace('|', ' ')} held ${B(h)} of ${B(i)}`); gapLocal += h - i; }
   });
-  if (gaps.length) out.push({ family: 'O', check: 'O6 corporate paper held = issued', week, usd: gapUSD, message: `${gaps.length} region-kinds' books differ from the ladders (${gaps.slice(0, 4).join(' | ')}${gaps.length > 4 ? ' | …' : ''})` });
+  if (gaps.length) out.push({ family: 'O', check: 'O6 corporate paper held = issued', week, usd: gapLocal, message: `${gaps.length} region-kinds' books differ from the ladders (${gaps.slice(0, 4).join(' | ')}${gaps.length > 4 ? ' | …' : ''})` });
   return out;
 }
 
@@ -195,7 +195,7 @@ function o7(state: GameState, week: number): AuditFinding[] {
     materializeBook(v2, e.id).forEach((h) => {
       if (!isTrancheKind(h.instrumentType)) return;
       // The claim is FACE; when the mark lands this reads `faceLocal` (§9.13 part 3).
-      const usd = h.quantityOrNotionalUSD ?? 0;
+      const usd = h.quantityOrNotionalLocal ?? 0;
       if (!(usd > 0)) return;
       claimedByTranche.set(h.instrumentId, (claimedByTranche.get(h.instrumentId) ?? 0) + usd);
       rowsByTranche.set(h.instrumentId, (rowsByTranche.get(h.instrumentId) ?? 0) + 1);
@@ -285,7 +285,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
     materializeBook(v2, e.id).forEach((h) => {
       const id = h.instrumentId;
       const known = isTrancheId(v2, id) || companyIds.has(id) || entityIds.has(id);
-      if (!known) { unresolvable++; unresolvableUSD += h.quantityOrNotionalUSD ?? 0; }
+      if (!known) { unresolvable++; unresolvableUSD += h.quantityOrNotionalLocal ?? 0; }
     });
   });
   if (unresolvable > 0) out.push({ family: 'O', check: 'O8 one thing, one key: register rows', week, usd: unresolvableUSD, message: `${unresolvable} register rows worth ${B(unresolvableUSD)} name an id that is no tranche, company or fund — a key that resolves in no store` });
@@ -378,11 +378,11 @@ function o9(state: GameState, week: number): AuditFinding[] {
     markByParty.set(a, (markByParty.get(a) ?? 0) + c.settledMarkUSD);
     markByParty.set(b, (markByParty.get(b) ?? 0) - c.settledMarkUSD);
   });
-  let net = 0, grossUSD = 0;
-  markByParty.forEach((v) => { net += v; grossUSD += Math.abs(v); });
+  let net = 0, grossLocal = 0;
+  markByParty.forEach((v) => { net += v; grossLocal += Math.abs(v); });
   if (Math.abs(net) > 1e3) {
     out.push({ family: 'O', check: 'O9 derivative marks net to zero across parties', week, usd: net,
-      message: `the parties' derivative marks sum to ${B(net)} rather than zero on ${B(grossUSD)} gross — a contract booked to one side only, or to the same party twice` });
+      message: `the parties' derivative marks sum to ${B(net)} rather than zero on ${B(grossLocal)} gross — a contract booked to one side only, or to the same party twice` });
   }
   if (selfFaced > 0) {
     out.push({ family: 'O', check: 'O9 no contract faces itself', week, usd: selfFaced,
@@ -458,7 +458,7 @@ function o11(state: GameState, week: number): AuditFinding[] {
     // SOV_BOND, which is the same instrument under the model's other name for it.
     materializeBook(v2, e.id).forEach((h) => {
       if (holdingClassOf(h.instrumentType) !== 'SOVEREIGN') return;
-      check(h.instrumentId, h.quantityOrNotionalUSD ?? 0, `register ${e.id}`);
+      check(h.instrumentId, h.quantityOrNotionalLocal ?? 0, `register ${e.id}`);
     });
   });
   if (strayRows > 0) {

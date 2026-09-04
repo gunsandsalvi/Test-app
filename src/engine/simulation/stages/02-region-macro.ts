@@ -36,13 +36,13 @@ function householdWeekOf(
   let receiptsUSD = depositInterestUSD;
   let taxPaidUSD = 0;
   let dividendsUSD = 0;
-  flows.forEach((amountUSD, reason) => {
-    if (amountUSD > 0) {
-      receiptsUSD += amountUSD;
-      if (reason === 'dividend to the public float') dividendsUSD += amountUSD;
+  flows.forEach((amountLocal, reason) => {
+    if (amountLocal > 0) {
+      receiptsUSD += amountLocal;
+      if (reason === 'dividend to the public float') dividendsUSD += amountLocal;
       return;
     }
-    if (reason.includes('tax')) taxPaidUSD += -amountUSD;
+    if (reason.includes('tax')) taxPaidUSD += -amountLocal;
   });
   return { receiptsUSD, taxPaidUSD, dividendsUSD };
 }
@@ -72,7 +72,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     const bottomUpUnemploymentDelta = -employmentChangePct * 0.1;
 
     const totalRegionalCapEx = regionFirms.reduce((sum, f) => sum + (f.capex || 0), 0);
-    const baseGdp = state.regions[regionId].estimatedNominalGdpUSD;
+    const baseGdp = state.regions[regionId].estimatedNominalGdpLocal;
     const baselineExpectedCapEx = (baseGdp * 0.03) / 52;
     const capexDeltaDollars = totalRegionalCapEx - baselineExpectedCapEx;
     const capexGdpImpactWeekly = capexDeltaDollars / baseGdp;

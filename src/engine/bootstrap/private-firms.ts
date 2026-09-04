@@ -12,7 +12,7 @@
  *
  * CONSERVATION is the build discipline (plan §5-HC): everything a named firm carries is carved
  * OUT of its segment's aggregate, never added on top. In HC1 that is DEBT — each firm's real
- * ladder is subtracted from its segment's debtUSD, so total private debt is unchanged to the
+ * ladder is subtracted from its segment's debtLocal, so total private debt is unchanged to the
  * dollar. Revenue and employment are set as real attributes here (the credit market needs real
  * leverage and coverage) but the segments keep carrying the goods economy and the labor demand
  * until HC3 hands both over in one conservation-checked pass — until then a private firm's
@@ -26,7 +26,7 @@ import { sectorBaselineMarginPct } from './firms';
 
 export interface PrivateFirmSeed {
   industry: Industry;
-  annualRevenueUSD: number;
+  annualRevenueLocal: number;
   ebitdaMargin: number;
   /** Debt / EBITDA. The sponsor-style subset carries real LBO leverage — that is what a real
    * levered private tier looks like, and it is where the economy's B/BB paper actually lives. */
@@ -78,9 +78,9 @@ const SPONSOR_STYLE_SHARE = 0.4;
 
 export function generatePrivateFirmSeeds(
   _region: RegionId,
-  segments: { industry: Industry; annualRevenueUSD: number; debtUSD: number; employment: number }[]
+  segments: { industry: Industry; annualRevenueLocal: number; debtLocal: number; employment: number }[]
 ): PrivateFirmSeed[] {
-  const totalRevenueUSD = segments.reduce((a, s) => a + s.annualRevenueUSD, 0) || 1;
+  const totalRevenueUSD = segments.reduce((a, s) => a + s.annualRevenueLocal, 0) || 1;
   const seeds: PrivateFirmSeed[] = [];
 
   segments.forEach((seg) => {
@@ -88,7 +88,7 @@ export function generatePrivateFirmSeeds(
     // roster (16 industries x 20 = 320 a region however small the knob was set), which is exactly
     // why the first cycle-time curve flattened at ~830 ms and looked like an engine floor.
     const segFloor = Math.max(2, Math.round(20 * UNIVERSE_SCALE));
-    const n = Math.max(segFloor, Math.round(PRIVATE_FIRMS_PER_REGION * (seg.annualRevenueUSD / totalRevenueUSD)));
+    const n = Math.max(segFloor, Math.round(PRIVATE_FIRMS_PER_REGION * (seg.annualRevenueLocal / totalRevenueUSD)));
 
     // Draw the tail: evenly spaced quantiles of a Pareto (deterministic — bootstrap generation
     // is reproducible-by-shape, and quantiles avoid a lucky/unlucky draw deciding the carve).
@@ -102,11 +102,11 @@ export function generatePrivateFirmSeeds(
     // Revenue attribute per firm: the named tier's revenue share mirrors its debt share of the
     // segment — the tier that carries the syndicated debt is the tier with the revenue behind
     // it. (Attribute only until HC3 — see module comment.)
-    const tierRevenueUSD = seg.annualRevenueUSD * NAMED_TIER_REVENUE_SHARE;
-    const productivityUSD = seg.annualRevenueUSD / Math.max(1, seg.employment);
+    const tierRevenueUSD = seg.annualRevenueLocal * NAMED_TIER_REVENUE_SHARE;
+    const productivityUSD = seg.annualRevenueLocal / Math.max(1, seg.employment);
 
     rawSizes.forEach((raw, i) => {
-      const revenueUSD = tierRevenueUSD * (raw / rawSum);
+      const revenueLocal = tierRevenueUSD * (raw / rawSum);
       // A named firm earns its sector's own margin — the SME discount applies to the POOL it
       // is carved out of, not to the named tier being carved.
       const margin = sectorBaselineMarginPct(INDUSTRY_REGISTRY[seg.industry].sector);
@@ -119,7 +119,7 @@ export function generatePrivateFirmSeeds(
         : 1.5 + 3.0 * ((i * 104729) % 100) / 100; // 1.5–4.5
       seeds.push({
         industry: seg.industry,
-        annualRevenueUSD: revenueUSD,
+        annualRevenueLocal: revenueLocal,
         ebitdaMargin: margin,
         leverage,
         sponsorStyle,
@@ -135,7 +135,7 @@ export function generatePrivateFirmSeeds(
         // 1,712 firms below their cost of capital (§7.115's reverted attempt). That was never a
         // double-count; the two tiers simply derived headcount by different routes.
         employeeCount: Math.max(25, Math.round(
-          revenueUSD * (1 - industryRecipeIntensity(seg.industry)) / Math.max(50_000, productivityUSD)
+          revenueLocal * (1 - industryRecipeIntensity(seg.industry)) / Math.max(50_000, productivityUSD)
         )),
       });
     });
