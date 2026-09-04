@@ -72,7 +72,6 @@ export function ownershipCoverage(
   type Book = OwnershipBook;
   const held: Record<string, Book> = {}; const outstanding: Record<string, Book> = {};
   REGION_IDS.forEach((r) => { held[r] = { corp: 0, loan: 0, sov: 0, cp: 0 }; outstanding[r] = { corp: 0, loan: 0, sov: 0, cp: 0 }; });
-  const regionById = new Map(state.companies.map((c) => [c.id, c.region]));
   const v2o1 = ensureV2(state);
   state.companies.forEach((c) => {
     if (c.mergerAcquired) return;
@@ -129,7 +128,9 @@ export function ownershipCoverage(
     const sovByClass = sovereignHeldByClass(ensureV2(state), state, r);
     held[r].sov = sovByClass.REGISTER + sovByClass.BANK + sovByClass.DESK
       + sovByClass.CENTRAL_BANK + sovByClass.TREASURY;
-    void regionById;
+    // §3.13-BOOK (c-then-2): a `regionById` map over every company stood here, kept alive only by
+    // a `void` to silence the linter — a full index build every audit pass, read by nothing. The
+    // sovereign walk above answers by region already. Deleted.
   });
   return { held, outstanding };
 }

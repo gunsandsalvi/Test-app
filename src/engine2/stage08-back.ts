@@ -61,7 +61,7 @@ import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../domain/primary-m
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/stated';
 import { trancheWeekAccrual } from './front-core';
 import { maintenanceBridgeTrancheId, liquidityRevolverTrancheId, maturityRevolverTrancheId, calledRefinanceTrancheId } from '../domain/instrument-keys';
-import type { InstrumentId, Ticker } from '../domain/ids';
+import type { InstrumentId, Ticker, EntityId } from '../domain/ids';
 import { asEntityId } from '../domain/ids';
 
 /**
@@ -110,7 +110,7 @@ export interface BackKernelDeps {
   currentWeekMod13: number;
   updatedRegions: WeeklyStepContext['updatedRegions'];
   companyUpdates: Record<string, CompanyWeekUpdate>;
-  entityById: Map<string, GameState['institutionalEntities'][number]>;
+  entityById: ReadonlyMap<EntityId, GameState['institutionalEntities'][number]>;
   regionMedianRevenueLocal: number;
   systemicStressFactorGlobal: number;
   retainCashLedger: boolean;

@@ -28,7 +28,7 @@ import { RegionId } from '../../domain/geography';
 import { defect } from '../../domain/defect';
 import { issuerIdOf } from '../../engine2/tranches';
 import { holdingClassOf } from '../../domain/assets';
-import type { Ticker } from '../../domain/ids';
+import type { Company } from '../../domain/company';
 
 export type HoldingKind = ItemizedHolding['instrumentType'];
 
@@ -96,13 +96,13 @@ const holderIdOf = (p: PartyRef): string | undefined => (
  * rule are two places for it to rot, and these two rotted together.
  */
 export function issuerOfHoldingRow(
-  v2: V2World, h: ItemizedHolding, tickerByEntityId: ReadonlyMap<EntityId, Ticker>,
+  v2: V2World, h: ItemizedHolding, companyById: ReadonlyMap<EntityId, Company>,
 ): PartyRef {
   // The registry says which kinds are sovereign; this does not switch on the kind itself.
   if (holdingClassOf(h.instrumentType) === 'SOVEREIGN') return { kind: 'GOVERNMENT', region: h.issuerRegion };
   // A tranche resolves to its issuer; anything else — equity, a fund's own shares — is its own
   // issuer, so those two resolve exactly as they did before.
-  const ticker = tickerByEntityId.get(issuerIdOf(v2, h.instrumentId));
+  const ticker = companyById.get(issuerIdOf(v2, h.instrumentId))?.ticker;
   // §3.13-BOOK (c2b): no ticker resolved, so the row names something the company table does not
   // carry — a fund share, keyed on the register by the fund ENTITY itself. That crossing is why
   // an instrument id can stand here, and slice (d)'s registry is what removes the need.

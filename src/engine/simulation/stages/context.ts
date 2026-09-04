@@ -21,7 +21,6 @@ import { isActiveCompany, isPubliclyListed, CreditRating } from '../../../domain
 import { DiagnosticsLog, EarningsReport } from '../../../domain/events';
 import type { InstrumentId } from '../../../domain/ids';
 import type { Ticker } from '../../../domain/ids';
-import type { EntityId } from '../../../domain/ids';
 export type { EarningsReport };
 
 /**
@@ -139,9 +138,6 @@ export interface WeeklyStepContext {
    * holding ceiling exceeded what it already held. A market that cannot trade is a defect, not
    * a quiet pass (§7.102's shape). Asserted empty by the harness. */
   deadCeilingBooks: string[];
-  /** SETL3/4 — issuer id → ticker, so the register's payments name a real payer. */
-  /** §3.13-BOOK slice (c2c): entity id → ticker, which is the crossing `c-then` collapses. */
-  issuerTickerById: Map<EntityId, Ticker>;
   /** CASH/SETL1 — the week's payment instructions. Stages record; the settlement stage executes
    * (see stages/settlement.ts). A stage must not move money any other way. */
   /** SCALE phase 2: the register as typed-array columns, invalidated with the index above. */
@@ -422,7 +418,6 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     },
     wireJournal: newWireJournal((state as { nextWireId?: number }).nextWireId ?? 1, state.currentWeek + 1),
     pendingTouchedIds: [],
-    issuerTickerById: new Map(state.companies.map((c) => [c.id, c.ticker])),
     g2DeclinedOriginationLocal: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],
     primarySettlements: new Map(),

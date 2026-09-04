@@ -537,20 +537,7 @@ written from here):
        measurement is 155 `ByTicker` maps, 845 `.ticker` references and **thirty entity-index
        builds**, which is three (c2)-sized jobs in one line:
          · **c-then-1** the index EXISTS and the LEDGER'S identity reads it — **DONE, in §9.**
-         · **c-then-2** THE STAGE-LOCAL INDEXES. The other ~24 builds, in `audit/wires.ts` (three
-           in one file), `audit/snapshot.ts`, `core.ts` (two), `context.ts`, `index-calculation`,
-           `08-company-fundamentals`, `pe-lifecycle` (three), `etf-flows`, `shared-helpers` (two),
-           `register-marking`, `initialization` (two), `news-derivation`, `goods-arrival`,
-           `merger.ts`, and 07b/07d. Three known findings ride on it, all found by c-then-1:
-           **the private-firm fold is a no-op** in 07b and 07d (the read that proves it:
-           `context.ts:432` opens the week as `updatedCompanies: [...state.companies]` and every
-           reassignment is a length-preserving `.map`, so `prevActivePrivateFirms` — itself a
-           `state.companies` FILTER at `context.ts:401` — is a strict subset and the `if (!has)`
-           guard cannot fire; two of the four are already deleted); **`05-unit-bidding`'s `byKey`
-           map holds TICKERS AND IDS in one map** and casts `asTicker(c.id)` to decide which,
-           which is the id-space lie 13-BOOK exists to end; and `institutional-balance-sheet.ts:218`
-           memoises an index on `ctx`, which is the pattern `entity-index.ts` documents as unsafe —
-           read whether its array is one stage 08 replaces before keeping it.
+         · **c-then-2** THE STAGE-LOCAL INDEXES — **DONE, in §9.**
          · **c-then-3** `PartyRef`'S FOUR TICKER ARMS KEY BY `EntityId`, which is what makes it a
            VIEW rather than a union. `partyKey`'s string changes with it, so
            `holderAccruedInterestLocal` and `sovereignAccruedInterestLocal` move too. **And
@@ -1652,6 +1639,61 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c-then-2) — THE OTHER TWENTY-FOUR, AND THE MIRROR THAT HAD TO BE HAND-REGISTERED
+AT EVERY FIRM BIRTH.** The rest of the thirty builds, across twenty files, now go through the one
+builder. What is LEFT behind afterwards is the right residue and worth naming, because it is the
+test of whether the rule held: per-region VALUE maps (07e's prices, book equity, net investment
+rate; the seed's issued-shares map) and two filtered CLAIMS (`08`'s `firmById` over
+`prevActiveFirms`, `merger.ts`'s over `activeCompanies`). An index is a lookup; a filter is a
+claim; a map of numbers is neither.
+
+**`ctx.issuerTickerById` IS DELETED, AND IT WAS THE CLEAREST CASE FOR THE WHOLE STEP.** A
+`Map<EntityId, Ticker>` built once at context creation — a mirror of one column of one store — with
+three properties a mirror always ends up having. It could not see a firm born mid-week, so
+`pe-lifecycle` carried an explicit `ctx.issuerTickerById?.set(c.id, c.ticker)` at the birth site
+whose comment records what that cost before someone added it: *"a firm born mid-week was invisible
+to every coupon and corporate-action payment that week — the money then flowed payer-less into the
+unbacked ledger."* It was re-declared TWICE in `shared-helpers.ts` as `Map<string, string>`,
+unbranded, and cast back with `as Ticker`. And it had exactly two readers. Both index
+`ctx.updatedCompanies` now — which `core.ts:323` pushes the newborn onto in the same pass — so the
+registration step is gone rather than moved, which is what deleting a mirror means (rule 4).
+
+**THREE MORE FOUND BY READING.** (1) `ownership.ts` built a `regionById` map over every company on
+every pass of `ownershipCoverage`, kept alive only by a `void regionById;` to silence the linter,
+and read by nothing. (2) `audit/wires.ts` built the same two maps THREE times, two of them inside a
+`forEach` so they were rebuilt per gap row; one lazy getter now, so the traces still pay nothing
+when off. (3) `05-unit-bidding`'s `byKey` — the one map in the model that holds two id spaces on
+purpose, because the goods book's buyer keys are either a ticker or an id — **resolved the
+collision by walk order**. Its stated rule is "ids first, tickers after, so the ticker wins"; it
+was implemented inside the walk as `if (!byTicker.has(asTicker(c.id)))`, a test against the tickers
+seen SO FAR, so a colliding firm later in the walk was missed and the id won. Two passes now, and
+the `asTicker(c.id)` cast — an entity id branded a ticker to compare across spaces — goes with it.
+
+**AND ONE LIVE DEFECT, WHICH IS WHY THE POPULATIONS MATTER.** `sponsorPortfolioLocal` marks a PE
+fund's portfolio, and its two callers passed two DIFFERENT populations: the engine
+`prevActivePrivateFirms` (active, unlisted, **last week's objects**), the UI/harness read
+`state.companies.filter(c => !c.isBankEntity)` (this week's, but including public and inactive
+firms and excluding banks). Same fund, two NAVs, and the harness compares its own against the
+engine's. **The engine's was the wrong one and it was stale**: a company taken private THIS week is
+appended to `portfolioCompanyIds` and set `'PRIVATE'` in the same pass, but it was PUBLIC last
+week, so it is not in `prevActivePrivateFirms` — and the brand-new LBO was marked at **zero** for
+the rest of the week. Neither filter was doing any work (`portfolioCompanyIds` already names
+exactly the right companies, and a portfolio company is private by construction), so both callers
+pass the whole store now and the liveness test lives in one place. `private-equity` C5.
+
+**BRANDING KEPT PAYING.** `CreditPriceWorld.issuerById` now takes an `EntityId` (its one
+implementer answers out of the index, and `issuerIdOf` already returned one), which pulled
+`issuerCreditPoints`/`issuerSpreadAt`/`issuerSpreadAtOnCurve` with it. `Company.managesEntityIds`
+and `managedEntityIdsOf` are `EntityId[]`. `stage08-back`'s and `profiles/types`' `entityById` are
+`ReadonlyMap<EntityId, …>`. And `index-calculation.ts:basketValueLocal` failed to compile — it
+looks each index constituent up in a map keyed by COMPANY id, so **the EQUITY side reads
+`IndexConstituent.instrumentId` as an issuer too**, not just the credit adapters. `indices` A1's
+entry updated: all three readers of that field want a borrower.
+
+24 files, +197 −98 (98 of the added lines are the reasoning above), 20 files now on the one
+builder. Atlas: `money-and-settlement` C1.a, `private-equity` C5, `indices` A1. Gates green
+(150 tests); no run.
 
 **13-BOOK slice (c-then-1) — WHO A PARTY IS WAS ANSWERED IN THIRTY PLACES, AND ONE OF THEM WAS
 WRITTEN TWICE IN THE SAME FILE.** The entity store is two arrays and every consumer that needed an

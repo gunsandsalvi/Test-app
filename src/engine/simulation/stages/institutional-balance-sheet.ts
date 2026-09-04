@@ -41,6 +41,8 @@ import { isActiveCompany } from '../../../domain/company';
 import { mandatePctOf } from '../../../domain/institutions';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
+import { EntityIndex, buildEntityIndex } from '../../ledger/entity-index';
+import type { EntityId } from '../../../domain/ids';
 import { pendingSettlementLocal } from './settlement';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import { materializeGovLadder } from '../../../engine2/tranches';
@@ -196,11 +198,34 @@ function comparableMultiple(v2: V2World, memoKey: object, region: RegionId, list
 }
 
 /** HC4: a sponsor's assets are its portfolio companies at the public comparable, at its stake. */
-function sponsorPortfolioLocal(entity: InstitutionalEntity, evMultiple: number, privateById: Map<string, Company>, v2: V2World): number {
+/**
+ * §3.13-BOOK (c-then-2) — ONE POPULATION FOR ONE QUESTION, AND IT IS THE WHOLE STORE.
+ *
+ * This took a `privateById` map, and its two callers built that map from two DIFFERENT
+ * populations: the engine from `prevActivePrivateFirms` (active, unlisted, and **last week's
+ * objects**) and the state read from `state.companies.filter(c => !c.isBankEntity)` (this week's,
+ * but including public and inactive firms and excluding banks). So the same PE fund's portfolio
+ * marked to two different numbers depending on who asked — the harness compared its answer
+ * against the engine's (rule 4).
+ *
+ * **The engine's was the wrong one, and it was stale.** A company taken private THIS week is
+ * appended to `portfolioCompanyIds` by `pe-lifecycle` and its `listingStatus` set to `'PRIVATE'`
+ * in the same pass (`pe-lifecycle.ts:698`) — but it was PUBLIC last week, so it is not in
+ * `prevActivePrivateFirms`, and this marked the brand-new LBO at **zero** for the rest of the
+ * week. Rule 19's stale mirror exactly.
+ *
+ * Neither filter was doing any work: `portfolioCompanyIds` already names precisely the companies
+ * that count, and a portfolio company is private by construction (every path that adds one takes
+ * it private; the IPO path removes it, `:767`). So the index is the whole entity store and the
+ * liveness test is here, once, where both callers get it.
+ */
+function sponsorPortfolioLocal(
+  entity: InstitutionalEntity, evMultiple: number, companyById: ReadonlyMap<EntityId, Company>, v2: V2World
+): number {
   if (!entity.peFund) return 0;
   return entity.peFund.portfolioCompanyIds.reduce((a, id) => {
-    const c = privateById.get(id);
-    if (!c || c.isDefaulted) return a;
+    const c = companyById.get(id);
+    if (!c || c.isDefaulted || !isActiveCompany(c)) return a;
     return a + Math.max(0, evMultiple * c.ebitda - ladderTotalLocal(v2, c.id)) * (c.ownership?.peSponsorPct ?? 0);
   }, 0);
 }
@@ -208,15 +233,26 @@ function sponsorPortfolioLocal(entity: InstitutionalEntity, evMultiple: number, 
 export function institutionTotalAssetsLocal(ctx: WeeklyStepContext, entity: InstitutionalEntity): number {
   const pendingLocal = ctx.holdingsStore ? 0 : pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: entity.id });
   const portfolioLocal = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
-    ? sponsorPortfolioLocal(entity, comparableMultiple(ctx.v2, ctx, entity.region, ctx.prevActiveFirms), privateFirmIndex(ctx), ctx.v2)
+    ? sponsorPortfolioLocal(entity, comparableMultiple(ctx.v2, ctx, entity.region, ctx.prevActiveFirms), companyIndex(ctx), ctx.v2)
     : 0;
   return totalAssetsRead(entity, entityCashOf(ctx.v2, entity), institutionBookLocal(ctx.v2, entity.id), pendingLocal, portfolioLocal);
 }
-const privateIndexMemo = new WeakMap<object, Map<string, Company>>();
-function privateFirmIndex(ctx: WeeklyStepContext): Map<string, Company> {
-  let m = privateIndexMemo.get(ctx);
-  if (!m) { m = new Map(ctx.prevActivePrivateFirms.map((c) => [c.id, c])); privateIndexMemo.set(ctx, m); }
-  return m;
+/**
+ * §3.13-BOOK (c-then-2) — the memo stays, and it is the ONE place in the engine where one is safe
+ * on `ctx`: this function is called once per institution per read and the key is the context, not
+ * an array, so nothing about `updatedCompanies` being replaced in place invalidates it. What it
+ * memoises is the INDEX, and the index holds live company OBJECTS — so a company stage 08 replaces
+ * mid-week is a different object than the one indexed here.
+ *
+ * That is safe for what this reads (`ebitda`, `ownership`, `isDefaulted`) only because
+ * `institutionTotalAssetsLocal`'s callers all run after 08. If a caller moves ahead of it, drop
+ * the memo rather than reasoning about which fields survived — see `ledger/entity-index.ts`.
+ */
+const companyIndexMemo = new WeakMap<object, EntityIndex>();
+function companyIndex(ctx: WeeklyStepContext): ReadonlyMap<EntityId, Company> {
+  let m = companyIndexMemo.get(ctx);
+  if (!m) { m = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities); companyIndexMemo.set(ctx, m); }
+  return m.companyById;
 }
 
 /** The same read off a closed state (the UI, the harness): nothing is pending between weeks. */
@@ -224,7 +260,7 @@ export function institutionTotalAssetsFromState(state: GameState, entity: Instit
   const v2 = ensureV2(state);
   const portfolioLocal = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
     ? sponsorPortfolioLocal(entity, comparableMultiple(ensureV2(state), state, entity.region, state.companies.filter((c) => isActiveCompany(c))),
-        new Map(state.companies.filter((c) => !c.isBankEntity).map((c) => [c.id, c])), v2)
+        buildEntityIndex(state.companies, state.institutionalEntities ?? []).companyById, v2)
     : 0;
   return totalAssetsRead(entity, entityCashOf(v2, entity), institutionBookLocal(v2, entity.id), 0, portfolioLocal);
 }

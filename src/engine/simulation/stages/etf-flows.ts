@@ -34,6 +34,7 @@ import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { mandatePctOf } from '../../../domain/institutions';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
+import { buildEntityIndex } from '../../ledger/entity-index';
 import { INDEX_DEFINITIONS, IndexDefinition } from '../../../domain/indexes';
 import { apWeeklyCapacityLocal, basketAssemblyCostRate, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
 import { ItemizedHolding } from '../../../domain/banking';
@@ -539,7 +540,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     byFund.forEach((usd, fundId) => inKindOwedByFund.set(fundId, (inKindOwedByFund.get(fundId) ?? 0) + usd));
   });
   if (inKindOwedByFund.size > 0) {
-    const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
+    const { institutionById: entityById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
     let delivered = false;
     const fundAssetsLocal = new Map<EntityId, number>();
     // The cash the slice loop has NOT yet promised. The payments below settle at the

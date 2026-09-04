@@ -179,6 +179,13 @@ sides agree. It becomes wrong the moment anything joins an index to the register
 table by that field — which is exactly what slice (d)'s instrument index invites, and what B4
 (❌, *index return = weighted constituent return*) would need in order to be measurable at all.
 
+**And the EQUITY side reads it back as an issuer too (§3.13-BOOK c-then-2).** Branding the entity
+index's key made `basketValueLocal` fail to compile: it looks each constituent up in a map keyed by
+COMPANY id, which is a third reader treating this field as an issuer — so *every* consumer of
+`IndexConstituent.instrumentId`, equity and credit alike, wants a borrower. The crossing is now the
+named `equityIssuerId`, which makes it countable rather than fixing it. Three read sites for slice
+(d) to resolve: `index-calculation.ts:basketValueLocal`, `07b:571`, `07d:489`.
+
 **Becomes a §3 step**, in slice (d)'s neighbourhood: either the field splits by asset class, or a
 credit index states tranches and `rebalance` stops being one function over companies. Not slice
 (a)'s to decide — recorded here so the decision is made rather than inherited.

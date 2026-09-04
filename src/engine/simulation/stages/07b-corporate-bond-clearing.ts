@@ -81,6 +81,7 @@ import type { PaperTerms, ZeroCurve } from '../../../domain/pricing';
 import { issuerSpreadAt, CreditPriceWorld } from '../../credit-price';
 import { isInvestmentGrade, spreadRiskCapitalChargeRate, computeDistressedReservationSpreadBps } from './asset-allocation';
 import { WeeklyStepContext } from './context';
+import { buildEntityIndex } from '../../ledger/entity-index';
 
 import { institutionSpendableLocal, PartyRef } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, participantPartyOf, parHoldingRow, writeBackClearedFills } from './book-settlement';
@@ -154,12 +155,14 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
   });
   // The credit-curve read, for the one thing that genuinely needs a borrower-level number: what a
   // brand-new deal's coupon is struck at. It reads the issuer's OWN printed paper.
-  const companyById = new Map<string, Company>();
-  ctx.updatedCompanies.forEach((c) => companyById.set(c.id, c));
-  ctx.prevActiveFirms.forEach((c) => { if (!companyById.has(c.id)) companyById.set(c.id, c); });
-  ctx.prevActivePrivateFirms.forEach((c) => { if (!companyById.has(c.id)) companyById.set(c.id, c); });
+  // §3.13-BOOK (c-then-2): the ONE index, and the two folds under it were no-ops. They walked
+  // `prevActiveFirms` and `prevActivePrivateFirms` to add "issuers the working copy might not
+  // hold"; `context.ts:432` opens the week as `updatedCompanies: [...state.companies]` and both
+  // of those are `state.companies` FILTERS (`context.ts:400-401`), so the `if (!has(id))` guard
+  // could never fire. Deleted against that read, not a run (rule 19).
+  const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   const creditWorld: CreditPriceWorld = {
-    issuerById: (id: string) => companyById.get(id),
+    issuerById: (id) => companyById.get(id),
     regionById: (r: string) => ctx.updatedRegions[r as RegionId],
   };
 

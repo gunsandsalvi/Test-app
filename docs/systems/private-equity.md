@@ -113,6 +113,27 @@ Counts: 16 `✅` · 6 `⚠️` · 6 `❌`.
 
 ## 3. THE DIFF
 
+### ⚠️ C5 — THE SAME PORTFOLIO MARKED TO TWO NUMBERS, AND THE ENGINE'S WAS STALE (§3.13-BOOK c-then-2)
+
+`sponsorPortfolioLocal` took a `privateById` map, and its two callers built that map from two
+DIFFERENT populations. `institutionTotalAssetsLocal` (the engine) passed `prevActivePrivateFirms`
+— active, unlisted, and **last week's objects**. `institutionTotalAssetsFromState` (the UI and the
+harness) passed `state.companies.filter(c => !c.isBankEntity)` — this week's, but including public
+and inactive firms and excluding banks. So a fund's NAV depended on who asked, and the harness
+compared its own answer against the engine's (rule 4).
+
+**The engine's was the wrong one and it was stale.** A company taken private THIS week is appended
+to `portfolioCompanyIds` and has `listingStatus` set to `'PRIVATE'` in the same pass
+(`pe-lifecycle.ts:698`) — but it was PUBLIC last week, so it is not in `prevActivePrivateFirms`,
+and this marked **a brand-new LBO at zero for the rest of the week**: C5's mark, missing, on
+exactly the deal that just happened. Rule 19's stale mirror.
+
+Neither filter was doing any work. `portfolioCompanyIds` already names precisely the companies
+that count, and a portfolio company is private by construction — every path that adds one takes it
+private, and the IPO path removes it (`pe-lifecycle.ts:767`). Both callers now pass the whole
+entity index and the liveness test lives in `sponsorPortfolioLocal`, once. C5.a below is
+untouched: the mark is still an EV multiple on the sponsor's own books.
+
 ### ❌ C5.a — THE UNLISTED MARK IS THE SPONSOR'S BALANCE SHEET
 
 The FORBID node, and it is violated by the sponsor's total-assets read itself.

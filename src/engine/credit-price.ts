@@ -19,7 +19,7 @@
  * issuer's region's cleared curve. The arithmetic is the domain's and reads nothing.
  */
 import { V2World } from '../engine2/world';
-import { InstrumentId } from '../domain/ids';
+import { InstrumentId, EntityId } from '../domain/ids';
 import { clearedPriceOf } from '../engine2/prices';
 import { trancheIdOf,
   trancheRowOf, issuerIdOf, ladderRowsOf, trancheScheduleOf,
@@ -30,8 +30,10 @@ import type { ZeroCurve, PaperTerms } from '../domain/pricing';
 import { spreadAtTenor, CreditCurvePoint, CreditCurveRead } from '../domain/credit-curve';
 
 export interface CreditPriceWorld {
-  /** The issuer's region — everything else about its paper is on the ladder. */
-  issuerById: (id: string) => { region: string } | undefined;
+  /** The issuer's region — everything else about its paper is on the ladder. §3.13-BOOK
+   *  (c-then-2): the key is an `EntityId`, because `issuerIdOf` returns one and the only
+   *  implementer (`07b`) answers it out of the entity index. */
+  issuerById: (id: EntityId) => { region: string } | undefined;
   /** The region's cleared curve and its reference rate. */
   regionById: (region: string) => { zeroRates?: ZeroCurve; policyRate?: number } | undefined;
 }
@@ -130,7 +132,7 @@ export function rowSpreadBps(
  * is really asking this curve a question at some maturity.
  */
 export function issuerCreditPoints(
-  world: CreditPriceWorld, v2: V2World, issuerId: string, week: number
+  world: CreditPriceWorld, v2: V2World, issuerId: EntityId, week: number
 ): CreditCurvePoint[] {
   const comp = world.issuerById(issuerId);
   const reg = comp ? world.regionById(comp.region) : undefined;
@@ -149,7 +151,7 @@ export function issuerCreditPoints(
  * meant here; a caller asking about the loan market passes `IS_LOAN_ROW` and says so.
  */
 export function issuerCreditPointsOnCurve(
-  v2: V2World, rates: RegionRates, issuerId: string, week: number,
+  v2: V2World, rates: RegionRates, issuerId: EntityId, week: number,
   rowFilter: (flags: number) => boolean = IS_BOND_ROW
 ): CreditCurvePoint[] {
   const S = v2.tranches;
@@ -170,7 +172,7 @@ export function issuerCreditPointsOnCurve(
 
 /** What this borrower pays at a maturity, for a caller that already holds the region's rates. */
 export function issuerSpreadAtOnCurve(
-  v2: V2World, rates: RegionRates, issuerId: string, week: number, tenorYears: number,
+  v2: V2World, rates: RegionRates, issuerId: EntityId, week: number, tenorYears: number,
   rowFilter: (flags: number) => boolean = IS_BOND_ROW
 ): CreditCurveRead | undefined {
   return spreadAtTenor(issuerCreditPointsOnCurve(v2, rates, issuerId, week, rowFilter), tenorYears);
@@ -183,7 +185,7 @@ export function issuerSpreadAtOnCurve(
  * curve, and inventing one for it is exactly what this replaces.
  */
 export function issuerSpreadAt(
-  world: CreditPriceWorld, v2: V2World, issuerId: string, week: number, tenorYears: number
+  world: CreditPriceWorld, v2: V2World, issuerId: EntityId, week: number, tenorYears: number
 ): CreditCurveRead | undefined {
   return spreadAtTenor(issuerCreditPoints(world, v2, issuerId, week), tenorYears);
 }
@@ -191,7 +193,7 @@ export function issuerSpreadAt(
 /** The same question, as a bare number for a caller that has its own answer when the issuer has
  *  no paper (a debut's price talk, a bank's wholesale spread). */
 export function issuerSpreadBpsAt(
-  world: CreditPriceWorld, v2: V2World, issuerId: string, week: number, tenorYears: number,
+  world: CreditPriceWorld, v2: V2World, issuerId: EntityId, week: number, tenorYears: number,
   whenUnpriced: number
 ): number {
   return issuerSpreadAt(world, v2, issuerId, week, tenorYears)?.spreadBps ?? whenUnpriced;

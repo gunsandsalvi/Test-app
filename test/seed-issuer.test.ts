@@ -16,6 +16,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { corporateTrancheId } from '../src/domain/instrument-keys';
 import { ensureV2 } from '../src/engine2/world';
+import { buildEntityIndex } from '../src/engine/ledger/entity-index';
+import type { Company } from '../src/domain/company';
 
 import { issuerIdOf, syncLadderRows } from '../src/engine2/tranches';
 import { issuerOfHoldingRow } from '../src/engine/ledger/holdings-ledger';
@@ -56,22 +58,28 @@ test('a seeded CORPORATE BOND row is issued by its company, not by a party that 
     id, principalLocal: 1_000_000, rateType: 'FIXED', couponRate: 0.05,
     originationWeek: 0, maturityWeek: 260, seniority: 'SENIOR',
   }]);
-  const tickerById = new Map([[asEntityId('USA_ACME'), asTicker('ACME')]]);
+  // §3.13-BOOK (c-then-2): `issuerOfHoldingRow` takes the ENTITY INDEX now, not a `Map<id, ticker>`
+  // mirror of it. Only the ticker is read, so a one-firm index is all this needs.
+  const companyById = buildEntityIndex(
+    [{ id: asEntityId('USA_ACME'), ticker: asTicker('ACME') } as Company], []).companyById;
   const row: ItemizedHolding = {
     instrumentId: id, instrumentType: 'CORP_BOND', issuerRegion: 'USA',
     quantityOrNotionalLocal: 1_000, units: 1_000,
   };
   // Before the fix this was `{ kind: 'INSTITUTION', id: 'ACME-T1' }`.
-  assert.deepEqual(issuerOfHoldingRow(v2, row, tickerById), { kind: 'COMPANY', ticker: 'ACME' });
+  assert.deepEqual(issuerOfHoldingRow(v2, row, companyById), { kind: 'COMPANY', ticker: 'ACME' });
 });
 
 test('a seeded FUND SHARE row is still issued by the fund itself', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
-  const tickerById = new Map([[asEntityId('USA_ACME'), asTicker('ACME')]]);
+  // §3.13-BOOK (c-then-2): `issuerOfHoldingRow` takes the ENTITY INDEX now, not a `Map<id, ticker>`
+  // mirror of it. Only the ticker is read, so a one-firm index is all this needs.
+  const companyById = buildEntityIndex(
+    [{ id: asEntityId('USA_ACME'), ticker: asTicker('ACME') } as Company], []).companyById;
   const row: ItemizedHolding = {
     instrumentId: asInstrumentId('USA_ETF_1'), instrumentType: 'ETF_SHARE', issuerRegion: 'USA',
     quantityOrNotionalLocal: 1_000, units: 1_000,
   };
   // The half the fix must NOT change: a fund's shares are keyed by the fund's own id.
-  assert.deepEqual(issuerOfHoldingRow(v2, row, tickerById), { kind: 'INSTITUTION', id: 'USA_ETF_1' });
+  assert.deepEqual(issuerOfHoldingRow(v2, row, companyById), { kind: 'INSTITUTION', id: 'USA_ETF_1' });
 });

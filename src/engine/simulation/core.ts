@@ -71,6 +71,7 @@ import { ensureV2 } from '../../engine2/world';
 import { assertLaddersInSync, materializeLadder, facilityBookOf, ensureLaddersSynced } from '../../engine2/tranches';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
+import { buildEntityIndex } from '../ledger/entity-index';
 import type { ItemizedHolding } from '../../domain/banking';
 import type { PartyRef } from '../ledger/party';
 
@@ -161,8 +162,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // The REGISTER opens the same way. A holding's issuer is the party its instrument names: a
     // firm for equity and corporate paper (the id IS the company's), the treasury for a sovereign
     // tranche, the fund itself for its own shares.
-    const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
-    const issuerOfHolding = (h: ItemizedHolding): PartyRef => issuerOfHoldingRow(v2, h, tickerById);
+    const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+    const issuerOfHolding = (h: ItemizedHolding): PartyRef => issuerOfHoldingRow(v2, h, companyById);
     for (const e of state.institutionalEntities ?? []) {
       if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
     }
@@ -505,8 +506,13 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         // sheet cleared — is still the company whose region the money moved in. Filtering to
         // `isBankEntity` dropped its whole delta on the floor, silently, and M6 saw the deposits
         // move with no creator to explain them.
-        const regionOfBank = new Map(ctx.updatedCompanies.map((c) => [c.ticker, c.region as string]));
-        state.companies.forEach((c) => { if (!regionOfBank.has(c.ticker)) regionOfBank.set(c.ticker, c.region as string); });
+        // §3.13-BOOK (c-then-2): the week's index first, the week-start one behind it. Two
+        // populations on purpose — a bank that vanished mid-week is still the company whose
+        // region the money moved in, and that is the whole point of the fallback.
+        const nowByTicker = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities).companyByTicker;
+        const wasByTicker = buildEntityIndex(state.companies, state.institutionalEntities ?? []).companyByTicker;
+        const regionOfBank = (ticker: Ticker): string | undefined =>
+          (nowByTicker.get(ticker) ?? wasByTicker.get(ticker))?.region;
         const mergeMapsForRegion = (x: Map<string, number>, y: Map<string, number>): Map<string, number> => {
           const out = new Map(x); y.forEach((v, k) => out.set(k, (out.get(k) ?? 0) + v)); return out;
         };
@@ -516,7 +522,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         const byRegion = (m: Map<string, number>): Record<string, number> => {
           const out: Record<string, number> = {};
           m.forEach((v, ticker) => {
-            const r = regionOfBank.get(asTicker(ticker));
+            const r = regionOfBank(asTicker(ticker));
             if (r) out[r] = (out[r] ?? 0) + v; else unmappedLocal += v;
           });
           return out;

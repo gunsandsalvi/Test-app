@@ -5,6 +5,7 @@
  */
 
 import { journalPayment, partyId, PendingNetCtx } from './settlement';
+import { buildEntityIndex } from '../../ledger/entity-index';
 import { currencyOf } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
@@ -452,7 +453,6 @@ export function applyPendingCorporateActionSettlements(
      *  payer. (It used to be here to find the shares the register did NOT hold — the "public
      *  float" — which §9.13-EQUITY removed by giving that holder rows.) */
     updatedCompanies?: Company[];
-    issuerTickerById?: Map<string, string>;
   } & PendingNetCtx
 ): void {
   const pending = ctx.pendingHolderSettlements;
@@ -486,8 +486,11 @@ export function applyPendingCorporateActionSettlements(
   // COMPOSITE of the two, and it stays valid only while an instrument ref fits in 22 bits.
   const pairOf = (t: TypeRef, i: InstrRef): number => t * 0x400000 + i;
   // An instrument is a tranche or its issuer; the issuer's ticker is one read either way.
+  // §3.13-BOOK (c-then-2): read off the entity index rather than a `Map<id, ticker>` mirror that
+  // had to be hand-registered at every firm birth to stay complete.
+  const { companyById } = buildEntityIndex(ctx.updatedCompanies ?? [], []);
   const issuerTickerOf = (instrumentId: string): Ticker | undefined =>
-    ctx.issuerTickerById?.get(issuerIdOf(v2, instrumentId)) as Ticker | undefined;
+    companyById.get(issuerIdOf(v2, instrumentId))?.ticker;
   const pairKeyOf = (r: number): number => pairOf(H.typeRef[r], H.instrRef[r]);
   const toPairs = (byType: Map<string, Map<string, number>>): Map<number, number> => {
     const out = new Map<number, number>();
@@ -519,7 +522,7 @@ export function applyPendingCorporateActionSettlements(
   // desks' positions stand until the next auction's paydown catches them up a week late, and
   // the clearing house is short by exactly the desks' share of each week's retirements.
   if (ctx.updatedCompanies && ctx.paymentJournal) {
-    const regionByIssuerId = new Map(ctx.updatedCompanies.map((c) => [c.id, c.region as RegionId]));
+    const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
     pendingByType.forEach((byId, type) => {
       const book = type === 'CORP_BOND' || type === 'LEVERAGED_LOAN' ? DESK_BOOK_BY_TYPE[type] : undefined;
       if (!book) return;
@@ -531,7 +534,7 @@ export function applyPendingCorporateActionSettlements(
           const ratio = byId.get(p.instrumentId);
           if (ratio === undefined || !(p.inventoryLocal > 0) || Math.abs(ratio - 1) < 1e-9) return p;
           const issuerTicker = issuerTickerOf(p.instrumentId);
-          const issuerRegion = regionByIssuerId.get(issuerIdOf(v2, p.instrumentId));
+          const issuerRegion = companyById.get(issuerIdOf(v2, p.instrumentId))?.region;
           if (!issuerTicker || !issuerRegion) return p;
           const deltaLocal = p.inventoryLocal * (ratio - 1);
           const house = { kind: 'CLEARING_HOUSE' as const, region: issuerRegion };
@@ -605,7 +608,7 @@ export function applyPendingCorporateActionSettlements(
   const denomByPair = new Map<number, number>();
   const deskIncomeByTicker = new Map<Ticker, number>();
   if (hasCash && ctx.updatedCompanies) {
-    const companyById = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
+    const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
     pendingCashByType.forEach((byId, type) => {
       const t = typeRefOf(v2, type);
       if (t < 0) return;
@@ -943,7 +946,6 @@ export function applyHolderInterestAccruals(
     holderAccruedInterestLocal: Map<string, Map<string, number>>;
     /** The banks, so the desks holding an issuer's paper accrue their share of its coupon. */
     updatedCompanies?: Company[];
-    issuerTickerById?: Map<string, string>;
     nextWeek?: number;
   } & PendingNetCtx
 ): void {
@@ -1089,12 +1091,16 @@ export function applyHolderInterestAccruals(
     return;
   }
   // Only the instruments whose coupon falls due this week, and only their own holders.
+  // §3.13-BOOK (c-then-2): the issuers, read off the entity index rather than the `Map<id, ticker>`
+  // mirror that had to be hand-registered at every firm birth. Built here, after the early
+  // returns, so a week with no payout pays nothing for it.
+  const { companyById: issuersById } = buildEntityIndex(ctx.updatedCompanies ?? [], []);
   const deskCouponByTicker = new Map<Ticker, number>();
   payouts.forEach((instrumentKey) => {
     const byHolder = ctx.holderAccruedInterestLocal.get(instrumentKey);
     if (!byHolder) return;
     const issuerId = instrumentKey.slice(instrumentKey.indexOf(':') + 1);
-    const ticker = ctx.issuerTickerById?.get(issuerIdOf(ctx.v2, issuerId)); // a tranche key names its issuer through the store
+    const ticker = issuersById.get(issuerIdOf(ctx.v2, issuerId))?.ticker; // a tranche key names its issuer through the store
     if (!ticker || !ctx.paymentJournal) {
       // A coupon due from an issuer nobody can name is a defect at the site that accrued it,
       // not a receivable that quietly survives.

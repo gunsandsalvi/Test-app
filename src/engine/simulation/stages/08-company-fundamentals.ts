@@ -13,6 +13,7 @@ import {
   GameState, Company, NewsItem, RegionId,
 } from '../../../types';
 import { currencyOfId } from '../../../engine2/world';
+import { buildEntityIndex } from '../../ledger/entity-index';
 import { isActiveCompany, getOutputInventoryLocal, banksOf } from '../../../domain/company';
 import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } from './shared-helpers';
 import { openCorporateSweepBooks, settleCorporateSweepBooks } from './money-market-fund';
@@ -92,7 +93,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // Per-week indices, built once (see the plan's optimization rule: memoize per-week derived
   // values at the top of a stage, never inside a per-company loop). Each of these was a full
   // scan of a multi-thousand-element array executed once per company.
-  const entityById = new Map(state.institutionalEntities.map(e => [e.id, e]));
+  // §3.13-BOOK (c-then-2): the institutions from the ONE builder. `firmById` stays its own map:
+  // it indexes `prevActiveFirms` — the ACTIVE, PUBLICLY LISTED subset this stage runs over — which
+  // is a filter and therefore a claim, not a lookup (see `ledger/entity-index.ts`).
+  const { institutionById: entityById } = buildEntityIndex([], state.institutionalEntities);
   const firmById = new Map(prevActiveFirms.map(c => [c.id, c]));
   // CRD-R1 — the median issuer's revenue, so SCALE in the rating is relative to the firms a
   // credit is actually rated against rather than a stated size (§7.184).

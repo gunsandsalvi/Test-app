@@ -316,7 +316,7 @@ export interface Company {
    * default in ONE place — and this field is what lets a manager run several vehicles (the ETF
    * sponsor template) once the split's later steps land. Never read it raw; ask the helper.
    */
-  managesEntityIds?: string[];
+  managesEntityIds?: EntityId[];
   baselineAnnualRevenue: number;
   annualRevenue: number;
   productLines?: ProductLine[];
@@ -890,7 +890,7 @@ export const RECEIPTS_MEASUREMENT_WEIGHT = 0.08;
 
 /** §7.284 — the vehicles this shell manages. The id-equality convention is the stated default,
  *  here and nowhere else; a shell with an explicit link reads the link. */
-export function managedEntityIdsOf(comp: { id: string; managesEntityIds?: string[] }): string[] {
+export function managedEntityIdsOf(comp: { id: EntityId; managesEntityIds?: EntityId[] }): EntityId[] {
   return comp.managesEntityIds ?? [comp.id];
 }
 

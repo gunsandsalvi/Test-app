@@ -78,6 +78,7 @@ import { openAccount, openingCashOf, stashOpeningCash, sectorRowAt, stashSeedHou
 import { newWireJournal, setActiveWireJournal, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
+import { buildEntityIndex } from '../ledger/entity-index';
 import type { PartyRef } from '../ledger/party';
 
 import { reasonText } from './stages/settlement';
@@ -364,8 +365,8 @@ function openSeededMirrors(state: GameState): void {
       if (!ladder.length) return;
       seedLadder(v2, governmentIssuer(regionId), ladder);
     });
-    const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
-    const issuerOfHolding = (h: ItemizedHolding): PartyRef => issuerOfHoldingRow(v2, h, tickerById);
+    const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+    const issuerOfHolding = (h: ItemizedHolding): PartyRef => issuerOfHoldingRow(v2, h, companyById);
     for (const e of state.institutionalEntities ?? []) {
       if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
     }
@@ -404,8 +405,8 @@ function openSeededMirrors(state: GameState): void {
     // The seed's wires are a real journal and the world carries it, so week 0 can be asked what
     // it wired exactly as any week is. There are no payments at the seed, so the pending money it
     // is netted against is zero.
-    const regionByTicker = new Map(state.companies.map((c) => [c.ticker, c.region]));
-    state.lastWires = summarizeWires(j, { numeraire: 0, byCurrency: {} }, (t: Ticker) => regionByTicker.get(t), reasonText, v2.fx);
+    const { companyByTicker } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+    state.lastWires = summarizeWires(j, { numeraire: 0, byCurrency: {} }, (t: Ticker) => companyByTicker.get(t)?.region, reasonText, v2.fx);
     (state as { nextWireId?: number }).nextWireId = j.base + j.n;
   } finally {
     setActiveWireJournal(undefined);

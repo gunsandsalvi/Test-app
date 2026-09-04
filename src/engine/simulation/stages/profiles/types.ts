@@ -19,13 +19,14 @@
 
 import { GameState, Region, Company, InstitutionalEntity } from '../../../../types';
 import { WeeklyStepContext } from '../context';
+import type { EntityId } from '../../../../domain/ids';
 
 export interface ProfileInput {
   comp: Company;
   reg: Region;
   state: GameState;
   ctx: WeeklyStepContext;
-  entityById: Map<string, InstitutionalEntity>;
+  entityById: ReadonlyMap<EntityId, InstitutionalEntity>;
   annualInterest: number;
   taxRate: number;
   perShare: (amountLocal: number) => number;

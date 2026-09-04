@@ -56,7 +56,7 @@ import { weeklyWageBillLocal, getBaseAnnualWageLocal } from '../../bootstrap/lab
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { cashOf } from '../../ledger/accounts';
 import { type PartyKeyRef } from '../../../engine2/refs';
-import type { Ticker } from '../../../domain/ids';
+import type { Ticker, EntityId } from '../../../domain/ids';
 import { asTicker } from '../../../domain/ids';
 
 /** SCALE / DECLARED RELABEL: decimal rounding by arithmetic
@@ -301,10 +301,20 @@ interface RegionMarketIndex {
  */
 interface GlobalFirmLookup {
   byTicker: Map<Ticker, Company>;
-  byId: Map<string, Company>;
-  /** One probe for a key that may be a ticker OR an id (contracts store either).
-   * Ids are inserted first and tickers after, so on any collision the ticker wins — exactly
-   * the `byTicker.get(k) ?? byId.get(k)` resolution this replaces, at half the probes. */
+  byId: Map<EntityId, Company>;
+  /**
+   * One probe for a key that may be a ticker OR an id, because the goods book's buyer keys hold
+   * EITHER — the one place in the model where two id spaces share a map on purpose, and the
+   * reason `partyOfKey` can answer both. Ids go in first and tickers after, so a ticker wins any
+   * collision: `byTicker.get(k) ?? byId.get(k)` at half the probes.
+   *
+   * §3.13-BOOK (c-then-2) — THE RULE NOW HOLDS REGARDLESS OF WALK ORDER. It was written inside
+   * the walk as `if (!byTicker.has(asTicker(c.id))) byKey.set(c.id, c)`, which asked whether any
+   * firm SEEN SO FAR had a ticker equal to this firm's id: a colliding firm later in the walk was
+   * missed and the id won instead. The cast was also a lie the compiler now refuses — an entity
+   * id branded as a ticker to compare across spaces. Both go away by filling the two spaces in
+   * two passes, which is what the sentence above always said.
+   */
   byKey: Map<string, Company>;
 }
 
@@ -333,9 +343,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
     if (!index) return;
     lookup.byTicker.set(c.ticker, c);
     lookup.byId.set(c.id, c);
-    // A firm whose ID collides with no ticker also answers to its id in the loose `byKey` map.
-    if (!lookup.byTicker.has(asTicker(c.id))) lookup.byKey.set(c.id, c);
-    lookup.byKey.set(c.ticker, c);
+    lookup.byKey.set(c.id, c); // ids first; the ticker pass below overwrites any collision
     index.activeFirms.push(c);
     if ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0) > 0) index.capexBuyers.push(c);
     (c.productLines || []).forEach((l) => {
@@ -358,6 +366,8 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
   };
   ctx.prevActiveFirms.forEach(walk);
   ctx.prevActivePrivateFirms.forEach(walk);
+  // The ticker pass, AFTER every id is in: on a key that is both, the ticker wins.
+  lookup.byTicker.forEach((c, ticker) => lookup.byKey.set(ticker, c));
   return { byRegion, lookup };
 }
 

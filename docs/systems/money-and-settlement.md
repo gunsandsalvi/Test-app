@@ -206,7 +206,7 @@ identical cases each (`partyRegionOf` and an inline `regionOfParty`). One builde
 and the memo policy stated once — memoised on the STATE in the audit, never in the engine, because
 `08-company-fundamentals.ts:470` replaces companies in place at the same length.
 
-Four things the collapse found by reading, none of them E4's own:
+Four things the c-then-1 collapse found by reading, none of them E4's own:
 
 - **`bankByTicker` was four different filters.** `isBankEntity` alone (the audit's O4, stage 08's
   lanes), `bankBalanceSheet` alone (estate resolution), and live-sheet-and-active (`banksOf`, in
@@ -215,12 +215,37 @@ Four things the collapse found by reading, none of them E4's own:
 - **The private-firm fold was always a no-op**, in three files. `context.ts:432` opens the week as
   `updatedCompanies: [...state.companies]` and every reassignment is a length-preserving `.map`,
   so `prevActivePrivateFirms` — a `state.companies` FILTER — is a strict subset and the
-  `if (!has(id))` guard could not fire. Two are deleted here (`derivative-lifecycle.ts`); 07b and
-  07d carry the third and fourth.
+  `if (!has(id))` guard could not fire. All four are now deleted (`derivative-lifecycle.ts` ×2,
+  07b, 07d).
 - **`DerivativeContract.referenceId` is four id spaces in one `string` field**, discriminated by
   `classId` alone: an entity id from the CDS book, a commodity id, a REGION from the FX forward,
   and `''` from the swap. See `the-derivative-layer`.
 - **O3's fund-share line**, in `the-register`.
+
+### C1.a — AND THE `Map<id, ticker>` MIRROR THAT HAD TO BE HAND-REGISTERED (§3.13-BOOK c-then-2)
+
+The rest of the thirty builds, in twenty files, now go through the one builder. What that found:
+
+- **`ctx.issuerTickerById` was a mirror with a maintenance burden, and it is gone.** Built once at
+  context creation, it could not see a firm born mid-week — so `pe-lifecycle.ts` carried an
+  explicit `ctx.issuerTickerById?.set(c.id, c.ticker)` at the birth site, with a comment recording
+  what had gone wrong before it: *"a firm born mid-week was invisible to every coupon and
+  corporate-action payment that week — the money then flowed payer-less into the unbacked
+  ledger"*. Exactly the invalidation-at-every-writer invariant a parallel mirror demands. It was
+  also re-declared TWICE in `shared-helpers.ts` as `Map<string, string>` and cast back with
+  `as Ticker`. Its two readers index `ctx.updatedCompanies` now, which `core.ts:323` pushes the
+  newborn onto in the same pass — so the newborn is found with no registration step at all.
+- **A dead index in the audit.** `ownership.ts` built a `regionById` map over every company on
+  every pass of `ownershipCoverage`, kept alive only by a `void regionById;` to silence the
+  linter. Read by nothing. Deleted.
+- **`audit/wires.ts` built the same two maps three times**, two of them INSIDE a `forEach` so they
+  were rebuilt per gap row. One lazy getter now — the traces still pay nothing when off.
+- **`05-unit-bidding`'s `byKey` map resolved a ticker/id collision by walk order.** It is the one
+  map in the model that holds two id spaces on purpose (the goods book's buyer keys are either),
+  and its stated rule is "ids first, tickers after, so the ticker wins". It was implemented inside
+  the walk as `if (!byTicker.has(asTicker(c.id)))` — a test against the tickers seen SO FAR, so a
+  colliding firm later in the walk was missed and the id won instead. Two passes now, and the
+  `asTicker(c.id)` cast (an entity id branded a ticker to compare across spaces) is gone.
 
 ### ⚠️ E3 — "TWO INSTRUCTIONS THAT BOTH DRAW ON ONE BALANCE CANNOT BOTH SUCCEED BY LUCK"
 

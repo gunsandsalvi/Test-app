@@ -10,9 +10,17 @@ import { isTrancheKind } from '../../domain/assets';
 import { ensureV2 } from '../../engine2/world';
 import { issuerIdOf } from '../../engine2/tranches';
 import { asEntityId, asTicker } from '../../domain/ids';
+import { EntityIndex, buildEntityIndex } from '../ledger/entity-index';
 
 export function auditWires(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
+  // §3.13-BOOK (c-then-2) — ONE INDEX, BUILT ONLY IF A TRACE ASKS FOR IT. This file held three
+  // builds of the same two maps, all inside env-gated trace blocks, and two of them sat INSIDE a
+  // `forEach` so they were rebuilt per gap row. Collapsed to one lazy getter: the traces still
+  // pay nothing when they are off, and they now agree on who a firm is.
+  let entityIndex: EntityIndex | undefined;
+  const entities = (): EntityIndex =>
+    (entityIndex ??= buildEntityIndex(state.companies, state.institutionalEntities ?? []));
   const w = state.lastWires; const s = state.lastSettlement;
   // §3.37-SEED: week 0 is the OPENING STATE and no week has elapsed, so there is no journal to
   // find and its absence is not a finding. Every check below this line asks what MOVED, which is
@@ -86,7 +94,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       // The per-issuer decomposition: which firms' ladders moved by other than their wires, and
       // whether the firm is new this week (a birth — B's gap) or gone.
       const nowT = ladderUSDByTicker(state);
-      const byTicker = new Map(state.companies.map((c) => [c.ticker, c]));
+      const byTicker = entities().companyByTicker;
       const rows: [string, number, string][] = [];
       new Set([...Object.keys(nowT), ...Object.keys(prev.ladderUSDByTicker), ...Object.keys(w.issuerNetUSDByTicker ?? {})]).forEach((key) => {
         const d = (nowT[key] ?? 0) - (prev.ladderUSDByTicker![key] ?? 0);
@@ -129,10 +137,10 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
         const f = flows[key]; const pn = partsNow[key] ?? [0, 0, 0];
         const [rg, sb] = key.split('|');
         let receipts = 0;
-        const byId = new Map(state.companies.map((c) => [c.id, c]));
+        const byId = entities().companyById;
         Object.entries((state as { lotReceiptsTrace?: Record<string, number> }).lotReceiptsTrace ?? {}).forEach(([k, u]) => { const [cid, s2] = k.split('|'); if (s2 === sb && byId.get(asEntityId(cid))?.region === rg) receipts += u; });
         if (rg === 'USA' && sb === 'electricity') {
-          const byTicker = new Map(state.companies.map((c) => [c.ticker, c]));
+          const byTicker = entities().companyByTicker;
           const inBy: Record<string, number> = {}; const reasonsBy: Record<string, Set<string>> = {};
           Object.entries(w.goodsInByTicker ?? {}).forEach(([k, u]) => { const [tkRaw, s2, rs] = k.split('|'); const tk = asTicker(tkRaw); if (s2 !== sb) return; const c = byTicker.get(tk); if (c?.region !== rg) return; inBy[tk] = (inBy[tk] ?? 0) + u; (reasonsBy[tk] ??= new Set()).add(rs); });
           const recBy: Record<string, number> = {};

@@ -40,7 +40,7 @@ import { issuerSpreadAtOnCurve } from '../../../credit-price';
 
 
 import { cdsInstrumentId } from '../../../../domain/instrument-keys';
-import type { InstrumentId } from '../../../../domain/ids';
+import type { InstrumentId, EntityId } from '../../../../domain/ids';
 import { asEntityId } from '../../../../domain/ids';
 import { asTicker } from '../../../../domain/ids';
 function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
@@ -59,7 +59,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
      * bond of any maturity, and then there is no basis to speak of rather than a basis against a
      * number nobody traded.
      */
-    const cashSpreadBpsOf = (c: { id: string; region: string }): number | undefined =>
+    const cashSpreadBpsOf = (c: { id: EntityId; region: string }): number | undefined =>
       issuerSpreadAtOnCurve(ctx.v2, ctx.updatedRegions[c.region as RegionId], c.id,
         ctx.nextWeek, CDS_TENOR_WEEKS / 52)?.spreadBps;
 

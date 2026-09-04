@@ -4,6 +4,7 @@
  * week-over-week checks need, copied out when the audit runs.
  */
 import { stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
+import { buildEntityIndex } from '../ledger/entity-index';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { GameState, RegionId } from '../../types';
 import { loanBooksOf, spendableDepositsOf } from '../../domain/banking';
@@ -140,12 +141,12 @@ export function goodsUnitsByKey(state: GameState, parts?: Record<string, [number
       if (touched) for (const subIdx of touched) add(c.region, SUBUNITS[subIdx], inputUnitsHeld(v2, c.id, SUBUNITS[subIdx]), 1);
     }
   }
-  const regionOf = new Map(state.companies.map((c) => [c.ticker, c.region]));
+  const { companyByTicker } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
   // A consignment is stock in its NAMED carrier's region; one the transport pool carries (no
   // ticker) passed through a source-and-sink and reappears at arrival from it.
   for (const sh of state.goodsInTransit ?? []) {
     if (!sh.carrierTicker) continue;
-    const region = sh.carrierRegion ?? regionOf.get(sh.carrierTicker);
+    const region = sh.carrierRegion ?? companyByTicker.get(sh.carrierTicker)?.region;
     if (region) add(region, sh.subUnitId, sh.units, 2);
   }
   return out;

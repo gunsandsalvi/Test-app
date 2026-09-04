@@ -16,6 +16,8 @@
  */
 
 import { GameState, Company } from '../../../types';
+import { buildEntityIndex } from '../../ledger/entity-index';
+import type { EntityId } from '../../../domain/ids';
 import { ensureV2, V2World } from '../../../engine2/world';
 import { trancheIdOf, ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY } from '../../../engine2/tranches';
 import { clearedPriceOf } from '../../../engine2/prices';
@@ -27,7 +29,7 @@ import {
   INDEX_DEFINITIONS, IndexDefinition, IndexConstituent, MarketIndex,
   LARGE_CAP_CUMULATIVE_SHARE, INDEX_REBALANCE_WEEKS, INDEX_BASE_LEVEL,
 } from '../../../domain/indexes';
-import { equityInstrumentId } from '../../../domain/instrument-keys';
+import { equityInstrumentId, equityIssuerId } from '../../../domain/instrument-keys';
 
 // §7.311 — ladder reads on rows; "indexable" = capital-markets paper (no bank debt, no CP).
 const INDEXABLE_EXCLUDED = TR_FACILITY | TR_CP;
@@ -109,16 +111,20 @@ function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], week
 }
 
 /** This week's aggregate value of a fixed membership, at cleared prices. */
-function basketValueLocal(v2: V2World, def: IndexDefinition, constituents: IndexConstituent[], byId: Map<string, Company>, week: number): number {
+function basketValueLocal(v2: V2World, def: IndexDefinition, constituents: IndexConstituent[], byId: ReadonlyMap<EntityId, Company>, week: number): number {
   return constituents.reduce((sum, c) => {
-    const comp = byId.get(c.instrumentId);
+    // §3.13-BOOK (c-then-2) — THE EQUITY CROSSING'S RETURN LEG, named. `rebalance` mints each
+    // constituent as `equityInstrumentId(c.id)`, which IS the company's id verbatim, so reading
+    // it back as an ISSUER is what the field means whatever it is called. Slice (a) already found
+    // the outbound half of this in `indices.md` A1; branding the index's key found the read.
+    const comp = byId.get(equityIssuerId(c.instrumentId));
     return comp ? sum + indexValueLocal(v2, def, comp, week) : sum;
   }, 0);
 }
 
 export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2 = ensureV2(state);
-  const byId = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
+  const { companyById: byId } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   const previous = new Map((state.marketIndexes ?? []).map((i) => [i.id, i]));
   const week = ctx.nextWeek;
 

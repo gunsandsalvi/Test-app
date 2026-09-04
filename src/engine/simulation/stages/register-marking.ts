@@ -40,6 +40,7 @@
  * quantity is stored rather than inferred.
  */
 import { GameState } from '../../../types';
+import { buildEntityIndex } from '../../ledger/entity-index';
 import { WeeklyStepContext } from './context';
 import { markBookToMarket, registerBooks } from '../../ledger/holdings-ledger';
 import { trancheClearedPricePerFace } from '../../credit-price';
@@ -53,7 +54,7 @@ export function markRegisterToMarket(state: GameState, ctx: WeeklyStepContext): 
   const priceById = new Map<string, number | undefined>();
   // A share's price is its issuer's own cleared print. It is read off THIS week's companies —
   // `updatedCompanies` is what 07e wrote and stage 08 rebuilt — never off the week-start array.
-  const companyById = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
+  const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   const priceOfRow = (instrumentType: string, instrumentId: InstrumentId): number | undefined => {
     const key = `${instrumentType}|${instrumentId}`;
     if (priceById.has(key)) return priceById.get(key);

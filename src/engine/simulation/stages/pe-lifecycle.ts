@@ -25,6 +25,7 @@ import { distributable } from '../../../domain/fund';
 import { currencyOf } from '../../../domain/geography';
 import { Company, InstitutionalEntity, Region, RegionId, DebtTranche, NewsItem } from '../../../types';
 import { WeeklyStepContext } from './context';
+import { buildEntityIndex } from '../../ledger/entity-index';
 import { PrimaryOffering, mandateAllocator } from '../../../domain/primary-market';
 import { isActiveCompany, banksOf } from '../../../domain/company';
 import { random } from '../../rng';
@@ -149,7 +150,7 @@ const IPO_PREMIUM_OVER_ENTRY = 1.15;
 export function dryPowderLocal(
   v2: V2World,
   sponsor: InstitutionalEntity,
-  lpById: Map<string, InstitutionalEntity>
+  lpById: ReadonlyMap<EntityId, InstitutionalEntity>
 ): number {
   return (sponsor.peFund?.lpCommitments ?? []).reduce((sum, c) => {
     const undrawnLocal = Math.max(0, c.committedLocal - c.drawnLocal);
@@ -302,8 +303,8 @@ export function runPeLifecycleForRegion(
       ticker: c.ticker, bankMarketShare: c.bankMarketShare,
       capacityLocal: (ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet)?.bankEquityLocal ?? 0,
     })));
-  const byId = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
-  const lpById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
+  // §3.13-BOOK (c-then-2): the ONE builder, for both identities this pass resolves.
+  const { companyById: byId, institutionById: lpById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   // One valuation for this region this week: what the public market pays for comparable listed
   // earnings. The purchase price, the exit test and HC4's NAV mark all read it, so a portfolio is
   // never bought on one number and marked on another. No comps at all means no basis on which to
@@ -618,7 +619,7 @@ export function runPeLifecycleForRegion(
  */
 export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number): void {
   // §3.13-READ D9: once for the whole pass, not once per deal inside `callCapitalLocal`.
-  const lpById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
+  const { institutionById: lpById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   ctx.primarySettlements.forEach((settlement) => {
     const deal = settlement.offering.peDeal;
     if (!deal) return;
@@ -945,10 +946,13 @@ export function runFirmBirthsForRegion(
     if (!c.homeBankTicker) {
       c.homeBankTicker = banksForRelationship.pick(c.id, Math.max(0, openingCashOf(c)));
     }
-    // root fix: issuerTickerById is built once at context creation, so a firm born
-    // mid-week was invisible to every coupon and corporate-action payment that week — the money
-    // then flowed payer-less into the unbacked ledger. Register the newborn where it is born.
-    ctx.issuerTickerById?.set(c.id, c.ticker);
+    // §3.13-BOOK (c-then-2): the `ctx.issuerTickerById?.set(c.id, c.ticker)` that stood here is
+    // GONE with the mirror it maintained. It existed because that map was built once at context
+    // creation, so a firm born mid-week was invisible to every coupon and corporate-action
+    // payment that week and the money flowed payer-less into the unbacked ledger. `core.ts:323`
+    // pushes a newborn onto `updatedCompanies` in this same pass, and the readers now index THAT
+    // — so the newborn is found with no registration step, which is the invariant the mirror
+    // could only approximate by hand at every birth site.
     fundNewbornDebt(c, reg, ctx, nextWeek);
   });
   return born;
