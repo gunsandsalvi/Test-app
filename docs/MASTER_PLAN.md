@@ -428,9 +428,6 @@ written from here):
     seed/audit paths, the remaining stages, and the derivations a store now answers.
 
     **A. THE LIVE DEFECTS — each is wrong today, in this order.**
-    A1. **07f re-offers bills that are already held.** Its `primaryOfferingLocal` counts BIDDERS
-        only, so a corporate treasury's bill holding is offered again. The same defect 07c had;
-        the same fix — `sovereignHeldByBond`. (`sovereign-credit` E1.a closes with this.)
     A2. **Four copies of "what can this entity spend" drop the stock-loan collateral term**, so an
         entity can spend collateral it is only holding. `pe-lifecycle:231` also drops the
         `max(0, …)` clamp and hands a NEGATIVE budget to `distributable` — the thing the comment
@@ -1693,6 +1690,17 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ A1 — AND 07F HAD IT WORSE: A BILL IS DISCOUNT PAPER.** 07c's defect again, with a
+mechanism that makes it systematic rather than occasional. 07f's `primaryOfferingLocal` subtracted
+`tradableFloatLocal` — what the BIDDERS hold, at the MARK — from the ladder's FACE. A bill trades
+below par every week of its life by construction, so the offering was overstated by the whole
+discount on every bill, every week. Second and separately, a holder that was not a bidder counted as
+nobody: `regionEntities` is filtered by mandate weight, so an institution holding this region's
+bills under a zero weight fell out, and the household books are not in that book at all. Both
+sovereign books now ask `forEachSovereignPosition`, which reports face across every store; the
+central-bank carve-out (its book is not on offer on a no-order week) is preserved exactly. Atlas:
+`sovereign-credit` E1.a CLOSES — the walk is one and both callers use it. Gates green; no run.
 
 **13-BOOK — 07C OFFERED PAPER THAT WAS ALREADY HELD, and it is rule 19's first application.**
 `sovereign-register.ts` exists because five places open-coded the walk over the stores that keep a

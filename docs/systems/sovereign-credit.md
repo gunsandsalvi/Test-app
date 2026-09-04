@@ -190,7 +190,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | D5 repo collateral, at the smallest haircut of any asset | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
 | D6 VERIFY the bid-offer is a consequence, not a prior | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
 | **E1 a register: who holds how much of WHICH LINE** | `src/engine/sovereign-register.ts:forEachSovereignPosition` | ✅ |
-| E1.a · and ONE walk answers it, over every store that keeps one | `src/engine/sovereign-register.ts:sovereignHeldByBond` | ⚠️ |
+| E1.a · and ONE walk answers it, over every store that keeps one | `src/engine/sovereign-register.ts:forEachSovereignPosition` | ✅ |
 | E2 holder classes hold for different reasons | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
 | E2.a banks — the regulatory liquidity buffer | `src/engine/macro/banking.ts:liquidityDrivenSovereignFloorLocal` | ✅ |
 | E2.b insurers and pensions — duration against liabilities | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:durationPremiumBps` | ⚠️ |
@@ -240,9 +240,13 @@ made it interesting — it had rotted twice over:
 Replaced by `sovereignHeldByBond`, which returns `units` — the face — off the store, so both sides
 of the subtraction are now the same quantity and the walk sees the week's real positions.
 
-E1.a stays `⚠️`: one walk answers the question now, but 07f's bill book still computes its own
-`primaryOfferingLocal` from bidders alone, so a corporate treasury's bill holding is still re-offered
-there. Same shape, same fix, not yet made.
+**07f had the same defect, worse.** Its `primaryOfferingLocal` subtracted `tradableFloatLocal` —
+what the BIDDERS hold, at the MARK — from the ladder's FACE. A bill is discount paper, so its mark
+is below par every week of its life: the offering was overstated by the whole discount
+*systematically*, not occasionally. And a holder that was not a bidder counted as nobody —
+`regionEntities` is filtered by mandate weight, and the household books are not in that book at all.
+Both books now ask `forEachSovereignPosition`, which reports face across every store, so E1.a
+closes: the walk is one, and both callers use it.
 
 
 **68 rows: 30 ✅, 13 ⚠️, 25 ❌** — COUNTED at §9.13-BILL and again at §9.13-OUTSIDE, which added

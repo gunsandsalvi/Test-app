@@ -32,7 +32,7 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
-import { InstrumentId } from '../../../domain/ids';
+import { asInstrumentId, InstrumentId } from '../../../domain/ids';
 
 import { ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf, trancheRowOf, trancheScheduleOf, trancheIdOf } from '../../../engine2/tranches';
@@ -73,6 +73,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { commercialPaperTrancheId } from '../../../domain/instrument-keys';
 import { governmentEntityId } from '../../../domain/entity-keys';
+import { forEachSovereignPosition } from '../../sovereign-register';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
@@ -371,18 +372,25 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // repaid a holder that was not there. A bill auction is exactly this: paper that exists,
       // offered at whatever the week's demand pays, and offered again next week if it does not
       // clear. The central bank's book on a no-order week is a real holding and is NOT on offer.
-      const passiveCbByBond = new Map<string, number>();
-      if (!cbOrder && reg.centralBankSheet) {
-        Object.entries(reg.centralBankSheet.sovereignHoldingsByBond || {})
-          .forEach(([key, usd]) => passiveCbByBond.set(key, Number(usd) || 0));
-      }
+      // §1.19 — WHAT NOBODY HOLDS, ASKED OF THE ONE WALK. This subtracted `tradableFloatLocal`,
+      // which answers a different question with a different quantity, and was wrong twice: the
+      // float is what BIDDERS hold at the MARK, while `outstandingByBond` is the ladder's FACE —
+      // and a bill is discount paper, so its mark is below par every week of its life and the
+      // offering was overstated by the whole discount, systematically. Second, a holder that is
+      // not a bidder counted as nobody: `regionEntities` is filtered by mandate weight, and the
+      // household books are not in this book at all. The central-bank carve-out is kept exactly —
+      // on a no-order week its book is a real holding and is not on offer.
+      const heldFaceByBill = new Map<string, number>();
+      forEachSovereignPosition(ctx.v2, state, regionId, (pos) => {
+        if (!billIds.has(asInstrumentId(pos.bondId))) return;
+        if (cbOrder && pos.holderClass === 'CENTRAL_BANK') return;
+        heldFaceByBill.set(pos.bondId, (heldFaceByBill.get(pos.bondId) ?? 0) + pos.faceLocal);
+      });
       activeBills.forEach((b) => {
         const inst = instruments.find((i) => i.id === b.key);
         if (!inst) return;
         inst.primaryOfferingLocal = Math.max(0,
-          (outstandingByBond.get(b.key) ?? 0)
-          - inst.tradableFloatLocal
-          - (passiveCbByBond.get(b.key) ?? 0));
+          (outstandingByBond.get(b.key) ?? 0) - (heldFaceByBill.get(b.key) ?? 0));
       });
 
       const result = clearFinancialAsset(instruments, [...participants, ...deskParticipants], priorDealerInventory, {
