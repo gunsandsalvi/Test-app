@@ -434,8 +434,6 @@ written from here):
     **C. THE SECOND ANSWERS — DONE, all five, in §9.**
 
     **D. THE RULES WRITTEN MORE THAN ONCE — collapse, and the branding then becomes small.**
-    D9. Lookup maps rebuilt from the same source: **38 construction sites**, including three alive
-        in one scope in `wires.ts` and two rebuilt inside a `forEach`. Home: memoised on `ctx`.
     D13. The seed's house-bank assignment, 3 passes. **NOT the mechanical collapse the survey
         assumed** (read for D12): each pass feeds `applyBankFundingSplit` in its own scope, and the
         seed steps between them — the SME and household debt migrations, the pools' opening cash —
@@ -1642,6 +1640,31 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ D9 — THE PROPOSED FIX WAS THE DEFECT.** The survey said 38 lookup-map construction
+sites, "home: memoised on `ctx`". Reading them: **most of the 38 are not duplicates at all** —
+`billInstrumentById` over this session's instruments, `renamedByOld` over one merger's tranches,
+`cpFaceById` over this week's paper — each a local index of a local list, which is what a lookup
+map is for. And the two pathologies it named are inside `GOODS_TRACE` and `LADDER_TRACE` blocks:
+env-gated diagnostics that run only when someone asks, where re-indexing five times costs nothing
+anyone pays.
+
+**And the proposed home is unsafe.** A cache keyed on the array's identity, invalidated when its
+length changes, is the obvious `ctx` memo — and `08-company-fundamentals.ts:468` replaces elements
+of `updatedCompanies` IN PLACE, at the same index and the same length. A memo keyed that way hands
+back LAST WEEK'S company object for a live ticker: the stale-mirror failure rule 19 exists to name,
+installed by the tidy-up meant to remove it. Making it safe needs an explicit invalidation call at
+every such writer — a new invariant of exactly the kind `bumpRegister`'s comment warns about — and
+what it would buy is two map builds per stage. Not worth an invariant, and the reasoning is written
+at `settlement.ts:partyIndexOf` so the next reader does not re-propose it.
+
+**What was real, and is done.** Three genuine repeats: `settlement.ts` built the same two party
+indexes twice in ONE pass (`partyRegionOf` built them, and its only caller built them again eight
+lines later); `pe-lifecycle.ts:callCapitalLocal` re-indexed every institution in the world on every
+DEAL, from an index its caller had already built; and the audit built nine indexes over the same
+two arrays across `o1`, `o3`, `o4` and `o5`. The first two are hoisted to one build per pass. The
+audit's ARE memoised — on the state, which is safe there and nowhere else, because the audit runs
+at the close over a world no stage is still writing.
 
 **13-READ D5 (the collapse) — −129 CODE LINES, AND THE ATLAS GATE CAUGHT ME DOING IT.** With the
 sub-IG factor restored the two credit demand builds were word-for-word equal, which is the state

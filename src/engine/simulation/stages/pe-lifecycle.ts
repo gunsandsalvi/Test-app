@@ -177,10 +177,17 @@ export function dryPowderLocal(
  * cross-border LP exists the commitment needs its own denomination** — the money is agreed at
  * subscription and the LP has to buy it — and this is the condition to watch for.
  */
-function callCapitalLocal(ctx: WeeklyStepContext, sponsorId: string, requestedLocal: number): number {
+/** §3.13-READ D9: the LP index is the CALLER'S — this is called once per deal inside the region
+ *  loop, and it was re-indexing every institution in the world on each call, from an index the
+ *  caller had already built two lines above its own loop. */
+function callCapitalLocal(
+  ctx: WeeklyStepContext,
+  lpById: ReadonlyMap<string, InstitutionalEntity>,
+  sponsorId: string,
+  requestedLocal: number
+): number {
   const sponsor = ctx.updatedInstitutionalEntities.find((e) => e.id === sponsorId);
   if (!sponsor?.peFund || !(requestedLocal > 0)) return 0;
-  const lpById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
   const capacity = sponsor.peFund.lpCommitments.map((c) => {
     const lp = lpById.get(c.lpEntityId);
     // An LP's real budget is its cash PLUS what it has already committed to pay or is due
@@ -446,7 +453,7 @@ export function runPeLifecycleForRegion(
         s2.id !== sponsor.id && !s2.isDefaulted
         && dryPowderLocal(ctx.v2, s2, lpById) >= priceLocal);
       if (buyer && priceLocal > 1e6) {
-        const drawnLocal = callCapitalLocal(ctx, buyer.id, priceLocal);
+        const drawnLocal = callCapitalLocal(ctx, lpById, buyer.id, priceLocal);
         if (drawnLocal >= priceLocal * 0.999) {
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: buyer.id },
@@ -608,6 +615,8 @@ export function runPeLifecycleForRegion(
  * listing flag with a real share registry.
  */
 export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number): void {
+  // §3.13-READ D9: once for the whole pass, not once per deal inside `callCapitalLocal`.
+  const lpById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
   ctx.primarySettlements.forEach((settlement) => {
     const deal = settlement.offering.peDeal;
     if (!deal) return;
@@ -621,7 +630,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       // The cheque is real money called from the fund's LPs. A call that comes up short — an LP
       // that cannot fund what it committed — is a deal that does not close, so nothing is
       // half-drawn: what was raised goes back before the deal is abandoned.
-      const calledLocal = callCapitalLocal(ctx, deal.sponsorId, equityLocal);
+      const calledLocal = callCapitalLocal(ctx, lpById, deal.sponsorId, equityLocal);
       if (calledLocal < equityLocal * 0.999) {
         if (calledLocal > 0) distributeToLps(ctx, deal.sponsorId, calledLocal);
         return;
@@ -663,7 +672,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       const pricePerShare = deal.takeoutPricePerShare ?? 0;
       const shares = comp.sharesOutstanding;
       if (!(pricePerShare > 0) || !(shares > 0)) return;
-      const calledLocal = callCapitalLocal(ctx, deal.sponsorId, equityLocal);
+      const calledLocal = callCapitalLocal(ctx, lpById, deal.sponsorId, equityLocal);
       if (calledLocal < equityLocal * 0.999) {
         if (calledLocal > 0) distributeToLps(ctx, deal.sponsorId, calledLocal);
         return;

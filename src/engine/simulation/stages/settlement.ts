@@ -48,6 +48,7 @@ const MONEY_KIND_ID = ASSET_KINDS.indexOf('MONEY');
 import { PaymentCategory, categoryOfReason } from '../../ledger/payment-category';
 import { assertNever } from '../../../domain/defect';
 import { banksOf } from '../../../domain/company';
+import type { Company, InstitutionalEntity } from '../../../types';
 
 export interface PaymentInstruction {
   payer: PartyRef;
@@ -519,9 +520,36 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
  * books in and whose desks it converts through. Every party but the clearing house has one; the
  * house is the hub its legs pass through and belongs to no region.
  */
-export function partyRegionOf(ctx: WeeklyStepContext): (ref: PartyRef) => RegionId | undefined {
-  const companyByTicker = new Map(ctx.updatedCompanies.map((c) => [c.ticker, c]));
-  const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
+/**
+ * §3.13-READ D9 — THE TWO PARTY INDEXES THIS STAGE NEEDS, built once per pass.
+ *
+ * `partyRegionOf` used to build them itself, and `runSettlementStage` — its only caller —
+ * builds the same two a few lines later, so one settlement pass indexed every company and every
+ * institution TWICE. They are passed now.
+ *
+ * **They are deliberately NOT memoised on `ctx`, which is what the survey proposed.** The obvious
+ * cache — keyed on the array's identity, invalidated when its length changes — is WRONG here:
+ * `08-company-fundamentals.ts:468` replaces elements of `updatedCompanies` IN PLACE, at the same
+ * index and the same length, so a cache keyed that way hands back last week's company object for
+ * a live ticker. That is the stale-mirror failure rule 19 names, installed by the fix meant to
+ * tidy it. A memo would need an explicit invalidation call at every such writer — a new invariant
+ * of exactly the kind `bumpRegister`'s comment warns about — and the duplication here is two map
+ * builds in one stage, which is not worth an invariant.
+ */
+export interface PartyIndex {
+  companyByTicker: ReadonlyMap<string, Company>;
+  entityById: ReadonlyMap<string, InstitutionalEntity>;
+}
+
+export function partyIndexOf(ctx: WeeklyStepContext): PartyIndex {
+  return {
+    companyByTicker: new Map(ctx.updatedCompanies.map((c) => [c.ticker, c])),
+    entityById: new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e])),
+  };
+}
+
+export function partyRegionOf(index: PartyIndex): (ref: PartyRef) => RegionId | undefined {
+  const { companyByTicker, entityById } = index;
   return (ref: PartyRef): RegionId | undefined => {
     switch (ref.kind) {
       case 'COMPANY': return companyByTicker.get(ref.ticker)?.region;
@@ -537,10 +565,15 @@ export function partyRegionOf(ctx: WeeklyStepContext): (ref: PartyRef) => Region
 export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const priorReport = ctx.lastSettlementReport;
   const journal = ctx.paymentJournal;
+  // §3.13-READ D9: built ONCE for the whole pass. Safe here and only here: neither
+  // `fundForeignCurrencyShortfalls` nor `squareInterbankFxPositions` replaces `updatedCompanies`
+  // or `updatedInstitutionalEntities`, so the objects this indexes are the ones the rest of the
+  // pass reads. See `partyIndexOf` for why it is not cached across stages.
+  const partyIndex = partyIndexOf(ctx);
   // §3.13c-FX: before anything applies, everyone who must pay in a money it does not hold buys
   // it — from a desk, at the cleared rate, paying the pip. Its rows join this pass's, so the
   // purchase and the payment that forced it settle together (rule 5).
-  fundForeignCurrencyShortfalls(ctx, journal, settlementWeek(), partyRegionOf(ctx));
+  fundForeignCurrencyShortfalls(ctx, journal, settlementWeek(), partyRegionOf(partyIndex));
   // §3.13c-FX-2: and the desks offset each other's client flow, so only the NET imbalance is
   // left on anybody's book. Reads the positions the last pass left, so it follows the buying.
   squareInterbankFxPositions(ctx);
@@ -575,8 +608,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
 
   // ---- 1. Apply every due row to the account store by the one rule and keep the
   // per-reason ledgers the sector parties' income statements are built from.
-  const companyByTicker = new Map(ctx.updatedCompanies.map((c) => [c.ticker, c]));
-  const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
+  const { companyByTicker, entityById } = partyIndex;
   // C4b — which central bank's system a side of a payment lives in. Every party but
   // the clearing house has one; the clearing house is the hub its legs pass through, so a leg
   // to or from it attributes through its other side and the hub itself contributes nothing.

@@ -15,12 +15,42 @@ import { holdingClassOf } from '../../domain/assets';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { isTrancheKind } from '../../domain/assets';
 import { bookHeadOf } from '../../engine2/holdings';
+import type { Company, InstitutionalEntity } from '../../types';
 
 /** Which of O1's four buckets a ladder row falls in. `BANK_FACILITY` is absent, not zero: it is
  *  on the lending bank's loan book and O4 is the check that tests it there. */
 const O1_BUCKET_BY_TRANCHE_KIND: Partial<Record<
   ReturnType<typeof trancheKindOfRow>, 'corp' | 'loan' | 'cp'
 >> = { CORP_BOND: 'corp', LEVERAGED_LOAN: 'loan', COMMERCIAL_PAPER: 'cp' };
+
+/**
+ * §3.13-READ D9 — THE AUDIT'S PARTY INDEXES, built once per state.
+ *
+ * `o1`, `o3`, `o4` and `o5` each built their own company-by-id, company-by-ticker and
+ * entity-by-id maps: nine index builds over the same two arrays in one pass. Memoised on the
+ * STATE here, which is safe in the audit and nowhere else — the audit runs at the close, over a
+ * world no stage is still writing, and `auditWeek` is handed a fresh state object each week. The
+ * engine's own equivalent is deliberately NOT cached (see `settlement.ts:partyIndexOf`): mid-week,
+ * `08-company-fundamentals` replaces elements of `updatedCompanies` in place at the same length,
+ * so any cache keyed on the array would hand back last week's object for a live ticker.
+ */
+interface AuditPartyIndex {
+  companyById: ReadonlyMap<string, Company>;
+  companyByTicker: ReadonlyMap<string, Company>;
+  entityById: ReadonlyMap<string, InstitutionalEntity>;
+}
+const AUDIT_PARTY_INDEX = new WeakMap<GameState, AuditPartyIndex>();
+function partyIndexOfState(state: GameState): AuditPartyIndex {
+  const hit = AUDIT_PARTY_INDEX.get(state);
+  if (hit) return hit;
+  const companyById = new Map<string, Company>();
+  const companyByTicker = new Map<string, Company>();
+  for (const c of state.companies) { companyById.set(c.id, c); companyByTicker.set(c.ticker, c); }
+  const entityById = new Map((state.institutionalEntities ?? []).map((e) => [e.id, e]));
+  const index: AuditPartyIndex = { companyById, companyByTicker, entityById };
+  AUDIT_PARTY_INDEX.set(state, index);
+  return index;
+}
 
 /** One region's debt books, by class, in FACE. */
 export type OwnershipBook = { corp: number; loan: number; sov: number; cp: number };
@@ -164,8 +194,7 @@ function o2(state: GameState, week: number): AuditFinding[] {
 /** O3 — register integrity: every row names a live instrument and a live holder; nothing references an acquired firm. */
 function o3(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  const live = new Map(state.companies.map((c) => [c.id, c]));
-  const ent = new Map(state.institutionalEntities.map((e) => [e.id, e]));
+  const { companyById: live, entityById: ent } = partyIndexOfState(state);
   const v2o3 = ensureV2(state); // 13b: a row names a tranche or its issuer
   let orphan = 0, orphanLocal = 0, merged = 0, mergedLocal = 0, deadHolders = 0;
   state.institutionalEntities.forEach((e) => {
@@ -201,7 +230,7 @@ function o4(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
   const S = v2.tranches;
-  const byId = new Map(state.companies.map((c) => [c.id, c]));
+  const { companyById: byId } = partyIndexOfState(state);
   const bankByTicker = new Map(state.companies.filter((c) => c.isBankEntity).map((c) => [c.ticker, c]));
   const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   let orphanLoans = 0, orphanLocal = 0, lenderless = 0, lenderlessLocal = 0;
@@ -382,8 +411,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
 /** O5 — contracts, estates, indices, shipments: parties alive, claims bounded, weights whole. */
 function o5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  const tickers = new Map(state.companies.map((c) => [c.ticker, c]));
-  const ents = new Map(state.institutionalEntities.map((e) => [e.id, e]));
+  const { companyByTicker: tickers, entityById: ents } = partyIndexOfState(state);
   let deadParty = 0, deadLocal = 0;
   (state.derivativesBook ?? []).forEach((k) => {
     const alive = (p: { kind: string; ticker?: string; id?: string }) => p.kind === 'INSTITUTION' ? !!ents.get(p.id!) && !ents.get(p.id!)!.isDefaulted : !!tickers.get(p.ticker!) && isActiveCompany(tickers.get(p.ticker!)!);
